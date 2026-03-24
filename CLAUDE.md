@@ -1,7 +1,9 @@
-# Music Manager — Project Memory
+# TuneBridge — Project Memory
 
 ## What This Is
 A local web-based music manager for a personal FLAC music library. Built with Flask (Python) + Vanilla JS. Lets you browse your library, build playlists with drag-and-drop, export them to portable music players, and sync music between local storage and SD cards.
+
+**Project name**: TuneBridge (previously "Music Manager", previously "Playlist Creator")
 
 ## How to Run
 ```bash
@@ -133,7 +135,7 @@ Global `sync_state` dict tracks: `status` (idle/scanning/ready/copying/done/erro
 Sync button (⟳ arrows icon) in sidebar bottom bar opens `#sync-modal`. Device picker shows mount status (green "Connected" / grey "Not connected"). Scan phase shows animated progress bar. Preview phase shows two sections (copy to device ↑ / copy to local ↓) with scrollable checkbox lists — folder path in muted colour, filename in brighter. "Select all" toggle per section. Copy phase shows file-by-file progress. Done phase shows summary + any errors.
 
 ## Git Workflow
-- Repo: `https://github.com/hashansr/music-manager` (pushed, `main` branch)
+- Repo: `https://github.com/hashansr/tunebridge` (pushed, `main` branch)
 - **Commit all changes after each session** — always `git add` modified files and commit with a clear message
 - `.claude/` is intentionally gitignored (machine-specific Claude Code config)
 - `data/library.json` and `data/artwork/` are gitignored (auto-regenerated cache)
