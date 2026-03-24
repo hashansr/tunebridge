@@ -1,25 +1,31 @@
 #!/bin/bash
-# Creates "Music Manager.app" in /Applications
+# Creates "TuneBridge.app" in /Applications
 # Run once: bash create_app.sh
 
 set -e
 
-APP_NAME="Music Manager"
+APP_NAME="TuneBridge"
 APP_PATH="/Applications/${APP_NAME}.app"
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV_PYTHON="${PROJECT_DIR}/venv/bin/python"
 
 echo "Building ${APP_NAME}.app..."
 
+# Remove old "Music Manager.app" if it exists (rename migration)
+if [ -d "/Applications/Music Manager.app" ]; then
+    echo "Removing old Music Manager.app..."
+    rm -rf "/Applications/Music Manager.app"
+fi
+
 # ── Write AppleScript to temp file ───────────────────────────────────────────
-TEMP_SCRIPT=$(mktemp /tmp/music_manager_XXXXXX.applescript)
+TEMP_SCRIPT=$(mktemp /tmp/tunebridge_XXXXXX.applescript)
 
 cat > "$TEMP_SCRIPT" <<APPLESCRIPT
 on run
     set projectDir to "${PROJECT_DIR}"
     set venvPython to "${VENV_PYTHON}"
     set appScript to projectDir & "/app.py"
-    set logFile to "/tmp/music-manager.log"
+    set logFile to "/tmp/tunebridge.log"
 
     -- Check if server is already running on port 5001
     set serverRunning to false
@@ -44,7 +50,7 @@ on run
         end repeat
 
         if not ready then
-            display dialog "Music Manager failed to start." & return & return & "Check log: " & logFile buttons {"OK"} default button "OK" with icon stop
+            display dialog "TuneBridge failed to start." & return & return & "Check log: " & logFile buttons {"OK"} default button "OK" with icon stop
             return
         end if
     end if
@@ -58,7 +64,6 @@ end run
 APPLESCRIPT
 
 # ── Compile to .app ───────────────────────────────────────────────────────────
-# Remove old version if it exists
 if [ -d "$APP_PATH" ]; then
     echo "Replacing existing ${APP_NAME}.app..."
     rm -rf "$APP_PATH"
@@ -79,5 +84,5 @@ echo "  Done! \"${APP_NAME}\" is now in /Applications."
 echo ""
 echo "  - Double-click to launch (starts server + opens Safari)"
 echo "  - Drag to your Dock for quick access"
-echo "  - Server log: /tmp/music-manager.log"
+echo "  - Server log: /tmp/tunebridge.log"
 echo ""

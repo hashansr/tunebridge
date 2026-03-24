@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "playlist-creator",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["/Users/hashan/playlist_proxy.py"],
+      "port": 5002
+    }
+  ]
+}

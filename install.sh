@@ -1,5 +1,5 @@
 #!/bin/bash
-# Music Manager — one-time installer
+# TuneBridge — one-time installer
 # Run this once on a new machine: bash install.sh
 
 set -e
@@ -11,7 +11,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo ""
-echo -e "${BOLD}Music Manager — Setup${NC}"
+echo -e "${BOLD}TuneBridge — Setup${NC}"
 echo "──────────────────────────────────────"
 
 # ── Check Python 3.8+ ───────────────────────────────────────────────────────

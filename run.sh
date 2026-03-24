@@ -12,7 +12,7 @@ source venv/bin/activate
 pip install -q -r requirements.txt
 
 echo ""
-echo "  Music Manager"
+echo "  TuneBridge"
 echo "  Open http://localhost:5001 in your browser"
 echo "  Press Ctrl+C to stop"
 echo ""

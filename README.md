@@ -1,4 +1,4 @@
-# Music Manager
+# TuneBridge
 
 A local web-based music manager for a personal FLAC library. Browse your music collection, build playlists with drag-and-drop, export to portable players, and keep your devices in sync.
 
@@ -26,8 +26,8 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/YOUR_USERNAME/music-manager.git
-cd music-manager
+git clone https://github.com/hashansr/tunebridge.git
+cd tunebridge
 bash install.sh
 
 # 2. Set your music library path
@@ -36,6 +36,10 @@ nano data/settings.json   # set "music_base" to your library path
 # 3. Run
 bash run.sh
 # → Open http://localhost:5001
+
+# 4. (Optional) Create a macOS app launcher
+bash create_app.sh
+# → Opens TuneBridge.app in /Applications — double-click to launch
 ```
 
 ## Install Script
@@ -46,6 +50,17 @@ bash run.sh
 - Installs dependencies (`flask`, `flask-cors`, `mutagen`)
 - Creates `data/` directories
 - Generates default `data/settings.json`
+
+## macOS App Launcher
+
+Run `bash create_app.sh` once to create **TuneBridge.app** in `/Applications`.
+
+- Double-click (or add to Dock) to launch
+- Starts the server automatically if not running
+- Opens `http://localhost:5001` in a new Safari window
+- Server logs at `/tmp/tunebridge.log`
+
+Re-run `create_app.sh` if you move the project folder.
 
 ## Configuration
 
@@ -97,16 +112,10 @@ Folder structure is always preserved. Files are never deleted — only added.
 | `data/artwork/` | Album art cache (auto-generated, gitignored) |
 | `data/playlist_artwork/` | Your custom playlist covers |
 
-## Running in the Background
-
-```bash
-nohup bash run.sh &> logs/app.log &
-```
-
 ## Project Structure
 
 ```
-music-manager/
+tunebridge/
 ├── app.py              # Flask backend, all API routes
 ├── static/
 │   ├── index.html      # Single-page app
@@ -117,6 +126,7 @@ music-manager/
 │   ├── settings.json   # Device config
 │   ├── artwork/        # Album art cache
 │   └── playlist_artwork/  # Custom playlist covers
+├── create_app.sh       # Build TuneBridge.app for macOS
 ├── install.sh          # One-time setup script
 ├── run.sh              # Start the app
 └── requirements.txt    # Python dependencies

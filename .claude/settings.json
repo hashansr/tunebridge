@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"systemMessage\":\"Remember to update CLAUDE.md with any significant changes made.\"}'",
+            "statusMessage": "Checking CLAUDE.md reminder..."
+          }
+        ]
+      }
+    ]
+  }
+}
