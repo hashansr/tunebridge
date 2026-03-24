@@ -72,10 +72,10 @@ fi
 osacompile -o "$APP_PATH" "$TEMP_SCRIPT"
 rm "$TEMP_SCRIPT"
 
-# ── Set icon (replace default applet icon with Music app icon) ────────────────
-MUSIC_ICON="/System/Applications/Music.app/Contents/Resources/AppIcon.icns"
-if [ -f "$MUSIC_ICON" ]; then
-    cp "$MUSIC_ICON" "${APP_PATH}/Contents/Resources/applet.icns"
+# ── Set icon ──────────────────────────────────────────────────────────────────
+CUSTOM_ICON="${PROJECT_DIR}/static/TuneBridge.icns"
+if [ -f "$CUSTOM_ICON" ]; then
+    cp "$CUSTOM_ICON" "${APP_PATH}/Contents/Resources/applet.icns"
     touch "$APP_PATH"
 fi
 
