@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Music Manager</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div id="sidebar-header">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="18" r="3"/><circle cx="15" cy="15" r="3"/><line x1="12" y1="12" x2="12" y2="3"/><line x1="18" y1="9" x2="18" y2="6"/></svg>
+        <span>Music Manager</span>
+        <button id="help-btn" onclick="App.showHelp()" title="Help">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="3"/></svg>
+        </button>
+      </div>
+
+      <nav>
+        <div class="nav-section-label">Library</div>
+        <button class="nav-item active" data-view="artists" onclick="App.showView('artists')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Artists
+        </button>
+        <button class="nav-item" data-view="albums" onclick="App.showView('albums')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="3" x2="12" y2="9"/></svg>
+          Albums
+        </button>
+        <button class="nav-item" data-view="search" onclick="App.showView('search')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Search Songs
+        </button>
+
+        <div class="nav-section-label" style="margin-top:10px">Tools</div>
+        <button class="nav-item" onclick="App.showSync()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+          Sync Music
+        </button>
+      </nav>
+
+      <div id="playlists-section">
+        <div class="nav-section-label" style="display:flex;justify-content:space-between;align-items:center;">
+          Playlists
+          <div style="display:flex;gap:2px">
+            <div style="position:relative">
+              <button class="sidebar-icon-btn" id="sidebar-sort-btn" onclick="App.toggleSidebarSort(event)" title="Sort playlists">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
+              </button>
+              <div id="sidebar-sort-dd" style="display:none;position:absolute;top:calc(100% + 4px);right:0;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;min-width:140px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:200">
+                <div class="sidebar-sort-option" onclick="App.setSidebarSort('alpha')">
+                  <span id="sidebar-sort-check-alpha" style="opacity:0">✓</span> A–Z
+                </div>
+                <div class="sidebar-sort-option" onclick="App.setSidebarSort('created')">
+                  <span id="sidebar-sort-check-created">✓</span> Date Created
+                </div>
+                <div class="sidebar-sort-option" onclick="App.setSidebarSort('updated')">
+                  <span id="sidebar-sort-check-updated" style="opacity:0">✓</span> Last Updated
+                </div>
+              </div>
+            </div>
+            <button class="sidebar-icon-btn" onclick="App.triggerImport()" title="Import M3U / M3U8">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </button>
+            <button id="new-playlist-btn" class="sidebar-icon-btn" onclick="App.createPlaylist()" title="New Playlist">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+        </div>
+        <input type="file" id="import-file-input" accept=".m3u,.m3u8" style="display:none" onchange="App.handleImportFile(this)" />
+        <div id="playlists-list"></div>
+      </div>
+
+      <div id="scan-status">
+        <div id="scan-bar-wrap" style="display:none">
+          <div id="scan-bar"></div>
+        </div>
+        <span id="scan-msg"></span>
+        <button id="sync-btn" onclick="App.showSync()" title="Sync Music Library">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+        </button>
+        <button id="settings-btn" onclick="App.showSettings()" title="Device Settings">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <div id="rescan-wrap" style="position:relative">
+          <button id="rescan-btn" onclick="App.toggleRescanMenu(event)" title="Rescan Library">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
+          <div id="rescan-menu" style="display:none;position:absolute;bottom:calc(100% + 6px);right:0;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;min-width:170px;box-shadow:0 4px 16px rgba(0,0,0,.4);overflow:hidden;z-index:200">
+            <button class="rescan-menu-item" onclick="App.rescan();App.closeRescanMenu()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Rescan Library
+            </button>
+            <button class="rescan-menu-item rescan-menu-clean" onclick="App.rescanClean();App.closeRescanMenu()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+              Clean Rescan
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main id="main">
+      <!-- Library views -->
+      <div id="view-artists" class="view">
+        <div class="view-header">
+          <h2>Artists</h2>
+          <div class="view-count" id="artists-count"></div>
+        </div>
+        <div id="alpha-bar" class="alpha-bar"></div>
+        <div id="artists-grid" class="artist-grid"></div>
+      </div>
+
+      <div id="view-albums" class="view" style="display:none">
+        <div class="view-header">
+          <div class="breadcrumb" id="albums-breadcrumb"></div>
+          <div class="view-count" id="albums-count"></div>
+        </div>
+        <div id="artist-hero" class="browse-hero" style="display:none">
+          <div class="hero-art" id="artist-hero-art"></div>
+          <div class="hero-info">
+            <div class="hero-label">Artist</div>
+            <div class="hero-title" id="artist-hero-name"></div>
+            <div class="hero-meta" id="artist-hero-meta"></div>
+            <div class="hero-actions">
+              <button class="btn-secondary" id="artist-hero-add">+ Add All Songs</button>
+              <button class="btn-secondary" id="artist-hero-browse" onclick="">Browse All Songs</button>
+            </div>
+          </div>
+        </div>
+        <div id="albums-grid" class="album-grid"></div>
+      </div>
+
+      <div id="view-tracks" class="view" style="display:none">
+        <div class="view-header">
+          <div class="breadcrumb" id="tracks-breadcrumb"></div>
+        </div>
+        <div id="album-hero" class="browse-hero" style="display:none">
+          <div class="hero-art-sq" id="album-hero-art"></div>
+          <div class="hero-info">
+            <div class="hero-label">Album</div>
+            <div class="hero-title" id="album-hero-name"></div>
+            <div class="hero-sub" id="album-hero-artist"></div>
+            <div class="hero-meta" id="album-hero-meta"></div>
+            <div class="hero-actions">
+              <button class="btn-secondary" id="add-all-btn">+ Add All to Playlist</button>
+            </div>
+          </div>
+        </div>
+        <div id="tracks-table-wrap">
+          <table id="tracks-table">
+            <thead><tr>
+              <th class="col-num">#</th>
+              <th class="col-title">Title</th>
+              <th class="col-album">Album</th>
+              <th class="col-dur">Time</th>
+              <th class="col-act"></th>
+            </tr></thead>
+            <tbody id="tracks-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="view-search" class="view" style="display:none">
+        <div class="view-header">
+          <h2>Search</h2>
+        </div>
+        <div class="search-bar-wrap">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="search-input" type="text" placeholder="Search songs, artists, albums…" oninput="App.doSearch(this.value)" />
+        </div>
+        <div id="search-results-info"></div>
+        <div id="search-table-wrap">
+          <table id="search-table">
+            <thead><tr>
+              <th class="col-num">#</th>
+              <th class="col-title">Title</th>
+              <th class="col-album">Album</th>
+              <th class="col-dur">Time</th>
+              <th class="col-act"></th>
+            </tr></thead>
+            <tbody id="search-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Playlist view -->
+      <div id="view-playlist" class="view" style="display:none">
+        <div class="playlist-header">
+          <div class="playlist-cover-wrap" onclick="App.triggerArtworkUpload()" title="Click to set cover art">
+            <div class="playlist-cover" id="pl-cover"></div>
+            <div class="cover-upload-overlay">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <span>Change Cover</span>
+            </div>
+            <button class="cover-remove-btn" id="pl-cover-remove" onclick="App.removePlaylistArtwork(event)" title="Remove custom cover" style="display:none">✕</button>
+          </div>
+          <input type="file" id="artwork-file-input" accept="image/*" style="display:none" onchange="App.handleArtworkFile(this)">
+          <div class="playlist-meta">
+            <div class="playlist-label">PLAYLIST</div>
+            <h1 id="pl-name" contenteditable="true" spellcheck="false" onblur="App.renamePlaylist(this.textContent)"></h1>
+            <div class="playlist-stats" id="pl-stats"></div>
+            <div class="playlist-actions">
+              <div class="export-group">
+                <button class="btn-export" onclick="App.exportPlaylist('poweramp')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Poweramp (M3U)
+                </button>
+                <button class="btn-export btn-export-device" id="poweramp-device-btn" onclick="App.exportToDevice('poweramp')" style="display:none">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
+                  → FiiO M21
+                </button>
+              </div>
+              <div class="export-group">
+                <button class="btn-export" onclick="App.exportPlaylist('ap80')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  AP80 Pro Max (M3U)
+                </button>
+                <button class="btn-export btn-export-device" id="ap80-device-btn" onclick="App.exportToDevice('ap80')" style="display:none">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
+                  → AP80
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="pl-controls" id="pl-controls">
+          <div class="pl-filter-wrap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="pl-filter-input" type="text" placeholder="Filter songs…" oninput="App.filterPlaylist(this.value)" />
+            <button id="pl-filter-clear" class="pl-filter-clear" onclick="App.clearPlaylistFilter()" style="display:none" title="Clear filter">✕</button>
+          </div>
+          <div class="pl-sort-pills">
+            <span class="pl-sort-label">Sort:</span>
+            <button class="pl-sort-pill active" data-sort="original" onclick="App.setPlaylistInSort('original')">Original</button>
+            <button class="pl-sort-pill" data-sort="az" onclick="App.setPlaylistInSort('az')">A–Z</button>
+            <button class="pl-sort-pill" data-sort="album" onclick="App.setPlaylistInSort('album')">Album</button>
+            <button class="pl-sort-pill" data-sort="date" onclick="App.setPlaylistInSort('date')">Date</button>
+          </div>
+        </div>
+
+        <div id="pl-empty" class="empty-state" style="display:none">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          <p>This playlist is empty.</p>
+          <p class="muted">Browse the library and click <strong>+</strong> to add songs.</p>
+        </div>
+
+        <table id="pl-table" style="display:none">
+          <thead><tr>
+            <th class="col-num">#</th>
+            <th class="col-title">Title</th>
+            <th class="col-artist">Artist</th>
+            <th class="col-album">Album</th>
+            <th class="col-dur">Time</th>
+            <th class="col-act"></th>
+          </tr></thead>
+          <tbody id="pl-tbody"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <!-- Add-to-playlist dropdown -->
+  <div id="add-dropdown" class="dropdown" style="display:none">
+    <div class="dropdown-header">Add to playlist</div>
+    <div id="dropdown-items"></div>
+  </div>
+
+  <!-- Bulk action bar -->
+  <div id="bulk-bar">
+    <span class="bulk-count" id="bulk-count">0 selected</span>
+    <div class="bulk-sep"></div>
+    <button class="btn-primary" id="bulk-add-btn">+ Add to Playlist</button>
+    <button class="btn-danger-sm" id="bulk-remove-btn" onclick="App.removeSelectedFromPlaylist()" style="display:none">Remove</button>
+    <button class="btn-ghost-sm" onclick="App.clearSelection()">✕ Clear</button>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast"></div>
+
+  <!-- Duplicate warning modal -->
+  <div id="dup-modal" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div class="modal-icon-row">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="3"/></svg>
+        <h3 id="dup-modal-title">Already in Playlist</h3>
+      </div>
+      <p id="dup-modal-msg" style="color:var(--text-sub);margin:8px 0 12px;line-height:1.5"></p>
+      <div id="dup-modal-list" style="margin-bottom:16px"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="App.dupCancel()">Cancel</button>
+        <button class="btn-secondary" id="dup-skip-btn" onclick="App.dupSkip()">Skip Duplicates</button>
+        <button class="btn-primary" onclick="App.dupAddAnyway()">Add Anyway</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import preview modal -->
+  <div id="import-modal" class="modal-overlay" style="display:none">
+    <div class="modal modal-wide">
+      <div class="modal-icon-row">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <h3>Import Playlist</h3>
+      </div>
+      <div style="margin:12px 0 6px">
+        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Playlist name</label>
+        <input id="import-name-input" type="text" style="width:100%;padding:8px 10px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;outline:none" />
+      </div>
+      <div id="import-summary" style="margin:12px 0;padding:10px 14px;background:var(--bg-elevated);border-radius:6px;font-size:13px"></div>
+      <div id="import-unmatched-wrap" style="display:none">
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Unmatched tracks — search to map to your library</div>
+        <div id="import-unmatched-list" style="max-height:300px;overflow-y:auto;padding:0 2px"></div>
+      </div>
+      <div class="modal-actions" style="margin-top:16px">
+        <button class="btn-secondary" onclick="App.closeImportModal()">Cancel</button>
+        <button class="btn-primary" id="import-confirm-btn" onclick="App.confirmImport()">Import Playlist</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help modal -->
+  <div id="help-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeHelp()">
+    <div class="modal modal-help">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <h3 style="font-size:18px">Help &amp; Guide</h3>
+        <button onclick="App.closeHelp()" style="color:var(--text-muted);padding:4px;border-radius:4px" class="btn-secondary" style="padding:4px 8px">✕</button>
+      </div>
+
+      <div class="help-section">
+        <div class="help-section-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Using Playlists on Poweramp (FiiO M21)
+        </div>
+        <ol class="help-steps">
+          <li>Select a playlist and click <strong>Poweramp (M3U)</strong> to download the file.</li>
+          <li>Connect your FiiO M21 to your Mac — it mounts at <code>/Volumes/FIIO M21/</code></li>
+          <li>Copy the <code>.m3u</code> file to <code>FIIO M21 › Playlists › </code></li>
+          <li>Eject the device, open Poweramp → Library → Playlists.</li>
+          <li>If the playlist doesn't appear, go to Poweramp Settings → Library → Rescan.</li>
+        </ol>
+        <div class="help-tip">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="3"/></svg>
+          <span><strong>Playlist name shows with an extension?</strong> Poweramp uses the filename as the playlist display name. Playlists are now exported as <code>.m3u</code> which Poweramp strips from the display name automatically. If you have old <code>.m3u8</code> files on your device, delete them and re-export.</span>
+        </div>
+        <div class="help-tip" style="margin-top:8px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          Tip: When the FiiO M21 is connected, a device button appears on the playlist page that copies the file directly.
+        </div>
+      </div>
+
+      <div class="help-section">
+        <div class="help-section-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Using Playlists on AP80 Pro Max
+        </div>
+        <ol class="help-steps">
+          <li><strong>One-time setup:</strong> On the AP80, create and save one playlist using the heart/star icon during playback. This makes the device create the <code>playlist_data/</code> folder on the SD card.</li>
+          <li>Connect your AP80 to your Mac via USB (Settings → USB Mode → Storage) — it mounts at <code>/Volumes/AP80/</code></li>
+          <li>Export using <strong>AP80 Pro Max (M3U)</strong> to download, or click <strong>→ AP80</strong> to copy directly when the device is connected.</li>
+          <li>If copying manually, place the <code>.m3u</code> file in <code>playlist_data/</code> at the SD card root (not in Music/ or a Playlists/ folder).</li>
+          <li>On the AP80: Music → ☆ → Playlists → Load Playlist.</li>
+        </ol>
+        <div class="help-tip">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="3"/></svg>
+          <span><strong>Playlist shows 0 songs?</strong> This happens if you created the <code>playlist_data/</code> folder manually on your Mac. Delete the folder, let the AP80 recreate it by saving a dummy playlist, then re-copy your M3U files.</span>
+        </div>
+        <div class="help-tip" style="margin-top:8px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>Can't see <code>playlist_data/</code> from your Mac? It may be hidden. Use the → AP80 direct copy button — it creates the folder automatically.</span>
+        </div>
+      </div>
+
+      <div class="help-section">
+        <div class="help-section-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v4H3zM3 11h18v4H3zM3 19h18v2H3z" stroke-width="1.5"/></svg>
+          How playlist paths work
+        </div>
+        <p style="font-size:13px;color:var(--text-sub);line-height:1.6;margin-bottom:8px">
+          Playlist path formats differ by device:
+        </p>
+        <p style="font-size:13px;color:var(--text-sub);line-height:1.6;margin-bottom:4px"><strong>Poweramp (FiiO M21)</strong> — relative paths from the SD card root:</p>
+        <code class="help-code">Music/Artist/Album/01. Track Title.flac</code>
+        <p style="font-size:13px;color:var(--text-sub);line-height:1.6;margin-top:8px;margin-bottom:4px"><strong>AP80 Pro Max</strong> — relative paths from <code>playlist_data/</code> (one level above Music/):</p>
+        <code class="help-code">../Music/Artist/Album/01. Track Title.flac</code>
+      </div>
+
+      <div class="help-section">
+        <div class="help-section-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Importing existing playlists
+        </div>
+        <p style="font-size:13px;color:var(--text-sub);line-height:1.6;margin-bottom:8px">
+          Click the <strong>↑</strong> (upload) button next to Playlists in the sidebar to import any <code>.m3u</code> or <code>.m3u8</code> file.
+        </p>
+        <p style="font-size:13px;color:var(--text-sub);line-height:1.6">
+          The app matches tracks by file path and falls back to artist + title matching. Tracks not found in your library are shown as unmatched so you can review them.
+        </p>
+      </div>
+
+      <div class="help-section" style="border:none;padding-bottom:0">
+        <div class="help-section-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="3"/></svg>
+          Music source &amp; library
+        </div>
+        <p style="font-size:13px;color:var(--text-sub);line-height:1.6">
+          Your library is scanned from <code>/Volumes/Storage/Music/FLAC/</code>. Click the <strong>↺</strong> button at the bottom of the sidebar to rescan after adding new music.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Device settings modal -->
+  <div id="settings-modal" class="modal-overlay" style="display:none">
+    <div class="modal modal-wide">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <h3>Device Settings</h3>
+        <button class="btn-secondary" style="padding:4px 8px" onclick="App.closeSettings()">✕</button>
+      </div>
+
+      <div class="settings-device-block">
+        <div class="settings-device-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
+          Poweramp — FiiO M21
+        </div>
+        <div class="settings-row">
+          <label>Mac mount path</label>
+          <input id="s-poweramp-mount" type="text" placeholder="/Volumes/FIIO M21" />
+        </div>
+        <div class="settings-row">
+          <label>Internal SD card path</label>
+          <input id="s-poweramp-prefix" type="text" placeholder="Leave empty for relative paths, e.g. /storage/sdcard0" />
+        </div>
+        <p class="settings-hint">The internal path is prepended to track paths in the exported M3U8, e.g. <code>/storage/sdcard0/Music/…</code>. Leave empty to use relative paths.</p>
+      </div>
+
+      <div class="settings-device-block" style="border-bottom:none;padding-bottom:0">
+        <div class="settings-device-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
+          AP80 Pro Max
+        </div>
+        <div class="settings-row">
+          <label>Mac mount path</label>
+          <input id="s-ap80-mount" type="text" placeholder="/Volumes/AP80" />
+        </div>
+        <p class="settings-hint">Playlists are written to <code>playlist_data/</code> at the SD card root using relative paths — no additional configuration needed.</p>
+      </div>
+
+      <div class="modal-actions" style="margin-top:20px">
+        <button class="btn-secondary" onclick="App.closeSettings()">Cancel</button>
+        <button class="btn-primary" onclick="App.saveSettings()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sync modal -->
+  <div id="sync-modal" class="modal-overlay" style="display:none">
+    <div class="modal modal-wide">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <h3>Sync Music Library</h3>
+        <button class="btn-secondary" style="padding:4px 8px" onclick="App.closeSyncModal()">✕</button>
+      </div>
+
+      <!-- Phase: pick device -->
+      <div id="sync-phase-pick">
+        <p style="color:var(--text-sub);margin-bottom:16px;font-size:13px">
+          Compare your local library with a device and copy missing files in both directions.
+          <br/>Source of truth is always <code>/Volumes/Storage/Music/FLAC</code>.
+        </p>
+        <div style="display:flex;gap:12px">
+          <button id="sync-btn-m21" class="sync-device-btn" onclick="App.startSyncScan('poweramp')">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
+            <span>FiiO M21</span>
+            <span id="sync-m21-status" class="sync-device-status"></span>
+          </button>
+          <button id="sync-btn-ap80" class="sync-device-btn" onclick="App.startSyncScan('ap80')">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
+            <span>AP80 Pro Max</span>
+            <span id="sync-ap80-status" class="sync-device-status"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Phase: scanning -->
+      <div id="sync-phase-scanning" style="display:none">
+        <p class="sync-phase-msg" id="sync-scanning-msg">Scanning…</p>
+        <div class="sync-progress-wrap"><div class="sync-progress-bar" id="sync-scan-bar"></div></div>
+      </div>
+
+      <!-- Phase: preview -->
+      <div id="sync-phase-preview" style="display:none">
+        <div id="sync-section-local">
+          <div class="sync-section-hdr">
+            <span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5"><polyline points="5 12 12 5 19 12"/><line x1="12" y1="19" x2="12" y2="5"/></svg>
+              Copy to device — <span id="sync-local-count">0</span> file(s)
+            </span>
+            <label class="sync-check-all"><input type="checkbox" id="chk-all-local" onchange="App.syncToggleAll('local', this.checked)" checked /> Select all</label>
+          </div>
+          <div class="sync-list" id="sync-list-local"></div>
+        </div>
+
+        <div id="sync-section-device" style="margin-top:14px">
+          <div class="sync-section-hdr">
+            <span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5"><polyline points="19 12 12 19 5 12"/><line x1="12" y1="5" x2="12" y2="19"/></svg>
+              Copy to local — <span id="sync-device-count">0</span> file(s)
+            </span>
+            <label class="sync-check-all"><input type="checkbox" id="chk-all-device" onchange="App.syncToggleAll('device', this.checked)" checked /> Select all</label>
+          </div>
+          <div class="sync-list" id="sync-list-device"></div>
+        </div>
+
+        <div class="modal-actions" style="margin-top:20px">
+          <button class="btn-secondary" onclick="App.closeSyncModal()">Cancel</button>
+          <button class="btn-primary" id="sync-execute-btn" onclick="App.executeSync()">Sync Selected Files</button>
+        </div>
+      </div>
+
+      <!-- Phase: copying -->
+      <div id="sync-phase-copying" style="display:none">
+        <p class="sync-phase-msg" id="sync-copying-msg">Copying…</p>
+        <div class="sync-progress-wrap"><div class="sync-progress-bar" id="sync-copy-bar"></div></div>
+        <p id="sync-copying-current" style="font-size:11px;color:var(--text-muted);margin-top:6px;font-family:monospace;word-break:break-all"></p>
+      </div>
+
+      <!-- Phase: done -->
+      <div id="sync-phase-done" style="display:none">
+        <p class="sync-phase-msg" id="sync-done-msg"></p>
+        <div id="sync-errors-wrap" style="display:none;margin-top:12px">
+          <div class="sync-section-hdr" style="color:var(--text-muted)">Errors</div>
+          <div class="sync-list" id="sync-errors-list"></div>
+        </div>
+        <div class="modal-actions" style="margin-top:20px">
+          <button class="btn-secondary" onclick="App.syncScanAgain()">Scan Again</button>
+          <button class="btn-primary" onclick="App.closeSyncModal()">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rename modal -->
+  <div id="rename-modal" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <h3>Rename Playlist</h3>
+      <input id="rename-input" type="text" />
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="App.closeRenameModal()">Cancel</button>
+        <button class="btn-primary" onclick="App.confirmRename()">Rename</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

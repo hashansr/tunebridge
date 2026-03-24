@@ -1,0 +1,28 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.env
+
+# App cache — auto-regenerated on rescan
+data/library.json
+data/artwork/
+data/playlists.bak.json
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
