@@ -132,7 +132,30 @@ Global `sync_state` dict tracks: `status` (idle/scanning/ready/copying/done/erro
 
 Sync button (⟳ arrows icon) in sidebar bottom bar opens `#sync-modal`. Device picker shows mount status (green "Connected" / grey "Not connected"). Scan phase shows animated progress bar. Preview phase shows two sections (copy to device ↑ / copy to local ↓) with scrollable checkbox lists — folder path in muted colour, filename in brighter. "Select all" toggle per section. Copy phase shows file-by-file progress. Done phase shows summary + any errors.
 
+## Git Workflow
+- Repo: `https://github.com/hashansr/music-manager` (pushed, `main` branch)
+- **Commit all changes after each session** — always `git add` modified files and commit with a clear message
+- `.claude/` is intentionally gitignored (machine-specific Claude Code config)
+- `data/library.json` and `data/artwork/` are gitignored (auto-regenerated cache)
+- `data/playlists.json`, `data/settings.json`, `data/playlist_artwork/` ARE committed (user data)
+
 ## Last Updated
+2026-03-25 — Session 8: Stability fixes, UI redesign, git setup
+- Fixed playlist clearing bug: switched from random `uuid4()` to `MD5(path)` as track ID → playlists survive rescans
+- Added atomic playlist save with `.tmp` write + rename to prevent corruption
+- Added `playlists.bak.json` backup on every save; auto-recovery if primary file corrupt
+- Fixed M4A/non-FLAC files missing from library: `scan_file()` now handles all audio formats via mutagen
+- Fixed playlist picker popup appearing off-screen (left edge): repositioning logic now clamps to viewport
+- Fixed playlist sort dropdown appearing at bottom of page instead of near sort button
+- Redesigned track row num-cell: `[⠿ drag] [□ check]` always visible side-by-side (no more hover-toggle)
+  - Playlist rows: grip icon + checkbox; Browse rows: track number + checkbox
+  - Both elements always visible at low opacity, brighten on hover; checkbox fills red when selected
+  - Grip icon changed to 6-dot grid pattern (more standard drag affordance)
+- Library scan status now shows new track count: "Library ready — 4304 tracks · +12 new"
+- Added "Force Clean Cache" option (⟳ long-press or dedicated button) — deletes library.json and re-scans from disk
+- Set up git repo: `.gitignore`, `README.md`, `install.sh`, `requirements.txt` with version pins
+- `install.sh` checks Python 3.8+, creates venv, installs deps, bootstraps data files with defaults
+
 2026-03-24 — Session 7: Modal click-outside protection + import source context
 - Removed click-outside-to-close from import, settings, sync, and rename modals — prevents accidental data loss
 - Help modal retains click-outside-to-close (read-only, no data at risk)
