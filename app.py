@@ -1536,7 +1536,7 @@ def fetch_squig_measurement(squig_url):
         url = base + urlquote(f"{file_key} {ch}.txt")
         return _squig_fetch_url(url, host)
 
-    return {'L': fetch_ch('L'), 'R': fetch_ch('R'), 'file_key': file_key, 'host': host}
+    return {'L': fetch_ch('L'), 'R': fetch_ch('R'), 'file_key': file_key, 'host': host, 'subdomain': host}
 
 
 def parse_peq_txt(text):
