@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request, send_file, Response
 from flask_cors import CORS
 import os
+import sys
 import json
 import uuid
 import threading
@@ -907,6 +908,20 @@ def put_settings():
             settings[key] = data[key]
     save_settings(settings)
     return jsonify(settings)
+
+
+@app.route('/api/health')
+def health():
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/restart', methods=['POST'])
+def restart_server():
+    def do_restart():
+        time.sleep(0.6)
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    threading.Thread(target=do_restart, daemon=True).start()
+    return jsonify({'message': 'Restarting…'})
 
 
 @app.route('/api/devices/status')

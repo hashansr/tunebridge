@@ -264,6 +264,37 @@ nav {
   line-height: 1.5; margin-top: 4px;
   padding-left: 172px;
 }
+.settings-section {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+.settings-section-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-sub);
+  margin: 0 0 18px;
+}
+.settings-app-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.settings-app-row-label {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.settings-app-row-hint {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
 
 /* ── Main ─────────────────────────────────────────────────────────────── */
 #main {

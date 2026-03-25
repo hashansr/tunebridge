@@ -971,11 +971,11 @@ function showView(viewName) {
   else if (viewName === 'songs') loadSongsView();
   else if (viewName === 'daps') loadDapsView();
   else if (viewName === 'iems') loadIemsView();
-  else if (viewName === 'library-settings') loadLibrarySettings();
+  else if (viewName === 'settings') loadSettings();
 }
 
 function showViewEl(name) {
-  const views = ['artists', 'albums', 'tracks', 'songs', 'playlist', 'daps', 'dap-detail', 'iems', 'iem-detail', 'library-settings'];
+  const views = ['artists', 'albums', 'tracks', 'songs', 'playlist', 'daps', 'dap-detail', 'iems', 'iem-detail', 'settings'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.style.display = v === name ? (v === 'playlist' ? 'flex' : 'block') : 'none';
@@ -2296,11 +2296,30 @@ function clearSongsFilter() {
   renderSongsTable();
 }
 
-/* ── Library Settings ──────────────────────────────────────────────── */
-async function loadLibrarySettings() {
+/* ── Settings ──────────────────────────────────────────────────────── */
+async function loadSettings() {
   const settings = await api('/settings').catch(() => ({}));
   const inp = document.getElementById('lib-path-input');
   if (inp) inp.value = settings.library_path || '/Volumes/Storage/Music/FLAC';
+}
+
+async function restartApp() {
+  const btn = document.getElementById('restart-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Restarting…'; }
+  try {
+    await fetch('/api/restart', { method: 'POST' });
+  } catch (_) { /* server closed the connection — that's expected */ }
+
+  // Poll until the server is back up, then reload
+  const poll = setInterval(async () => {
+    try {
+      const r = await fetch('/api/health');
+      if (r.ok) {
+        clearInterval(poll);
+        window.location.reload();
+      }
+    } catch (_) { /* still restarting */ }
+  }, 800);
 }
 
 async function saveLibraryPath() {
@@ -2394,9 +2413,10 @@ const App = {
   clearSongsFilter,
   songsPrevPage,
   songsNextPage,
-  // Library settings
-  loadLibrarySettings,
+  // Settings
+  loadSettings,
   saveLibraryPath,
+  restartApp,
   // DAP
   _selectIcon,
   toggleIconDropdown,
