@@ -15,6 +15,13 @@
   --border:      rgba(255,255,255,0.07);
   --radius:      8px;
   --sidebar-w:   240px;
+
+  /* Type scale */
+  --text-xs:   11px;   /* labels, badges, status */
+  --text-sm:   12px;   /* secondary metadata */
+  --text-base: 13px;   /* primary UI text */
+  --text-md:   14px;   /* body / table rows */
+  --text-lg:   15px;   /* sidebar title, emphasis */
 }
 
 html, body { height: 100%; overflow: hidden; }
@@ -60,7 +67,7 @@ input  { font: inherit; }
   padding: 20px 16px 16px;
   color: var(--accent);
   font-weight: 700;
-  font-size: 15px;
+  font-size: var(--text-lg);
   letter-spacing: -0.3px;
   border-bottom: 1px solid var(--border);
 }
@@ -69,7 +76,7 @@ nav { padding: 12px 8px 8px; }
 
 .nav-section-label {
   padding: 4px 8px 6px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--text-muted);
@@ -84,7 +91,7 @@ nav { padding: 12px 8px 8px; }
   padding: 8px 10px;
   border-radius: 6px;
   color: var(--text-sub);
-  font-size: 13.5px;
+  font-size: var(--text-base);
   font-weight: 500;
   transition: background 0.12s, color 0.12s;
   margin-bottom: 1px;
@@ -131,7 +138,7 @@ nav { padding: 12px 8px 8px; }
   padding: 7px 10px;
   border-radius: 6px;
   color: var(--text-sub);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 400;
   transition: background 0.12s, color 0.12s;
   text-align: left;
@@ -176,15 +183,15 @@ nav { padding: 12px 8px 8px; }
   transition: width 0.3s;
   width: 0%;
 }
-#scan-msg { flex: 1; font-size: 11px; display: flex; flex-direction: column; gap: 1px; }
-.scan-ready { color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
-.scan-total { color: var(--text); font-weight: 600; font-size: 12px; }
-.scan-new { color: #4caf7d; font-size: 10px; }
-.scan-removed { color: var(--accent); font-size: 10px; }
-.scan-unchanged { color: var(--text-muted); font-size: 10px; }
+#scan-msg { flex: 1; font-size: var(--text-xs); display: flex; flex-direction: column; gap: 1px; }
+.scan-ready { color: var(--text-muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; }
+.scan-total { color: var(--text); font-weight: 600; font-size: var(--text-sm); }
+.scan-new { color: #4caf7d; font-size: var(--text-xs); }
+.scan-removed { color: var(--accent); font-size: var(--text-xs); }
+.scan-unchanged { color: var(--text-muted); font-size: var(--text-xs); }
 #rescan-btn, #settings-btn { color: var(--text-muted); padding: 4px; border-radius: 4px; }
 #rescan-btn:hover, #settings-btn:hover { color: var(--text); background: var(--bg-hover); }
-.rescan-menu-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 14px; font-size: 13px; color: var(--text); background: none; border: none; cursor: pointer; text-align: left; }
+.rescan-menu-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 14px; font-size: var(--text-base); color: var(--text); background: none; border: none; cursor: pointer; text-align: left; }
 .rescan-menu-item:hover { background: var(--bg-hover); }
 .rescan-menu-clean { color: var(--accent); }
 .rescan-menu-clean:hover { background: rgba(220,53,69,.08); }
@@ -195,7 +202,7 @@ nav { padding: 12px 8px 8px; }
 }
 .settings-device-title {
   display: flex; align-items: center; gap: 8px;
-  font-size: 13px; font-weight: 700;
+  font-size: var(--text-base); font-weight: 700;
   margin-bottom: 12px;
 }
 .settings-row {
@@ -204,19 +211,19 @@ nav { padding: 12px 8px 8px; }
 }
 .settings-row label {
   width: 160px; flex-shrink: 0;
-  font-size: 12.5px; color: var(--text-sub);
+  font-size: var(--text-sm); color: var(--text-sub);
 }
 .settings-row input {
   flex: 1; padding: 7px 10px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 6px;
-  color: var(--text); font-size: 13px; outline: none;
-  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--text); font-size: var(--text-base); outline: none;
+  font-family: inherit;
 }
 .settings-row input:focus { border-color: var(--accent); }
 .settings-hint {
-  font-size: 12px; color: var(--text-muted);
+  font-size: var(--text-sm); color: var(--text-muted);
   line-height: 1.5; margin-top: 4px;
   padding-left: 172px;
 }
@@ -238,13 +245,13 @@ nav { padding: 12px 8px 8px; }
   margin-bottom: 20px;
 }
 .view-header h2 { font-size: 22px; font-weight: 700; }
-.view-count { color: var(--text-muted); font-size: 13px; }
+.view-count { color: var(--text-muted); font-size: var(--text-base); }
 
 .breadcrumb {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 .breadcrumb .crumb { color: var(--text-sub); cursor: pointer; }
 .breadcrumb .crumb:hover { color: var(--text); text-decoration: underline; }
@@ -266,7 +273,7 @@ nav { padding: 12px 8px 8px; }
 .alpha-btn {
   width: 28px; height: 28px;
   border-radius: 5px;
-  font-size: 12px; font-weight: 700;
+  font-size: var(--text-sm); font-weight: 700;
   color: var(--text-sub);
   background: var(--bg-elevated);
   transition: background 0.12s, color 0.12s;
@@ -309,8 +316,8 @@ nav { padding: 12px 8px 8px; }
 }
 .artist-thumb img { width: 100%; height: 100%; object-fit: cover; }
 
-.artist-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.artist-meta { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+.artist-name { font-weight: 600; font-size: var(--text-base); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.artist-meta { font-size: var(--text-xs); color: var(--text-muted); margin-top: 3px; }
 
 /* Artist card quick-add overlay */
 .artist-card-overlay {
@@ -378,9 +385,9 @@ nav { padding: 12px 8px 8px; }
 }
 .album-card:hover .album-thumb-overlay { opacity: 1; }
 
-.album-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.album-artist { font-size: 12px; color: var(--text-muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.album-year { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.album-name { font-weight: 600; font-size: var(--text-base); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.album-artist { font-size: var(--text-sm); color: var(--text-muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.album-year { font-size: var(--text-xs); color: var(--text-muted); margin-top: 2px; }
 
 /* ── Hero headers (artist/album context) ─────────────────────────────── */
 .browse-hero {
@@ -413,12 +420,12 @@ nav { padding: 12px 8px 8px; }
 }
 .hero-art img, .hero-art-sq img { width: 100%; height: 100%; object-fit: cover; }
 .hero-info { flex: 1; min-width: 0; }
-.hero-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; }
+.hero-label { font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.1em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; }
 .hero-title { font-size: 26px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px; }
-.hero-sub { font-size: 14px; color: var(--text-sub); margin-bottom: 4px; }
+.hero-sub { font-size: var(--text-md); color: var(--text-sub); margin-bottom: 4px; }
 .hero-sub a, .hero-sub span.link { color: var(--text-sub); cursor: pointer; }
 .hero-sub a:hover, .hero-sub span.link:hover { color: var(--text); text-decoration: underline; }
-.hero-meta { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+.hero-meta { font-size: var(--text-base); color: var(--text-muted); margin-bottom: 16px; }
 .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
 /* ── Track table ─────────────────────────────────────────────────────── */
@@ -431,7 +438,7 @@ nav { padding: 12px 8px 8px; }
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13.5px;
+  font-size: var(--text-base);
 }
 
 thead tr {
@@ -441,7 +448,7 @@ thead tr {
 thead th {
   padding: 6px 12px;
   text-align: left;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--text-muted);
@@ -471,7 +478,7 @@ td { padding: 8px 12px; vertical-align: middle; }
 .track-num {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: var(--text-base);
   display: flex; align-items: center; justify-content: center;
   min-width: 20px;
 }
@@ -515,7 +522,7 @@ tbody tr:hover .drag-handle { opacity: 0.8; }
 .thumb img { width: 100%; height: 100%; object-fit: cover; }
 
 .track-info .track-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
-.track-info .track-artist { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+.track-info .track-artist { font-size: var(--text-sm); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
 
 .col-artist td, td.cell-artist { color: var(--text-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
 td.cell-album { color: var(--text-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
@@ -564,7 +571,7 @@ td.cell-album { color: var(--text-sub); white-space: nowrap; overflow: hidden; t
   display: flex; align-items: center; gap: 8px;
   padding: 9px 14px;
   cursor: pointer;
-  font-size: 13.5px;
+  font-size: var(--text-base);
   transition: background 0.1s;
 }
 .dropdown-item:hover { background: var(--bg-hover); }
@@ -829,7 +836,7 @@ td.cell-album { color: var(--text-sub); white-space: nowrap; overflow: hidden; t
   color: var(--text);
   padding: 10px 20px;
   border-radius: 8px;
-  font-size: 13.5px;
+  font-size: var(--text-base);
   box-shadow: 0 4px 20px rgba(0,0,0,0.5);
   transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s;
   opacity: 0;
@@ -896,7 +903,7 @@ td.cell-album { color: var(--text-sub); white-space: nowrap; overflow: hidden; t
   margin-top: 12px; padding: 10px 12px;
   background: rgba(252,60,68,0.08);
   border-radius: 6px;
-  font-size: 12.5px; color: var(--text-sub); line-height: 1.5;
+  font-size: var(--text-sm); color: var(--text-sub); line-height: 1.5;
 }
 .help-tip svg { flex-shrink: 0; margin-top: 1px; color: var(--accent); }
 .help-code {
