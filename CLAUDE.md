@@ -49,6 +49,7 @@ Port 5000 is blocked on macOS (AirPlay). Always use 5001.
 | `data/settings.json` | Device mount paths |
 | `data/daps.json` | DAP devices (name, model, mount, export config, playlist export timestamps) |
 | `data/iems.json` | IEM/headphone library (name, type, squig measurement data, PEQ profiles) |
+| `data/baselines.json` | FR tuning targets (name, url, color, 300-point measurement) |
 | `data/artwork/` | Cached album art JPEGs |
 | `data/playlist_artwork/` | Custom playlist cover images |
 | `~/playlist_proxy.py` | Reverse proxy 5002 → 5001 |
@@ -83,6 +84,10 @@ Key routes:
 - `POST /api/iems/<iid>/peq` — upload APO/AutoEQ .txt PEQ profile (multipart or JSON)
 - `DELETE /api/iems/<iid>/peq/<peq_id>` — delete PEQ profile
 - `POST /api/iems/<iid>/peq/<peq_id>/copy` — copy PEQ file to a DAP's PEQ folder
+- `GET /api/iems/<iid>/peq/<peq_id>/download` — download raw PEQ .txt file
+- `GET/POST /api/baselines` — list / create FR tuning targets (fetches squig.link target data)
+- `DELETE /api/baselines/<bid>` — delete a baseline
+- `GET /api/daps/<did>/export/<pid>/download` — generate & download M3U using DAP's path config
 
 ### Frontend (`app.js`)
 State object:
@@ -105,12 +110,16 @@ Module-level globals for Gear views:
 - `_currentIemId` — IEM being viewed (used by PEQ upload/delete)
 - `_activePeqId` — currently overlaid PEQ profile ID (null = raw measurement)
 - `DAP_MODEL_PRESETS` — map of model → `{mount, folder, prefix, hint}` for modal auto-fill
+- `_baselines` — cached baseline list (loaded on Settings view open)
+- `_selectedBaselineColor` — currently chosen swatch for next baseline add
+- `BASELINE_COLORS` — 10-colour design-system palette for baseline swatch picker
+- `_DAP_SVG` — inline SVG string used for all DAP card/header icons
 
 Public `App` object exposes all functions called from HTML `onclick` attributes.
 
 ## Features Implemented
-- [x] DAP management — add/edit/delete DAPs with model presets (Poweramp, Hiby OS, FiiO Player, Other), emoji icon picker, per-playlist sync status tracking (never / stale / up-to-date), one-click export to mounted device
-- [x] IEM & Headphone library — add/edit/delete with squig.link measurement import, frequency response graph (Chart.js, log-scale, region bands), PEQ profile upload (APO/AutoEQ .txt), PEQ overlay on graph
+- [x] DAP management — add/edit/delete DAPs with model presets (Poweramp, Hiby OS, FiiO Player, Other), SVG icon (no emoji), per-playlist sync status tracking (never / stale / up-to-date), one-click export to mounted device
+- [x] IEM & Headphone library — add/edit/delete with squig.link measurement import, frequency response graph (Chart.js, log-scale, region bands, 1kHz normalised to 75 dB), PEQ profile upload (APO/AutoEQ .txt), PEQ overlay on graph, PEQ accordion view with filter table + download
 - [x] Artist → Album → Track drill-down navigation
 - [x] "Browse All Songs" button in artist hero → flat track list for entire artist
 - [x] Multi-select tracks (click `#` cell) with shift-click range; floating bulk action bar
@@ -142,8 +151,17 @@ Public `App` object exposes all functions called from HTML `onclick` attributes.
 - [x] Health check panel in Settings (library, squig.link, DAPs, data files)
 - [x] Production server: Waitress replaces Flask dev server (debug=False)
 - [x] File upload size cap: 10 MB MAX_CONTENT_LENGTH
-- [x] SSRF warning for non-squig.link URLs in baseline add form
+- [x] SSRF warning for non-squig.link URLs in baseline add form (regex fixed: `[^./]+` subdomain match)
 - [x] update.sh: backs up data/, pulls latest git, updates deps, rebuilds Mac app
+- [x] FR tuning targets (baselines) — add squig.link targets (Harman, Rtings, etc.), toggle per-curve in legend, user-chosen plot colour via 10-colour swatch picker
+- [x] FR graph: baselines hidden by default on load — only factory L/R visible; eye-toggle to show/hide any curve; legend items dim when hidden
+- [x] FR graph: fixed Y-axis 50–110 dB, chart height 420px, 1kHz normalisation to 75 dB reference
+- [x] FR graph: 7 squig.link-style region bands (Sub bass → Air), log-scale X-axis, blue-tinted grid
+- [x] PEQ accordion — view filter table (type/fc/gain/Q) and download PEQ file inline on IEM detail page without navigation
+- [x] Dynamic DAP export pills in playlist view — fetches live DAP list, renders download + device-copy button per DAP
+- [x] Dynamic Sync modal — DAP list fetched live; uses DAP's mount/music path; no hardcoded device names
+- [x] No emoji in UI — DAP cards/headers use SVG portable-player icon; sync modal and export pills use SVG only
+- [x] New waveform icons — sidebar logo, favicon (multi-size .ico), Mac app icon (icns via iconutil)
 
 ## Data Notes
 - Playlists store track IDs (strings), resolved to full objects on load
@@ -155,6 +173,11 @@ Public `App` object exposes all functions called from HTML `onclick` attributes.
 - IEM measurements stored as `[[freq, spl], ...]` (300 log-spaced points, 20–20kHz) in `measurement_L` / `measurement_R`
 - IEM PEQ profiles: `{id, name, preamp_db, filters: [{type, fc, gain, q}], raw_txt}`
 - squig.link fetch requires browser User-Agent + Referer headers (server returns 403 otherwise)
+- Baselines stored in `data/baselines.json`: `{id, name, url, color, measurement: [[freq,spl],...]}`
+- Baseline `id` = MD5(url)[:12]; `color` = user-chosen hex OR deterministic from `_baseline_color(bid)` fallback
+- Target files use bare `{file_key}.txt` (no L/R suffix); `fetch_squig_target()` tries bare then falls back to `{file_key} L.txt`
+- All FR curves normalised to 75 dB at 1kHz (`NORM_REF_DB = 75.0`); IEM L/R share one offset from L channel; baselines normalised independently
+- DAP `icon` field is deprecated — no longer sent or rendered; all DAPs use `_DAP_SVG` inline icon
 
 ## Known Issues / Quirks
 - Poweramp displays playlist name as filename (e.g. "My Mix.m3u" shows as "My Mix.m3u"). User can long-press → Edit to rename within Poweramp.
@@ -202,14 +225,27 @@ Sync button (⟳ arrows icon) in sidebar bottom bar opens `#sync-modal`. Device 
 - [ ] Playlist sharing / export to streaming services
 
 ## Last Updated
-2026-03-26 — Session 12: Production-readiness changes
+2026-03-26 — Session 13: FR graph improvements + UI polish
+
+- **FR baselines hidden by default**: Baseline/target datasets start with `hidden: true` in Chart.js. Only factory L (blue) / R (red) channels show on initial load. Legend items render dimmed (swatch line + label at 0.35/0.45 opacity) when hidden. `toggleIemCurve()` now also dims/undims the swatch SVG line and label span — not just the eye-toggle button.
+- **Baseline colour picker**: New 10-swatch colour picker in the Settings → Frequency Response Baselines add row. Clicking the circular swatch button opens a floating 5×2 grid using the design-system palette (amber, blue, pink, green, violet, orange, sky, rose, emerald, teal). Selected colour is POSTed to `/api/baselines` and stored. Backend validates hex colour and falls back to deterministic hash if invalid. After adding a baseline the picker auto-advances to the next colour. Functions: `_initBaselineColorPicker()`, `selectBaselineColor(color)`, `toggleBaselineColorPicker()`.
+- **Remove DAP emoji entirely**: DAP icon picker dropdown, `DAP_ICONS` array, `_renderIconPicker()`, `_selectIcon()`, `toggleIconDropdown()`, all `.icon-picker` / `.icon-dropdown` CSS, the hidden `dap-icon` input, and the click-outside handler removed (−128 lines). All DAP cards and detail headers now use `_DAP_SVG` — a consistent inline SVG of a portable media player (rectangle + scroll wheel + label bar). The `icon` field is no longer sent to the API.
+
+2026-03-26 — Session 12: Production-readiness + Gear feature expansion
 - **Health check panel**: New "System Status" section in Settings view. `GET /api/health/status` returns library path/track count/cache age, squig.link reachability, DAP mount status, and data file R/W access. Frontend `runHealthCheck()` renders a 2×2 grid of status tiles with colour-coded dots (green/yellow/red/grey).
 - **Production server**: Replaced `debug=True` Flask dev server with Waitress WSGI server (`waitress>=3.0`). Falls back to `app.run(debug=False)` if waitress not installed. Port configurable via `TUNEBRIDGE_PORT` env var.
 - **File upload size cap**: `MAX_CONTENT_LENGTH = 10 MB` added to Flask app config.
-- **SSRF warning**: `addBaseline()` in `app.js` now shows a toast warning if the entered URL doesn't match `*.squig.link/*`.
+- **SSRF warning fix**: Regex corrected from `[^/]+` to `[^./]+` so subdomain check actually works.
+- **FR tuning targets (baselines)**: `GET/POST /api/baselines`, `DELETE /api/baselines/<bid>`. `fetch_squig_target()` tries bare `{file_key}.txt` then `{file_key} L.txt`. Stored in `data/baselines.json`. Rendered as reference lines on all IEM graphs. Settings section to manage them.
+- **1kHz normalisation**: All FR curves (IEM L/R, PEQ, baselines) shifted so value at 1kHz = 75 dB. Eliminates inter-database dB gaps. `NORM_REF_DB`, `_spl_at_1khz()`, `_shift()` helpers in `app.py`.
+- **FR graph fixed Y-axis**: 50–110 dB, chart height 420px.
+- **PEQ accordion**: Inline filter table (type/fc/gain/Q) and download button on IEM detail page. `.peq-card`, `.peq-card-header`, `.peq-accordion`, `.peq-chevron`. `togglePeqAccordion(peqId)`, `downloadPeq(peqId, name)`. New route `GET /api/iems/<iid>/peq/<peq_id>/download`.
+- **Dynamic DAP export pills**: `renderDapExportPills(pid)` fetches `/api/daps` on each playlist open. New route `GET /api/daps/<did>/export/<pid>/download`. Replaced hardcoded Poweramp/AP80 buttons.
+- **Dynamic Sync modal**: `showSync()` fetches live DAP list; `startSyncScan(dapId)` passes `dap_id`; `get_dap_music_path(dap_id)` replaces hardcoded `get_device_music_path()`.
+- **No emoji in UI**: Sync modal and export pills use SVG icons only.
+- **New waveform icons**: `static/logo.png` (sidebar), `static/favicon.ico` (multi-size ICO via Python struct), `static/favicon_32.png`, `static/favicon_180.png`, `static/TuneBridge.icns` (Mac app via iconutil). Source icons at `/Users/hashan/Documents/Claude/Music Library/icons/`.
 - **requirements.txt**: Removed unused `flask-cors`, added `pillow>=10.0` and `waitress>=3.0`.
 - **update.sh**: New script — backs up `data/*.json` to timestamped folder, runs `git pull --ff-only`, updates pip deps, optionally rebuilds Mac app wrapper.
-- **install.sh**: Updated next-steps message to mention `update.sh` and corrected "Rescan Library" location.
 - **Settings layout**: Replaced inline `max-width:620px` div with `.settings-content` CSS class (flex column, full width).
 
 2026-03-25 — Session 11: Artist sort, Settings view, Restart & Reload
