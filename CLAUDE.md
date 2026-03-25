@@ -71,6 +71,8 @@ Key routes:
 - `GET /api/playlists/<pid>/artwork` — serve cover art
 - `POST /api/playlists/import` — parse and import M3U/M3U8 file
 - `GET/PUT /api/settings` — device configuration
+- `GET /api/health` — health check (`{status: "ok"}`)
+- `POST /api/restart` — restart server via `os.execv` (responds before restarting)
 - `GET/POST /api/daps` — list / create DAP devices
 - `GET/PUT/DELETE /api/daps/<did>` — get / update / delete DAP
 - `POST /api/daps/<did>/export/<pid>` — export playlist M3U to DAP, records timestamp in `playlist_exports`
@@ -130,6 +132,12 @@ Public `App` object exposes all functions called from HTML `onclick` attributes.
 - [x] Library rescan with progress bar
 - [x] `updated_at` tracked on all playlist mutations; backfilled on old playlists
 - [x] Bidirectional music sync (local ↔ M21 / local ↔ AP80) — scan diff, preview with checkboxes, copy with progress
+- [x] Artist sort ignores leading articles (The, A, An) — across artists page, albums page, and Songs sort
+- [x] Settings view (Tools section) — Library section (path config) + App section (Restart & Reload)
+- [x] IEM graph: distinct L (blue) / R (red) / PEQ (green) colours, custom eye-toggle legend
+- [x] Songs view pagination (100 tracks/page)
+- [x] DAP detail: clickable playlist names → navigate to playlist
+- [x] Sidebar nav order: Library → Gear → Tools → Playlists
 
 ## Data Notes
 - Playlists store track IDs (strings), resolved to full objects on load
@@ -181,6 +189,20 @@ Sync button (⟳ arrows icon) in sidebar bottom bar opens `#sync-modal`. Device 
 - Downsampled to 300 log-spaced points between 20–20kHz
 
 ## Last Updated
+2026-03-25 — Session 11: Artist sort, Settings view, Restart & Reload
+- **Artist sort ignores leading articles**: "The", "A", "An" stripped before sorting — "The Offspring" sorts under O, "A Perfect Circle" under P. Applied to `/api/library/artists`, `/api/library/albums`, and `/api/library/songs` (artist/album_artist columns). `artist_sort_key()` helper in `app.py`. Frontend A–Z alpha bar already used the same stripping logic.
+- **Settings view**: Renamed "Library Settings" nav item → **"Settings"** (gear icon). View (`view-settings`) now has two card sections:
+  - **Library** — music library path input, Save, Rescan Library buttons (same as before)
+  - **App** — Restart & Reload button: calls `POST /api/restart`, polls `GET /api/health` every 800ms until server responds, then reloads the page automatically
+- **New API routes**: `GET /api/health` (returns `{status: "ok"}`), `POST /api/restart` (uses `os.execv` to replace the process with a fresh instance after 600ms delay)
+- **Sidebar nav order**: Library → Gear → Tools → Playlists (Playlists is outside `<nav>` as `#playlists-header` + `#playlists-section`)
+- **Playlist scroll bug fixed**: PLAYLISTS header moved outside `#playlists-section` as a static flex sibling — no more content scrolling behind the header
+- **IEM graph**: L channel = Blue (`#5b8dee`), R channel = Red (`#e05c5c`), PEQ overlay = Green (`#53e16f`). Custom HTML legend with eye-toggle buttons per curve (replaces Chart.js built-in legend). `_iemCurveColor(id)` derives colour from dataset ID suffix (`-L`, `-R`, `-peq-*`). `toggleIemCurve(idx)` toggles Chart.js dataset visibility.
+- **DAP modal**: Icon dropdown aligned correctly (44px → 36px, border-radius fix)
+- **Songs view**: Client-side pagination (100 tracks/page). `_songsPage`, `SONGS_PER_PAGE`, `songsPrevPage()`, `songsNextPage()`, `_scrollSongsTop()`. Sort/filter resets to page 0.
+- **DAP detail**: Playlist names in sync status table are clickable → navigates directly to that playlist (`openPlaylist(id)`)
+- **Search Songs removed**: Superseded by Songs view with inline filter
+
 2026-03-25 — Session 10: Major UI overhaul (Luminous Depth design system) + new features
 - **Design System**: Complete CSS rewrite implementing "Luminous Depth" / "Obsidian Lens" design spec
   - New colour palette: primary `#adc6ff` (blue), secondary `#ffb3b5` (pink), tertiary `#53e16f` (green)
