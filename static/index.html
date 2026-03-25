@@ -61,34 +61,34 @@
         </button>
       </nav>
 
-      <div id="playlists-section">
-        <div class="nav-section-label nav-section-sticky" style="display:flex;justify-content:space-between;align-items:center;">
-          Playlists
-          <div style="display:flex;gap:2px">
-            <div style="position:relative">
-              <button class="sidebar-icon-btn" id="sidebar-sort-btn" onclick="App.toggleSidebarSort(event)" title="Sort playlists">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
-              </button>
-              <div id="sidebar-sort-dd" style="display:none;position:absolute;top:calc(100% + 4px);right:0;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;min-width:140px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:200">
-                <div class="sidebar-sort-option" onclick="App.setSidebarSort('alpha')">
-                  <span id="sidebar-sort-check-alpha" style="opacity:0">✓</span> A–Z
-                </div>
-                <div class="sidebar-sort-option" onclick="App.setSidebarSort('created')">
-                  <span id="sidebar-sort-check-created">✓</span> Date Created
-                </div>
-                <div class="sidebar-sort-option" onclick="App.setSidebarSort('updated')">
-                  <span id="sidebar-sort-check-updated" style="opacity:0">✓</span> Last Updated
-                </div>
+      <div id="playlists-header" class="nav-section-label" style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;margin-top:4px;">
+        Playlists
+        <div style="display:flex;gap:2px">
+          <div style="position:relative">
+            <button class="sidebar-icon-btn" id="sidebar-sort-btn" onclick="App.toggleSidebarSort(event)" title="Sort playlists">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
+            </button>
+            <div id="sidebar-sort-dd" style="display:none;position:absolute;top:calc(100% + 4px);right:0;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;min-width:140px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:200">
+              <div class="sidebar-sort-option" onclick="App.setSidebarSort('alpha')">
+                <span id="sidebar-sort-check-alpha" style="opacity:0">✓</span> A–Z
+              </div>
+              <div class="sidebar-sort-option" onclick="App.setSidebarSort('created')">
+                <span id="sidebar-sort-check-created">✓</span> Date Created
+              </div>
+              <div class="sidebar-sort-option" onclick="App.setSidebarSort('updated')">
+                <span id="sidebar-sort-check-updated" style="opacity:0">✓</span> Last Updated
               </div>
             </div>
-            <button class="sidebar-icon-btn" onclick="App.triggerImport()" title="Import M3U / M3U8">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            </button>
-            <button id="new-playlist-btn" class="sidebar-icon-btn" onclick="App.createPlaylist()" title="New Playlist">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            </button>
           </div>
+          <button class="sidebar-icon-btn" onclick="App.triggerImport()" title="Import M3U / M3U8">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </button>
+          <button id="new-playlist-btn" class="sidebar-icon-btn" onclick="App.createPlaylist()" title="New Playlist">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
         </div>
+      </div>
+      <div id="playlists-section">
         <input type="file" id="import-file-input" accept=".m3u,.m3u8" style="display:none" onchange="App.handleImportFile(this)" />
         <div id="playlists-list"></div>
       </div>
