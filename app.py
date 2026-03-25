@@ -4,6 +4,11 @@ import os
 import sys
 import json
 import subprocess
+try:
+    from waitress import serve as waitress_serve
+    HAS_WAITRESS = True
+except ImportError:
+    HAS_WAITRESS = False
 import uuid
 import threading
 import time
@@ -21,6 +26,7 @@ import re
 from PIL import Image
 
 app = Flask(__name__, static_folder='static', static_url_path='')
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
 
 _ARTICLE_RE = re.compile(r'^(the|a|an)\s+', re.IGNORECASE)
 
@@ -915,6 +921,51 @@ def put_settings():
 @app.route('/api/health')
 def health():
     return jsonify({'status': 'ok'})
+
+
+@app.route('/api/health/status')
+def health_status():
+    import time as _time
+    result = {}
+
+    # 1. Local library
+    music_path = get_music_base()
+    lib_ok = music_path.exists()
+    with library_lock:
+        track_count = len(library)
+    cache_age = None
+    if LIBRARY_CACHE.exists():
+        cache_age = round((_time.time() - LIBRARY_CACHE.stat().st_mtime) / 3600, 1)
+    result['library'] = {
+        'ok': lib_ok,
+        'path': str(music_path),
+        'tracks': track_count,
+        'cache_age_hours': cache_age,
+    }
+
+    # 2. squig.link connectivity
+    import urllib.request as _req
+    try:
+        r = _req.urlopen('https://squig.link', timeout=4)
+        result['squig'] = {'ok': True, 'status': r.status}
+    except Exception as e:
+        result['squig'] = {'ok': False, 'error': str(e)}
+
+    # 3. DAPs
+    daps = load_daps()
+    for d in daps:
+        d['mounted'] = Path(d.get('mount_path', '')).exists()
+    result['daps'] = [{'id': d['id'], 'name': d['name'], 'mounted': d['mounted']} for d in daps]
+
+    # 4. Data files
+    files = {
+        'playlists': PLAYLIST_FILE,
+        'settings': SETTINGS_FILE,
+        'iems': IEM_FILE,
+    }
+    result['data_files'] = {k: v.exists() and os.access(v, os.R_OK | os.W_OK) for k, v in files.items()}
+
+    return jsonify(result)
 
 
 @app.route('/api/restart', methods=['POST'])
@@ -1875,4 +1926,9 @@ def delete_baseline(bid):
 
 if __name__ == '__main__':
     load_library()
-    app.run(debug=True, port=5001, use_reloader=False)
+    port = int(os.environ.get('TUNEBRIDGE_PORT', 5001))
+    if HAS_WAITRESS:
+        print(f' * TuneBridge running on http://127.0.0.1:{port}')
+        waitress_serve(app, host='127.0.0.1', port=port, threads=4)
+    else:
+        app.run(debug=False, host='127.0.0.1', port=port, use_reloader=False)

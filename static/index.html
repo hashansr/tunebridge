@@ -317,7 +317,7 @@
         <div class="view-header">
           <h2>Settings</h2>
         </div>
-        <div style="max-width:620px">
+        <div class="settings-content">
 
           <!-- Library section -->
           <div class="settings-section">
@@ -348,6 +348,46 @@
             <p style="font-size:var(--text-sm);color:var(--text-muted);margin-top:8px">
               e.g. <code>https://ducbloke.squig.link/?share=Harman_Target</code>
             </p>
+          </div>
+
+          <!-- System Status section -->
+          <div class="settings-section">
+            <h3 class="settings-section-title">System Status</h3>
+            <div id="health-grid" class="health-grid">
+              <!-- populated by runHealthCheck() -->
+              <div class="health-item">
+                <div class="health-dot health-dot-idle"></div>
+                <div class="health-item-body">
+                  <div class="health-item-label">Local Library</div>
+                  <div class="health-item-detail">Run check to test</div>
+                </div>
+              </div>
+              <div class="health-item">
+                <div class="health-dot health-dot-idle"></div>
+                <div class="health-item-body">
+                  <div class="health-item-label">squig.link</div>
+                  <div class="health-item-detail">Run check to test</div>
+                </div>
+              </div>
+              <div class="health-item">
+                <div class="health-dot health-dot-idle"></div>
+                <div class="health-item-body">
+                  <div class="health-item-label">DAPs</div>
+                  <div class="health-item-detail">Run check to test</div>
+                </div>
+              </div>
+              <div class="health-item">
+                <div class="health-dot health-dot-idle"></div>
+                <div class="health-item-body">
+                  <div class="health-item-label">Data Files</div>
+                  <div class="health-item-detail">Run check to test</div>
+                </div>
+              </div>
+            </div>
+            <div class="health-run-row">
+              <button class="btn-secondary" id="health-check-btn" onclick="App.runHealthCheck()">Run Health Check</button>
+              <span class="health-last-run" id="health-last-run"></span>
+            </div>
           </div>
 
           <!-- App section -->

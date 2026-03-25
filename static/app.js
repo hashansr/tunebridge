@@ -2448,6 +2448,86 @@ async function restartApp() {
   }, 800);
 }
 
+async function runHealthCheck() {
+  const btn = document.getElementById('health-check-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+
+  let data;
+  try {
+    data = await api('/health/status');
+  } catch(e) {
+    toast('Health check failed: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Run Health Check'; }
+    return;
+  }
+
+  // Build grid HTML
+  const dot = ok => `<div class="health-dot health-dot-${ok ? 'ok' : 'err'}"></div>`;
+
+  // Library
+  const lib = data.library;
+  const libDetail = lib.ok
+    ? `${lib.tracks} tracks · ${lib.cache_age_hours != null ? `cache ${lib.cache_age_hours}h old` : 'no cache'}`
+    : `Path not found`;
+  const libHtml = `
+    <div class="health-item">
+      ${dot(lib.ok)}
+      <div class="health-item-body">
+        <div class="health-item-label">Local Library</div>
+        <div class="health-item-detail">${esc(lib.path)}<br>${esc(libDetail)}</div>
+      </div>
+    </div>`;
+
+  // squig.link
+  const sq = data.squig;
+  const sqHtml = `
+    <div class="health-item">
+      ${dot(sq.ok)}
+      <div class="health-item-body">
+        <div class="health-item-label">squig.link</div>
+        <div class="health-item-detail">${sq.ok ? 'Reachable' : esc(sq.error || 'Unreachable')}</div>
+      </div>
+    </div>`;
+
+  // DAPs
+  const daps = data.daps || [];
+  const dapDetail = daps.length === 0
+    ? 'No DAPs configured'
+    : daps.map(d => `<div class="health-dap-row">${dot(d.mounted)}<span style="font-size:var(--text-xs);color:var(--text-sub)">${esc(d.name)}: ${d.mounted ? 'Connected' : 'Not connected'}</span></div>`).join('');
+  const dapsOk = daps.length > 0 && daps.some(d => d.mounted);
+  const dapHtml = `
+    <div class="health-item">
+      <div class="health-dot health-dot-${daps.length === 0 ? 'idle' : dapsOk ? 'ok' : 'warn'}"></div>
+      <div class="health-item-body">
+        <div class="health-item-label">DAPs</div>
+        <div class="health-item-detail"><div class="health-dap-list">${dapDetail}</div></div>
+      </div>
+    </div>`;
+
+  // Data files
+  const df = data.data_files;
+  const dfAll = Object.values(df).every(Boolean);
+  const dfDetail = Object.entries(df).map(([k, ok]) =>
+    `${ok ? '✓' : '✗'} ${k}.json`
+  ).join(' · ');
+  const dfHtml = `
+    <div class="health-item">
+      ${dot(dfAll)}
+      <div class="health-item-body">
+        <div class="health-item-label">Data Files</div>
+        <div class="health-item-detail">${esc(dfDetail)}</div>
+      </div>
+    </div>`;
+
+  const grid = document.getElementById('health-grid');
+  if (grid) grid.innerHTML = libHtml + sqHtml + dapHtml + dfHtml;
+
+  const lastRun = document.getElementById('health-last-run');
+  if (lastRun) lastRun.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Run Health Check'; }
+}
+
 /* ── Baselines (FR tuning targets) ─────────────────────────────────── */
 let _baselines = [];
 
@@ -2479,6 +2559,9 @@ async function addBaseline() {
   const name = nameEl.value.trim();
   const url  = urlEl.value.trim();
   if (!name || !url) { toast('Enter a name and a squig.link URL'); return; }
+  if (url && !url.match(/^https?:\/\/[^/]+\.squig\.link\//i)) {
+    toast('⚠ URL doesn\'t look like a squig.link address — double-check it');
+  }
   btn.disabled = true;
   btn.textContent = 'Fetching…';
   try {
@@ -2611,6 +2694,7 @@ const App = {
   deleteIem,
   applyPeqToGraph,
   toggleIemCurve,
+  runHealthCheck,
   togglePeqAccordion,
   downloadPeq,
   showPeqModal,

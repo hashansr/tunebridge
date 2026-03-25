@@ -72,6 +72,7 @@ Key routes:
 - `POST /api/playlists/import` — parse and import M3U/M3U8 file
 - `GET/PUT /api/settings` — device configuration
 - `GET /api/health` — health check (`{status: "ok"}`)
+- `GET /api/health/status` — detailed system status (library, squig.link, DAPs, data files)
 - `POST /api/restart` — restart server via `os.execv` (responds before restarting)
 - `GET/POST /api/daps` — list / create DAP devices
 - `GET/PUT/DELETE /api/daps/<did>` — get / update / delete DAP
@@ -138,6 +139,11 @@ Public `App` object exposes all functions called from HTML `onclick` attributes.
 - [x] Songs view pagination (100 tracks/page)
 - [x] DAP detail: clickable playlist names → navigate to playlist
 - [x] Sidebar nav order: Library → Gear → Tools → Playlists
+- [x] Health check panel in Settings (library, squig.link, DAPs, data files)
+- [x] Production server: Waitress replaces Flask dev server (debug=False)
+- [x] File upload size cap: 10 MB MAX_CONTENT_LENGTH
+- [x] SSRF warning for non-squig.link URLs in baseline add form
+- [x] update.sh: backs up data/, pulls latest git, updates deps, rebuilds Mac app
 
 ## Data Notes
 - Playlists store track IDs (strings), resolved to full objects on load
@@ -188,7 +194,24 @@ Sync button (⟳ arrows icon) in sidebar bottom bar opens `#sync-modal`. Device 
 - File format: REW space-separated (`* header` lines skipped, columns: freq SPL phase)
 - Downsampled to 300 log-spaced points between 20–20kHz
 
+## Future Improvements
+- [ ] LAN access with authentication (currently localhost-only for security)
+- [ ] Windows installer / run.bat script
+- [ ] Automatic library rescan on file system changes (FSEvents/inotify)
+- [ ] Multiple library paths support
+- [ ] Playlist sharing / export to streaming services
+
 ## Last Updated
+2026-03-26 — Session 12: Production-readiness changes
+- **Health check panel**: New "System Status" section in Settings view. `GET /api/health/status` returns library path/track count/cache age, squig.link reachability, DAP mount status, and data file R/W access. Frontend `runHealthCheck()` renders a 2×2 grid of status tiles with colour-coded dots (green/yellow/red/grey).
+- **Production server**: Replaced `debug=True` Flask dev server with Waitress WSGI server (`waitress>=3.0`). Falls back to `app.run(debug=False)` if waitress not installed. Port configurable via `TUNEBRIDGE_PORT` env var.
+- **File upload size cap**: `MAX_CONTENT_LENGTH = 10 MB` added to Flask app config.
+- **SSRF warning**: `addBaseline()` in `app.js` now shows a toast warning if the entered URL doesn't match `*.squig.link/*`.
+- **requirements.txt**: Removed unused `flask-cors`, added `pillow>=10.0` and `waitress>=3.0`.
+- **update.sh**: New script — backs up `data/*.json` to timestamped folder, runs `git pull --ff-only`, updates pip deps, optionally rebuilds Mac app wrapper.
+- **install.sh**: Updated next-steps message to mention `update.sh` and corrected "Rescan Library" location.
+- **Settings layout**: Replaced inline `max-width:620px` div with `.settings-content` CSS class (flex column, full width).
+
 2026-03-25 — Session 11: Artist sort, Settings view, Restart & Reload
 - **Artist sort ignores leading articles**: "The", "A", "An" stripped before sorting — "The Offspring" sorts under O, "A Perfect Circle" under P. Applied to `/api/library/artists`, `/api/library/albums`, and `/api/library/songs` (artist/album_artist columns). `artist_sort_key()` helper in `app.py`. Frontend A–Z alpha bar already used the same stripping logic.
 - **Settings view**: Renamed "Library Settings" nav item → **"Settings"** (gear icon). View (`view-settings`) now has two card sections:
