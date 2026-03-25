@@ -1840,19 +1840,86 @@ function _renderPeqList(profiles) {
   if (!profiles.length) {
     return `<div style="color:var(--text-muted);font-size:var(--text-sm);padding:10px 0">No PEQ profiles yet. Upload an APO/AutoEQ .txt file.</div>`;
   }
-  return profiles.map(p => `
-    <div class="peq-row${_activePeqId === p.id ? ' active' : ''}" id="peq-row-${p.id}">
-      <div class="peq-row-name">${esc(p.name)}</div>
-      <div class="peq-row-meta">${p.filters?.length || 0} filters · ${p.preamp_db != null ? (p.preamp_db >= 0 ? '+' : '') + p.preamp_db.toFixed(1) + ' dB preamp' : ''}</div>
-      <div class="peq-row-actions">
-        <button class="btn-secondary" style="font-size:var(--text-xs);padding:3px 9px"
-          onclick="App.applyPeqToGraph('${p.id}')">
-          ${_activePeqId === p.id ? 'Showing' : 'View on graph'}
-        </button>
-        <button class="btn-danger-sm" onclick="App.deletePeq('${p.id}')">✕</button>
+  return profiles.map(p => {
+    const filterCount = p.filters?.length || 0;
+    const preampStr = p.preamp_db != null
+      ? `${p.preamp_db >= 0 ? '+' : ''}${p.preamp_db.toFixed(1)} dB preamp`
+      : '';
+    const meta = [filterCount + ' filter' + (filterCount !== 1 ? 's' : ''), preampStr].filter(Boolean).join(' · ');
+
+    const preampHtml = p.preamp_db != null
+      ? `<div class="peq-preamp">Preamp: <strong>${p.preamp_db >= 0 ? '+' : ''}${p.preamp_db.toFixed(1)} dB</strong></div>`
+      : '';
+
+    const filterRows = (p.filters || []).map(f => {
+      const freq = f.fc >= 1000 ? (f.fc / 1000).toFixed(f.fc % 1000 === 0 ? 0 : 1) + ' kHz' : f.fc + ' Hz';
+      const gainStr = f.gain != null ? (f.gain > 0 ? '+' : '') + Number(f.gain).toFixed(1) + ' dB' : '—';
+      const gainClass = f.gain > 0 ? 'peq-gain-pos' : f.gain < 0 ? 'peq-gain-neg' : '';
+      const qStr = f.q != null ? Number(f.q).toFixed(2) : '—';
+      return `<tr>
+        <td>${esc(f.type || '')}</td>
+        <td>${freq}</td>
+        <td class="${gainClass}">${gainStr}</td>
+        <td>${qStr}</td>
+      </tr>`;
+    }).join('');
+
+    const tableHtml = filterRows
+      ? `<table class="peq-filter-table">
+           <thead><tr><th>Type</th><th>Freq</th><th>Gain</th><th>Q</th></tr></thead>
+           <tbody>${filterRows}</tbody>
+         </table>`
+      : `<div style="color:var(--text-muted);font-size:var(--text-xs);padding:8px 0 12px">No filters found.</div>`;
+
+    return `
+    <div class="peq-card${_activePeqId === p.id ? ' active' : ''}" id="peq-row-${p.id}">
+      <div class="peq-card-header" onclick="App.togglePeqAccordion('${p.id}')">
+        <svg class="peq-chevron" id="peq-chevron-${p.id}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="peq-row-name">${esc(p.name)}</span>
+        <span class="peq-row-meta">${esc(meta)}</span>
+        <div class="peq-row-actions" onclick="event.stopPropagation()">
+          <button class="btn-secondary" style="font-size:var(--text-xs);padding:3px 9px"
+            onclick="App.applyPeqToGraph('${p.id}')">
+            ${_activePeqId === p.id ? 'Showing' : 'View on graph'}
+          </button>
+          <button class="btn-danger-sm" onclick="App.deletePeq('${p.id}')">✕</button>
+        </div>
       </div>
-    </div>
-  `).join('');
+      <div class="peq-accordion" id="peq-accordion-${p.id}" style="display:none">
+        ${preampHtml}
+        ${tableHtml}
+        <button class="btn-secondary peq-download-btn"
+          onclick="App.downloadPeq('${p.id}', ${JSON.stringify(p.name)})">↓ Download .txt</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function togglePeqAccordion(peqId) {
+  const accordion = document.getElementById(`peq-accordion-${peqId}`);
+  const chevron = document.getElementById(`peq-chevron-${peqId}`);
+  if (!accordion) return;
+  const isOpen = accordion.style.display !== 'none';
+  accordion.style.display = isOpen ? 'none' : 'block';
+  if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(90deg)';
+}
+
+async function downloadPeq(peqId, name) {
+  try {
+    const res = await fetch(`/api/iems/${_currentIemId}/peq/${peqId}/download`);
+    if (!res.ok) throw new Error('Server error');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name.replace(/[/\\]/g, '-') + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    toast('Failed to download PEQ: ' + e.message);
+  }
 }
 
 async function _loadIemGraph(iemId, peqId) {
@@ -2502,6 +2569,8 @@ const App = {
   deleteIem,
   applyPeqToGraph,
   toggleIemCurve,
+  togglePeqAccordion,
+  downloadPeq,
   showPeqModal,
   closePeqModal,
   savePeq,

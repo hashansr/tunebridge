@@ -1767,6 +1767,30 @@ def copy_peq_to_dap(iid, peq_id):
     return jsonify({'message': f"Copied to {out_path}"})
 
 
+@app.route('/api/iems/<iid>/peq/<peq_id>/download')
+def download_peq(iid, peq_id):
+    iems = load_iems()
+    iem = next((i for i in iems if i['id'] == iid), None)
+    if not iem:
+        return jsonify({'error': 'Not found'}), 404
+    peq = next((p for p in iem.get('peq_profiles', []) if p['id'] == peq_id), None)
+    if not peq:
+        return jsonify({'error': 'Profile not found'}), 404
+    raw = peq.get('raw_txt', '')
+    if not raw:
+        lines = [f"Preamp: {peq.get('preamp_db', 0):.1f} dB"]
+        for i, flt in enumerate(peq.get('filters', []), 1):
+            state = 'ON' if flt.get('enabled', True) else 'OFF'
+            lines.append(f"Filter {i}: {state} {flt['type']} Fc {flt['fc']} Hz Gain {flt['gain']} dB Q {flt['q']}")
+        raw = '\n'.join(lines)
+    safe_name = peq['name'].replace('/', '-').replace('\\', '-')
+    return Response(
+        raw,
+        mimetype='text/plain',
+        headers={'Content-Disposition': f'attachment; filename="{safe_name}.txt"'}
+    )
+
+
 ## ── Baselines (FR tuning targets) ─────────────────────────────────────
 
 BASELINE_PALETTE = ['#f0b429', '#a78bfa', '#fb923c', '#38bdf8', '#f472b6', '#34d399', '#ff6b6b', '#4ecdc4']

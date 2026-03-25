@@ -1494,22 +1494,70 @@ tr.track-selected .track-check-indicator {
   letter-spacing: .1em;
 }
 .peq-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
-.peq-row {
+
+/* Accordion PEQ card */
+.peq-card {
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: background 0.15s;
+}
+.peq-card.active > .peq-card-header { background: var(--accent-dim); }
+.peq-card-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
-  background: var(--bg-elevated);
-  border: none;
-  border-radius: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
   font-size: var(--text-sm);
+  user-select: none;
   transition: background 0.15s;
 }
-.peq-row:hover { background: var(--bg-hover); }
-.peq-row.active { background: var(--accent-dim); }
+.peq-card-header:hover { background: var(--bg-hover); }
+.peq-card.active > .peq-card-header:hover { background: var(--accent-dim); filter: brightness(1.1); }
+.peq-chevron {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
 .peq-row-name { flex: 1; color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .peq-row-meta { color: var(--text-muted); font-size: var(--text-xs); white-space: nowrap; }
 .peq-row-actions { display: flex; gap: 6px; align-items: center; }
+
+/* Accordion body */
+.peq-accordion {
+  padding: 0 14px 14px;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+.peq-preamp {
+  font-size: var(--text-sm);
+  color: var(--text-sub);
+  padding: 10px 0 8px;
+}
+.peq-preamp strong { color: var(--text); }
+.peq-filter-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+  margin-bottom: 12px;
+}
+.peq-filter-table th {
+  text-align: left;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 4px 10px 6px 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  letter-spacing: .04em;
+}
+.peq-filter-table td {
+  padding: 5px 10px 5px 4px;
+  color: var(--text-sub);
+  font-variant-numeric: tabular-nums;
+}
+.peq-filter-table tbody tr:hover td { background: rgba(255,255,255,0.03); }
+.peq-gain-pos { color: #53e16f; font-weight: 500; }
+.peq-gain-neg { color: #e05c5c; font-weight: 500; }
+.peq-download-btn { font-size: var(--text-xs); padding: 4px 12px; }
 
 /* Gear detail edit row */
 .gear-edit-actions {
