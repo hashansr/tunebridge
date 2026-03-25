@@ -1939,19 +1939,18 @@ async function _loadIemGraph(iemId, peqId) {
     },
   };
 
-  // R channels: dimmer colour + dashed so they're visually distinct from L
-  function _dimColor(hex) {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r},${g},${b},0.55)`;
+  // L = blue, R = red, PEQ = green — consistent regardless of comparison palette
+  function _iemCurveColor(id) {
+    if (id.includes('-peq-')) return '#53e16f';  // accent-success green
+    if (id.endsWith('-R'))    return '#e05c5c';  // red for R channel
+    return '#5b8dee';                             // blue for L channel
   }
 
   const datasets = data.curves.map(c => ({
     label: c.label,
     data: c.data.map(([f, spl]) => ({ x: f, y: spl })),
-    borderColor: c.dash ? _dimColor(c.color) : c.color,
-    borderWidth: c.dash ? 1.2 : 1.8,
+    borderColor: _iemCurveColor(c.id),
+    borderWidth: c.dash ? 1.3 : 1.9,
     borderDash: c.dash ? [5, 3] : [],
     pointRadius: 0,
     tension: 0.3,
@@ -2192,6 +2191,8 @@ async function deletePeq(peqId) {
 let _songsData = [];
 let _songsSort = { col: 'title', order: 'asc' };
 let _songsFilter = '';
+let _songsPage = 0;
+const SONGS_PER_PAGE = 100;
 
 async function loadSongsView() {
   try {
@@ -2210,8 +2211,36 @@ function renderSongsTable() {
       ((t.title || '') + ' ' + (t.artist || '') + ' ' + (t.album || '')).toLowerCase().includes(q)
     );
   }
+  const total = tracks.length;
+  const totalPages = Math.ceil(total / SONGS_PER_PAGE);
+  if (_songsPage >= totalPages) _songsPage = Math.max(0, totalPages - 1);
+  const start = _songsPage * SONGS_PER_PAGE;
+  const end = Math.min(start + SONGS_PER_PAGE, total);
+  const page = tracks.slice(start, end);
+
   const count = document.getElementById('songs-count');
-  if (count) count.textContent = `${tracks.length} songs`;
+  if (count) count.textContent = `${total.toLocaleString()} songs`;
+
+  // Pagination bar
+  let paginationEl = document.getElementById('songs-pagination');
+  if (!paginationEl) {
+    paginationEl = document.createElement('div');
+    paginationEl.id = 'songs-pagination';
+    paginationEl.className = 'songs-pagination';
+    const wrap = document.getElementById('songs-table-wrap');
+    if (wrap) wrap.after(paginationEl);
+  }
+  if (totalPages > 1) {
+    paginationEl.innerHTML = `
+      <button class="btn-secondary" onclick="App.songsPrevPage()" ${_songsPage === 0 ? 'disabled' : ''}>‹ Prev</button>
+      <span class="songs-page-info">Page ${_songsPage + 1} of ${totalPages} &nbsp;·&nbsp; ${(start + 1).toLocaleString()}–${end.toLocaleString()} of ${total.toLocaleString()}</span>
+      <button class="btn-secondary" onclick="App.songsNextPage()" ${_songsPage >= totalPages - 1 ? 'disabled' : ''}>Next ›</button>
+    `;
+    paginationEl.style.display = 'flex';
+  } else {
+    paginationEl.style.display = 'none';
+  }
+
   const tbody = document.getElementById('songs-tbody');
   if (!tbody) return;
 
@@ -2220,14 +2249,15 @@ function renderSongsTable() {
   const arrow = document.getElementById(`songs-sort-${_songsSort.col}`);
   if (arrow) arrow.textContent = _songsSort.order === 'asc' ? ' \u25B2' : ' \u25BC';
 
-  tbody.innerHTML = tracks.map((t, i) => {
+  tbody.innerHTML = page.map((t, i) => {
+    const globalIdx = start + i;
     const fmtDate = t.date_added ? new Date(t.date_added * 1000).toLocaleDateString() : '';
     const bitrate = t.bitrate ? t.bitrate + ' kbps' : '';
     return `
     <tr data-id="${t.id}">
-      <td class="col-num" onclick="App.toggleTrackSelection('${t.id}', ${i}, event)">
+      <td class="col-num" onclick="App.toggleTrackSelection('${t.id}', ${globalIdx}, event)">
         <div class="num-cell">
-          <span class="track-num">${t.track_number || (i + 1)}</span>
+          <span class="track-num">${t.track_number || (globalIdx + 1)}</span>
           <span class="track-check-indicator"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg></span>
         </div>
       </td>
@@ -2264,11 +2294,24 @@ function sortSongs(col) {
     _songsSort.col = col;
     _songsSort.order = 'asc';
   }
+  _songsPage = 0;
   loadSongsView();
+}
+
+function songsPrevPage() {
+  if (_songsPage > 0) { _songsPage--; renderSongsTable(); _scrollSongsTop(); }
+}
+function songsNextPage() {
+  _songsPage++; renderSongsTable(); _scrollSongsTop();
+}
+function _scrollSongsTop() {
+  const main = document.getElementById('main');
+  if (main) main.scrollTop = 0;
 }
 
 function filterSongs(val) {
   _songsFilter = val;
+  _songsPage = 0;
   const clearBtn = document.getElementById('songs-filter-clear');
   if (clearBtn) clearBtn.style.display = val ? 'block' : 'none';
   renderSongsTable();
@@ -2380,6 +2423,8 @@ const App = {
   sortSongs,
   filterSongs,
   clearSongsFilter,
+  songsPrevPage,
+  songsNextPage,
   // Library settings
   loadLibrarySettings,
   saveLibraryPath,

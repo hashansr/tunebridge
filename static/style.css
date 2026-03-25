@@ -859,6 +859,17 @@ td.cell-album { color: var(--text-sub); white-space: nowrap; overflow: hidden; t
   gap: 12px;
   margin-bottom: 16px;
 }
+.songs-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 0 8px;
+}
+.songs-page-info {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
 
 /* ── Buttons ─────────────────────────────────────────────────────────── */
 .btn-primary {
@@ -1499,15 +1510,15 @@ tr.track-selected .track-check-indicator {
   display: inline-block;
 }
 .icon-dropdown-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius);
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   background: var(--bg-elevated);
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
+  font-size: 18px;
   cursor: pointer;
   transition: background 0.15s;
 }
