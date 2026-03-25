@@ -1330,17 +1330,32 @@ async function showSync() {
   await api('/sync/reset', { method: 'POST' }).catch(() => {});
   _syncPhase('pick');
 
-  // Show mount status on device buttons
-  const devices = await api('/devices/status').catch(() => ({ poweramp: false, ap80: false }));
-  const m21Status = document.getElementById('sync-m21-status');
-  const ap80Status = document.getElementById('sync-ap80-status');
-  const m21Btn = document.getElementById('sync-btn-m21');
-  const ap80Btn = document.getElementById('sync-btn-ap80');
+  const daps = await api('/daps').catch(() => []);
+  const container = document.getElementById('sync-device-list');
+  if (!container) { document.getElementById('sync-modal').style.display = 'flex'; return; }
 
-  if (m21Status) m21Status.textContent = devices.poweramp ? 'Connected' : 'Not connected';
-  if (ap80Status) ap80Status.textContent = devices.ap80 ? 'Connected' : 'Not connected';
-  if (m21Btn) m21Btn.disabled = !devices.poweramp;
-  if (ap80Btn) ap80Btn.disabled = !devices.ap80;
+  const svgDevice = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>`;
+
+  if (!daps.length) {
+    container.innerHTML = `<p style="color:var(--text-muted);font-size:13px">No DAPs configured — add one in <strong>Gear → DAPs</strong> first.</p>`;
+  } else {
+    container.innerHTML = daps.map(dap => {
+      const connected = dap.mounted;
+      const iconHtml = dap.icon
+        ? `<span style="font-size:22px;line-height:1">${esc(dap.icon)}</span>`
+        : svgDevice;
+      return `
+        <button class="sync-device-btn${connected ? '' : ' sync-device-btn-offline'}"
+          ${connected ? '' : 'disabled'}
+          onclick="App.startSyncScan('${dap.id}')">
+          ${iconHtml}
+          <span>${esc(dap.name)}</span>
+          <span class="sync-device-status${connected ? ' sync-device-status-on' : ''}">
+            ${connected ? '● Connected' : '○ Not connected'}
+          </span>
+        </button>`;
+    }).join('');
+  }
 
   document.getElementById('sync-modal').style.display = 'flex';
 }
@@ -1351,12 +1366,12 @@ function closeSyncModal() {
   document.getElementById('sync-modal').style.display = 'none';
 }
 
-async function startSyncScan(device) {
+async function startSyncScan(dapId) {
   _syncPhase('scanning');
   document.getElementById('sync-scanning-msg').textContent = 'Scanning files…';
   document.getElementById('sync-scan-bar').style.width = '0%';
 
-  const res = await api('/sync/scan', { method: 'POST', body: { device } });
+  const res = await api('/sync/scan', { method: 'POST', body: { dap_id: dapId } });
   if (res.error) { toast(res.error); _syncPhase('pick'); return; }
 
   // Animate indeterminate bar while scanning

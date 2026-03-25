@@ -571,20 +571,10 @@
       <!-- Phase: pick device -->
       <div id="sync-phase-pick">
         <p style="color:var(--text-sub);margin-bottom:16px;font-size:13px">
-          Compare your local library with a device and copy missing files in both directions.
-          <br/>Source of truth is always <code>/Volumes/Storage/Music/FLAC</code>.
+          Compare your local music library with a device and copy missing files in either direction.
         </p>
-        <div style="display:flex;gap:12px">
-          <button id="sync-btn-m21" class="sync-device-btn" onclick="App.startSyncScan('poweramp')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
-            <span>FiiO M21</span>
-            <span id="sync-m21-status" class="sync-device-status"></span>
-          </button>
-          <button id="sync-btn-ap80" class="sync-device-btn" onclick="App.startSyncScan('ap80')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
-            <span>AP80 Pro Max</span>
-            <span id="sync-ap80-status" class="sync-device-status"></span>
-          </button>
+        <div id="sync-device-list" style="display:flex;flex-wrap:wrap;gap:12px">
+          <!-- Populated dynamically from DAP list in showSync() -->
         </div>
       </div>
 

@@ -1196,14 +1196,15 @@ tr.track-selected .track-check-indicator {
   cursor: pointer;
 }
 .sync-device-btn:hover:not(:disabled) { background: var(--bg-hover); }
-.sync-device-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.sync-device-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.sync-device-btn-offline { border: 1px dashed rgba(255,255,255,0.08); }
 
 .sync-device-status {
   font-size: 11px;
   font-weight: 400;
   color: var(--text-muted);
 }
-.sync-device-btn:not(:disabled) .sync-device-status { color: var(--accent-success); }
+.sync-device-status-on { color: var(--accent-success) !important; }
 
 .sync-phase-msg {
   font-size: 14px;

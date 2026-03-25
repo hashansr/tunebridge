@@ -1005,13 +1005,12 @@ def export_to_device():
 
 SYNC_EXTENSIONS = {'.flac', '.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus', '.wv'}
 
-def get_device_music_path(device):
-    settings = load_settings()
-    if device == 'poweramp':
-        return Path(settings.get('poweramp_mount', '/Volumes/FIIO M21')) / 'Music'
-    elif device == 'ap80':
-        return Path(settings.get('ap80_mount', '/Volumes/AP80')) / 'Music'
-    return None
+def get_dap_music_path(dap_id):
+    """Return Path to Music folder on the DAP identified by dap_id."""
+    dap = next((d for d in load_daps() if d['id'] == dap_id), None)
+    if not dap:
+        return None
+    return Path(dap['mount_path']) / 'Music'
 
 def walk_music_files(root):
     """Return sorted list of relative path strings for all music files under root."""
@@ -1038,17 +1037,17 @@ def sync_scan():
         return jsonify({'error': 'Sync already in progress'}), 400
 
     data = request.json or {}
-    device = data.get('device')
-    if device not in ('poweramp', 'ap80'):
-        return jsonify({'error': 'Invalid device'}), 400
+    dap_id = data.get('dap_id')
+    if not dap_id:
+        return jsonify({'error': 'dap_id required'}), 400
 
-    device_path = get_device_music_path(device)
+    device_path = get_dap_music_path(dap_id)
     if not device_path or not device_path.exists():
         return jsonify({'error': 'Device not mounted or Music folder not found'}), 400
 
     sync_state = {
         'status': 'scanning',
-        'device': device,
+        'dap_id': dap_id,
         'message': 'Scanning files…',
         'progress': 0,
         'total': 0,
@@ -1102,8 +1101,8 @@ def sync_execute():
     data = request.json or {}
     local_paths = data.get('local_paths', [])   # copy local → device
     device_paths = data.get('device_paths', []) # copy device → local
-    device = sync_state['device']
-    device_path = get_device_music_path(device)
+    dap_id = sync_state['dap_id']
+    device_path = get_dap_music_path(dap_id)
 
     if not device_path or not device_path.exists():
         return jsonify({'error': 'Device not mounted'}), 400
