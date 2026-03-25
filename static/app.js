@@ -1849,6 +1849,7 @@ async function showIemDetail(id) {
              </div>`
         }
       </div>
+      ${hasMeasurement ? `<div id="iem-curve-legend" class="curve-legend"></div>` : ''}
     </div>
 
     <div class="peq-section-hdr">
@@ -1938,11 +1939,19 @@ async function _loadIemGraph(iemId, peqId) {
     },
   };
 
+  // R channels: dimmer colour + dashed so they're visually distinct from L
+  function _dimColor(hex) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},0.55)`;
+  }
+
   const datasets = data.curves.map(c => ({
     label: c.label,
     data: c.data.map(([f, spl]) => ({ x: f, y: spl })),
-    borderColor: c.color,
-    borderWidth: 1.5,
+    borderColor: c.dash ? _dimColor(c.color) : c.color,
+    borderWidth: c.dash ? 1.2 : 1.8,
     borderDash: c.dash ? [5, 3] : [],
     pointRadius: 0,
     tension: 0.3,
@@ -1951,7 +1960,7 @@ async function _loadIemGraph(iemId, peqId) {
   _iemChart = new Chart(canvas, {
     type: 'line',
     plugins: [regionPlugin],
-    data: { datasets },
+    data: { datasets: datasets.map(ds => ({ ...ds, borderDash: ds.borderDash || [] })) },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -1993,33 +2002,7 @@ async function _loadIemGraph(iemId, peqId) {
         },
       },
       plugins: {
-        legend: {
-          display: true,
-          position: 'top',
-          labels: {
-            color: '#c1c6d7',
-            font: { size: 11, family: 'Inter, sans-serif' },
-            boxWidth: 24,
-            padding: 12,
-            generateLabels(chart) {
-              return chart.data.datasets.map((ds, i) => ({
-                text: ds.label,
-                fillStyle: 'transparent',
-                strokeStyle: ds.borderColor,
-                lineWidth: ds.borderWidth,
-                lineDash: ds.borderDash || [],
-                hidden: !chart.isDatasetVisible(i),
-                datasetIndex: i,
-              }));
-            },
-          },
-          onClick(e, legendItem, legend) {
-            const idx = legendItem.datasetIndex;
-            const ci = legend.chart;
-            ci.setDatasetVisibility(idx, !ci.isDatasetVisible(idx));
-            ci.update();
-          },
-        },
+        legend: { display: false },
         tooltip: {
           backgroundColor: 'rgba(53,53,52,0.95)',
           titleColor: '#e5e2e1',
@@ -2037,6 +2020,39 @@ async function _loadIemGraph(iemId, peqId) {
       },
     },
   });
+
+  _renderIemLegend(datasets);
+}
+
+function _renderIemLegend(datasets) {
+  const el = document.getElementById('iem-curve-legend');
+  if (!el) return;
+  el.innerHTML = datasets.map((ds, i) => {
+    const dash = (ds.borderDash && ds.borderDash.length) ? 'stroke-dasharray="5 4"' : '';
+    return `
+      <div class="curve-legend-item" id="legend-item-${i}">
+        <button class="eye-toggle" onclick="App.toggleIemCurve(${i})" title="Show/hide curve">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+        <svg width="28" height="10" viewBox="0 0 28 10" style="flex-shrink:0">
+          <line x1="0" y1="5" x2="28" y2="5" stroke="${ds.borderColor}"
+            stroke-width="${ds.borderWidth || 1.5}" ${dash}/>
+        </svg>
+        <span>${esc(ds.label)}</span>
+      </div>`;
+  }).join('');
+}
+
+function toggleIemCurve(idx) {
+  if (!_iemChart) return;
+  const nowVisible = !_iemChart.isDatasetVisible(idx);
+  _iemChart.setDatasetVisibility(idx, nowVisible);
+  _iemChart.update();
+  const btn = document.querySelector(`#legend-item-${idx} .eye-toggle`);
+  if (btn) btn.classList.toggle('hidden', !nowVisible);
 }
 
 async function applyPeqToGraph(peqId) {
@@ -2386,6 +2402,7 @@ const App = {
   saveIem,
   deleteIem,
   applyPeqToGraph,
+  toggleIemCurve,
   showPeqModal,
   closePeqModal,
   savePeq,
