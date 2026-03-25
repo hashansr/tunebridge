@@ -574,7 +574,7 @@ td.cell-album { color: var(--text-sub); white-space: nowrap; overflow: hidden; t
 }
 #dropdown-items {
   overflow-y: auto;
-  flex: 1;
+  max-height: calc(min(320px, 100vh - 32px) - 34px);
 }
 .dropdown-item {
   display: flex; align-items: center; gap: 8px;
