@@ -224,6 +224,21 @@ Sync button (⟳ arrows icon) in sidebar bottom bar opens `#sync-modal`. Device 
 - [ ] Multiple library paths support
 - [ ] Playlist sharing / export to streaming services
 
+## Out of Scope — Researched & Decided Against
+
+### iPod Classic 5th Gen Sync — OOS (researched 2026-03-26)
+Investigated feasibility of syncing music and playlists to an iPod Classic 5th Gen from TuneBridge. **Decision: too large and too complex, will not implement.**
+
+Key findings:
+- **Mounting risk**: macOS Sequoia 15.4.1+ broke iPod Classic USB disk mounting at the OS level. No app-level fix possible. Go/no-go depends entirely on whether the device mounts cleanly.
+- **No FLAC support**: iPod 5th Gen does not support FLAC. Entire library would need FLAC → ALAC transcoding via `ffmpeg` before each sync. Requires a transcoded file cache (gigabytes), invalidation logic, and re-transcode detection.
+- **Binary iTunesDB format**: Custom binary database (`iPod_Control/iTunes/iTunesDB`) with chunk-based tree structure (`mhbd/mhsd/mhlt/mhit/mhod`). Tracks stored with scrambled filenames across 50 subdirs (`F00`–`F49`). Must be read and rewritten on every sync.
+- **hash58 auth**: 5th gen uses a device-specific hash derived from FirewireID in `SysInfo` — computable in pure Python, no iTunes pre-authorization needed. Not a blocker.
+- **Best available library**: iOpenPod (github.com/TheRealSavi/iOpenPod) — modern Python 3, implements its own iTunesDB parser/writer, handles transcoding. Would be the reference implementation to study.
+- **Artwork**: Separate binary ArtworkDB format — very high complexity, would skip in any v1.
+- **Rockbox alternative**: Flashing Rockbox firmware adds native FLAC support and simplifies sync to plain file copy, but is a one-time device commitment.
+- **Effort estimate**: PoC 2–3 sessions; playlists + delta sync +3–4; transcoding pipeline +2–3; artwork +3–4; Sequoia workarounds unpredictable. Total: 10–15+ sessions for production quality.
+
 ## Last Updated
 2026-03-26 — Session 13: FR graph improvements + UI polish
 
