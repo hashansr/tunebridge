@@ -2033,6 +2033,8 @@ async function _loadIemGraph(iemId, peqId) {
     borderDash: c.dash ? [6, 4] : [],
     pointRadius: 0,
     tension: 0.3,
+    // Baselines are hidden on first load — user toggles them via the legend
+    hidden: c.id.startsWith('baseline-'),
   }));
 
   _iemChart = new Chart(canvas, {
@@ -2113,19 +2115,20 @@ function _renderIemLegend(datasets) {
   if (!el) return;
   el.innerHTML = datasets.map((ds, i) => {
     const dash = (ds.borderDash && ds.borderDash.length) ? 'stroke-dasharray="5 4"' : '';
+    const isHidden = ds.hidden === true;
     return `
       <div class="curve-legend-item" id="legend-item-${i}">
-        <button class="eye-toggle" onclick="App.toggleIemCurve(${i})" title="Show/hide curve">
+        <button class="eye-toggle${isHidden ? ' hidden' : ''}" onclick="App.toggleIemCurve(${i})" title="${isHidden ? 'Show curve' : 'Hide curve'}">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
             <circle cx="12" cy="12" r="3"/>
           </svg>
         </button>
-        <svg width="28" height="10" viewBox="0 0 28 10" style="flex-shrink:0">
+        <svg width="28" height="10" viewBox="0 0 28 10" style="flex-shrink:0;opacity:${isHidden ? '0.35' : '1'}">
           <line x1="0" y1="5" x2="28" y2="5" stroke="${ds.borderColor}"
             stroke-width="${ds.borderWidth || 1.5}" ${dash}/>
         </svg>
-        <span>${esc(ds.label)}</span>
+        <span style="opacity:${isHidden ? '0.45' : '1'}">${esc(ds.label)}</span>
       </div>`;
   }).join('');
 }
@@ -2135,8 +2138,17 @@ function toggleIemCurve(idx) {
   const nowVisible = !_iemChart.isDatasetVisible(idx);
   _iemChart.setDatasetVisibility(idx, nowVisible);
   _iemChart.update();
-  const btn = document.querySelector(`#legend-item-${idx} .eye-toggle`);
-  if (btn) btn.classList.toggle('hidden', !nowVisible);
+  const item = document.getElementById(`legend-item-${idx}`);
+  if (!item) return;
+  const btn = item.querySelector('.eye-toggle');
+  if (btn) {
+    btn.classList.toggle('hidden', !nowVisible);
+    btn.title = nowVisible ? 'Hide curve' : 'Show curve';
+  }
+  const svg = item.querySelector('svg:not(.eye-toggle svg)');
+  if (svg) svg.style.opacity = nowVisible ? '1' : '0.35';
+  const label = item.querySelector('span');
+  if (label) label.style.opacity = nowVisible ? '1' : '0.45';
 }
 
 async function applyPeqToGraph(peqId) {
@@ -2531,6 +2543,66 @@ async function runHealthCheck() {
 /* ── Baselines (FR tuning targets) ─────────────────────────────────── */
 let _baselines = [];
 
+// Design-system–aligned palette for baseline colours
+const BASELINE_COLORS = [
+  '#f0b429', // amber
+  '#adc6ff', // accent blue
+  '#ffb3b5', // accent pink
+  '#53e16f', // accent green
+  '#a78bfa', // violet
+  '#fb923c', // orange
+  '#38bdf8', // sky
+  '#f472b6', // rose
+  '#34d399', // emerald
+  '#4ecdc4', // teal
+];
+let _selectedBaselineColor = BASELINE_COLORS[0];
+
+function _initBaselineColorPicker() {
+  const menu = document.getElementById('baseline-color-menu');
+  if (!menu || menu.dataset.init) return;
+  menu.dataset.init = '1';
+  menu.innerHTML = BASELINE_COLORS.map(c => `
+    <button class="baseline-color-option${c === _selectedBaselineColor ? ' active' : ''}"
+      style="background:${c}" title="${c}"
+      onclick="App.selectBaselineColor('${c}')"></button>
+  `).join('');
+}
+
+function selectBaselineColor(color) {
+  _selectedBaselineColor = color;
+  const swatch = document.getElementById('baseline-color-swatch');
+  if (swatch) swatch.style.background = color;
+  // Update active state in grid
+  document.querySelectorAll('.baseline-color-option').forEach(btn => {
+    btn.classList.toggle('active', btn.style.background === color ||
+      btn.style.backgroundColor === color);
+  });
+  // Close picker
+  const menu = document.getElementById('baseline-color-menu');
+  if (menu) menu.style.display = 'none';
+}
+
+function toggleBaselineColorPicker() {
+  _initBaselineColorPicker();
+  const menu = document.getElementById('baseline-color-menu');
+  if (!menu) return;
+  const isOpen = menu.style.display !== 'none';
+  menu.style.display = isOpen ? 'none' : 'grid';
+  if (!isOpen) {
+    // Close on outside click
+    setTimeout(() => {
+      document.addEventListener('click', function _close(e) {
+        const wrap = document.getElementById('baseline-color-wrap');
+        if (wrap && !wrap.contains(e.target)) {
+          menu.style.display = 'none';
+          document.removeEventListener('click', _close);
+        }
+      });
+    }, 0);
+  }
+}
+
 async function loadBaselines() {
   _baselines = await api('/baselines').catch(() => []);
   _renderBaselines();
@@ -2566,11 +2638,14 @@ async function addBaseline() {
   btn.disabled = true;
   btn.textContent = 'Fetching…';
   try {
-    const bl = await api('/baselines', { method: 'POST', body: { name, url } });
+    const bl = await api('/baselines', { method: 'POST', body: { name, url, color: _selectedBaselineColor } });
     _baselines = [..._baselines.filter(b => b.id !== bl.id), bl];
     _renderBaselines();
     nameEl.value = '';
     urlEl.value  = '';
+    // Cycle to next colour for convenience
+    const nextIdx = (BASELINE_COLORS.indexOf(_selectedBaselineColor) + 1) % BASELINE_COLORS.length;
+    selectBaselineColor(BASELINE_COLORS[nextIdx]);
     toast(`Added baseline: ${bl.name}`);
   } catch (e) {
     toast('Error: ' + (e.message || 'Could not fetch measurement'));
@@ -2675,6 +2750,8 @@ const App = {
   // Baselines
   addBaseline,
   deleteBaseline,
+  toggleBaselineColorPicker,
+  selectBaselineColor,
   // DAP
   _selectIcon,
   toggleIconDropdown,

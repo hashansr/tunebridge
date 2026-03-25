@@ -343,6 +343,14 @@
             <div class="settings-baseline-add">
               <input id="baseline-name-input" type="text" class="settings-baseline-name" placeholder="Label (e.g. Harman Target)" />
               <input id="baseline-url-input" type="text" class="settings-baseline-url" placeholder="squig.link share URL" />
+              <div class="baseline-color-wrap" id="baseline-color-wrap">
+                <button class="baseline-color-btn" id="baseline-color-btn" onclick="App.toggleBaselineColorPicker()" title="Choose colour">
+                  <span id="baseline-color-swatch" class="baseline-color-swatch" style="background:#f0b429"></span>
+                </button>
+                <div class="baseline-color-menu" id="baseline-color-menu" style="display:none">
+                  <!-- populated by JS -->
+                </div>
+              </div>
               <button class="btn-primary" id="baseline-add-btn" onclick="App.addBaseline()">Add</button>
             </div>
             <p style="font-size:var(--text-sm);color:var(--text-muted);margin-top:8px">

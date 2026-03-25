@@ -385,6 +385,54 @@ nav {
 }
 .settings-baseline-url:focus { background: var(--bg-hover); box-shadow: 0 0 0 1px var(--border-focus); }
 
+/* Baseline color picker */
+.baseline-color-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.baseline-color-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px;
+  background: var(--bg-elevated);
+  border: none; border-radius: 8px; cursor: pointer;
+  padding: 0;
+  transition: background 0.15s;
+}
+.baseline-color-btn:hover { background: var(--bg-hover); }
+.baseline-color-swatch {
+  display: block;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px rgba(255,255,255,0.15);
+}
+.baseline-color-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-card);
+  border-radius: 10px;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: repeat(5, 22px);
+  gap: 7px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  backdrop-filter: blur(12px);
+  z-index: 200;
+}
+.baseline-color-option {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.1s;
+  outline: none;
+}
+.baseline-color-option:hover { transform: scale(1.18); }
+.baseline-color-option.active {
+  border-color: rgba(255,255,255,0.7);
+  transform: scale(1.12);
+}
+
 /* ── Main ─────────────────────────────────────────────────────────────── */
 #main {
   flex: 1;

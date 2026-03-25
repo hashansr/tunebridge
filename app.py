@@ -1920,11 +1920,14 @@ def create_baseline():
         return jsonify({'error': 'Could not fetch measurement data from squig.link. Check the URL.'}), 400
 
     bid = hashlib.md5(url.encode()).hexdigest()[:12]
+    # Use user-supplied color if provided and looks like a valid hex color
+    user_color = data.get('color', '').strip()
+    color = user_color if (user_color and user_color.startswith('#') and len(user_color) in (4, 7)) else _baseline_color(bid)
     baseline = {
         'id': bid,
         'name': name,
         'url': url,
-        'color': _baseline_color(bid),
+        'color': color,
         'measurement': measurement,
     }
     baselines = [b for b in load_baselines() if b['id'] != bid]
