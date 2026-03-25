@@ -1966,8 +1966,14 @@ async function _loadIemGraph(iemId, peqId) {
           },
         },
         y: {
+          min: 50,
+          max: 110,
           title: { display: true, text: 'dB', color: '#6b6b7b', font: { size: 11, family: 'Inter, sans-serif' } },
-          ticks: { color: '#6b6b7b', font: { size: 10, family: 'Inter, sans-serif' } },
+          ticks: {
+            color: '#6b6b7b',
+            font: { size: 10, family: 'Inter, sans-serif' },
+            stepSize: 10,
+          },
           grid: { color: 'rgba(173,198,255,.06)' },
         },
       },

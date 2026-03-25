@@ -1466,7 +1466,7 @@ tr.track-selected .track-check-indicator {
   transition: background 0.15s;
 }
 .freq-graph-toolbar select:focus { background: var(--bg-hover); }
-#freq-canvas-wrap { position: relative; height: 300px; }
+#freq-canvas-wrap { position: relative; height: 420px; }
 
 .freq-no-data {
   display: flex;
