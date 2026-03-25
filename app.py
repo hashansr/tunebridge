@@ -15,9 +15,16 @@ from mutagen.flac import FLAC
 from mutagen.mp3 import MP3
 from mutagen.mp4 import MP4
 import hashlib
+import re
 from PIL import Image
 
 app = Flask(__name__, static_folder='static', static_url_path='')
+
+_ARTICLE_RE = re.compile(r'^(the|a|an)\s+', re.IGNORECASE)
+
+def artist_sort_key(name):
+    """Return sort key that ignores leading articles (The, A, An)."""
+    return _ARTICLE_RE.sub('', name).lower()
 CORS(app)
 
 DATA_DIR = Path(__file__).parent / 'data'
@@ -456,7 +463,7 @@ def get_artists():
 
     result = [
         {'name': k, 'album_count': len(v['albums']), 'track_count': v['track_count'], 'artwork_key': v['artwork_key']}
-        for k, v in sorted(artists.items())
+        for k, v in sorted(artists.items(), key=lambda item: artist_sort_key(item[0]))
     ]
     return jsonify(result)
 
@@ -486,7 +493,7 @@ def get_albums():
         if not albums[key]['artwork_key'] and t.get('artwork_key'):
             albums[key]['artwork_key'] = t['artwork_key']
 
-    result = sorted(albums.values(), key=lambda x: (x['artist'], x['year'] or '0', x['name']))
+    result = sorted(albums.values(), key=lambda x: (artist_sort_key(x['artist']), x['year'] or '0', x['name'].lower()))
     return jsonify(result)
 
 
@@ -504,13 +511,13 @@ def library_songs():
 
     sort_keys = {
         'title': lambda t: (t.get('title') or '').lower(),
-        'artist': lambda t: (t.get('artist') or '').lower(),
+        'artist': lambda t: artist_sort_key(t.get('artist') or ''),
         'album': lambda t: (t.get('album') or '').lower(),
         'year': lambda t: t.get('year') or '0000',
         'genre': lambda t: (t.get('genre') or '').lower(),
         'duration': lambda t: t.get('duration') or 0,
         'date_added': lambda t: t.get('date_added') or 0,
-        'album_artist': lambda t: (t.get('album_artist') or t.get('artist') or '').lower(),
+        'album_artist': lambda t: artist_sort_key(t.get('album_artist') or t.get('artist') or ''),
         'format': lambda t: (t.get('format') or '').lower(),
         'bitrate': lambda t: t.get('bitrate') or 0,
     }
