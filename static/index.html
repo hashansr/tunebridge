@@ -4,15 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TuneBridge</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/style.css" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div id="app">
     <!-- Sidebar -->
     <aside id="sidebar">
       <div id="sidebar-header">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="18" r="3"/><circle cx="15" cy="15" r="3"/><line x1="12" y1="12" x2="12" y2="3"/><line x1="18" y1="9" x2="18" y2="6"/></svg>
+        <svg width="26" height="26" viewBox="0 0 32 32" fill="none"><circle cx="11" cy="22" r="3.5" stroke="currentColor" stroke-width="2"/><circle cx="21" cy="19" r="3.5" stroke="currentColor" stroke-width="2"/><line x1="14.5" y1="22" x2="14.5" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="24.5" y1="19" x2="24.5" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="14.5" y1="8" x2="24.5" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         <span>TuneBridge</span>
         <button id="help-btn" onclick="App.showHelp()" title="Help">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="3"/></svg>
@@ -20,7 +22,7 @@
       </div>
 
       <nav>
-        <div class="nav-section-label">Library</div>
+        <div class="nav-section-label nav-section-sticky">Library</div>
         <button class="nav-item active" data-view="artists" onclick="App.showView('artists')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Artists
@@ -29,20 +31,38 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="3" x2="12" y2="9"/></svg>
           Albums
         </button>
+        <button class="nav-item" data-view="songs" onclick="App.showView('songs')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          Songs
+        </button>
         <button class="nav-item" data-view="search" onclick="App.showView('search')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           Search Songs
         </button>
 
-        <div class="nav-section-label" style="margin-top:10px">Tools</div>
+        <div class="nav-section-label nav-section-sticky" style="margin-top:10px">Tools</div>
         <button class="nav-item" onclick="App.showSync()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
           Sync Music
         </button>
+
+        <div class="nav-section-label nav-section-sticky" style="margin-top:10px">Gear</div>
+        <button class="nav-item" data-view="daps" onclick="App.showView('daps')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="12" y2="11"/></svg>
+          DAPs
+        </button>
+        <button class="nav-item" data-view="iems" onclick="App.showView('iems')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+          IEMs &amp; Headphones
+        </button>
+        <button class="nav-item" data-view="library-settings" onclick="App.showView('library-settings')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Library Settings
+        </button>
       </nav>
 
       <div id="playlists-section">
-        <div class="nav-section-label" style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="nav-section-label nav-section-sticky" style="display:flex;justify-content:space-between;align-items:center;">
           Playlists
           <div style="display:flex;gap:2px">
             <div style="position:relative">
@@ -80,9 +100,6 @@
         <span id="scan-msg"></span>
         <button id="sync-btn" onclick="App.showSync()" title="Sync Music Library">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-        </button>
-        <button id="settings-btn" onclick="App.showSettings()" title="Device Settings">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
         <div id="rescan-wrap" style="position:relative">
           <button id="rescan-btn" onclick="App.toggleRescanMenu(event)" title="Rescan Library">
@@ -187,6 +204,40 @@
         </div>
       </div>
 
+      <!-- Songs view (all library songs) -->
+      <div id="view-songs" class="view view-songs" style="display:none">
+        <div class="view-header">
+          <h2>Songs</h2>
+          <div class="view-count" id="songs-count"></div>
+        </div>
+        <div class="songs-toolbar">
+          <div class="pl-filter-wrap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="songs-filter-input" type="text" placeholder="Filter songs..." oninput="App.filterSongs(this.value)" />
+            <button id="songs-filter-clear" class="pl-filter-clear" onclick="App.clearSongsFilter()" style="display:none" title="Clear filter">&#10005;</button>
+          </div>
+        </div>
+        <div id="songs-table-wrap" style="overflow-x:auto">
+          <table id="songs-table">
+            <thead><tr>
+              <th class="col-num" data-sort="track_number">#</th>
+              <th class="col-title" data-sort="title" onclick="App.sortSongs('title')">Title <span class="sort-arrow" id="songs-sort-title"></span></th>
+              <th class="col-artist" data-sort="artist" onclick="App.sortSongs('artist')">Artist <span class="sort-arrow" id="songs-sort-artist"></span></th>
+              <th class="col-album" data-sort="album" onclick="App.sortSongs('album')">Album <span class="sort-arrow" id="songs-sort-album"></span></th>
+              <th class="col-dur" data-sort="duration" onclick="App.sortSongs('duration')">Time <span class="sort-arrow" id="songs-sort-duration"></span></th>
+              <th data-sort="genre" onclick="App.sortSongs('genre')" style="min-width:80px">Genre <span class="sort-arrow" id="songs-sort-genre"></span></th>
+              <th data-sort="year" onclick="App.sortSongs('year')" style="min-width:50px">Year <span class="sort-arrow" id="songs-sort-year"></span></th>
+              <th data-sort="album_artist" onclick="App.sortSongs('album_artist')" style="min-width:120px">Album Artist <span class="sort-arrow" id="songs-sort-album_artist"></span></th>
+              <th data-sort="format" onclick="App.sortSongs('format')" style="min-width:60px">Format <span class="sort-arrow" id="songs-sort-format"></span></th>
+              <th data-sort="bitrate" onclick="App.sortSongs('bitrate')" style="min-width:70px">Bitrate <span class="sort-arrow" id="songs-sort-bitrate"></span></th>
+              <th data-sort="date_added" onclick="App.sortSongs('date_added')" style="min-width:90px">Date Added <span class="sort-arrow" id="songs-sort-date_added"></span></th>
+              <th class="col-act"></th>
+            </tr></thead>
+            <tbody id="songs-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Playlist view -->
       <div id="view-playlist" class="view" style="display:none">
         <div class="playlist-header">
@@ -260,6 +311,68 @@
           </tr></thead>
           <tbody id="pl-tbody"></tbody>
         </table>
+      </div>
+
+      <!-- DAPs view -->
+      <div id="view-daps" class="view" style="display:none">
+        <div class="view-header">
+          <h2>DAPs</h2>
+          <button class="btn-primary" onclick="App.showAddDapModal()">+ Add DAP</button>
+        </div>
+        <div id="daps-grid" class="gear-grid"></div>
+        <div id="daps-empty" class="empty-state" style="display:none">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
+          <p>No DAPs added yet.</p>
+          <p class="muted">Add your portable audio players to track playlist sync status.</p>
+        </div>
+      </div>
+
+      <!-- DAP detail view -->
+      <div id="view-dap-detail" class="view" style="display:none">
+        <div class="view-header">
+          <div class="breadcrumb" id="dap-detail-breadcrumb"></div>
+        </div>
+        <div id="dap-detail-content"></div>
+      </div>
+
+      <!-- IEMs view -->
+      <div id="view-iems" class="view" style="display:none">
+        <div class="view-header">
+          <h2>IEMs &amp; Headphones</h2>
+          <button class="btn-primary" onclick="App.showAddIemModal()">+ Add</button>
+        </div>
+        <div id="iems-grid" class="gear-grid"></div>
+        <div id="iems-empty" class="empty-state" style="display:none">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+          <p>No IEMs or headphones added yet.</p>
+          <p class="muted">Add your gear to upload PEQ files and view frequency response graphs.</p>
+        </div>
+      </div>
+
+      <!-- IEM detail view -->
+      <div id="view-iem-detail" class="view" style="display:none">
+        <div class="view-header">
+          <div class="breadcrumb" id="iem-detail-breadcrumb"></div>
+        </div>
+        <div id="iem-detail-content"></div>
+      </div>
+
+      <!-- Library Settings view -->
+      <div id="view-library-settings" class="view" style="display:none">
+        <div class="view-header">
+          <h2>Library Settings</h2>
+        </div>
+        <div style="max-width:600px">
+          <div class="settings-row">
+            <label>Music library path</label>
+            <input id="lib-path-input" type="text" />
+          </div>
+          <p class="settings-hint">The folder containing your music files. Structure: <code>Artist/Album/Track.flac</code></p>
+          <div style="margin-top:16px;display:flex;gap:8px">
+            <button class="btn-primary" onclick="App.saveLibraryPath()">Save</button>
+            <button class="btn-secondary" onclick="App.rescan()">Rescan Library</button>
+          </div>
+        </div>
       </div>
     </main>
   </div>
@@ -550,6 +663,115 @@
       <div class="modal-actions">
         <button class="btn-secondary" onclick="App.closeRenameModal()">Cancel</button>
         <button class="btn-primary" onclick="App.confirmRename()">Rename</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DAP add/edit modal -->
+  <div id="dap-modal" class="modal-overlay" style="display:none">
+    <div class="modal modal-wide">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <h3 id="dap-modal-title">Add DAP</h3>
+        <button class="btn-secondary" style="padding:4px 8px" onclick="App.closeDapModal()">✕</button>
+      </div>
+      <input type="hidden" id="dap-modal-id" />
+      <div class="settings-row">
+        <label>Name</label>
+        <div style="flex:1;display:flex;gap:8px;align-items:center">
+          <input id="dap-name" type="text" style="flex:1" />
+          <div class="icon-dropdown" style="position:relative">
+            <button type="button" class="icon-dropdown-btn" id="dap-icon-btn" onclick="App.toggleIconDropdown()" title="Choose icon">
+              <span id="dap-icon-display">📱</span>
+            </button>
+            <div class="icon-dropdown-menu" id="dap-icon-menu" style="display:none">
+              <div id="dap-icon-picker" class="icon-picker"></div>
+            </div>
+          </div>
+          <input type="hidden" id="dap-icon" value="📱" />
+        </div>
+      </div>
+      <div class="settings-row">
+        <label>Model preset</label>
+        <select id="dap-model" onchange="App.dapModelPreset(this.value)" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:13px;outline:none;width:100%">
+          <option value="poweramp">Poweramp</option>
+          <option value="hiby">Hiby OS</option>
+          <option value="fiio">FiiO Player</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <label>Mount path</label>
+        <input id="dap-mount" type="text" />
+      </div>
+      <div class="settings-row" style="align-items:flex-start">
+        <label style="padding-top:8px">Playlist export folder</label>
+        <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+          <input id="dap-export-folder" type="text" style="width:100%" />
+          <span id="dap-folder-hint" style="font-size:11px;color:var(--text-muted);line-height:1.4"></span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <label>Path prefix <span style="font-size:11px;color:var(--text-muted)">(leave blank for relative)</span></label>
+        <input id="dap-prefix" type="text" />
+      </div>
+      <div class="modal-actions" style="margin-top:20px">
+        <button class="btn-secondary" onclick="App.closeDapModal()">Cancel</button>
+        <button class="btn-primary" onclick="App.saveDap()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- IEM add/edit modal -->
+  <div id="iem-modal" class="modal-overlay" style="display:none">
+    <div class="modal modal-wide">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <h3 id="iem-modal-title">Add IEM / Headphone</h3>
+        <button class="btn-secondary" style="padding:4px 8px" onclick="App.closeIemModal()">✕</button>
+      </div>
+      <input type="hidden" id="iem-modal-id" />
+      <div class="settings-row">
+        <label>Name</label>
+        <input id="iem-name" type="text" />
+      </div>
+      <div class="settings-row">
+        <label>Type</label>
+        <select id="iem-type" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:13px;outline:none;width:100%">
+          <option value="IEM">IEM</option>
+          <option value="Headphone">Headphone</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <label><a href="https://squig.link" target="_blank" rel="noopener" class="squig-link">squig.link</a> URL <span style="font-size:11px;color:var(--text-muted)">(optional)</span></label>
+        <input id="iem-squig-url" type="text" />
+      </div>
+      <p class="settings-hint" style="margin-top:4px">Paste a share URL from <a href="https://squig.link" target="_blank" rel="noopener" class="squig-link">squig.link</a> to import the frequency response measurement.</p>
+      <div id="iem-modal-error" style="display:none;color:#e05c5c;font-size:12px;margin-top:8px"></div>
+      <div class="modal-actions" style="margin-top:20px">
+        <button class="btn-secondary" onclick="App.closeIemModal()">Cancel</button>
+        <button class="btn-primary" id="iem-save-btn" onclick="App.saveIem()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PEQ upload modal -->
+  <div id="peq-modal" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3>Upload PEQ Profile</h3>
+        <button class="btn-secondary" style="padding:4px 8px" onclick="App.closePeqModal()">✕</button>
+      </div>
+      <div class="settings-row">
+        <label>Profile name</label>
+        <input id="peq-name" type="text" />
+      </div>
+      <div style="margin-top:12px">
+        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px">PEQ file (APO/AutoEQ format)</label>
+        <input type="file" id="peq-file-input" accept=".txt,.peq" style="font-size:12px;color:var(--text-sub)" />
+      </div>
+      <div id="peq-modal-error" style="display:none;color:#e05c5c;font-size:12px;margin-top:8px"></div>
+      <div class="modal-actions" style="margin-top:20px">
+        <button class="btn-secondary" onclick="App.closePeqModal()">Cancel</button>
+        <button class="btn-primary" onclick="App.savePeq()">Upload</button>
       </div>
     </div>
   </div>

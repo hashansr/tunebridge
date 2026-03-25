@@ -1,0 +1,24 @@
+[
+  {
+    "id": "6a888926-f9ac-465d-988a-6a5e22a86c85",
+    "name": "FiiO M21",
+    "model": "poweramp",
+    "mount_path": "/Volumes/FIIO M21",
+    "export_folder": "Playlists",
+    "path_prefix": "",
+    "peq_folder": "PEQ",
+    "playlist_exports": {},
+    "icon": "\ud83c\udfb5"
+  },
+  {
+    "id": "11bcd6d8-7c7c-428e-b95f-72398db5c048",
+    "name": "AP80 Pro Max",
+    "model": "",
+    "mount_path": "/Volumes/AP80",
+    "export_folder": "playlist_data",
+    "path_prefix": "..",
+    "peq_folder": "PEQ",
+    "playlist_exports": {},
+    "icon": "\u26a1"
+  }
+]

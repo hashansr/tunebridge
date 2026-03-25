@@ -6,7 +6,11 @@ import uuid
 import threading
 import time
 import shutil
+import math
 from pathlib import Path
+from urllib.request import urlopen
+from urllib.parse import urlparse, parse_qs, quote as urlquote
+from urllib.request import Request as UrlRequest
 from mutagen.flac import FLAC
 from mutagen.mp3 import MP3
 from mutagen.mp4 import MP4
@@ -16,20 +20,27 @@ from PIL import Image
 app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)
 
-MUSIC_BASE = Path('/Volumes/Storage/Music/FLAC')
 DATA_DIR = Path(__file__).parent / 'data'
 PLAYLIST_FILE = DATA_DIR / 'playlists.json'
 LIBRARY_CACHE = DATA_DIR / 'library.json'
 ARTWORK_DIR = DATA_DIR / 'artwork'
 PLAYLIST_ARTWORK_DIR = DATA_DIR / 'playlist_artwork'
 SETTINGS_FILE = DATA_DIR / 'settings.json'
+DAP_FILE = DATA_DIR / 'daps.json'
+IEM_FILE = DATA_DIR / 'iems.json'
 
 DEFAULT_SETTINGS = {
+    'library_path':     '/Volumes/Storage/Music/FLAC',
     'poweramp_mount':   '/Volumes/FIIO M21',
     'ap80_mount':       '/Volumes/AP80',
     'poweramp_prefix':  '',   # internal device path, e.g. /storage/sdcard0
     'ap80_prefix':      '',   # internal device path, e.g. /mnt/sdcard
 }
+
+
+def get_music_base():
+    settings = load_settings()
+    return Path(settings.get('library_path', DEFAULT_SETTINGS['library_path']))
 
 DATA_DIR.mkdir(exist_ok=True)
 ARTWORK_DIR.mkdir(exist_ok=True)
@@ -88,7 +99,7 @@ def get_flac_tag(tags, *keys):
 
 def scan_file(filepath):
     filepath = Path(filepath)
-    rel_path = str(filepath.relative_to(MUSIC_BASE))
+    rel_path = str(filepath.relative_to(get_music_base()))
     filename = filepath.name
 
     try:
@@ -209,6 +220,26 @@ def scan_file(filepath):
         if year:
             year = str(year)[:4]
 
+        # Compute bitrate (kbps)
+        bitrate = None
+        try:
+            if hasattr(audio.info, 'bitrate') and audio.info.bitrate:
+                bitrate = int(audio.info.bitrate / 1000)
+            elif hasattr(audio.info, 'sample_rate') and hasattr(audio.info, 'bits_per_sample'):
+                channels = getattr(audio.info, 'channels', 2)
+                bitrate = int(audio.info.sample_rate * audio.info.bits_per_sample * channels / 1000)
+        except Exception:
+            pass
+
+        # File format from extension
+        file_format = filepath.suffix.lstrip('.').upper() or None
+
+        # Date added (file modification time)
+        try:
+            date_added = int(filepath.stat().st_mtime)
+        except Exception:
+            date_added = None
+
         return {
             'id': hashlib.md5(rel_path.encode('utf-8')).hexdigest(),
             'path': rel_path,
@@ -223,6 +254,9 @@ def scan_file(filepath):
             'duration': duration,
             'duration_fmt': format_duration(duration),
             'artwork_key': artwork_key,
+            'bitrate': bitrate,
+            'format': file_format,
+            'date_added': date_added,
         }
     except Exception as e:
         print(f"Error scanning {filepath}: {e}")
@@ -235,12 +269,13 @@ def do_scan():
     prev_count = len(library)
     scan_state.update({'status': 'scanning', 'message': 'Finding music files...', 'progress': 0, 'total': 0, 'new_tracks': 0})
 
-    if not MUSIC_BASE.exists():
-        scan_state.update({'status': 'error', 'message': f'Music folder not found: {MUSIC_BASE}'})
+    music_base = get_music_base()
+    if not music_base.exists():
+        scan_state.update({'status': 'error', 'message': f'Music folder not found: {music_base}'})
         return
 
     files = []
-    for root, dirs, filenames in os.walk(MUSIC_BASE):
+    for root, dirs, filenames in os.walk(music_base):
         dirs[:] = sorted(d for d in dirs if not d.startswith('.'))
         for fn in sorted(filenames):
             if fn.startswith('.') or fn.startswith('._'):
@@ -453,6 +488,37 @@ def get_albums():
 
     result = sorted(albums.values(), key=lambda x: (x['artist'], x['year'] or '0', x['name']))
     return jsonify(result)
+
+
+@app.route('/api/library/songs')
+def library_songs():
+    q = request.args.get('q', '').strip().lower()
+    sort_by = request.args.get('sort', 'title')
+    order = request.args.get('order', 'asc')
+
+    with library_lock:
+        tracks = library[:]
+
+    if q:
+        tracks = [t for t in tracks if q in (t.get('title', '') + ' ' + t.get('artist', '') + ' ' + t.get('album', '')).lower()]
+
+    sort_keys = {
+        'title': lambda t: (t.get('title') or '').lower(),
+        'artist': lambda t: (t.get('artist') or '').lower(),
+        'album': lambda t: (t.get('album') or '').lower(),
+        'year': lambda t: t.get('year') or '0000',
+        'genre': lambda t: (t.get('genre') or '').lower(),
+        'duration': lambda t: t.get('duration') or 0,
+        'date_added': lambda t: t.get('date_added') or 0,
+        'album_artist': lambda t: (t.get('album_artist') or t.get('artist') or '').lower(),
+        'format': lambda t: (t.get('format') or '').lower(),
+        'bitrate': lambda t: t.get('bitrate') or 0,
+    }
+
+    key_fn = sort_keys.get(sort_by, sort_keys['title'])
+    tracks.sort(key=key_fn, reverse=(order == 'desc'))
+
+    return jsonify(tracks)
 
 
 @app.route('/api/artwork/<key>')
@@ -969,7 +1035,7 @@ def sync_scan():
         global sync_state
         try:
             sync_state['current'] = 'Scanning local library…'
-            local_files = set(walk_music_files(MUSIC_BASE))
+            local_files = set(walk_music_files(get_music_base()))
             sync_state['current'] = 'Scanning device…'
             device_files = set(walk_music_files(device_path))
 
@@ -1034,7 +1100,7 @@ def sync_execute():
         progress = 0
 
         for rel in local_paths:
-            src = MUSIC_BASE / rel
+            src = get_music_base() / rel
             dst = device_path / rel
             sync_state['current'] = f'→ Device: {rel}'
             try:
@@ -1048,7 +1114,7 @@ def sync_execute():
 
         for rel in device_paths:
             src = device_path / rel
-            dst = MUSIC_BASE / rel
+            dst = get_music_base() / rel
             sync_state['current'] = f'← Local: {rel}'
             try:
                 dst.parent.mkdir(parents=True, exist_ok=True)
@@ -1083,6 +1149,521 @@ def sync_reset():
         'errors': [], 'current': '',
     }
     return jsonify({'ok': True})
+
+
+# ── DAP Management ────────────────────────────────────────────────────────────
+
+def load_daps():
+    if DAP_FILE.exists():
+        try:
+            return json.load(open(DAP_FILE))
+        except Exception:
+            pass
+    return []
+
+
+def save_daps(daps):
+    with open(DAP_FILE, 'w') as f:
+        json.dump(daps, f, indent=2)
+
+
+@app.route('/api/daps', methods=['GET'])
+def get_daps():
+    daps = load_daps()
+    playlists = load_playlists()
+    for d in daps:
+        d['mounted'] = Path(d.get('mount_path', '')).exists()
+        # Count out-of-date playlists
+        exports = d.get('playlist_exports', {})
+        d['stale_count'] = sum(
+            1 for pl in playlists.values()
+            if pl['id'] in exports and pl.get('updated_at', 0) > exports[pl['id']]
+        )
+        d['never_exported'] = sum(
+            1 for pl in playlists.values() if pl['id'] not in exports
+        )
+    return jsonify(daps)
+
+
+@app.route('/api/daps', methods=['POST'])
+def create_dap():
+    data = request.json or {}
+    model = data.get('model', 'generic')
+    # Model-specific defaults
+    model_defaults = {
+        'poweramp': {'export_folder': 'Playlists',         'path_prefix': ''},
+        'hiby':     {'export_folder': 'HiByMusic/Playlist','path_prefix': ''},
+        'fiio':     {'export_folder': 'Playlists',         'path_prefix': ''},
+        'ap80':     {'export_folder': 'playlist_data',     'path_prefix': '..'},
+        'other':    {'export_folder': 'Playlists',         'path_prefix': ''},
+    }
+    defaults = model_defaults.get(model, model_defaults['other'])
+    dap = {
+        'id': str(uuid.uuid4()),
+        'name': data.get('name', 'New DAP'),
+        'model': model,
+        'icon': data.get('icon', '📱'),
+        'mount_path': data.get('mount_path', ''),
+        'export_folder': data.get('export_folder') or defaults['export_folder'],
+        'path_prefix': data.get('path_prefix', defaults['path_prefix']),
+        'peq_folder': data.get('peq_folder', 'PEQ'),
+        'playlist_exports': {},
+    }
+    daps = load_daps()
+    daps.append(dap)
+    save_daps(daps)
+    dap['mounted'] = Path(dap['mount_path']).exists()
+    return jsonify(dap), 201
+
+
+@app.route('/api/daps/<did>', methods=['GET'])
+def get_dap(did):
+    dap = next((d for d in load_daps() if d['id'] == did), None)
+    if not dap:
+        return jsonify({'error': 'Not found'}), 404
+    dap['mounted'] = Path(dap.get('mount_path', '')).exists()
+    return jsonify(dap)
+
+
+@app.route('/api/daps/<did>', methods=['PUT'])
+def update_dap(did):
+    data = request.json or {}
+    daps = load_daps()
+    dap = next((d for d in daps if d['id'] == did), None)
+    if not dap:
+        return jsonify({'error': 'Not found'}), 404
+    for k in ('name', 'model', 'icon', 'mount_path', 'export_folder', 'path_prefix', 'peq_folder'):
+        if k in data:
+            dap[k] = data[k]
+    save_daps(daps)
+    dap['mounted'] = Path(dap.get('mount_path', '')).exists()
+    return jsonify(dap)
+
+
+@app.route('/api/daps/<did>', methods=['DELETE'])
+def delete_dap(did):
+    save_daps([d for d in load_daps() if d['id'] != did])
+    return '', 204
+
+
+@app.route('/api/daps/<did>/export/<pid>', methods=['POST'])
+def dap_export_playlist(did, pid):
+    daps = load_daps()
+    dap = next((d for d in daps if d['id'] == did), None)
+    if not dap:
+        return jsonify({'error': 'DAP not found'}), 404
+
+    device_root = Path(dap['mount_path'])
+    if not device_root.exists():
+        return jsonify({'error': f"Device not mounted at {dap['mount_path']}"}), 404
+
+    playlists = load_playlists()
+    playlist = playlists.get(pid)
+    if not playlist:
+        return jsonify({'error': 'Playlist not found'}), 404
+
+    with library_lock:
+        lib_map = {t['id']: t for t in library}
+
+    tracks = [lib_map[e if isinstance(e, str) else e.get('id')]
+              for e in playlist.get('tracks', [])
+              if (e if isinstance(e, str) else e.get('id')) in lib_map]
+
+    prefix = dap.get('path_prefix', '')
+    if dap.get('model') == 'ap80':
+        prefix = prefix or '..'
+
+    out_dir = device_root / dap.get('export_folder', 'Playlists')
+    out_dir.mkdir(exist_ok=True)
+    content = generate_m3u(tracks, playlist['name'], path_prefix=prefix)
+    with open(out_dir / f"{playlist['name']}.m3u", 'w', encoding='utf-8') as f:
+        f.write(content)
+
+    if 'playlist_exports' not in dap:
+        dap['playlist_exports'] = {}
+    dap['playlist_exports'][pid] = int(time.time())
+    save_daps(daps)
+    return jsonify({'exported_at': dap['playlist_exports'][pid]})
+
+
+# ── IEM Management ────────────────────────────────────────────────────────────
+
+def load_iems():
+    if IEM_FILE.exists():
+        try:
+            return json.load(open(IEM_FILE))
+        except Exception:
+            pass
+    return []
+
+
+def save_iems(iems):
+    with open(IEM_FILE, 'w') as f:
+        json.dump(iems, f, indent=2)
+
+
+def parse_rew_file(text):
+    """Parse REW space-separated measurement file. Returns [[freq, spl], ...]."""
+    points = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith('*'):
+            continue
+        parts = line.split()
+        if len(parts) >= 2:
+            try:
+                freq = float(parts[0])
+                spl = float(parts[1])
+                if 20.0 <= freq <= 20000.0:
+                    points.append((freq, spl))
+            except ValueError:
+                pass
+    return _downsample(points, 300)
+
+
+def _downsample(points, n=300):
+    """Downsample to n log-spaced points 20Hz–20kHz via linear interpolation."""
+    if not points:
+        return []
+    points = sorted(points, key=lambda p: p[0])
+    freqs = [p[0] for p in points]
+    spls = [p[1] for p in points]
+    result = []
+    for i in range(n):
+        tf = 20.0 * (20000.0 / 20.0) ** (i / (n - 1))
+        if tf <= freqs[0]:
+            result.append([round(tf, 2), round(spls[0], 3)])
+        elif tf >= freqs[-1]:
+            result.append([round(tf, 2), round(spls[-1], 3)])
+        else:
+            lo, hi = 0, len(freqs) - 1
+            while lo < hi - 1:
+                mid = (lo + hi) // 2
+                if freqs[mid] <= tf:
+                    lo = mid
+                else:
+                    hi = mid
+            t = (tf - freqs[lo]) / (freqs[hi] - freqs[lo])
+            result.append([round(tf, 2), round(spls[lo] + t * (spls[hi] - spls[lo]), 3)])
+    return result
+
+
+def fetch_squig_measurement(squig_url):
+    """Fetch L/R REW measurements from a squig.link share URL."""
+    parsed = urlparse(squig_url)
+    host = parsed.netloc                        # e.g. ducbloke.squig.link
+    subdomain = host.split('.')[0]              # e.g. ducbloke
+    share = parse_qs(parsed.query).get('share', [''])[0]  # e.g. Crinear_Daybreak
+    file_key = share.replace('_', ' ')          # e.g. Crinear Daybreak
+    base = f"https://{subdomain}.squig.link/data/"
+
+    def fetch_ch(ch):
+        url = base + urlquote(f"{file_key} {ch}.txt")
+        try:
+            req = UrlRequest(url, headers={
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                'Referer': f'https://{subdomain}.squig.link/',
+                'Accept': '*/*',
+            })
+            with urlopen(req, timeout=15) as r:
+                return parse_rew_file(r.read().decode('utf-8', errors='replace'))
+        except Exception as e:
+            print(f"squig fetch error ({url}): {e}")
+            return None
+
+    return {'L': fetch_ch('L'), 'R': fetch_ch('R'), 'file_key': file_key, 'subdomain': subdomain}
+
+
+def parse_peq_txt(text):
+    """Parse APO/AutoEQ parametric EQ .txt file."""
+    preamp_db = 0.0
+    filters = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        lo = line.lower()
+        if lo.startswith('preamp:'):
+            try:
+                preamp_db = float(line.split(':', 1)[1].strip().split()[0])
+            except Exception:
+                pass
+        elif lo.startswith('filter'):
+            parts = line.split()
+            try:
+                state_idx = next((i for i, p in enumerate(parts) if p.upper() in ('ON', 'OFF')), None)
+                if state_idx is None:
+                    continue
+                enabled = parts[state_idx].upper() == 'ON'
+                ftype = parts[state_idx + 1].upper() if state_idx + 1 < len(parts) else 'PK'
+                fc = gain = q = None
+                for i, p in enumerate(parts):
+                    if p == 'Fc' and i + 1 < len(parts):
+                        try: fc = float(parts[i + 1])
+                        except Exception: pass
+                    elif p == 'Gain' and i + 1 < len(parts):
+                        try: gain = float(parts[i + 1])
+                        except Exception: pass
+                    elif p == 'Q' and i + 1 < len(parts):
+                        try: q = float(parts[i + 1])
+                        except Exception: pass
+                if fc is not None:
+                    filters.append({'type': ftype, 'enabled': enabled,
+                                    'fc': fc, 'gain': gain or 0.0, 'q': q or 1.0})
+            except Exception:
+                pass
+    return {'preamp_db': preamp_db, 'filters': filters}
+
+
+def _biquad_gain_db(f, ftype, f0, gain_db, Q):
+    """Compute magnitude response in dB of an analog biquad EQ filter."""
+    if f <= 0 or f0 <= 0:
+        return 0.0
+    w = 2 * math.pi * f
+    w0 = 2 * math.pi * f0
+    s = complex(0, w)
+    if ftype == 'PK':
+        if gain_db == 0:
+            return 0.0
+        A = 10.0 ** (gain_db / 40.0)
+        num = s*s + s*(A/Q)*w0 + w0*w0
+        den = s*s + s*(1.0/(A*Q))*w0 + w0*w0
+    elif ftype in ('LS', 'LSC'):
+        A = 10.0 ** (gain_db / 40.0)
+        sqA = A ** 0.5
+        num = A*(s*s + s*(sqA/Q)*w0 + A*w0*w0)
+        den = A*s*s + s*(sqA/Q)*w0 + w0*w0
+    elif ftype in ('HS', 'HSC'):
+        A = 10.0 ** (gain_db / 40.0)
+        sqA = A ** 0.5
+        num = A*(A*s*s + s*(sqA/Q)*w0 + w0*w0)
+        den = s*s + s*(sqA/Q)*w0 + A*w0*w0
+    else:
+        return 0.0
+    mag = abs(num / den)
+    return 20 * math.log10(mag) if mag > 0 else -120.0
+
+
+def _apply_peq(measurement, peq_profile):
+    """Return measurement with PEQ filters applied."""
+    if not measurement or not peq_profile:
+        return measurement
+    preamp = peq_profile.get('preamp_db', 0.0)
+    active = [f for f in peq_profile.get('filters', []) if f.get('enabled', True)]
+    result = []
+    for freq, spl in measurement:
+        adj = spl + preamp
+        for f in active:
+            adj += _biquad_gain_db(freq, f['type'], f['fc'], f['gain'], f['q'])
+        result.append([round(freq, 2), round(adj, 3)])
+    return result
+
+
+@app.route('/api/iems', methods=['GET'])
+def get_iems():
+    # Omit large measurement arrays from list view
+    result = [{k: v for k, v in iem.items() if k not in ('measurement_L', 'measurement_R')}
+              for iem in load_iems()]
+    return jsonify(result)
+
+
+@app.route('/api/iems', methods=['POST'])
+def create_iem():
+    data = request.json or {}
+    squig_url = data.get('squig_url', '').strip()
+    iem = {
+        'id': str(uuid.uuid4()),
+        'name': data.get('name', '').strip() or 'New IEM',
+        'type': data.get('type', 'IEM'),
+        'squig_url': squig_url,
+        'squig_subdomain': '',
+        'squig_file_key': '',
+        'measurement_L': None,
+        'measurement_R': None,
+        'peq_profiles': [],
+    }
+    if squig_url:
+        try:
+            result = fetch_squig_measurement(squig_url)
+            if not result['L'] and not result['R']:
+                return jsonify({'error': 'Could not fetch measurement data from squig.link. Check the URL and try again.'}), 400
+            iem['measurement_L'] = result['L']
+            iem['measurement_R'] = result['R']
+            iem['squig_subdomain'] = result['subdomain']
+            iem['squig_file_key'] = result['file_key']
+            if not data.get('name'):
+                iem['name'] = result['file_key']
+        except Exception as e:
+            return jsonify({'error': f'Failed to fetch measurement: {e}'}), 400
+
+    iems = load_iems()
+    iems.append(iem)
+    save_iems(iems)
+    return jsonify({k: v for k, v in iem.items() if k not in ('measurement_L', 'measurement_R')}), 201
+
+
+@app.route('/api/iems/<iid>', methods=['GET'])
+def get_iem(iid):
+    iem = next((i for i in load_iems() if i['id'] == iid), None)
+    if not iem:
+        return jsonify({'error': 'Not found'}), 404
+    return jsonify(iem)
+
+
+@app.route('/api/iems/<iid>', methods=['PUT'])
+def update_iem(iid):
+    data = request.json or {}
+    iems = load_iems()
+    iem = next((i for i in iems if i['id'] == iid), None)
+    if not iem:
+        return jsonify({'error': 'Not found'}), 404
+    for k in ('name', 'type'):
+        if k in data:
+            iem[k] = data[k]
+    if 'squig_url' in data and (data['squig_url'] != iem.get('squig_url') or data.get('force_refetch') or not iem.get('measurement_L')):
+        iem['squig_url'] = data['squig_url']
+        try:
+            result = fetch_squig_measurement(data['squig_url'])
+            if not result['L'] and not result['R']:
+                return jsonify({'error': 'Could not fetch measurement data from squig.link. Check the URL and try again.'}), 400
+            iem['measurement_L'] = result['L']
+            iem['measurement_R'] = result['R']
+            iem['squig_subdomain'] = result['subdomain']
+            iem['squig_file_key'] = result['file_key']
+        except Exception as e:
+            return jsonify({'error': f'Failed to fetch measurement: {e}'}), 400
+    save_iems(iems)
+    return jsonify({k: v for k, v in iem.items() if k not in ('measurement_L', 'measurement_R')})
+
+
+@app.route('/api/iems/<iid>', methods=['DELETE'])
+def delete_iem(iid):
+    save_iems([i for i in load_iems() if i['id'] != iid])
+    return '', 204
+
+
+@app.route('/api/iems/<iid>/graph')
+def iem_graph(iid):
+    iems = load_iems()
+    iem = next((i for i in iems if i['id'] == iid), None)
+    if not iem:
+        return jsonify({'error': 'Not found'}), 404
+
+    peq_id = request.args.get('peq', '')
+    compare_ids = request.args.getlist('compare')
+    palette = ['#5b8dee', '#e05c5c', '#4caf8f', '#e8a838', '#9c6dd8', '#e05ca0']
+
+    curves = []
+    targets = [iem] + [i for i in iems if i['id'] in compare_ids]
+
+    for idx, cur in enumerate(targets):
+        color = palette[idx % len(palette)]
+        name = cur['name']
+        mL = cur.get('measurement_L')
+        mR = cur.get('measurement_R')
+        if mL:
+            curves.append({'id': f"{cur['id']}-L", 'label': f"{name} (L)",
+                           'color': color, 'dash': False, 'data': mL})
+        if mR:
+            curves.append({'id': f"{cur['id']}-R", 'label': f"{name} (R)",
+                           'color': color, 'dash': True, 'data': mR})
+
+        # Apply PEQ for primary IEM only
+        if idx == 0 and peq_id:
+            peq = next((p for p in cur.get('peq_profiles', []) if p['id'] == peq_id), None)
+            if peq:
+                peq_color = palette[(len(targets)) % len(palette)]
+                if mL:
+                    curves.append({'id': f"{cur['id']}-peq-L",
+                                   'label': f"{name} + {peq['name']} (L)",
+                                   'color': peq_color, 'dash': False,
+                                   'data': _apply_peq(mL, peq)})
+                if mR:
+                    curves.append({'id': f"{cur['id']}-peq-R",
+                                   'label': f"{name} + {peq['name']} (R)",
+                                   'color': peq_color, 'dash': True,
+                                   'data': _apply_peq(mR, peq)})
+
+    return jsonify({'curves': curves, 'iem_name': iem['name']})
+
+
+@app.route('/api/iems/<iid>/peq', methods=['POST'])
+def add_peq_profile(iid):
+    iems = load_iems()
+    iem = next((i for i in iems if i['id'] == iid), None)
+    if not iem:
+        return jsonify({'error': 'Not found'}), 404
+
+    if 'file' in request.files:
+        f = request.files['file']
+        text = f.read().decode('utf-8', errors='replace')
+        name = request.form.get('name') or Path(f.filename).stem
+    else:
+        body = request.json or {}
+        text = body.get('content', '')
+        name = body.get('name', 'PEQ Profile')
+
+    if not text.strip():
+        return jsonify({'error': 'No content'}), 400
+
+    parsed = parse_peq_txt(text)
+    profile = {
+        'id': str(uuid.uuid4()),
+        'name': name,
+        'preamp_db': parsed['preamp_db'],
+        'filters': parsed['filters'],
+        'raw_txt': text,
+    }
+    iem.setdefault('peq_profiles', []).append(profile)
+    save_iems(iems)
+    return jsonify({k: v for k, v in profile.items() if k != 'raw_txt'}), 201
+
+
+@app.route('/api/iems/<iid>/peq/<peq_id>', methods=['DELETE'])
+def delete_peq_profile(iid, peq_id):
+    iems = load_iems()
+    iem = next((i for i in iems if i['id'] == iid), None)
+    if not iem:
+        return jsonify({'error': 'Not found'}), 404
+    iem['peq_profiles'] = [p for p in iem.get('peq_profiles', []) if p['id'] != peq_id]
+    save_iems(iems)
+    return '', 204
+
+
+@app.route('/api/iems/<iid>/peq/<peq_id>/copy', methods=['POST'])
+def copy_peq_to_dap(iid, peq_id):
+    iems = load_iems()
+    iem = next((i for i in iems if i['id'] == iid), None)
+    if not iem:
+        return jsonify({'error': 'IEM not found'}), 404
+    peq = next((p for p in iem.get('peq_profiles', []) if p['id'] == peq_id), None)
+    if not peq:
+        return jsonify({'error': 'PEQ profile not found'}), 404
+
+    dap_id = (request.json or {}).get('dap_id')
+    dap = next((d for d in load_daps() if d['id'] == dap_id), None)
+    if not dap:
+        return jsonify({'error': 'DAP not found'}), 404
+
+    device_root = Path(dap['mount_path'])
+    if not device_root.exists():
+        return jsonify({'error': f"Device not mounted at {dap['mount_path']}"}), 404
+
+    peq_dir = device_root / dap.get('peq_folder', 'PEQ')
+    peq_dir.mkdir(exist_ok=True)
+
+    raw = peq.get('raw_txt', '')
+    if not raw:
+        lines = [f"Preamp: {peq['preamp_db']:.1f} dB"]
+        for i, flt in enumerate(peq.get('filters', []), 1):
+            state = 'ON' if flt.get('enabled', True) else 'OFF'
+            lines.append(f"Filter {i}: {state} {flt['type']} Fc {flt['fc']} Hz Gain {flt['gain']} dB Q {flt['q']}")
+        raw = '\n'.join(lines)
+
+    out_path = peq_dir / f"{iem['name']} - {peq['name']}.txt"
+    with open(out_path, 'w', encoding='utf-8') as f:
+        f.write(raw)
+    return jsonify({'message': f"Copied to {out_path}"})
 
 
 if __name__ == '__main__':

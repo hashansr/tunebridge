@@ -996,13 +996,16 @@ function showView(viewName) {
 
   if (viewName === 'artists') loadArtists();
   else if (viewName === 'albums') { state.artist = null; loadAlbums(); }
+  else if (viewName === 'songs') loadSongsView();
   else if (viewName === 'search') {
     setTimeout(() => document.getElementById('search-input').focus(), 50);
-  }
+  } else if (viewName === 'daps') loadDapsView();
+  else if (viewName === 'iems') loadIemsView();
+  else if (viewName === 'library-settings') loadLibrarySettings();
 }
 
 function showViewEl(name) {
-  const views = ['artists', 'albums', 'tracks', 'search', 'playlist'];
+  const views = ['artists', 'albums', 'tracks', 'search', 'songs', 'playlist', 'daps', 'dap-detail', 'iems', 'iem-detail', 'library-settings'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.style.display = v === name ? (v === 'playlist' ? 'flex' : 'block') : 'none';
@@ -1481,6 +1484,822 @@ async function syncScanAgain() {
   _syncPhase('pick');
 }
 
+/* ── DAP icon picker ────────────────────────────────────────────────── */
+const DAP_ICONS = [
+  '📱','🎵','🎶','🎧','📻','💿','🔊','🎸',
+  '🎹','🎺','🎻','🥁','🎤','⚡','🌟','🔥',
+  '💎','🚀','🌊','🎯','🦋','🎨','📡','🔮',
+];
+
+function _renderIconPicker(selected) {
+  const container = document.getElementById('dap-icon-picker');
+  if (!container) return;
+  document.getElementById('dap-icon').value = selected || '📱';
+  container.innerHTML = DAP_ICONS.map(icon => `
+    <button type="button" class="icon-picker-btn${icon === (selected || '📱') ? ' selected' : ''}"
+      onclick="App._selectIcon('${icon}')" title="${icon}">${icon}</button>
+  `).join('');
+}
+
+function _selectIcon(icon) {
+  document.getElementById('dap-icon').value = icon;
+  const display = document.getElementById('dap-icon-display');
+  if (display) display.textContent = icon;
+  document.querySelectorAll('.icon-picker-btn').forEach(btn => {
+    btn.classList.toggle('selected', btn.textContent === icon);
+  });
+  // Close dropdown
+  const menu = document.getElementById('dap-icon-menu');
+  if (menu) menu.style.display = 'none';
+}
+
+/* ── DAP management ─────────────────────────────────────────────────── */
+async function loadDapsView() {
+  const daps = await api('/daps').catch(() => []);
+  const grid = document.getElementById('daps-grid');
+  const empty = document.getElementById('daps-empty');
+  if (!daps.length) {
+    grid.innerHTML = '';
+    empty.style.display = 'flex';
+    return;
+  }
+  empty.style.display = 'none';
+  grid.innerHTML = daps.map(d => `
+    <div class="gear-card" onclick="App.showDapDetail('${d.id}')">
+      <div class="gear-card-icon" style="font-size:22px">${esc(d.icon || '📱')}</div>
+      <div class="gear-card-name">${esc(d.name)}</div>
+      <div class="gear-card-meta">
+        <span class="gear-badge ${d.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected'}">
+          ${d.mounted ? '● Connected' : '○ Not connected'}
+        </span>
+        ${d.stale_count > 0 ? `<span class="gear-sync-badge gear-sync-stale">⚠ ${d.stale_count} stale</span>` : ''}
+        ${d.never_exported > 0 ? `<span class="gear-sync-badge gear-sync-never">${d.never_exported} unsynced</span>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+async function showDapDetail(id) {
+  const [dap, playlists] = await Promise.all([
+    api(`/daps/${id}`),
+    api('/playlists'),
+  ]);
+  state.view = 'dap-detail';
+  clearSelection();
+  setActiveNav('daps');
+  showViewEl('dap-detail');
+
+  document.getElementById('dap-detail-breadcrumb').innerHTML = `
+    <span class="crumb" onclick="App.showView('daps')">DAPs</span>
+    <span class="crumb-sep">›</span>
+    <span class="crumb-current">${esc(dap.name)}</span>
+  `;
+
+  const exports = dap.playlist_exports || {};
+  const sortedPl = [...playlists].sort((a, b) => a.name.localeCompare(b.name));
+
+  const plRows = sortedPl.map(pl => {
+    const ts = exports[pl.id];
+    let statusHtml;
+    if (!ts) {
+      statusHtml = `<span class="gear-sync-badge gear-sync-never">Never exported</span>`;
+    } else if (ts < (pl.updated_at || 0)) {
+      statusHtml = `<span class="gear-sync-badge gear-sync-stale">⚠ Stale</span>`;
+    } else {
+      statusHtml = `<span class="gear-sync-badge gear-sync-ok">✓ Up to date</span>`;
+    }
+    const canExport = dap.mounted;
+    return `
+      <tr>
+        <td>${esc(pl.name)}</td>
+        <td>${pl.tracks?.length ?? 0} tracks</td>
+        <td>${statusHtml}</td>
+        <td style="text-align:right">
+          <button class="dap-pl-export-btn" ${canExport ? '' : 'disabled title="Device not mounted"'}
+            onclick="App.dapExportPlaylist('${dap.id}','${pl.id}',this)">
+            ${dap.mounted ? '→ Export' : 'Not mounted'}
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  document.getElementById('dap-detail-content').innerHTML = `
+    <div class="dap-detail-header">
+      <div class="dap-detail-icon" style="font-size:28px">${esc(dap.icon || '📱')}</div>
+      <div>
+        <div class="dap-detail-title">${esc(dap.name)}</div>
+        <div class="dap-detail-sub">
+          <span class="gear-badge ${dap.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected'}">
+            ${dap.mounted ? '● Connected' : '○ Not connected'}
+          </span>
+          <span class="gear-badge gear-badge-dap">${esc(dap.model || 'generic')}</span>
+        </div>
+        <div class="gear-edit-actions">
+          <button class="btn-secondary" onclick="App.showEditDapModal('${dap.id}')">Edit</button>
+          <button class="btn-danger-sm" onclick="App.deleteDap('${dap.id}')">Delete</button>
+        </div>
+      </div>
+    </div>
+    <div class="dap-config-block">
+      <div class="dap-config-field"><label>Mount path</label><span>${esc(dap.mount_path || '—')}</span></div>
+      <div class="dap-config-field"><label>Export folder</label><span>${esc(dap.export_folder || 'Playlists')}</span></div>
+      <div class="dap-config-field"><label>Path prefix</label><span>${esc(dap.path_prefix || '(none)')}</span></div>
+      <div class="dap-config-field"><label>Model</label><span>${esc(dap.model || 'generic')}</span></div>
+    </div>
+    <div style="font-size:var(--text-xs);font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">
+      Playlist Sync Status
+    </div>
+    <table class="dap-pl-table">
+      <thead><tr>
+        <th>Playlist</th><th>Tracks</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody>${plRows || '<tr><td colspan="4" style="color:var(--text-muted);text-align:center;padding:20px">No playlists yet</td></tr>'}</tbody>
+    </table>
+  `;
+}
+
+async function dapExportPlaylist(dapId, plId, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Exporting…';
+  try {
+    await api(`/daps/${dapId}/export/${plId}`, { method: 'POST' });
+    btn.textContent = '✓ Exported';
+    btn.style.background = '#4caf8f';
+    // Refresh stale badge
+    const row = btn.closest('tr');
+    if (row) {
+      const statusCell = row.cells[2];
+      if (statusCell) statusCell.innerHTML = `<span class="gear-sync-badge gear-sync-ok">✓ Up to date</span>`;
+    }
+  } catch (e) {
+    toast('Export failed: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '→ Export';
+  }
+}
+
+function showAddDapModal() {
+  document.getElementById('dap-modal-title').textContent = 'Add DAP';
+  document.getElementById('dap-modal-id').value = '';
+  document.getElementById('dap-name').value = '';
+  document.getElementById('dap-model').value = 'poweramp';
+  document.getElementById('dap-mount').value = '';
+  document.getElementById('dap-export-folder').value = 'Playlists';
+  document.getElementById('dap-prefix').value = '';
+  _renderIconPicker('📱');
+  const display = document.getElementById('dap-icon-display');
+  if (display) display.textContent = '📱';
+  dapModelPreset('poweramp');
+  document.getElementById('dap-modal').style.display = 'flex';
+}
+
+async function showEditDapModal(id) {
+  const dap = await api(`/daps/${id}`);
+  document.getElementById('dap-modal-title').textContent = 'Edit DAP';
+  document.getElementById('dap-modal-id').value = id;
+  document.getElementById('dap-name').value = dap.name || '';
+  document.getElementById('dap-model').value = dap.model || 'poweramp';
+  document.getElementById('dap-mount').value = dap.mount_path || '';
+  document.getElementById('dap-export-folder').value = dap.export_folder || 'Playlists';
+  document.getElementById('dap-prefix').value = dap.path_prefix || '';
+  const icon = dap.icon || '📱';
+  _renderIconPicker(icon);
+  const display = document.getElementById('dap-icon-display');
+  if (display) display.textContent = icon;
+  _updateDapFolderHint(dap.model || 'poweramp');
+  document.getElementById('dap-modal').style.display = 'flex';
+}
+
+function closeDapModal() {
+  document.getElementById('dap-modal').style.display = 'none';
+}
+
+const _mountPrefix = (() => {
+  const os = _getOsPlatform();
+  if (os === 'windows') return { base: 'E:\\', sep: '\\' };
+  if (os === 'linux') return { base: '/media/', sep: '/' };
+  return { base: '/Volumes/', sep: '/' };
+})();
+
+const DAP_MODEL_PRESETS = {
+  poweramp: {
+    mount: _mountPrefix.base + 'FIIO M21',
+    folder: 'Playlists',
+    prefix: '',
+    hint: 'Poweramp scans all storage for .m3u files. Filename = playlist name.',
+  },
+  hiby: {
+    mount: _mountPrefix.base + 'HiBy',
+    folder: 'HiByMusic/Playlist',
+    prefix: '',
+    hint: 'HiBy OS reads playlists from HiByMusic/Playlist/ on SD card.',
+  },
+  fiio: {
+    mount: _mountPrefix.base + 'FiiO',
+    folder: 'Playlists',
+    prefix: '',
+    hint: 'FiiO Music finds M3U files via Browse Files on the same storage as music.',
+  },
+  other: {
+    mount: _mountPrefix.base + 'MyDAP',
+    folder: 'Playlists',
+    prefix: '',
+    hint: '',
+  },
+};
+
+function dapModelPreset(model) {
+  const preset = DAP_MODEL_PRESETS[model] || DAP_MODEL_PRESETS.other;
+  const mountInput = document.getElementById('dap-mount');
+  // Only update mount if field is empty or user hasn't customized it
+  if (!mountInput.value || Object.values(DAP_MODEL_PRESETS).some(p => mountInput.value === p.mount)) {
+    mountInput.value = preset.mount;
+  }
+  document.getElementById('dap-export-folder').value = preset.folder;
+  document.getElementById('dap-prefix').value = preset.prefix;
+  _updateDapFolderHint(model);
+}
+
+function _updateDapFolderHint(model) {
+  const el = document.getElementById('dap-folder-hint');
+  if (!el) return;
+  const preset = DAP_MODEL_PRESETS[model] || DAP_MODEL_PRESETS.other;
+  el.textContent = preset.hint;
+}
+
+async function saveDap() {
+  const id = document.getElementById('dap-modal-id').value;
+  const body = {
+    name: document.getElementById('dap-name').value.trim() || 'My DAP',
+    model: document.getElementById('dap-model').value,
+    icon: document.getElementById('dap-icon').value || '📱',
+    mount_path: document.getElementById('dap-mount').value.trim(),
+    export_folder: document.getElementById('dap-export-folder').value.trim() || 'Playlists',
+    path_prefix: document.getElementById('dap-prefix').value.trim(),
+  };
+  try {
+    if (id) {
+      await api(`/daps/${id}`, { method: 'PUT', body });
+    } else {
+      await api('/daps', { method: 'POST', body });
+    }
+    closeDapModal();
+    if (state.view === 'dap-detail' && id) {
+      showDapDetail(id);
+    } else {
+      showView('daps');
+    }
+  } catch (e) {
+    toast('Error: ' + e.message);
+  }
+}
+
+async function deleteDap(id) {
+  if (!confirm('Delete this DAP?')) return;
+  await api(`/daps/${id}`, { method: 'DELETE' });
+  showView('daps');
+}
+
+/* ── IEM management ─────────────────────────────────────────────────── */
+let _iemChart = null;
+let _currentIemId = null;
+let _activePeqId = null;
+
+async function loadIemsView() {
+  const iems = await api('/iems').catch(() => []);
+  const grid = document.getElementById('iems-grid');
+  const empty = document.getElementById('iems-empty');
+  if (!iems.length) {
+    grid.innerHTML = '';
+    empty.style.display = 'flex';
+    return;
+  }
+  empty.style.display = 'none';
+  grid.innerHTML = iems.map(i => {
+    const badgeClass = i.type === 'Headphone' ? 'gear-badge-hp' : 'gear-badge-iem';
+    return `
+      <div class="gear-card" onclick="App.showIemDetail('${i.id}')">
+        <div class="gear-card-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+        </div>
+        <div class="gear-card-name">${esc(i.name)}</div>
+        <div class="gear-card-meta">
+          <span class="gear-badge ${badgeClass}">${esc(i.type || 'IEM')}</span>
+          ${i.peq_profiles?.length ? `<span style="font-size:var(--text-xs);color:var(--text-muted)">${i.peq_profiles.length} PEQ${i.peq_profiles.length !== 1 ? 's' : ''}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function showIemDetail(id) {
+  const iem = await api(`/iems/${id}`);
+  _currentIemId = id;
+  _activePeqId = null;
+  state.view = 'iem-detail';
+  clearSelection();
+  setActiveNav('iems');
+  showViewEl('iem-detail');
+
+  document.getElementById('iem-detail-breadcrumb').innerHTML = `
+    <span class="crumb" onclick="App.showView('iems')">IEMs &amp; Headphones</span>
+    <span class="crumb-sep">›</span>
+    <span class="crumb-current">${esc(iem.name)}</span>
+  `;
+
+  const typeBadge = iem.type === 'Headphone' ? 'gear-badge-hp' : 'gear-badge-iem';
+  const hasMeasurement = iem.measurement_L || iem.measurement_R;
+  const peqOptions = (iem.peq_profiles || []).map(p =>
+    `<option value="${p.id}">${esc(p.name)}</option>`
+  ).join('');
+
+  document.getElementById('iem-detail-content').innerHTML = `
+    <div class="iem-detail-header">
+      <div class="iem-detail-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+      </div>
+      <div>
+        <div class="iem-detail-title">${esc(iem.name)}</div>
+        <div class="iem-detail-sub">
+          <span class="gear-badge ${typeBadge}">${esc(iem.type || 'IEM')}</span>
+          ${iem.squig_url ? `<a href="${esc(iem.squig_url)}" target="_blank" style="font-size:var(--text-xs);color:var(--accent);text-decoration:none">squig.link ↗</a>` : ''}
+        </div>
+        <div class="gear-edit-actions">
+          <button class="btn-secondary" onclick="App.showEditIemModal('${iem.id}')">Edit</button>
+          <button class="btn-danger-sm" onclick="App.deleteIem('${iem.id}')">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="freq-graph-wrap">
+      <div class="freq-graph-toolbar">
+        <label>PEQ:</label>
+        <select id="peq-select" onchange="App.applyPeqToGraph(this.value)">
+          <option value="">None (raw measurement)</option>
+          ${peqOptions}
+        </select>
+      </div>
+      <div id="freq-canvas-wrap">
+        ${hasMeasurement
+          ? `<canvas id="freq-canvas"></canvas>`
+          : `<div class="freq-no-data">
+               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 4-4" stroke-width="2"/></svg>
+               <span>No measurement data — add a squig.link URL to import frequency response.</span>
+             </div>`
+        }
+      </div>
+    </div>
+
+    <div class="peq-section-hdr">
+      <div class="peq-section-title">PEQ Profiles</div>
+      <button class="btn-secondary" onclick="App.showPeqModal()">+ Upload PEQ</button>
+    </div>
+    <div class="peq-list" id="peq-list">
+      ${_renderPeqList(iem.peq_profiles || [])}
+    </div>
+  `;
+
+  if (hasMeasurement) {
+    await _loadIemGraph(id, null);
+  }
+}
+
+function _renderPeqList(profiles) {
+  if (!profiles.length) {
+    return `<div style="color:var(--text-muted);font-size:var(--text-sm);padding:10px 0">No PEQ profiles yet. Upload an APO/AutoEQ .txt file.</div>`;
+  }
+  return profiles.map(p => `
+    <div class="peq-row${_activePeqId === p.id ? ' active' : ''}" id="peq-row-${p.id}">
+      <div class="peq-row-name">${esc(p.name)}</div>
+      <div class="peq-row-meta">${p.filters?.length || 0} filters · ${p.preamp_db != null ? (p.preamp_db >= 0 ? '+' : '') + p.preamp_db.toFixed(1) + ' dB preamp' : ''}</div>
+      <div class="peq-row-actions">
+        <button class="btn-secondary" style="font-size:var(--text-xs);padding:3px 9px"
+          onclick="App.applyPeqToGraph('${p.id}')">
+          ${_activePeqId === p.id ? 'Showing' : 'View on graph'}
+        </button>
+        <button class="btn-danger-sm" onclick="App.deletePeq('${p.id}')">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function _loadIemGraph(iemId, peqId) {
+  const params = peqId ? `?peq=${peqId}` : '';
+  let data;
+  try {
+    data = await api(`/iems/${iemId}/graph${params}`);
+  } catch (e) {
+    toast('Failed to load graph data: ' + e.message);
+    return;
+  }
+  if (!data || !data.curves || !data.curves.length) return;
+
+  const canvas = document.getElementById('freq-canvas');
+  if (!canvas) return;
+
+  if (_iemChart) { _iemChart.destroy(); _iemChart = null; }
+
+  const regionPlugin = {
+    id: 'freqRegions',
+    beforeDatasetsDraw(chart) {
+      const { ctx, chartArea: { left, right, top, bottom, height }, scales: { x } } = chart;
+      // squig.link-style 7 region bands
+      const regions = [
+        { f1: 20,   f2: 80,    color: 'rgba(173,198,255,.04)', label: 'Sub bass' },
+        { f1: 80,   f2: 300,   color: 'rgba(173,198,255,.025)', label: 'Mid bass' },
+        { f1: 300,  f2: 1000,  color: 'rgba(173,198,255,.015)', label: 'Lower midrange' },
+        { f1: 1000, f2: 4000,  color: 'rgba(173,198,255,.025)', label: 'Upper midrange' },
+        { f1: 4000, f2: 6000,  color: 'rgba(173,198,255,.04)', label: 'Presence region' },
+        { f1: 6000, f2: 10000, color: 'rgba(173,198,255,.025)', label: 'Mid treble' },
+        { f1: 10000,f2: 20000, color: 'rgba(173,198,255,.04)', label: 'Air' },
+      ];
+      regions.forEach(r => {
+        const x1 = Math.max(x.getPixelForValue(r.f1), left);
+        const x2 = Math.min(x.getPixelForValue(r.f2), right);
+        ctx.fillStyle = r.color;
+        ctx.fillRect(x1, top, x2 - x1, bottom - top);
+      });
+      // Draw region labels at bottom
+      ctx.save();
+      ctx.font = '9px Inter, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      regions.forEach(r => {
+        const x1 = Math.max(x.getPixelForValue(r.f1), left);
+        const x2 = Math.min(x.getPixelForValue(r.f2), right);
+        const cx = (x1 + x2) / 2;
+        if (x2 - x1 > 30) { // Only draw if region is wide enough
+          ctx.fillText(r.label, cx, bottom - 2);
+        }
+      });
+      ctx.restore();
+    },
+  };
+
+  const datasets = data.curves.map(c => ({
+    label: c.label,
+    data: c.data.map(([f, spl]) => ({ x: f, y: spl })),
+    borderColor: c.color,
+    borderWidth: 1.5,
+    borderDash: c.dash ? [5, 3] : [],
+    pointRadius: 0,
+    tension: 0.3,
+  }));
+
+  _iemChart = new Chart(canvas, {
+    type: 'line',
+    plugins: [regionPlugin],
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 200 },
+      scales: {
+        x: {
+          type: 'logarithmic',
+          min: 20,
+          max: 20000,
+          title: { display: true, text: 'Frequency (Hz)', color: '#6b6b7b', font: { size: 11, family: 'Inter, sans-serif' } },
+          ticks: {
+            color: '#6b6b7b',
+            font: { size: 10, family: 'Inter, sans-serif' },
+            callback: function(v) {
+              const labeled = [20,50,100,200,500,1000,2000,5000,10000,20000];
+              if (!labeled.includes(v)) return '';
+              if (v >= 1000) return (v / 1000) + 'k';
+              return v;
+            },
+            autoSkip: false,
+            maxRotation: 0,
+            font: { size: 9, family: 'Inter, sans-serif' },
+          },
+          grid: {
+            color: function(ctx) {
+              const v = ctx.tick && ctx.tick.value;
+              const major = [100, 1000, 10000];
+              return major.includes(v) ? 'rgba(173,198,255,.12)' : 'rgba(173,198,255,.04)';
+            },
+          },
+          afterBuildTicks(axis) {
+            axis.ticks = [20,30,40,50,60,80,100,150,200,300,400,500,600,800,1000,1500,2000,3000,4000,5000,6000,8000,10000,15000,20000].map(v => ({ value: v }));
+          },
+        },
+        y: {
+          title: { display: true, text: 'dB', color: '#6b6b7b', font: { size: 11, family: 'Inter, sans-serif' } },
+          ticks: { color: '#6b6b7b', font: { size: 10, family: 'Inter, sans-serif' } },
+          grid: { color: 'rgba(173,198,255,.06)' },
+        },
+      },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          labels: {
+            color: '#c1c6d7',
+            font: { size: 11, family: 'Inter, sans-serif' },
+            boxWidth: 24,
+            padding: 12,
+            generateLabels(chart) {
+              return chart.data.datasets.map((ds, i) => ({
+                text: ds.label,
+                fillStyle: 'transparent',
+                strokeStyle: ds.borderColor,
+                lineWidth: ds.borderWidth,
+                lineDash: ds.borderDash || [],
+                hidden: !chart.isDatasetVisible(i),
+                datasetIndex: i,
+              }));
+            },
+          },
+          onClick(e, legendItem, legend) {
+            const idx = legendItem.datasetIndex;
+            const ci = legend.chart;
+            ci.setDatasetVisibility(idx, !ci.isDatasetVisible(idx));
+            ci.update();
+          },
+        },
+        tooltip: {
+          backgroundColor: 'rgba(53,53,52,0.95)',
+          titleColor: '#e5e2e1',
+          bodyColor: '#c1c6d7',
+          borderColor: 'rgba(65,71,85,0.3)',
+          borderWidth: 1,
+          callbacks: {
+            title: items => {
+              const f = items[0].parsed.x;
+              return f >= 1000 ? (f / 1000).toFixed(1) + ' kHz' : Math.round(f) + ' Hz';
+            },
+            label: item => ` ${item.dataset.label}: ${item.parsed.y.toFixed(1)} dB`,
+          },
+        },
+      },
+    },
+  });
+}
+
+async function applyPeqToGraph(peqId) {
+  _activePeqId = peqId || null;
+  // Update select
+  const sel = document.getElementById('peq-select');
+  if (sel) sel.value = peqId || '';
+  // Update row highlights
+  document.querySelectorAll('.peq-row').forEach(row => row.classList.remove('active'));
+  if (peqId) {
+    const activeRow = document.getElementById(`peq-row-${peqId}`);
+    if (activeRow) activeRow.classList.add('active');
+  }
+  if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId);
+}
+
+function showAddIemModal() {
+  document.getElementById('iem-modal-title').textContent = 'Add IEM / Headphone';
+  document.getElementById('iem-modal-id').value = '';
+  document.getElementById('iem-name').value = '';
+  document.getElementById('iem-type').value = 'IEM';
+  document.getElementById('iem-squig-url').value = '';
+  document.getElementById('iem-modal-error').style.display = 'none';
+  document.getElementById('iem-save-btn').disabled = false;
+  document.getElementById('iem-save-btn').textContent = 'Save';
+  document.getElementById('iem-modal').style.display = 'flex';
+}
+
+async function showEditIemModal(id) {
+  const iem = await api(`/iems/${id}`);
+  document.getElementById('iem-modal-title').textContent = 'Edit IEM';
+  document.getElementById('iem-modal-id').value = id;
+  document.getElementById('iem-name').value = iem.name || '';
+  document.getElementById('iem-type').value = iem.type || 'IEM';
+  document.getElementById('iem-squig-url').value = iem.squig_url || '';
+  document.getElementById('iem-modal-error').style.display = 'none';
+  document.getElementById('iem-save-btn').disabled = false;
+  document.getElementById('iem-save-btn').textContent = 'Save';
+  document.getElementById('iem-modal').style.display = 'flex';
+}
+
+function closeIemModal() {
+  document.getElementById('iem-modal').style.display = 'none';
+}
+
+async function saveIem() {
+  const id = document.getElementById('iem-modal-id').value;
+  const body = {
+    name: document.getElementById('iem-name').value.trim() || 'New IEM',
+    type: document.getElementById('iem-type').value,
+    squig_url: document.getElementById('iem-squig-url').value.trim(),
+  };
+  const errEl = document.getElementById('iem-modal-error');
+  const btn = document.getElementById('iem-save-btn');
+  btn.disabled = true;
+  btn.textContent = body.squig_url ? 'Fetching measurement…' : 'Saving…';
+  errEl.style.display = 'none';
+  try {
+    let saved;
+    if (id) {
+      saved = await api(`/iems/${id}`, { method: 'PUT', body });
+    } else {
+      saved = await api('/iems', { method: 'POST', body });
+    }
+    closeIemModal();
+    if (id) {
+      showIemDetail(id);
+    } else {
+      showIemDetail(saved.id);
+    }
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  }
+}
+
+async function deleteIem(id) {
+  if (!confirm('Delete this IEM/headphone?')) return;
+  if (_iemChart) { _iemChart.destroy(); _iemChart = null; }
+  await api(`/iems/${id}`, { method: 'DELETE' });
+  showView('iems');
+}
+
+function showPeqModal() {
+  document.getElementById('peq-name').value = '';
+  document.getElementById('peq-file-input').value = '';
+  document.getElementById('peq-modal-error').style.display = 'none';
+  document.getElementById('peq-modal').style.display = 'flex';
+}
+
+function closePeqModal() {
+  document.getElementById('peq-modal').style.display = 'none';
+}
+
+async function savePeq() {
+  if (!_currentIemId) return;
+  const nameVal = document.getElementById('peq-name').value.trim();
+  const fileInput = document.getElementById('peq-file-input');
+  const errEl = document.getElementById('peq-modal-error');
+  errEl.style.display = 'none';
+
+  if (!fileInput.files.length) {
+    errEl.textContent = 'Please select a PEQ file.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  if (nameVal) formData.append('name', nameVal);
+
+  try {
+    const res = await fetch(`/api/iems/${_currentIemId}/peq`, { method: 'POST', body: formData });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+      throw new Error(err.error || 'Upload failed');
+    }
+    closePeqModal();
+    await showIemDetail(_currentIemId);
+  } catch (e) {
+    errEl.textContent = e.message || 'Failed to upload PEQ file. Check the file format.';
+    errEl.style.display = 'block';
+  }
+}
+
+async function deletePeq(peqId) {
+  if (!_currentIemId) return;
+  if (!confirm('Delete this PEQ profile?')) return;
+  await api(`/iems/${_currentIemId}/peq/${peqId}`, { method: 'DELETE' });
+  if (_activePeqId === peqId) _activePeqId = null;
+  await showIemDetail(_currentIemId);
+}
+
+/* ── Songs view ─────────────────────────────────────────────────────── */
+let _songsData = [];
+let _songsSort = { col: 'title', order: 'asc' };
+let _songsFilter = '';
+
+async function loadSongsView() {
+  try {
+    _songsData = await api(`/library/songs?sort=${_songsSort.col}&order=${_songsSort.order}`);
+  } catch {
+    _songsData = [];
+  }
+  renderSongsTable();
+}
+
+function renderSongsTable() {
+  let tracks = _songsData;
+  if (_songsFilter) {
+    const q = _songsFilter.toLowerCase();
+    tracks = tracks.filter(t =>
+      ((t.title || '') + ' ' + (t.artist || '') + ' ' + (t.album || '')).toLowerCase().includes(q)
+    );
+  }
+  const count = document.getElementById('songs-count');
+  if (count) count.textContent = `${tracks.length} songs`;
+  const tbody = document.getElementById('songs-tbody');
+  if (!tbody) return;
+
+  // Update sort arrows
+  document.querySelectorAll('#songs-table .sort-arrow').forEach(el => el.textContent = '');
+  const arrow = document.getElementById(`songs-sort-${_songsSort.col}`);
+  if (arrow) arrow.textContent = _songsSort.order === 'asc' ? ' \u25B2' : ' \u25BC';
+
+  tbody.innerHTML = tracks.map((t, i) => {
+    const fmtDate = t.date_added ? new Date(t.date_added * 1000).toLocaleDateString() : '';
+    const bitrate = t.bitrate ? t.bitrate + ' kbps' : '';
+    return `
+    <tr data-id="${t.id}">
+      <td class="col-num" onclick="App.toggleTrackSelection('${t.id}', ${i}, event)">
+        <div class="num-cell">
+          <span class="track-num">${t.track_number || (i + 1)}</span>
+          <span class="track-check-indicator"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+        </div>
+      </td>
+      <td>
+        <div class="title-cell">
+          <div class="thumb">${thumbImg(t.artwork_key, 34, '4px')}</div>
+          <div class="track-info">
+            <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
+          </div>
+        </div>
+      </td>
+      <td class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
+      <td class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
+      <td class="col-dur">${esc(t.duration_fmt || '')}</td>
+      <td style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
+      <td style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.year || '')}</td>
+      <td style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.album_artist || '')}">${esc(t.album_artist || '')}</td>
+      <td style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.format || '')}</td>
+      <td style="color:var(--text-muted);font-size:var(--text-sm)">${bitrate}</td>
+      <td style="color:var(--text-muted);font-size:var(--text-sm)">${fmtDate}</td>
+      <td><div class="col-act-inner">
+        <button class="add-btn" onclick="App.showAddDropdown(event, '${t.id}')" title="Add to playlist">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function sortSongs(col) {
+  if (_songsSort.col === col) {
+    _songsSort.order = _songsSort.order === 'asc' ? 'desc' : 'asc';
+  } else {
+    _songsSort.col = col;
+    _songsSort.order = 'asc';
+  }
+  loadSongsView();
+}
+
+function filterSongs(val) {
+  _songsFilter = val;
+  const clearBtn = document.getElementById('songs-filter-clear');
+  if (clearBtn) clearBtn.style.display = val ? 'block' : 'none';
+  renderSongsTable();
+}
+
+function clearSongsFilter() {
+  _songsFilter = '';
+  const inp = document.getElementById('songs-filter-input');
+  if (inp) inp.value = '';
+  const clearBtn = document.getElementById('songs-filter-clear');
+  if (clearBtn) clearBtn.style.display = 'none';
+  renderSongsTable();
+}
+
+/* ── Library Settings ──────────────────────────────────────────────── */
+async function loadLibrarySettings() {
+  const settings = await api('/settings').catch(() => ({}));
+  const inp = document.getElementById('lib-path-input');
+  if (inp) inp.value = settings.library_path || '/Volumes/Storage/Music/FLAC';
+}
+
+async function saveLibraryPath() {
+  const path = document.getElementById('lib-path-input').value.trim();
+  if (!path) { toast('Please enter a valid path'); return; }
+  try {
+    await api('/settings', { method: 'PUT', body: { library_path: path } });
+    toast('Library path saved. Rescan to apply changes.');
+  } catch (e) {
+    toast('Error: ' + e.message);
+  }
+}
+
+/* ── Icon dropdown (replaces grid picker) ──────────────────────────── */
+function toggleIconDropdown() {
+  const menu = document.getElementById('dap-icon-menu');
+  if (!menu) return;
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+/* ── OS-aware mount path defaults ──────────────────────────────────── */
+function _getOsPlatform() {
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes('mac')) return 'mac';
+  if (ua.includes('win')) return 'windows';
+  return 'linux';
+}
+
 /* ── Public API ─────────────────────────────────────────────────────── */
 const App = {
   showView,
@@ -1510,9 +2329,9 @@ const App = {
   rescanClean,
   toggleRescanMenu,
   closeRescanMenu,
-  showSettings,
-  closeSettings,
-  saveSettings,
+  showSettings: () => {},
+  closeSettings: () => {},
+  saveSettings: () => {},
   showHelp,
   closeHelp,
   triggerImport,
@@ -1541,6 +2360,36 @@ const App = {
   syncToggleAll,
   executeSync,
   syncScanAgain,
+  // Songs
+  sortSongs,
+  filterSongs,
+  clearSongsFilter,
+  // Library settings
+  loadLibrarySettings,
+  saveLibraryPath,
+  // DAP
+  _selectIcon,
+  toggleIconDropdown,
+  showDapDetail,
+  showAddDapModal,
+  showEditDapModal,
+  closeDapModal,
+  dapModelPreset,
+  saveDap,
+  deleteDap,
+  dapExportPlaylist,
+  // IEM
+  showIemDetail,
+  showAddIemModal,
+  showEditIemModal,
+  closeIemModal,
+  saveIem,
+  deleteIem,
+  applyPeqToGraph,
+  showPeqModal,
+  closePeqModal,
+  savePeq,
+  deletePeq,
 };
 
 /* ── Init ───────────────────────────────────────────────────────────── */
@@ -1553,6 +2402,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Close any open mapping results dropdowns
     if (!e.target.closest('.map-row-target')) {
       document.querySelectorAll('.map-results').forEach(el => el.style.display = 'none');
+    }
+
+    // Close icon dropdown
+    if (!e.target.closest('.icon-dropdown')) {
+      const iconMenu = document.getElementById('dap-icon-menu');
+      if (iconMenu) iconMenu.style.display = 'none';
     }
   });
 

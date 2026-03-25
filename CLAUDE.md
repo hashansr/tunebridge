@@ -47,6 +47,8 @@ Port 5000 is blocked on macOS (AirPlay). Always use 5001.
 | `data/library.json` | Cached track metadata |
 | `data/playlists.json` | Persisted playlists |
 | `data/settings.json` | Device mount paths |
+| `data/daps.json` | DAP devices (name, model, mount, export config, playlist export timestamps) |
+| `data/iems.json` | IEM/headphone library (name, type, squig measurement data, PEQ profiles) |
 | `data/artwork/` | Cached album art JPEGs |
 | `data/playlist_artwork/` | Custom playlist cover images |
 | `~/playlist_proxy.py` | Reverse proxy 5002 → 5001 |
@@ -69,6 +71,15 @@ Key routes:
 - `GET /api/playlists/<pid>/artwork` — serve cover art
 - `POST /api/playlists/import` — parse and import M3U/M3U8 file
 - `GET/PUT /api/settings` — device configuration
+- `GET/POST /api/daps` — list / create DAP devices
+- `GET/PUT/DELETE /api/daps/<did>` — get / update / delete DAP
+- `POST /api/daps/<did>/export/<pid>` — export playlist M3U to DAP, records timestamp in `playlist_exports`
+- `GET/POST /api/iems` — list / create IEM (POST fetches squig.link measurement)
+- `GET/PUT/DELETE /api/iems/<iid>` — get / update (re-fetches squig if URL changed or missing) / delete
+- `GET /api/iems/<iid>/graph` — returns curve data for Chart.js (`?peq=<id>` to overlay PEQ, `?compare=<id>` for multi)
+- `POST /api/iems/<iid>/peq` — upload APO/AutoEQ .txt PEQ profile (multipart or JSON)
+- `DELETE /api/iems/<iid>/peq/<peq_id>` — delete PEQ profile
+- `POST /api/iems/<iid>/peq/<peq_id>/copy` — copy PEQ file to a DAP's PEQ folder
 
 ### Frontend (`app.js`)
 State object:
@@ -86,9 +97,17 @@ const state = {
 }
 ```
 
+Module-level globals for Gear views:
+- `_iemChart` — active Chart.js instance (destroyed/recreated on IEM detail load)
+- `_currentIemId` — IEM being viewed (used by PEQ upload/delete)
+- `_activePeqId` — currently overlaid PEQ profile ID (null = raw measurement)
+- `DAP_MODEL_PRESETS` — map of model → `{mount, folder, prefix, hint}` for modal auto-fill
+
 Public `App` object exposes all functions called from HTML `onclick` attributes.
 
 ## Features Implemented
+- [x] DAP management — add/edit/delete DAPs with model presets (Poweramp, Hiby OS, FiiO Player, Other), emoji icon picker, per-playlist sync status tracking (never / stale / up-to-date), one-click export to mounted device
+- [x] IEM & Headphone library — add/edit/delete with squig.link measurement import, frequency response graph (Chart.js, log-scale, region bands), PEQ profile upload (APO/AutoEQ .txt), PEQ overlay on graph
 - [x] Artist → Album → Track drill-down navigation
 - [x] "Browse All Songs" button in artist hero → flat track list for entire artist
 - [x] Multi-select tracks (click `#` cell) with shift-click range; floating bulk action bar
@@ -118,12 +137,18 @@ Public `App` object exposes all functions called from HTML `onclick` attributes.
 - Settings default: Poweramp mount `/Volumes/FIIO M21`, AP80 mount `/Volumes/AP80`
 - AP80 prefix is hardcoded `..` (not user-configurable) — relative paths from `playlist_data/`
 - Artwork keys are MD5 of `artist+album` string
+- DAP `playlist_exports`: `{pid: unix_timestamp}` — stale when `playlist.updated_at > exports[pid]`
+- IEM measurements stored as `[[freq, spl], ...]` (300 log-spaced points, 20–20kHz) in `measurement_L` / `measurement_R`
+- IEM PEQ profiles: `{id, name, preamp_db, filters: [{type, fc, gain, q}], raw_txt}`
+- squig.link fetch requires browser User-Agent + Referer headers (server returns 403 otherwise)
 
 ## Known Issues / Quirks
 - Poweramp displays playlist name as filename (e.g. "My Mix.m3u" shows as "My Mix.m3u"). User can long-press → Edit to rename within Poweramp.
 - AP80 `playlist_data/` folder must be created by the device first (save a dummy playlist on-device), otherwise manually created folders show 0 songs.
 - macOS AirPlay occupies port 5000; app uses port 5001.
 - Preview tool sandbox can't access `~/Documents/`; solved with proxy on port 5002.
+- squig.link returns 403 without browser headers — `fetch_squig_measurement()` sends `User-Agent` + `Referer` to work around this.
+- IEMs created before the header fix will have `measurement_L/R = null`. Editing and saving the IEM (PUT with same squig_url) will auto-refetch since the backend now refetches when measurement is missing.
 
 ## Sync Feature
 Routes: `POST /api/sync/scan`, `GET /api/sync/status`, `POST /api/sync/execute`, `POST /api/sync/reset`
@@ -141,7 +166,51 @@ Sync button (⟳ arrows icon) in sidebar bottom bar opens `#sync-modal`. Device 
 - `data/library.json` and `data/artwork/` are gitignored (auto-regenerated cache)
 - `data/playlists.json`, `data/settings.json`, `data/playlist_artwork/` ARE committed (user data)
 
+## DAP Playlist Path Reference
+| Model preset | Export folder | Path prefix | Notes |
+|---|---|---|---|
+| Poweramp | `Playlists` | _(empty)_ | Scans all storage; filename = playlist name |
+| Hiby OS | `HiByMusic/Playlist` | _(empty)_ | HiBy R5/R6 etc; paths relative to storage root |
+| FiiO Player | `Playlists` | _(empty)_ | Access via Browse Files (not Playlist menu) |
+| Other / AP80 | `playlist_data` | `..` | AP80 firmware requires this folder; device must create it first |
+
+## Gear Feature: squig.link URL Format
+- URL: `https://{subdomain}.squig.link/?share={File_Key_With_Underscores}`
+- Data files: `https://{subdomain}.squig.link/data/{File Key} L.txt` and `…R.txt`
+- File format: REW space-separated (`* header` lines skipped, columns: freq SPL phase)
+- Downsampled to 300 log-spaced points between 20–20kHz
+
 ## Last Updated
+2026-03-25 — Session 10: Major UI overhaul (Luminous Depth design system) + new features
+- **Design System**: Complete CSS rewrite implementing "Luminous Depth" / "Obsidian Lens" design spec
+  - New colour palette: primary `#adc6ff` (blue), secondary `#ffb3b5` (pink), tertiary `#53e16f` (green)
+  - Inter font loaded from Google Fonts, all typography updated
+  - "No-border" rule: replaced all solid 1px borders with tonal layering (background-colour shifts)
+  - Glassmorphism on modals, dropdowns, toast (backdrop-filter blur)
+  - Pill-shaped buttons with gradient primary CTA
+  - Surface hierarchy: `#131313` → `#1c1b1b` → `#2a2a2a` → `#353534`
+- **Songs view**: New "Songs" nav item under Library — shows all 4300+ tracks in full table with columns: #, Title, Artist, Album, Duration, Genre, Year, Album Artist, Format, Bitrate, Date Added. Sortable columns (click header), filterable (search bar).
+- **Library Settings**: New view under Gear → Library Settings. Configurable music library path (saved to settings.json). Save + Rescan buttons.
+- **Configurable library path**: `MUSIC_BASE` is now read from `settings.json` via `get_music_base()` — no longer hardcoded.
+- **Track metadata**: `scan_file()` now outputs `bitrate` (kbps), `format` (FLAC/MP3/M4A), `date_added` (file mtime). Available after rescan.
+- **New API**: `GET /api/library/songs` — full track list with sort/filter (`?sort=title&order=asc&q=search`)
+- **DAP modal**: Icon selection changed to compact dropdown (was full grid). Removed placeholder text from all fields. Mount path auto-filled based on OS (mac/windows/linux). Model preset updates mount value (not placeholder).
+- **IEM modal**: Removed all placeholder text. "squig.link" is now a clickable hyperlink to the website.
+- **Frequency response graph**: Updated to match squig.link with 7 region bands (Sub bass, Mid bass, Lower midrange, Upper midrange, Presence region, Mid treble, Air). X-axis ticks: 20, 50, 100, 200, 500, 1k, 2k, 5k, 10k, 20k. Major gridlines more prominent. Legend items click-to-toggle curve visibility. Blue-tinted region bands and grid.
+- **Error handling**: IEM creation now returns 400 if squig.link measurement fetch fails (instead of silently saving with null data). PEQ upload shows server error messages. Graph load failures show toast.
+- **Favicon**: New SVG favicon matching the TuneBridge logo (music note in blue).
+- **Sidebar**: Section headers (LIBRARY, TOOLS, GEAR, PLAYLISTS) are now sticky — stay pinned while scrolling. Removed cog/settings button (replaced by Library Settings under Gear).
+
+2026-03-25 — Session 9: DAP management + IEM/Headphone library with frequency response graphs
+- Added DAP management: CRUD, model presets (Poweramp/Hiby OS/FiiO Player/Other), emoji icon picker, per-playlist sync status, one-click export to mounted device
+- Added IEM & Headphone library: CRUD, squig.link measurement import, Chart.js frequency response graph (log-scale x-axis, region band overlay plugin), PEQ upload (APO/AutoEQ .txt), PEQ overlay on graph
+- Fixed squig.link fetch 403: added browser User-Agent + Referer headers to `fetch_squig_measurement()`
+- PUT `/api/iems/<iid>` now auto-refetches measurement if `measurement_L` is null (handles IEMs created before the header fix)
+- Sidebar: new GEAR section with DAPs and IEMs & Headphones nav items
+- New views: `view-daps`, `view-dap-detail`, `view-iems`, `view-iem-detail`
+- New modals: DAP add/edit, IEM add/edit, PEQ upload
+- Chart.js 4.4.0 added via CDN
+
 2026-03-25 — Session 8: Stability fixes, UI redesign, git setup
 - Fixed playlist clearing bug: switched from random `uuid4()` to `MD5(path)` as track ID → playlists survive rescans
 - Added atomic playlist save with `.tmp` write + rename to prevent corruption
