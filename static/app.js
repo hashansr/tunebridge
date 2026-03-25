@@ -1541,7 +1541,7 @@ async function showDapDetail(id) {
     const canExport = dap.mounted;
     return `
       <tr>
-        <td>${esc(pl.name)}</td>
+        <td class="dap-pl-name" onclick="App.openPlaylist('${pl.id}')" title="Open playlist">${esc(pl.name)}</td>
         <td>${pl.tracks?.length ?? 0} tracks</td>
         <td>${statusHtml}</td>
         <td style="text-align:right">

@@ -1310,6 +1310,8 @@ tr.track-selected .track-check-indicator {
 .dap-pl-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.015); }
 .dap-pl-table tr:last-child td { border-bottom: none; }
 .dap-pl-table td:first-child { color: var(--text); font-weight: 500; }
+.dap-pl-name { cursor: pointer; }
+.dap-pl-name:hover { color: var(--accent) !important; text-decoration: underline; }
 .dap-pl-table .dap-pl-export-btn {
   padding: 4px 12px;
   font-size: var(--text-xs);
