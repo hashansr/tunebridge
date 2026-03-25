@@ -1389,6 +1389,42 @@ def _downsample(points, n=300):
     return result
 
 
+def _squig_headers(subdomain):
+    return {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Referer': f'https://{subdomain}.squig.link/',
+        'Accept': '*/*',
+    }
+
+
+def _squig_fetch_url(url, subdomain):
+    """Fetch and parse a single squig.link data file. Returns points or None."""
+    try:
+        req = UrlRequest(url, headers=_squig_headers(subdomain))
+        with urlopen(req, timeout=15) as r:
+            return parse_rew_file(r.read().decode('utf-8', errors='replace'))
+    except Exception as e:
+        print(f"squig fetch error ({url}): {e}")
+        return None
+
+
+def fetch_squig_target(squig_url):
+    """Fetch a single-channel tuning target from a squig.link share URL.
+    Targets use '{file_key}.txt' (no L/R suffix), with '{file_key} L.txt' as fallback."""
+    parsed = urlparse(squig_url)
+    host = parsed.netloc
+    subdomain = host.split('.')[0]
+    share = parse_qs(parsed.query).get('share', [''])[0]
+    file_key = share.replace('_', ' ')
+    base = f"https://{subdomain}.squig.link/data/"
+
+    # Try bare filename first (targets), then L channel (stereo measurements used as target)
+    data = _squig_fetch_url(base + urlquote(f"{file_key}.txt"), subdomain)
+    if data is None:
+        data = _squig_fetch_url(base + urlquote(f"{file_key} L.txt"), subdomain)
+    return data
+
+
 def fetch_squig_measurement(squig_url):
     """Fetch L/R REW measurements from a squig.link share URL."""
     parsed = urlparse(squig_url)
@@ -1400,17 +1436,7 @@ def fetch_squig_measurement(squig_url):
 
     def fetch_ch(ch):
         url = base + urlquote(f"{file_key} {ch}.txt")
-        try:
-            req = UrlRequest(url, headers={
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-                'Referer': f'https://{subdomain}.squig.link/',
-                'Accept': '*/*',
-            })
-            with urlopen(req, timeout=15) as r:
-                return parse_rew_file(r.read().decode('utf-8', errors='replace'))
-        except Exception as e:
-            print(f"squig fetch error ({url}): {e}")
-            return None
+        return _squig_fetch_url(url, subdomain)
 
     return {'L': fetch_ch('L'), 'R': fetch_ch('R'), 'file_key': file_key, 'subdomain': subdomain}
 
@@ -1744,8 +1770,7 @@ def create_baseline():
     if not name or not url:
         return jsonify({'error': 'Name and URL are required'}), 400
 
-    result = fetch_squig_measurement(url)
-    measurement = result.get('L') if result else None
+    measurement = fetch_squig_target(url)
     if not measurement:
         return jsonify({'error': 'Could not fetch measurement data from squig.link. Check the URL.'}), 400
 
