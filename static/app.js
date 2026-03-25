@@ -408,7 +408,6 @@ async function renderDapExportPills(pid) {
   const svgDevice = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>`;
 
   container.innerHTML = daps.map(dap => {
-    const icon = dap.icon ? `<span style="margin-right:4px">${esc(dap.icon)}</span>` : '';
     const deviceBtn = dap.mounted
       ? `<button class="btn-export btn-export-device"
            onclick="App.exportToDeviceDap('${dap.id}')"
@@ -419,7 +418,7 @@ async function renderDapExportPills(pid) {
     return `
       <div class="export-group">
         <button class="btn-export" onclick="App.exportPlaylistDap('${dap.id}')">
-          ${svgDown}${icon}${esc(dap.name)} (M3U)
+          ${svgDown}${esc(dap.name)} (M3U)
         </button>
         ${deviceBtn}
       </div>`;
@@ -1341,14 +1340,11 @@ async function showSync() {
   } else {
     container.innerHTML = daps.map(dap => {
       const connected = dap.mounted;
-      const iconHtml = dap.icon
-        ? `<span style="font-size:22px;line-height:1">${esc(dap.icon)}</span>`
-        : svgDevice;
       return `
         <button class="sync-device-btn${connected ? '' : ' sync-device-btn-offline'}"
           ${connected ? '' : 'disabled'}
           onclick="App.startSyncScan('${dap.id}')">
-          ${iconHtml}
+          ${svgDevice}
           <span>${esc(dap.name)}</span>
           <span class="sync-device-status${connected ? ' sync-device-status-on' : ''}">
             ${connected ? '● Connected' : '○ Not connected'}
