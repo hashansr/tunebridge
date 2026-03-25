@@ -1609,6 +1609,21 @@ def delete_iem(iid):
     return '', 204
 
 
+NORM_REF_DB = 75.0  # All curves normalised to this SPL at 1 kHz
+
+
+def _spl_at_1khz(points):
+    """Return the SPL of the point closest to 1 kHz."""
+    if not points:
+        return None
+    return min(points, key=lambda p: abs(p[0] - 1000))[1]
+
+
+def _shift(points, offset):
+    """Add a constant dB offset to every point."""
+    return [[p[0], p[1] + offset] for p in points]
+
+
 @app.route('/api/iems/<iid>/graph')
 def iem_graph(iid):
     iems = load_iems()
@@ -1628,14 +1643,19 @@ def iem_graph(iid):
         name = cur['name']
         mL = cur.get('measurement_L')
         mR = cur.get('measurement_R')
+
+        # Normalise: use L-channel 1 kHz as reference, apply same offset to R & PEQ
+        ref_spl = _spl_at_1khz(mL or mR)
+        offset = (NORM_REF_DB - ref_spl) if ref_spl is not None else 0.0
+
         if mL:
             curves.append({'id': f"{cur['id']}-L", 'label': f"{name} (L)",
-                           'color': color, 'dash': False, 'data': mL})
+                           'color': color, 'dash': False, 'data': _shift(mL, offset)})
         if mR:
             curves.append({'id': f"{cur['id']}-R", 'label': f"{name} (R)",
-                           'color': color, 'dash': True, 'data': mR})
+                           'color': color, 'dash': True, 'data': _shift(mR, offset)})
 
-        # Apply PEQ for primary IEM only
+        # Apply PEQ for primary IEM only (same offset keeps PEQ effect relative to normalised curve)
         if idx == 0 and peq_id:
             peq = next((p for p in cur.get('peq_profiles', []) if p['id'] == peq_id), None)
             if peq:
@@ -1644,23 +1664,25 @@ def iem_graph(iid):
                     curves.append({'id': f"{cur['id']}-peq-L",
                                    'label': f"{name} + {peq['name']} (L)",
                                    'color': peq_color, 'dash': False,
-                                   'data': _apply_peq(mL, peq)})
+                                   'data': _shift(_apply_peq(mL, peq), offset)})
                 if mR:
                     curves.append({'id': f"{cur['id']}-peq-R",
                                    'label': f"{name} + {peq['name']} (R)",
                                    'color': peq_color, 'dash': True,
-                                   'data': _apply_peq(mR, peq)})
+                                   'data': _shift(_apply_peq(mR, peq), offset)})
 
-    # Append baseline/target curves
+    # Append baseline/target curves — each normalised independently
     for bl in load_baselines():
         m = bl.get('measurement')
         if m:
+            ref_spl = _spl_at_1khz(m)
+            offset = (NORM_REF_DB - ref_spl) if ref_spl is not None else 0.0
             curves.append({
                 'id': f"baseline-{bl['id']}",
                 'label': bl['name'],
                 'color': bl.get('color', '#f0b429'),
                 'dash': True,
-                'data': m,
+                'data': _shift(m, offset),
             })
 
     return jsonify({'curves': curves, 'iem_name': iem['name']})
