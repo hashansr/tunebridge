@@ -832,25 +832,6 @@ td.cell-album { color: var(--text-sub); white-space: nowrap; overflow: hidden; t
 .empty-state p { font-size: 14px; }
 .empty-state p.muted { font-size: 13px; color: var(--text-muted); }
 
-/* ── Search view ─────────────────────────────────────────────────────── */
-.search-bar-wrap {
-  display: flex; align-items: center; gap: 10px;
-  background: var(--bg-elevated);
-  border: none;
-  border-radius: var(--radius);
-  padding: 10px 14px;
-  margin-bottom: 20px;
-  transition: background 0.15s, box-shadow 0.15s;
-}
-.search-bar-wrap:focus-within { background: var(--bg-hover); box-shadow: 0 0 0 1px var(--border-focus); }
-.search-bar-wrap svg { color: var(--text-muted); flex-shrink: 0; }
-#search-input {
-  flex: 1; background: none; border: none; outline: none;
-  color: var(--text); font-size: 14px;
-}
-#search-input::placeholder { color: var(--text-muted); }
-#search-results-info { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
-
 /* ── Songs view ──────────────────────────────────────────────────────── */
 .view-songs { padding: 28px 32px; min-height: 100%; }
 .songs-toolbar {
@@ -1024,7 +1005,7 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; backgrou
 }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
 
-#tracks-table-wrap, #search-table-wrap { overflow-x: auto; }
+#tracks-table-wrap { overflow-x: auto; }
 
 /* ── Track selection ─────────────────────────────────────────────────── */
 .track-check-indicator {

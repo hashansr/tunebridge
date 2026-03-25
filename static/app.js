@@ -1,6 +1,6 @@
 /* ── State ──────────────────────────────────────────────────────────── */
 const state = {
-  view: 'artists',         // artists | albums | tracks | search | playlist
+  view: 'artists',         // artists | albums | tracks | playlist
   artist: null,
   album: null,
   playlist: null,          // full playlist object (with enriched tracks)
@@ -8,7 +8,6 @@ const state = {
   tracks: [],              // tracks in current library view
   artists: [],
   albums: [],
-  searchResults: [],
   devices: { poweramp: false, ap80: false },
   scanStatus: null,
   activeTrackId: null,     // for add-to dropdown
@@ -103,7 +102,7 @@ async function pollScanStatus() {
 
     if (status.status === 'done') {
       // Refresh current view if it's a library view
-      if (['artists', 'albums', 'tracks', 'search'].includes(state.view)) {
+      if (['artists', 'albums', 'tracks'].includes(state.view)) {
         refreshCurrentLibraryView();
       }
     }
@@ -114,7 +113,6 @@ async function refreshCurrentLibraryView() {
   if (state.view === 'artists') await loadArtists();
   else if (state.view === 'albums') await loadAlbums(state.artist);
   else if (state.view === 'tracks') await loadTracks(state.artist, state.album);
-  else if (state.view === 'search' && state.searchQuery) await doSearch(state.searchQuery);
 }
 
 /* ── Sidebar playlists ──────────────────────────────────────────────── */
@@ -335,31 +333,6 @@ function fmtDuration(totalSecs) {
   return `${m} min`;
 }
 
-/* ── Search ─────────────────────────────────────────────────────────── */
-let searchTimer;
-async function doSearch(query) {
-  state.searchQuery = query;
-  clearTimeout(searchTimer);
-  if (!query.trim()) {
-    document.getElementById('search-results-info').textContent = '';
-    document.getElementById('search-tbody').innerHTML = '';
-    return;
-  }
-  searchTimer = setTimeout(async () => {
-    const tracks = await api(`/library/tracks?q=${encodeURIComponent(query)}`);
-    state.searchResults = tracks;
-    const info = document.getElementById('search-results-info');
-    const tbody = document.getElementById('search-tbody');
-    if (!tracks.length) {
-      info.textContent = 'No results found.';
-      tbody.innerHTML = '';
-      return;
-    }
-    info.textContent = `${tracks.length} result${tracks.length !== 1 ? 's' : ''}`;
-    tbody.innerHTML = tracks.map((t, i) => trackRow(t, i + 1, false)).join('');
-  }, 250);
-}
-
 /* ── Track row (library) ────────────────────────────────────────────── */
 function trackRow(t, num, inPlaylist) {
   const add = inPlaylist
@@ -532,7 +505,6 @@ function setPlaylistInSort(mode) {
 /* ── Multi-select ───────────────────────────────────────────────────── */
 function _getCurrentViewTrackList() {
   if (state.view === 'tracks') return state.tracks;
-  if (state.view === 'search') return state.searchResults;
   if (state.view === 'playlist') return _getDisplayedTracks();
   return [];
 }
@@ -997,15 +969,13 @@ function showView(viewName) {
   if (viewName === 'artists') loadArtists();
   else if (viewName === 'albums') { state.artist = null; loadAlbums(); }
   else if (viewName === 'songs') loadSongsView();
-  else if (viewName === 'search') {
-    setTimeout(() => document.getElementById('search-input').focus(), 50);
-  } else if (viewName === 'daps') loadDapsView();
+  else if (viewName === 'daps') loadDapsView();
   else if (viewName === 'iems') loadIemsView();
   else if (viewName === 'library-settings') loadLibrarySettings();
 }
 
 function showViewEl(name) {
-  const views = ['artists', 'albums', 'tracks', 'search', 'songs', 'playlist', 'daps', 'dap-detail', 'iems', 'iem-detail', 'library-settings'];
+  const views = ['artists', 'albums', 'tracks', 'songs', 'playlist', 'daps', 'dap-detail', 'iems', 'iem-detail', 'library-settings'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.style.display = v === name ? (v === 'playlist' ? 'flex' : 'block') : 'none';
@@ -2383,7 +2353,6 @@ const App = {
   dupAddAnyway,
   exportPlaylist,
   exportToDevice,
-  doSearch,
   rescan,
   rescanClean,
   toggleRescanMenu,
