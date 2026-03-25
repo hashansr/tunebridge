@@ -1495,36 +1495,10 @@ async function syncScanAgain() {
   _syncPhase('pick');
 }
 
-/* ── DAP icon picker ────────────────────────────────────────────────── */
-const DAP_ICONS = [
-  '📱','🎵','🎶','🎧','📻','💿','🔊','🎸',
-  '🎹','🎺','🎻','🥁','🎤','⚡','🌟','🔥',
-  '💎','🚀','🌊','🎯','🦋','🎨','📡','🔮',
-];
-
-function _renderIconPicker(selected) {
-  const container = document.getElementById('dap-icon-picker');
-  if (!container) return;
-  document.getElementById('dap-icon').value = selected || '📱';
-  container.innerHTML = DAP_ICONS.map(icon => `
-    <button type="button" class="icon-picker-btn${icon === (selected || '📱') ? ' selected' : ''}"
-      onclick="App._selectIcon('${icon}')" title="${icon}">${icon}</button>
-  `).join('');
-}
-
-function _selectIcon(icon) {
-  document.getElementById('dap-icon').value = icon;
-  const display = document.getElementById('dap-icon-display');
-  if (display) display.textContent = icon;
-  document.querySelectorAll('.icon-picker-btn').forEach(btn => {
-    btn.classList.toggle('selected', btn.textContent === icon);
-  });
-  // Close dropdown
-  const menu = document.getElementById('dap-icon-menu');
-  if (menu) menu.style.display = 'none';
-}
-
 /* ── DAP management ─────────────────────────────────────────────────── */
+
+// SVG icon used for all DAP cards/headers
+const _DAP_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg>`;
 async function loadDapsView() {
   const daps = await api('/daps').catch(() => []);
   const grid = document.getElementById('daps-grid');
@@ -1537,7 +1511,7 @@ async function loadDapsView() {
   empty.style.display = 'none';
   grid.innerHTML = daps.map(d => `
     <div class="gear-card" onclick="App.showDapDetail('${d.id}')">
-      <div class="gear-card-icon" style="font-size:22px">${esc(d.icon || '📱')}</div>
+      <div class="gear-card-icon">${_DAP_SVG}</div>
       <div class="gear-card-name">${esc(d.name)}</div>
       <div class="gear-card-meta">
         <span class="gear-badge ${d.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected'}">
@@ -1597,7 +1571,7 @@ async function showDapDetail(id) {
 
   document.getElementById('dap-detail-content').innerHTML = `
     <div class="dap-detail-header">
-      <div class="dap-detail-icon" style="font-size:28px">${esc(dap.icon || '📱')}</div>
+      <div class="dap-detail-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg></div>
       <div>
         <div class="dap-detail-title">${esc(dap.name)}</div>
         <div class="dap-detail-sub">
@@ -1658,9 +1632,6 @@ function showAddDapModal() {
   document.getElementById('dap-mount').value = '';
   document.getElementById('dap-export-folder').value = 'Playlists';
   document.getElementById('dap-prefix').value = '';
-  _renderIconPicker('📱');
-  const display = document.getElementById('dap-icon-display');
-  if (display) display.textContent = '📱';
   dapModelPreset('poweramp');
   document.getElementById('dap-modal').style.display = 'flex';
 }
@@ -1674,10 +1645,6 @@ async function showEditDapModal(id) {
   document.getElementById('dap-mount').value = dap.mount_path || '';
   document.getElementById('dap-export-folder').value = dap.export_folder || 'Playlists';
   document.getElementById('dap-prefix').value = dap.path_prefix || '';
-  const icon = dap.icon || '📱';
-  _renderIconPicker(icon);
-  const display = document.getElementById('dap-icon-display');
-  if (display) display.textContent = icon;
   _updateDapFolderHint(dap.model || 'poweramp');
   document.getElementById('dap-modal').style.display = 'flex';
 }
@@ -1744,7 +1711,6 @@ async function saveDap() {
   const body = {
     name: document.getElementById('dap-name').value.trim() || 'My DAP',
     model: document.getElementById('dap-model').value,
-    icon: document.getElementById('dap-icon').value || '📱',
     mount_path: document.getElementById('dap-mount').value.trim(),
     export_folder: document.getElementById('dap-export-folder').value.trim() || 'Playlists',
     path_prefix: document.getElementById('dap-prefix').value.trim(),
@@ -2663,12 +2629,6 @@ async function deleteBaseline(bid) {
 }
 
 /* ── Icon dropdown (replaces grid picker) ──────────────────────────── */
-function toggleIconDropdown() {
-  const menu = document.getElementById('dap-icon-menu');
-  if (!menu) return;
-  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
-}
-
 /* ── OS-aware mount path defaults ──────────────────────────────────── */
 function _getOsPlatform() {
   const ua = navigator.userAgent.toLowerCase();
@@ -2753,8 +2713,6 @@ const App = {
   toggleBaselineColorPicker,
   selectBaselineColor,
   // DAP
-  _selectIcon,
-  toggleIconDropdown,
   showDapDetail,
   showAddDapModal,
   showEditDapModal,
@@ -2793,11 +2751,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.querySelectorAll('.map-results').forEach(el => el.style.display = 'none');
     }
 
-    // Close icon dropdown
-    if (!e.target.closest('.icon-dropdown')) {
-      const iconMenu = document.getElementById('dap-icon-menu');
-      if (iconMenu) iconMenu.style.display = 'none';
-    }
   });
 
   // Keyboard shortcut: Escape closes dropdown
