@@ -1273,6 +1273,39 @@ def delete_dap(did):
     return '', 204
 
 
+@app.route('/api/daps/<did>/export/<pid>/download')
+def dap_download_playlist(did, pid):
+    """Return the M3U file as a download, using the DAP's path config."""
+    daps = load_daps()
+    dap = next((d for d in daps if d['id'] == did), None)
+    if not dap:
+        return jsonify({'error': 'DAP not found'}), 404
+
+    playlists = load_playlists()
+    playlist = playlists.get(pid)
+    if not playlist:
+        return jsonify({'error': 'Playlist not found'}), 404
+
+    with library_lock:
+        lib_map = {t['id']: t for t in library}
+
+    tracks = [lib_map[e if isinstance(e, str) else e.get('id')]
+              for e in playlist.get('tracks', [])
+              if (e if isinstance(e, str) else e.get('id')) in lib_map]
+
+    prefix = dap.get('path_prefix', '')
+    if dap.get('model') == 'ap80':
+        prefix = prefix or '..'
+
+    content = generate_m3u(tracks, playlist['name'], path_prefix=prefix)
+    safe_name = playlist['name'].replace('/', '-')
+    return Response(
+        content,
+        mimetype='audio/x-mpegurl',
+        headers={'Content-Disposition': f'attachment; filename="{safe_name}.m3u"'}
+    )
+
+
 @app.route('/api/daps/<did>/export/<pid>', methods=['POST'])
 def dap_export_playlist(did, pid):
     daps = load_daps()

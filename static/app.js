@@ -391,7 +391,39 @@ async function openPlaylist(pid) {
   renderPlaylistTracks(pl.tracks);
   updatePlaylistCover(pl.tracks);
   updatePlaylistStats(pl.tracks);
-  checkDevices();
+  renderDapExportPills(pid);
+}
+
+async function renderDapExportPills(pid) {
+  const container = document.getElementById('dap-export-pills');
+  if (!container) return;
+
+  const daps = await api('/daps').catch(() => []);
+  if (!daps.length) {
+    container.innerHTML = `<span style="color:var(--text-muted);font-size:var(--text-xs)">No DAPs configured — add one in Gear → DAPs</span>`;
+    return;
+  }
+
+  const svgDown = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+  const svgDevice = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>`;
+
+  container.innerHTML = daps.map(dap => {
+    const icon = dap.icon ? `<span style="margin-right:4px">${esc(dap.icon)}</span>` : '';
+    const deviceBtn = dap.mounted
+      ? `<button class="btn-export btn-export-device"
+           onclick="App.exportToDeviceDap('${dap.id}')"
+           title="Copy directly to ${esc(dap.name)}">
+           ${svgDevice} → ${esc(dap.name)}
+         </button>`
+      : '';
+    return `
+      <div class="export-group">
+        <button class="btn-export" onclick="App.exportPlaylistDap('${dap.id}')">
+          ${svgDown}${icon}${esc(dap.name)} (M3U)
+        </button>
+        ${deviceBtn}
+      </div>`;
+  }).join('');
 }
 
 function _getDisplayedTracks() {
@@ -668,12 +700,8 @@ function updatePlaylistStats(tracks) {
     `${tracks.length} song${tracks.length !== 1 ? 's' : ''} · ${timeStr}`;
 }
 
-async function checkDevices() {
-  const devices = await api('/devices/status').catch(() => ({ poweramp: false, ap80: false }));
-  state.devices = devices;
-  document.getElementById('poweramp-device-btn').style.display = devices.poweramp ? 'flex' : 'none';
-  document.getElementById('ap80-device-btn').style.display = devices.ap80 ? 'flex' : 'none';
-}
+// checkDevices() removed — device status is now embedded in the DAP list
+// (GET /api/daps returns mounted:true/false per DAP)
 
 /* ── Playlist picker (shared by all add-to entry points) ─────────────── */
 function _sortedPlaylists() {
@@ -934,23 +962,26 @@ function renamePlaylist(newName) {
 }
 
 /* ── Export ─────────────────────────────────────────────────────────── */
-async function exportPlaylist(fmt) {
+async function exportPlaylistDap(did) {
   if (!state.playlist) return;
-  const url = `/api/playlists/${state.playlist.id}/export/${fmt}`;
+  const url = `/api/daps/${did}/export/${state.playlist.id}/download`;
   const a = document.createElement('a');
   a.href = url;
+  document.body.appendChild(a);
   a.click();
-  toast(`Downloading ${fmt === 'poweramp' ? 'Poweramp' : 'AP80'} playlist…`);
+  document.body.removeChild(a);
+  const daps = await api('/daps').catch(() => []);
+  const dap = daps.find(d => d.id === did);
+  toast(`Downloading M3U for ${dap ? dap.name : 'DAP'}…`);
 }
 
-async function exportToDevice(device) {
+async function exportToDeviceDap(did) {
   if (!state.playlist) return;
   try {
-    const res = await api('/devices/export', {
-      method: 'POST',
-      body: { playlist_id: state.playlist.id, device },
-    });
-    toast(`Exported to ${res.path}`);
+    const res = await api(`/daps/${did}/export/${state.playlist.id}`, { method: 'POST' });
+    toast(`Exported to device ✓`);
+    // Refresh pills so sync status updates
+    renderDapExportPills(state.playlist.id);
   } catch (e) {
     toast('Error: ' + e.message);
   }
@@ -1071,7 +1102,6 @@ async function saveSettings() {
   };
   _settings = await api('/settings', { method: 'PUT', body: updated });
   closeSettings();
-  checkDevices();
   toast('Settings saved');
 }
 
@@ -2499,8 +2529,9 @@ const App = {
   dupCancel,
   dupSkip,
   dupAddAnyway,
-  exportPlaylist,
-  exportToDevice,
+  exportPlaylistDap,
+  exportToDeviceDap,
+  renderDapExportPills,
   rescan,
   rescanClean,
   toggleRescanMenu,

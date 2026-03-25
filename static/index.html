@@ -226,27 +226,8 @@
             <div class="playlist-label">PLAYLIST</div>
             <h1 id="pl-name" contenteditable="true" spellcheck="false" onblur="App.renamePlaylist(this.textContent)"></h1>
             <div class="playlist-stats" id="pl-stats"></div>
-            <div class="playlist-actions">
-              <div class="export-group">
-                <button class="btn-export" onclick="App.exportPlaylist('poweramp')">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  Poweramp (M3U)
-                </button>
-                <button class="btn-export btn-export-device" id="poweramp-device-btn" onclick="App.exportToDevice('poweramp')" style="display:none">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
-                  → FiiO M21
-                </button>
-              </div>
-              <div class="export-group">
-                <button class="btn-export" onclick="App.exportPlaylist('ap80')">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  AP80 Pro Max (M3U)
-                </button>
-                <button class="btn-export btn-export-device" id="ap80-device-btn" onclick="App.exportToDevice('ap80')" style="display:none">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
-                  → AP80
-                </button>
-              </div>
+            <div class="playlist-actions" id="dap-export-pills">
+              <!-- Populated dynamically from DAP list in openPlaylist() -->
             </div>
           </div>
         </div>
