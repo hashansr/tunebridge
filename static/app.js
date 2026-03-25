@@ -197,14 +197,14 @@ async function loadArtists() {
       lastLetter = letter;
     }
     return `
-      <div class="artist-card" ${anchor} onclick="App.showArtist('${esc(a.name)}')">
+      <div class="artist-card" ${anchor} data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)">
         <div class="artist-thumb">
           ${thumbImg(a.artwork_key, 120, '6px')}
         </div>
         <div class="artist-name" title="${esc(a.name)}">${esc(a.name)}</div>
         <div class="artist-meta">${a.album_count} album${a.album_count !== 1 ? 's' : ''} · ${a.track_count} songs</div>
         <div class="artist-card-overlay">
-          <button class="card-add-btn" onclick="event.stopPropagation();App.addAllArtistSongs('${esc(a.name)}',event)" title="Add all songs to playlist">+</button>
+          <button class="card-add-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.addAllArtistSongs(this.dataset.artist,event)" title="Add all songs to playlist">+</button>
         </div>
       </div>
     `;
@@ -257,11 +257,11 @@ async function loadAlbums(artistFilter = null) {
   }
 
   grid.innerHTML = albums.map(al => `
-    <div class="album-card" onclick="App.showAlbum('${esc(al.artist)}', '${esc(al.name)}')">
+    <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)">
       <div class="album-thumb">
         ${thumbImg(al.artwork_key, 160, '6px')}
         <div class="album-thumb-overlay">
-          <button class="card-add-btn" onclick="event.stopPropagation();App.addAlbumToPlaylist('${esc(al.artist)}','${esc(al.name)}',event)" title="Add album to playlist">+</button>
+          <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
         </div>
       </div>
       <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
@@ -281,7 +281,7 @@ async function loadTracks(artist = null, album = null) {
 
   const crumb = document.getElementById('tracks-breadcrumb');
   const crumbParts = [`<span class="crumb" onclick="App.showView('artists')">Artists</span>`];
-  if (artist) crumbParts.push(`<span class="crumb" onclick="App.showArtist('${esc(artist)}')">${esc(artist)}</span>`);
+  if (artist) crumbParts.push(`<span class="crumb" data-artist="${esc(artist)}" onclick="App.showArtist(this.dataset.artist)">${esc(artist)}</span>`);
   if (album) crumbParts.push(`<span class="crumb-current">${esc(album)}</span>`);
   else if (artist) crumbParts.push(`<span class="crumb-current">All Songs</span>`);
   crumb.innerHTML = crumbParts.join('<span class="crumb-sep">›</span>');
@@ -295,7 +295,7 @@ async function loadTracks(artist = null, album = null) {
       artKey ? `<img src="${artworkUrl(artKey)}" />` : musicNote(56);
     document.getElementById('album-hero-name').textContent = album;
     document.getElementById('album-hero-artist').innerHTML = artist
-      ? `<span class="link" onclick="App.showArtist('${esc(artist)}')">${esc(artist)}</span>` : '';
+      ? `<span class="link" data-artist="${esc(artist)}" onclick="App.showArtist(this.dataset.artist)">${esc(artist)}</span>` : '';
     const totalSecs = tracks.reduce((s, t) => s + (t.duration || 0), 0);
     const yr = tracks[0].year;
     const meta = [
@@ -312,7 +312,7 @@ async function loadTracks(artist = null, album = null) {
       artKey ? `<img src="${artworkUrl(artKey)}" />` : musicNote(56);
     document.getElementById('album-hero-name').textContent = 'All Songs';
     document.getElementById('album-hero-artist').innerHTML =
-      `<span class="link" onclick="App.showArtist('${esc(artist)}')">${esc(artist)}</span>`;
+      `<span class="link" data-artist="${esc(artist)}" onclick="App.showArtist(this.dataset.artist)">${esc(artist)}</span>`;
     const totalSecs = tracks.reduce((s, t) => s + (t.duration || 0), 0);
     document.getElementById('album-hero-meta').textContent =
       `${tracks.length} songs${totalSecs ? ' · ' + fmtDuration(totalSecs) : ''}`;
@@ -716,15 +716,27 @@ function _sortedPlaylists() {
 function _positionDropdown(anchorEl) {
   const dd = document.getElementById('add-dropdown');
   const rect = anchorEl.getBoundingClientRect();
+  dd.style.left = '-9999px';
+  dd.style.top  = '-9999px';
   dd.style.display = 'block';
-  dd.style.left = (rect.left - 180 + rect.width) + 'px';
-  dd.style.top = (rect.bottom + 6) + 'px';
-  setTimeout(() => {
-    const r = dd.getBoundingClientRect();
-    if (r.right > window.innerWidth)  dd.style.left = (window.innerWidth - r.width - 8) + 'px';
-    if (r.bottom > window.innerHeight) dd.style.top = (rect.top - r.height - 6) + 'px';
-    if (r.left < 8) dd.style.left = '8px';
-  }, 0);
+  requestAnimationFrame(() => {
+    const ddW = dd.offsetWidth;
+    const ddH = dd.offsetHeight;
+    const vw  = window.innerWidth;
+    const vh  = window.innerHeight;
+    const gap = 6;
+    const pad = 8;
+    // Horizontal: right-align to anchor, clamped to viewport
+    let left = rect.right - ddW;
+    if (left < pad) left = pad;
+    if (left + ddW > vw - pad) left = vw - ddW - pad;
+    // Vertical: prefer below, flip above if not enough room, always clamp
+    let top = rect.bottom + gap;
+    if (top + ddH > vh - pad) top = rect.top - ddH - gap;
+    if (top < pad) top = pad;
+    dd.style.left = left + 'px';
+    dd.style.top  = top  + 'px';
+  });
 }
 
 function showPlaylistPicker(anchorEl, trackIds) {
@@ -808,16 +820,16 @@ async function addAllToSpecificPlaylist(pid, plName) {
 
 /* ── Quick-add helpers (artist / album cards) ───────────────────────── */
 async function addAllArtistSongs(artistName, event) {
+  const anchor = (event && event.currentTarget) || document.getElementById('artist-hero-add');
   const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artistName)}`);
   if (!tracks.length) { toast('No tracks found'); return; }
-  const anchor = (event && event.currentTarget) || document.getElementById('artist-hero-add');
   await addAllToPlaylist(tracks.map(t => t.id), anchor);
 }
 
 async function addAlbumToPlaylist(artist, album, event) {
+  const anchor = (event && event.currentTarget) || document.getElementById('add-all-btn');
   const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`);
   if (!tracks.length) { toast('No tracks found'); return; }
-  const anchor = (event && event.currentTarget) || document.getElementById('add-all-btn');
   await addAllToPlaylist(tracks.map(t => t.id), anchor);
 }
 
