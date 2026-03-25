@@ -1472,18 +1472,19 @@ def _downsample(points, n=300):
     return result
 
 
-def _squig_headers(subdomain):
+def _squig_headers(host):
+    """Build request headers for squig.link data files using the actual hostname."""
     return {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Referer': f'https://{subdomain}.squig.link/',
+        'Referer': f'https://{host}/',
         'Accept': '*/*',
     }
 
 
-def _squig_fetch_url(url, subdomain):
+def _squig_fetch_url(url, host):
     """Fetch and parse a single squig.link data file. Returns points or None."""
     try:
-        req = UrlRequest(url, headers=_squig_headers(subdomain))
+        req = UrlRequest(url, headers=_squig_headers(host))
         with urlopen(req, timeout=15) as r:
             return parse_rew_file(r.read().decode('utf-8', errors='replace'))
     except Exception as e:
@@ -1493,35 +1494,49 @@ def _squig_fetch_url(url, subdomain):
 
 def fetch_squig_target(squig_url):
     """Fetch a single-channel tuning target from a squig.link share URL.
-    Targets use '{file_key}.txt' (no L/R suffix), with '{file_key} L.txt' as fallback."""
-    parsed = urlparse(squig_url)
-    host = parsed.netloc
-    subdomain = host.split('.')[0]
-    share = parse_qs(parsed.query).get('share', [''])[0]
-    file_key = share.replace('_', ' ')
-    base = f"https://{subdomain}.squig.link/data/"
 
-    # Try bare filename first (targets), then L channel (stereo measurements used as target)
-    data = _squig_fetch_url(base + urlquote(f"{file_key}.txt"), subdomain)
-    if data is None:
-        data = _squig_fetch_url(base + urlquote(f"{file_key} L.txt"), subdomain)
-    return data
+    squig.link stores target files as '{name} Target.txt' (graphtool.js appends ' Target').
+    The share URL may or may not include '_Target' in the key, so we try multiple variants.
+    Falls back to '{file_key} L.txt' for stereo measurements used as targets.
+    Uses the actual netloc (supports both subdomain.squig.link and squig.link).
+    """
+    parsed = urlparse(squig_url)
+    host = parsed.netloc                        # e.g. "ducbloke.squig.link" or "squig.link"
+    share = parse_qs(parsed.query).get('share', [''])[0]
+    file_key = share.replace('_', ' ')          # e.g. "Harman Target" or "Harman"
+    base = f"https://{host}/data/"              # use actual host, not reconstructed subdomain
+
+    candidates = [
+        urlquote(f"{file_key}.txt"),             # exact match (share key already has ' Target')
+        urlquote(f"{file_key} Target.txt"),      # share key missing ' Target' suffix
+        urlquote(f"{file_key} L.txt"),           # stereo measurement used as target
+    ]
+
+    for i, suffix in enumerate(candidates):
+        url = base + suffix
+        print(f"fetch_squig_target: [{i+1}/{len(candidates)}] trying {url}")
+        data = _squig_fetch_url(url, host)
+        if data:
+            print(f"fetch_squig_target: success with variant {i+1}, got {len(data)} points")
+            return data
+
+    print(f"fetch_squig_target: all attempts failed for key='{file_key}' on {host}")
+    return None
 
 
 def fetch_squig_measurement(squig_url):
     """Fetch L/R REW measurements from a squig.link share URL."""
     parsed = urlparse(squig_url)
     host = parsed.netloc                        # e.g. ducbloke.squig.link
-    subdomain = host.split('.')[0]              # e.g. ducbloke
     share = parse_qs(parsed.query).get('share', [''])[0]  # e.g. Crinear_Daybreak
     file_key = share.replace('_', ' ')          # e.g. Crinear Daybreak
-    base = f"https://{subdomain}.squig.link/data/"
+    base = f"https://{host}/data/"              # use actual host
 
     def fetch_ch(ch):
         url = base + urlquote(f"{file_key} {ch}.txt")
-        return _squig_fetch_url(url, subdomain)
+        return _squig_fetch_url(url, host)
 
-    return {'L': fetch_ch('L'), 'R': fetch_ch('R'), 'file_key': file_key, 'subdomain': subdomain}
+    return {'L': fetch_ch('L'), 'R': fetch_ch('R'), 'file_key': file_key, 'host': host}
 
 
 def parse_peq_txt(text):
@@ -1899,6 +1914,7 @@ def create_baseline():
     if not name or not url:
         return jsonify({'error': 'Name and URL are required'}), 400
 
+    print(f"create_baseline: name='{name}' url='{url}'")
     measurement = fetch_squig_target(url)
     if not measurement:
         return jsonify({'error': 'Could not fetch measurement data from squig.link. Check the URL.'}), 400

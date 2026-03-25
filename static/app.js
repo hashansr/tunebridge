@@ -2559,8 +2559,9 @@ async function addBaseline() {
   const name = nameEl.value.trim();
   const url  = urlEl.value.trim();
   if (!name || !url) { toast('Enter a name and a squig.link URL'); return; }
-  if (url && !url.match(/^https?:\/\/[^/]+\.squig\.link\//i)) {
+  if (url && !url.match(/^https?:\/\/(?:[^./]+\.)?squig\.link\//i)) {
     toast('⚠ URL doesn\'t look like a squig.link address — double-check it');
+    return;
   }
   btn.disabled = true;
   btn.textContent = 'Fetching…';
