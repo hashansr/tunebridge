@@ -350,6 +350,23 @@
             </div>
           </div>
 
+          <!-- Frequency Response Baselines section -->
+          <div class="settings-section">
+            <h3 class="settings-section-title">Frequency Response Baselines</h3>
+            <p style="font-size:var(--text-sm);color:var(--text-muted);margin:0 0 16px;line-height:1.5">
+              Add tuning targets from <a href="https://squig.link" target="_blank" style="color:var(--accent)">squig.link</a>. They appear as reference lines on all IEM &amp; headphone frequency response graphs.
+            </p>
+            <div id="baselines-list"></div>
+            <div class="settings-baseline-add">
+              <input id="baseline-name-input" type="text" class="settings-baseline-name" placeholder="Label (e.g. Harman Target)" />
+              <input id="baseline-url-input" type="text" class="settings-baseline-url" placeholder="squig.link share URL" />
+              <button class="btn-primary" id="baseline-add-btn" onclick="App.addBaseline()">Add</button>
+            </div>
+            <p style="font-size:var(--text-sm);color:var(--text-muted);margin-top:8px">
+              e.g. <code>https://ducbloke.squig.link/?share=Harman_Target</code>
+            </p>
+          </div>
+
           <!-- App section -->
           <div class="settings-section">
             <h3 class="settings-section-title">App</h3>

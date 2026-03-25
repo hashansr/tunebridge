@@ -3,6 +3,7 @@ from flask_cors import CORS
 import os
 import sys
 import json
+import subprocess
 import uuid
 import threading
 import time
@@ -36,6 +37,7 @@ PLAYLIST_ARTWORK_DIR = DATA_DIR / 'playlist_artwork'
 SETTINGS_FILE = DATA_DIR / 'settings.json'
 DAP_FILE = DATA_DIR / 'daps.json'
 IEM_FILE = DATA_DIR / 'iems.json'
+BASELINES_FILE = DATA_DIR / 'baselines.json'
 
 DEFAULT_SETTINGS = {
     'library_path':     '/Volumes/Storage/Music/FLAC',
@@ -918,9 +920,12 @@ def health():
 @app.route('/api/restart', methods=['POST'])
 def restart_server():
     def do_restart():
-        time.sleep(0.6)
-        os.execv(sys.executable, [sys.executable] + sys.argv)
-    threading.Thread(target=do_restart, daemon=True).start()
+        time.sleep(1.2)  # let response flush
+        subprocess.Popen([sys.executable] + sys.argv,
+                         close_fds=True, start_new_session=True)
+        time.sleep(0.8)  # new process imports before we release the port
+        os._exit(0)
+    threading.Thread(target=do_restart, daemon=False).start()
     return jsonify({'message': 'Restarting…'})
 
 
@@ -1324,6 +1329,20 @@ def save_iems(iems):
         json.dump(iems, f, indent=2)
 
 
+def load_baselines():
+    if BASELINES_FILE.exists():
+        try:
+            return json.load(open(BASELINES_FILE))
+        except Exception:
+            pass
+    return []
+
+
+def save_baselines(baselines):
+    with open(BASELINES_FILE, 'w') as f:
+        json.dump(baselines, f, indent=2)
+
+
 def parse_rew_file(text):
     """Parse REW space-separated measurement file. Returns [[freq, spl], ...]."""
     points = []
@@ -1606,6 +1625,18 @@ def iem_graph(iid):
                                    'color': peq_color, 'dash': True,
                                    'data': _apply_peq(mR, peq)})
 
+    # Append baseline/target curves
+    for bl in load_baselines():
+        m = bl.get('measurement')
+        if m:
+            curves.append({
+                'id': f"baseline-{bl['id']}",
+                'label': bl['name'],
+                'color': bl.get('color', '#f0b429'),
+                'dash': True,
+                'data': m,
+            })
+
     return jsonify({'curves': curves, 'iem_name': iem['name']})
 
 
@@ -1686,6 +1717,57 @@ def copy_peq_to_dap(iid, peq_id):
     with open(out_path, 'w', encoding='utf-8') as f:
         f.write(raw)
     return jsonify({'message': f"Copied to {out_path}"})
+
+
+## ── Baselines (FR tuning targets) ─────────────────────────────────────
+
+BASELINE_PALETTE = ['#f0b429', '#a78bfa', '#fb923c', '#38bdf8', '#f472b6', '#34d399', '#ff6b6b', '#4ecdc4']
+
+def _baseline_color(bid):
+    """Deterministic colour from baseline ID."""
+    h = 0
+    for c in bid:
+        h = (h * 31 + ord(c)) & 0xffffffff
+    return BASELINE_PALETTE[h % len(BASELINE_PALETTE)]
+
+
+@app.route('/api/baselines', methods=['GET'])
+def get_baselines():
+    return jsonify(load_baselines())
+
+
+@app.route('/api/baselines', methods=['POST'])
+def create_baseline():
+    data = request.json or {}
+    name = data.get('name', '').strip()
+    url = data.get('url', '').strip()
+    if not name or not url:
+        return jsonify({'error': 'Name and URL are required'}), 400
+
+    result = fetch_squig_measurement(url)
+    measurement = result.get('L') if result else None
+    if not measurement:
+        return jsonify({'error': 'Could not fetch measurement data from squig.link. Check the URL.'}), 400
+
+    bid = hashlib.md5(url.encode()).hexdigest()[:12]
+    baseline = {
+        'id': bid,
+        'name': name,
+        'url': url,
+        'color': _baseline_color(bid),
+        'measurement': measurement,
+    }
+    baselines = [b for b in load_baselines() if b['id'] != bid]
+    baselines.append(baseline)
+    save_baselines(baselines)
+    return jsonify(baseline), 201
+
+
+@app.route('/api/baselines/<bid>', methods=['DELETE'])
+def delete_baseline(bid):
+    baselines = [b for b in load_baselines() if b['id'] != bid]
+    save_baselines(baselines)
+    return jsonify({'ok': True})
 
 
 if __name__ == '__main__':

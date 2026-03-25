@@ -1910,7 +1910,8 @@ async function _loadIemGraph(iemId, peqId) {
   };
 
   // L = blue, R = red, PEQ = green — consistent regardless of comparison palette
-  function _iemCurveColor(id) {
+  function _iemCurveColor(id, backendColor) {
+    if (id.startsWith('baseline-')) return backendColor || '#f0b429';
     if (id.includes('-peq-')) return '#53e16f';  // accent-success green
     if (id.endsWith('-R'))    return '#e05c5c';  // red for R channel
     return '#5b8dee';                             // blue for L channel
@@ -1919,9 +1920,9 @@ async function _loadIemGraph(iemId, peqId) {
   const datasets = data.curves.map(c => ({
     label: c.label,
     data: c.data.map(([f, spl]) => ({ x: f, y: spl })),
-    borderColor: _iemCurveColor(c.id),
-    borderWidth: c.dash ? 1.3 : 1.9,
-    borderDash: c.dash ? [5, 3] : [],
+    borderColor: _iemCurveColor(c.id, c.color),
+    borderWidth: c.id.startsWith('baseline-') ? 1.4 : c.dash ? 1.3 : 1.9,
+    borderDash: c.dash ? [6, 4] : [],
     pointRadius: 0,
     tension: 0.3,
   }));
@@ -2298,28 +2299,12 @@ function clearSongsFilter() {
 
 /* ── Settings ──────────────────────────────────────────────────────── */
 async function loadSettings() {
-  const settings = await api('/settings').catch(() => ({}));
+  const [settings] = await Promise.all([
+    api('/settings').catch(() => ({})),
+    loadBaselines(),
+  ]);
   const inp = document.getElementById('lib-path-input');
   if (inp) inp.value = settings.library_path || '/Volumes/Storage/Music/FLAC';
-}
-
-async function restartApp() {
-  const btn = document.getElementById('restart-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Restarting…'; }
-  try {
-    await fetch('/api/restart', { method: 'POST' });
-  } catch (_) { /* server closed the connection — that's expected */ }
-
-  // Poll until the server is back up, then reload
-  const poll = setInterval(async () => {
-    try {
-      const r = await fetch('/api/health');
-      if (r.ok) {
-        clearInterval(poll);
-        window.location.reload();
-      }
-    } catch (_) { /* still restarting */ }
-  }, 800);
 }
 
 async function saveLibraryPath() {
@@ -2331,6 +2316,77 @@ async function saveLibraryPath() {
   } catch (e) {
     toast('Error: ' + e.message);
   }
+}
+
+async function restartApp() {
+  const btn = document.getElementById('restart-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;animation:spin 1s linear infinite"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>Restarting…'; }
+  try {
+    await fetch('/api/restart', { method: 'POST' });
+  } catch (_) { /* connection may drop before response — expected */ }
+
+  // Poll until the server is back up, then reload
+  const poll = setInterval(async () => {
+    try {
+      const r = await fetch('/api/health', { cache: 'no-store' });
+      if (r.ok) { clearInterval(poll); window.location.reload(); }
+    } catch (_) { /* still restarting */ }
+  }, 800);
+}
+
+/* ── Baselines (FR tuning targets) ─────────────────────────────────── */
+let _baselines = [];
+
+async function loadBaselines() {
+  _baselines = await api('/baselines').catch(() => []);
+  _renderBaselines();
+}
+
+function _renderBaselines() {
+  const el = document.getElementById('baselines-list');
+  if (!el) return;
+  if (!_baselines.length) {
+    el.innerHTML = '<p style="font-size:var(--text-sm);color:var(--text-muted);margin:0 0 4px">No baselines added yet.</p>';
+    return;
+  }
+  el.innerHTML = _baselines.map(b => `
+    <div class="baseline-item">
+      <span class="baseline-dot" style="background:${b.color}"></span>
+      <span class="baseline-item-name">${esc(b.name)}</span>
+      <span class="baseline-item-url" title="${esc(b.url)}">${esc(b.url)}</span>
+      <button class="btn-ghost-sm" onclick="App.deleteBaseline('${b.id}')">Remove</button>
+    </div>`).join('');
+}
+
+async function addBaseline() {
+  const nameEl = document.getElementById('baseline-name-input');
+  const urlEl  = document.getElementById('baseline-url-input');
+  const btn    = document.getElementById('baseline-add-btn');
+  const name = nameEl.value.trim();
+  const url  = urlEl.value.trim();
+  if (!name || !url) { toast('Enter a name and a squig.link URL'); return; }
+  btn.disabled = true;
+  btn.textContent = 'Fetching…';
+  try {
+    const bl = await api('/baselines', { method: 'POST', body: { name, url } });
+    _baselines = [..._baselines.filter(b => b.id !== bl.id), bl];
+    _renderBaselines();
+    nameEl.value = '';
+    urlEl.value  = '';
+    toast(`Added baseline: ${bl.name}`);
+  } catch (e) {
+    toast('Error: ' + (e.message || 'Could not fetch measurement'));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Add';
+  }
+}
+
+async function deleteBaseline(bid) {
+  await api(`/baselines/${bid}`, { method: 'DELETE' }).catch(() => {});
+  _baselines = _baselines.filter(b => b.id !== bid);
+  _renderBaselines();
+  toast('Baseline removed');
 }
 
 /* ── Icon dropdown (replaces grid picker) ──────────────────────────── */
@@ -2417,6 +2473,9 @@ const App = {
   loadSettings,
   saveLibraryPath,
   restartApp,
+  // Baselines
+  addBaseline,
+  deleteBaseline,
   // DAP
   _selectIcon,
   toggleIconDropdown,
