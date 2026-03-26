@@ -1626,9 +1626,12 @@ def _apply_peq(measurement, peq_profile):
 
 @app.route('/api/iems', methods=['GET'])
 def get_iems():
-    # Omit large measurement arrays from list view
-    result = [{k: v for k, v in iem.items() if k not in ('measurement_L', 'measurement_R')}
-              for iem in load_iems()]
+    # Omit large measurement arrays from list view; sort alphabetically by name
+    result = sorted(
+        [{k: v for k, v in iem.items() if k not in ('measurement_L', 'measurement_R')}
+         for iem in load_iems()],
+        key=lambda i: i.get('name', '').lower()
+    )
     return jsonify(result)
 
 
