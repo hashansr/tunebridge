@@ -1996,7 +1996,7 @@ async function _loadIemGraph(iemId, peqId) {
     data: c.data.map(([f, spl]) => ({ x: f, y: spl })),
     borderColor: _iemCurveColor(c.id, c.color),
     borderWidth: c.id.startsWith('baseline-') ? 1.4 : c.dash ? 1.3 : 1.9,
-    borderDash: c.dash ? [6, 4] : [],
+    borderDash: c.dash ? [6, 4] : undefined,
     pointRadius: 0,
     tension: 0.3,
     // Baselines are hidden on first load — user toggles them via the legend
@@ -2006,7 +2006,7 @@ async function _loadIemGraph(iemId, peqId) {
   _iemChart = new Chart(canvas, {
     type: 'line',
     plugins: [regionPlugin],
-    data: { datasets: datasets.map(ds => ({ ...ds, borderDash: ds.borderDash || [] })) },
+    data: { datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,

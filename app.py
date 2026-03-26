@@ -1754,7 +1754,7 @@ def iem_graph(iid):
                            'color': color, 'dash': False, 'data': _shift(mL, offset)})
         if mR:
             curves.append({'id': f"{cur['id']}-R", 'label': f"{name} (R)",
-                           'color': color, 'dash': True, 'data': _shift(mR, offset)})
+                           'color': color, 'dash': False, 'data': _shift(mR, offset)})
 
         # Apply PEQ for primary IEM only (same offset keeps PEQ effect relative to normalised curve)
         if idx == 0 and peq_id:
@@ -1769,7 +1769,7 @@ def iem_graph(iid):
                 if mR:
                     curves.append({'id': f"{cur['id']}-peq-R",
                                    'label': f"{name} + {peq['name']} (R)",
-                                   'color': peq_color, 'dash': True,
+                                   'color': peq_color, 'dash': False,
                                    'data': _shift(_apply_peq(mR, peq), offset)})
 
     # Append baseline/target curves — each normalised independently
