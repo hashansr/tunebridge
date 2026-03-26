@@ -559,8 +559,21 @@ def has_playlist_artwork(pid):
 def get_playlists():
     playlists = load_playlists()
     result = sorted(playlists.values(), key=lambda p: p.get('created_at', 0))
+    with library_lock:
+        lib_map = {t['id']: t for t in library}
     for p in result:
         p['has_artwork'] = has_playlist_artwork(p['id'])
+        p['track_count'] = len(p.get('tracks', []))
+        # Gather up to 4 unique artwork keys for cover mosaic
+        seen = []
+        for entry in p.get('tracks', []):
+            tid = entry if isinstance(entry, str) else entry.get('id')
+            track = lib_map.get(tid)
+            if track and track.get('artwork_key') and track['artwork_key'] not in seen:
+                seen.append(track['artwork_key'])
+                if len(seen) >= 4:
+                    break
+        p['artwork_keys'] = seen
     return jsonify(result)
 
 

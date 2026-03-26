@@ -21,6 +21,8 @@ const state = {
   plFilter: '',
 };
 
+let _currentGearTab = 'daps';
+
 /* ── API helpers ────────────────────────────────────────────────────── */
 async function api(path, opts = {}) {
   const res = await fetch('/api' + path, {
@@ -123,22 +125,9 @@ async function loadPlaylists() {
 }
 
 function renderSidebarPlaylists() {
-  const el = document.getElementById('playlists-list');
-  const sorted = [...state.playlists].sort((a, b) => {
-    if (state.playlistSortMode === 'alpha') return a.name.localeCompare(b.name);
-    if (state.playlistSortMode === 'updated') return (b.updated_at || b.created_at || 0) - (a.updated_at || a.created_at || 0);
-    return (b.created_at || 0) - (a.created_at || 0); // 'created' default
-  });
-  el.innerHTML = sorted.map(pl => `
-    <div class="playlist-nav-item${state.playlist?.id === pl.id ? ' active' : ''}"
-         onclick="App.openPlaylist('${pl.id}')">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(pl.name)}</span>
-      <button class="pl-del" onclick="event.stopPropagation();App.deletePlaylist('${pl.id}')" title="Delete playlist">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-  `).join('');
+  // Sidebar playlist list removed — playlists now in their own view
+  // Refresh the playlists view if currently active
+  if (state.view === 'playlists') loadPlaylistsView();
 }
 
 function toggleSidebarSort(event) {
@@ -155,22 +144,94 @@ function toggleSidebarSort(event) {
 function setSidebarSort(mode) {
   state.playlistSortMode = mode;
   localStorage.setItem('sidebarSort', mode);
-  document.getElementById('sidebar-sort-dd').style.display = 'none';
+  const dd = document.getElementById('pl-view-sort-dd');
+  if (dd) dd.style.display = 'none';
   ['alpha','created','updated'].forEach(m => {
-    const el = document.getElementById(`sidebar-sort-check-${m}`);
+    const el = document.getElementById(`pl-view-sort-check-${m}`);
     if (el) el.style.opacity = (m === mode) ? '1' : '0';
   });
   renderSidebarPlaylists();
 }
 
+function togglePlViewSort(event) {
+  event.stopPropagation();
+  const dd = document.getElementById('pl-view-sort-dd');
+  if (!dd) return;
+  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+  ['alpha','created','updated'].forEach(m => {
+    const el = document.getElementById(`pl-view-sort-check-${m}`);
+    if (el) el.style.opacity = (m === state.playlistSortMode) ? '1' : '0';
+  });
+}
+
+async function loadPlaylistsView() {
+  const grid = document.getElementById('playlists-view-grid');
+  const empty = document.getElementById('playlists-view-empty');
+  if (!grid) return;
+
+  // Sort playlists
+  const pls = [...state.playlists];
+  if (state.playlistSortMode === 'alpha') {
+    pls.sort((a, b) => a.name.localeCompare(b.name));
+  } else if (state.playlistSortMode === 'created') {
+    pls.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+  } else {
+    pls.sort((a, b) => (b.updated_at || b.created_at || 0) - (a.updated_at || a.created_at || 0));
+  }
+
+  if (!pls.length) {
+    grid.innerHTML = '';
+    if (empty) empty.style.display = 'flex';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  grid.innerHTML = pls.map(pl => {
+    // Build cover art HTML
+    let coverHtml;
+    if (pl.has_artwork) {
+      coverHtml = `<img src="/api/playlists/${pl.id}/artwork?t=${Date.now()}" style="width:100%;height:100%;object-fit:cover" loading="lazy" onerror="this.style.display='none'" />`;
+    } else {
+      const keys = (pl.artwork_keys || []).slice(0, 4);
+      if (!keys.length) {
+        coverHtml = `<div class="cover-placeholder">${musicNote(40)}</div>`;
+      } else if (keys.length === 1) {
+        coverHtml = `<img src="/api/artwork/${keys[0]}" style="width:100%;height:100%;object-fit:cover" loading="lazy" />`;
+      } else {
+        coverHtml = keys.map(k => `<img src="/api/artwork/${k}" loading="lazy" />`).join('');
+      }
+    }
+    const count = pl.track_count != null ? pl.track_count : (pl.tracks ? pl.tracks.length : 0);
+    return `
+      <div class="pl-view-card" onclick="App.openPlaylist('${pl.id}')">
+        <div class="pl-view-cover ${pl.has_artwork || (pl.artwork_keys && pl.artwork_keys.length === 1) ? 'playlist-cover-single' : ''}">${coverHtml}</div>
+        <div class="pl-view-info">
+          <div class="pl-view-name" title="${esc(pl.name)}">${esc(pl.name)}</div>
+          <div class="pl-view-meta">${count} track${count !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 /* ── Artists view ───────────────────────────────────────────────────── */
 async function loadArtists() {
+  document.getElementById('artists-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
   const artists = await api('/library/artists');
   state.artists = artists;
 
   const grid = document.getElementById('artists-grid');
   const alphaBar = document.getElementById('alpha-bar');
   document.getElementById('artists-count').textContent = `${artists.length} artists`;
+
+  const artistsEmpty = document.getElementById('artists-empty');
+  if (!artists.length) {
+    grid.innerHTML = '';
+    if (artistsEmpty) artistsEmpty.style.display = 'flex';
+    alphaBar.innerHTML = '';
+    return;
+  }
+  if (artistsEmpty) artistsEmpty.style.display = 'none';
 
   // Build A-Z bar
   const LETTERS = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -223,8 +284,14 @@ function scrollToLetter(letter) {
   if (btn) { btn.classList.add('active'); setTimeout(() => btn.classList.remove('active'), 800); }
 }
 
+function scrollToAlbumLetter(letter) {
+  const el = document.getElementById(`albums-alpha-${letter}`);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 /* ── Albums view ────────────────────────────────────────────────────── */
 async function loadAlbums(artistFilter = null) {
+  document.getElementById('albums-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
   const query = artistFilter ? `?artist=${encodeURIComponent(artistFilter)}` : '';
   const albums = await api('/library/albums' + query);
   state.albums = albums;
@@ -233,6 +300,8 @@ async function loadAlbums(artistFilter = null) {
   const countEl = document.getElementById('albums-count');
   const crumb = document.getElementById('albums-breadcrumb');
   const hero = document.getElementById('artist-hero');
+  const albumsAlphaBar = document.getElementById('albums-alpha-bar');
+  const albumsEmpty = document.getElementById('albums-empty');
 
   countEl.textContent = `${albums.length} album${albums.length !== 1 ? 's' : ''}`;
 
@@ -259,19 +328,67 @@ async function loadAlbums(artistFilter = null) {
     hero.style.display = 'none';
   }
 
-  grid.innerHTML = albums.map(al => `
-    <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)">
-      <div class="album-thumb">
-        ${thumbImg(al.artwork_key, 160, '6px')}
-        <div class="album-thumb-overlay">
-          <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
+  // Empty state
+  if (!albums.length) {
+    grid.innerHTML = '';
+    if (albumsEmpty) albumsEmpty.style.display = 'flex';
+    if (albumsAlphaBar) albumsAlphaBar.style.display = 'none';
+    return;
+  }
+  if (albumsEmpty) albumsEmpty.style.display = 'none';
+
+  if (!artistFilter && albumsAlphaBar) {
+    // Alpha bar for all-albums view
+    const LETTERS = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    const presentLetters = new Set(albums.map(al => {
+      const first = al.name.charAt(0).toUpperCase();
+      return /[A-Z]/.test(first) ? first : '#';
+    }));
+    albumsAlphaBar.style.display = 'flex';
+    albumsAlphaBar.innerHTML = LETTERS.map(l => `
+      <button class="alpha-btn" ${presentLetters.has(l) ? `onclick="App.scrollToAlbumLetter('${l}')"` : 'disabled'}
+        title="${l === '#' ? 'Numbers / symbols' : l}">${l}</button>
+    `).join('');
+
+    // Re-render grid with letter anchors
+    let lastLetter = null;
+    grid.innerHTML = albums.map(al => {
+      const letter = /[A-Z]/i.test(al.name.charAt(0)) ? al.name.charAt(0).toUpperCase() : '#';
+      let anchor = '';
+      if (letter !== lastLetter) {
+        anchor = `id="albums-alpha-${letter}"`;
+        lastLetter = letter;
+      }
+      return `
+        <div class="album-card" ${anchor} data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)">
+          <div class="album-thumb">
+            ${thumbImg(al.artwork_key, 160, '6px')}
+            <div class="album-thumb-overlay">
+              <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
+            </div>
+          </div>
+          <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
+          <div class="album-artist">${esc(al.artist)}</div>
+          ${al.year ? `<div class="album-year">${esc(al.year)}</div>` : ''}
         </div>
+      `;
+    }).join('');
+  } else {
+    if (albumsAlphaBar) albumsAlphaBar.style.display = 'none';
+    grid.innerHTML = albums.map(al => `
+      <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)">
+        <div class="album-thumb">
+          ${thumbImg(al.artwork_key, 160, '6px')}
+          <div class="album-thumb-overlay">
+            <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
+          </div>
+        </div>
+        <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
+        ${!artistFilter ? `<div class="album-artist">${esc(al.artist)}</div>` : ''}
+        ${al.year ? `<div class="album-year">${esc(al.year)}</div>` : ''}
       </div>
-      <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
-      ${!artistFilter ? `<div class="album-artist">${esc(al.artist)}</div>` : ''}
-      ${al.year ? `<div class="album-year">${esc(al.year)}</div>` : ''}
-    </div>
-  `).join('');
+    `).join('');
+  }
 }
 
 /* ── Tracks view ────────────────────────────────────────────────────── */
@@ -387,7 +504,7 @@ async function openPlaylist(pid) {
   state.playlist = pl;
   state.view = 'playlist';
   clearSelection();
-  setActiveNav(null);
+  setActiveNav('playlist');
   renderSidebarPlaylists();
   showViewEl('playlist');
 
@@ -1004,13 +1121,13 @@ function showView(viewName) {
   if (viewName === 'artists') { state._artistsScrollTop = 0; loadArtists(); }
   else if (viewName === 'albums') { state.artist = null; loadAlbums(); }
   else if (viewName === 'songs') loadSongsView();
-  else if (viewName === 'daps') loadDapsView();
-  else if (viewName === 'iems') loadIemsView();
+  else if (viewName === 'gear') loadGearView();
+  else if (viewName === 'playlists') loadPlaylistsView();
   else if (viewName === 'settings') loadSettings();
 }
 
 function showViewEl(name) {
-  const views = ['artists', 'albums', 'tracks', 'songs', 'playlist', 'daps', 'dap-detail', 'iems', 'iem-detail', 'settings'];
+  const views = ['artists', 'albums', 'tracks', 'songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.style.display = v === name ? (v === 'playlist' ? 'flex' : 'block') : 'none';
@@ -1018,8 +1135,15 @@ function showViewEl(name) {
 }
 
 function setActiveNav(view) {
+  const NAV_MAP = {
+    'tracks': 'artists',
+    'dap-detail': 'gear',
+    'iem-detail': 'gear',
+    'playlist': 'playlists',
+  };
+  const navView = NAV_MAP[view] || view;
   document.querySelectorAll('.nav-item').forEach(el => {
-    el.classList.toggle('active', el.dataset.view === view);
+    el.classList.toggle('active', el.dataset.view === navView);
   });
 }
 
@@ -1030,6 +1154,14 @@ function backToArtists() {
   renderSidebarPlaylists();
   showViewEl('artists');
   loadArtists(); // restores _artistsScrollTop if set
+}
+
+function backToGear() {
+  state.view = 'gear';
+  clearSelection();
+  setActiveNav('gear');
+  showViewEl('gear');
+  loadGearView(_currentGearTab || 'daps');
 }
 
 async function showArtist(artist) {
@@ -1516,6 +1648,7 @@ async function syncScanAgain() {
 // SVG icon used for all DAP cards/headers
 const _DAP_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg>`;
 async function loadDapsView() {
+  document.getElementById('daps-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
   const daps = await api('/daps').catch(() => []);
   const grid = document.getElementById('daps-grid');
   const empty = document.getElementById('daps-empty');
@@ -1540,6 +1673,37 @@ async function loadDapsView() {
   `).join('');
 }
 
+async function loadGearView(tab) {
+  tab = tab || _currentGearTab || 'daps';
+  _currentGearTab = tab;
+
+  // Update gear-header-action button
+  const actionEl = document.getElementById('gear-header-action');
+  if (actionEl) {
+    actionEl.innerHTML = tab === 'daps'
+      ? `<button class="btn-primary" onclick="App.showAddDapModal()">+ Add DAP</button>`
+      : `<button class="btn-primary" onclick="App.showAddIemModal()">+ Add</button>`;
+  }
+
+  // Switch tab active states
+  document.getElementById('gear-tab-daps')?.classList.toggle('active', tab === 'daps');
+  document.getElementById('gear-tab-iems')?.classList.toggle('active', tab === 'iems');
+
+  // Show/hide panels
+  const dapsPanel = document.getElementById('gear-daps-panel');
+  const iemsPanel = document.getElementById('gear-iems-panel');
+  if (dapsPanel) dapsPanel.style.display = tab === 'daps' ? 'block' : 'none';
+  if (iemsPanel) iemsPanel.style.display = tab === 'iems' ? 'block' : 'none';
+
+  // Load content
+  if (tab === 'daps') await loadDapsView();
+  else await loadIemsView();
+}
+
+function switchGearTab(tab) {
+  loadGearView(tab);
+}
+
 async function showDapDetail(id) {
   const [dap, playlists] = await Promise.all([
     api(`/daps/${id}`),
@@ -1547,11 +1711,11 @@ async function showDapDetail(id) {
   ]);
   state.view = 'dap-detail';
   clearSelection();
-  setActiveNav('daps');
+  setActiveNav('gear');
   showViewEl('dap-detail');
 
   document.getElementById('dap-detail-breadcrumb').innerHTML = `
-    <span class="crumb" onclick="App.showView('daps')">DAPs</span>
+    <span class="crumb" onclick="App.backToGear()">Gear</span>
     <span class="crumb-sep">›</span>
     <span class="crumb-current">${esc(dap.name)}</span>
   `;
@@ -1741,7 +1905,7 @@ async function saveDap() {
     if (state.view === 'dap-detail' && id) {
       showDapDetail(id);
     } else {
-      showView('daps');
+      showView('gear');
     }
   } catch (e) {
     toast('Error: ' + e.message);
@@ -1751,7 +1915,7 @@ async function saveDap() {
 async function deleteDap(id) {
   if (!confirm('Delete this DAP?')) return;
   await api(`/daps/${id}`, { method: 'DELETE' });
-  showView('daps');
+  showView('gear');
 }
 
 /* ── IEM management ─────────────────────────────────────────────────── */
@@ -1760,6 +1924,7 @@ let _currentIemId = null;
 let _activePeqId = null;
 
 async function loadIemsView() {
+  document.getElementById('iems-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
   const iems = await api('/iems').catch(() => []);
   const grid = document.getElementById('iems-grid');
   const empty = document.getElementById('iems-empty');
@@ -1792,11 +1957,11 @@ async function showIemDetail(id) {
   _activePeqId = null;
   state.view = 'iem-detail';
   clearSelection();
-  setActiveNav('iems');
+  setActiveNav('gear');
   showViewEl('iem-detail');
 
   document.getElementById('iem-detail-breadcrumb').innerHTML = `
-    <span class="crumb" onclick="App.showView('iems')">IEMs &amp; Headphones</span>
+    <span class="crumb" onclick="App.backToGear()">Gear</span>
     <span class="crumb-sep">›</span>
     <span class="crumb-current">${esc(iem.name)}</span>
   `;
@@ -2213,7 +2378,7 @@ async function deleteIem(id) {
   if (!confirm('Delete this IEM/headphone?')) return;
   if (_iemChart) { _iemChart.destroy(); _iemChart = null; }
   await api(`/iems/${id}`, { method: 'DELETE' });
-  showView('iems');
+  showView('gear');
 }
 
 function showPeqModal() {
@@ -2291,6 +2456,20 @@ function renderSongsTable() {
     );
   }
   const total = tracks.length;
+  const songsWrap = document.getElementById('songs-table-wrap');
+  const songsEmpty = document.getElementById('songs-empty');
+  if (!total) {
+    if (songsWrap) songsWrap.style.display = 'none';
+    if (songsEmpty) songsEmpty.style.display = 'flex';
+    const count = document.getElementById('songs-count');
+    if (count) count.textContent = '0 songs';
+    const paginationEl = document.getElementById('songs-pagination');
+    if (paginationEl) paginationEl.style.display = 'none';
+    return;
+  }
+  if (songsWrap) songsWrap.style.display = '';
+  if (songsEmpty) songsEmpty.style.display = 'none';
+
   const totalPages = Math.ceil(total / SONGS_PER_PAGE);
   if (_songsPage >= totalPages) _songsPage = Math.max(0, totalPages - 1);
   const start = _songsPage * SONGS_PER_PAGE;
@@ -2672,6 +2851,12 @@ const App = {
   addAlbumToPlaylist,
   _commitToPlaylist,
   scrollToLetter,
+  scrollToAlbumLetter,
+  backToGear,
+  loadGearView,
+  switchGearTab,
+  loadPlaylistsView,
+  togglePlViewSort,
   removeFromPlaylist,
   dupCancel,
   dupSkip,

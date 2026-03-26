@@ -18,9 +18,14 @@
       <div id="sidebar-header">
         <img src="/logo.png" width="26" height="26" alt="TuneBridge" style="border-radius:5px" />
         <span>TuneBridge</span>
-        <button id="help-btn" onclick="App.showHelp()" title="Help">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="3"/></svg>
-        </button>
+        <div class="header-icons">
+          <button id="help-btn" onclick="App.showHelp()" title="Help">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="3"/></svg>
+          </button>
+          <button id="settings-btn" onclick="App.showView('settings')" title="Settings">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+        </div>
       </div>
 
       <nav>
@@ -37,67 +42,27 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
           Songs
         </button>
+        <button class="nav-item" data-view="playlists" onclick="App.showView('playlists')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6" stroke-width="3"/><line x1="3" y1="12" x2="3.01" y2="12" stroke-width="3"/><line x1="3" y1="18" x2="3.01" y2="18" stroke-width="3"/></svg>
+          Playlists
+        </button>
         <div class="nav-section-label nav-section-sticky" style="margin-top:10px">Gear</div>
-        <button class="nav-item" data-view="daps" onclick="App.showView('daps')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="12" y2="11"/></svg>
-          DAPs
-        </button>
-        <button class="nav-item" data-view="iems" onclick="App.showView('iems')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
-          IEMs &amp; Headphones
-        </button>
-
-        <div class="nav-section-label nav-section-sticky" style="margin-top:10px">Tools</div>
-        <button class="nav-item" onclick="App.showSync()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-          Sync Music
-        </button>
-        <button class="nav-item" data-view="settings" onclick="App.showView('settings')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          Settings
+        <button class="nav-item" data-view="gear" onclick="App.showView('gear')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg>
+          Gear
         </button>
       </nav>
 
-      <div id="playlists-header" class="nav-section-label" style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;margin-top:4px;">
-        Playlists
-        <div style="display:flex;gap:2px">
-          <div style="position:relative">
-            <button class="sidebar-icon-btn" id="sidebar-sort-btn" onclick="App.toggleSidebarSort(event)" title="Sort playlists">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
-            </button>
-            <div id="sidebar-sort-dd" style="display:none;position:absolute;top:calc(100% + 4px);right:0;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;min-width:140px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:200">
-              <div class="sidebar-sort-option" onclick="App.setSidebarSort('alpha')">
-                <span id="sidebar-sort-check-alpha" style="opacity:0">✓</span> A–Z
-              </div>
-              <div class="sidebar-sort-option" onclick="App.setSidebarSort('created')">
-                <span id="sidebar-sort-check-created">✓</span> Date Created
-              </div>
-              <div class="sidebar-sort-option" onclick="App.setSidebarSort('updated')">
-                <span id="sidebar-sort-check-updated" style="opacity:0">✓</span> Last Updated
-              </div>
-            </div>
-          </div>
-          <button class="sidebar-icon-btn" onclick="App.triggerImport()" title="Import M3U / M3U8">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          </button>
-          <button id="new-playlist-btn" class="sidebar-icon-btn" onclick="App.createPlaylist()" title="New Playlist">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </button>
-        </div>
-      </div>
-      <div id="playlists-section">
-        <input type="file" id="import-file-input" accept=".m3u,.m3u8" style="display:none" onchange="App.handleImportFile(this)" />
-        <div id="playlists-list"></div>
-      </div>
+      <button id="sync-nav-btn" onclick="App.showSync()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+        Sync Music
+      </button>
 
       <div id="scan-status">
         <div id="scan-bar-wrap" style="display:none">
           <div id="scan-bar"></div>
         </div>
         <span id="scan-msg"></span>
-        <button id="sync-btn" onclick="App.showSync()" title="Sync Music Library">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-        </button>
         <div id="rescan-wrap" style="position:relative">
           <button id="rescan-btn" onclick="App.toggleRescanMenu(event)" title="Rescan Library">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -126,6 +91,11 @@
         </div>
         <div id="alpha-bar" class="alpha-bar"></div>
         <div id="artists-grid" class="artist-grid"></div>
+        <div id="artists-empty" class="empty-state" style="display:none">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          <p>No artists found.</p>
+          <p class="muted">Rescan your library to load music.</p>
+        </div>
       </div>
 
       <div id="view-albums" class="view" style="display:none">
@@ -133,6 +103,7 @@
           <div class="breadcrumb" id="albums-breadcrumb"></div>
           <div class="view-count" id="albums-count"></div>
         </div>
+        <div id="albums-alpha-bar" class="alpha-bar" style="display:none"></div>
         <div id="artist-hero" class="browse-hero" style="display:none">
           <div class="hero-art" id="artist-hero-art"></div>
           <div class="hero-info">
@@ -146,6 +117,11 @@
           </div>
         </div>
         <div id="albums-grid" class="album-grid"></div>
+        <div id="albums-empty" class="empty-state" style="display:none">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="3"/></svg>
+          <p>No albums found.</p>
+          <p class="muted">Browse by artist or rescan your library.</p>
+        </div>
       </div>
 
       <div id="view-tracks" class="view" style="display:none">
@@ -210,6 +186,11 @@
             <tbody id="songs-tbody"></tbody>
           </table>
         </div>
+        <div id="songs-empty" class="empty-state" style="display:none">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          <p>No songs found.</p>
+          <p class="muted">Try a different filter or rescan your library.</p>
+        </div>
       </div>
 
       <!-- Playlist view -->
@@ -268,17 +249,34 @@
         </table>
       </div>
 
-      <!-- DAPs view -->
-      <div id="view-daps" class="view" style="display:none">
+      <!-- Gear view (DAPs + IEMs) -->
+      <div id="view-gear" class="view" style="display:none">
         <div class="view-header">
-          <h2>DAPs</h2>
-          <button class="btn-primary" onclick="App.showAddDapModal()">+ Add DAP</button>
+          <div class="gear-view-tabs">
+            <button class="gear-view-tab active" id="gear-tab-daps" onclick="App.switchGearTab('daps')">DAPs</button>
+            <button class="gear-view-tab" id="gear-tab-iems" onclick="App.switchGearTab('iems')">IEMs &amp; Headphones</button>
+          </div>
+          <div id="gear-header-action"></div>
         </div>
-        <div id="daps-grid" class="gear-grid"></div>
-        <div id="daps-empty" class="empty-state" style="display:none">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
-          <p>No DAPs added yet.</p>
-          <p class="muted">Add your portable audio players to track playlist sync status.</p>
+
+        <div id="gear-daps-panel">
+          <div id="daps-grid" class="gear-grid"></div>
+          <div id="daps-empty" class="empty-state" style="display:none">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
+            <p>No DAPs added yet.</p>
+            <p class="muted">Add your portable audio players to track playlist sync status.</p>
+            <button class="btn-primary" onclick="App.showAddDapModal()">+ Add DAP</button>
+          </div>
+        </div>
+
+        <div id="gear-iems-panel" style="display:none">
+          <div id="iems-grid" class="gear-grid"></div>
+          <div id="iems-empty" class="empty-state" style="display:none">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+            <p>No IEMs or headphones added yet.</p>
+            <p class="muted">Add your gear to upload PEQ files and view frequency response graphs.</p>
+            <button class="btn-primary" onclick="App.showAddIemModal()">+ Add IEM / Headphone</button>
+          </div>
         </div>
       </div>
 
@@ -290,26 +288,51 @@
         <div id="dap-detail-content"></div>
       </div>
 
-      <!-- IEMs view -->
-      <div id="view-iems" class="view" style="display:none">
-        <div class="view-header">
-          <h2>IEMs &amp; Headphones</h2>
-          <button class="btn-primary" onclick="App.showAddIemModal()">+ Add</button>
-        </div>
-        <div id="iems-grid" class="gear-grid"></div>
-        <div id="iems-empty" class="empty-state" style="display:none">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
-          <p>No IEMs or headphones added yet.</p>
-          <p class="muted">Add your gear to upload PEQ files and view frequency response graphs.</p>
-        </div>
-      </div>
-
       <!-- IEM detail view -->
       <div id="view-iem-detail" class="view" style="display:none">
         <div class="view-header">
           <div class="breadcrumb" id="iem-detail-breadcrumb"></div>
         </div>
         <div id="iem-detail-content"></div>
+      </div>
+
+      <!-- Playlists view -->
+      <div id="view-playlists" class="view" style="display:none">
+        <div class="view-header">
+          <h2>Playlists</h2>
+          <div class="view-header-actions">
+            <div style="position:relative">
+              <button class="btn-secondary" id="pl-view-sort-btn" onclick="App.togglePlViewSort(event)" title="Sort playlists">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
+                Sort
+              </button>
+              <div id="pl-view-sort-dd" style="display:none;position:absolute;top:calc(100% + 4px);right:0;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;min-width:140px;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:200">
+                <div class="sidebar-sort-option" onclick="App.setSidebarSort('alpha')">
+                  <span id="pl-view-sort-check-alpha" style="opacity:0">✓</span> A–Z
+                </div>
+                <div class="sidebar-sort-option" onclick="App.setSidebarSort('created')">
+                  <span id="pl-view-sort-check-created">✓</span> Date Created
+                </div>
+                <div class="sidebar-sort-option" onclick="App.setSidebarSort('updated')">
+                  <span id="pl-view-sort-check-updated" style="opacity:0">✓</span> Last Updated
+                </div>
+              </div>
+            </div>
+            <button class="btn-secondary" onclick="App.triggerImport()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Import
+            </button>
+            <button class="btn-primary" onclick="App.createPlaylist()">+ New Playlist</button>
+          </div>
+        </div>
+        <div id="playlists-view-grid" class="playlists-view-grid"></div>
+        <div id="playlists-view-empty" class="empty-state" style="display:none">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6" stroke-width="3"/><line x1="3" y1="12" x2="3.01" y2="12" stroke-width="3"/><line x1="3" y1="18" x2="3.01" y2="18" stroke-width="3"/></svg>
+          <p>No playlists yet.</p>
+          <p class="muted">Create a playlist to start organising your music.</p>
+          <button class="btn-primary" onclick="App.createPlaylist()">+ New Playlist</button>
+        </div>
+        <input type="file" id="import-file-input" accept=".m3u,.m3u8" style="display:none" onchange="App.handleImportFile(this)" />
       </div>
 
       <!-- Settings view -->
