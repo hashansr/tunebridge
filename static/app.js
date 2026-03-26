@@ -2827,7 +2827,7 @@ const App = {
   scrollToAlbumLetter,
   backToGear,
   loadGearView,
-  switchGearTab,
+
   loadPlaylistsView,
   togglePlViewSort,
   removeFromPlaylist,
