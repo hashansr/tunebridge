@@ -433,9 +433,10 @@ def get_tracks():
         tracks = library[:]
 
     if artist_filter:
-        tracks = [t for t in tracks if t.get('artist') == artist_filter or t.get('album_artist') == artist_filter]
+        af = artist_filter.lower()
+        tracks = [t for t in tracks if (t.get('artist') or '').lower() == af or (t.get('album_artist') or '').lower() == af]
     if album_filter:
-        tracks = [t for t in tracks if t.get('album') == album_filter]
+        tracks = [t for t in tracks if (t.get('album') or '').lower() == album_filter.lower()]
     if search:
         tracks = [t for t in tracks if
                   search in (t.get('title') or '').lower() or
@@ -463,16 +464,17 @@ def get_artists():
     artists = {}
     for t in tracks:
         name = t.get('album_artist') or t.get('artist') or 'Unknown Artist'
-        if name not in artists:
-            artists[name] = {'name': name, 'albums': set(), 'track_count': 0, 'artwork_key': None}
-        artists[name]['albums'].add(t.get('album'))
-        artists[name]['track_count'] += 1
-        if not artists[name]['artwork_key'] and t.get('artwork_key'):
-            artists[name]['artwork_key'] = t['artwork_key']
+        key = name.lower()
+        if key not in artists:
+            artists[key] = {'name': name, 'albums': set(), 'track_count': 0, 'artwork_key': None}
+        artists[key]['albums'].add(t.get('album'))
+        artists[key]['track_count'] += 1
+        if not artists[key]['artwork_key'] and t.get('artwork_key'):
+            artists[key]['artwork_key'] = t['artwork_key']
 
     result = [
-        {'name': k, 'album_count': len(v['albums']), 'track_count': v['track_count'], 'artwork_key': v['artwork_key']}
-        for k, v in sorted(artists.items(), key=lambda item: artist_sort_key(item[0]))
+        {'name': v['name'], 'album_count': len(v['albums']), 'track_count': v['track_count'], 'artwork_key': v['artwork_key']}
+        for v in sorted(artists.values(), key=lambda v: artist_sort_key(v['name']))
     ]
     return jsonify(result)
 
@@ -485,13 +487,14 @@ def get_albums():
         tracks = library[:]
 
     if artist_filter:
-        tracks = [t for t in tracks if t.get('artist') == artist_filter or t.get('album_artist') == artist_filter]
+        af = artist_filter.lower()
+        tracks = [t for t in tracks if (t.get('artist') or '').lower() == af or (t.get('album_artist') or '').lower() == af]
 
     albums = {}
     for t in tracks:
         artist = t.get('album_artist') or t.get('artist') or 'Unknown Artist'
         album = t.get('album') or 'Unknown Album'
-        key = f"{artist}||{album}"
+        key = f"{artist.lower()}||{album.lower()}"
         if key not in albums:
             albums[key] = {
                 'name': album, 'artist': artist,
