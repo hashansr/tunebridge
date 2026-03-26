@@ -240,6 +240,14 @@ Key findings:
 - **Effort estimate**: PoC 2–3 sessions; playlists + delta sync +3–4; transcoding pipeline +2–3; artwork +3–4; Sequoia workarounds unpredictable. Total: 10–15+ sessions for production quality.
 
 ## Last Updated
+2026-03-26 — Session 14: FR graph defaults, baseline colour picker, IEM sort, bug fixes
+
+- **FR baselines hidden by default on load**: Baseline datasets start with `hidden: true` in Chart.js. Only factory L (blue) / R (red) visible on initial load. Legend items rendered dimmed (swatch line + label at 0.35/0.45 opacity) when hidden. `toggleIemCurve()` now dims/undims the swatch SVG line and label span — not just the eye-toggle button.
+- **Baseline colour picker**: 10-swatch design-system colour picker in Settings → Frequency Response Baselines add row. Clicking the circular swatch button opens a floating 5×2 grid. Selected colour POSTed to `/api/baselines` and stored. Backend validates hex colour, falls back to deterministic hash if invalid. After adding, picker auto-advances to next colour. Functions: `_initBaselineColorPicker()`, `selectBaselineColor(color)`, `toggleBaselineColorPicker()`. Palette: amber, blue, pink, green, violet, orange, sky, rose, emerald, teal.
+- **IEM list sorted A–Z**: `GET /api/iems` now returns IEMs sorted alphabetically by name (case-insensitive). Applied in `get_iems()` backend route.
+- **Fix squig.link root-domain URLs**: URLs without a subdomain (e.g. `https://squig.link/?share=Xenns_Tea_Pro`) now handled correctly. `fetch_squig_measurement()` previously crashed with `KeyError: 'subdomain'` when parsing these URLs. Fixed by defaulting subdomain to empty string and building data URL as `squig.link/data/...` directly.
+- **Remove DAP emoji/icon picker**: DAP icon picker dropdown, `DAP_ICONS` array, `_renderIconPicker()`, `_selectIcon()`, `toggleIconDropdown()`, all `.icon-picker`/`.icon-dropdown` CSS, the hidden `dap-icon` input, and click-outside handler removed. All DAPs use `_DAP_SVG` inline SVG icon consistently. `icon` field no longer sent to API.
+
 2026-03-26 — Session 13: FR graph improvements + UI polish
 
 - **FR baselines hidden by default**: Baseline/target datasets start with `hidden: true` in Chart.js. Only factory L (blue) / R (red) channels show on initial load. Legend items render dimmed (swatch line + label at 0.35/0.45 opacity) when hidden. `toggleIemCurve()` now also dims/undims the swatch SVG line and label span — not just the eye-toggle button.
