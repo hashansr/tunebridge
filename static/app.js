@@ -240,7 +240,7 @@ async function loadAlbums(artistFilter = null) {
 
   if (artistFilter) {
     crumb.innerHTML = `
-      <span class="crumb" onclick="App.showView('artists')">Artists</span>
+      <span class="crumb" onclick="App.backToArtists()">Artists</span>
       <span class="crumb-sep">›</span>
       <span class="crumb-current">${esc(artistFilter)}</span>
     `;
@@ -285,7 +285,7 @@ async function loadTracks(artist = null, album = null) {
   state.tracks = tracks;
 
   const crumb = document.getElementById('tracks-breadcrumb');
-  const crumbParts = [`<span class="crumb" onclick="App.showView('artists')">Artists</span>`];
+  const crumbParts = [`<span class="crumb" onclick="App.backToArtists()">Artists</span>`];
   if (artist) crumbParts.push(`<span class="crumb" data-artist="${esc(artist)}" onclick="App.showArtist(this.dataset.artist)">${esc(artist)}</span>`);
   if (album) crumbParts.push(`<span class="crumb-current">${esc(album)}</span>`);
   else if (artist) crumbParts.push(`<span class="crumb-current">All Songs</span>`);
@@ -1003,7 +1003,7 @@ function showView(viewName) {
 
   showViewEl(viewName);
 
-  if (viewName === 'artists') loadArtists();
+  if (viewName === 'artists') { state._artistsScrollTop = 0; loadArtists(); }
   else if (viewName === 'albums') { state.artist = null; loadAlbums(); }
   else if (viewName === 'songs') loadSongsView();
   else if (viewName === 'daps') loadDapsView();
@@ -1023,6 +1023,15 @@ function setActiveNav(view) {
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.view === view);
   });
+}
+
+function backToArtists() {
+  state.view = 'artists';
+  clearSelection();
+  setActiveNav('artists');
+  renderSidebarPlaylists();
+  showViewEl('artists');
+  loadArtists(); // restores _artistsScrollTop if set
 }
 
 async function showArtist(artist) {
@@ -2649,6 +2658,7 @@ function _getOsPlatform() {
 /* ── Public API ─────────────────────────────────────────────────────── */
 const App = {
   showView,
+  backToArtists,
   showArtist,
   showAlbum,
   openPlaylist,
