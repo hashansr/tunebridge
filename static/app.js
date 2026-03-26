@@ -1533,7 +1533,7 @@ async function loadDapsView() {
         <span class="gear-badge ${d.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected'}">
           ${d.mounted ? '● Connected' : '○ Not connected'}
         </span>
-        ${d.stale_count > 0 ? `<span class="gear-sync-badge gear-sync-stale">⚠ ${d.stale_count} stale</span>` : ''}
+        ${d.stale_count > 0 ? `<span class="gear-sync-badge gear-sync-stale">⚠ ${d.stale_count} outdated</span>` : ''}
         ${d.never_exported > 0 ? `<span class="gear-sync-badge gear-sync-never">${d.never_exported} unsynced</span>` : ''}
       </div>
     </div>
@@ -1565,7 +1565,7 @@ async function showDapDetail(id) {
     if (!ts) {
       statusHtml = `<span class="gear-sync-badge gear-sync-never">Never exported</span>`;
     } else if (ts < (pl.updated_at || 0)) {
-      statusHtml = `<span class="gear-sync-badge gear-sync-stale">⚠ Stale</span>`;
+      statusHtml = `<span class="gear-sync-badge gear-sync-stale">⚠ Outdated</span>`;
     } else {
       statusHtml = `<span class="gear-sync-badge gear-sync-ok">✓ Up to date</span>`;
     }
