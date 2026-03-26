@@ -1786,7 +1786,20 @@ tr.track-selected .track-check-indicator {
   margin-left: auto;
 }
 
-/* ── Gear tabs ────────────────────────────────────────────────────────── */
+/* ── Gear section headers ─────────────────────────────────────────────── */
+.gear-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.gear-section-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── Gear tabs (kept for potential future use) ────────────────────────── */
 .gear-view-tabs {
   display: flex;
   gap: 4px;

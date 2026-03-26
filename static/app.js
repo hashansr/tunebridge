@@ -1161,7 +1161,7 @@ function backToGear() {
   clearSelection();
   setActiveNav('gear');
   showViewEl('gear');
-  loadGearView(_currentGearTab || 'daps');
+  loadGearView();
 }
 
 async function showArtist(artist) {
@@ -1673,35 +1673,8 @@ async function loadDapsView() {
   `).join('');
 }
 
-async function loadGearView(tab) {
-  tab = tab || _currentGearTab || 'daps';
-  _currentGearTab = tab;
-
-  // Update gear-header-action button
-  const actionEl = document.getElementById('gear-header-action');
-  if (actionEl) {
-    actionEl.innerHTML = tab === 'daps'
-      ? `<button class="btn-primary" onclick="App.showAddDapModal()">+ Add DAP</button>`
-      : `<button class="btn-primary" onclick="App.showAddIemModal()">+ Add</button>`;
-  }
-
-  // Switch tab active states
-  document.getElementById('gear-tab-daps')?.classList.toggle('active', tab === 'daps');
-  document.getElementById('gear-tab-iems')?.classList.toggle('active', tab === 'iems');
-
-  // Show/hide panels
-  const dapsPanel = document.getElementById('gear-daps-panel');
-  const iemsPanel = document.getElementById('gear-iems-panel');
-  if (dapsPanel) dapsPanel.style.display = tab === 'daps' ? 'block' : 'none';
-  if (iemsPanel) iemsPanel.style.display = tab === 'iems' ? 'block' : 'none';
-
-  // Load content
-  if (tab === 'daps') await loadDapsView();
-  else await loadIemsView();
-}
-
-function switchGearTab(tab) {
-  loadGearView(tab);
+async function loadGearView() {
+  await Promise.all([loadDapsView(), loadIemsView()]);
 }
 
 async function showDapDetail(id) {
