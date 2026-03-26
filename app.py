@@ -1946,8 +1946,9 @@ def delete_baseline(bid):
     return jsonify({'ok': True})
 
 
+load_library()
+
 if __name__ == '__main__':
-    load_library()
     port = int(os.environ.get('TUNEBRIDGE_PORT', 5001))
     if HAS_WAITRESS:
         print(f' * TuneBridge running on http://127.0.0.1:{port}')
