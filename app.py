@@ -1387,10 +1387,17 @@ def dap_export_playlist(did, pid):
         prefix = prefix or '..'
 
     out_dir = device_root / dap.get('export_folder', 'Playlists')
-    out_dir.mkdir(exist_ok=True)
-    content = generate_m3u(tracks, playlist['name'], path_prefix=prefix)
-    with open(out_dir / f"{playlist['name']}.m3u", 'w', encoding='utf-8') as f:
-        f.write(content)
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        content = generate_m3u(tracks, playlist['name'], path_prefix=prefix)
+        safe_name = playlist['name'].replace('/', '-').replace(':', '-')
+        with open(out_dir / f"{safe_name}.m3u", 'w', encoding='utf-8') as f:
+            f.write(content)
+    except OSError as e:
+        import errno as _errno
+        if e.errno == _errno.EROFS:
+            return jsonify({'error': f"Device is mounted read-only. Eject and reconnect {dap['name']}, then try again."}), 409
+        return jsonify({'error': f"Could not write to device: {e.strerror}"}), 409
 
     if 'playlist_exports' not in dap:
         dap['playlist_exports'] = {}
