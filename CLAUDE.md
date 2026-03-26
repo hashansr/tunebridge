@@ -162,6 +162,16 @@ Public `App` object exposes all functions called from HTML `onclick` attributes.
 - [x] Dynamic Sync modal — DAP list fetched live; uses DAP's mount/music path; no hardcoded device names
 - [x] No emoji in UI — DAP cards/headers use SVG portable-player icon; sync modal and export pills use SVG only
 - [x] New waveform icons — sidebar logo, favicon (multi-size .ico), Mac app icon (icns via iconutil)
+- [x] IEM list sorted alphabetically
+- [x] R channel solid line (same as L channel); only baselines use dashed lines
+- [x] Native macOS app (`TuneBridge.app`) — C launcher binary (`launcher.c`) compiled via CLT clang, execs into CLT Python → `tunebridge_gui.py` → pywebview WKWebView window. Clean bundle (binary + Info.plist + icon), ad-hoc signed. TCC Documents prompt fires on first launch.
+
+## Key Files (additional)
+| File | Purpose |
+|------|---------|
+| `tunebridge_gui.py` | pywebview entrypoint: starts Waitress in thread, opens WKWebView window |
+| `launcher.c` | Source for the tiny C binary inside TuneBridge.app |
+| `create_app.sh` | Builds TuneBridge.app: compiles launcher.c, assembles bundle, signs |
 
 ## Data Notes
 - Playlists store track IDs (strings), resolved to full objects on load
@@ -240,6 +250,16 @@ Key findings:
 - **Effort estimate**: PoC 2–3 sessions; playlists + delta sync +3–4; transcoding pipeline +2–3; artwork +3–4; Sequoia workarounds unpredictable. Total: 10–15+ sessions for production quality.
 
 ## Last Updated
+2026-03-26 — Session 15: Native macOS app (C launcher)
+
+- **Native macOS app**: `TuneBridge.app` built via `create_app.sh`. Three approaches were tried:
+  1. Shell script `.app` → silent failure (macOS TCC blocks `~/Documents` access for shell scripts with EPERM, no prompt shown)
+  2. PyInstaller Mach-O → Finder "(null)" error (codesign refuses to sign bundles containing `webview/js/` and `.dist-info` dirs in `Contents/Frameworks/`)
+  3. **Tiny C launcher (current)** → works cleanly
+- **`launcher.c`**: 27-line C program. Sets `PYTHONPATH` to venv site-packages and `TUNEBRIDGE_PROJECT_DIR` to project root, then `execv()`s into CLT Python with `tunebridge_gui.py`. CLT Python is not in `~/Documents` so no TCC is needed for the `execv()`. When Python opens `tunebridge_gui.py` (in `~/Documents`), TCC fires naturally. User approves once, remembered forever.
+- **`create_app.sh` rewritten**: Auto-detects CLT Python version; generates path-correct `launcher.c` on the fly (via Python heredoc to handle spaces); compiles with `clang`; builds minimal `.app` bundle (binary + Info.plist + icon only); ad-hoc signs with `codesign --force --sign -`; clears quarantine. No PyInstaller dependency.
+- **`tunebridge_gui.py`**: Starts Waitress/Flask in daemon thread; polls `/api/health` for up to 15s; creates 1280×800 WKWebView window (`pywebview>=6.0`). Window close → `os._exit(0)`. Works both as direct Python script and as frozen/launcher-launched app.
+
 2026-03-26 — Session 14: FR graph defaults, baseline colour picker, IEM sort, bug fixes
 
 - **FR baselines hidden by default on load**: Baseline datasets start with `hidden: true` in Chart.js. Only factory L (blue) / R (red) visible on initial load. Legend items rendered dimmed (swatch line + label at 0.35/0.45 opacity) when hidden. `toggleIemCurve()` now dims/undims the swatch SVG line and label span — not just the eye-toggle button.
