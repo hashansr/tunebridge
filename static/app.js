@@ -207,6 +207,13 @@ async function loadArtists() {
       </div>
     `;
   }).join('');
+
+  // Restore scroll position when returning from an artist
+  if (state._artistsScrollTop) {
+    const main = document.getElementById('main');
+    if (main) main.scrollTop = state._artistsScrollTop;
+    state._artistsScrollTop = 0;
+  }
 }
 
 function scrollToLetter(letter) {
@@ -1019,6 +1026,8 @@ function setActiveNav(view) {
 }
 
 async function showArtist(artist) {
+  const main = document.getElementById('main');
+  state._artistsScrollTop = main ? main.scrollTop : 0;
   state.artist = artist;
   state.view = 'albums';
   clearSelection();
