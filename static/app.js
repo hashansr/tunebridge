@@ -208,12 +208,10 @@ async function loadArtists() {
     `;
   }).join('');
 
-  // Restore scroll position when returning from an artist
-  if (state._artistsScrollTop) {
-    const main = document.getElementById('main');
-    if (main) main.scrollTop = state._artistsScrollTop;
-    state._artistsScrollTop = 0;
-  }
+  // Restore saved scroll position (breadcrumb back) or reset to top (sidebar nav)
+  const main = document.getElementById('main');
+  if (main) main.scrollTop = state._artistsScrollTop || 0;
+  state._artistsScrollTop = 0;
 }
 
 function scrollToLetter(letter) {
