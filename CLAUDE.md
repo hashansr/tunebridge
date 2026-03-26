@@ -250,6 +250,30 @@ Key findings:
 - **Effort estimate**: PoC 2–3 sessions; playlists + delta sync +3–4; transcoding pipeline +2–3; artwork +3–4; Sequoia workarounds unpredictable. Total: 10–15+ sessions for production quality.
 
 ## Last Updated
+2026-03-27 — Session 17: UI/UX overhaul, Gear screen redesign, case-insensitive artist grouping
+
+- **System font**: Confirmed `-apple-system, BlinkMacSystemFont` already provides SF Pro on macOS/iOS — no change needed.
+- **Case-insensitive artist grouping**: Backend normalises `album_artist` and `artist` fields to lowercase before grouping, eliminating duplicate cards for "Linkin Park" vs "LINKIN PARK".
+- **Artists breadcrumb scroll restoration**: Clicking a letter anchor on Artists page → artist drill-down → back to Artists now restores scroll position to the letter. Fixed falsy-zero bug: `if (state._artistsScrollTop)` treated `0` as falsy — changed to `main.scrollTop = state._artistsScrollTop || 0`.
+- **Artists sidebar nav always scrolls to top**: Same falsy-zero fix. Sidebar nav item now reliably resets to top of list.
+- **DAP Export 500 fix**: Export crashing on read-only filesystem (commit `d123663`).
+- **Sync badge rename**: "Stale" → "Outdated" (commit `39929f9`).
+- **Major UI/UX overhaul** (commit `60213de`):
+  - Sidebar: removed sidebar playlist list; added prominent Sync Music button; active nav state via `NAV_MAP` in `setActiveNav()` for compound views (tracks, dap-detail, iem-detail, playlist); Library status bar pinned to sidebar bottom (`margin-top:auto; flex-shrink:0`).
+  - Albums A–Z alpha bar mirrors Artists implementation; shown only on all-albums browse; anchors use `id="albums-alpha-{letter}"`.
+  - Spinner loaders (`@keyframes spin`, `.spinner`, `.spinner-wrap`) on Artists, Albums, Songs load.
+  - Empty states added to Artists, Albums, Songs, DAPs, IEMs, Playlists views.
+  - `view-playlists` grid with mosaic cover art (CSS `display:grid; grid-template-columns: 1fr 1fr`); `/api/playlists` returns `artwork_keys` + `track_count`.
+  - Settings button moved to sidebar header icon group.
+- **Gear screen redesign** (commits `e3ee64f`, `c32f4fe`, `1a2a2b2`):
+  - Removed tab UI entirely; replaced `view-daps` + `view-iems` with single `view-gear` containing two stacked sections.
+  - Section headers: "Digital Audio Players" and "IEMs & Headphones", each with `+ Add` button.
+  - `loadGearView()` simplified to `Promise.all([loadDapsView(), loadIemsView()])`.
+  - `switchGearTab` removed from both function definitions AND `App` exports (missing removal from exports caused `ReferenceError` that silently broke entire app JS).
+  - `backToGear()` added for DAP/IEM detail breadcrumb navigation.
+- **`showViewEl()` views array**: updated to `['artists', 'albums', 'tracks', 'songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists']`.
+- **Technical debt noted**: Duplicate `loadSettings()` functions in `app.js` (lines ~1229 and ~2561) — second definition wins via JS scoping; should be cleaned up.
+
 2026-03-26 — Session 15: Native macOS app (C launcher)
 
 - **Native macOS app**: `TuneBridge.app` built via `create_app.sh`. Three approaches were tried:
