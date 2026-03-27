@@ -571,6 +571,22 @@ nav {
   pointer-events: none;
 }
 .artist-card:hover .artist-card-overlay { opacity: 1; }
+.album-thumb-overlay {
+  gap: 10px;  /* space between play + add buttons */
+}
+
+.card-play-btn {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.15s, background 0.15s;
+  pointer-events: all;
+  flex-shrink: 0;
+}
+.card-play-btn:hover { transform: scale(1.1); background: #fff; }
+
 .card-add-btn {
   width: 32px; height: 32px;
   border-radius: 50%;

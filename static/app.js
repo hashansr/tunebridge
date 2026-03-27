@@ -364,6 +364,9 @@ async function loadAlbums(artistFilter = null) {
           <div class="album-thumb">
             ${thumbImg(al.artwork_key, 160, '6px')}
             <div class="album-thumb-overlay">
+              <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>
+              </button>
               <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
             </div>
           </div>
@@ -380,6 +383,9 @@ async function loadAlbums(artistFilter = null) {
         <div class="album-thumb">
           ${thumbImg(al.artwork_key, 160, '6px')}
           <div class="album-thumb-overlay">
+            <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>
+            </button>
             <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
           </div>
         </div>
@@ -984,6 +990,12 @@ async function addAlbumToPlaylist(artist, album, event) {
   const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`);
   if (!tracks.length) { toast('No tracks found'); return; }
   await addAllToPlaylist(tracks.map(t => t.id), anchor);
+}
+
+async function playAlbum(artist, album) {
+  const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`);
+  if (!tracks || !tracks.length) { toast('No tracks found'); return; }
+  Player.playAll(tracks);
 }
 
 /* ── Duplicate dialog ───────────────────────────────────────────────── */
@@ -2860,6 +2872,7 @@ const App = {
   addAllToSpecificPlaylist,
   addAllArtistSongs,
   addAlbumToPlaylist,
+  playAlbum,
   _commitToPlaylist,
   scrollToLetter,
   scrollToAlbumLetter,
