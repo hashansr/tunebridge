@@ -10,7 +10,6 @@ Works in two modes:
   - Installed:   /Applications/TuneBridge.app (PyInstaller bundle)
 """
 
-import json
 import os
 import sys
 import threading
@@ -87,27 +86,37 @@ def main():
         background_color="#131313",
     )
 
-    # ── Save player state before the window (and Flask thread) die ──────────
-    # window.events.closing fires BEFORE the JS context is destroyed, so
-    # evaluate_js still works.  We write directly to the file from Python,
-    # bypassing the HTTP race between sendBeacon and os._exit(0).
-    def _on_closing():
-        try:
-            state_json = window.evaluate_js(
-                'typeof Player !== "undefined" && Player.getStateJSON'
-                ' ? Player.getStateJSON() : null'
-            )
-            if state_json and isinstance(state_json, str) and len(state_json) > 5:
-                state_file = Path(PROJECT_DIR) / 'data' / 'player_state.json'
-                tmp = str(state_file) + '.tmp'
-                with open(tmp, 'w') as f:
-                    f.write(state_json)
-                Path(tmp).replace(state_file)
-        except Exception:
-            pass  # never block window close on state-save failure
+    # ── Player state persistence ─────────────────────────────────────────────
+    # IMPORTANT: Do NOT call evaluate_js from window.events.closing.
+    # closing fires on the main AppKit thread; evaluate_js uses
+    # performSelectorOnMainThread:waitUntilDone:YES internally, so calling
+    # it from the main thread deadlocks the app (the "not responding" hang).
+    #
+    # Instead, a background thread calls evaluate_js every 5 s and writes
+    # the state directly to player_state.json.  Background → main thread
+    # dispatch works fine; only main → main self-dispatch deadlocks.
+    state_file = Path(PROJECT_DIR) / 'data' / 'player_state.json'
 
-    window.events.closing += _on_closing
-    window.events.closed  += lambda: os._exit(0)
+    def _player_state_watcher():
+        while True:
+            time.sleep(5)
+            try:
+                state_json = window.evaluate_js(
+                    'typeof Player !== "undefined" && Player.getStateJSON'
+                    ' ? Player.getStateJSON() : null'
+                )
+                if state_json and isinstance(state_json, str) and len(state_json) > 5:
+                    tmp = str(state_file) + '.tmp'
+                    with open(tmp, 'w') as f:
+                        f.write(state_json)
+                    Path(tmp).replace(state_file)
+            except Exception:
+                break  # window closed or JS context gone — exit quietly
+
+    watcher = threading.Thread(target=_player_state_watcher, daemon=True)
+    watcher.start()
+
+    window.events.closed += lambda: os._exit(0)
 
     webview.start(
         debug=False,
