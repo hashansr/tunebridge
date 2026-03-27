@@ -359,12 +359,15 @@ async function loadAlbums(artistFilter = null) {
   if (albumsEmpty) albumsEmpty.style.display = 'none';
 
   if (!artistFilter && albumsAlphaBar) {
+    // Sort letter: strip leading articles (The/A/An) to match backend sort key
+    const _albumLetter = name => {
+      const stripped = (name || '').replace(/^(the|a|an)\s+/i, '');
+      const first = stripped.charAt(0).toUpperCase();
+      return /[A-Z]/.test(first) ? first : '#';
+    };
     // Alpha bar for all-albums view
     const LETTERS = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-    const presentLetters = new Set(albums.map(al => {
-      const first = al.name.charAt(0).toUpperCase();
-      return /[A-Z]/.test(first) ? first : '#';
-    }));
+    const presentLetters = new Set(albums.map(al => _albumLetter(al.name)));
     albumsAlphaBar.style.display = 'flex';
     albumsAlphaBar.innerHTML = LETTERS.map(l => `
       <button class="alpha-btn" ${presentLetters.has(l) ? `onclick="App.scrollToAlbumLetter('${l}')"` : 'disabled'}
@@ -374,7 +377,7 @@ async function loadAlbums(artistFilter = null) {
     // Re-render grid with letter anchors
     let lastLetter = null;
     grid.innerHTML = albums.map(al => {
-      const letter = /[A-Z]/i.test(al.name.charAt(0)) ? al.name.charAt(0).toUpperCase() : '#';
+      const letter = _albumLetter(al.name);
       let anchor = '';
       if (letter !== lastLetter) {
         anchor = `id="albums-alpha-${letter}"`;
