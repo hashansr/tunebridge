@@ -2217,13 +2217,13 @@ tr.track-selected .track-check-indicator {
   position: absolute;
   bottom: calc(100% + 12px);
   right: 0;
-  width: 264px;
+  width: 252px;
   background: rgba(24, 23, 23, 0.94);
   backdrop-filter: blur(32px);
   -webkit-backdrop-filter: blur(32px);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 18px;
-  padding: 18px;
+  padding: 14px;
   box-shadow: 0px 20px 48px rgba(193, 198, 215, 0.10);
   z-index: 410;
 }
@@ -2233,7 +2233,7 @@ tr.track-selected .track-check-indicator {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 .peq-title {
   font-size: 11px;
@@ -2259,13 +2259,13 @@ tr.track-selected .track-check-indicator {
 .peq-close-btn:hover { background: rgba(255,255,255,0.14); color: var(--text); }
 
 /* Sections */
-.peq-section { margin-bottom: 16px; }
+.peq-section { margin-bottom: 10px; }
 .peq-section:last-of-type { margin-bottom: 0; }
 
 .peq-section-label {
   font-size: 11px;
   color: var(--text-muted);
-  margin-bottom: 7px;
+  margin-bottom: 5px;
 }
 
 /* Select */
@@ -2275,7 +2275,7 @@ tr.track-selected .track-check-indicator {
   color: var(--text);
   border: none;
   border-radius: 10px;
-  padding: 10px 34px 10px 12px;
+  padding: 8px 34px 8px 12px;
   font-size: 14px;
   cursor: pointer;
   outline: none;
@@ -2293,7 +2293,7 @@ tr.track-selected .track-check-indicator {
 .peq-divider {
   height: 1px;
   background: rgba(255,255,255,0.07);
-  margin: 4px 0 18px;
+  margin: 2px 0 12px;
 }
 
 /* Crossfade */
@@ -2301,7 +2301,7 @@ tr.track-selected .track-check-indicator {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 .peq-xfade-cat {
   font-size: 10px;
@@ -2315,11 +2315,11 @@ tr.track-selected .track-check-indicator {
   color: var(--text-sub);
 }
 .peq-xfade-val {
-  font-size: 26px;
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
   color: var(--text);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   line-height: 1;
 }
 
@@ -2334,7 +2334,7 @@ tr.track-selected .track-check-indicator {
   outline: none;
   cursor: pointer;
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 .peq-xfade-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -2364,9 +2364,9 @@ tr.track-selected .track-check-indicator {
   width: 100%;
   display: block;
   text-align: center;
-  padding: 12px;
-  margin-top: 20px;
-  font-size: 14px;
+  padding: 10px;
+  margin-top: 14px;
+  font-size: 13px;
   font-weight: 600;
   border-radius: 9999px;
 }
