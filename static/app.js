@@ -18,6 +18,7 @@ const state = {
   lastSelectedIdx: null,
   playlistSortMode: localStorage.getItem('sidebarSort') || 'created',
   plSortMode: 'original',
+  plSortDir: 'asc',
   plFilter: '',
 };
 
@@ -583,6 +584,8 @@ function trackRow(t, num, inPlaylist) {
       ${inPlaylist ? `<td class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>` : ''}
       <td class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
       <td class="col-dur">${esc(t.duration_fmt || '')}</td>
+      ${inPlaylist ? `<td class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.genre || '')}</td>` : ''}
+      ${inPlaylist ? `<td class="col-year" style="color:var(--text-muted);font-size:var(--text-sm)">${t.year || ''}</td>` : ''}
       <td><div class="col-act-inner">${add}</div></td>
     </tr>`;
 }
@@ -670,8 +673,12 @@ function _getDisplayedTracks() {
       if (ac !== 0) return ac;
       return (a.track_number || 0) - (b.track_number || 0);
     });
-  } else if (state.plSortMode === 'date') {
-    tracks = [...tracks].sort((a, b) => (b.year || 0) - (a.year || 0));
+  } else if (state.plSortMode === 'year') {
+    tracks = [...tracks].sort((a, b) =>
+      state.plSortDir === 'asc'
+        ? (a.year || 0) - (b.year || 0)
+        : (b.year || 0) - (a.year || 0)
+    );
   }
   return tracks;
 }
@@ -751,11 +758,20 @@ function clearPlaylistFilter() {
 }
 
 function setPlaylistInSort(mode) {
+  if (mode === 'year' && state.plSortMode === 'year') {
+    // Toggle direction on second click
+    state.plSortDir = state.plSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.plSortDir = 'asc';
+  }
   state.plSortMode = mode;
   // Update pill active state
   document.querySelectorAll('.pl-sort-pill').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.sort === mode);
   });
+  // Update year direction indicator
+  const dirEl = document.getElementById('pl-sort-year-dir');
+  if (dirEl) dirEl.textContent = mode === 'year' ? (state.plSortDir === 'asc' ? '↑' : '↓') : '';
   renderPlaylistTracks(state.playlist?.tracks || []);
 }
 
@@ -1049,6 +1065,8 @@ function _showCtxMenu(x, y, tracks, label) {
 function hideCtxMenu() {
   const menu = document.getElementById('ctx-menu');
   if (menu) menu.style.display = 'none';
+  closeCtxSubmenu();
+  clearTimeout(_ctxSubmenuTimer);
   _ctxTracks = [];
 }
 
@@ -1098,14 +1116,94 @@ function ctxAddToQueue() {
 }
 
 function ctxAddToPlaylist(e) {
+  // Legacy path — now handled by submenu; kept as fallback
+  openCtxSubmenu(e);
+}
+
+let _ctxSubmenuTimer = null;
+
+function openCtxSubmenu(e) {
+  clearTimeout(_ctxSubmenuTimer);
+  if (!_ctxTracks.length) return;
+
+  const sub  = document.getElementById('ctx-submenu');
+  const list = document.getElementById('ctx-submenu-list');
+  const item = document.getElementById('ctx-playlist-item');
+  if (!sub || !list) return;
+
+  // Highlight parent item
+  item && item.classList.add('active');
+
+  // Build playlist list
+  const pls = [...state.playlists].sort((a, b) => {
+    if (a.id === state.lastUsedPlaylistId) return -1;
+    if (b.id === state.lastUsedPlaylistId) return  1;
+    return a.name.localeCompare(b.name);
+  });
+
+  const newIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+  const noteIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+
+  list.innerHTML =
+    `<div class="ctx-item" onclick="App._ctxNewPlaylistAndAdd()">${newIcon} New Playlist</div>` +
+    `<div class="ctx-sep"></div>` +
+    pls.map(pl => `<div class="ctx-item" onclick="App._ctxPickPlaylist('${pl.id}','${pl.name.replace(/'/g,"\\'")}')">${noteIcon} ${esc(pl.name)}</div>`).join('');
+
+  // Position: right of parent item, aligned to its top
+  const menuEl = document.getElementById('ctx-menu');
+  const menuRect = menuEl.getBoundingClientRect();
+  sub.style.display = 'block';
+  sub.style.left = '-9999px';
+  sub.style.top  = '-9999px';
+
+  requestAnimationFrame(() => {
+    const sw = sub.offsetWidth, sh = sub.offsetHeight;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const pad = 8;
+    let left = menuRect.right + 4;
+    let top  = menuRect.top;
+    if (left + sw > vw - pad) left = menuRect.left - sw - 4;
+    if (left < pad) left = pad;
+    if (top  + sh > vh - pad) top = vh - sh - pad;
+    if (top  < pad) top = pad;
+    sub.style.left = left + 'px';
+    sub.style.top  = top  + 'px';
+  });
+}
+
+function closeCtxSubmenu() {
+  const sub  = document.getElementById('ctx-submenu');
+  const item = document.getElementById('ctx-playlist-item');
+  if (sub)  sub.style.display = 'none';
+  if (item) item.classList.remove('active');
+}
+
+function _ctxSubmenuLeaveItem(e) {
+  // Start timer — cancel if mouse enters submenu
+  _ctxSubmenuTimer = setTimeout(() => closeCtxSubmenu(), 150);
+}
+function _ctxSubmenuEnter() {
+  clearTimeout(_ctxSubmenuTimer);
+}
+function _ctxSubmenuLeave() {
+  _ctxSubmenuTimer = setTimeout(() => closeCtxSubmenu(), 120);
+}
+
+async function _ctxPickPlaylist(pid, plName) {
   const ids = _ctxTracks.map(t => t.id);
   hideCtxMenu();
+  closeCtxSubmenu();
   if (!ids.length) return;
-  const cx = e.clientX, cy = e.clientY;
-  const fakeAnchor = {
-    getBoundingClientRect: () => ({ left: cx, right: cx, top: cy, bottom: cy }),
-  };
-  showPlaylistPicker(fakeAnchor, ids);
+  state._pendingTrackIds = ids;
+  await _commitToPlaylist(pid, plName);
+}
+
+async function _ctxNewPlaylistAndAdd() {
+  const ids = _ctxTracks.map(t => t.id);
+  hideCtxMenu();
+  closeCtxSubmenu();
+  if (!ids.length) return;
+  showCreatePlaylistModal(ids);
 }
 
 // Keep for backward compat (duplicate dialog "Add Anyway" path uses this)
@@ -3076,6 +3174,13 @@ const App = {
   ctxPlayNext,
   ctxAddToQueue,
   ctxAddToPlaylist,
+  openCtxSubmenu,
+  closeCtxSubmenu,
+  _ctxSubmenuLeaveItem,
+  _ctxSubmenuEnter,
+  _ctxSubmenuLeave,
+  _ctxPickPlaylist,
+  _ctxNewPlaylistAndAdd,
   addToPlaylist,
   addAllToPlaylist,
   addAllToSpecificPlaylist,

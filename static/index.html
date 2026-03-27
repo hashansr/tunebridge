@@ -231,7 +231,7 @@
             <button class="pl-sort-pill active" data-sort="original" onclick="App.setPlaylistInSort('original')">Original</button>
             <button class="pl-sort-pill" data-sort="az" onclick="App.setPlaylistInSort('az')">A–Z</button>
             <button class="pl-sort-pill" data-sort="album" onclick="App.setPlaylistInSort('album')">Album</button>
-            <button class="pl-sort-pill" data-sort="date" onclick="App.setPlaylistInSort('date')">Date</button>
+            <button class="pl-sort-pill" data-sort="year" onclick="App.setPlaylistInSort('year')">Year <span class="pl-sort-dir" id="pl-sort-year-dir"></span></button>
           </div>
         </div>
 
@@ -248,6 +248,8 @@
             <th class="col-artist">Artist</th>
             <th class="col-album">Album</th>
             <th class="col-dur">Time</th>
+            <th class="col-genre">Genre</th>
+            <th class="col-year">Year</th>
             <th class="col-act"></th>
           </tr></thead>
           <tbody id="pl-tbody"></tbody>
@@ -975,10 +977,20 @@
       Add to Queue
     </div>
     <div class="ctx-sep"></div>
-    <div class="ctx-item" onclick="App.ctxAddToPlaylist(event)">
+    <div class="ctx-item ctx-has-submenu" id="ctx-playlist-item"
+         onmouseenter="App.openCtxSubmenu(event)"
+         onmouseleave="App._ctxSubmenuLeaveItem(event)">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-      Add to Playlist…
+      Add to Playlist
+      <svg class="ctx-chevron-right" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
     </div>
+  </div>
+
+  <!-- Context menu playlist submenu -->
+  <div id="ctx-submenu" style="display:none"
+       onmouseenter="App._ctxSubmenuEnter()"
+       onmouseleave="App._ctxSubmenuLeave()">
+    <div class="ctx-submenu-inner" id="ctx-submenu-list"></div>
   </div>
 
   <!-- Create playlist modal -->

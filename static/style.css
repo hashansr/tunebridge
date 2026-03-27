@@ -1010,9 +1010,9 @@ td.cell-album { color: var(--text-sub); white-space: nowrap; overflow: hidden; t
 #pl-name:hover { background: rgba(255,255,255,0.03); }
 #pl-name:focus { background: rgba(255,255,255,0.06); }
 
-.playlist-stats { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; }
+.playlist-stats { font-size: 13px; color: var(--text-muted); margin-bottom: 14px; }
 
-.playlist-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.playlist-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
 
 .export-group { display: flex; gap: 4px; }
 
@@ -1960,7 +1960,7 @@ tr.track-selected .track-check-indicator {
   font-size: var(--text-sm);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 .pl-header-delete-btn:hover { background: rgba(224,92,92,0.15); color: #e05c5c; }
 
@@ -2643,6 +2643,7 @@ tr.player-active .track-title { color: var(--accent); }
   border: none;
   cursor: pointer;
   transition: opacity 0.15s, transform 0.1s;
+  margin-bottom: 12px;
 }
 .btn-play-all:hover { opacity: 0.88; transform: scale(1.02); }
 .btn-play-all svg { flex-shrink: 0; }
@@ -2714,3 +2715,34 @@ tr.player-active .track-title { color: var(--accent); }
   background: rgba(255,255,255,.07);
   margin: 3px 4px;
 }
+
+/* Submenu trigger item */
+.ctx-has-submenu {
+  justify-content: flex-start;
+}
+.ctx-has-submenu.active {
+  background: rgba(255,255,255,0.08);
+  color: var(--text);
+}
+.ctx-chevron-right {
+  margin-left: auto;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+/* Playlist submenu panel */
+#ctx-submenu {
+  position: fixed;
+  z-index: 9001;
+  min-width: 220px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: rgba(38, 37, 36, 0.96);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: 0px 16px 40px rgba(193,198,215,0.12);
+}
+.ctx-submenu-inner { display: flex; flex-direction: column; }
