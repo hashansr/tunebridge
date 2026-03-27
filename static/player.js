@@ -26,8 +26,9 @@ const Player = (function () {
     isPlaying:    false,
     activePeqIemId:     null,
     activePeqProfileId: null,
-    queueOpen:    false,
-    peqOpen:      false,
+    queueOpen:       false,
+    peqOpen:         false,
+    historyExpanded: false,
   };
 
   /* ── Track registry (populated by app.js via Player.registerTracks) ── */
@@ -208,6 +209,7 @@ const Player = (function () {
     ps.queueIdx = ps.queueIdx > 0 ? ps.queueIdx - 1 : ps.queue.length - 1;
     _loadTrack(currentTrack());
     if (ps.isPlaying) _startPlay();
+    if (ps.queueOpen) _renderQueue();
   }
 
   function next() {
@@ -215,6 +217,7 @@ const Player = (function () {
     ps.queueIdx = (ps.queueIdx + 1) % ps.queue.length;
     _loadTrack(currentTrack());
     if (ps.isPlaying) _startPlay();
+    if (ps.queueOpen) _renderQueue();
   }
 
   function seekInput(value) {
@@ -462,6 +465,7 @@ const Player = (function () {
       ps.isPlaying = false;
       _updatePlayBtn();
       _highlightActiveRow();
+      if (ps.queueOpen) _renderQueue();
     }
   });
 
@@ -546,30 +550,24 @@ const Player = (function () {
     if (ps.queueOpen) _renderQueue();
   }
 
-  function _renderQueue() {
-    const list    = document.getElementById('queue-list');
-    const countEl = document.getElementById('queue-count');
-    if (countEl) countEl.textContent = `${ps.queue.length} track${ps.queue.length !== 1 ? 's' : ''}`;
-    if (!list) return;
-    if (ps.queue.length === 0) {
-      list.innerHTML = '<div class="queue-empty">Your queue is empty</div>';
-      if (_queueSortable) { _queueSortable.destroy(); _queueSortable = null; }
-      return;
-    }
-
-    const activeRealIdx = _realIdx();
-    list.innerHTML = ps.queue.map((t, i) => `
-      <div class="queue-item${i === activeRealIdx ? ' queue-item-active' : ''}" data-idx="${i}">
-        <div class="queue-drag-handle">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <circle cx="9" cy="6" r="1.2" fill="currentColor" stroke="none"/>
-            <circle cx="15" cy="6" r="1.2" fill="currentColor" stroke="none"/>
-            <circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/>
-            <circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/>
-            <circle cx="9" cy="18" r="1.2" fill="currentColor" stroke="none"/>
-            <circle cx="15" cy="18" r="1.2" fill="currentColor" stroke="none"/>
-          </svg>
-        </div>
+  /* ── Queue item HTML helper ─────────────────────────────────────────── */
+  function _queueItemHtml(t, realIdx, draggable, isHistory) {
+    const dragHandle = draggable && !ps.shuffle
+      ? `<div class="queue-drag-handle">
+           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+             <circle cx="9" cy="6" r="1.2" fill="currentColor" stroke="none"/>
+             <circle cx="15" cy="6" r="1.2" fill="currentColor" stroke="none"/>
+             <circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+             <circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+             <circle cx="9" cy="18" r="1.2" fill="currentColor" stroke="none"/>
+             <circle cx="15" cy="18" r="1.2" fill="currentColor" stroke="none"/>
+           </svg>
+         </div>`
+      : `<div class="queue-drag-spacer"></div>`;
+    return `
+      <div class="queue-item${isHistory ? ' queue-item-history' : ''}" data-idx="${realIdx}"
+           ondblclick="Player.playTrackById('${_esc(t.id)}')">
+        ${dragHandle}
         <div class="queue-item-art">
           ${t.artwork_key ? `<img src="/api/artwork/${t.artwork_key}" loading="lazy" onerror="this.style.display='none'">` : ''}
         </div>
@@ -578,30 +576,141 @@ const Player = (function () {
           <div class="queue-item-artist">${_esc(t.artist)}</div>
         </div>
         <div class="queue-item-dur">${_esc(t.duration_fmt || '')}</div>
-        <button class="queue-item-remove" onclick="Player.removeFromQueue(${i})" title="Remove from queue">
+        <button class="queue-item-remove" onclick="Player.removeFromQueue(${realIdx})" title="Remove">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
         </button>
-      </div>
-    `).join('');
+      </div>`;
+  }
 
-    // Drag-and-drop reorder (SortableJS — already loaded globally)
+  function _renderQueue() {
+    const list    = document.getElementById('queue-list');
+    const countEl = document.getElementById('queue-count');
+    if (countEl) countEl.textContent = `${ps.queue.length} track${ps.queue.length !== 1 ? 's' : ''}`;
+    if (!list) return;
+
     if (_queueSortable) { _queueSortable.destroy(); _queueSortable = null; }
-    if (typeof Sortable !== 'undefined') {
-      _queueSortable = Sortable.create(list, {
+
+    if (ps.queue.length === 0) {
+      list.innerHTML = '<div class="queue-empty">Your queue is empty</div>';
+      return;
+    }
+
+    const curRealIdx = _realIdx();  // actual ps.queue index of current track
+
+    // Split queue into history / current / upcoming
+    let historyItems, upcomingItems;
+    if (ps.shuffle && ps.shuffleOrder.length > 0) {
+      historyItems  = ps.shuffleOrder.slice(0, ps.queueIdx).map(i => ({ t: ps.queue[i], realIdx: i }));
+      upcomingItems = ps.shuffleOrder.slice(ps.queueIdx + 1).map(i => ({ t: ps.queue[i], realIdx: i }));
+    } else {
+      historyItems  = ps.queue.slice(0, curRealIdx).map((t, i) => ({ t, realIdx: i }));
+      upcomingItems = ps.queue.slice(curRealIdx + 1).map((t, i) => ({ t, realIdx: curRealIdx + 1 + i }));
+    }
+    const currentTrackObj = ps.queue[curRealIdx];
+
+    let html = '';
+
+    // ── History section ──────────────────────────────────────────────
+    if (historyItems.length > 0) {
+      const chevronDir = ps.historyExpanded ? '90' : '-90';
+      html += `<div class="queue-section">
+        <div class="queue-section-hdr" onclick="Player.toggleHistory()">
+          <svg class="queue-section-chevron" width="12" height="12" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2.5"
+               style="transform:rotate(${chevronDir}deg);transition:transform .2s">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          <span class="queue-section-title">History</span>
+          <button class="queue-clear-history" onclick="event.stopPropagation();Player.clearHistory()" title="Clear history">Clear</button>
+        </div>
+        <div class="queue-history-items" style="display:${ps.historyExpanded ? 'block' : 'none'}">`;
+      // Most-recently-played at top (reversed)
+      [...historyItems].reverse().forEach(({ t, realIdx }) => {
+        html += _queueItemHtml(t, realIdx, false, true);
+      });
+      html += `</div></div>`;
+    }
+
+    // ── Continue Playing section ─────────────────────────────────────
+    const fromLabel = currentTrackObj?.album || upcomingItems[0]?.t?.album || '';
+    html += `<div class="queue-section">
+      <div class="queue-section-hdr queue-section-hdr-plain">
+        <span class="queue-section-title">Continue Playing</span>
+        ${fromLabel ? `<span class="queue-section-from">from ${_esc(fromLabel)}</span>` : ''}
+      </div>`;
+
+    // Current track (highlighted, not draggable, no remove)
+    if (currentTrackObj) {
+      html += `<div class="queue-item queue-item-active" data-idx="${curRealIdx}"
+                    ondblclick="Player.playTrackById('${_esc(currentTrackObj.id)}')">
+        <div class="queue-drag-spacer"></div>
+        <div class="queue-item-playing-icon">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+        </div>
+        <div class="queue-item-art">
+          ${currentTrackObj.artwork_key ? `<img src="/api/artwork/${currentTrackObj.artwork_key}" loading="lazy" onerror="this.style.display='none'">` : ''}
+        </div>
+        <div class="queue-item-info">
+          <div class="queue-item-title">${_esc(currentTrackObj.title)}</div>
+          <div class="queue-item-artist">${_esc(currentTrackObj.artist)}</div>
+        </div>
+        <div class="queue-item-dur">${_esc(currentTrackObj.duration_fmt || '')}</div>
+        <div class="queue-item-remove" style="opacity:0;pointer-events:none"></div>
+      </div>`;
+    }
+
+    // Upcoming tracks (draggable in non-shuffle mode)
+    html += `<div id="queue-upcoming-list">`;
+    upcomingItems.forEach(({ t, realIdx }) => {
+      html += _queueItemHtml(t, realIdx, true, false);
+    });
+    html += `</div></div>`;  // close upcoming list + section
+
+    list.innerHTML = html;
+
+    // Drag-and-drop on upcoming list only (non-shuffle mode)
+    const upcomingList = document.getElementById('queue-upcoming-list');
+    if (upcomingList && !ps.shuffle && typeof Sortable !== 'undefined' && upcomingItems.length > 1) {
+      _queueSortable = Sortable.create(upcomingList, {
         animation: 150,
         handle: '.queue-drag-handle',
         onEnd(evt) {
-          moveQueueItem(evt.oldIndex, evt.newIndex);
+          const from = curRealIdx + 1 + evt.oldIndex;
+          const to   = curRealIdx + 1 + evt.newIndex;
+          moveQueueItem(from, to);
           _renderQueue();
         },
       });
     }
 
-    // Scroll active track into view
+    // Scroll current track into view
     const activeEl = list.querySelector('.queue-item-active');
     if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  function toggleHistory() {
+    ps.historyExpanded = !ps.historyExpanded;
+    _renderQueue();
+  }
+
+  function clearHistory() {
+    const curRealIdx = _realIdx();
+    if (curRealIdx <= 0) return;
+    // Remove all items before current from the queue
+    ps.queue.splice(0, curRealIdx);
+    ps.queueIdx = 0;
+    if (ps.shuffle) {
+      // Rebuild shuffle order (current at pos 0, rest unchanged)
+      const remaining = ps.shuffleOrder
+        .map(i => i - curRealIdx)
+        .filter(i => i >= 0);
+      ps.shuffleOrder = remaining;
+      ps.queueIdx = 0;
+    }
+    _renderQueue();
+    _saveState();
   }
 
   /* ── UI update helpers ──────────────────────────────────────────────── */
@@ -615,8 +724,8 @@ const Player = (function () {
     const fillEl   = document.getElementById('player-progress-fill');
 
     if (!track) {
-      if (titleEl)  titleEl.textContent  = 'Nothing playing';
-      if (artistEl) artistEl.textContent = '';
+      if (titleEl)  { titleEl.textContent = 'Nothing playing'; titleEl.classList.remove('marquee'); }
+      if (artistEl) { artistEl.textContent = ''; artistEl.classList.remove('marquee'); }
       if (artEl)    artEl.innerHTML      = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
       if (curEl)    curEl.textContent    = '0:00';
       if (durEl)    durEl.textContent    = '0:00';
@@ -626,8 +735,8 @@ const Player = (function () {
       return;
     }
 
-    if (titleEl)  titleEl.textContent  = track.title  || 'Unknown';
-    if (artistEl) artistEl.textContent = [track.artist, track.album].filter(Boolean).join(' · ');
+    if (titleEl)  _setupMarquee(titleEl,  track.title  || 'Unknown');
+    if (artistEl) _setupMarquee(artistEl, [track.artist, track.album].filter(Boolean).join(' · '));
     if (artEl) {
       artEl.innerHTML = track.artwork_key
         ? `<img src="/api/artwork/${track.artwork_key}" onerror="this.style.display='none'">`
@@ -811,6 +920,24 @@ const Player = (function () {
     _initKeyboard();
   }
 
+  /* ── Marquee ────────────────────────────────────────────────────────── */
+  function _setupMarquee(el, text) {
+    el.textContent = text;
+    el.classList.remove('marquee');
+    el.style.removeProperty('--marquee-dist');
+    el.style.removeProperty('--marquee-dur');
+    // Check overflow after paint
+    requestAnimationFrame(() => {
+      const overflow = el.scrollWidth - el.clientWidth;
+      if (overflow > 6) {
+        const dur = Math.max(5, overflow / 25); // ~25px/s
+        el.style.setProperty('--marquee-dist', `-${overflow}px`);
+        el.style.setProperty('--marquee-dur',  `${dur}s`);
+        el.classList.add('marquee');
+      }
+    });
+  }
+
   /* ── Utilities ──────────────────────────────────────────────────────── */
   function _fmtTime(s) {
     if (!isFinite(s) || isNaN(s) || s < 0) return '0:00';
@@ -855,6 +982,8 @@ const Player = (function () {
     removeFromQueue,
     clearQueue,
     toggleQueue,
+    toggleHistory,
+    clearHistory,
     // Registry
     registerTracks,
     // PEQ
