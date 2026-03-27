@@ -46,9 +46,11 @@ const Player = (function () {
   let _volNode    = null;   // GainNode — user volume
   let _peqNodes   = [];     // BiquadFilterNode[] — PEQ chain
 
-  let _queueSortable    = null;
-  let _seekDragging     = false;
-  let _saveSeekThrottle = -1;  // last 5-second bucket saved (throttles timeupdate writes)
+  let _queueSortable        = null;
+  let _seekDragging         = false;
+  let _saveSeekThrottle     = -1;  // last 5-second bucket saved (throttles timeupdate writes)
+  let _remoteSaveTimer      = null; // debounce handle for server-side state saves
+  let _remoteSeekThrottle   = -1;  // last 30-second bucket that triggered a remote save
 
   /* ── Web Audio graph init ───────────────────────────────────────────── */
   function _initAudioContext() {
@@ -477,6 +479,12 @@ const Player = (function () {
     if (bucket !== _saveSeekThrottle) {
       _saveSeekThrottle = bucket;
       try { localStorage.setItem(_LS.seekTime, _audio.currentTime); } catch (_) {}
+      // Also push to server every ~30 s (6 × 5-second buckets)
+      const remoteBucket = Math.floor(_audio.currentTime / 30);
+      if (remoteBucket !== _remoteSeekThrottle) {
+        _remoteSeekThrottle = remoteBucket;
+        _scheduleRemoteSave();
+      }
     }
   });
 
@@ -899,6 +907,34 @@ const Player = (function () {
     });
   }
 
+  /* ── Server-side persistence (survives WKWebView ephemeral localStorage) ── */
+  function _scheduleRemoteSave() {
+    clearTimeout(_remoteSaveTimer);
+    _remoteSaveTimer = setTimeout(_saveStateToServer, 2000);
+  }
+
+  async function _saveStateToServer() {
+    try {
+      const body = JSON.stringify({
+        queue:        ps.queue,
+        queueIdx:     ps.queueIdx,
+        shuffle:      ps.shuffle,
+        shuffleOrder: ps.shuffleOrder,
+        repeatMode:   ps.repeatMode,
+        volume:       ps.volume,
+        muted:        ps.muted,
+        peqIem:       ps.activePeqIemId     || '',
+        peqProfile:   ps.activePeqProfileId || '',
+        seekTime:     _audio.currentTime    || 0,
+      });
+      await fetch('/api/player/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+    } catch (_) {}
+  }
+
   /* ── Persistence ────────────────────────────────────────────────────── */
   const _LS = {
     queue:      'tb_queue',
@@ -926,6 +962,7 @@ const Player = (function () {
       localStorage.setItem(_LS.peqProfile, ps.activePeqProfileId || '');
       localStorage.setItem(_LS.seekTime,   _audio.currentTime    || 0);
     } catch (_) { /* quota exceeded — ignore */ }
+    _scheduleRemoteSave();
   }
 
   function _restoreState() {
@@ -958,44 +995,71 @@ const Player = (function () {
   }
 
   /* ── Init ───────────────────────────────────────────────────────────── */
-  function init() {
-    _restoreState();
+  // Helper: apply a resolved state object (from localStorage or server) to ps
+  function _applyRestoredState(sv, seekTimeOverride) {
+    if (sv.queue && sv.queue.length > 0) {
+      ps.queue        = sv.queue;
+      ps.queueIdx     = typeof sv.queueIdx === 'number' ? sv.queueIdx : 0;
+      if (ps.queueIdx >= ps.queue.length) ps.queueIdx = ps.queue.length - 1;
+    }
+    if (typeof sv.shuffle    !== 'undefined') ps.shuffle    = !!sv.shuffle;
+    if (sv.shuffleOrder)                      ps.shuffleOrder = sv.shuffleOrder;
+    if (sv.repeatMode)                        ps.repeatMode   = sv.repeatMode;
+    if (typeof sv.volume     !== 'undefined') ps.volume = Math.max(0, Math.min(1, sv.volume));
+    if (typeof sv.muted      !== 'undefined') ps.muted  = !!sv.muted;
+    ps.activePeqIemId     = sv.peqIem     || sv.activePeqIemId     || null;
+    ps.activePeqProfileId = sv.peqProfile || sv.activePeqProfileId || null;
+    ps.queue.forEach(t => { if (t && t.id) _registry.set(t.id, t); });
+    return seekTimeOverride ?? sv.seekTime ?? 0;
+  }
 
-    // Apply volume before audio context (HTMLAudioElement fallback)
+  async function init() {
+    // 1. Fast path — try localStorage (synchronous)
+    _restoreState();
+    let seekTime = parseFloat(localStorage.getItem(_LS.seekTime) || '0');
+
+    // 2. Fetch server state (authoritative — survives WKWebView ephemeral localStorage)
+    try {
+      const res = await fetch('/api/player/state');
+      if (res.ok) {
+        const sv = await res.json();
+        // Server wins when it has a queue (localStorage may be empty in WKWebView)
+        if (sv && Array.isArray(sv.queue) && sv.queue.length > 0) {
+          seekTime = _applyRestoredState(sv);
+        }
+      }
+    } catch (_) {}
+
+    // 3. Apply volume before audio context (HTMLAudioElement fallback)
     _audio.volume = ps.muted ? 0 : ps.volume;
 
-    // Sync UI to restored state
+    // 4. Sync UI to restored state
     _updateVolumeUI();
     _updateShuffleBtn();
     _updateRepeatBtn();
     _updatePlayBtn();
-    _updatePeqBtn();  // show EQ indicator if profile was active when app closed
+    _updatePeqBtn();
 
-    // Restore track display (no autoplay)
+    // 5. Restore track display (no autoplay)
     const track = currentTrack();
     if (track) {
       _updateTrackUI(track);
-      // Load src — explicit load() ensures loadedmetadata fires reliably
       _audio.src = `/api/stream/${track.id}`;
       _audio.load();
 
-      // Restore seek position after metadata loads
-      const savedTime = parseFloat(localStorage.getItem(_LS.seekTime) || '0');
-      if (savedTime > 0) {
+      if (seekTime > 0) {
         const _applySeek = () => {
-          if (isFinite(_audio.duration) && savedTime < _audio.duration) {
-            _audio.currentTime = savedTime;
-            // Update progress bar UI without waiting for timeupdate
-            const pct    = savedTime / _audio.duration;
+          if (isFinite(_audio.duration) && seekTime < _audio.duration) {
+            _audio.currentTime = seekTime;
+            const pct    = seekTime / _audio.duration;
             const fillEl = document.getElementById('player-progress-fill');
             const curEl  = document.getElementById('player-current-time');
             const seekEl = document.getElementById('player-seek');
             if (fillEl) fillEl.style.width  = (pct * 100) + '%';
-            if (curEl)  curEl.textContent   = _fmtTime(savedTime);
+            if (curEl)  curEl.textContent   = _fmtTime(seekTime);
             if (seekEl) seekEl.value        = pct * 1000;
           }
         };
-        // If metadata is already available (cached), apply immediately
         if (_audio.readyState >= 1) _applySeek();
         else _audio.addEventListener('loadedmetadata', _applySeek, { once: true });
       }
@@ -1003,8 +1067,9 @@ const Player = (function () {
       _updateTrackUI(null);
     }
 
-    // Close PEQ popover on outside click (active class is managed by _updatePeqBtn, not here)
+    // 6. Popover / queue outside-click handler
     document.addEventListener('click', (e) => {
+      // Close PEQ popover
       if (ps.peqOpen
           && !e.target.closest('#peq-popover')
           && !e.target.closest('#player-peq-btn')) {
@@ -1012,15 +1077,17 @@ const Player = (function () {
         const pop = document.getElementById('peq-popover');
         if (pop) pop.style.display = 'none';
       }
-      // Close queue drawer on outside click
+      // Close queue drawer — IMPORTANT: skip if target is no longer in the DOM
+      // (happens when _renderQueue() re-builds innerHTML while the click is propagating)
       if (ps.queueOpen
+          && document.contains(e.target)
           && !e.target.closest('#queue-drawer')
           && !e.target.closest('#player-queue-btn')) {
         toggleQueue();
       }
     });
 
-    // Reset seek-dragging flag on pointer release (handles late oninput edge case)
+    // 7. Seek slider: reset dragging flag on pointer release
     const seekSliderEl = document.getElementById('player-seek');
     if (seekSliderEl) {
       seekSliderEl.addEventListener('pointerup', () => {
@@ -1028,7 +1095,7 @@ const Player = (function () {
       });
     }
 
-    // Player artist/album nav links: click to navigate
+    // 8. Player bar artist/album: click to navigate
     const playerArtistEl = document.getElementById('player-artist');
     if (playerArtistEl) {
       playerArtistEl.addEventListener('click', (e) => {
@@ -1042,9 +1109,21 @@ const Player = (function () {
       });
     }
 
-    // Final seek-position save when the page is closed/navigated away
+    // 9. Final save on page close
     window.addEventListener('beforeunload', () => {
       try { localStorage.setItem(_LS.seekTime, _audio.currentTime || 0); } catch (_) {}
+      // sendBeacon is fire-and-forget and works even during page unload
+      try {
+        const body = JSON.stringify({
+          queue: ps.queue, queueIdx: ps.queueIdx,
+          shuffle: ps.shuffle, shuffleOrder: ps.shuffleOrder,
+          repeatMode: ps.repeatMode, volume: ps.volume, muted: ps.muted,
+          peqIem: ps.activePeqIemId || '', peqProfile: ps.activePeqProfileId || '',
+          seekTime: _audio.currentTime || 0,
+        });
+        navigator.sendBeacon('/api/player/state',
+          new Blob([body], { type: 'application/json' }));
+      } catch (_) {}
     });
 
     _initKeyboard();

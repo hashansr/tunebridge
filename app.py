@@ -44,6 +44,7 @@ SETTINGS_FILE = DATA_DIR / 'settings.json'
 DAP_FILE = DATA_DIR / 'daps.json'
 IEM_FILE = DATA_DIR / 'iems.json'
 BASELINES_FILE = DATA_DIR / 'baselines.json'
+PLAYER_STATE_FILE = DATA_DIR / 'player_state.json'
 
 DEFAULT_SETTINGS = {
     'library_path':     '/Volumes/Storage/Music/FLAC',
@@ -937,6 +938,32 @@ def put_settings():
 @app.route('/api/health')
 def health():
     return jsonify({'status': 'ok'})
+
+
+# ── Player state persistence ───────────────────────────────────────────────
+# Survives WKWebView restarts where localStorage is ephemeral.
+
+@app.route('/api/player/state', methods=['GET'])
+def get_player_state():
+    if PLAYER_STATE_FILE.exists():
+        try:
+            with open(PLAYER_STATE_FILE) as f:
+                return jsonify(json.load(f))
+        except Exception:
+            pass
+    return jsonify({})
+
+@app.route('/api/player/state', methods=['POST'])
+def save_player_state():
+    data = request.get_json(force=True) or {}
+    tmp = str(PLAYER_STATE_FILE) + '.tmp'
+    try:
+        with open(tmp, 'w') as f:
+            json.dump(data, f, separators=(',', ':'))
+        os.replace(tmp, str(PLAYER_STATE_FILE))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    return jsonify({'ok': True})
 
 
 @app.route('/api/health/status')
