@@ -2327,7 +2327,7 @@ tr.track-selected .track-check-indicator {
   cursor: grab;
   flex-shrink: 0;
   padding: 2px;
-  opacity: 0.65;
+  opacity: 0.85;
   transition: opacity 0.15s;
 }
 .queue-drag-handle:hover { opacity: 1; }

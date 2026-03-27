@@ -46,8 +46,9 @@ const Player = (function () {
   let _volNode    = null;   // GainNode — user volume
   let _peqNodes   = [];     // BiquadFilterNode[] — PEQ chain
 
-  let _queueSortable = null;
-  let _seekDragging  = false;
+  let _queueSortable    = null;
+  let _seekDragging     = false;
+  let _saveSeekThrottle = -1;  // last 5-second bucket saved (throttles timeupdate writes)
 
   /* ── Web Audio graph init ───────────────────────────────────────────── */
   function _initAudioContext() {
@@ -468,6 +469,13 @@ const Player = (function () {
     if (seekEl) seekEl.value = pct * 1000;
     if (fillEl) fillEl.style.width = (pct * 100) + '%';
     if (curEl)  curEl.textContent  = _fmtTime(_audio.currentTime);
+
+    // Throttled seek-position save: write at most once per 5-second bucket
+    const bucket = Math.floor(_audio.currentTime / 5);
+    if (bucket !== _saveSeekThrottle) {
+      _saveSeekThrottle = bucket;
+      try { localStorage.setItem(_LS.seekTime, _audio.currentTime); } catch (_) {}
+    }
   });
 
   _audio.addEventListener('loadedmetadata', () => {
@@ -507,13 +515,18 @@ const Player = (function () {
   _audio.addEventListener('pause', () => { ps.isPlaying = false; _updatePlayBtn(); });
 
   /* ── PEQ UI ─────────────────────────────────────────────────────────── */
+  function _updatePeqBtn() {
+    const btn = document.getElementById('player-peq-btn');
+    if (!btn) return;
+    // 'active' = EQ profile is selected (persistent indicator, independent of popover state)
+    btn.classList.toggle('active', !!ps.activePeqProfileId);
+  }
+
   async function togglePeqPopover() {
     const pop = document.getElementById('peq-popover');
     if (!pop) return;
     ps.peqOpen = !ps.peqOpen;
     pop.style.display = ps.peqOpen ? 'block' : 'none';
-    const btn = document.getElementById('player-peq-btn');
-    if (btn) btn.classList.toggle('active', ps.peqOpen);
     if (ps.peqOpen) await _populatePeqIemList();
   }
 
@@ -537,6 +550,7 @@ const Player = (function () {
     ps.activePeqProfileId = null;
     await _updatePeqProfileList(iemId, null);
     _buildPeqChain(null);  // clear PEQ until a profile is chosen
+    _updatePeqBtn();
     _saveState();
   }
 
@@ -564,6 +578,7 @@ const Player = (function () {
     if (_ctx) {
       await _loadAndApplyPeq(ps.activePeqIemId, ps.activePeqProfileId);
     }
+    _updatePeqBtn();
     _saveState();
   }
 
@@ -871,6 +886,7 @@ const Player = (function () {
     muted:      'tb_muted',
     peqIem:     'tb_peq_iem',
     peqProfile: 'tb_peq_profile',
+    seekTime:   'tb_seek_time',
   };
 
   function _saveState() {
@@ -884,6 +900,7 @@ const Player = (function () {
       localStorage.setItem(_LS.muted,      ps.muted);
       localStorage.setItem(_LS.peqIem,     ps.activePeqIemId     || '');
       localStorage.setItem(_LS.peqProfile, ps.activePeqProfileId || '');
+      localStorage.setItem(_LS.seekTime,   _audio.currentTime    || 0);
     } catch (_) { /* quota exceeded — ignore */ }
   }
 
@@ -928,18 +945,40 @@ const Player = (function () {
     _updateShuffleBtn();
     _updateRepeatBtn();
     _updatePlayBtn();
+    _updatePeqBtn();  // show EQ indicator if profile was active when app closed
 
     // Restore track display (no autoplay)
     const track = currentTrack();
     if (track) {
       _updateTrackUI(track);
-      // Load src silently for metadata (duration display)
+      // Load src — preload='metadata' fetches just duration
       _audio.src = `/api/stream/${track.id}`;
+
+      // Restore seek position after metadata loads
+      const savedTime = parseFloat(localStorage.getItem(_LS.seekTime) || '0');
+      if (savedTime > 0) {
+        const _applySeek = () => {
+          if (isFinite(_audio.duration) && savedTime < _audio.duration) {
+            _audio.currentTime = savedTime;
+            // Update progress bar UI without waiting for timeupdate
+            const pct    = savedTime / _audio.duration;
+            const fillEl = document.getElementById('player-progress-fill');
+            const curEl  = document.getElementById('player-current-time');
+            const seekEl = document.getElementById('player-seek');
+            if (fillEl) fillEl.style.width  = (pct * 100) + '%';
+            if (curEl)  curEl.textContent   = _fmtTime(savedTime);
+            if (seekEl) seekEl.value        = pct * 1000;
+          }
+        };
+        // If metadata is already available (cached), apply immediately
+        if (_audio.readyState >= 1) _applySeek();
+        else _audio.addEventListener('loadedmetadata', _applySeek, { once: true });
+      }
     } else {
       _updateTrackUI(null);
     }
 
-    // Close PEQ popover on outside click
+    // Close PEQ popover on outside click (active class is managed by _updatePeqBtn, not here)
     document.addEventListener('click', (e) => {
       if (ps.peqOpen
           && !e.target.closest('#peq-popover')
@@ -947,9 +986,12 @@ const Player = (function () {
         ps.peqOpen = false;
         const pop = document.getElementById('peq-popover');
         if (pop) pop.style.display = 'none';
-        const btn = document.getElementById('player-peq-btn');
-        if (btn) btn.classList.remove('active');
       }
+    });
+
+    // Final seek-position save when the page is closed/navigated away
+    window.addEventListener('beforeunload', () => {
+      try { localStorage.setItem(_LS.seekTime, _audio.currentTime || 0); } catch (_) {}
     });
 
     _initKeyboard();
