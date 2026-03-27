@@ -798,6 +798,18 @@ const Player = (function () {
     _saveState();
   }
 
+  /** Apply current selections and close the popover */
+  async function applyPeqProfile() {
+    const profileSel = document.getElementById('peq-profile-select');
+    if (profileSel && profileSel.closest('#peq-profile-row')?.style.display !== 'none') {
+      await onPeqProfileChange(profileSel.value);
+    }
+    // Close popover
+    ps.peqOpen = false;
+    const pop = document.getElementById('peq-popover');
+    if (pop) pop.style.display = 'none';
+  }
+
   /* ── Queue drawer UI ────────────────────────────────────────────────── */
   function toggleQueue() {
     const drawer = document.getElementById('queue-drawer');
@@ -1429,6 +1441,7 @@ const Player = (function () {
     togglePeqPopover,
     onPeqIemChange,
     onPeqProfileChange,
+    applyPeqProfile,
     // Crossfade
     setXfade,
     // State snapshot (called by tunebridge_gui.py via evaluate_js on window close)

@@ -879,33 +879,44 @@
         <button class="player-btn player-btn-text" id="player-peq-btn" onclick="Player.togglePeqPopover()" title="Parametric EQ">EQ</button>
         <!-- PEQ popover -->
         <div id="peq-popover" class="peq-popover" style="display:none">
-          <div class="peq-popover-title">Parametric EQ</div>
-          <div class="peq-row">
-            <label class="peq-label">Headphone / IEM</label>
+          <!-- Header -->
+          <div class="peq-header">
+            <span class="peq-title">Parametric EQ</span>
+            <button class="peq-close-btn" onclick="Player.togglePeqPopover()" title="Close">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <!-- IEM selector -->
+          <div class="peq-section">
+            <div class="peq-section-label">Preset Target</div>
             <select id="peq-iem-select" class="peq-select" onchange="Player.onPeqIemChange(this.value)">
               <option value="">— Off —</option>
             </select>
           </div>
-          <div class="peq-row" id="peq-profile-row" style="display:none">
-            <label class="peq-label">PEQ Profile</label>
+          <!-- Profile selector -->
+          <div class="peq-section" id="peq-profile-row" style="display:none">
+            <div class="peq-section-label">PEQ Profile</div>
             <select id="peq-profile-select" class="peq-select" onchange="Player.onPeqProfileChange(this.value)">
               <option value="">— Off —</option>
             </select>
           </div>
+          <!-- Crossfade -->
           <div class="peq-divider"></div>
-          <div class="peq-popover-title">Crossfade</div>
-          <div class="peq-row" style="align-items:center">
-            <label class="peq-label" style="flex:1">Duration</label>
-            <span id="xfade-val" style="font-size:12px;color:var(--text);min-width:26px;text-align:right">Off</span>
-          </div>
-          <div class="peq-row" style="padding-top:2px">
+          <div class="peq-section">
+            <div class="peq-xfade-meta">
+              <span class="peq-xfade-cat">Crossfade</span>
+              <span class="peq-xfade-sub">Duration</span>
+            </div>
+            <div id="xfade-val" class="peq-xfade-val">Off</div>
             <input type="range" id="xfade-slider" min="0" max="12" step="1" value="0"
-                   style="width:100%;accent-color:var(--accent);cursor:pointer"
+                   class="peq-xfade-slider"
                    oninput="Player.setXfade(this.value)" />
+            <div class="peq-xfade-labels">
+              <span>Off</span><span>12s</span>
+            </div>
           </div>
-          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);padding:0 1px 2px">
-            <span>Off</span><span>12s</span>
-          </div>
+          <!-- Apply -->
+          <button class="btn-primary peq-apply-btn" onclick="Player.applyPeqProfile()">Apply Profile</button>
         </div>
       </div>
       <button class="player-btn player-btn-sm" id="player-queue-btn" onclick="Player.toggleQueue()" title="Queue">

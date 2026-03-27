@@ -2217,45 +2217,159 @@ tr.track-selected .track-check-indicator {
   position: absolute;
   bottom: calc(100% + 12px);
   right: 0;
-  background: var(--bg-elevated);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: var(--radius);
-  padding: 16px;
-  min-width: 230px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  width: 264px;
+  background: rgba(24, 23, 23, 0.94);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0px 20px 48px rgba(193, 198, 215, 0.10);
   z-index: 410;
 }
-.peq-popover-title {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  color: var(--text-muted);
-  margin-bottom: 12px;
-}
-.peq-row {
+
+/* Header row */
+.peq-header {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
 }
-.peq-row:last-child { margin-bottom: 0; }
-.peq-label {
-  font-size: var(--text-sm);
-  color: var(--text-sub);
-}
-.peq-select {
-  background: var(--bg-active);
+.peq-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
   color: var(--text);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: var(--text-base);
+}
+.peq-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.08);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.peq-close-btn:hover { background: rgba(255,255,255,0.14); color: var(--text); }
+
+/* Sections */
+.peq-section { margin-bottom: 16px; }
+.peq-section:last-of-type { margin-bottom: 0; }
+
+.peq-section-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 7px;
+}
+
+/* Select */
+.peq-select {
   width: 100%;
+  background: rgba(53, 53, 52, 0.95);
+  color: var(--text);
+  border: none;
+  border-radius: 10px;
+  padding: 10px 34px 10px 12px;
+  font-size: 14px;
   cursor: pointer;
   outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5' stroke-linecap='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  box-sizing: border-box;
+  transition: background-color 0.15s;
 }
-.peq-select:focus { border-color: var(--border-focus); }
+.peq-select:focus { background-color: rgba(60, 59, 58, 1); }
+
+/* Divider between EQ and crossfade */
+.peq-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.07);
+  margin: 4px 0 18px;
+}
+
+/* Crossfade */
+.peq-xfade-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.peq-xfade-cat {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--text-muted);
+}
+.peq-xfade-sub {
+  font-size: 12px;
+  color: var(--text-sub);
+}
+.peq-xfade-val {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  margin-bottom: 12px;
+  line-height: 1;
+}
+
+/* Custom crossfade slider */
+.peq-xfade-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  background: rgba(255,255,255,0.14);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  display: block;
+  margin-bottom: 8px;
+}
+.peq-xfade-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #adc6ff;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(173,198,255,0.55), 0 0 0 4px rgba(173,198,255,0.12);
+  transition: box-shadow 0.15s;
+}
+.peq-xfade-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 14px rgba(173,198,255,0.80), 0 0 0 6px rgba(173,198,255,0.18);
+}
+.peq-xfade-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+/* Apply Profile button */
+.peq-apply-btn {
+  width: 100%;
+  display: block;
+  text-align: center;
+  padding: 12px;
+  margin-top: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 9999px;
+}
 
 /* Volume slider */
 .player-vol-slider {
