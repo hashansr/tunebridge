@@ -26,6 +26,7 @@ const Player = (function () {
     isPlaying:    false,
     activePeqIemId:     null,
     activePeqProfileId: null,
+    crossfadeDuration:  0,    // seconds; 0 = disabled
     queueOpen:       false,
     peqOpen:         false,
     historyExpanded: false,
@@ -34,17 +35,30 @@ const Player = (function () {
   /* ── Track registry (populated by app.js via Player.registerTracks) ── */
   const _registry = new Map();   // id → track object
 
-  /* ── Audio elements ─────────────────────────────────────────────────── */
-  const _audio = new Audio();
-  _audio.preload = 'metadata';
-  _audio.crossOrigin = 'anonymous';
+  /* ── Audio elements (A/B for crossfade) ─────────────────────────────── */
+  const _audioA = new Audio();
+  _audioA.preload = 'metadata';
+  _audioA.crossOrigin = 'anonymous';
+
+  const _audioB = new Audio();
+  _audioB.preload = 'auto';   // pre-buffer next track during crossfade
+  _audioB.crossOrigin = 'anonymous';
+
+  let _audio = _audioA;       // pointer to currently active element — swaps on crossfade
 
   // Web Audio API graph (lazy — created on first play gesture)
   let _ctx        = null;
-  let _srcNode    = null;   // MediaElementSource
+  let _srcA       = null;   // MediaElementSource for _audioA
+  let _srcB       = null;   // MediaElementSource for _audioB
+  let _fadeGainA  = null;   // GainNode — crossfade gain for A
+  let _fadeGainB  = null;   // GainNode — crossfade gain for B
   let _preampNode = null;   // GainNode — PEQ preamp headroom
   let _volNode    = null;   // GainNode — user volume
   let _peqNodes   = [];     // BiquadFilterNode[] — PEQ chain
+
+  // Crossfade state
+  let _xfadeTriggered = false;  // true while a crossfade is in progress
+  let _xfadeTimeout   = null;   // setTimeout handle for _completeCrossfade
 
   let _queueSortable        = null;
   let _seekDragging         = false;
@@ -57,12 +71,22 @@ const Player = (function () {
     if (_ctx) return;
     try {
       _ctx        = new (window.AudioContext || window.webkitAudioContext)();
-      _srcNode    = _ctx.createMediaElementSource(_audio);
+      // One MediaElementSource per audio element (can only be created once per element)
+      _srcA       = _ctx.createMediaElementSource(_audioA);
+      _srcB       = _ctx.createMediaElementSource(_audioB);
+      _fadeGainA  = _ctx.createGain();
+      _fadeGainB  = _ctx.createGain();
       _preampNode = _ctx.createGain();
       _volNode    = _ctx.createGain();
       _volNode.gain.value    = ps.muted ? 0 : ps.volume;
       _preampNode.gain.value = 1.0;
-      _srcNode.connect(_preampNode);
+      _fadeGainA.gain.value  = 1.0;   // A starts as active
+      _fadeGainB.gain.value  = 0.0;   // B starts as standby
+      // Both paths feed into the shared PEQ chain
+      _srcA.connect(_fadeGainA);
+      _srcB.connect(_fadeGainB);
+      _fadeGainA.connect(_preampNode);
+      _fadeGainB.connect(_preampNode);
       _preampNode.connect(_volNode);
       _volNode.connect(_ctx.destination);
       // Re-apply any stored PEQ
@@ -72,6 +96,121 @@ const Player = (function () {
     } catch (e) {
       console.warn('Player: Web Audio API init failed', e);
     }
+  }
+
+  /* ── Crossfade helpers ──────────────────────────────────────────────── */
+  // Returns the fade GainNode for the currently active slot
+  function _curFadeGain()  { return _audio === _audioA ? _fadeGainA : _fadeGainB; }
+  // Returns the OTHER audio element (standby / next)
+  function _nextAudioEl()  { return _audio === _audioA ? _audioB : _audioA; }
+  // Returns the fade GainNode for the standby slot
+  function _nxtFadeGain()  { return _audio === _audioA ? _fadeGainB : _fadeGainA; }
+
+  function _cancelCrossfade() {
+    if (_xfadeTimeout) { clearTimeout(_xfadeTimeout); _xfadeTimeout = null; }
+    _xfadeTriggered = false;
+    if (!_ctx) return;
+    const now = _ctx.currentTime;
+    // Abort any scheduled ramps and hard-reset gains
+    if (_fadeGainA) { _fadeGainA.gain.cancelScheduledValues(now); }
+    if (_fadeGainB) { _fadeGainB.gain.cancelScheduledValues(now); }
+    const activeFade = _curFadeGain();
+    const standbyFade = _nxtFadeGain();
+    const standbyEl   = _nextAudioEl();
+    if (activeFade)  activeFade.gain.setValueAtTime(1, now);
+    if (standbyFade) standbyFade.gain.setValueAtTime(0, now);
+    standbyEl.pause();
+    standbyEl.src = '';
+  }
+
+  function _startCrossfade() {
+    if (_xfadeTriggered || !_ctx || ps.crossfadeDuration <= 0) return;
+    if (!ps.isPlaying) return;
+
+    // Determine next queue position
+    let nextQueueIdx;
+    if (ps.repeatMode === 'one') {
+      nextQueueIdx = ps.queueIdx;
+    } else if (ps.queueIdx < ps.queue.length - 1) {
+      nextQueueIdx = ps.queueIdx + 1;
+    } else if (ps.repeatMode === 'all') {
+      nextQueueIdx = 0;
+    } else {
+      return;  // end of queue with no repeat — let it finish naturally
+    }
+
+    // Resolve the real queue index (shuffle-aware)
+    const nextRealIdx = (ps.shuffle && ps.shuffleOrder.length > 0)
+      ? (ps.shuffleOrder[nextQueueIdx] ?? nextQueueIdx)
+      : nextQueueIdx;
+    const nextTrack = ps.queue[nextRealIdx];
+    if (!nextTrack) return;
+
+    _xfadeTriggered = true;
+
+    const nextEl   = _nextAudioEl();
+    const nextFade = _nxtFadeGain();
+    const curFade  = _curFadeGain();
+    const dur      = ps.crossfadeDuration;
+    const now      = _ctx.currentTime;
+
+    // Cancel any existing ramps
+    curFade.gain.cancelScheduledValues(now);
+    nextFade.gain.cancelScheduledValues(now);
+
+    // Load and start playing next track (silently — gain will ramp up)
+    nextFade.gain.setValueAtTime(0, now);
+    nextEl.src = `/api/stream/${nextTrack.id}`;
+    nextEl.load();
+    nextEl.play().catch(() => {});
+
+    // Schedule smooth linear crossfade over `dur` seconds
+    curFade.gain.setValueAtTime(curFade.gain.value, now);
+    curFade.gain.linearRampToValueAtTime(0, now + dur);
+    nextFade.gain.linearRampToValueAtTime(1, now + dur);
+
+    // Complete the swap after the fade finishes
+    _xfadeTimeout = setTimeout(() => _completeCrossfade(nextTrack, nextQueueIdx), dur * 1000);
+  }
+
+  function _completeCrossfade(nextTrack, nextQueueIdx) {
+    const oldEl   = _audio;
+    const oldFade = _curFadeGain();
+
+    // Swap active pointer
+    _audio = _nextAudioEl();
+
+    // Hard-silence and stop the old element
+    if (_ctx) oldFade.gain.setValueAtTime(0, _ctx.currentTime);
+    oldEl.pause();
+    oldEl.src = '';
+
+    // Advance queue
+    ps.queueIdx = nextQueueIdx;
+
+    // Update UI
+    _updateTrackUI(nextTrack);
+
+    // Manually set duration/time (loadedmetadata already fired on the inactive element)
+    const durEl  = document.getElementById('player-duration');
+    const curEl  = document.getElementById('player-current-time');
+    const seekEl = document.getElementById('player-seek');
+    const fillEl = document.getElementById('player-progress-fill');
+    const activeDur = _audio.duration;
+    if (isFinite(activeDur) && activeDur > 0) {
+      const pct = _audio.currentTime / activeDur;
+      if (durEl)  durEl.textContent       = _fmtTime(activeDur);
+      if (curEl)  curEl.textContent       = _fmtTime(_audio.currentTime);
+      if (seekEl) seekEl.value            = pct * 1000;
+      if (fillEl) fillEl.style.width      = (pct * 100) + '%';
+    }
+
+    _highlightActiveRow();
+    _saveState();
+    if (ps.queueOpen) _renderQueue();
+
+    _xfadeTriggered = false;
+    _xfadeTimeout   = null;
   }
 
   /* ── PEQ ─────────────────────────────────────────────────────────────── */
@@ -163,6 +302,7 @@ const Player = (function () {
   /* ── Playback core ──────────────────────────────────────────────────── */
   function _loadTrack(track) {
     if (!track) return;
+    _cancelCrossfade();
     _audio.src = `/api/stream/${track.id}`;
     _audio.load();
     _updateTrackUI(track);
@@ -269,8 +409,13 @@ const Player = (function () {
 
   function _applyVolume() {
     const v = ps.muted ? 0 : ps.volume;
-    if (_volNode) _volNode.gain.value = v;
-    else          _audio.volume       = v;
+    if (_volNode) {
+      _volNode.gain.value = v;
+    } else {
+      // Fallback when Web Audio isn't initialised
+      _audioA.volume = v;
+      _audioB.volume = 0;   // B is always silent when not in a crossfade without Web Audio
+    }
   }
 
   function toggleShuffle() {
@@ -500,8 +645,9 @@ const Player = (function () {
     tracks.forEach(t => { if (t && t.id) _registry.set(t.id, t); });
   }
 
-  /* ── Audio element events ───────────────────────────────────────────── */
-  _audio.addEventListener('timeupdate', () => {
+  /* ── Audio element events (attached to both A and B; guard ignores inactive) ── */
+  function _onTimeUpdate() {
+    if (this !== _audio) return;   // ignore events from the standby element
     if (_seekDragging) return;
     const dur = _audio.duration;
     if (!isFinite(dur) || dur === 0) return;
@@ -521,25 +667,31 @@ const Player = (function () {
     if (bucket !== _saveSeekThrottle) {
       _saveSeekThrottle = bucket;
       try { localStorage.setItem(_LS.seekTime, _audio.currentTime); } catch (_) {}
-      // Also push to server every ~30 s (6 × 5-second buckets)
       const remoteBucket = Math.floor(_audio.currentTime / 30);
       if (remoteBucket !== _remoteSeekThrottle) {
         _remoteSeekThrottle = remoteBucket;
         _scheduleRemoteSave();
       }
     }
-  });
 
-  _audio.addEventListener('loadedmetadata', () => {
+    // Crossfade trigger: start when `crossfadeDuration` seconds remain
+    if (!_xfadeTriggered && ps.crossfadeDuration > 0) {
+      const remaining = dur - _audio.currentTime;
+      if (remaining > 0.1 && remaining <= ps.crossfadeDuration && _audio.currentTime > 0.5) {
+        _startCrossfade();
+      }
+    }
+  }
+
+  function _onLoadedMetadata() {
+    if (this !== _audio) return;
     const durEl = document.getElementById('player-duration');
     if (durEl) durEl.textContent = _fmtTime(_audio.duration);
-  });
+  }
 
-  _audio.addEventListener('ended', () => {
-    // A track just finished — we were definitely playing.
-    // Do NOT route through next()/prev() here; _audio.load() inside _loadTrack
-    // fires 'pause' synchronously and would set ps.isPlaying = false before
-    // _startPlay() can be called. Advance and start directly instead.
+  function _onEnded() {
+    if (this !== _audio) return;   // crossfade already swapped _audio before this fires
+    if (_xfadeTriggered) return;   // crossfade handles advancement — don't double-advance
     if (ps.repeatMode === 'one') {
       _audio.currentTime = 0;
       _startPlay();
@@ -549,22 +701,31 @@ const Player = (function () {
       _startPlay();
       if (ps.queueOpen) _renderQueue();
     } else {
-      // End of queue, no repeat
       ps.isPlaying = false;
       _updatePlayBtn();
       _highlightActiveRow();
       if (ps.queueOpen) _renderQueue();
     }
-  });
+  }
 
-  _audio.addEventListener('error', () => {
+  function _onError() {
+    if (this !== _audio) return;
     _toast('Playback error — skipping track');
     if (ps.queue.length > 1) setTimeout(next, 600);
     else { ps.isPlaying = false; _updatePlayBtn(); }
-  });
+  }
 
-  _audio.addEventListener('play',  () => { ps.isPlaying = true;  _updatePlayBtn(); _highlightActiveRow(); });
-  _audio.addEventListener('pause', () => { ps.isPlaying = false; _updatePlayBtn(); });
+  function _onPlay()  { if (this !== _audio) return; ps.isPlaying = true;  _updatePlayBtn(); _highlightActiveRow(); }
+  function _onPause() { if (this !== _audio) return; ps.isPlaying = false; _updatePlayBtn(); }
+
+  [_audioA, _audioB].forEach(el => {
+    el.addEventListener('timeupdate',    _onTimeUpdate);
+    el.addEventListener('loadedmetadata', _onLoadedMetadata);
+    el.addEventListener('ended',         _onEnded);
+    el.addEventListener('error',         _onError);
+    el.addEventListener('play',          _onPlay);
+    el.addEventListener('pause',         _onPause);
+  });
 
   /* ── PEQ UI ─────────────────────────────────────────────────────────── */
   function _updatePeqBtn() {
@@ -579,7 +740,10 @@ const Player = (function () {
     if (!pop) return;
     ps.peqOpen = !ps.peqOpen;
     pop.style.display = ps.peqOpen ? 'block' : 'none';
-    if (ps.peqOpen) await _populatePeqIemList();
+    if (ps.peqOpen) {
+      await _populatePeqIemList();
+      _updateXfadeUI();
+    }
   }
 
   async function _populatePeqIemList() {
@@ -872,6 +1036,20 @@ const Player = (function () {
     document.title = `${track.title} — TuneBridge`;
   }
 
+  /* ── Crossfade control ──────────────────────────────────────────────── */
+  function setXfade(value) {
+    ps.crossfadeDuration = Math.max(0, Math.min(12, parseInt(value, 10)));
+    try { localStorage.setItem('tb_xfade', ps.crossfadeDuration); } catch (_) {}
+    _updateXfadeUI();
+  }
+
+  function _updateXfadeUI() {
+    const valEl    = document.getElementById('xfade-val');
+    const sliderEl = document.getElementById('xfade-slider');
+    if (valEl)    valEl.textContent = ps.crossfadeDuration === 0 ? 'Off' : `${ps.crossfadeDuration}s`;
+    if (sliderEl) sliderEl.value   = ps.crossfadeDuration;
+  }
+
   function _updatePlayBtn() {
     const btn = document.getElementById('player-play-btn');
     if (!btn) return;
@@ -1031,6 +1209,9 @@ const Player = (function () {
       ps.activePeqIemId     = localStorage.getItem(_LS.peqIem)     || null;
       ps.activePeqProfileId = localStorage.getItem(_LS.peqProfile) || null;
 
+      const xfade = parseInt(localStorage.getItem('tb_xfade') ?? '0', 10);
+      ps.crossfadeDuration  = isNaN(xfade) ? 0 : Math.max(0, Math.min(12, xfade));
+
       // Populate registry from restored queue
       ps.queue.forEach(t => { if (t && t.id) _registry.set(t.id, t); });
     } catch (e) {
@@ -1076,7 +1257,8 @@ const Player = (function () {
     } catch (_) {}
 
     // 3. Apply volume before audio context (HTMLAudioElement fallback)
-    _audio.volume = ps.muted ? 0 : ps.volume;
+    _audioA.volume = ps.muted ? 0 : ps.volume;
+    _audioB.volume = 0;
 
     // 4. Sync UI to restored state
     _updateVolumeUI();
@@ -1247,6 +1429,8 @@ const Player = (function () {
     togglePeqPopover,
     onPeqIemChange,
     onPeqProfileChange,
+    // Crossfade
+    setXfade,
     // State snapshot (called by tunebridge_gui.py via evaluate_js on window close)
     getStateJSON,
     // Read-only getters
