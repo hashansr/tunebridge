@@ -860,6 +860,7 @@
           <div class="player-progress-bg"></div>
           <div class="player-progress-fill" id="player-progress-fill"></div>
           <input type="range" id="player-seek" class="player-seek" min="0" max="1000" value="0" step="1"
+                 disabled
                  oninput="Player.seekInput(this.value)"
                  onchange="Player.seek(this.value)" />
         </div>

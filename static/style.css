@@ -1911,7 +1911,9 @@ tr.track-selected .track-check-indicator {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid rgba(255,255,255,0.06);
-  display: flex;
+  /* 3-column grid guarantees the centre section is truly centred */
+  display: grid;
+  grid-template-columns: 260px 1fr 260px;
   align-items: center;
   gap: 16px;
   padding: 0 20px;
@@ -1924,8 +1926,6 @@ tr.track-selected .track-check-indicator {
   display: flex;
   align-items: center;
   gap: 12px;
-  width: 260px;
-  flex-shrink: 0;
   min-width: 0;
 }
 
@@ -1970,13 +1970,12 @@ tr.track-selected .track-check-indicator {
 
 /* ── Center section ───────────────────────────────────────────────────── */
 .player-center {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  max-width: 560px;
+  width: 100%;
 }
 
 .player-controls {
@@ -2081,17 +2080,33 @@ tr.track-selected .track-check-indicator {
   margin: 0;
   -webkit-appearance: none;
 }
+/* Disable seek interaction when no track is loaded */
+.player-seek:disabled { cursor: default; pointer-events: none; }
 /* Show thumb on hover */
 .player-seek-wrap:hover .player-progress-fill { background: var(--accent); }
 .player-seek-wrap:hover .player-progress-bg   { background: rgba(255,255,255,0.15); }
+
+/* Repeat-one badge — renders "1" via CSS, no SVG text needed */
+#player-repeat-btn {
+  position: relative;
+}
+#player-repeat-btn.repeat-one::after {
+  content: '1';
+  position: absolute;
+  bottom: 3px;
+  right: 2px;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--accent);
+  pointer-events: none;
+}
 
 /* ── Right section ────────────────────────────────────────────────────── */
 .player-right {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 200px;
-  flex-shrink: 0;
   justify-content: flex-end;
 }
 

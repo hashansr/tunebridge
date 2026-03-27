@@ -218,22 +218,26 @@ const Player = (function () {
   }
 
   function seekInput(value) {
+    // Guard: no-op if nothing is loaded
+    if (!currentTrack() || !isFinite(_audio.duration) || _audio.duration === 0) return;
     // Called on input (dragging) — update visuals only, not audio
     _seekDragging = true;
     const pct = parseFloat(value) / 1000;
     const fillEl = document.getElementById('player-progress-fill');
     const curEl  = document.getElementById('player-current-time');
     if (fillEl) fillEl.style.width = (pct * 100) + '%';
-    if (curEl && isFinite(_audio.duration)) curEl.textContent = _fmtTime(pct * _audio.duration);
+    if (curEl) curEl.textContent = _fmtTime(pct * _audio.duration);
   }
 
   function seek(value) {
+    // Guard: no-op if nothing is loaded
+    if (!currentTrack() || !isFinite(_audio.duration) || _audio.duration === 0) {
+      _seekDragging = false;
+      return;
+    }
     // Called on change (release) — commit seek to audio element
     _seekDragging = false;
-    const pct = parseFloat(value) / 1000;
-    if (isFinite(_audio.duration) && _audio.duration > 0) {
-      _audio.currentTime = pct * _audio.duration;
-    }
+    _audio.currentTime = (parseFloat(value) / 1000) * _audio.duration;
   }
 
   function setVolume(value) {
@@ -616,7 +620,7 @@ const Player = (function () {
       if (artEl)    artEl.innerHTML      = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
       if (curEl)    curEl.textContent    = '0:00';
       if (durEl)    durEl.textContent    = '0:00';
-      if (seekEl)   seekEl.value         = 0;
+      if (seekEl)   { seekEl.value = 0; seekEl.disabled = true; }
       if (fillEl)   fillEl.style.width   = '0%';
       document.title = 'TuneBridge';
       return;
@@ -629,7 +633,7 @@ const Player = (function () {
         ? `<img src="/api/artwork/${track.artwork_key}" onerror="this.style.display='none'">`
         : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
     }
-    if (seekEl) seekEl.value = 0;
+    if (seekEl) { seekEl.value = 0; seekEl.disabled = false; }
     if (fillEl) fillEl.style.width = '0%';
     if (curEl)  curEl.textContent  = '0:00';
     document.title = `${track.title} — TuneBridge`;
@@ -642,7 +646,8 @@ const Player = (function () {
       btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
       btn.title = 'Pause';
     } else {
-      btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`;
+      // translate(1.5,0) optically centres the right-pointing triangle in the circle
+      btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>`;
       btn.title = 'Play';
     }
   }
@@ -655,14 +660,12 @@ const Player = (function () {
   function _updateRepeatBtn() {
     const btn = document.getElementById('player-repeat-btn');
     if (!btn) return;
-    btn.classList.toggle('active', ps.repeatMode !== 'off');
+    btn.classList.toggle('active',     ps.repeatMode !== 'off');
+    btn.classList.toggle('repeat-one', ps.repeatMode === 'one');
     const titles = { off: 'Repeat: off', all: 'Repeat: all', one: 'Repeat: one' };
     btn.title = titles[ps.repeatMode] || 'Repeat';
-    if (ps.repeatMode === 'one') {
-      btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/><text x="12" y="14.5" font-size="6" fill="currentColor" stroke="none" text-anchor="middle" font-family="sans-serif" font-weight="bold">1</text></svg>`;
-    } else {
-      btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`;
-    }
+    // Same SVG for all modes — the 'repeat-one' CSS class adds a "1" badge via ::after
+    btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`;
   }
 
   function _updateVolumeUI() {
