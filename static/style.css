@@ -2479,6 +2479,29 @@ tr.player-active .track-title { color: var(--accent); }
 .btn-play-all:hover { opacity: 0.88; transform: scale(1.02); }
 .btn-play-all svg { flex-shrink: 0; }
 
+/* ── Generic confirm modal ─────────────────────────────────────────── */
+.confirm-modal-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(224, 92, 92, 0.12);
+  margin: 0 auto 18px;
+}
+.confirm-modal-icon.icon-neutral {
+  background: rgba(173, 198, 255, 0.1);
+}
+.btn-danger {
+  background: linear-gradient(135deg, #c0392b, #e05c5c);
+  color: #fff;
+  border: none;
+}
+.btn-danger:hover {
+  background: linear-gradient(135deg, #d44, #e87070);
+}
+
 /* ── Right-click context menu ────────────────────────────────────────── */
 #ctx-menu {
   position: fixed;

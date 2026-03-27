@@ -123,6 +123,42 @@ let _ctxTracks = [];
 /* ── Create playlist modal state ────────────────────────────────────── */
 let _createPlPendingIds = [];
 
+/* ── Generic confirm modal ──────────────────────────────────────────── */
+let _confirmResolve = null;
+
+function _showConfirm({ title = '', message = '', okText = 'Delete', danger = true, icon = null } = {}) {
+  return new Promise(resolve => {
+    _confirmResolve = resolve;
+    document.getElementById('confirm-modal-title').textContent = title;
+    document.getElementById('confirm-modal-msg').textContent   = message;
+    const okBtn = document.getElementById('confirm-modal-ok');
+    okBtn.textContent  = okText;
+    okBtn.className    = danger ? 'btn-danger' : 'btn-primary';
+    const iconEl = document.getElementById('confirm-modal-icon');
+    if (icon) {
+      iconEl.innerHTML  = icon;
+      iconEl.className  = 'confirm-modal-icon';
+    } else if (!danger) {
+      iconEl.innerHTML  = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+      iconEl.className  = 'confirm-modal-icon icon-neutral';
+    } else {
+      iconEl.innerHTML  = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#e05c5c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+      iconEl.className  = 'confirm-modal-icon';
+    }
+    document.getElementById('confirm-modal').style.display = 'flex';
+  });
+}
+
+function _confirmYes() {
+  document.getElementById('confirm-modal').style.display = 'none';
+  if (_confirmResolve) { _confirmResolve(true);  _confirmResolve = null; }
+}
+
+function _confirmNo() {
+  document.getElementById('confirm-modal').style.display = 'none';
+  if (_confirmResolve) { _confirmResolve(false); _confirmResolve = null; }
+}
+
 /* ── Sidebar playlists ──────────────────────────────────────────────── */
 async function loadPlaylists() {
   const playlists = await api('/playlists');
@@ -1235,7 +1271,12 @@ async function createPlaylistAndAdd() {
 
 async function deletePlaylist(pid) {
   const pl = state.playlists.find(p => p.id === pid);
-  if (!confirm(`Delete "${pl?.name}"?`)) return;
+  const ok = await _showConfirm({
+    title:   'Delete Playlist',
+    message: `"${pl?.name}" will be permanently deleted.`,
+    okText:  'Delete',
+  });
+  if (!ok) return;
   await api(`/playlists/${pid}`, { method: 'DELETE' });
   if (state.playlist?.id === pid) {
     state.playlist = null;
@@ -2060,7 +2101,12 @@ async function saveDap() {
 }
 
 async function deleteDap(id) {
-  if (!confirm('Delete this DAP?')) return;
+  const ok = await _showConfirm({
+    title:   'Delete DAP',
+    message: 'This DAP and all its export history will be removed.',
+    okText:  'Delete',
+  });
+  if (!ok) return;
   await api(`/daps/${id}`, { method: 'DELETE' });
   showView('gear');
 }
@@ -2522,7 +2568,12 @@ async function saveIem() {
 }
 
 async function deleteIem(id) {
-  if (!confirm('Delete this IEM/headphone?')) return;
+  const ok = await _showConfirm({
+    title:   'Delete IEM / Headphone',
+    message: 'All measurements and EQ profiles for this IEM will be removed.',
+    okText:  'Delete',
+  });
+  if (!ok) return;
   if (_iemChart) { _iemChart.destroy(); _iemChart = null; }
   await api(`/iems/${id}`, { method: 'DELETE' });
   showView('gear');
@@ -2572,7 +2623,12 @@ async function savePeq() {
 
 async function deletePeq(peqId) {
   if (!_currentIemId) return;
-  if (!confirm('Delete this PEQ profile?')) return;
+  const ok = await _showConfirm({
+    title:   'Delete EQ Profile',
+    message: 'This EQ profile will be permanently removed.',
+    okText:  'Delete',
+  });
+  if (!ok) return;
   await api(`/iems/${_currentIemId}/peq/${peqId}`, { method: 'DELETE' });
   if (_activePeqId === peqId) _activePeqId = null;
   await showIemDetail(_currentIemId);
@@ -2997,6 +3053,8 @@ const App = {
   showCreatePlaylistModal,
   closeCreatePlaylistModal,
   submitCreatePlaylist,
+  _confirmYes,
+  _confirmNo,
   deletePlaylist,
   renamePlaylist,
   showAddDropdown,
