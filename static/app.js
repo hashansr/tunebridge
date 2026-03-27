@@ -287,6 +287,13 @@ function scrollToLetter(letter) {
 function scrollToAlbumLetter(letter) {
   const el = document.getElementById(`albums-alpha-${letter}`);
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Briefly highlight the clicked letter button (same UX as artist alpha bar)
+  const bar = document.getElementById('albums-alpha-bar');
+  if (bar) {
+    bar.querySelectorAll('.alpha-btn').forEach(b => b.classList.remove('active'));
+    const btn = [...bar.querySelectorAll('.alpha-btn')].find(b => b.textContent === letter);
+    if (btn) { btn.classList.add('active'); setTimeout(() => btn.classList.remove('active'), 800); }
+  }
 }
 
 /* ── Albums view ────────────────────────────────────────────────────── */
@@ -503,7 +510,7 @@ function trackRow(t, num, inPlaylist) {
   const playIcon  = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`;
 
   return `
-    <tr data-id="${t.id}">
+    <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')">
       <td class="col-num" onclick="App.toggleTrackSelection('${t.id}', ${num - 1}, event)">
         <div class="num-cell">
           ${dragHandle}
@@ -2541,7 +2548,7 @@ function renderSongsTable() {
     const bitrate = t.bitrate ? t.bitrate + ' kbps' : '';
     const playIcon = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`;
     return `
-    <tr data-id="${t.id}">
+    <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')">
       <td class="col-num" onclick="App.toggleTrackSelection('${t.id}', ${globalIdx}, event)">
         <div class="num-cell">
           <span class="track-num">${t.track_number || (globalIdx + 1)}</span>

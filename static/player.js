@@ -246,8 +246,9 @@ const Player = (function () {
       return;
     }
     // Called on change (release) — commit seek to audio element
-    _seekDragging = false;
+    // Use timeout to ensure _seekDragging is cleared even if oninput fires late
     _audio.currentTime = (parseFloat(value) / 1000) * _audio.duration;
+    setTimeout(() => { _seekDragging = false; }, 50);
   }
 
   function setVolume(value) {
@@ -466,8 +467,9 @@ const Player = (function () {
     const fillEl = document.getElementById('player-progress-fill');
     const curEl  = document.getElementById('player-current-time');
 
-    if (seekEl) seekEl.value = pct * 1000;
-    if (fillEl) fillEl.style.width = (pct * 100) + '%';
+    const clampedPct = Math.min(1, pct);
+    if (seekEl) seekEl.value = clampedPct * 1000;
+    if (fillEl) fillEl.style.width = (clampedPct * 100) + '%';
     if (curEl)  curEl.textContent  = _fmtTime(_audio.currentTime);
 
     // Throttled seek-position save: write at most once per 5-second bucket
@@ -775,7 +777,7 @@ const Player = (function () {
 
     if (!track) {
       if (titleEl)  { titleEl.textContent = 'Nothing playing'; titleEl.classList.remove('marquee'); }
-      if (artistEl) { artistEl.textContent = ''; artistEl.classList.remove('marquee'); }
+      if (artistEl) { artistEl.innerHTML = ''; artistEl.classList.remove('marquee'); artistEl.dataset.artist = ''; artistEl.dataset.album = ''; }
       if (artEl)    artEl.innerHTML      = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
       if (curEl)    curEl.textContent    = '0:00';
       if (durEl)    durEl.textContent    = '0:00';
@@ -786,7 +788,29 @@ const Player = (function () {
     }
 
     if (titleEl)  _setupMarquee(titleEl,  track.title  || 'Unknown');
-    if (artistEl) _setupMarquee(artistEl, [track.artist, track.album].filter(Boolean).join(' · '));
+    if (artistEl) {
+      // Build clickable artist · album subtitle
+      artistEl.classList.remove('marquee');
+      artistEl.style.removeProperty('--marquee-dist');
+      artistEl.style.removeProperty('--marquee-dur');
+      const parts = [];
+      if (track.artist) parts.push(`<span class="player-nav-link" data-nav="artist">${_esc(track.artist)}</span>`);
+      if (track.artist && track.album) parts.push(`<span class="player-nav-sep"> · </span>`);
+      if (track.album)  parts.push(`<span class="player-nav-link" data-nav="album">${_esc(track.album)}</span>`);
+      artistEl.innerHTML = parts.join('');
+      artistEl.dataset.artist = track.artist || '';
+      artistEl.dataset.album  = track.album  || '';
+      // Apply marquee after paint
+      requestAnimationFrame(() => {
+        const overflow = artistEl.scrollWidth - artistEl.clientWidth;
+        if (overflow > 6) {
+          const dur = Math.max(5, overflow / 25);
+          artistEl.style.setProperty('--marquee-dist', `-${overflow}px`);
+          artistEl.style.setProperty('--marquee-dur',  `${dur}s`);
+          artistEl.classList.add('marquee');
+        }
+      });
+    }
     if (artEl) {
       artEl.innerHTML = track.artwork_key
         ? `<img src="/api/artwork/${track.artwork_key}" onerror="this.style.display='none'">`
@@ -951,8 +975,9 @@ const Player = (function () {
     const track = currentTrack();
     if (track) {
       _updateTrackUI(track);
-      // Load src — preload='metadata' fetches just duration
+      // Load src — explicit load() ensures loadedmetadata fires reliably
       _audio.src = `/api/stream/${track.id}`;
+      _audio.load();
 
       // Restore seek position after metadata loads
       const savedTime = parseFloat(localStorage.getItem(_LS.seekTime) || '0');
@@ -987,7 +1012,35 @@ const Player = (function () {
         const pop = document.getElementById('peq-popover');
         if (pop) pop.style.display = 'none';
       }
+      // Close queue drawer on outside click
+      if (ps.queueOpen
+          && !e.target.closest('#queue-drawer')
+          && !e.target.closest('#player-queue-btn')) {
+        toggleQueue();
+      }
     });
+
+    // Reset seek-dragging flag on pointer release (handles late oninput edge case)
+    const seekSliderEl = document.getElementById('player-seek');
+    if (seekSliderEl) {
+      seekSliderEl.addEventListener('pointerup', () => {
+        setTimeout(() => { _seekDragging = false; }, 60);
+      });
+    }
+
+    // Player artist/album nav links: click to navigate
+    const playerArtistEl = document.getElementById('player-artist');
+    if (playerArtistEl) {
+      playerArtistEl.addEventListener('click', (e) => {
+        const link = e.target.closest('.player-nav-link');
+        if (!link) return;
+        const nav    = link.dataset.nav;
+        const artist = playerArtistEl.dataset.artist;
+        const album  = playerArtistEl.dataset.album;
+        if (nav === 'artist' && artist && typeof App !== 'undefined') App.showArtist(artist);
+        if (nav === 'album'  && artist && typeof App !== 'undefined') App.showAlbum(artist, album);
+      });
+    }
 
     // Final seek-position save when the page is closed/navigated away
     window.addEventListener('beforeunload', () => {

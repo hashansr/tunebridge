@@ -1987,6 +1987,7 @@ tr.track-selected .track-check-indicator {
 /* Marquee scroll for long titles */
 .player-title.marquee,
 .player-artist.marquee {
+  overflow: visible;  /* allow full text to paint; parent .player-track-info clips */
   text-overflow: clip;
   animation: player-marquee var(--marquee-dur, 8s) ease-in-out 1.5s infinite;
 }
@@ -1994,6 +1995,21 @@ tr.track-selected .track-check-indicator {
   0%, 15%  { transform: translateX(0); }
   65%, 80% { transform: translateX(var(--marquee-dist, 0)); }
   95%, 100%{ transform: translateX(0); }
+}
+
+/* Clickable artist / album links in the player bar */
+.player-nav-link {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.player-nav-link:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.player-nav-sep {
+  color: var(--text-muted);
+  user-select: none;
 }
 
 /* ── Center section ───────────────────────────────────────────────────── */
