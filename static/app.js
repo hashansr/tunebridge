@@ -117,6 +117,12 @@ async function refreshCurrentLibraryView() {
   else if (state.view === 'tracks') await loadTracks(state.artist, state.album);
 }
 
+/* ── Context menu state ─────────────────────────────────────────────── */
+let _ctxTracks = [];
+
+/* ── Create playlist modal state ────────────────────────────────────── */
+let _createPlPendingIds = [];
+
 /* ── Sidebar playlists ──────────────────────────────────────────────── */
 async function loadPlaylists() {
   const playlists = await api('/playlists');
@@ -256,7 +262,7 @@ async function loadArtists() {
       lastLetter = letter;
     }
     return `
-      <div class="artist-card" ${anchor} data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)">
+      <div class="artist-card" ${anchor} data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
         <div class="artist-thumb">
           ${thumbImg(a.artwork_key, 120, '6px')}
         </div>
@@ -375,7 +381,7 @@ async function loadAlbums(artistFilter = null) {
         lastLetter = letter;
       }
       return `
-        <div class="album-card" ${anchor} data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)">
+        <div class="album-card" ${anchor} data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
           <div class="album-thumb">
             ${thumbImg(al.artwork_key, 160, '6px')}
             <div class="album-thumb-overlay">
@@ -394,7 +400,7 @@ async function loadAlbums(artistFilter = null) {
   } else {
     if (albumsAlphaBar) albumsAlphaBar.style.display = 'none';
     grid.innerHTML = albums.map(al => `
-      <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)">
+      <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
         <div class="album-thumb">
           ${thumbImg(al.artwork_key, 160, '6px')}
           <div class="album-thumb-overlay">
@@ -510,7 +516,7 @@ function trackRow(t, num, inPlaylist) {
   const playIcon  = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`;
 
   return `
-    <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')">
+    <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
       <td class="col-num" onclick="App.toggleTrackSelection('${t.id}', ${num - 1}, event)">
         <div class="num-cell">
           ${dragHandle}
@@ -843,6 +849,7 @@ async function handleArtworkFile(input) {
     if (data.ok) {
       state.playlist.has_artwork = true;
       updatePlaylistCover(state.playlist.tracks || []);
+      loadPlaylists();  // refresh has_artwork + artwork_keys in list view
       toast('Cover art updated');
     }
   } catch (e) {
@@ -856,6 +863,7 @@ async function removePlaylistArtwork(e) {
   await api(`/playlists/${state.playlist.id}/artwork`, { method: 'DELETE' });
   state.playlist.has_artwork = false;
   updatePlaylistCover(state.playlist.tracks || []);
+  loadPlaylists();  // refresh has_artwork in list view
   toast('Cover art removed');
 }
 
@@ -959,6 +967,7 @@ async function _commitToPlaylist(pid, plName) {
     state.lastUsedPlaylistId = pid;
     const n = res.added;
     toast(n === 1 ? `Added to "${plName}"` : `Added ${n} songs to "${plName}"`);
+    loadPlaylists();  // refresh track_count + artwork_keys in list view (non-blocking)
     if (state.playlist?.id === pid) await openPlaylist(pid);
   } catch (e) {
     toast('Error: ' + e.message);
@@ -968,6 +977,91 @@ async function _commitToPlaylist(pid, plName) {
 function showAddDropdown(event, trackId) {
   event.stopPropagation();
   showPlaylistPicker(event.currentTarget, [trackId]);
+}
+
+/* ── Right-click context menu ───────────────────────────────────────── */
+function _showCtxMenu(x, y, tracks, label) {
+  _ctxTracks = tracks;
+  const menu = document.getElementById('ctx-menu');
+  const labelEl = document.getElementById('ctx-label');
+  if (labelEl) labelEl.textContent = label || (tracks.length === 1 ? tracks[0].title : `${tracks.length} songs`);
+  menu.style.display = 'block';
+  menu.style.left = '-9999px';
+  menu.style.top  = '-9999px';
+  requestAnimationFrame(() => {
+    const w  = menu.offsetWidth, h  = menu.offsetHeight;
+    const vw = window.innerWidth,  vh = window.innerHeight;
+    const pad = 8;
+    let left = x + 4, top = y + 4;
+    if (left + w > vw - pad) left = x - w - 4;
+    if (left < pad)           left = pad;
+    if (top  + h > vh - pad)  top  = y - h - 4;
+    if (top  < pad)           top  = pad;
+    menu.style.left = left + 'px';
+    menu.style.top  = top  + 'px';
+  });
+}
+
+function hideCtxMenu() {
+  const menu = document.getElementById('ctx-menu');
+  if (menu) menu.style.display = 'none';
+  _ctxTracks = [];
+}
+
+function showTrackCtxMenu(e, trackId) {
+  e.preventDefault();
+  e.stopPropagation();
+  hideDropdown();
+  const track = Player.getTrack(trackId);
+  if (!track) return;
+  _showCtxMenu(e.clientX, e.clientY, [track], track.title);
+}
+
+async function showArtistCtxMenu(e, artistName) {
+  e.preventDefault();
+  e.stopPropagation();
+  hideDropdown();
+  try {
+    const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artistName)}`);
+    _showCtxMenu(e.clientX, e.clientY, tracks,
+      `${artistName} · ${tracks.length} song${tracks.length !== 1 ? 's' : ''}`);
+  } catch (_) {}
+}
+
+async function showAlbumCtxMenu(e, artist, album) {
+  e.preventDefault();
+  e.stopPropagation();
+  hideDropdown();
+  try {
+    const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`);
+    _showCtxMenu(e.clientX, e.clientY, tracks,
+      `${album} · ${tracks.length} song${tracks.length !== 1 ? 's' : ''}`);
+  } catch (_) {}
+}
+
+function ctxPlayNext() {
+  const tracks = _ctxTracks.slice();
+  hideCtxMenu();
+  if (!tracks.length) return;
+  Player.playNext(tracks);
+}
+
+function ctxAddToQueue() {
+  const tracks = _ctxTracks.slice();
+  hideCtxMenu();
+  if (!tracks.length) return;
+  Player.addToQueue(tracks);
+}
+
+function ctxAddToPlaylist(e) {
+  const ids = _ctxTracks.map(t => t.id);
+  hideCtxMenu();
+  if (!ids.length) return;
+  const cx = e.clientX, cy = e.clientY;
+  const fakeAnchor = {
+    getBoundingClientRect: () => ({ left: cx, right: cx, top: cy, bottom: cy }),
+  };
+  showPlaylistPicker(fakeAnchor, ids);
 }
 
 // Keep for backward compat (duplicate dialog "Add Anyway" path uses this)
@@ -1093,22 +1187,30 @@ async function removeFromPlaylist(trackId) {
   renderPlaylistTracks(state.playlist.tracks);
   updatePlaylistCover(state.playlist.tracks);
   updatePlaylistStats(state.playlist.tracks);
+  loadPlaylists();  // refresh track_count in list view
 }
 
 /* ── Playlist CRUD ──────────────────────────────────────────────────── */
-async function createPlaylist() {
-  const name = prompt('Playlist name:');
-  if (!name) return;
-  const pl = await api('/playlists', { method: 'POST', body: { name } });
-  await loadPlaylists();
-  await openPlaylist(pl.id);
+function showCreatePlaylistModal(trackIds = []) {
+  _createPlPendingIds = trackIds;
+  const modal = document.getElementById('create-playlist-modal');
+  const input = document.getElementById('create-playlist-input');
+  modal.style.display = 'flex';
+  input.value = '';
+  setTimeout(() => input.focus(), 60);
 }
 
-async function createPlaylistAndAdd() {
-  hideDropdown();
-  const trackIds = [...state._pendingTrackIds];
-  const name = prompt('New playlist name:');
-  if (!name) return;
+function closeCreatePlaylistModal() {
+  document.getElementById('create-playlist-modal').style.display = 'none';
+  _createPlPendingIds = [];
+}
+
+async function submitCreatePlaylist() {
+  const input = document.getElementById('create-playlist-input');
+  const name = input.value.trim();
+  if (!name) { input.focus(); return; }
+  const trackIds = [..._createPlPendingIds];
+  closeCreatePlaylistModal();
   const pl = await api('/playlists', { method: 'POST', body: { name } });
   await loadPlaylists();
   if (trackIds.length) {
@@ -1117,6 +1219,15 @@ async function createPlaylistAndAdd() {
     toast(`Added ${res.added} song${res.added !== 1 ? 's' : ''} to "${pl.name}"`);
   }
   await openPlaylist(pl.id);
+}
+
+async function createPlaylist() {
+  showCreatePlaylistModal();
+}
+
+async function createPlaylistAndAdd() {
+  hideDropdown();
+  showCreatePlaylistModal([...state._pendingTrackIds]);
 }
 
 async function deletePlaylist(pid) {
@@ -2548,7 +2659,7 @@ function renderSongsTable() {
     const bitrate = t.bitrate ? t.bitrate + ' kbps' : '';
     const playIcon = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`;
     return `
-    <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')">
+    <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
       <td class="col-num" onclick="App.toggleTrackSelection('${t.id}', ${globalIdx}, event)">
         <div class="num-cell">
           <span class="track-num">${t.track_number || (globalIdx + 1)}</span>
@@ -2880,9 +2991,19 @@ const App = {
   openPlaylist,
   createPlaylist,
   createPlaylistAndAdd,
+  showCreatePlaylistModal,
+  closeCreatePlaylistModal,
+  submitCreatePlaylist,
   deletePlaylist,
   renamePlaylist,
   showAddDropdown,
+  showTrackCtxMenu,
+  showArtistCtxMenu,
+  showAlbumCtxMenu,
+  hideCtxMenu,
+  ctxPlayNext,
+  ctxAddToQueue,
+  ctxAddToPlaylist,
   addToPlaylist,
   addAllToPlaylist,
   addAllToSpecificPlaylist,
@@ -2995,12 +3116,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   });
 
-  // Keyboard shortcut: Escape closes dropdown
+  // Keyboard shortcut: Escape closes dropdown and context menu
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') hideDropdown();
+    if (e.key === 'Escape') { hideDropdown(); hideCtxMenu(); }
   });
 
+  // Close context menu on outside click or scroll
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#ctx-menu')) hideCtxMenu();
+  });
+  document.addEventListener('scroll', () => hideCtxMenu(), true);
+
   Player.init();
+  // Enter submits create playlist modal
+  const cpInput = document.getElementById('create-playlist-input');
+  if (cpInput) cpInput.addEventListener('keydown', e => { if (e.key === 'Enter') App.submitCreatePlaylist(); });
   await loadSettings();
   await loadPlaylists();
   pollScanStatus();

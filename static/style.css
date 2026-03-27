@@ -2478,3 +2478,48 @@ tr.player-active .track-title { color: var(--accent); }
 }
 .btn-play-all:hover { opacity: 0.88; transform: scale(1.02); }
 .btn-play-all svg { flex-shrink: 0; }
+
+/* ── Right-click context menu ────────────────────────────────────────── */
+#ctx-menu {
+  position: fixed;
+  z-index: 9000;
+  min-width: 210px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.07);
+  padding: 4px;
+  display: none;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+.ctx-label {
+  padding: 7px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.ctx-item:hover { background: rgba(255,255,255,.09); }
+.ctx-item svg   { color: var(--text-muted); flex-shrink: 0; }
+.ctx-sep {
+  height: 1px;
+  background: rgba(255,255,255,.07);
+  margin: 3px 4px;
+}

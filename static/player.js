@@ -385,6 +385,48 @@ const Player = (function () {
     _toast(`Added ${n} track${n !== 1 ? 's' : ''} to queue`);
   }
 
+  /** Insert tracks to play right after the current track */
+  function playNext(tracks) {
+    if (!Array.isArray(tracks)) tracks = [tracks];
+    if (tracks.length === 0) return;
+    tracks.forEach(t => _registry.set(t.id, t));
+    const n = tracks.length;
+
+    if (ps.queueIdx < 0 || ps.queue.length === 0) {
+      // Nothing playing — add to queue and start
+      ps.queue.unshift(...tracks);
+      ps.queueIdx = 0;
+      if (ps.shuffle) {
+        const rest = ps.queue.map((_, i) => i).filter(i => i >= n);
+        ps.shuffleOrder = [...tracks.map((_, i) => i), ..._fisherYates(rest)];
+        ps.queueIdx = 0;
+      }
+      _loadTrack(currentTrack());
+      _startPlay();
+    } else {
+      const realIdx  = _realIdx();   // real queue index of current track
+      const insertAt = realIdx + 1;
+      ps.queue.splice(insertAt, 0, ...tracks);
+      if (ps.shuffle) {
+        // Shift all shuffleOrder values >= insertAt
+        ps.shuffleOrder = ps.shuffleOrder.map(i => i >= insertAt ? i + n : i);
+        // Insert new real indices right after current shuffleOrder position
+        const newIndices = tracks.map((_, i) => insertAt + i);
+        ps.shuffleOrder.splice(ps.queueIdx + 1, 0, ...newIndices);
+      }
+      // ps.queueIdx unchanged — current track keeps playing
+    }
+
+    _renderQueue();
+    _saveState();
+    _toast(n === 1 ? `"${tracks[0].title}" plays next` : `${n} tracks play next`);
+  }
+
+  /** Look up a track by ID from the registry */
+  function getTrack(id) {
+    return _registry.get(id) ?? ps.queue.find(t => t.id === id) ?? null;
+  }
+
   /** Remove track at queue array index idx */
   function removeFromQueue(idx) {
     if (idx < 0 || idx >= ps.queue.length) return;
@@ -1192,7 +1234,9 @@ const Player = (function () {
     playTrackById,
     playAll,
     addToQueue,
+    playNext,
     removeFromQueue,
+    getTrack,
     clearQueue,
     toggleQueue,
     toggleHistory,
