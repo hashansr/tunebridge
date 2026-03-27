@@ -264,15 +264,24 @@ const Player = (function () {
   }
 
   function toggleShuffle() {
+    // IMPORTANT: read the real queue index BEFORE changing ps.shuffle.
+    // _realIdx() branches on ps.shuffle, so toggling it first causes it to
+    // return the wrong value when disabling shuffle (it would return the
+    // shuffle-position index instead of the actual queue-array index).
+    const curRealIdx = ps.shuffle
+      ? (ps.shuffleOrder[ps.queueIdx] ?? ps.queueIdx)  // was ON → use shuffleOrder
+      : ps.queueIdx;                                     // was OFF → already the real index
+
     ps.shuffle = !ps.shuffle;
+
     if (ps.shuffle) {
-      const cur  = _realIdx();
-      const rest = ps.queue.map((_, i) => i).filter(i => i !== cur);
-      ps.shuffleOrder = [cur, ..._fisherYates(rest)];
-      ps.queueIdx = 0;   // position 0 in shuffle order = current track
+      // OFF → ON: pin current track at position 0 of a new shuffled order
+      const rest = ps.queue.map((_, i) => i).filter(i => i !== curRealIdx);
+      ps.shuffleOrder = [curRealIdx, ..._fisherYates(rest)];
+      ps.queueIdx = 0;
     } else {
-      const realIdx = _realIdx();
-      ps.queueIdx = realIdx;
+      // ON → OFF: restore queueIdx to the real queue-array index
+      ps.queueIdx = curRealIdx;
       ps.shuffleOrder = [];
     }
     _updateShuffleBtn();
