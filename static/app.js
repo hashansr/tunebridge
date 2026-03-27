@@ -3300,9 +3300,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Close context menu on outside click or scroll
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('#ctx-menu')) hideCtxMenu();
+    if (!e.target.closest('#ctx-menu') && !e.target.closest('#ctx-submenu')) hideCtxMenu();
   });
-  document.addEventListener('scroll', () => hideCtxMenu(), true);
+  document.addEventListener('scroll', (e) => {
+    // Ignore scrolls inside the submenu — those are intentional
+    if (e.target && (e.target.id === 'ctx-submenu' || e.target.closest?.('#ctx-submenu'))) return;
+    hideCtxMenu();
+  }, true);
 
   Player.init();
   // Enter submits create playlist modal

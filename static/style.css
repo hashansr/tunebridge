@@ -2735,8 +2735,9 @@ tr.player-active .track-title { color: var(--accent); }
   position: fixed;
   z-index: 9001;
   min-width: 220px;
-  max-height: 400px;
-  overflow-y: auto;
+  max-height: 340px;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
   background: rgba(38, 37, 36, 0.96);
   backdrop-filter: blur(32px);
   -webkit-backdrop-filter: blur(32px);
@@ -2745,4 +2746,9 @@ tr.player-active .track-title { color: var(--accent); }
   padding: 4px;
   box-shadow: 0px 16px 40px rgba(193,198,215,0.12);
 }
+/* Styled scrollbar so it's visible and grabbable */
+#ctx-submenu::-webkit-scrollbar        { width: 6px; }
+#ctx-submenu::-webkit-scrollbar-track  { background: transparent; }
+#ctx-submenu::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.18); border-radius: 3px; }
+#ctx-submenu::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.32); }
 .ctx-submenu-inner { display: flex; flex-direction: column; }
