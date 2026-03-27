@@ -1076,38 +1076,41 @@ td.cell-album { color: var(--text-sub); white-space: nowrap; overflow: hidden; t
 .btn-primary {
   padding: 8px 18px;
   border-radius: 9999px;
-  background: linear-gradient(135deg, #adc6ff, #7ba3e0);
-  color: #00285c;
+  background: linear-gradient(135deg, #adc6ff 0%, #385283 100%);
+  color: #fff;
   font-size: 13px; font-weight: 600;
-  transition: opacity 0.15s, transform 0.15s;
+  border: none;
+  transition: filter 0.15s, transform 0.15s;
 }
-.btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+.btn-primary:hover  { filter: brightness(1.12); transform: translateY(-1px); }
+.btn-primary:active { transform: scale(0.98); filter: brightness(0.95); }
 
 .btn-secondary {
   padding: 7px 14px;
   border-radius: 9999px;
-  background: var(--bg-hover);
-  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.07);
+  border: none;
   color: var(--text-sub);
   font-size: 13px;
   transition: background 0.15s, color 0.15s;
 }
-.btn-secondary:hover { background: var(--bg-active); color: var(--text); }
+.btn-secondary:hover  { background: rgba(255,255,255,0.12); color: var(--text); }
+.btn-secondary:active { background: rgba(255,255,255,0.05); }
 
 /* ── Toast — glassmorphism ──────────────────────────────────────────── */
 #toast {
   position: fixed;
   bottom: 24px; left: 50%;
   transform: translateX(-50%) translateY(80px);
-  background: rgba(42, 42, 42, 0.8);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border);
+  background: rgba(42, 42, 42, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255,255,255,0.07);
   color: var(--text);
   padding: 10px 20px;
   border-radius: 9999px;
   font-size: var(--text-base);
-  box-shadow: 0 0 40px rgba(200,200,220,0.08);
+  box-shadow: 0px 12px 32px rgba(193, 198, 215, 0.08);
   transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s;
   opacity: 0;
   z-index: 99999;
@@ -1119,34 +1122,42 @@ td.cell-album { color: var(--text-sub); white-space: nowrap; overflow: hidden; t
 /* ── Modal ───────────────────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.65);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   display: flex; align-items: center; justify-content: center;
   z-index: 10000;
 }
 .modal {
-  background: #353534;
-  border: none;
-  border-radius: 16px;
-  padding: 24px;
+  background: rgba(38, 37, 36, 0.90);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 20px;
+  padding: 28px;
   width: 360px;
-  box-shadow: 0 0 60px rgba(200,200,220,0.08);
+  box-shadow: 0px 24px 48px rgba(193, 198, 215, 0.08);
 }
 .modal-icon-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
 .modal h3 { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; }
 .modal input {
-  width: 100%; padding: 10px 12px;
-  background: var(--bg-elevated);
+  width: 100%; padding: 11px 14px;
+  background: rgba(53, 53, 52, 0.9);
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   color: var(--text);
   font-size: 14px;
   outline: none;
   margin-bottom: 16px;
-  transition: background 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+  /* Focus glow on bottom edge instead of full ring */
+  box-shadow: 0 2px 0 0 rgba(173, 198, 255, 0);
+  transition: background 0.15s, box-shadow 0.2s;
 }
-.modal input:focus { background: var(--bg-hover); box-shadow: 0 0 0 1px var(--border-focus); }
+.modal input:focus {
+  background: rgba(58, 57, 56, 1);
+  box-shadow: 0 2px 0 0 rgba(173, 198, 255, 0.55);
+}
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
 /* ── Wide / help modals ──────────────────────────────────────────────── */
@@ -2537,26 +2548,26 @@ tr.player-active .track-title { color: var(--accent); }
   background: rgba(173, 198, 255, 0.1);
 }
 .btn-danger {
-  background: linear-gradient(135deg, #c0392b, #e05c5c);
+  background: linear-gradient(135deg, #c0392b 0%, #e05c5c 100%);
   color: #fff;
   border: none;
 }
-.btn-danger:hover {
-  background: linear-gradient(135deg, #d44, #e87070);
-}
+.btn-danger:hover  { filter: brightness(1.12); transform: translateY(-1px); }
+.btn-danger:active { transform: scale(0.98); filter: brightness(0.92); }
 
 /* ── Right-click context menu ────────────────────────────────────────── */
 #ctx-menu {
   position: fixed;
   z-index: 9000;
   min-width: 210px;
-  background: var(--surface-2);
-  border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.07);
+  background: rgba(38, 37, 36, 0.92);
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.07);
+  box-shadow: 0px 16px 40px rgba(193, 198, 215, 0.10), 0 0 0 0.5px rgba(255,255,255,0.05);
   padding: 4px;
   display: none;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
 }
 .ctx-label {
   padding: 7px 12px 4px;
