@@ -364,6 +364,9 @@ async function loadAlbums(artistFilter = null) {
           <div class="album-thumb">
             ${thumbImg(al.artwork_key, 160, '6px')}
             <div class="album-thumb-overlay">
+              <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>
+              </button>
               <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
             </div>
           </div>
@@ -380,6 +383,9 @@ async function loadAlbums(artistFilter = null) {
         <div class="album-thumb">
           ${thumbImg(al.artwork_key, 160, '6px')}
           <div class="album-thumb-overlay">
+            <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>
+            </button>
             <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
           </div>
         </div>
@@ -444,8 +450,21 @@ async function loadTracks(artist = null, album = null) {
 
   const tbody = document.getElementById('tracks-tbody');
   tbody.innerHTML = tracks.map((t, i) => trackRow(t, i + 1, false)).join('');
+  Player.registerTracks(tracks);
 
   document.getElementById('add-all-btn').onclick = () => App.addAllToPlaylist(tracks.map(t => t.id));
+
+  // Play All button on album/artist hero
+  const heroActions = document.querySelector('#album-hero .hero-actions, #artist-hero .hero-actions');
+  if (heroActions && !heroActions.querySelector('.btn-play-all')) {
+    const playBtn = document.createElement('button');
+    playBtn.className = 'btn-play-all';
+    playBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play All`;
+    playBtn.onclick = () => Player.playAll(tracks);
+    heroActions.prepend(playBtn);
+  } else if (heroActions) {
+    heroActions.querySelector('.btn-play-all').onclick = () => Player.playAll(tracks);
+  }
 }
 
 function fmtDuration(totalSecs) {
@@ -472,6 +491,7 @@ function trackRow(t, num, inPlaylist) {
     : '';
 
   const checkIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+  const playIcon  = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`;
 
   return `
     <tr data-id="${t.id}">
@@ -484,7 +504,10 @@ function trackRow(t, num, inPlaylist) {
       </td>
       <td>
         <div class="title-cell">
-          <div class="thumb">${thumbImg(t.artwork_key, 38, '4px')}</div>
+          <div class="thumb-wrap">
+            <div class="thumb">${thumbImg(t.artwork_key, 38, '4px')}</div>
+            <button class="thumb-play-btn" onclick="event.stopPropagation();Player.playTrackById('${t.id}')" title="Play">${playIcon}</button>
+          </div>
           <div class="track-info">
             <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
             <div class="track-artist" title="${esc(t.artist)}">${esc(t.artist)}</div>
@@ -514,6 +537,20 @@ async function openPlaylist(pid) {
   updatePlaylistCover(pl.tracks);
   updatePlaylistStats(pl.tracks);
   renderDapExportPills(pid);
+
+  // Register tracks with player and add/update Play button
+  Player.registerTracks(pl.tracks);
+  let playAllBtn = document.getElementById('pl-play-all-btn');
+  if (!playAllBtn) {
+    playAllBtn = document.createElement('button');
+    playAllBtn.id = 'pl-play-all-btn';
+    playAllBtn.className = 'btn-play-all';
+    playAllBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play`;
+    const stats = document.getElementById('pl-stats');
+    if (stats) stats.insertAdjacentElement('afterend', playAllBtn);
+  }
+  playAllBtn.onclick = () => Player.playAll(pl.tracks);
+  playAllBtn.style.display = pl.tracks.length ? '' : 'none';
 }
 
 async function renderDapExportPills(pid) {
@@ -574,6 +611,7 @@ function _getDisplayedTracks() {
 }
 
 function renderPlaylistTracks(tracks) {
+  if (tracks && tracks.length) Player.registerTracks(tracks);
   const tbody = document.getElementById('pl-tbody');
   const table = document.getElementById('pl-table');
   const empty = document.getElementById('pl-empty');
@@ -952,6 +990,12 @@ async function addAlbumToPlaylist(artist, album, event) {
   const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`);
   if (!tracks.length) { toast('No tracks found'); return; }
   await addAllToPlaylist(tracks.map(t => t.id), anchor);
+}
+
+async function playAlbum(artist, album) {
+  const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`);
+  if (!tracks || !tracks.length) { toast('No tracks found'); return; }
+  Player.playAll(tracks);
 }
 
 /* ── Duplicate dialog ───────────────────────────────────────────────── */
@@ -2480,10 +2524,13 @@ function renderSongsTable() {
   const arrow = document.getElementById(`songs-sort-${_songsSort.col}`);
   if (arrow) arrow.textContent = _songsSort.order === 'asc' ? ' \u25B2' : ' \u25BC';
 
+  Player.registerTracks(page);
+
   tbody.innerHTML = page.map((t, i) => {
     const globalIdx = start + i;
     const fmtDate = t.date_added ? new Date(t.date_added * 1000).toLocaleDateString() : '';
     const bitrate = t.bitrate ? t.bitrate + ' kbps' : '';
+    const playIcon = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`;
     return `
     <tr data-id="${t.id}">
       <td class="col-num" onclick="App.toggleTrackSelection('${t.id}', ${globalIdx}, event)">
@@ -2494,7 +2541,10 @@ function renderSongsTable() {
       </td>
       <td>
         <div class="title-cell">
-          <div class="thumb">${thumbImg(t.artwork_key, 34, '4px')}</div>
+          <div class="thumb-wrap" style="width:34px;height:34px">
+            <div class="thumb">${thumbImg(t.artwork_key, 34, '4px')}</div>
+            <button class="thumb-play-btn" onclick="event.stopPropagation();Player.playTrackById('${t.id}')" title="Play">${playIcon}</button>
+          </div>
           <div class="track-info">
             <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
           </div>
@@ -2822,6 +2872,7 @@ const App = {
   addAllToSpecificPlaylist,
   addAllArtistSongs,
   addAlbumToPlaylist,
+  playAlbum,
   _commitToPlaylist,
   scrollToLetter,
   scrollToAlbumLetter,
@@ -2933,6 +2984,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.key === 'Escape') hideDropdown();
   });
 
+  Player.init();
   await loadSettings();
   await loadPlaylists();
   pollScanStatus();

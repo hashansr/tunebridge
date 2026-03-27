@@ -44,6 +44,7 @@ Port 5000 is blocked on macOS (AirPlay). Always use 5001.
 | `static/index.html` | Single-page app HTML, all modals |
 | `static/style.css` | Dark theme CSS |
 | `static/app.js` | All frontend logic |
+| `static/player.js` | In-app music player (queue, Web Audio PEQ, shuffle/repeat, localStorage persistence) |
 | `data/library.json` | Cached track metadata |
 | `data/playlists.json` | Persisted playlists |
 | `data/settings.json` | Device mount paths |
@@ -75,6 +76,7 @@ Key routes:
 - `GET /api/health` — health check (`{status: "ok"}`)
 - `GET /api/health/status` — detailed system status (library, squig.link, DAPs, data files)
 - `POST /api/restart` — restart server via `os.execv` (responds before restarting)
+- `GET /api/stream/<track_id>` — stream audio file with HTTP Range support (64KB chunks, required for seeking in FLAC)
 - `GET/POST /api/daps` — list / create DAP devices
 - `GET/PUT/DELETE /api/daps/<did>` — get / update / delete DAP
 - `POST /api/daps/<did>/export/<pid>` — export playlist M3U to DAP, records timestamp in `playlist_exports`
@@ -165,6 +167,8 @@ Public `App` object exposes all functions called from HTML `onclick` attributes.
 - [x] IEM list sorted alphabetically
 - [x] R channel solid line (same as L channel); only baselines use dashed lines
 - [x] Native macOS app (`TuneBridge.app`) — C launcher binary (`launcher.c`) compiled via CLT clang, execs into CLT Python → `tunebridge_gui.py` → pywebview WKWebView window. Clean bundle (binary + Info.plist + icon), ad-hoc signed. TCC Documents prompt fires on first launch.
+- [x] In-app music player — fixed bottom bar (74px), queue drawer (slide-up), PEQ popover. Web Audio API graph (lazy AudioContext) with BiquadFilterNode chain for real-time PEQ. Shuffle (Fisher-Yates), repeat off/all/one. Keyboard shortcuts: Space = play/pause, Alt+←/→ = prev/next, M = mute. State persisted to localStorage.
+- [x] Play All button — on album/artist hero, playlist header, and album card hover overlay
 
 ## Key Files (additional)
 | File | Purpose |
@@ -250,6 +254,26 @@ Key findings:
 - **Effort estimate**: PoC 2–3 sessions; playlists + delta sync +3–4; transcoding pipeline +2–3; artwork +3–4; Sequoia workarounds unpredictable. Total: 10–15+ sessions for production quality.
 
 ## Last Updated
+2026-03-27 — Session 18: In-app music player with PEQ integration
+
+- **New `GET /api/stream/<track_id>`**: Streams audio with HTTP Range support. 64KB chunked generator handles partial-content requests (status 206) for correct seeking in large FLAC files. `_AUDIO_MIMES` dict maps extensions → MIME types (flac, mp3, m4a, aac, wav, ogg, opus).
+- **`static/player.js`** (~870 lines): Self-contained player module exposed as `window.Player`.
+  - `HTMLAudioElement` with `crossOrigin='anonymous'` + lazy `AudioContext` (created on first play gesture to satisfy browser autoplay policy)
+  - Web Audio graph: `MediaElementSource → GainNode (preamp) → [BiquadFilterNode...] → GainNode (vol) → destination`
+  - PEQ: `_buildPeqChain(profile)` maps APO filter type strings (`PK/LSC/HSC/LPQ/HPQ/NO/AP`) to `BiquadFilterNode.type`; preamp dB → linear gain via `_dBToLinear(db)`
+  - Queue: `playTrack()`, `playAll()`, `addToQueue()`, `removeFromQueue()`, `clearQueue()`, `moveQueueItem()`, SortableJS drag/drop in queue drawer
+  - Shuffle: Fisher-Yates on `shuffleOrder` index array; current track pinned to position 0 when enabling
+  - Repeat: `cycleRepeat()` cycles `'off' → 'all' → 'one'`; repeat-one `::after` badge via CSS class
+  - Persistent state via localStorage (`tb_queue`, `tb_queue_idx`, `tb_shuffle`, `tb_repeat`, `tb_volume`, `tb_muted`, `tb_peq_iem`, `tb_peq_profile`)
+  - Keyboard: Space = play/pause, Alt+← = prev, Alt+→ = next, M = mute (blocked in inputs)
+  - `registerTracks(tracks)` populates `_registry` Map so `playTrackById(id)` can find tracks without them being in the active queue
+- **`#player-bar`** (HTML + CSS): Fixed 74px bottom bar using 3-column CSS grid (`260px / 1fr / 260px`) so transport controls are truly centred. Left section: album art (40×40) + title/artist. Centre: prev/play/next + seek bar + timestamps. Right: shuffle, repeat, PEQ toggle, queue toggle, mute, volume slider.
+- **Queue drawer** (`#queue-drawer`): Slides up from bottom over player bar. Track list with drag-to-reorder, remove button, active track highlighted.
+- **PEQ popover** (`#peq-popover`): IEM dropdown → profile dropdown → applies `_buildPeqChain()`. IEM list fetched live from `/api/iems`. Closes on outside click.
+- **Track row play buttons**: Each track row in library/playlist/songs has a `.thumb-play-btn` overlay — clicking it calls `Player.playTrackById(id)`.
+- **Play All buttons**: Added to album/artist hero sections, playlist header, and album card hover overlay (`App.playAlbum(artist, album)` fetches tracks then calls `Player.playAll()`).
+- **Player init**: `Player.init()` called in `DOMContentLoaded`; `Player.registerTracks(tracks)` called at end of every view-load function.
+
 2026-03-27 — Session 17: UI/UX overhaul, Gear screen redesign, case-insensitive artist grouping
 
 - **System font**: Confirmed `-apple-system, BlinkMacSystemFont` already provides SF Pro on macOS/iOS — no change needed.

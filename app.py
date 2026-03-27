@@ -1969,6 +1969,81 @@ def delete_baseline(bid):
     return jsonify({'ok': True})
 
 
+def _get_track_by_id(tid):
+    """Look up a track in the in-memory library by its ID."""
+    with library_lock:
+        for t in library:
+            if t.get('id') == tid:
+                return t
+    return None
+
+
+_AUDIO_MIMES = {
+    'flac': 'audio/flac',
+    'mp3':  'audio/mpeg',
+    'm4a':  'audio/mp4',
+    'aac':  'audio/aac',
+    'mp4':  'audio/mp4',
+    'wav':  'audio/wav',
+    'ogg':  'audio/ogg',
+    'opus': 'audio/ogg; codecs=opus',
+}
+
+
+@app.route('/api/stream/<track_id>')
+def stream_track(track_id):
+    """Stream an audio file with HTTP Range request support (required for seeking)."""
+    track = _get_track_by_id(track_id)
+    if not track:
+        return jsonify({'error': 'Track not found'}), 404
+
+    path = get_music_base() / track['path']
+    if not path.exists():
+        return jsonify({'error': 'Audio file not found on disk'}), 404
+
+    ext  = path.suffix.lstrip('.').lower()
+    mime = _AUDIO_MIMES.get(ext, 'application/octet-stream')
+    file_size = path.stat().st_size
+    range_header = request.headers.get('Range')
+
+    if not range_header:
+        resp = send_file(str(path), mimetype=mime, conditional=True)
+        resp.headers['Accept-Ranges'] = 'bytes'
+        return resp
+
+    # Parse "bytes=start-[end]"
+    m = re.match(r'bytes=(\d+)-(\d*)', range_header)
+    if not m:
+        return Response(status=416, headers={'Content-Range': f'bytes */{file_size}'})
+
+    byte1 = int(m.group(1))
+    byte2 = int(m.group(2)) if m.group(2) else file_size - 1
+    byte2 = min(byte2, file_size - 1)
+
+    if byte1 > byte2 or byte1 >= file_size:
+        return Response(status=416, headers={'Content-Range': f'bytes */{file_size}'})
+
+    length = byte2 - byte1 + 1
+
+    def _generate():
+        with open(str(path), 'rb') as f:
+            f.seek(byte1)
+            remaining = length
+            while remaining > 0:
+                chunk = f.read(min(65536, remaining))  # 64 KB chunks
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+
+    rv = Response(_generate(), 206, mimetype=mime, direct_passthrough=True)
+    rv.headers['Content-Range']  = f'bytes {byte1}-{byte2}/{file_size}'
+    rv.headers['Accept-Ranges']  = 'bytes'
+    rv.headers['Content-Length'] = str(length)
+    rv.headers['Cache-Control']  = 'no-cache'
+    return rv
+
+
 load_library()
 
 if __name__ == '__main__':
