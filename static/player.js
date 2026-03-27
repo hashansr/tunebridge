@@ -206,17 +206,23 @@ const Player = (function () {
       _audio.currentTime = 0;
       return;
     }
+    // Capture BEFORE _loadTrack — _audio.load() fires 'pause' synchronously,
+    // which sets ps.isPlaying = false before we can check it.
+    const wasPlaying = ps.isPlaying;
     ps.queueIdx = ps.queueIdx > 0 ? ps.queueIdx - 1 : ps.queue.length - 1;
     _loadTrack(currentTrack());
-    if (ps.isPlaying) _startPlay();
+    if (wasPlaying) _startPlay();
     if (ps.queueOpen) _renderQueue();
   }
 
   function next() {
     if (ps.queue.length === 0) return;
+    // Capture BEFORE _loadTrack — _audio.load() fires 'pause' synchronously,
+    // which sets ps.isPlaying = false before we can check it.
+    const wasPlaying = ps.isPlaying;
     ps.queueIdx = (ps.queueIdx + 1) % ps.queue.length;
     _loadTrack(currentTrack());
-    if (ps.isPlaying) _startPlay();
+    if (wasPlaying) _startPlay();
     if (ps.queueOpen) _renderQueue();
   }
 
@@ -434,6 +440,14 @@ const Player = (function () {
     _saveState();
   }
 
+  /** Reorder the shuffleOrder array (used when drag/drop fires in shuffle mode) */
+  function moveShuffleItem(fromPos, toPos) {
+    if (fromPos === toPos) return;
+    const [item] = ps.shuffleOrder.splice(fromPos, 1);
+    ps.shuffleOrder.splice(toPos, 0, item);
+    _saveState();
+  }
+
   /* ── Register tracks from app.js views ─────────────────────────────── */
   function registerTracks(tracks) {
     if (!Array.isArray(tracks)) return;
@@ -462,13 +476,18 @@ const Player = (function () {
   });
 
   _audio.addEventListener('ended', () => {
+    // A track just finished — we were definitely playing.
+    // Do NOT route through next()/prev() here; _audio.load() inside _loadTrack
+    // fires 'pause' synchronously and would set ps.isPlaying = false before
+    // _startPlay() can be called. Advance and start directly instead.
     if (ps.repeatMode === 'one') {
       _audio.currentTime = 0;
       _startPlay();
-    } else if (ps.repeatMode === 'all') {
-      next();
-    } else if (ps.queueIdx < ps.queue.length - 1) {
-      next();
+    } else if (ps.repeatMode === 'all' || ps.queueIdx < ps.queue.length - 1) {
+      ps.queueIdx = (ps.queueIdx + 1) % ps.queue.length;
+      _loadTrack(currentTrack());
+      _startPlay();
+      if (ps.queueOpen) _renderQueue();
     } else {
       // End of queue, no repeat
       ps.isPlaying = false;
@@ -561,7 +580,7 @@ const Player = (function () {
 
   /* ── Queue item HTML helper ─────────────────────────────────────────── */
   function _queueItemHtml(t, realIdx, draggable, isHistory) {
-    const dragHandle = draggable && !ps.shuffle
+    const dragHandle = draggable
       ? `<div class="queue-drag-handle">
            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
              <circle cx="9" cy="6" r="1.2" fill="currentColor" stroke="none"/>
@@ -679,16 +698,23 @@ const Player = (function () {
 
     list.innerHTML = html;
 
-    // Drag-and-drop on upcoming list only (non-shuffle mode)
+    // Drag-and-drop on upcoming list (both normal and shuffle mode)
     const upcomingList = document.getElementById('queue-upcoming-list');
-    if (upcomingList && !ps.shuffle && typeof Sortable !== 'undefined' && upcomingItems.length > 1) {
+    if (upcomingList && typeof Sortable !== 'undefined' && upcomingItems.length > 1) {
       _queueSortable = Sortable.create(upcomingList, {
         animation: 150,
         handle: '.queue-drag-handle',
         onEnd(evt) {
-          const from = curRealIdx + 1 + evt.oldIndex;
-          const to   = curRealIdx + 1 + evt.newIndex;
-          moveQueueItem(from, to);
+          if (ps.shuffle) {
+            // Reorder shuffleOrder positions (don't touch ps.queue array)
+            const fromPos = ps.queueIdx + 1 + evt.oldIndex;
+            const toPos   = ps.queueIdx + 1 + evt.newIndex;
+            moveShuffleItem(fromPos, toPos);
+          } else {
+            const from = curRealIdx + 1 + evt.oldIndex;
+            const to   = curRealIdx + 1 + evt.newIndex;
+            moveQueueItem(from, to);
+          }
           _renderQueue();
         },
       });
