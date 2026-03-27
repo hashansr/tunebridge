@@ -248,8 +248,13 @@ async function loadPlaylistsView() {
       <div class="pl-view-card" onclick="App.openPlaylist('${pl.id}')">
         <div class="pl-view-cover ${pl.has_artwork || (pl.artwork_keys && pl.artwork_keys.length === 1) ? 'playlist-cover-single' : ''}">${coverHtml}</div>
         <div class="pl-view-info">
-          <div class="pl-view-name" title="${esc(pl.name)}">${esc(pl.name)}</div>
-          <div class="pl-view-meta">${count} track${count !== 1 ? 's' : ''}</div>
+          <div class="pl-view-info-text">
+            <div class="pl-view-name" title="${esc(pl.name)}">${esc(pl.name)}</div>
+            <div class="pl-view-meta">${count} track${count !== 1 ? 's' : ''}</div>
+          </div>
+          <button class="pl-card-delete-btn" onclick="event.stopPropagation();App.deletePlaylist('${pl.id}')" title="Delete playlist">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
         </div>
       </div>
     `;
@@ -1270,7 +1275,7 @@ async function createPlaylistAndAdd() {
 }
 
 async function deletePlaylist(pid) {
-  const pl = state.playlists.find(p => p.id === pid);
+  const pl = state.playlists.find(p => p.id === pid) || state.playlist;
   const ok = await _showConfirm({
     title:   'Delete Playlist',
     message: `"${pl?.name}" will be permanently deleted.`,
@@ -1280,9 +1285,14 @@ async function deletePlaylist(pid) {
   await api(`/playlists/${pid}`, { method: 'DELETE' });
   if (state.playlist?.id === pid) {
     state.playlist = null;
-    showView('artists');
+    showView('playlists');
   }
   await loadPlaylists();
+}
+
+async function deleteCurrentPlaylist() {
+  if (!state.playlist) return;
+  await deletePlaylist(state.playlist.id);
 }
 
 let renameTarget = null;
@@ -3056,6 +3066,7 @@ const App = {
   _confirmYes,
   _confirmNo,
   deletePlaylist,
+  deleteCurrentPlaylist,
   renamePlaylist,
   showAddDropdown,
   showTrackCtxMenu,

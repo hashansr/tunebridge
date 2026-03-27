@@ -1895,6 +1895,14 @@ tr.track-selected .track-check-indicator {
 
 .pl-view-info {
   padding: 0 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.pl-view-info-text {
+  flex: 1;
+  min-width: 0;
 }
 .pl-view-name {
   font-size: var(--text-base);
@@ -1909,6 +1917,41 @@ tr.track-selected .track-check-indicator {
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+/* Delete button on playlist card — visible only on hover */
+.pl-card-delete-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.pl-view-card:hover .pl-card-delete-btn { opacity: 1; }
+.pl-card-delete-btn:hover { background: rgba(224,92,92,0.15); color: #e05c5c; }
+
+/* Delete button in playlist detail header */
+.pl-header-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-top: 8px;
+}
+.pl-header-delete-btn:hover { background: rgba(224,92,92,0.15); color: #e05c5c; }
 
 /* ═══════════════════════════════════════════════════════════════════════
    PLAYER BAR
