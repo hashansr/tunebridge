@@ -506,7 +506,7 @@ def get_albums():
         if not albums[key]['artwork_key'] and t.get('artwork_key'):
             albums[key]['artwork_key'] = t['artwork_key']
 
-    result = sorted(albums.values(), key=lambda x: (artist_sort_key(x['artist']), x['year'] or '0', x['name'].lower()))
+    result = sorted(albums.values(), key=lambda x: artist_sort_key(x['name']))
     return jsonify(result)
 
 
