@@ -10,10 +10,12 @@ Works in two modes:
   - Installed:   /Applications/TuneBridge.app (PyInstaller bundle)
 """
 
+import json
 import os
 import sys
 import threading
 import time
+from pathlib import Path
 
 # ── Locate project directory ─────────────────────────────────────────────────
 # When frozen by PyInstaller, __file__ is inside the .app bundle temp dir.
@@ -85,7 +87,27 @@ def main():
         background_color="#131313",
     )
 
-    window.events.closed += lambda: os._exit(0)
+    # ── Save player state before the window (and Flask thread) die ──────────
+    # window.events.closing fires BEFORE the JS context is destroyed, so
+    # evaluate_js still works.  We write directly to the file from Python,
+    # bypassing the HTTP race between sendBeacon and os._exit(0).
+    def _on_closing():
+        try:
+            state_json = window.evaluate_js(
+                'typeof Player !== "undefined" && Player.getStateJSON'
+                ' ? Player.getStateJSON() : null'
+            )
+            if state_json and isinstance(state_json, str) and len(state_json) > 5:
+                state_file = Path(PROJECT_DIR) / 'data' / 'player_state.json'
+                tmp = str(state_file) + '.tmp'
+                with open(tmp, 'w') as f:
+                    f.write(state_json)
+                Path(tmp).replace(state_file)
+        except Exception:
+            pass  # never block window close on state-save failure
+
+    window.events.closing += _on_closing
+    window.events.closed  += lambda: os._exit(0)
 
     webview.start(
         debug=False,

@@ -910,27 +910,30 @@ const Player = (function () {
   /* ── Server-side persistence (survives WKWebView ephemeral localStorage) ── */
   function _scheduleRemoteSave() {
     clearTimeout(_remoteSaveTimer);
-    _remoteSaveTimer = setTimeout(_saveStateToServer, 2000);
+    _remoteSaveTimer = setTimeout(_saveStateToServer, 500);  // short debounce
+  }
+
+  function getStateJSON() {
+    return JSON.stringify({
+      queue:        ps.queue,
+      queueIdx:     ps.queueIdx,
+      shuffle:      ps.shuffle,
+      shuffleOrder: ps.shuffleOrder,
+      repeatMode:   ps.repeatMode,
+      volume:       ps.volume,
+      muted:        ps.muted,
+      peqIem:       ps.activePeqIemId     || '',
+      peqProfile:   ps.activePeqProfileId || '',
+      seekTime:     _audio.currentTime    || 0,
+    });
   }
 
   async function _saveStateToServer() {
     try {
-      const body = JSON.stringify({
-        queue:        ps.queue,
-        queueIdx:     ps.queueIdx,
-        shuffle:      ps.shuffle,
-        shuffleOrder: ps.shuffleOrder,
-        repeatMode:   ps.repeatMode,
-        volume:       ps.volume,
-        muted:        ps.muted,
-        peqIem:       ps.activePeqIemId     || '',
-        peqProfile:   ps.activePeqProfileId || '',
-        seekTime:     _audio.currentTime    || 0,
-      });
       await fetch('/api/player/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body,
+        body: getStateJSON(),
       });
     } catch (_) {}
   }
@@ -1109,20 +1112,21 @@ const Player = (function () {
       });
     }
 
-    // 9. Final save on page close
+    // 9. Periodic server save — every 10 s while app is open (belt-and-suspenders)
+    setInterval(_saveStateToServer, 10000);
+
+    // 10. Final save on page close
     window.addEventListener('beforeunload', () => {
       try { localStorage.setItem(_LS.seekTime, _audio.currentTime || 0); } catch (_) {}
-      // sendBeacon is fire-and-forget and works even during page unload
+      // Synchronous XHR blocks until Flask responds — more reliable than sendBeacon
+      // in WKWebView where the server and page die simultaneously on os._exit(0).
+      // (Python's closing handler writes the file directly via evaluate_js, so this
+      //  is a fallback for non-pywebview use, e.g. plain browser.)
       try {
-        const body = JSON.stringify({
-          queue: ps.queue, queueIdx: ps.queueIdx,
-          shuffle: ps.shuffle, shuffleOrder: ps.shuffleOrder,
-          repeatMode: ps.repeatMode, volume: ps.volume, muted: ps.muted,
-          peqIem: ps.activePeqIemId || '', peqProfile: ps.activePeqProfileId || '',
-          seekTime: _audio.currentTime || 0,
-        });
-        navigator.sendBeacon('/api/player/state',
-          new Blob([body], { type: 'application/json' }));
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/player/state', false); // false = synchronous
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(getStateJSON());
       } catch (_) {}
     });
 
@@ -1199,6 +1203,8 @@ const Player = (function () {
     togglePeqPopover,
     onPeqIemChange,
     onPeqProfileChange,
+    // State snapshot (called by tunebridge_gui.py via evaluate_js on window close)
+    getStateJSON,
     // Read-only getters
     get currentTrack() { return currentTrack(); },
     get isPlaying()    { return ps.isPlaying; },
