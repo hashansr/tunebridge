@@ -169,6 +169,18 @@ Public `App` object exposes all functions called from HTML `onclick` attributes.
 - [x] Native macOS app (`TuneBridge.app`) — C launcher binary (`launcher.c`) compiled via CLT clang, execs into CLT Python → `tunebridge_gui.py` → pywebview WKWebView window. Clean bundle (binary + Info.plist + icon), ad-hoc signed. TCC Documents prompt fires on first launch.
 - [x] In-app music player — fixed bottom bar (74px), queue drawer (slide-up), PEQ popover. Web Audio API graph (lazy AudioContext) with BiquadFilterNode chain for real-time PEQ. Shuffle (Fisher-Yates), repeat off/all/one. Keyboard shortcuts: Space = play/pause, Alt+←/→ = prev/next, M = mute. State persisted to localStorage.
 - [x] Play All button — on album/artist hero, playlist header, and album card hover overlay
+- [x] Player state persistence — background Python thread in `tunebridge_gui.py` calls `evaluate_js` every 5 s to write `data/player_state.json`; `init()` fetches server state on load. Avoids WKWebView localStorage ephemerality and `os._exit(0)` race.
+- [x] Crossfade between tracks — dual `HTMLAudioElement` A/B engine in `player.js`. Configurable duration (0–12 s) via slider in PEQ popover. GainNode fade-out on current + fade-in on next. Persisted to localStorage as `tb_crossfade`.
+- [x] Right-click context menu — on track rows, artist cards, album cards. Options: Play Next (inserts after current with shuffle-order patch), Add to Queue, Add to Playlist…. Dismisses on outside click / scroll / Escape.
+- [x] `Player.playNext(tracks)` — inserts tracks after current queue position; patches `shuffleOrder` correctly.
+- [x] `Player.getTrack(id)` — looks up track from `_registry` or live queue.
+- [x] In-app create playlist modal — replaces native `prompt()` (showed Python rocket icon). Music note icon, name input with Enter-key submit, Cancel/Create buttons, dark theme.
+- [x] In-app confirm/delete modal — generic `_showConfirm({title, message, okText, danger})` returning `Promise<bool>`. Replaces all `confirm()` calls (deletePlaylist, deleteDap, deleteIem, deletePeq). Trash icon, red Delete button.
+- [x] Stale playlist home data fixed — `loadPlaylists()` called after addTracks, uploadArtwork, removeArtwork, removeTrack so track_count and artwork_keys stay fresh in grid.
+- [x] Albums view sorted by album title (article-stripped, A–Z) — was sorted by artist name. Backend sort key changed from `artist_sort_key(x['artist'])` to `artist_sort_key(x['name'])`.
+- [x] Double-click to play track — `ondblclick="Player.playTrackById(id)"` on all track rows (library, songs, playlist views).
+- [x] Marquee scroll for long track/artist names in player bar — `overflow:visible` on `.player-title.marquee`; parent `.player-track-info` clips.
+- [x] Player bar artist/album nav links — clicking artist or album name in player bar navigates to that artist/album page.
 
 ## Key Files (additional)
 | File | Purpose |
@@ -200,6 +212,9 @@ Public `App` object exposes all functions called from HTML `onclick` attributes.
 - Preview tool sandbox can't access `~/Documents/`; solved with proxy on port 5002.
 - squig.link returns 403 without browser headers — `fetch_squig_measurement()` sends `User-Agent` + `Referer` to work around this.
 - IEMs created before the header fix will have `measurement_L/R = null`. Editing and saving the IEM (PUT with same squig_url) will auto-refetch since the backend now refetches when measurement is missing.
+- `POST /api/restart` (`os.execv`) does NOT work inside TuneBridge.app — the C launcher changes `sys.argv`, so re-exec fails and the server dies without restarting. Any Python code change requires relaunching the .app manually.
+- `window.events.closing` in pywebview on macOS runs on the main AppKit thread. Calling `evaluate_js` from within `closing` deadlocks (`performSelectorOnMainThread:waitUntilDone:YES` waits on itself). Fix: use a background daemon thread for periodic `evaluate_js` calls instead.
+- Crossfade: `AudioContext` must be created lazily (on first user gesture) to satisfy browser autoplay policy. Crossfade GainNode ramp uses `linearRampToValueAtTime`; both audio elements share the same `AudioContext`.
 
 ## Sync Feature
 Routes: `POST /api/sync/scan`, `GET /api/sync/status`, `POST /api/sync/execute`, `POST /api/sync/reset`
@@ -254,6 +269,19 @@ Key findings:
 - **Effort estimate**: PoC 2–3 sessions; playlists + delta sync +3–4; transcoding pipeline +2–3; artwork +3–4; Sequoia workarounds unpredictable. Total: 10–15+ sessions for production quality.
 
 ## Last Updated
+2026-03-28 — Session 19: Player persistence, crossfade, context menus, UX polish
+
+- **Player state persistence**: `tunebridge_gui.py` background thread (`_player_state_watcher`) calls `evaluate_js('Player.getStateJSON()')` every 5 s and writes `data/player_state.json` directly (bypasses WKWebView localStorage ephemerality + `os._exit(0)` race). `Player.init()` is async and fetches server state on load; server wins over empty localStorage. `Player.getStateJSON()` exposed on public API.
+- **App close hang fixed**: Removed `window.events.closing` handler that called `evaluate_js` — this deadlocked on macOS (closing fires on main AppKit thread; `evaluate_js` dispatches back to same thread via `performSelectorOnMainThread:waitUntilDone:YES`). Background watcher thread is safe because it calls from a non-main thread.
+- **Crossfade**: Dual `HTMLAudioElement` (A/B) engine. `_crossfadeActive` flag, `_fadeDuration` (0–12 s, default 3 s). On track end: start next track on idle element, ramp gainA out + gainB in over `_fadeDuration` seconds using `linearRampToValueAtTime`, then swap roles. Slider in PEQ popover. Persisted to `tb_crossfade` in localStorage.
+- **Right-click context menu**: `#ctx-menu` overlay, viewport-clamped positioning. `showTrackCtxMenu`, `showArtistCtxMenu` (fetches all artist tracks), `showAlbumCtxMenu` (fetches album tracks). Actions: `ctxPlayNext`, `ctxAddToQueue`, `ctxAddToPlaylist`. `Player.playNext(tracks)` inserts after current queue position and patches `shuffleOrder`. `Player.getTrack(id)` looks up from `_registry`.
+- **In-app modals replace all native dialogs**: Create Playlist (was `prompt()`), Delete Playlist/DAP/IEM/PEQ (were `confirm()`). Generic `_showConfirm({title,message,okText,danger})` returns `Promise<bool>`. All dark-themed, no Python rocket icon.
+- **Stale playlist home**: `loadPlaylists()` called after every mutation (add tracks, upload/remove artwork, remove track) — keeps `track_count` and `artwork_keys` fresh in grid.
+- **Albums sort**: Changed `app.py` sort key from `artist_sort_key(x['artist'])` to `artist_sort_key(x['name'])` — albums now A–Z by title. Requires app relaunch (Python change).
+- **Double-click to play**: `ondblclick` on all track rows in library, songs, and playlist views.
+- **Player bar nav links**: Clicking artist/album in the player bar navigates to that page.
+- **Marquee for long names**: Player bar title/artist uses CSS marquee animation; `overflow:visible` on the animated element, parent clips.
+
 2026-03-27 — Session 18: In-app music player with PEQ integration
 
 - **New `GET /api/stream/<track_id>`**: Streams audio with HTTP Range support. 64KB chunked generator handles partial-content requests (status 206) for correct seeking in large FLAC files. `_AUDIO_MIMES` dict maps extensions → MIME types (flac, mp3, m4a, aac, wav, ogg, opus).
