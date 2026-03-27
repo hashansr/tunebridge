@@ -1965,6 +1965,7 @@ tr.track-selected .track-check-indicator {
 .player-track-info {
   min-width: 0;
   flex: 1;
+  overflow: hidden;  /* clip marquee translateX so text doesn't bleed into album art */
 }
 .player-title {
   font-size: var(--text-base);
