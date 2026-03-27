@@ -1983,6 +1983,17 @@ tr.track-selected .track-check-indicator {
   white-space: nowrap;
   margin-top: 2px;
 }
+/* Marquee scroll for long titles */
+.player-title.marquee,
+.player-artist.marquee {
+  text-overflow: clip;
+  animation: player-marquee var(--marquee-dur, 8s) ease-in-out 1.5s infinite;
+}
+@keyframes player-marquee {
+  0%, 15%  { transform: translateX(0); }
+  65%, 80% { transform: translateX(var(--marquee-dist, 0)); }
+  95%, 100%{ transform: translateX(0); }
+}
 
 /* ── Center section ───────────────────────────────────────────────────── */
 .player-center {
@@ -2254,6 +2265,46 @@ tr.track-selected .track-check-indicator {
   padding: 32px 16px;
 }
 
+/* Queue sections (History / Continue Playing) */
+.queue-section { }
+.queue-section-hdr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.queue-section-hdr-plain { cursor: default; }
+.queue-section-chevron { flex-shrink: 0; color: var(--text-muted); }
+.queue-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex: 1;
+}
+.queue-section-from {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
+}
+.queue-clear-history {
+  background: none;
+  border: none;
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.queue-clear-history:hover { text-decoration: underline; }
+
 .queue-item {
   display: flex;
   align-items: center;
@@ -2267,6 +2318,8 @@ tr.track-selected .track-check-indicator {
   background: var(--accent-dim);
 }
 .queue-item-active .queue-item-title { color: var(--accent); }
+.queue-item-history { opacity: 0.55; }
+.queue-item-history:hover { opacity: 0.85; }
 
 .queue-drag-handle {
   color: var(--text-muted);
@@ -2276,6 +2329,16 @@ tr.track-selected .track-check-indicator {
   opacity: 0.5;
 }
 .queue-drag-handle:hover { opacity: 1; }
+.queue-drag-spacer { width: 14px; flex-shrink: 0; }
+
+/* Playing indicator replacing drag handle for active track */
+.queue-item-playing-icon {
+  width: 14px;
+  flex-shrink: 0;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+}
 
 .queue-item-art {
   width: 36px;

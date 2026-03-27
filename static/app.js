@@ -322,6 +322,14 @@ async function loadAlbums(artistFilter = null) {
       `${albums.length} album${albums.length !== 1 ? 's' : ''} · ${totalSongs} songs`;
     document.getElementById('artist-hero-add').onclick = () => App.addAllArtistSongs(artistFilter);
     document.getElementById('artist-hero-browse').onclick = () => App.showArtistTracks(artistFilter);
+    const artistPlayBtn = document.getElementById('artist-hero-play');
+    if (artistPlayBtn) {
+      artistPlayBtn.style.display = '';
+      artistPlayBtn.onclick = async () => {
+        const t = await api(`/library/tracks?artist=${encodeURIComponent(artistFilter)}`);
+        if (t && t.length) Player.playAll(t);
+      };
+    }
     hero.style.display = 'flex';
   } else {
     crumb.innerHTML = `<span class="crumb-current" style="font-size:22px;font-weight:700">Albums</span>`;
@@ -454,16 +462,17 @@ async function loadTracks(artist = null, album = null) {
 
   document.getElementById('add-all-btn').onclick = () => App.addAllToPlaylist(tracks.map(t => t.id));
 
-  // Play All button on album/artist hero
-  const heroActions = document.querySelector('#album-hero .hero-actions, #artist-hero .hero-actions');
-  if (heroActions && !heroActions.querySelector('.btn-play-all')) {
-    const playBtn = document.createElement('button');
-    playBtn.className = 'btn-play-all';
-    playBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play All`;
+  // Play All button on album/artist hero (always #album-hero in view-tracks)
+  const heroActions = document.querySelector('#album-hero .hero-actions');
+  if (heroActions) {
+    let playBtn = heroActions.querySelector('.btn-play-all');
+    if (!playBtn) {
+      playBtn = document.createElement('button');
+      playBtn.className = 'btn-play-all';
+      playBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play All`;
+      heroActions.prepend(playBtn);
+    }
     playBtn.onclick = () => Player.playAll(tracks);
-    heroActions.prepend(playBtn);
-  } else if (heroActions) {
-    heroActions.querySelector('.btn-play-all').onclick = () => Player.playAll(tracks);
   }
 }
 
