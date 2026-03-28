@@ -2341,6 +2341,119 @@ def insights_tag_health():
     })
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Insights — Phase 2: Background Audio Analysis
+# ═══════════════════════════════════════════════════════════════════════════════
+
+analysis_state = {
+    'status':       'idle',   # idle | running | done | error
+    'done':         0,
+    'total':        0,
+    'started_at':   None,
+    'completed_at': None,
+    'error':        None,
+}
+
+_FEATURES_FILE = None   # resolved lazily after DATA_DIR is set
+
+
+def _features_file():
+    p = DATA_DIR / 'features'
+    p.mkdir(parents=True, exist_ok=True)
+    return p / 'track_features.json'
+
+
+def _run_analysis():
+    global analysis_state
+    try:
+        import soundfile as sf
+        import numpy as np
+    except ImportError:
+        analysis_state.update({'status': 'error', 'error': 'soundfile / numpy not installed. Run: pip install soundfile numpy'})
+        return
+
+    tracks = library
+    analysis_state.update({
+        'status':     'running',
+        'done':       0,
+        'total':      len(tracks),
+        'started_at': int(time.time()),
+        'error':      None,
+    })
+
+    feat_path = _features_file()
+
+    # Load existing results for incremental re-use
+    existing = {}
+    if feat_path.exists():
+        try:
+            for f in json.loads(feat_path.read_text()):
+                existing[f['track_id']] = f
+        except Exception:
+            existing = {}
+
+    music_base = get_music_base()
+    results = []
+
+    for i, track in enumerate(tracks):
+        if analysis_state['status'] != 'running':
+            break  # allow external cancellation in future
+
+        analysis_state['done'] = i
+        tid = track['id']
+
+        if tid in existing and existing[tid].get('brightness') is not None:
+            results.append(existing[tid])
+            continue
+
+        try:
+            path = Path(music_base) / track['path']
+            data, sr = sf.read(str(path), dtype='float32', always_2d=True)
+            mono = data[:, 0]
+
+            # RMS energy (full track)
+            rms = float(np.sqrt(np.mean(mono ** 2)))
+
+            # Spectral centroid from first ~1.5 s (fast, representative)
+            n = min(len(mono), 65536)
+            frame = mono[:n] * np.hanning(n)
+            fft_mag = np.abs(np.fft.rfft(frame))
+            freqs   = np.fft.rfftfreq(n, d=1.0 / sr)
+            centroid = float(np.sum(freqs * fft_mag) / (np.sum(fft_mag) + 1e-8))
+
+            results.append({'track_id': tid, 'brightness': round(centroid, 2), 'energy': round(rms, 6), 'cluster': None})
+        except Exception:
+            results.append({'track_id': tid, 'brightness': None, 'energy': None, 'cluster': None})
+
+        # Flush to disk every 200 tracks so progress survives a crash
+        if i > 0 and i % 200 == 0:
+            try:
+                feat_path.write_text(json.dumps(results))
+            except Exception:
+                pass
+
+    feat_path.write_text(json.dumps(results))
+    analysis_state.update({
+        'status':       'done',
+        'done':         len(tracks),
+        'completed_at': int(time.time()),
+    })
+
+
+@app.route('/api/insights/analyse', methods=['POST'])
+def insights_start_analysis():
+    if analysis_state['status'] == 'running':
+        return jsonify({'error': 'Analysis already running'}), 409
+    t = threading.Thread(target=_run_analysis, daemon=True)
+    t.start()
+    return jsonify({'ok': True, 'total': len(library)})
+
+
+@app.route('/api/insights/analyse/status')
+def insights_analysis_status():
+    return jsonify(analysis_state)
+
+
 load_library()
 
 if __name__ == '__main__':

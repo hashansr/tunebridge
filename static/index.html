@@ -55,6 +55,7 @@
         <button class="nav-item" data-view="insights" onclick="App.showView('insights')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           Insights
+          <span id="insights-nav-dot" class="insights-nav-dot" style="display:none"></span>
         </button>
       </nav>
 
@@ -483,6 +484,22 @@
           <h2>Library Insights</h2>
         </div>
         <div class="insights-content">
+
+          <!-- Analysis progress banner — hidden when idle -->
+          <div id="insights-analysis-banner" class="insights-analysis-banner" style="display:none">
+            <div class="insights-analysis-banner-inner">
+              <div class="insights-analysis-icon" id="insights-analysis-icon">
+                <!-- spinner or checkmark, set by JS -->
+              </div>
+              <div class="insights-analysis-text">
+                <span id="insights-analysis-label">Analysing library…</span>
+                <span id="insights-analysis-sub"></span>
+              </div>
+              <div class="insights-analysis-bar-wrap">
+                <div class="insights-analysis-bar" id="insights-analysis-bar"></div>
+              </div>
+            </div>
+          </div>
 
           <!-- Overview -->
           <div class="insights-section" id="insights-overview-section">

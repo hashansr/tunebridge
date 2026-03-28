@@ -3347,6 +3347,14 @@ async function loadInsightsView() {
   setActiveNav('insights');
   showViewEl('insights');
 
+  // Resume polling if analysis is already running
+  const statusRes = await fetch('/api/insights/analyse/status').catch(() => null);
+  if (statusRes && statusRes.ok) {
+    const s = await statusRes.json();
+    _updateAnalysisBanner(s);
+    if (s.status === 'running') _startAnalysisPolling();
+  }
+
   const [overviewRes, tagRes] = await Promise.all([
     fetch('/api/insights/overview'),
     fetch('/api/insights/tag-health'),
@@ -3513,6 +3521,8 @@ function _renderInsightsTagHealth(d) {
     </div>`;
 }
 
+let _analysisPoller = null;
+
 async function startLibraryAnalysis() {
   const ok = await _showConfirm({
     title: 'Analyse Library',
@@ -3521,7 +3531,93 @@ async function startLibraryAnalysis() {
     danger: false,
   });
   if (!ok) return;
-  showToast('Audio analysis coming soon — this will be available in the next update.');
+
+  const res = await fetch('/api/insights/analyse', { method: 'POST' });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    showToast(d.error || 'Could not start analysis.');
+    return;
+  }
+  _startAnalysisPolling();
+}
+
+function _startAnalysisPolling() {
+  if (_analysisPoller) return;  // already polling
+  _analysisPoller = setInterval(_pollAnalysisStatus, 1500);
+  _pollAnalysisStatus(); // immediate first tick
+}
+
+async function _pollAnalysisStatus() {
+  try {
+    const res = await fetch('/api/insights/analyse/status');
+    if (!res.ok) return;
+    const s = await res.json();
+    _updateAnalysisBanner(s);
+
+    if (s.status === 'done' || s.status === 'error' || s.status === 'idle') {
+      clearInterval(_analysisPoller);
+      _analysisPoller = null;
+      if (s.status === 'done') {
+        // Refresh overview charts now that sample_rate/bit_depth data is fresh
+        setTimeout(() => {
+          if (state.view === 'insights') loadInsightsView();
+        }, 800);
+      }
+    }
+  } catch (_) { /* network hiccup — keep polling */ }
+}
+
+function _updateAnalysisBanner(s) {
+  const banner   = document.getElementById('insights-analysis-banner');
+  const navDot   = document.getElementById('insights-nav-dot');
+  const icon     = document.getElementById('insights-analysis-icon');
+  const label    = document.getElementById('insights-analysis-label');
+  const sub      = document.getElementById('insights-analysis-sub');
+  const bar      = document.getElementById('insights-analysis-bar');
+  const cta      = document.getElementById('insights-analyse-btn');
+  if (!banner) return;
+
+  if (s.status === 'idle') {
+    banner.style.display = 'none';
+    if (navDot) navDot.style.display = 'none';
+    return;
+  }
+
+  banner.style.display = 'block';
+  banner.className = 'insights-analysis-banner';
+
+  const _spinnerSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></path></svg>`;
+  const _doneSvg   = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+  const _errorSvg  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+
+  if (s.status === 'running') {
+    navDot.style.display = 'flex';
+    icon.innerHTML = _spinnerSvg;
+    label.textContent = 'Analysing library…';
+    const pct = s.total > 0 ? Math.round(s.done / s.total * 100) : 0;
+    sub.textContent = `${s.done.toLocaleString()} / ${s.total.toLocaleString()} tracks · ${pct}%`;
+    bar.className = 'insights-analysis-bar';
+    bar.style.width = `${pct}%`;
+    if (cta) cta.disabled = true;
+  } else if (s.status === 'done') {
+    navDot.style.display = 'none';
+    banner.classList.add('insights-analysis-banner--done');
+    icon.innerHTML = _doneSvg;
+    label.textContent = 'Analysis complete';
+    const ts = s.completed_at ? new Date(s.completed_at * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    sub.textContent = `${s.total.toLocaleString()} tracks analysed${ts ? ' · ' + ts : ''}`;
+    bar.className = 'insights-analysis-bar';
+    bar.style.width = '100%';
+    if (cta) cta.disabled = false;
+  } else if (s.status === 'error') {
+    navDot.style.display = 'none';
+    banner.classList.add('insights-analysis-banner--error');
+    icon.innerHTML = _errorSvg;
+    label.textContent = 'Analysis failed';
+    sub.textContent = s.error || 'Unknown error';
+    bar.style.width = '0%';
+    if (cta) cta.disabled = false;
+  }
 }
 
 /* ── Init ───────────────────────────────────────────────────────────── */
