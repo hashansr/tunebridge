@@ -3551,6 +3551,9 @@ async function startLibraryAnalysis() {
   const d = await res.json().catch(() => ({}));
   // Immediately show the banner — don't wait for the first poll tick
   _updateAnalysisBanner({ status: 'running', done: 0, total: d.total || 0 });
+  // Scroll the banner into view so the user sees it appear
+  const banner = document.getElementById('insights-analysis-banner');
+  if (banner) banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   _startAnalysisPolling();
 }
 
@@ -3605,7 +3608,7 @@ function _updateAnalysisBanner(s) {
   if (s.status === 'idle') {
     banner.style.display = 'none';
     if (navDot) navDot.style.display = 'none';
-    if (cta) { cta.disabled = false; }
+    if (cta) { cta.disabled = false; cta.innerHTML = 'Analyse Library'; }
     if (cancelBtn) cancelBtn.style.display = 'none';
     return;
   }
@@ -3627,7 +3630,10 @@ function _updateAnalysisBanner(s) {
       : 'Starting…';
     bar.className = 'insights-analysis-bar';
     bar.style.width = `${pct}%`;
-    if (cta) cta.disabled = true;
+    if (cta) {
+      cta.disabled = true;
+      cta.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:spin 1s linear infinite;flex-shrink:0"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Analysing…`;
+    }
     if (cancelBtn) cancelBtn.style.display = 'inline-flex';
   } else if (s.status === 'done') {
     if (navDot) navDot.style.display = 'none';
@@ -3638,7 +3644,7 @@ function _updateAnalysisBanner(s) {
     sub.textContent = `${s.total.toLocaleString()} tracks analysed${ts ? ' · ' + ts : ''}`;
     bar.className = 'insights-analysis-bar';
     bar.style.width = '100%';
-    if (cta) cta.disabled = false;
+    if (cta) { cta.disabled = false; cta.innerHTML = 'Re-analyse'; }
     if (cancelBtn) cancelBtn.style.display = 'none';
   } else if (s.status === 'error') {
     if (navDot) navDot.style.display = 'none';
@@ -3647,7 +3653,7 @@ function _updateAnalysisBanner(s) {
     label.textContent = 'Analysis failed';
     sub.textContent = s.error || 'Unknown error';
     bar.style.width = '0%';
-    if (cta) cta.disabled = false;
+    if (cta) { cta.disabled = false; cta.innerHTML = 'Analyse Library'; }
     if (cancelBtn) cancelBtn.style.display = 'none';
   }
 }
