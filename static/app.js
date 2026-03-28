@@ -2895,6 +2895,42 @@ function clearSongsFilter() {
   renderSongsTable();
 }
 
+/* ── Backup & Browse ────────────────────────────────────────────────── */
+async function browseFolder(inputId) {
+  const res = await api('/browse/folder', { method: 'POST' }).catch(() => null);
+  if (!res) { toast('Could not open folder picker'); return; }
+  if (res.error) { toast(res.error); return; }
+  if (res.path) {
+    const el = document.getElementById(inputId);
+    if (el) { el.value = res.path; el.focus(); }
+  }
+  // res.path === null means user cancelled — do nothing
+}
+
+function exportBackup() {
+  window.location.href = '/api/backup/export';
+}
+
+async function importBackup(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch('/api/backup/import', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.ok) {
+      toast('Backup restored successfully — reloading…');
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      toast('Import failed: ' + (data.error || 'Unknown error'));
+    }
+  } catch(e) {
+    toast('Import failed: ' + e.message);
+  }
+  input.value = '';  // reset so same file can be re-selected
+}
+
 /* ── Settings ──────────────────────────────────────────────────────── */
 async function loadSettings() {
   const [settings] = await Promise.all([
@@ -2903,6 +2939,8 @@ async function loadSettings() {
   ]);
   const inp = document.getElementById('lib-path-input');
   if (inp) inp.value = settings.library_path || '/Volumes/Storage/Music/FLAC';
+  const dirEl = document.getElementById('settings-data-dir');
+  if (dirEl && settings._data_dir) dirEl.textContent = settings._data_dir;
 }
 
 async function saveLibraryPath() {
@@ -3241,6 +3279,9 @@ const App = {
   loadSettings,
   saveLibraryPath,
   restartApp,
+  browseFolder,
+  exportBackup,
+  importBackup,
   // Baselines
   addBaseline,
   deleteBaseline,

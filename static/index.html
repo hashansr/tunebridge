@@ -356,12 +356,36 @@
             <h3 class="settings-section-title">Library</h3>
             <div class="settings-row">
               <label>Music library path</label>
-              <input id="lib-path-input" type="text" />
+              <div class="input-browse-group">
+                <input id="lib-path-input" type="text" />
+                <button class="btn-browse" onclick="App.browseFolder('lib-path-input')">Browse…</button>
+              </div>
             </div>
             <p class="settings-hint">The folder containing your music files. Structure: <code>Artist/Album/Track.flac</code></p>
             <div style="margin-top:16px;display:flex;gap:8px">
               <button class="btn-primary" onclick="App.saveLibraryPath()">Save</button>
               <button class="btn-secondary" onclick="App.rescan()">Rescan Library</button>
+            </div>
+          </div>
+
+          <!-- Data & Backup section -->
+          <div class="settings-section">
+            <h3 class="settings-section-title">Data &amp; Backup</h3>
+            <p class="settings-data-dir-label">Data location: <code id="settings-data-dir">~/Library/Application Support/TuneBridge</code></p>
+            <p class="settings-hint" style="padding-left:0;margin-bottom:16px">
+              Your playlists, DAPs, IEMs and settings are preserved here across app updates.
+              Export a backup before reinstalling or switching machines.
+            </p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button class="btn-secondary" onclick="App.exportBackup()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export Backup
+              </button>
+              <label class="btn-secondary" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Import Backup
+                <input type="file" accept=".zip" style="display:none" onchange="App.importBackup(this)">
+              </label>
             </div>
           </div>
 
@@ -782,8 +806,12 @@
       </div>
       <div class="settings-row">
         <label>Mount path</label>
-        <input id="dap-mount" type="text" />
+        <div class="input-browse-group">
+          <input id="dap-mount" type="text" />
+          <button class="btn-browse" onclick="App.browseFolder('dap-mount')">Browse…</button>
+        </div>
       </div>
+      <p class="settings-hint" style="margin-bottom:10px">Connect your DAP via USB, then Browse to its root folder (e.g. <code>/Volumes/FIIO M21</code>). You can also point directly to the Music folder on its SD card.</p>
       <div class="settings-row" style="align-items:flex-start">
         <label style="padding-top:8px">Playlist export folder</label>
         <div style="flex:1;display:flex;flex-direction:column;gap:4px">

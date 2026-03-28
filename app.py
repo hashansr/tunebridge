@@ -2,6 +2,8 @@ from flask import Flask, jsonify, request, send_file, Response
 import os
 import sys
 import json
+import io
+import zipfile
 import subprocess
 try:
     from waitress import serve as waitress_serve
@@ -979,7 +981,9 @@ def export_playlist(pid, fmt):
 
 @app.route('/api/settings', methods=['GET'])
 def get_settings():
-    return jsonify(load_settings())
+    s = load_settings()
+    s['_data_dir'] = str(DATA_DIR)
+    return jsonify(s)
 
 
 @app.route('/api/settings', methods=['PUT'])
@@ -2127,6 +2131,77 @@ def stream_track(track_id):
     rv.headers['Content-Length'] = str(length)
     rv.headers['Cache-Control']  = 'no-cache'
     return rv
+
+
+@app.route('/api/backup/export', methods=['GET'])
+def export_backup():
+    buf = io.BytesIO()
+    timestamp = time.strftime('%Y%m%d_%H%M%S')
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for fname in ['playlists.json', 'settings.json', 'daps.json',
+                      'iems.json', 'baselines.json']:
+            p = DATA_DIR / fname
+            if p.exists():
+                zf.write(p, fname)
+        art = DATA_DIR / 'playlist_artwork'
+        if art.is_dir():
+            for item in art.iterdir():
+                if item.is_file():
+                    zf.write(item, f'playlist_artwork/{item.name}')
+    buf.seek(0)
+    return send_file(buf, mimetype='application/zip',
+                     as_attachment=True,
+                     download_name=f'tunebridge_backup_{timestamp}.zip')
+
+
+@app.route('/api/backup/import', methods=['POST'])
+def import_backup():
+    f = request.files.get('file')
+    if not f:
+        return jsonify({'error': 'No file provided'}), 400
+    try:
+        raw = f.read()
+        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            names = zf.namelist()
+            for fname in ['playlists.json', 'settings.json', 'daps.json',
+                          'iems.json', 'baselines.json']:
+                if fname in names:
+                    content = json.loads(zf.read(fname))   # validate JSON
+                    dest = DATA_DIR / fname
+                    tmp = str(dest) + '.import.tmp'
+                    with open(tmp, 'w') as out:
+                        json.dump(content, out, indent=2)
+                    Path(tmp).replace(dest)
+            art_dir = DATA_DIR / 'playlist_artwork'
+            art_dir.mkdir(exist_ok=True)
+            for name in names:
+                if name.startswith('playlist_artwork/') and not name.endswith('/'):
+                    dest = art_dir / Path(name).name
+                    dest.write_bytes(zf.read(name))
+        return jsonify({'ok': True})
+    except zipfile.BadZipFile:
+        return jsonify({'error': 'Invalid ZIP file — is this a TuneBridge backup?'}), 400
+    except json.JSONDecodeError as e:
+        return jsonify({'error': f'Corrupt JSON in backup: {e}'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/browse/folder', methods=['POST'])
+def browse_folder():
+    try:
+        import webview
+        wins = webview.windows
+        if not wins:
+            return jsonify({'error': 'No window available'}), 400
+        result = wins[0].create_file_dialog(webview.FOLDER_DIALOG)
+        if result:
+            return jsonify({'path': result[0]})
+        return jsonify({'path': None})
+    except ImportError:
+        return jsonify({'error': 'Browse not available in dev mode — type path manually'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 load_library()
