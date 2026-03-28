@@ -95,7 +95,13 @@ def main():
     # Instead, a background thread calls evaluate_js every 5 s and writes
     # the state directly to player_state.json.  Background → main thread
     # dispatch works fine; only main → main self-dispatch deadlocks.
-    state_file = Path(PROJECT_DIR) / 'data' / 'player_state.json'
+    _bundled = os.environ.get('TUNEBRIDGE_BUNDLED') == '1'
+    _data_dir = (
+        Path.home() / 'Library' / 'Application Support' / 'TuneBridge'
+        if _bundled else
+        Path(PROJECT_DIR) / 'data'
+    )
+    state_file = _data_dir / 'player_state.json'
 
     def _player_state_watcher():
         while True:

@@ -1,5 +1,4 @@
 from flask import Flask, jsonify, request, send_file, Response
-from flask_cors import CORS
 import os
 import sys
 import json
@@ -33,9 +32,15 @@ _ARTICLE_RE = re.compile(r'^(the|a|an)\s+', re.IGNORECASE)
 def artist_sort_key(name):
     """Return sort key that ignores leading articles (The, A, An)."""
     return _ARTICLE_RE.sub('', name).lower()
-CORS(app)
 
-DATA_DIR = Path(__file__).parent / 'data'
+# In bundled .app mode, store user data in ~/Library/Application Support/TuneBridge/
+# so it survives app updates and works even when app is in /Applications (read-only).
+_BUNDLED = os.environ.get('TUNEBRIDGE_BUNDLED') == '1'
+DATA_DIR = (
+    Path.home() / 'Library' / 'Application Support' / 'TuneBridge'
+    if _BUNDLED else
+    Path(__file__).parent / 'data'
+)
 PLAYLIST_FILE = DATA_DIR / 'playlists.json'
 LIBRARY_CACHE = DATA_DIR / 'library.json'
 ARTWORK_DIR = DATA_DIR / 'artwork'
@@ -47,7 +52,7 @@ BASELINES_FILE = DATA_DIR / 'baselines.json'
 PLAYER_STATE_FILE = DATA_DIR / 'player_state.json'
 
 DEFAULT_SETTINGS = {
-    'library_path':     '/Volumes/Storage/Music/FLAC',
+    'library_path':     str(Path.home() / 'Music'),
     'poweramp_mount':   '/Volumes/FIIO M21',
     'ap80_mount':       '/Volumes/AP80',
     'poweramp_prefix':  '',   # internal device path, e.g. /storage/sdcard0

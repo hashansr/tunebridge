@@ -6,7 +6,10 @@ __pycache__/
 *.pyd
 .Python
 *.egg-info/
+
+# Distribution build output
 dist/
+*.dmg
 build/
 .env
 
