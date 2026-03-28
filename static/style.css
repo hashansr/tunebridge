@@ -3093,6 +3093,7 @@ tr.player-active .track-title { color: var(--accent); }
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   margin-bottom: 24px;
+  min-width: 0;
 }
 
 .insights-stat-card {
@@ -3100,6 +3101,7 @@ tr.player-active .track-title { color: var(--accent); }
   border-radius: 10px;
   padding: 18px 20px;
   text-align: center;
+  min-width: 0;
 }
 
 .insights-stat-value {
@@ -3123,12 +3125,15 @@ tr.player-active .track-title { color: var(--accent); }
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
+  min-width: 0;
 }
 
 .insights-chart-card {
   background: var(--surface-3);
   border-radius: 10px;
   padding: 16px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .insights-chart-title {
@@ -3140,7 +3145,10 @@ tr.player-active .track-title { color: var(--accent); }
   margin-bottom: 12px;
 }
 
-.insights-chart-wrap { position: relative; }
+.insights-chart-wrap {
+  position: relative;
+  width: 100%;
+}
 
 .insights-chart-legend {
   margin-top: 12px;
