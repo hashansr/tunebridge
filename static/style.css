@@ -3481,3 +3481,262 @@ tr.player-active .track-title { color: var(--accent); }
 .insights-analysis-banner--done #insights-analysis-label { color: #53e16f; }
 .insights-analysis-banner--error .insights-analysis-icon { background: rgba(255,179,181,0.12); color: var(--accent-secondary); }
 .insights-analysis-banner--error #insights-analysis-label { color: var(--accent-secondary); }
+
+/* ── Locked state ──────────────────────────────────────────────────────── */
+.insights-locked-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 0 4px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* ── Sonic Profile ─────────────────────────────────────────────────────── */
+.sonic-charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+  min-width: 0;
+}
+
+.sonic-chart-card {
+  background: var(--surface-3);
+  border-radius: 10px;
+  padding: 16px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sonic-chart-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+
+.sonic-stat-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.sonic-stat {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sonic-stat strong {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.sonic-scatter-card {
+  background: var(--surface-3);
+  border-radius: 10px;
+  padding: 16px;
+  min-width: 0;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.sonic-caveat {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  padding: 12px 14px;
+  background: var(--surface-3);
+  border-radius: 8px;
+  border-left: 2px solid rgba(173,198,255,0.2);
+}
+
+/* ── Gear Fit ──────────────────────────────────────────────────────────── */
+.gear-library-char {
+  background: var(--surface-3);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.gear-library-char-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.gear-library-char-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+
+.gear-demand-bars { display: flex; flex-direction: column; gap: 8px; }
+
+.gear-demand-row {}
+
+.gear-demand-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.gear-demand-pct { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.gear-demand-track {
+  height: 4px;
+  background: var(--surface-4, #353534);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.gear-demand-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: rgba(173,198,255,0.6);
+  transition: width 0.5s ease;
+}
+
+/* IEM fit cards */
+.gear-iem-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.gear-iem-card {
+  background: var(--surface-3);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.gear-iem-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.gear-iem-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.gear-iem-char {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-top: 1px;
+}
+
+.gear-fit-badge {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.gear-fit-badge--high   { background: rgba(83,225,111,0.15);  color: #53e16f; }
+.gear-fit-badge--mid    { background: rgba(240,180,41,0.15);  color: #f0b429; }
+.gear-fit-badge--low    { background: rgba(255,179,181,0.15); color: var(--accent-secondary); }
+
+/* IEM band signature mini-bars */
+.gear-sig-bands {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.gear-sig-band {}
+
+.gear-sig-band-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.gear-sig-band-bar-wrap {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* Centred zero-line bar */
+.gear-sig-band-bar-track {
+  width: 100%;
+  height: 4px;
+  background: var(--surface-4, #353534);
+  border-radius: 99px;
+  position: relative;
+  overflow: visible;
+}
+
+.gear-sig-band-bar-fill {
+  position: absolute;
+  height: 100%;
+  border-radius: 99px;
+  top: 0;
+}
+
+.gear-sig-band-val {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Recommendations */
+.gear-recs-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.gear-recs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gear-rec-item {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  padding: 10px 14px;
+  background: var(--surface-3);
+  border-radius: 8px;
+  border-left: 2px solid rgba(173,198,255,0.25);
+}
+
+.gear-caveat {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  padding: 12px 14px;
+  background: var(--surface-3);
+  border-radius: 8px;
+  border-left: 2px solid rgba(240,180,41,0.3);
+  margin-top: 12px;
+}

@@ -2454,6 +2454,213 @@ def insights_analysis_status():
     return jsonify(analysis_state)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Insights — Phase 2 & 3: Sonic Profile + Gear Fit
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_FREQ_BANDS = [
+    ('sub_bass',    20,    80,    40,   'Sub-bass'),
+    ('bass',        80,   250,   141,   'Bass'),
+    ('mids',       250,  2000,   707,   'Mids'),
+    ('upper_mids', 2000,  5000,  3162,  'Upper Mids'),
+    ('treble',     5000, 20000, 10000,  'Treble'),
+]
+
+
+def _load_features():
+    p = _features_file()
+    if not p.exists():
+        return []
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return []
+
+
+def _library_demand(features):
+    """
+    Normalised demand per frequency band using a Gaussian kernel in
+    log-octave space centred on each track's spectral centroid.
+    """
+    import numpy as np
+    valid = [f['brightness'] for f in features if f.get('brightness')]
+    if not valid:
+        return None
+    centroids    = np.array(valid, dtype=float)
+    band_centers = np.array([b[3] for b in _FREQ_BANDS], dtype=float)
+    sigma        = 1.5   # log2-octave bandwidth
+    log_dists    = np.abs(np.log2(centroids[:, None] / band_centers[None, :]))
+    weights      = np.exp(-0.5 * (log_dists / sigma) ** 2)
+    demand       = weights.mean(axis=0)
+    demand       = demand / (demand.sum() + 1e-8)
+    return {b[0]: round(float(v), 4) for b, v in zip(_FREQ_BANDS, demand)}
+
+
+def _iem_signature(measurement):
+    """Per-band average SPL deviation from 75 dB reference."""
+    import numpy as np
+    if not measurement or len(measurement) < 10:
+        return None
+    freqs = np.array([p[0] for p in measurement], dtype=float)
+    spls  = np.array([p[1] for p in measurement], dtype=float)
+    result = {}
+    for key, f_lo, f_hi, _, _ in _FREQ_BANDS:
+        mask = (freqs >= f_lo) & (freqs < f_hi)
+        result[key] = round(float(np.mean(spls[mask])) - 75.0, 2) if mask.any() else 0.0
+    return result
+
+
+def _iem_character_label(sig):
+    sub, bass, mids, upper, treble = (
+        sig.get('sub_bass', 0), sig.get('bass', 0), sig.get('mids', 0),
+        sig.get('upper_mids', 0), sig.get('treble', 0),
+    )
+    tags = []
+    if   sub > 4 or bass > 4:       tags.append('bass-boosted')
+    elif sub > 2 or bass > 2:       tags.append('warm')
+    elif sub < -3 and bass < -3:    tags.append('bass-light')
+    if   mids < -3:                 tags.append('recessed mids')
+    elif mids >  3:                 tags.append('mid-forward')
+    if   upper >  4:                tags.append('bright upper mids')
+    elif upper < -3:                tags.append('smooth upper mids')
+    if   treble >  4:               tags.append('airy')
+    elif treble < -4:               tags.append('dark')
+    if not tags:                    tags.append('neutral')
+    return ', '.join(tags)
+
+
+def _library_character_label(demand):
+    dominant = max(demand, key=demand.get)
+    return {
+        'sub_bass':   'bass-heavy and low-end driven',
+        'bass':       'warm and bass-forward',
+        'mids':       'mid-centric and vocal-forward',
+        'upper_mids': 'detailed and presence-forward',
+        'treble':     'bright and airy',
+    }.get(dominant, 'balanced')
+
+
+def _fit_score(demand, sig):
+    import numpy as np
+    band_keys = [b[0] for b in _FREQ_BANDS]
+    d = np.array([demand[k]          for k in band_keys], dtype=float)
+    s = np.array([sig.get(k, 0.0)   for k in band_keys], dtype=float)
+    s_shifted = s - s.min() + 0.5
+    s_norm    = s_shifted / (s_shifted.sum() + 1e-8)
+    cos = float(np.dot(d, s_norm) / (np.linalg.norm(d) * np.linalg.norm(s_norm) + 1e-8))
+    return round(min(max(cos * 100.0, 0.0), 100.0), 1)
+
+
+def _recommendations(demand, iem_results):
+    band_labels = {b[0]: b[4] for b in _FREQ_BANDS}
+    full_labels = {
+        'sub_bass':   'sub-bass extension',
+        'bass':       'mid-bass warmth',
+        'mids':       'midrange presence',
+        'upper_mids': 'upper-midrange detail',
+        'treble':     'treble air',
+    }
+    if not iem_results:
+        return ['Add IEMs or headphones to your Gear library to see personalised recommendations.']
+
+    band_keys = [b[0] for b in _FREQ_BANDS]
+    avg_sig = {k: sum(r['signature'].get(k, 0) for r in iem_results) / len(iem_results)
+               for k in band_keys}
+    gear_weakest  = min(avg_sig, key=avg_sig.get)
+    lib_char      = _library_character_label(demand)
+    recs = []
+
+    if demand.get(gear_weakest, 0) > 0.18 and avg_sig[gear_weakest] < -1.5:
+        recs.append(
+            f"Your library makes notable use of the {full_labels[gear_weakest]} region, "
+            f"but your gear collection tends to underemphasise it. "
+            f"A sound signature with more {full_labels[gear_weakest]} would fill this gap."
+        )
+    if demand.get('treble', 0) > 0.25 and avg_sig.get('treble', 0) > 3.0:
+        recs.append(
+            "Both your library and your gear lean bright. "
+            "A smoother, more neutral signature could reduce fatigue on longer sessions."
+        )
+    if demand.get('mids', 0) > 0.30 and avg_sig.get('mids', 0) < -2.0:
+        recs.append(
+            "Your library is vocal-forward, but your gear has recessed mids on average. "
+            "A more mid-centric or neutral signature would let vocals cut through better."
+        )
+    if not recs:
+        recs.append(
+            f"Your gear collection is well-matched to your {lib_char} library. "
+            "No major gaps detected across your current lineup."
+        )
+    return recs
+
+
+@app.route('/api/insights/sonic-profile')
+def insights_sonic_profile():
+    import numpy as np, random as _rnd
+    features = _load_features()
+    valid = [f for f in features if f.get('brightness') and f.get('energy') is not None]
+    if not valid:
+        return jsonify({'error': 'Run audio analysis first'}), 404
+
+    brightness = np.array([f['brightness'] for f in valid], dtype=float)
+    energy     = np.array([f['energy']     for f in valid], dtype=float)
+
+    def _hist(arr, n=25):
+        counts, edges = np.histogram(arr, bins=n)
+        mids = [(edges[i] + edges[i+1]) / 2 for i in range(len(edges) - 1)]
+        return {'counts': counts.tolist(), 'midpoints': [round(m, 2) for m in mids]}
+
+    def _stats(arr):
+        return {k: round(float(v), 2) for k, v in {
+            'min': arr.min(), 'max': arr.max(), 'mean': arr.mean(),
+            'median': np.median(arr), 'p25': np.percentile(arr, 25),
+            'p75': np.percentile(arr, 75),
+        }.items()}
+
+    sample = _rnd.sample(valid, min(600, len(valid)))
+    scatter = [{'x': round(f['brightness'], 0), 'y': round(f['energy'], 5)} for f in sample]
+
+    return jsonify({
+        'track_count': len(valid),
+        'brightness':  {'histogram': _hist(brightness), 'stats': _stats(brightness)},
+        'energy':      {'histogram': _hist(energy),     'stats': _stats(energy)},
+        'scatter':     scatter,
+    })
+
+
+@app.route('/api/insights/gear-fit')
+def insights_gear_fit():
+    features = _load_features()
+    demand   = _library_demand(features)
+    if not demand:
+        return jsonify({'error': 'Run audio analysis first'}), 404
+
+    iems_path = DATA_DIR / 'iems.json'
+    iems = json.loads(iems_path.read_text()) if iems_path.exists() else []
+
+    iem_results = []
+    for iem in iems:
+        sig = _iem_signature(iem.get('measurement_L'))
+        if not sig:
+            continue
+        iem_results.append({
+            'id':        iem['id'],
+            'name':      iem['name'],
+            'signature': sig,
+            'character': _iem_character_label(sig),
+            'fit_score': _fit_score(demand, sig),
+        })
+    iem_results.sort(key=lambda x: -x['fit_score'])
+
+    return jsonify({
+        'demand':            demand,
+        'library_character': _library_character_label(demand),
+        'band_labels':       {b[0]: b[4] for b in _FREQ_BANDS},
+        'iems':              iem_results,
+        'recommendations':   _recommendations(demand, iem_results),
+    })
+
+
 load_library()
 
 if __name__ == '__main__':

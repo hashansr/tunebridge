@@ -3373,6 +3373,14 @@ async function loadInsightsView() {
     document.getElementById('insights-tag-health-content').innerHTML =
       '<p class="insights-error">Could not load tag health data.</p>';
   }
+
+  // Phase 2 & 3 — only available after analysis has been run
+  const [sonicRes, gearRes] = await Promise.all([
+    fetch('/api/insights/sonic-profile'),
+    fetch('/api/insights/gear-fit'),
+  ]);
+  if (sonicRes.ok) _renderInsightsSonicProfile(await sonicRes.json());
+  if (gearRes.ok)  _renderInsightsGearFit(await gearRes.json());
 }
 
 function _renderInsightsOverview(d) {
@@ -3618,6 +3626,180 @@ function _updateAnalysisBanner(s) {
     bar.style.width = '0%';
     if (cta) cta.disabled = false;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Insights — Phase 2: Sonic Profile
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+let _sonicBrightnessChart = null;
+let _sonicEnergyChart     = null;
+let _sonicScatterChart    = null;
+
+function _renderInsightsSonicProfile(d) {
+  const el = document.getElementById('insights-sonic-content');
+
+  [_sonicBrightnessChart, _sonicEnergyChart, _sonicScatterChart].forEach(c => { if (c) c.destroy(); });
+  _sonicBrightnessChart = _sonicEnergyChart = _sonicScatterChart = null;
+
+  const _hz = v => v >= 1000 ? `${(v/1000).toFixed(v%1000===0?0:1)}k` : Math.round(v).toString();
+  const _barOpts = (xlabel) => ({
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#6b6b7b', font: { size: 9 }, maxRotation: 45, callback: function(_, i) { return _hz(this.chart.data.labels[i]); } },
+           grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' },
+           title: { display: true, text: xlabel, color: '#6b6b7b', font: { size: 10 } } },
+      y: { ticks: { color: '#6b6b7b', font: { size: 9 } },
+           grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' },
+           title: { display: true, text: 'Tracks', color: '#6b6b7b', font: { size: 10 } } },
+    },
+    plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() },
+  });
+
+  const bs = d.brightness.stats;
+  const es = d.energy.stats;
+
+  el.innerHTML = `
+    <div class="sonic-charts-grid">
+      <div class="sonic-chart-card">
+        <div class="sonic-chart-title">Spectral Brightness</div>
+        <div class="insights-chart-wrap" style="height:180px"><canvas id="sonic-brightness-canvas"></canvas></div>
+        <div class="sonic-stat-row">
+          <span class="sonic-stat">Median <strong>${_hz(bs.median)} Hz</strong></span>
+          <span class="sonic-stat">Mean <strong>${_hz(bs.mean)} Hz</strong></span>
+          <span class="sonic-stat">IQR <strong>${_hz(bs.p25)}–${_hz(bs.p75)} Hz</strong></span>
+        </div>
+      </div>
+      <div class="sonic-chart-card">
+        <div class="sonic-chart-title">RMS Energy</div>
+        <div class="insights-chart-wrap" style="height:180px"><canvas id="sonic-energy-canvas"></canvas></div>
+        <div class="sonic-stat-row">
+          <span class="sonic-stat">Median <strong>${es.median.toFixed(3)}</strong></span>
+          <span class="sonic-stat">Mean <strong>${es.mean.toFixed(3)}</strong></span>
+          <span class="sonic-stat">IQR <strong>${es.p25.toFixed(3)}–${es.p75.toFixed(3)}</strong></span>
+        </div>
+      </div>
+    </div>
+    <div class="sonic-scatter-card">
+      <div class="sonic-chart-title">Brightness vs Energy — ${d.track_count.toLocaleString()} tracks sampled</div>
+      <div class="insights-chart-wrap" style="height:220px"><canvas id="sonic-scatter-canvas"></canvas></div>
+    </div>
+    <div class="sonic-caveat">
+      <strong>About this data</strong> — Spectral brightness (spectral centroid) is the frequency-weighted average of a track's spectrum and indicates where energy is concentrated. RMS energy reflects overall loudness. These are computed from the first ~1.5 s of each file, which is representative for most tracks but may differ for songs with extended intros. Values are derived from raw PCM data and are independent of any mastering or loudness normalisation.
+    </div>`;
+
+  _sonicBrightnessChart = new Chart(document.getElementById('sonic-brightness-canvas'), {
+    type: 'bar',
+    data: { labels: d.brightness.histogram.midpoints,
+            datasets: [{ data: d.brightness.histogram.counts, backgroundColor: 'rgba(173,198,255,0.65)', borderColor: 'rgba(173,198,255,0.9)', borderWidth: 1, borderRadius: 3 }] },
+    options: _barOpts('Spectral Centroid (Hz)'),
+  });
+
+  _sonicEnergyChart = new Chart(document.getElementById('sonic-energy-canvas'), {
+    type: 'bar',
+    data: { labels: d.energy.histogram.midpoints,
+            datasets: [{ data: d.energy.histogram.counts, backgroundColor: 'rgba(83,225,111,0.65)', borderColor: 'rgba(83,225,111,0.9)', borderWidth: 1, borderRadius: 3 }] },
+    options: {
+      ...(_barOpts('RMS Energy')),
+      scales: { ..._barOpts('RMS Energy').scales,
+        x: { ..._barOpts('RMS Energy').scales.x,
+             ticks: { ...(_barOpts('RMS Energy').scales.x.ticks),
+                      callback: function(_, i) { return this.chart.data.labels[i].toFixed(2); } } } },
+    },
+  });
+
+  _sonicScatterChart = new Chart(document.getElementById('sonic-scatter-canvas'), {
+    type: 'scatter',
+    data: { datasets: [{ data: d.scatter, pointRadius: 2.5,
+                          pointBackgroundColor: 'rgba(173,198,255,0.45)', pointBorderWidth: 0 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { type: 'logarithmic',
+             title: { display: true, text: 'Brightness (Hz)', color: '#6b6b7b', font: { size: 10 } },
+             ticks: { color: '#6b6b7b', font: { size: 9 }, callback: v => _hz(v) },
+             grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
+        y: { title: { display: true, text: 'Energy (RMS)', color: '#6b6b7b', font: { size: 10 } },
+             ticks: { color: '#6b6b7b', font: { size: 9 } },
+             grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
+      },
+      plugins: { legend: { display: false }, tooltip: { ..._insightsTooltipDefaults(),
+        callbacks: { label: ctx => `Brightness: ${_hz(ctx.parsed.x)} Hz · Energy: ${ctx.parsed.y.toFixed(3)}` } } },
+    },
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Insights — Phase 3: Gear Fit
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function _renderInsightsGearFit(d) {
+  const el = document.getElementById('insights-gear-content');
+  const bandKeys   = ['sub_bass', 'bass', 'mids', 'upper_mids', 'treble'];
+  const bandLabels = d.band_labels;
+  const MAX_DB = 10;  // visual range ±10 dB
+
+  // Library demand bars
+  const demandBarsHtml = bandKeys.map(k => {
+    const pct = Math.round(d.demand[k] * 100);
+    return `<div class="gear-demand-row">
+      <div class="gear-demand-label"><span>${bandLabels[k]}</span><span class="gear-demand-pct">${pct}%</span></div>
+      <div class="gear-demand-track"><div class="gear-demand-fill" style="width:${pct*4}%"></div></div>
+    </div>`;
+  }).join('');
+
+  // IEM cards
+  const iemCardsHtml = d.iems.length === 0
+    ? `<p class="insights-empty-note" style="padding:12px 0">No IEMs with frequency response data found. Add IEMs with squig.link measurements in the Gear section.</p>`
+    : d.iems.map(iem => {
+        const score = iem.fit_score;
+        const badgeClass = score >= 70 ? 'gear-fit-badge--high' : score >= 50 ? 'gear-fit-badge--mid' : 'gear-fit-badge--low';
+        const barsHtml = bandKeys.map(k => {
+          const val = iem.signature[k] || 0;
+          const pct = Math.min(Math.abs(val) / MAX_DB * 50, 50);  // 50% = max half-width
+          const isPos = val >= 0;
+          const col = isPos ? 'rgba(173,198,255,0.7)' : 'rgba(255,179,181,0.7)';
+          const leftPct  = isPos ? 50 : 50 - pct;
+          const widthPct = pct;
+          return `<div class="gear-sig-band">
+            <div class="gear-sig-band-label">${bandLabels[k].replace(' ', '&nbsp;')}</div>
+            <div class="gear-sig-band-bar-wrap">
+              <div class="gear-sig-band-bar-track">
+                <div class="gear-sig-band-bar-fill" style="left:${leftPct}%;width:${widthPct}%;background:${col}"></div>
+              </div>
+            </div>
+            <div class="gear-sig-band-val">${val > 0 ? '+' : ''}${val.toFixed(1)}</div>
+          </div>`;
+        }).join('');
+        return `<div class="gear-iem-card">
+          <div class="gear-iem-header">
+            <div><div class="gear-iem-name">${esc(iem.name)}</div><div class="gear-iem-char">${esc(iem.character)}</div></div>
+            <span class="gear-fit-badge ${badgeClass}">${score}%</span>
+          </div>
+          <div class="gear-sig-bands">${barsHtml}</div>
+        </div>`;
+      }).join('');
+
+  // Recommendations
+  const recsHtml = d.recommendations.map(r => `<div class="gear-rec-item">${esc(r)}</div>`).join('');
+
+  el.innerHTML = `
+    <div class="gear-library-char">
+      <div class="gear-library-char-label">Library character</div>
+      <div class="gear-library-char-value">${esc(d.library_character)}</div>
+      <div class="gear-demand-bars">${demandBarsHtml}</div>
+    </div>
+    <div class="insights-subsection">
+      <h4 class="insights-subsection-title">IEM Fit Scores</h4>
+      <div class="gear-iem-list">${iemCardsHtml}</div>
+    </div>
+    <div class="insights-subsection">
+      <h4 class="insights-subsection-title">Recommendations</h4>
+      <div class="gear-recs-list">${recsHtml}</div>
+    </div>
+    <div class="gear-caveat">
+      <strong>Caveat</strong> — Fit scores compare your library's spectral centroid distribution against each IEM's frequency response curve. This is a directional heuristic, not a precise acoustic measurement. It reflects broad tonal alignment and should be treated as a starting point for exploration rather than a definitive ranking.
+    </div>`;
 }
 
 /* ── Init ───────────────────────────────────────────────────────────── */
