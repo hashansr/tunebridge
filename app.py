@@ -2572,32 +2572,48 @@ def _library_salience(features):
     return {b[0]: round(float(v), 6) for b, v in zip(_FREQ_BANDS, S_b)}
 
 
-def _iem_features(measurement):
+def _iem_features(measurement, target_measurement=None):
     """
-    Per-band deviation from neutral (75 dB flat) and roughness (within-band SPL std).
-    Normalises the raw measurement to 75 dB at 1 kHz first (raw stored data is un-normalised).
+    Per-band deviation and roughness (within-band SPL std).
+    Both IEM and target are normalised to 75 dB at 1 kHz.
+    Deviation = IEM_band_mean − target_band_mean  (target defaults to flat = 75 dB).
     Returns {'deviation': {band: dB}, 'roughness': {band: dB}} or None.
     """
     import numpy as np
     if not measurement or len(measurement) < 50:
         return None
-    # Normalise to 75 dB at 1 kHz — raw iems.json data is not pre-normalised
+    # Normalise IEM to 75 dB at 1 kHz
     ref = _spl_at_1khz(measurement)
     if ref is not None:
         measurement = _shift(measurement, NORM_REF_DB - ref)
     freqs = np.array([p[0] for p in measurement], dtype=float)
     spls  = np.array([p[1] for p in measurement], dtype=float)
+
+    # Pre-compute per-band mean of the target curve (default: flat = 75 dB everywhere)
+    target_band_mean = {}
+    if target_measurement and len(target_measurement) >= 50:
+        t_ref = _spl_at_1khz(target_measurement)
+        t_meas = _shift(target_measurement, NORM_REF_DB - t_ref) if t_ref is not None else target_measurement
+        t_freqs = np.array([p[0] for p in t_meas], dtype=float)
+        t_spls  = np.array([p[1] for p in t_meas], dtype=float)
+        for key, f_lo, f_hi, _, _ in _FREQ_BANDS:
+            mask = (t_freqs >= f_lo) & (t_freqs < f_hi)
+            target_band_mean[key] = float(t_spls[mask].mean()) if mask.any() else NORM_REF_DB
+    else:
+        for key, *_ in _FREQ_BANDS:
+            target_band_mean[key] = NORM_REF_DB  # flat
+
     deviation = {}
     roughness = {}
     for key, f_lo, f_hi, _, _ in _FREQ_BANDS:
         mask = (freqs >= f_lo) & (freqs < f_hi)
         if mask.any():
-            band_spls        = spls[mask]
-            deviation[key]   = round(float(band_spls.mean()) - 75.0, 2)
-            roughness[key]   = round(float(band_spls.std()), 2)
+            band_spls      = spls[mask]
+            deviation[key] = round(float(band_spls.mean()) - target_band_mean[key], 2)
+            roughness[key] = round(float(band_spls.std()), 2)
         else:
-            deviation[key]   = 0.0
-            roughness[key]   = 0.0
+            deviation[key] = 0.0
+            roughness[key] = 0.0
     return {'deviation': deviation, 'roughness': roughness}
 
 
@@ -2864,26 +2880,45 @@ def insights_gear_fit():
             'error': 'Re-run audio analysis to compute 10-band library features.'
         }), 404
 
+    # Resolve target baseline (flat = default)
+    target_id   = request.args.get('target', 'flat')
+    target_name = 'Flat / Neutral'
+    target_meas = None
+    baselines   = load_baselines()
+    if target_id != 'flat':
+        bl = next((b for b in baselines if b['id'] == target_id), None)
+        if bl and bl.get('measurement'):
+            target_name = bl['name']
+            target_meas = bl['measurement']
+        else:
+            target_id = 'flat'  # baseline not found or has no data → fall back
+
+    available_targets = (
+        [{'id': 'flat', 'name': 'Flat / Neutral'}] +
+        [{'id': b['id'], 'name': b['name']}
+         for b in baselines if b.get('measurement')]
+    )
+
     iems_path = DATA_DIR / 'iems.json'
     iems = json.loads(iems_path.read_text()) if iems_path.exists() else []
 
     iem_results = []
     for iem in iems:
         measurement = iem.get('measurement_L')
-        feat = _iem_features(measurement)
+        feat = _iem_features(measurement, target_meas)
         if not feat:
             continue
 
-        # PEQ variants — apply PEQ, re-compute features and score
+        # PEQ variants — apply PEQ, re-compute features and score against same target
         peq_variants = []
         for peq in (iem.get('peq_profiles') or []):
             peq_meas = _apply_peq(measurement, peq)
-            peq_feat = _iem_features(peq_meas)
+            peq_feat = _iem_features(peq_meas, target_meas)
             if not peq_feat:
                 continue
             peq_variants.append({
-                'peq_id':   peq['id'],
-                'name':     peq.get('name', 'PEQ'),
+                'peq_id':    peq['id'],
+                'name':      peq.get('name', 'PEQ'),
                 'deviation': peq_feat['deviation'],
                 'roughness': peq_feat['roughness'],
                 'character': _iem_character_label(peq_feat['deviation']),
@@ -2891,12 +2926,12 @@ def insights_gear_fit():
             })
 
         iem_results.append({
-            'id':          iem['id'],
-            'name':        iem['name'],
-            'deviation':   feat['deviation'],
-            'roughness':   feat['roughness'],
-            'character':   _iem_character_label(feat['deviation']),
-            'fit_score':   _fit_score(salience, feat),
+            'id':           iem['id'],
+            'name':         iem['name'],
+            'deviation':    feat['deviation'],
+            'roughness':    feat['roughness'],
+            'character':    _iem_character_label(feat['deviation']),
+            'fit_score':    _fit_score(salience, feat),
             'peq_variants': peq_variants,
         })
     iem_results.sort(key=lambda x: -x['fit_score'])
@@ -2904,12 +2939,15 @@ def insights_gear_fit():
     blindspot = _blindspot_analysis(salience, iem_results)
 
     return jsonify({
-        'salience':          salience,
-        'library_character': _library_character_label(salience),
-        'band_labels':       {b[0]: b[4] for b in _FREQ_BANDS},
-        'iems':              iem_results,
-        'blindspot':         blindspot,
-        'recommendations':   _recommendations(salience, iem_results, blindspot),
+        'salience':           salience,
+        'library_character':  _library_character_label(salience),
+        'band_labels':        {b[0]: b[4] for b in _FREQ_BANDS},
+        'iems':               iem_results,
+        'blindspot':          blindspot,
+        'recommendations':    _recommendations(salience, iem_results, blindspot),
+        'target_id':          target_id,
+        'target_name':        target_name,
+        'available_targets':  available_targets,
     })
 
 

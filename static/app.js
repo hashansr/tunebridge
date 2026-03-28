@@ -3318,6 +3318,7 @@ const App = {
   cancelLibraryAnalysis,
   _switchIemGearTab,
   showInsightsHelp,
+  changeGearFitTarget,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -3386,7 +3387,7 @@ async function loadInsightsView() {
   // Phase 2 & 3 — only available after analysis has been run
   const [sonicRes, gearRes] = await Promise.all([
     fetch('/api/insights/sonic-profile'),
-    fetch('/api/insights/gear-fit'),
+    fetch(`/api/insights/gear-fit?target=${encodeURIComponent(_gearFitTarget)}`),
   ]);
   if (sonicRes.ok) _renderInsightsSonicProfile(await sonicRes.json());
   if (gearRes.ok)  _renderInsightsGearFit(await gearRes.json());
@@ -3645,12 +3646,13 @@ const _INSIGHTS_HELP = {
   },
   gear: {
     title: 'Gear Fit',
-    body: `<p>Scores how well each IEM matches your library's tonal demands using its measured frequency response compared to a neutral (flat) target.</p>
-           <p><strong>Library character</strong> — shows which frequency bands your music exercises most (salience). If your library is bass-heavy, bass accuracy matters more for your score.</p>
-           <p><strong>IEM Fit Score</strong> — 100% = perfectly flat/neutral. Score drops when an IEM deviates from neutral in bands your library uses heavily. Factory vs PEQ tabs let you compare with and without EQ applied.</p>
-           <p><strong>Band bars</strong> — deviation from neutral at 0 dB. Bars left = recessed; right = boosted. Bands your library exercises heavily cost more when an IEM deviates there.</p>
-           <p><strong>Collection Coverage</strong> — across <em>all</em> your IEMs, how well is each frequency band covered by at least one neutral-ish IEM? Low coverage = a tonal blindspot in your collection.</p>
-           <p><strong>Example:</strong> An IEM with +6 dB bass scores 78% on a bass-heavy library — a warm-sounding IEM that emphasises an already-emphasized region.</p>`,
+    body: `<p>Scores how well each IEM matches your library's tonal demands, measured against a chosen target curve.</p>
+           <p><strong>Scoring target</strong> — the FR curve each IEM is scored against. <em>Flat / Neutral</em> (default) = perfectly flat response. You can also pick any target you've added in Settings (e.g. Harman, Rtings) to score IEMs against a preferred tuning signature instead.</p>
+           <p><strong>Library character</strong> — which frequency bands your music exercises most (salience). Deviations from the target in heavily-used bands cost more points.</p>
+           <p><strong>IEM Fit Score</strong> — 100% = matches the target exactly. Factory vs PEQ tabs let you compare the raw measurement against a PEQ-equalised version.</p>
+           <p><strong>Band bars</strong> — deviation from the target at 0 dB centre. Left = recessed vs target; right = boosted vs target.</p>
+           <p><strong>Collection Coverage</strong> — across all your IEMs, how well is each band covered by at least one IEM close to the target?</p>
+           <p><strong>Example:</strong> Scoring against Harman IEM 2019 instead of flat will favour IEMs with a slight bass shelf and ear-gain peak — penalising overly neutral-sounding IEMs that most listeners find thin.</p>`,
   },
 };
 
@@ -3865,7 +3867,8 @@ function _renderInsightsSonicProfile(d) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 // Cached gear-fit response for tab switching
-let _gearFitData = null;
+let _gearFitData   = null;
+let _gearFitTarget = 'flat';   // persists selected target across re-renders
 
 const _GEAR_BAND_KEYS = ['sub_bass','bass','mid_bass','lower_mids','mids',
                           'upper_mids','presence','lower_treble','upper_treble','air'];
@@ -3925,6 +3928,14 @@ function _switchIemGearTab(iemId, variantIdx) {
   // Band bars — use deviation from the selected variant
   const bandsEl = document.getElementById(`gear-bands-${sid}`);
   if (bandsEl) bandsEl.innerHTML = _gearBarsHtml(variant.deviation, _gearFitData.band_labels);
+}
+
+async function changeGearFitTarget(selectEl) {
+  _gearFitTarget = selectEl.value;
+  const el = document.getElementById('insights-gear-content');
+  if (el) el.innerHTML = '<div class="insights-spinner-wrap"><div class="spinner"></div></div>';
+  const res = await fetch(`/api/insights/gear-fit?target=${encodeURIComponent(_gearFitTarget)}`);
+  if (res.ok) _renderInsightsGearFit(await res.json());
 }
 
 function _renderInsightsGearFit(d) {
@@ -4003,7 +4014,21 @@ function _renderInsightsGearFit(d) {
   // ── Recommendations ────────────────────────────────────────────────
   const recsHtml = d.recommendations.map(r => `<div class="gear-rec-item">${esc(r)}</div>`).join('');
 
+  // ── Target selector ────────────────────────────────────────────────
+  const targetOptions = (d.available_targets || [{ id: 'flat', name: 'Flat / Neutral' }])
+    .map(t => `<option value="${esc(t.id)}" ${t.id === d.target_id ? 'selected' : ''}>${esc(t.name)}</option>`)
+    .join('');
+  const noExtraTargets = (d.available_targets || []).length <= 1;
+  const targetHelpHtml = noExtraTargets
+    ? `<span class="gear-target-hint">No targets added yet — <a class="gear-target-link" href="#" onclick="App.showView('settings');return false">add one in Settings</a> to score against Harman, Rtings, etc.</span>`
+    : `<span class="gear-target-hint">Targets are FR curves you've added in <a class="gear-target-link" href="#" onclick="App.showView('settings');return false">Settings</a>.</span>`;
+
   el.innerHTML = `
+    <div class="gear-target-row">
+      <label class="gear-target-label" for="gear-target-select">Scoring target</label>
+      <select class="gear-target-select" id="gear-target-select" onchange="App.changeGearFitTarget(this)">${targetOptions}</select>
+      ${targetHelpHtml}
+    </div>
     <div class="gear-library-char">
       <div class="gear-library-char-label">Library character</div>
       <div class="gear-library-char-value">${esc(d.library_character)}</div>
@@ -4012,7 +4037,7 @@ function _renderInsightsGearFit(d) {
     </div>
     <div class="insights-subsection">
       <h4 class="insights-subsection-title">IEM Fit Scores</h4>
-      <p class="gear-section-note">Deviation from neutral (flat) weighted by library salience. Lower deviation in bands your library uses heavily = higher score.</p>
+      <p class="gear-section-note">Deviation from <strong>${esc(d.target_name)}</strong>, weighted by library salience. Lower deviation in bands your library uses heavily = higher score.</p>
       <div class="gear-iem-list">${iemCardsHtml}</div>
     </div>
     ${blindspotHtml}
@@ -4021,7 +4046,7 @@ function _renderInsightsGearFit(d) {
       <div class="gear-recs-list">${recsHtml}</div>
     </div>
     <div class="gear-caveat">
-      <strong>Caveat</strong> — Scores measure how close each IEM is to neutral (flat response), weighted by the frequency bands your library actually exercises. A neutral IEM scores highest for all libraries; deviations in heavily-used bands cost more. Treat this as a directional guide, not a definitive ranking.
+      <strong>Caveat</strong> — Scores measure how close each IEM is to the selected target, weighted by the frequency bands your library exercises. Deviations in heavily-used bands cost more. Treat this as a directional guide, not a definitive ranking.
     </div>`;
 }
 

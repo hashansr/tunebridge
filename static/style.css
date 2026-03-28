@@ -3658,6 +3658,58 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 /* ── Gear Fit ──────────────────────────────────────────────────────────── */
+/* ── Gear Fit target selector ──────────────────────────────────────────── */
+.gear-target-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.gear-target-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gear-target-select {
+  background: var(--surface-3);
+  border: 1px solid rgba(173,198,255,0.14);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 5px 10px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.gear-target-select:hover  { border-color: rgba(173,198,255,0.3); }
+.gear-target-select:focus  { border-color: var(--accent); }
+
+.gear-target-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex: 1;
+  min-width: 0;
+}
+
+.gear-target-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.gear-target-link:hover { text-decoration: underline; }
+
+/* ── Gear library character ────────────────────────────────────────────── */
 .gear-library-char {
   background: var(--surface-3);
   border-radius: 10px;
