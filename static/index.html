@@ -488,8 +488,11 @@
           <!-- Overview -->
           <div class="insights-section" id="insights-overview-section">
             <div class="insights-section-hdr">
-              <h3 class="insights-section-title">Library Overview</h3>
-              <p class="insights-section-desc">Format, sample rate, and bit depth distribution across your library.</p>
+              <div class="insights-section-hdr-text">
+                <h3 class="insights-section-title">Library Overview</h3>
+                <p class="insights-section-desc">Format, sample rate, and bit depth distribution across your library.</p>
+              </div>
+              <button class="insights-help-btn" onclick="App.showInsightsHelp('overview', event)" title="What is this?">?</button>
             </div>
             <div id="insights-overview-content">
               <div class="insights-spinner-wrap"><div class="spinner"></div></div>
@@ -499,8 +502,11 @@
           <!-- Tag Health -->
           <div class="insights-section" id="insights-tag-health-section">
             <div class="insights-section-hdr">
-              <h3 class="insights-section-title">Tag Health</h3>
-              <p class="insights-section-desc">Metadata completeness and consistency across your library.</p>
+              <div class="insights-section-hdr-text">
+                <h3 class="insights-section-title">Tag Health</h3>
+                <p class="insights-section-desc">Metadata completeness and consistency across your library.</p>
+              </div>
+              <button class="insights-help-btn" onclick="App.showInsightsHelp('tag-health', event)" title="What is this?">?</button>
             </div>
             <div id="insights-tag-health-content">
               <div class="insights-spinner-wrap"><div class="spinner"></div></div>
@@ -510,8 +516,11 @@
           <!-- Sonic Profile -->
           <div class="insights-section" id="insights-sonic-section">
             <div class="insights-section-hdr">
-              <h3 class="insights-section-title">Sonic Profile</h3>
-              <p class="insights-section-desc">Spectral brightness and energy distribution across your library, derived from audio analysis.</p>
+              <div class="insights-section-hdr-text">
+                <h3 class="insights-section-title">Sonic Profile</h3>
+                <p class="insights-section-desc">Spectral brightness and energy distribution across your library, derived from audio analysis.</p>
+              </div>
+              <button class="insights-help-btn" onclick="App.showInsightsHelp('sonic', event)" title="What is this?">?</button>
             </div>
             <div id="insights-sonic-content">
               <div class="insights-locked-state">
@@ -524,8 +533,11 @@
           <!-- Gear Fit -->
           <div class="insights-section" id="insights-gear-section">
             <div class="insights-section-hdr">
-              <h3 class="insights-section-title">Gear Fit</h3>
-              <p class="insights-section-desc">How well your IEMs and headphones match your library's sonic character.</p>
+              <div class="insights-section-hdr-text">
+                <h3 class="insights-section-title">Gear Fit</h3>
+                <p class="insights-section-desc">How well your IEMs and headphones match your library's sonic character.</p>
+              </div>
+              <button class="insights-help-btn" onclick="App.showInsightsHelp('gear', event)" title="What is this?">?</button>
             </div>
             <div id="insights-gear-content">
               <div class="insights-locked-state">
@@ -546,6 +558,7 @@
               <div class="insights-cta-body">
                 <h3 class="insights-cta-title">Sonic Analysis</h3>
                 <p class="insights-cta-desc">Unlock deeper insights: spectral brightness profile, timbral clusters, gear-to-library fit scores, and blindspot detection. Requires reading each audio file — runs in the background.</p>
+                <p id="insights-analyse-status" class="insights-analyse-status"></p>
               </div>
               <button class="btn-primary insights-cta-btn" id="insights-analyse-btn" onclick="App.startLibraryAnalysis()">Analyse Library</button>
             </div>
@@ -568,6 +581,13 @@
         </div>
       </div>
     </main>
+
+  <!-- Shared Insights help popover -->
+  <div id="insights-help-popover" class="insights-help-popover" style="display:none" data-open-for="">
+    <h4 class="insights-help-title" id="insights-help-title"></h4>
+    <div class="insights-help-body" id="insights-help-body"></div>
+  </div>
+
   </div>
 
   <!-- Add-to-playlist dropdown -->

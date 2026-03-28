@@ -2488,6 +2488,32 @@ def insights_analysis_status():
     return jsonify(analysis_state)
 
 
+@app.route('/api/insights/analyse/info')
+def insights_analyse_info():
+    """Return per-track analysis coverage: how many library tracks have valid features."""
+    total    = len(library)
+    analysed = 0
+    fp = _features_file()
+    if fp.exists():
+        try:
+            lib_ids = {t['id'] for t in library}
+            for f in json.loads(fp.read_text()):
+                if (f.get('track_id') in lib_ids
+                        and f.get('brightness') is not None
+                        and f.get('band_energy') and len(f['band_energy']) == 10):
+                    analysed += 1
+        except Exception:
+            analysed = 0
+    pending = max(0, total - analysed)
+    if analysed == 0:
+        status = 'not_run'
+    elif pending == 0:
+        status = 'up_to_date'
+    else:
+        status = 'pending'
+    return jsonify({'total': total, 'analysed': analysed, 'pending': pending, 'status': status})
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Insights — Phase 2 & 3: Sonic Profile + Gear Fit
 # ═══════════════════════════════════════════════════════════════════════════════

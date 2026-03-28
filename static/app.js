@@ -3317,6 +3317,7 @@ const App = {
   startLibraryAnalysis,
   cancelLibraryAnalysis,
   _switchIemGearTab,
+  showInsightsHelp,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -3349,12 +3350,18 @@ async function loadInsightsView() {
   setActiveNav('insights');
   showViewEl('insights');
 
-  // Resume polling if analysis is already running
-  const statusRes = await fetch('/api/insights/analyse/status').catch(() => null);
+  // Resume polling if analysis is already running + show coverage status
+  const [statusRes, infoRes] = await Promise.all([
+    fetch('/api/insights/analyse/status').catch(() => null),
+    fetch('/api/insights/analyse/info').catch(() => null),
+  ]);
   if (statusRes && statusRes.ok) {
     const s = await statusRes.json();
     _updateAnalysisBanner(s);
     if (s.status === 'running') _startAnalysisPolling();
+  }
+  if (infoRes && infoRes.ok) {
+    _updateAnalysisInfo(await infoRes.json());
   }
 
   const [overviewRes, tagRes] = await Promise.all([
@@ -3596,6 +3603,96 @@ async function _pollAnalysisStatus() {
       }
     }
   } catch (_) { /* network hiccup — keep polling */ }
+}
+
+/* ── Analysis coverage status (incremental delta display) ──────────────── */
+function _updateAnalysisInfo(info) {
+  const el  = document.getElementById('insights-analyse-status');
+  const btn = document.getElementById('insights-analyse-btn');
+  if (!el) return;
+  if (info.status === 'up_to_date') {
+    el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--ok"></span>Analysis up to date — ${info.analysed.toLocaleString()} tracks analysed`;
+    if (btn && !btn.disabled) btn.textContent = 'Re-analyse';
+  } else if (info.status === 'pending') {
+    el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--warn"></span>${info.pending.toLocaleString()} song${info.pending !== 1 ? 's' : ''} pending analysis`;
+    if (btn && !btn.disabled) btn.textContent = 'Analyse Library';
+  } else {
+    el.textContent = '';
+    if (btn && !btn.disabled) btn.textContent = 'Analyse Library';
+  }
+}
+
+/* ── Insights section help popovers ────────────────────────────────────── */
+const _INSIGHTS_HELP = {
+  overview: {
+    title: 'Library Overview',
+    body: `<p>Shows the distribution of <strong>file formats</strong>, <strong>sample rates</strong>, and <strong>bit depths</strong> across your entire library.</p>
+           <p><strong>How to read:</strong> Taller bars = more tracks in that category. Ideally your library is consistent — e.g. mostly FLAC at 44.1 kHz / 16-bit for CD rips, or 96–192 kHz for Hi-Res downloads.</p>
+           <p><strong>Example:</strong> If 95% of your tracks are FLAC at 44.1 kHz / 16-bit, your library is clean and consistent. A large MP3 slice alongside FLAC suggests rips from mixed sources.</p>`,
+  },
+  'tag-health': {
+    title: 'Tag Health',
+    body: `<p>Measures how <strong>complete</strong> the metadata tags are across your library files.</p>
+           <p><strong>How to read:</strong> Green = high coverage, red = many tracks missing that tag. Title, Artist, and Album are critical for browsing; Genre and Year are optional but useful for filtering and playlists.</p>
+           <p><strong>Example:</strong> A Genre score of 45% means more than half your tracks have no genre tag — worth fixing before building genre-based playlists.</p>`,
+  },
+  sonic: {
+    title: 'Sonic Profile',
+    body: `<p><strong>Spectral Brightness</strong> — the spectral centroid is the "centre of mass" of a track's frequency content. Higher values (e.g. 4–6 kHz) mean bright, treble-forward music; lower values (1–2 kHz) indicate warm, bass-heavy music.</p>
+           <p><strong>RMS Energy</strong> — average loudness. Heavily compressed recordings (modern pop, metal) score higher than dynamic classical recordings.</p>
+           <p><strong>Scatter plot</strong> — each dot is one track. Top-right = loud and bright (e.g. pop/EDM); bottom-left = quiet and warm (e.g. acoustic/classical).</p>
+           <p><strong>Example:</strong> A tight cluster around 2–3 kHz with medium energy suggests a balanced, midrange-forward library. A wide spread means your collection spans many genres.</p>`,
+  },
+  gear: {
+    title: 'Gear Fit',
+    body: `<p>Scores how well each IEM matches your library's tonal demands using its measured frequency response compared to a neutral (flat) target.</p>
+           <p><strong>Library character</strong> — shows which frequency bands your music exercises most (salience). If your library is bass-heavy, bass accuracy matters more for your score.</p>
+           <p><strong>IEM Fit Score</strong> — 100% = perfectly flat/neutral. Score drops when an IEM deviates from neutral in bands your library uses heavily. Factory vs PEQ tabs let you compare with and without EQ applied.</p>
+           <p><strong>Band bars</strong> — deviation from neutral at 0 dB. Bars left = recessed; right = boosted. Bands your library exercises heavily cost more when an IEM deviates there.</p>
+           <p><strong>Collection Coverage</strong> — across <em>all</em> your IEMs, how well is each frequency band covered by at least one neutral-ish IEM? Low coverage = a tonal blindspot in your collection.</p>
+           <p><strong>Example:</strong> An IEM with +6 dB bass scores 78% on a bass-heavy library — a warm-sounding IEM that emphasises an already-emphasized region.</p>`,
+  },
+};
+
+let _helpCloseHandler = null;
+
+function showInsightsHelp(sectionKey, e) {
+  e.stopPropagation();
+  const btn  = e.currentTarget;
+  const pop  = document.getElementById('insights-help-popover');
+  const help = _INSIGHTS_HELP[sectionKey];
+  if (!pop || !help) return;
+
+  // Toggle off if already showing this section
+  if (pop.dataset.openFor === sectionKey && pop.style.display !== 'none') {
+    pop.style.display = 'none';
+    pop.dataset.openFor = '';
+    return;
+  }
+
+  document.getElementById('insights-help-title').textContent = help.title;
+  document.getElementById('insights-help-body').innerHTML   = help.body;
+  pop.dataset.openFor = sectionKey;
+  pop.style.display   = 'block';
+
+  // Position: fixed, right-aligned below the ? button
+  const rect = btn.getBoundingClientRect();
+  const popW = 360;
+  let left   = rect.right - popW;
+  if (left < 10) left = 10;
+  pop.style.top   = (rect.bottom + 8) + 'px';
+  pop.style.left  = left + 'px';
+  pop.style.width = popW + 'px';
+
+  // Close on outside click
+  if (_helpCloseHandler) document.removeEventListener('click', _helpCloseHandler);
+  _helpCloseHandler = function () {
+    pop.style.display = 'none';
+    pop.dataset.openFor = '';
+    document.removeEventListener('click', _helpCloseHandler);
+    _helpCloseHandler = null;
+  };
+  setTimeout(() => document.addEventListener('click', _helpCloseHandler), 0);
 }
 
 function _updateAnalysisBanner(s) {
