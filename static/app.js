@@ -1447,10 +1447,11 @@ function showView(viewName) {
   else if (viewName === 'gear') loadGearView();
   else if (viewName === 'playlists') loadPlaylistsView();
   else if (viewName === 'settings') loadSettings();
+  else if (viewName === 'insights') loadInsightsView();
 }
 
 function showViewEl(name) {
-  const views = ['artists', 'albums', 'tracks', 'songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists'];
+  const views = ['artists', 'albums', 'tracks', 'songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.style.display = v === name ? (v === 'playlist' ? 'flex' : 'block') : 'none';
@@ -3312,7 +3313,216 @@ const App = {
   closePeqModal,
   savePeq,
   deletePeq,
+  loadInsightsView,
+  startLibraryAnalysis,
 };
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Insights — Phase 1: Library Overview + Tag Health
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+let _insightsFormatChart = null;
+let _insightsSrChart     = null;
+let _insightsBdChart     = null;
+
+const _INSIGHTS_COLORS = [
+  '#adc6ff', '#53e16f', '#ffb3b5', '#f0b429',
+  '#a78bfa', '#fb923c', '#38bdf8', '#f472b6', '#34d399', '#4ecdc4',
+];
+
+function _insightsTooltipDefaults() {
+  return {
+    backgroundColor: 'rgba(53,53,52,0.95)',
+    titleColor: '#e5e2e1',
+    bodyColor: '#c1c6d7',
+    borderColor: 'rgba(65,71,85,0.3)',
+    borderWidth: 1,
+    padding: 10,
+    cornerRadius: 8,
+  };
+}
+
+async function loadInsightsView() {
+  state.view = 'insights';
+  setActiveNav('insights');
+  showViewEl('insights');
+
+  const [overviewRes, tagRes] = await Promise.all([
+    fetch('/api/insights/overview'),
+    fetch('/api/insights/tag-health'),
+  ]);
+
+  if (overviewRes.ok) {
+    _renderInsightsOverview(await overviewRes.json());
+  } else {
+    document.getElementById('insights-overview-content').innerHTML =
+      '<p class="insights-error">Could not load overview. Try rescanning your library first.</p>';
+  }
+
+  if (tagRes.ok) {
+    _renderInsightsTagHealth(await tagRes.json());
+  } else {
+    document.getElementById('insights-tag-health-content').innerHTML =
+      '<p class="insights-error">Could not load tag health data.</p>';
+  }
+}
+
+function _renderInsightsOverview(d) {
+  const el = document.getElementById('insights-overview-content');
+
+  // Destroy old chart instances before replacing canvas elements
+  [_insightsFormatChart, _insightsSrChart, _insightsBdChart].forEach(c => { if (c) c.destroy(); });
+  _insightsFormatChart = _insightsSrChart = _insightsBdChart = null;
+
+  el.innerHTML = `
+    <div class="insights-stat-cards">
+      <div class="insights-stat-card">
+        <div class="insights-stat-value">${d.total_tracks.toLocaleString()}</div>
+        <div class="insights-stat-label">Tracks</div>
+      </div>
+      <div class="insights-stat-card">
+        <div class="insights-stat-value">${d.total_albums.toLocaleString()}</div>
+        <div class="insights-stat-label">Albums</div>
+      </div>
+      <div class="insights-stat-card">
+        <div class="insights-stat-value">${d.total_artists.toLocaleString()}</div>
+        <div class="insights-stat-label">Artists</div>
+      </div>
+    </div>
+    <div class="insights-charts-grid">
+      <div class="insights-chart-card">
+        <div class="insights-chart-title">File Format</div>
+        <div class="insights-chart-wrap" style="height:180px"><canvas id="insights-format-canvas"></canvas></div>
+        <div class="insights-chart-legend" id="insights-format-legend"></div>
+      </div>
+      <div class="insights-chart-card">
+        <div class="insights-chart-title">Sample Rate</div>
+        <div class="insights-chart-wrap" style="height:180px"><canvas id="insights-sr-canvas"></canvas></div>
+      </div>
+      <div class="insights-chart-card">
+        <div class="insights-chart-title">Bit Depth</div>
+        <div class="insights-chart-wrap" style="height:180px"><canvas id="insights-bd-canvas"></canvas></div>
+      </div>
+    </div>
+  `;
+
+  // Format doughnut
+  const fmtLabels = Object.keys(d.formats);
+  const fmtValues = Object.values(d.formats);
+  _insightsFormatChart = new Chart(document.getElementById('insights-format-canvas'), {
+    type: 'doughnut',
+    data: {
+      labels: fmtLabels,
+      datasets: [{ data: fmtValues, backgroundColor: _INSIGHTS_COLORS.slice(0, fmtLabels.length), borderWidth: 0, hoverOffset: 4 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() },
+    },
+  });
+  // Custom legend
+  document.getElementById('insights-format-legend').innerHTML = fmtLabels.map((l, i) =>
+    `<div class="insights-legend-item">
+      <span class="insights-legend-dot" style="background:${_INSIGHTS_COLORS[i]}"></span>
+      <span class="insights-legend-label">${esc(l)}</span>
+      <span class="insights-legend-count">${fmtValues[i].toLocaleString()}</span>
+    </div>`
+  ).join('');
+
+  const _barScales = {
+    x: { ticks: { color: '#6b6b7b', font: { size: 10 } }, grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
+    y: { ticks: { color: '#6b6b7b', font: { size: 10 } }, grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
+  };
+  const _barOpts = { responsive: true, maintainAspectRatio: false, scales: _barScales, plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() } };
+  const _rescanNote = `<p class="insights-rescan-note">Rescan your library to populate this data.</p>`;
+
+  // Sample rate bar — show rescan note if all unknown
+  const srKeys = Object.keys(d.sample_rates);
+  const srUnknownOnly = srKeys.length === 1 && srKeys[0] === 'Unknown';
+  if (srUnknownOnly) {
+    document.getElementById('insights-sr-canvas').replaceWith(Object.assign(document.createElement('div'), { innerHTML: _rescanNote }));
+  } else {
+    _insightsSrChart = new Chart(document.getElementById('insights-sr-canvas'), {
+      type: 'bar',
+      data: { labels: srKeys, datasets: [{ data: Object.values(d.sample_rates), backgroundColor: 'rgba(173,198,255,0.65)', borderColor: 'rgba(173,198,255,0.9)', borderWidth: 1, borderRadius: 4 }] },
+      options: _barOpts,
+    });
+  }
+
+  // Bit depth bar — show rescan note if all unknown
+  const bdKeys = Object.keys(d.bit_depths);
+  const bdUnknownOnly = bdKeys.length === 1 && bdKeys[0] === 'Unknown';
+  if (bdUnknownOnly) {
+    document.getElementById('insights-bd-canvas').replaceWith(Object.assign(document.createElement('div'), { innerHTML: _rescanNote }));
+  } else {
+    _insightsBdChart = new Chart(document.getElementById('insights-bd-canvas'), {
+      type: 'bar',
+      data: { labels: bdKeys, datasets: [{ data: Object.values(d.bit_depths), backgroundColor: 'rgba(83,225,111,0.65)', borderColor: 'rgba(83,225,111,0.9)', borderWidth: 1, borderRadius: 4 }] },
+      options: _barOpts,
+    });
+  }
+}
+
+function _renderInsightsTagHealth(d) {
+  const el = document.getElementById('insights-tag-health-content');
+
+  const fieldLabels = { title: 'Title', artist: 'Artist', album: 'Album', year: 'Year', genre: 'Genre' };
+  // Explicit order — Flask JSON encoder may alpha-sort dict keys
+  const fieldOrder = ['title', 'artist', 'album', 'year', 'genre'];
+
+  const barsHtml = fieldOrder.filter(f => d.completeness[f]).map(field => { const s = d.completeness[field];
+    const col = s.pct >= 95 ? '#53e16f' : s.pct >= 70 ? '#f0b429' : '#ffb3b5';
+    return `<div class="tag-bar-row">
+      <div class="tag-bar-label"><span>${fieldLabels[field] || field}</span><span class="tag-bar-pct" style="color:${col}">${s.pct}%</span></div>
+      <div class="tag-bar-track"><div class="tag-bar-fill" style="width:${s.pct}%;background:${col}"></div></div>
+      <div class="tag-bar-counts">${s.present.toLocaleString()} present · ${s.missing.toLocaleString()} missing</div>
+    </div>`;
+  }).join('');
+
+  const dupsHtml = d.artist_duplicates.length === 0
+    ? `<p class="insights-empty-note">No inconsistent artist names detected.</p>`
+    : `<div class="insights-info-note">${d.artist_duplicates.length} artist name${d.artist_duplicates.length > 1 ? 's have' : ' has'} case or spacing variations. These create duplicate entries in the library browser.</div>
+       <div class="duplicates-list">${d.artist_duplicates.slice(0, 20).map(dup =>
+         `<div class="dup-row"><div class="dup-variants">${dup.variants.map(v => `<span class="dup-chip">${esc(v)}</span>`).join('')}</div><div class="dup-count">${dup.track_count} tracks</div></div>`
+       ).join('')}</div>`;
+
+  const problemHtml = d.problem_track_count === 0
+    ? `<p class="insights-empty-note">All tracks have complete metadata.</p>`
+    : `<div class="insights-info-note">${d.problem_track_count.toLocaleString()} track${d.problem_track_count > 1 ? 's' : ''} with missing metadata.${d.problem_track_count > 100 ? ' Showing worst 100.' : ''}</div>
+       <div class="problem-tracks-list">${d.problem_tracks.map(t =>
+         `<div class="problem-track-row">
+           <div class="problem-track-info"><span class="problem-track-title">${esc(t.title)}</span><span class="problem-track-artist">${esc(t.artist)}</span></div>
+           <div class="problem-track-issues">${t.issues.map(i => `<span class="tag-issue-chip">${esc(i)}</span>`).join('')}</div>
+         </div>`
+       ).join('')}</div>`;
+
+  el.innerHTML = `
+    <div class="insights-subsection">
+      <h4 class="insights-subsection-title">Metadata Completeness</h4>
+      <p class="insights-hint">Based on ${d.total.toLocaleString()} tracks. Year and genre are commonly absent and don't affect playback.</p>
+      <div class="tag-health-bars">${barsHtml}</div>
+    </div>
+    <div class="insights-subsection">
+      <h4 class="insights-subsection-title">Artist Name Consistency</h4>
+      ${dupsHtml}
+    </div>
+    <div class="insights-subsection">
+      <h4 class="insights-subsection-title">Problem Tracks</h4>
+      ${problemHtml}
+    </div>`;
+}
+
+async function startLibraryAnalysis() {
+  const ok = await _showConfirm({
+    title: 'Analyse Library',
+    message: 'Audio analysis reads every file in your library. This runs in the background and may take a while depending on library size and machine speed.',
+    okText: 'Start Analysis',
+    danger: false,
+  });
+  if (!ok) return;
+  showToast('Audio analysis coming soon — this will be available in the next update.');
+}
 
 /* ── Init ───────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {

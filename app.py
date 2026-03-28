@@ -2204,6 +2204,143 @@ def browse_folder():
         return jsonify({'error': str(e)}), 500
 
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Insights — Phase 1: Library Overview + Tag Health
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/api/insights/overview')
+def insights_overview():
+    tracks = library
+    if not tracks:
+        return jsonify({'error': 'Library is empty or not scanned'}), 404
+
+    artist_set = set()
+    album_set = set()
+    formats = {}
+    sample_rates = {}
+    bit_depths = {}
+
+    for t in tracks:
+        a = (t.get('album_artist') or t.get('artist') or '').strip()
+        if a and a.lower() not in ('unknown artist',):
+            artist_set.add(a.lower())
+        alb = (t.get('album') or '').strip()
+        if alb and alb.lower() not in ('unknown album',):
+            album_set.add(f"{a.lower()}||{alb.lower()}")
+
+        fmt = t.get('format') or 'Unknown'
+        formats[fmt] = formats.get(fmt, 0) + 1
+
+        sr = t.get('sample_rate')
+        if sr:
+            k = f"{sr // 1000} kHz" if sr % 1000 == 0 else f"{sr / 1000:.1f} kHz"
+            sample_rates[k] = sample_rates.get(k, 0) + 1
+        else:
+            sample_rates['Unknown'] = sample_rates.get('Unknown', 0) + 1
+
+        bd = t.get('bits_per_sample')
+        if bd:
+            bit_depths[f"{bd}-bit"] = bit_depths.get(f"{bd}-bit", 0) + 1
+        else:
+            bit_depths['Unknown'] = bit_depths.get('Unknown', 0) + 1
+
+    def _sr_num(k):
+        try:
+            return float(k.replace(' kHz', ''))
+        except Exception:
+            return 9999.0
+
+    sample_rates = dict(sorted(sample_rates.items(), key=lambda x: _sr_num(x[0])))
+    bit_depths   = dict(sorted(bit_depths.items()))
+
+    return jsonify({
+        'total_tracks':  len(tracks),
+        'total_albums':  len(album_set),
+        'total_artists': len(artist_set),
+        'formats':       formats,
+        'sample_rates':  sample_rates,
+        'bit_depths':    bit_depths,
+    })
+
+
+@app.route('/api/insights/tag-health')
+def insights_tag_health():
+    from collections import defaultdict
+    tracks = library
+    if not tracks:
+        return jsonify({'error': 'Library is empty'}), 404
+
+    total = len(tracks)
+
+    def _missing(t, field, sentinel=None):
+        v = t.get(field)
+        return not v or (sentinel is not None and v == sentinel)
+
+    field_defs = [
+        ('title',  None),
+        ('artist', 'Unknown Artist'),
+        ('album',  'Unknown Album'),
+        ('year',   None),
+        ('genre',  None),
+    ]
+
+    completeness = {}
+    for field, sentinel in field_defs:
+        n_missing = sum(1 for t in tracks if _missing(t, field, sentinel))
+        present   = total - n_missing
+        completeness[field] = {
+            'present': present,
+            'missing': n_missing,
+            'pct':     round(present / total * 100, 1),
+        }
+
+    artist_groups = defaultdict(list)
+    for t in tracks:
+        raw = (t.get('album_artist') or t.get('artist') or '').strip()
+        if raw and raw.lower() != 'unknown artist':
+            norm = re.sub(r'\s+', ' ', raw.lower())
+            artist_groups[norm].append(raw)
+
+    duplicates = []
+    for norm, raw_list in artist_groups.items():
+        variants = list(dict.fromkeys(raw_list))
+        if len(variants) > 1:
+            duplicates.append({
+                'normalized':  norm,
+                'variants':    variants,
+                'track_count': len(raw_list),
+            })
+    duplicates.sort(key=lambda x: -x['track_count'])
+
+    problem_tracks = []
+    for t in tracks:
+        issues = []
+        if _missing(t, 'title'):                    issues.append('title')
+        if _missing(t, 'artist', 'Unknown Artist'): issues.append('artist')
+        if _missing(t, 'album',  'Unknown Album'):  issues.append('album')
+        if _missing(t, 'year'):                     issues.append('year')
+        if _missing(t, 'genre'):                    issues.append('genre')
+        if issues:
+            problem_tracks.append({
+                'id':     t['id'],
+                'title':  t.get('title') or t.get('filename', '?'),
+                'artist': t.get('artist', ''),
+                'album':  t.get('album', ''),
+                'path':   t.get('path', ''),
+                'issues': issues,
+            })
+    problem_tracks.sort(key=lambda x: -len(x['issues']))
+
+    return jsonify({
+        'total':                total,
+        'completeness':         completeness,
+        'artist_duplicates':    duplicates[:50],
+        'problem_tracks':       problem_tracks[:100],
+        'problem_track_count':  len(problem_tracks),
+    })
+
+
 load_library()
 
 if __name__ == '__main__':
