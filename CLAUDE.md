@@ -167,6 +167,9 @@ Public `App` object exposes all functions called from HTML `onclick` attributes.
 - [x] IEM list sorted alphabetically
 - [x] R channel solid line (same as L channel); only baselines use dashed lines
 - [x] Native macOS app (`TuneBridge.app`) — C launcher binary (`launcher.c`) compiled via CLT clang, execs into CLT Python → `tunebridge_gui.py` → pywebview WKWebView window. Clean bundle (binary + Info.plist + icon), ad-hoc signed. TCC Documents prompt fires on first launch.
+- [x] Distributable DMG (`build_app.sh --dmg`) — bundles all Python deps in `Packages/`, version-locks launcher to exact Python, creates 12 MB UDZO DMG with Applications symlink for drag-to-install.
+- [x] Data backup/restore — Export ZIP of all user data (playlists, DAPs, IEMs, artwork); Import atomically restores from ZIP. Protects against app data loss.
+- [x] Native folder picker — Browse… button in Settings (library path) and DAP modal (mount path) calls pywebview `FOLDER_DIALOG`; updates input field with selected path.
 - [x] In-app music player — fixed bottom bar (74px), queue drawer (slide-up), PEQ popover. Web Audio API graph (lazy AudioContext) with BiquadFilterNode chain for real-time PEQ. Shuffle (Fisher-Yates), repeat off/all/one. Keyboard shortcuts: Space = play/pause, Alt+←/→ = prev/next, M = mute. State persisted to localStorage.
 - [x] Playback quality display — `#player-quality` in player bar shows `<bit depth> · <sample rate> · <format>` for lossless (e.g. `24-bit · 48 kHz · FLAC`) or `<kbps> · <format>` for lossy. `scan_file()` returns `sample_rate` and `bits_per_sample`; requires library rescan to populate for existing libraries.
 - [x] Sync modal Luminous Depth redesign — icon-header, vertical device card list, indeterminate CSS progress animation, gradient progress bar, count pill badges, green done icon
@@ -272,6 +275,16 @@ Key findings:
 - **Effort estimate**: PoC 2–3 sessions; playlists + delta sync +3–4; transcoding pipeline +2–3; artwork +3–4; Sequoia workarounds unpredictable. Total: 10–15+ sessions for production quality.
 
 ## Last Updated
+2026-03-28 — Session 20: Distributable DMG, data backup, folder browse, DAP mount hint (continued)
+
+- **Distributable TuneBridge.dmg**: `build_app.sh` bundles all Python deps via `pip install --target Packages/`, writes `.python-version`, compiles `launcher.c` with clang, ad-hoc signs. `--dmg` flag uses `hdiutil create` + `-plist` output parsed by Python `plistlib` for reliable mount point extraction → copies .app → Applications symlink → UDZO compressed DMG. Output: 35 MB .app, 12 MB .dmg.
+- **`launcher.c` version-locking**: Reads `.python-version` (e.g. "3.12") from `Resources/`; when present, ONLY tries paths for that exact version (python.org, CLT, Homebrew versioned, Homebrew symlink). Generic 3.10+ fallback only if file absent. CLT 3.9 removed from all lists. Error dialog names exact Python version + `brew install python@X.Y` command.
+- **Data directory for bundled app**: `TUNEBRIDGE_BUNDLED=1` env var triggers `DATA_DIR = ~/Library/Application Support/TuneBridge/`. `_migrate_legacy_data()` on startup copies JSON files + playlist_artwork from old `data/` folder if playlists.json missing from Application Support.
+- **Data backup**: `GET /api/backup/export` streams a ZIP of all user data (playlists.json, settings.json, daps.json, iems.json, baselines.json, playlist_artwork/). `POST /api/backup/import` atomically restores from uploaded ZIP with JSON validation. Settings view has Export Backup button + Import Backup file picker + data directory display.
+- **Folder browse button**: `POST /api/browse/folder` calls `webview.windows[0].create_file_dialog(FOLDER_DIALOG)` — safe from Flask worker threads (pywebview dispatches to main thread internally). Browse… button on library path input and DAP mount path input. Returns selected path to caller via JS `browseFolder(inputId)`.
+- **DAP mount path hint**: Instructional text below DAP mount field: "Enter the path to the Music folder on your DAP or SD card" — helps users understand what to browse to.
+- **`flask_cors` removed**: `from flask_cors import CORS` and `CORS(app)` removed from app.py (not in requirements.txt, would crash clean installs).
+
 2026-03-28 — Session 20: Playback quality display, Sync modal redesign, Delete modal redesign
 
 - **Playback quality display**: `scan_file()` in `app.py` now returns `sample_rate` (Hz int) and `bits_per_sample` (int) for all formats. `_formatQuality(track)` helper in `player.js` renders `"24-bit · 48 kHz · FLAC"` for lossless, `"320 kbps · MP3"` for lossy. `#player-quality` element in the player bar updated by `_updateTrackUI()`. Audio pipeline confirmed lossless: HTMLAudioElement → GainNodes (1.0) → BiquadFilters → destination; browser AudioContext resamples to device native SR (OS-level constraint, not introduced by the player).
