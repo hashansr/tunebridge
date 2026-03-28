@@ -134,16 +134,16 @@ function _showConfirm({ title = '', message = '', okText = 'Delete', danger = tr
     document.getElementById('confirm-modal-msg').textContent   = message;
     const okBtn = document.getElementById('confirm-modal-ok');
     okBtn.textContent  = okText;
-    okBtn.className    = danger ? 'btn-danger' : 'btn-primary';
+    okBtn.className    = danger ? 'btn-danger-pill' : 'btn-danger-pill btn-danger-pill--neutral';
     const iconEl = document.getElementById('confirm-modal-icon');
     if (icon) {
       iconEl.innerHTML  = icon;
       iconEl.className  = 'confirm-modal-icon';
     } else if (!danger) {
-      iconEl.innerHTML  = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+      iconEl.innerHTML  = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
       iconEl.className  = 'confirm-modal-icon icon-neutral';
     } else {
-      iconEl.innerHTML  = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#e05c5c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+      iconEl.innerHTML  = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
       iconEl.className  = 'confirm-modal-icon';
     }
     document.getElementById('confirm-modal').style.display = 'flex';
@@ -1804,7 +1804,7 @@ async function showSync() {
   const container = document.getElementById('sync-device-list');
   if (!container) { document.getElementById('sync-modal').style.display = 'flex'; return; }
 
-  const svgDevice = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>`;
+  const svgDevice = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>`;
 
   if (!daps.length) {
     container.innerHTML = `<p style="color:var(--text-muted);font-size:13px">No DAPs configured — add one in <strong>Gear → DAPs</strong> first.</p>`;
@@ -1812,14 +1812,17 @@ async function showSync() {
     container.innerHTML = daps.map(dap => {
       const connected = dap.mounted;
       return `
-        <button class="sync-device-btn${connected ? '' : ' sync-device-btn-offline'}"
+        <button class="sync-device-card${connected ? ' sync-device-card--online' : ''}"
           ${connected ? '' : 'disabled'}
           onclick="App.startSyncScan('${dap.id}')">
-          ${svgDevice}
-          <span>${esc(dap.name)}</span>
-          <span class="sync-device-status${connected ? ' sync-device-status-on' : ''}">
-            ${connected ? '● Connected' : '○ Not connected'}
-          </span>
+          <div class="sync-device-card-icon">${svgDevice}</div>
+          <div class="sync-device-card-info">
+            <span class="sync-device-card-name">${esc(dap.name)}</span>
+            <span class="sync-device-status${connected ? ' sync-device-status--on' : ''}">
+              <span class="sync-device-status-dot"></span>
+              ${connected ? 'Connected' : 'Not connected'}
+            </span>
+          </div>
         </button>`;
     }).join('');
   }
@@ -1836,15 +1839,11 @@ function closeSyncModal() {
 async function startSyncScan(dapId) {
   _syncPhase('scanning');
   document.getElementById('sync-scanning-msg').textContent = 'Scanning files…';
-  document.getElementById('sync-scan-bar').style.width = '0%';
 
   const res = await api('/sync/scan', { method: 'POST', body: { dap_id: dapId } });
   if (res.error) { toast(res.error); _syncPhase('pick'); return; }
 
-  // Animate indeterminate bar while scanning
-  let pct = 0;
-  document.getElementById('sync-scan-bar').style.transition = 'none';
-
+  // CSS indeterminate animation runs on the bar — just poll for completion
   clearInterval(_syncPollTimer);
   _syncPollTimer = setInterval(async () => {
     const status = await api('/sync/status').catch(() => null);
@@ -1854,16 +1853,11 @@ async function startSyncScan(dapId) {
 
     if (status.status === 'ready') {
       clearInterval(_syncPollTimer);
-      document.getElementById('sync-scan-bar').style.width = '100%';
       renderSyncPreview(status);
     } else if (status.status === 'error') {
       clearInterval(_syncPollTimer);
       toast('Scan error: ' + status.message);
       _syncPhase('pick');
-    } else {
-      // Animate progress bar
-      pct = Math.min(pct + 15, 85);
-      document.getElementById('sync-scan-bar').style.width = pct + '%';
     }
   }, 600);
 }

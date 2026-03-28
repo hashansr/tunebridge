@@ -991,24 +991,41 @@ const Player = (function () {
     _saveState();
   }
 
+  /* ── Quality label helper ───────────────────────────────────────────── */
+  function _formatQuality(track) {
+    if (!track) return '';
+    const fmt = track.format || '';
+    if (track.bits_per_sample && track.sample_rate) {
+      const khz = track.sample_rate % 1000 === 0
+        ? `${track.sample_rate / 1000} kHz`
+        : `${(track.sample_rate / 1000).toFixed(1)} kHz`;
+      return `${track.bits_per_sample}-bit · ${khz}${fmt ? ' · ' + fmt : ''}`;
+    } else if (track.bitrate) {
+      return `${track.bitrate} kbps${fmt ? ' · ' + fmt : ''}`;
+    }
+    return fmt;
+  }
+
   /* ── UI update helpers ──────────────────────────────────────────────── */
   function _updateTrackUI(track) {
-    const titleEl  = document.getElementById('player-title');
-    const artistEl = document.getElementById('player-artist');
-    const artEl    = document.getElementById('player-art');
-    const curEl    = document.getElementById('player-current-time');
-    const durEl    = document.getElementById('player-duration');
-    const seekEl   = document.getElementById('player-seek');
-    const fillEl   = document.getElementById('player-progress-fill');
+    const titleEl   = document.getElementById('player-title');
+    const artistEl  = document.getElementById('player-artist');
+    const artEl     = document.getElementById('player-art');
+    const curEl     = document.getElementById('player-current-time');
+    const durEl     = document.getElementById('player-duration');
+    const seekEl    = document.getElementById('player-seek');
+    const fillEl    = document.getElementById('player-progress-fill');
+    const qualityEl = document.getElementById('player-quality');
 
     if (!track) {
-      if (titleEl)  { titleEl.textContent = 'Nothing playing'; titleEl.classList.remove('marquee'); }
-      if (artistEl) { artistEl.innerHTML = ''; artistEl.classList.remove('marquee'); artistEl.dataset.artist = ''; artistEl.dataset.album = ''; }
-      if (artEl)    artEl.innerHTML      = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
-      if (curEl)    curEl.textContent    = '0:00';
-      if (durEl)    durEl.textContent    = '0:00';
-      if (seekEl)   { seekEl.value = 0; seekEl.disabled = true; }
-      if (fillEl)   fillEl.style.width   = '0%';
+      if (titleEl)   { titleEl.textContent = 'Nothing playing'; titleEl.classList.remove('marquee'); }
+      if (artistEl)  { artistEl.innerHTML = ''; artistEl.classList.remove('marquee'); artistEl.dataset.artist = ''; artistEl.dataset.album = ''; }
+      if (artEl)     artEl.innerHTML      = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+      if (curEl)     curEl.textContent    = '0:00';
+      if (durEl)     durEl.textContent    = '0:00';
+      if (seekEl)    { seekEl.value = 0; seekEl.disabled = true; }
+      if (fillEl)    fillEl.style.width   = '0%';
+      if (qualityEl) qualityEl.textContent = '';
       document.title = 'TuneBridge';
       return;
     }
@@ -1042,9 +1059,10 @@ const Player = (function () {
         ? `<img src="/api/artwork/${track.artwork_key}" onerror="this.style.display='none'">`
         : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".35"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
     }
-    if (seekEl) { seekEl.value = 0; seekEl.disabled = false; }
-    if (fillEl) fillEl.style.width = '0%';
-    if (curEl)  curEl.textContent  = '0:00';
+    if (seekEl)    { seekEl.value = 0; seekEl.disabled = false; }
+    if (fillEl)    fillEl.style.width = '0%';
+    if (curEl)     curEl.textContent  = '0:00';
+    if (qualityEl) qualityEl.textContent = _formatQuality(track);
     document.title = `${track.title} — TuneBridge`;
   }
 

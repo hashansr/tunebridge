@@ -237,14 +237,18 @@ def scan_file(filepath):
         if year:
             year = str(year)[:4]
 
-        # Compute bitrate (kbps)
+        # Compute bitrate (kbps) and capture lossless metadata
         bitrate = None
+        sample_rate = None
+        bits_per_sample = None
         try:
+            sample_rate = getattr(audio.info, 'sample_rate', None)
+            bits_per_sample = getattr(audio.info, 'bits_per_sample', None)
             if hasattr(audio.info, 'bitrate') and audio.info.bitrate:
                 bitrate = int(audio.info.bitrate / 1000)
-            elif hasattr(audio.info, 'sample_rate') and hasattr(audio.info, 'bits_per_sample'):
+            elif sample_rate and bits_per_sample:
                 channels = getattr(audio.info, 'channels', 2)
-                bitrate = int(audio.info.sample_rate * audio.info.bits_per_sample * channels / 1000)
+                bitrate = int(sample_rate * bits_per_sample * channels / 1000)
         except Exception:
             pass
 
@@ -273,6 +277,8 @@ def scan_file(filepath):
             'artwork_key': artwork_key,
             'bitrate': bitrate,
             'format': file_format,
+            'sample_rate': sample_rate,
+            'bits_per_sample': bits_per_sample,
             'date_added': date_added,
         }
     except Exception as e:
