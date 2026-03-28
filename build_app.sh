@@ -30,26 +30,36 @@ echo "    Output  : ${APP_PATH}"
 
 # ── Find a suitable build Python ─────────────────────────────────────────────
 BUILD_PYTHON=""
+# python.org installers are preferred (clean, modern, no yanked packages).
+# CLT Python 3.9 is intentionally excluded — pyobjc 10+ dropped 3.9 support.
+# Homebrew python3 is last resort (version unpredictable).
 for candidate in \
     "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3" \
     "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3" \
     "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3" \
     "/Library/Frameworks/Python.framework/Versions/3.10/bin/python3" \
+    "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.13/bin/python3" \
     "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.12/bin/python3" \
     "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.11/bin/python3" \
-    "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3" \
+    "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.10/bin/python3" \
     "/opt/homebrew/bin/python3" \
     "/usr/local/bin/python3"; do
     if [ -x "$candidate" ]; then
-        BUILD_PYTHON="$candidate"
-        break
+        # Verify it's actually 3.10+ before accepting it
+        _ver=$("$candidate" -c 'import sys; print(sys.version_info.minor)' 2>/dev/null)
+        _maj=$("$candidate" -c 'import sys; print(sys.version_info.major)' 2>/dev/null)
+        if [ "$_maj" = "3" ] && [ "${_ver:-0}" -ge 10 ] 2>/dev/null; then
+            BUILD_PYTHON="$candidate"
+            break
+        fi
     fi
 done
 
 if [ -z "$BUILD_PYTHON" ]; then
     echo ""
-    echo "ERROR: No suitable Python interpreter found."
-    echo "  Install Python 3.10+ from https://python.org/downloads"
+    echo "ERROR: Python 3.10+ not found."
+    echo "  Install it from https://python.org/downloads/macos/ and re-run."
+    echo "  (CLT Python 3.9 is not supported — pyobjc requires 3.10+)"
     exit 1
 fi
 
@@ -172,27 +182,46 @@ if [ "$BUILD_DMG" = "1" ]; then
     # 1. Create a temp writable HFS+ image (400 MB is ample for deps)
     hdiutil create -size 400m -fs HFS+ -volname "TuneBridge" "$TMP_DMG" -quiet
 
-    # 2. Mount the temp image
-    MOUNT_POINT="$(hdiutil attach "$TMP_DMG" -noautoopen -quiet | tail -1 | awk '{print $3}')"
+    # 2. Mount the temp image.
+    #    Use -plist output so we can parse the mount point reliably with Python
+    #    (hdiutil's plain-text output format varies across macOS versions and
+    #     the tab-delimited columns confuse simple awk/cut approaches).
+    ATTACH_PLIST="$(hdiutil attach "$TMP_DMG" -noautoopen -nobrowse -plist 2>/dev/null)"
+    MOUNT_POINT="$(echo "$ATTACH_PLIST" | "$BUILD_PYTHON" -c "
+import sys, plistlib
+data = plistlib.loads(sys.stdin.buffer.read())
+mp = next(
+    (e['mount-point'] for e in data.get('system-entities', []) if 'mount-point' in e),
+    ''
+)
+print(mp)
+")"
 
-    # 3. Copy the .app into the mounted volume
-    cp -R "$APP_PATH" "${MOUNT_POINT}/"
+    if [ -z "$MOUNT_POINT" ]; then
+        echo "  ERROR: Could not determine DMG mount point. Skipping DMG."
+        rm -f "$TMP_DMG"
+    else
+        echo "  Mounted at: ${MOUNT_POINT}"
 
-    # 4. Add an Applications symlink for drag-to-install UX
-    ln -s /Applications "${MOUNT_POINT}/Applications"
+        # 3. Copy the .app into the mounted volume
+        cp -R "$APP_PATH" "${MOUNT_POINT}/"
 
-    # 5. Unmount
-    hdiutil detach "$MOUNT_POINT" -quiet
+        # 4. Add an Applications symlink for drag-to-install UX
+        ln -s /Applications "${MOUNT_POINT}/Applications"
 
-    # 6. Convert to compressed read-only UDZO image
-    hdiutil convert "$TMP_DMG" -format UDZO -o "$DMG_PATH" -quiet
+        # 5. Unmount
+        hdiutil detach "$MOUNT_POINT" -quiet
 
-    # 7. Remove temp image
-    rm -f "$TMP_DMG"
+        # 6. Convert to compressed read-only UDZO image
+        hdiutil convert "$TMP_DMG" -format UDZO -o "$DMG_PATH" -quiet
 
-    DMG_SIZE="$(du -sh "$DMG_PATH" | awk '{print $1}')"
-    echo "  DMG size   : ${DMG_SIZE}"
-    echo "  DMG path   : ${DMG_PATH}"
+        # 7. Remove temp image
+        rm -f "$TMP_DMG"
+
+        DMG_SIZE="$(du -sh "$DMG_PATH" | awk '{print $1}')"
+        echo "  DMG size   : ${DMG_SIZE}"
+        echo "  DMG path   : ${DMG_PATH}"
+    fi
 fi
 
 # ── Final instructions ────────────────────────────────────────────────────────
