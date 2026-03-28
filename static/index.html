@@ -485,22 +485,6 @@
         </div>
         <div class="insights-content">
 
-          <!-- Analysis progress banner — hidden when idle -->
-          <div id="insights-analysis-banner" class="insights-analysis-banner" style="display:none">
-            <div class="insights-analysis-banner-inner">
-              <div class="insights-analysis-icon" id="insights-analysis-icon">
-                <!-- spinner or checkmark, set by JS -->
-              </div>
-              <div class="insights-analysis-text">
-                <span id="insights-analysis-label">Analysing library…</span>
-                <span id="insights-analysis-sub"></span>
-              </div>
-              <div class="insights-analysis-bar-wrap">
-                <div class="insights-analysis-bar" id="insights-analysis-bar"></div>
-              </div>
-            </div>
-          </div>
-
           <!-- Overview -->
           <div class="insights-section" id="insights-overview-section">
             <div class="insights-section-hdr">
@@ -564,6 +548,19 @@
                 <p class="insights-cta-desc">Unlock deeper insights: spectral brightness profile, timbral clusters, gear-to-library fit scores, and blindspot detection. Requires reading each audio file — runs in the background.</p>
               </div>
               <button class="btn-primary insights-cta-btn" id="insights-analyse-btn" onclick="App.startLibraryAnalysis()">Analyse Library</button>
+            </div>
+            <!-- Progress banner sits here, inside the CTA card -->
+            <div id="insights-analysis-banner" class="insights-analysis-banner" style="display:none">
+              <div class="insights-analysis-banner-inner">
+                <div class="insights-analysis-icon" id="insights-analysis-icon"></div>
+                <div class="insights-analysis-text">
+                  <span id="insights-analysis-label">Analysing library…</span>
+                  <span id="insights-analysis-sub"></span>
+                </div>
+                <div class="insights-analysis-bar-wrap">
+                  <div class="insights-analysis-bar" id="insights-analysis-bar"></div>
+                </div>
+              </div>
             </div>
           </div>
 

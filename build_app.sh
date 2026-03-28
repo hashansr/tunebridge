@@ -106,6 +106,9 @@ echo "  Installing Python packages into bundle (this may take a minute)..."
     pillow \
     waitress \
     pywebview \
+    soundfile \
+    numpy \
+    scikit-learn \
     --target "$PACKAGES_DIR" \
     --quiet \
     --disable-pip-version-check

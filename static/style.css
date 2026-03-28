@@ -3407,10 +3407,9 @@ tr.player-active .track-title { color: var(--accent); }
 
 /* ── Analysis progress banner ──────────────────────────────────────────── */
 .insights-analysis-banner {
-  background: var(--surface-2);
-  border-radius: 12px;
-  padding: 16px 20px;
-  border: 1px solid rgba(173,198,255,0.1);
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(173,198,255,0.08);
 }
 
 .insights-analysis-banner-inner {
