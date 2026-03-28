@@ -32,7 +32,8 @@ echo "    Output  : ${APP_PATH}"
 BUILD_PYTHON=""
 # python.org installers are preferred (clean, modern, no yanked packages).
 # CLT Python 3.9 is intentionally excluded — pyobjc 10+ dropped 3.9 support.
-# Homebrew python3 is last resort (version unpredictable).
+# Homebrew versioned paths (e.g. python@3.12) are checked before the generic
+# python3 symlink, whose version is unpredictable.
 for candidate in \
     "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3" \
     "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3" \
@@ -42,6 +43,14 @@ for candidate in \
     "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.12/bin/python3" \
     "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.11/bin/python3" \
     "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.10/bin/python3" \
+    "/opt/homebrew/opt/python@3.13/bin/python3.13" \
+    "/opt/homebrew/opt/python@3.12/bin/python3.12" \
+    "/opt/homebrew/opt/python@3.11/bin/python3.11" \
+    "/opt/homebrew/opt/python@3.10/bin/python3.10" \
+    "/usr/local/opt/python@3.13/bin/python3.13" \
+    "/usr/local/opt/python@3.12/bin/python3.12" \
+    "/usr/local/opt/python@3.11/bin/python3.11" \
+    "/usr/local/opt/python@3.10/bin/python3.10" \
     "/opt/homebrew/bin/python3" \
     "/usr/local/bin/python3"; do
     if [ -x "$candidate" ]; then
