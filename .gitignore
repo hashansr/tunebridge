@@ -18,6 +18,9 @@ data/library.json
 data/artwork/
 data/playlists.bak.json
 
+# Runtime ephemera
+data/player_state.json
+
 # macOS
 .DS_Store
 ._*
