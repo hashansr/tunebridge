@@ -3044,6 +3044,65 @@ tr.player-active .track-title { color: var(--accent); }
 
 .insights-view { padding-bottom: 60px; }
 
+/* ── Insights rescan button ────────────────────────────────────────────── */
+.insights-rescan-btn {
+  margin-left: auto;
+  padding: 6px 14px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.insights-rescan-btn:hover:not(:disabled) { background: var(--surface-3); color: var(--text-primary); }
+.insights-rescan-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Insights inline scan progress banner ──────────────────────────────── */
+.insights-scan-banner {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+}
+.insights-scan-banner-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.insights-scan-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(173,198,255,0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+.insights-scan-banner #insights-scan-msg {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  flex: 1;
+}
+.insights-scan-bar-wrap {
+  width: 120px;
+  height: 3px;
+  background: rgba(173,198,255,0.1);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.insights-scan-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #adc6ff, #385283);
+  border-radius: 2px;
+  transition: width 0.4s ease;
+  width: 0%;
+}
+
 .insights-content {
   max-width: 900px;
   display: flex;

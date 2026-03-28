@@ -3316,6 +3316,7 @@ const App = {
   loadInsightsView,
   startLibraryAnalysis,
   cancelLibraryAnalysis,
+  insightsRescanLibrary,
   _switchIemGearTab,
   showInsightsHelp,
   changeGearFitTarget,
@@ -3574,6 +3575,90 @@ async function cancelLibraryAnalysis() {
   // Optimistically reset UI; poller will reconcile on next tick
   _updateAnalysisBanner({ status: 'idle' });
   if (_analysisPoller) { clearInterval(_analysisPoller); _analysisPoller = null; }
+}
+
+/* ── Insights: rescan library tags ──────────────────────────────────────── */
+let _insightsScanPoller = null;
+
+async function insightsRescanLibrary() {
+  const btn = document.getElementById('insights-rescan-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Scanning…'; }
+
+  const res = await fetch('/api/library/scan', { method: 'POST' }).catch(() => null);
+  if (!res || !res.ok) {
+    showToast('Could not start rescan.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Rescan tags'; }
+    return;
+  }
+
+  _showInsightsScanBanner('Scanning library…', 0);
+  if (_insightsScanPoller) clearInterval(_insightsScanPoller);
+  _insightsScanPoller = setInterval(_pollInsightsScan, 900);
+}
+
+async function _pollInsightsScan() {
+  const status = await fetch('/api/library/status').then(r => r.json()).catch(() => null);
+  if (!status) return;
+
+  // Also update the sidebar scan display
+  const msg = document.getElementById('scan-msg');
+  const bar = document.getElementById('scan-bar');
+  const barWrap = document.getElementById('scan-bar-wrap');
+
+  if (status.status === 'scanning') {
+    const pct = status.total > 0 ? Math.round(status.progress / status.total * 100) : 0;
+    _showInsightsScanBanner(`Scanning… ${status.progress} / ${status.total} tracks`, pct);
+    if (msg) msg.textContent = `Scanning… ${status.progress}/${status.total}`;
+    if (barWrap) barWrap.style.display = 'block';
+    if (bar) bar.style.width = pct + '%';
+    return;
+  }
+
+  // Scan finished — stop poller
+  clearInterval(_insightsScanPoller);
+  _insightsScanPoller = null;
+
+  // Update sidebar
+  if (barWrap) barWrap.style.display = 'none';
+  if (status.status === 'done' && status.total_tracks != null) {
+    const newLine = status.new_tracks > 0 ? `<span class="scan-new">+${status.new_tracks} new</span>`
+      : status.new_tracks < 0 ? `<span class="scan-removed">${status.new_tracks} removed</span>`
+      : `<span class="scan-unchanged">No changes</span>`;
+    if (msg) msg.innerHTML = `<span class="scan-ready">Library ready</span><span class="scan-total">${status.total_tracks.toLocaleString()} tracks</span>${newLine}`;
+  }
+
+  // Hide banner and restore button
+  _hideInsightsScanBanner();
+  const btn = document.getElementById('insights-rescan-btn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Rescan tags'; }
+
+  // Reload overview + tag health so updated tags are reflected
+  if (state.view === 'insights') {
+    const [overviewRes, tagRes] = await Promise.all([
+      fetch('/api/insights/overview'),
+      fetch('/api/insights/tag-health'),
+    ]);
+    if (overviewRes.ok) _renderInsightsOverview(await overviewRes.json());
+    if (tagRes.ok)      _renderInsightsTagHealth(await tagRes.json());
+    // Also refresh analysis info (track count may have changed)
+    const infoRes = await fetch('/api/insights/analyse/info').catch(() => null);
+    if (infoRes && infoRes.ok) _updateAnalysisCta(await infoRes.json());
+  }
+}
+
+function _showInsightsScanBanner(message, pct) {
+  const banner = document.getElementById('insights-scan-banner');
+  const msgEl  = document.getElementById('insights-scan-msg');
+  const barEl  = document.getElementById('insights-scan-bar');
+  if (!banner) return;
+  banner.style.display = 'block';
+  if (msgEl) msgEl.textContent = message;
+  if (barEl) barEl.style.width = (pct || 0) + '%';
+}
+
+function _hideInsightsScanBanner() {
+  const banner = document.getElementById('insights-scan-banner');
+  if (banner) banner.style.display = 'none';
 }
 
 function _startAnalysisPolling() {

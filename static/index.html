@@ -482,6 +482,15 @@
       <div id="view-insights" class="view insights-view" style="display:none">
         <div class="view-header">
           <h2>Library Insights</h2>
+          <button class="insights-rescan-btn" id="insights-rescan-btn" onclick="App.insightsRescanLibrary()" title="Re-read all file tags from disk">Rescan tags</button>
+        </div>
+        <!-- Inline scan progress — shown during rescan -->
+        <div id="insights-scan-banner" class="insights-scan-banner" style="display:none">
+          <div class="insights-scan-banner-inner">
+            <div class="insights-scan-spinner"></div>
+            <span id="insights-scan-msg">Scanning library…</span>
+            <div class="insights-scan-bar-wrap"><div class="insights-scan-bar" id="insights-scan-bar"></div></div>
+          </div>
         </div>
         <div class="insights-content">
 
