@@ -3315,6 +3315,7 @@ const App = {
   deletePeq,
   loadInsightsView,
   startLibraryAnalysis,
+  cancelLibraryAnalysis,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -3546,7 +3547,21 @@ async function startLibraryAnalysis() {
     showToast(d.error || 'Could not start analysis.');
     return;
   }
+  const d = await res.json().catch(() => ({}));
+  // Immediately show the banner — don't wait for the first poll tick
+  _updateAnalysisBanner({ status: 'running', done: 0, total: d.total || 0 });
   _startAnalysisPolling();
+}
+
+async function cancelLibraryAnalysis() {
+  const res = await fetch('/api/insights/analyse/cancel', { method: 'POST' });
+  if (!res.ok) {
+    showToast('Could not cancel analysis.');
+    return;
+  }
+  // Optimistically reset UI; poller will reconcile on next tick
+  _updateAnalysisBanner({ status: 'idle' });
+  if (_analysisPoller) { clearInterval(_analysisPoller); _analysisPoller = null; }
 }
 
 function _startAnalysisPolling() {
@@ -3578,16 +3593,19 @@ async function _pollAnalysisStatus() {
 function _updateAnalysisBanner(s) {
   const banner   = document.getElementById('insights-analysis-banner');
   const navDot   = document.getElementById('insights-nav-dot');
-  const icon     = document.getElementById('insights-analysis-icon');
-  const label    = document.getElementById('insights-analysis-label');
-  const sub      = document.getElementById('insights-analysis-sub');
-  const bar      = document.getElementById('insights-analysis-bar');
-  const cta      = document.getElementById('insights-analyse-btn');
+  const icon       = document.getElementById('insights-analysis-icon');
+  const label      = document.getElementById('insights-analysis-label');
+  const sub        = document.getElementById('insights-analysis-sub');
+  const bar        = document.getElementById('insights-analysis-bar');
+  const cta        = document.getElementById('insights-analyse-btn');
+  const cancelBtn  = document.getElementById('insights-cancel-btn');
   if (!banner) return;
 
   if (s.status === 'idle') {
     banner.style.display = 'none';
     if (navDot) navDot.style.display = 'none';
+    if (cta) { cta.disabled = false; }
+    if (cancelBtn) cancelBtn.style.display = 'none';
     return;
   }
 
@@ -3599,16 +3617,19 @@ function _updateAnalysisBanner(s) {
   const _errorSvg  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
 
   if (s.status === 'running') {
-    navDot.style.display = 'flex';
+    if (navDot) navDot.style.display = 'flex';
     icon.innerHTML = _spinnerSvg;
     label.textContent = 'Analysing library…';
     const pct = s.total > 0 ? Math.round(s.done / s.total * 100) : 0;
-    sub.textContent = `${s.done.toLocaleString()} / ${s.total.toLocaleString()} tracks · ${pct}%`;
+    sub.textContent = s.total > 0
+      ? `${s.done.toLocaleString()} / ${s.total.toLocaleString()} tracks · ${pct}%`
+      : 'Starting…';
     bar.className = 'insights-analysis-bar';
     bar.style.width = `${pct}%`;
     if (cta) cta.disabled = true;
+    if (cancelBtn) cancelBtn.style.display = 'inline-flex';
   } else if (s.status === 'done') {
-    navDot.style.display = 'none';
+    if (navDot) navDot.style.display = 'none';
     banner.classList.add('insights-analysis-banner--done');
     icon.innerHTML = _doneSvg;
     label.textContent = 'Analysis complete';
@@ -3617,14 +3638,16 @@ function _updateAnalysisBanner(s) {
     bar.className = 'insights-analysis-bar';
     bar.style.width = '100%';
     if (cta) cta.disabled = false;
+    if (cancelBtn) cancelBtn.style.display = 'none';
   } else if (s.status === 'error') {
-    navDot.style.display = 'none';
+    if (navDot) navDot.style.display = 'none';
     banner.classList.add('insights-analysis-banner--error');
     icon.innerHTML = _errorSvg;
     label.textContent = 'Analysis failed';
     sub.textContent = s.error || 'Unknown error';
     bar.style.width = '0%';
     if (cta) cta.disabled = false;
+    if (cancelBtn) cancelBtn.style.display = 'none';
   }
 }
 

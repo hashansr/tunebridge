@@ -2432,12 +2432,19 @@ def _run_analysis():
             except Exception:
                 pass
 
-    feat_path.write_text(json.dumps(results))
-    analysis_state.update({
-        'status':       'done',
-        'done':         len(tracks),
-        'completed_at': int(time.time()),
-    })
+    if analysis_state['status'] == 'running':
+        # Normal completion
+        feat_path.write_text(json.dumps(results))
+        analysis_state.update({
+            'status':       'done',
+            'done':         len(results),
+            'completed_at': int(time.time()),
+        })
+    else:
+        # Cancelled — save partial results so incremental re-run can resume
+        if results:
+            feat_path.write_text(json.dumps(results))
+        analysis_state.update({'status': 'idle', 'done': 0, 'total': 0, 'error': None})
 
 
 @app.route('/api/insights/analyse', methods=['POST'])
@@ -2447,6 +2454,14 @@ def insights_start_analysis():
     t = threading.Thread(target=_run_analysis, daemon=True)
     t.start()
     return jsonify({'ok': True, 'total': len(library)})
+
+
+@app.route('/api/insights/analyse/cancel', methods=['POST'])
+def insights_cancel_analysis():
+    if analysis_state['status'] == 'running':
+        analysis_state['status'] = 'cancelled'
+        return jsonify({'ok': True})
+    return jsonify({'error': 'No analysis is currently running'}), 409
 
 
 @app.route('/api/insights/analyse/status')
