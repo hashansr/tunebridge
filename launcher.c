@@ -70,59 +70,117 @@ int main(void) {
 
     /* ── Build candidate list ────────────────────────────────────────────── */
     /*
-     * Preferred version first (python.org path, then CLT path),
-     * then full ordered fallback list.
+     * The bundled Packages/ directory contains binary extensions (.so files)
+     * compiled for the SPECIFIC Python version recorded in .python-version.
+     * Using a different Python version causes ImportError (ABI mismatch).
+     *
+     * Strategy:
+     *   1. If .python-version is present, try ONLY paths for that exact version.
+     *      If none found, tell the user which Python to install.
+     *   2. If .python-version is absent (should not happen), try any 3.10+
+     *      as a last resort — the pure-Python parts may still work.
+     *
+     * Homebrew installs version-specific binaries at:
+     *   /opt/homebrew/opt/python@X.Y/bin/python3.Y   (Apple Silicon)
+     *   /usr/local/opt/python@X.Y/bin/python3.Y       (Intel)
+     * and optionally symlinks /opt/homebrew/bin/python3.Y.
+     * CLT 3.9 is intentionally excluded — it cannot load 3.10+ binary extensions.
      */
-    char preferred_pyorg[256] = "";
-    char preferred_clt[256]   = "";
+
+    char ver_pyorg[256]    = "";   /* python.org framework  */
+    char ver_clt[256]      = "";   /* Xcode CLT framework   */
+    char ver_hb_arm[256]   = "";   /* Homebrew Apple Silicon */
+    char ver_hb_x86[256]   = "";   /* Homebrew Intel        */
+    char ver_hb_arm_lnk[256] = ""; /* Homebrew arm64 symlink */
+    char ver_hb_x86_lnk[256] = ""; /* Homebrew x86 symlink  */
+
     if (preferred_ver[0]) {
-        snprintf(preferred_pyorg, sizeof(preferred_pyorg),
+        /* Extract minor version number for Homebrew path (e.g. "3.12" → "12") */
+        char minor_str[16] = "";
+        const char *dot = strchr(preferred_ver, '.');
+        if (dot) strncpy(minor_str, dot + 1, sizeof(minor_str) - 1);
+
+        snprintf(ver_pyorg,  sizeof(ver_pyorg),
                  "/Library/Frameworks/Python.framework/Versions/%s/bin/python3",
                  preferred_ver);
-        snprintf(preferred_clt, sizeof(preferred_clt),
+        snprintf(ver_clt, sizeof(ver_clt),
                  "/Library/Developer/CommandLineTools/Library/Frameworks/"
                  "Python3.framework/Versions/%s/bin/python3",
                  preferred_ver);
+        if (minor_str[0]) {
+            snprintf(ver_hb_arm, sizeof(ver_hb_arm),
+                     "/opt/homebrew/opt/python@%s/bin/python3.%s",
+                     preferred_ver, minor_str);
+            snprintf(ver_hb_x86, sizeof(ver_hb_x86),
+                     "/usr/local/opt/python@%s/bin/python3.%s",
+                     preferred_ver, minor_str);
+            snprintf(ver_hb_arm_lnk, sizeof(ver_hb_arm_lnk),
+                     "/opt/homebrew/bin/python3.%s", minor_str);
+            snprintf(ver_hb_x86_lnk, sizeof(ver_hb_x86_lnk),
+                     "/usr/local/bin/python3.%s", minor_str);
+        }
     }
 
-    const char *candidates[] = {
-        /* preferred version — python.org then CLT */
-        preferred_pyorg[0] ? preferred_pyorg : NULL,
-        preferred_clt[0]   ? preferred_clt   : NULL,
+    /* Version-specific candidates (used when .python-version is present) */
+    const char *ver_candidates[] = {
+        ver_pyorg[0]      ? ver_pyorg      : NULL,
+        ver_clt[0]        ? ver_clt        : NULL,
+        ver_hb_arm[0]     ? ver_hb_arm     : NULL,
+        ver_hb_x86[0]     ? ver_hb_x86     : NULL,
+        ver_hb_arm_lnk[0] ? ver_hb_arm_lnk : NULL,
+        ver_hb_x86_lnk[0] ? ver_hb_x86_lnk : NULL,
+        NULL
+    };
 
-        /* python.org installers (arm64 + x86_64 share these paths) */
+    /* Generic 3.10+ fallback (used only when .python-version is absent) */
+    const char *any_candidates[] = {
         "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
         "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
         "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3",
         "/Library/Frameworks/Python.framework/Versions/3.10/bin/python3",
-
-        /* Xcode CLT */
-        "/Library/Developer/CommandLineTools/Library/Frameworks/"
-            "Python3.framework/Versions/3.12/bin/python3",
-        "/Library/Developer/CommandLineTools/Library/Frameworks/"
-            "Python3.framework/Versions/3.11/bin/python3",
-        "/Library/Developer/CommandLineTools/Library/Frameworks/"
-            "Python3.framework/Versions/3.9/bin/python3",
-
-        /* Homebrew */
-        "/opt/homebrew/bin/python3",      /* arm64 */
-        "/usr/local/bin/python3",         /* x86_64 */
-
+        "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.13/bin/python3",
+        "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.12/bin/python3",
+        "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.11/bin/python3",
+        "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.10/bin/python3",
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "/opt/homebrew/opt/python@3.12/bin/python3.12",
+        "/opt/homebrew/opt/python@3.11/bin/python3.11",
+        "/opt/homebrew/opt/python@3.10/bin/python3.10",
+        "/usr/local/opt/python@3.13/bin/python3.13",
+        "/usr/local/opt/python@3.12/bin/python3.12",
+        "/usr/local/opt/python@3.11/bin/python3.11",
+        "/usr/local/opt/python@3.10/bin/python3.10",
+        "/opt/homebrew/bin/python3",
+        "/usr/local/bin/python3",
         NULL
     };
 
+    const char **search = preferred_ver[0] ? ver_candidates : any_candidates;
+
     const char *python = NULL;
-    for (int i = 0; candidates[i] != NULL; i++) {
-        if (candidates[i][0] && access(candidates[i], X_OK) == 0) {
-            python = candidates[i];
+    for (int i = 0; search[i] != NULL; i++) {
+        if (search[i][0] && access(search[i], X_OK) == 0) {
+            python = search[i];
             break;
         }
     }
 
     if (!python) {
-        return show_dialog("TuneBridge — Python not found",
-            "Python 3.10 or later is required.\\n\\n"
-            "Download it from python.org/downloads and re-launch TuneBridge.");
+        char errmsg[512];
+        if (preferred_ver[0]) {
+            snprintf(errmsg, sizeof(errmsg),
+                "Python %s is required but was not found.\\n\\n"
+                "Install it from python.org/downloads/macos/ "
+                "or run:\\n  brew install python@%s\\n\\n"
+                "Then relaunch TuneBridge.",
+                preferred_ver, preferred_ver);
+        } else {
+            snprintf(errmsg, sizeof(errmsg),
+                "Python 3.10 or later is required.\\n\\n"
+                "Download it from python.org/downloads/macos/ "
+                "and relaunch TuneBridge.");
+        }
+        return show_dialog("TuneBridge — Python not found", errmsg);
     }
 
     /* ── Verify script exists ────────────────────────────────────────────── */
