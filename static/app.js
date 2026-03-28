@@ -3571,7 +3571,11 @@ async function cancelLibraryAnalysis() {
 function _startAnalysisPolling() {
   if (_analysisPoller) return;  // already polling
   _analysisPoller = setInterval(_pollAnalysisStatus, 1500);
-  _pollAnalysisStatus(); // immediate first tick
+  // No immediate tick — the banner was already shown by startLibraryAnalysis()
+  // calling _updateAnalysisBanner({ status: 'running' }). An immediate poll risks
+  // a race condition where the background thread hasn't set analysis_state yet
+  // (e.g. it's still importing soundfile/numpy), so the server still returns
+  // 'idle', which would hide the banner we just showed.
 }
 
 async function _pollAnalysisStatus() {
