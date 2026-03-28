@@ -38,11 +38,13 @@ const Player = (function () {
   /* ── Audio elements (A/B for crossfade) ─────────────────────────────── */
   const _audioA = new Audio();
   _audioA.preload = 'metadata';
-  _audioA.crossOrigin = 'anonymous';
+  // Note: crossOrigin = 'anonymous' is NOT set — audio is always same-origin
+  // (localhost:5001 → localhost:5001). Setting it would cause WebKit to enforce
+  // CORS headers even for same-origin requests; createMediaElementSource works
+  // fine without it for same-origin audio.
 
   const _audioB = new Audio();
   _audioB.preload = 'auto';   // pre-buffer next track during crossfade
-  _audioB.crossOrigin = 'anonymous';
 
   let _audio = _audioA;       // pointer to currently active element — swaps on crossfade
 

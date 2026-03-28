@@ -2098,6 +2098,7 @@ def stream_track(track_id):
     if not range_header:
         resp = send_file(str(path), mimetype=mime, conditional=True)
         resp.headers['Accept-Ranges'] = 'bytes'
+        resp.headers['Access-Control-Allow-Origin'] = '*'
         return resp
 
     # Parse "bytes=start-[end]"
@@ -2126,10 +2127,11 @@ def stream_track(track_id):
                 yield chunk
 
     rv = Response(_generate(), 206, mimetype=mime, direct_passthrough=True)
-    rv.headers['Content-Range']  = f'bytes {byte1}-{byte2}/{file_size}'
-    rv.headers['Accept-Ranges']  = 'bytes'
-    rv.headers['Content-Length'] = str(length)
-    rv.headers['Cache-Control']  = 'no-cache'
+    rv.headers['Content-Range']              = f'bytes {byte1}-{byte2}/{file_size}'
+    rv.headers['Accept-Ranges']              = 'bytes'
+    rv.headers['Content-Length']             = str(length)
+    rv.headers['Cache-Control']              = 'no-cache'
+    rv.headers['Access-Control-Allow-Origin'] = '*'
     return rv
 
 
