@@ -64,9 +64,56 @@ def get_music_base():
     settings = load_settings()
     return Path(settings.get('library_path', DEFAULT_SETTINGS['library_path']))
 
-DATA_DIR.mkdir(exist_ok=True)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 ARTWORK_DIR.mkdir(exist_ok=True)
 PLAYLIST_ARTWORK_DIR.mkdir(exist_ok=True)
+
+
+def _migrate_legacy_data():
+    """
+    One-time migration: copy user data from the old project-relative data/
+    folder into ~/Library/Application Support/TuneBridge/ the first time the
+    bundled app runs.
+
+    Triggered when: running as a bundled .app AND playlists.json is missing
+    from DATA_DIR (i.e. fresh Application Support folder) AND a legacy data/
+    folder exists next to app.py (i.e. the user previously ran from source).
+    """
+    if not _BUNDLED:
+        return
+    if PLAYLIST_FILE.exists():
+        return  # already migrated or started fresh — nothing to do
+
+    legacy_dir = Path(__file__).parent / 'data'
+    if not legacy_dir.is_dir():
+        return  # no legacy data to migrate
+
+    _DATA_FILES = [
+        'playlists.json', 'playlists.bak.json',
+        'settings.json', 'daps.json', 'iems.json', 'baselines.json',
+    ]
+    migrated = []
+    for fname in _DATA_FILES:
+        src = legacy_dir / fname
+        dst = DATA_DIR / fname
+        if src.exists() and not dst.exists():
+            shutil.copy2(src, dst)
+            migrated.append(fname)
+
+    # Migrate playlist artwork (custom covers)
+    legacy_art = legacy_dir / 'playlist_artwork'
+    if legacy_art.is_dir():
+        for item in legacy_art.iterdir():
+            dst = PLAYLIST_ARTWORK_DIR / item.name
+            if not dst.exists():
+                shutil.copy2(item, dst)
+                migrated.append(f'playlist_artwork/{item.name}')
+
+    if migrated:
+        print(f'[TuneBridge] Migrated {len(migrated)} item(s) from legacy data/ folder.')
+
+
+_migrate_legacy_data()
 
 DEVICE_PATHS = {
     'poweramp': Path('/Volumes/FIIO M21'),
