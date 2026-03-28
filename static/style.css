@@ -3559,13 +3559,11 @@ tr.player-active .track-title { color: var(--accent); }
 .insights-help-popover {
   position: fixed;
   z-index: 900;
-  background: var(--surface-3);
-  border: 1px solid rgba(173,198,255,0.14);
+  background: #2a2a2a;
+  border: 1px solid rgba(173,198,255,0.18);
   border-radius: 12px;
   padding: 16px 18px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.75);
   max-width: 360px;
 }
 

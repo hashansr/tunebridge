@@ -2490,28 +2490,34 @@ def insights_analysis_status():
 
 @app.route('/api/insights/analyse/info')
 def insights_analyse_info():
-    """Return per-track analysis coverage: how many library tracks have valid features."""
-    total    = len(library)
-    analysed = 0
+    """Return per-track analysis coverage: how many library tracks have been processed."""
+    total     = len(library)
+    processed = 0   # valid features OR permanently failed (brightness=None saved)
+    valid     = 0   # has full feature set (brightness + 10-band energy)
     fp = _features_file()
     if fp.exists():
         try:
             lib_ids = {t['id'] for t in library}
             for f in json.loads(fp.read_text()):
-                if (f.get('track_id') in lib_ids
-                        and f.get('brightness') is not None
+                if f.get('track_id') not in lib_ids:
+                    continue
+                processed += 1  # attempted — either succeeded or failed
+                if (f.get('brightness') is not None
                         and f.get('band_energy') and len(f['band_energy']) == 10):
-                    analysed += 1
+                    valid += 1
         except Exception:
-            analysed = 0
-    pending = max(0, total - analysed)
-    if analysed == 0:
+            processed = valid = 0
+    pending = max(0, total - processed)
+    if processed == 0:
         status = 'not_run'
     elif pending == 0:
         status = 'up_to_date'
     else:
         status = 'pending'
-    return jsonify({'total': total, 'analysed': analysed, 'pending': pending, 'status': status})
+    return jsonify({
+        'total': total, 'analysed': valid, 'processed': processed,
+        'pending': pending, 'status': status,
+    })
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
