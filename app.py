@@ -2402,8 +2402,11 @@ def _run_analysis():
         analysis_state['done'] = i
         tid = track['id']
 
-        if tid in existing and existing[tid].get('brightness') is not None:
-            results.append(existing[tid])
+        # Cache is valid only if band_energy (10 bands) is already present
+        cached = existing.get(tid)
+        if cached and cached.get('brightness') is not None \
+                and cached.get('band_energy') and len(cached['band_energy']) == 10:
+            results.append(cached)
             continue
 
         try:
@@ -2414,16 +2417,30 @@ def _run_analysis():
             # RMS energy (full track)
             rms = float(np.sqrt(np.mean(mono ** 2)))
 
-            # Spectral centroid from first ~1.5 s (fast, representative)
-            n = min(len(mono), 65536)
+            # Spectral centroid + per-band power fractions (first ~1.5 s)
+            n     = min(len(mono), 65536)
             frame = mono[:n] * np.hanning(n)
             fft_mag = np.abs(np.fft.rfft(frame))
             freqs   = np.fft.rfftfreq(n, d=1.0 / sr)
             centroid = float(np.sum(freqs * fft_mag) / (np.sum(fft_mag) + 1e-8))
 
-            results.append({'track_id': tid, 'brightness': round(centroid, 2), 'energy': round(rms, 6), 'cluster': None})
+            power       = fft_mag ** 2
+            total_power = power.sum() + 1e-12
+            band_energy = [
+                round(float(power[(freqs >= f_lo) & (freqs < f_hi)].sum() / total_power), 6)
+                for _, f_lo, f_hi, _, _ in _FREQ_BANDS
+            ]
+
+            results.append({
+                'track_id':   tid,
+                'brightness': round(centroid, 2),
+                'energy':     round(rms, 6),
+                'band_energy': band_energy,
+                'cluster':    None,
+            })
         except Exception:
-            results.append({'track_id': tid, 'brightness': None, 'energy': None, 'cluster': None})
+            results.append({'track_id': tid, 'brightness': None, 'energy': None,
+                            'band_energy': None, 'cluster': None})
 
         # Flush to disk every 200 tracks so progress survives a crash
         if i > 0 and i % 200 == 0:
@@ -2474,11 +2491,16 @@ def insights_analysis_status():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _FREQ_BANDS = [
-    ('sub_bass',    20,    80,    40,   'Sub-bass'),
-    ('bass',        80,   250,   141,   'Bass'),
-    ('mids',       250,  2000,   707,   'Mids'),
-    ('upper_mids', 2000,  5000,  3162,  'Upper Mids'),
-    ('treble',     5000, 20000, 10000,  'Treble'),
+    ('sub_bass',       20,    40,    28,   'Sub-bass'),
+    ('bass',           40,    80,    57,   'Bass'),
+    ('mid_bass',       80,   160,   113,   'Mid-bass'),
+    ('lower_mids',    160,   320,   226,   'Lower mids'),
+    ('mids',          320,  1000,   566,   'Mids'),
+    ('upper_mids',   1000,  2500,  1581,   'Upper mids'),
+    ('presence',     2500,  5000,  3536,   'Presence'),
+    ('lower_treble', 5000,  8000,  6325,   'Lower treble'),
+    ('upper_treble', 8000, 12000,  9798,   'Upper treble'),
+    ('air',         12000, 20000, 15492,   'Air'),
 ]
 
 
@@ -2492,119 +2514,275 @@ def _load_features():
         return []
 
 
-def _library_demand(features):
+def _library_salience(features):
     """
-    Normalised demand per frequency band using a Gaussian kernel in
-    log-octave space centred on each track's spectral centroid.
+    Per-band salience weights derived from actual track band energies.
+    S_b = 0.7 * normalised(L_b) + 0.3 * normalised(V_b)
+    where L_b = mean band energy fraction, V_b = std across tracks.
+    Returns None if no tracks have 10-band data (analysis needs re-run).
     """
     import numpy as np
-    valid = [f['brightness'] for f in features if f.get('brightness')]
+    valid = [f for f in features
+             if f.get('band_energy') and len(f['band_energy']) == 10]
     if not valid:
         return None
-    centroids    = np.array(valid, dtype=float)
-    band_centers = np.array([b[3] for b in _FREQ_BANDS], dtype=float)
-    sigma        = 1.5   # log2-octave bandwidth
-    log_dists    = np.abs(np.log2(centroids[:, None] / band_centers[None, :]))
-    weights      = np.exp(-0.5 * (log_dists / sigma) ** 2)
-    demand       = weights.mean(axis=0)
-    demand       = demand / (demand.sum() + 1e-8)
-    return {b[0]: round(float(v), 4) for b, v in zip(_FREQ_BANDS, demand)}
+    matrix = np.array([f['band_energy'] for f in valid], dtype=float)  # (N, 10)
+    L_b = matrix.mean(axis=0)
+    V_b = matrix.std(axis=0)
+    # Normalise each to [0, 1] before combining so scales are comparable
+    def _norm01(arr):
+        rng = arr.max() - arr.min()
+        return (arr - arr.min()) / (rng + 1e-12)
+    S_b = 0.7 * _norm01(L_b) + 0.3 * _norm01(V_b)
+    S_b = S_b / (S_b.sum() + 1e-12)  # normalise to sum = 1
+    return {b[0]: round(float(v), 6) for b, v in zip(_FREQ_BANDS, S_b)}
 
 
-def _iem_signature(measurement):
-    """Per-band average SPL deviation from 75 dB reference."""
+def _iem_features(measurement):
+    """
+    Per-band deviation from neutral (75 dB flat) and roughness (within-band SPL std).
+    Normalises the raw measurement to 75 dB at 1 kHz first (raw stored data is un-normalised).
+    Returns {'deviation': {band: dB}, 'roughness': {band: dB}} or None.
+    """
     import numpy as np
-    if not measurement or len(measurement) < 10:
+    if not measurement or len(measurement) < 50:
         return None
+    # Normalise to 75 dB at 1 kHz — raw iems.json data is not pre-normalised
+    ref = _spl_at_1khz(measurement)
+    if ref is not None:
+        measurement = _shift(measurement, NORM_REF_DB - ref)
     freqs = np.array([p[0] for p in measurement], dtype=float)
     spls  = np.array([p[1] for p in measurement], dtype=float)
-    result = {}
+    deviation = {}
+    roughness = {}
     for key, f_lo, f_hi, _, _ in _FREQ_BANDS:
         mask = (freqs >= f_lo) & (freqs < f_hi)
-        result[key] = round(float(np.mean(spls[mask])) - 75.0, 2) if mask.any() else 0.0
-    return result
+        if mask.any():
+            band_spls        = spls[mask]
+            deviation[key]   = round(float(band_spls.mean()) - 75.0, 2)
+            roughness[key]   = round(float(band_spls.std()), 2)
+        else:
+            deviation[key]   = 0.0
+            roughness[key]   = 0.0
+    return {'deviation': deviation, 'roughness': roughness}
 
 
-def _iem_character_label(sig):
-    sub, bass, mids, upper, treble = (
-        sig.get('sub_bass', 0), sig.get('bass', 0), sig.get('mids', 0),
-        sig.get('upper_mids', 0), sig.get('treble', 0),
-    )
+def _iem_character_label(deviation):
+    """Human-readable tonal character from 10-band deviation dict."""
+    low_end  = (deviation.get('sub_bass', 0) + deviation.get('bass', 0)
+                + deviation.get('mid_bass', 0)) / 3
+    body     = (deviation.get('lower_mids', 0) + deviation.get('mids', 0)) / 2
+    detail   = (deviation.get('upper_mids', 0) + deviation.get('presence', 0)) / 2
+    bright   = (deviation.get('lower_treble', 0) + deviation.get('upper_treble', 0)
+                + deviation.get('air', 0)) / 3
     tags = []
-    if   sub > 4 or bass > 4:       tags.append('bass-boosted')
-    elif sub > 2 or bass > 2:       tags.append('warm')
-    elif sub < -3 and bass < -3:    tags.append('bass-light')
-    if   mids < -3:                 tags.append('recessed mids')
-    elif mids >  3:                 tags.append('mid-forward')
-    if   upper >  4:                tags.append('bright upper mids')
-    elif upper < -3:                tags.append('smooth upper mids')
-    if   treble >  4:               tags.append('airy')
-    elif treble < -4:               tags.append('dark')
-    if not tags:                    tags.append('neutral')
+    if   low_end >  4:  tags.append('bass-heavy')
+    elif low_end >  2:  tags.append('warm')
+    elif low_end < -3:  tags.append('bass-light')
+    if   body    >  3:  tags.append('full-bodied')
+    elif body    < -3:  tags.append('lean mids')
+    if   detail  >  4:  tags.append('forward presence')
+    elif detail  < -3:  tags.append('smooth mids')
+    if   bright  >  4:  tags.append('bright')
+    elif bright  >  2:  tags.append('airy')
+    elif bright  < -4:  tags.append('dark')
+    if not tags:        tags.append('neutral')
     return ', '.join(tags)
 
 
-def _library_character_label(demand):
-    dominant = max(demand, key=demand.get)
+def _library_character_label(salience):
+    """Top-band description of the library's spectral salience profile."""
+    top = max(salience, key=salience.get)
     return {
-        'sub_bass':   'bass-heavy and low-end driven',
-        'bass':       'warm and bass-forward',
-        'mids':       'mid-centric and vocal-forward',
-        'upper_mids': 'detailed and presence-forward',
-        'treble':     'bright and airy',
-    }.get(dominant, 'balanced')
+        'sub_bass':      'sub-bass heavy',
+        'bass':          'bass-driven',
+        'mid_bass':      'warm and punchy',
+        'lower_mids':    'full lower midrange',
+        'mids':          'mid-centric and vocal',
+        'upper_mids':    'detail and clarity focused',
+        'presence':      'presence-forward',
+        'lower_treble':  'bright lower treble',
+        'upper_treble':  'upper treble emphasis',
+        'air':           'airy and extended',
+    }.get(top, 'balanced')
 
 
-def _fit_score(demand, sig):
+def _apply_peq(measurement, peq_profile):
+    """
+    Apply a PEQ profile to a [[freq, spl], ...] measurement.
+    Uses biquad filter math (Audio EQ Cookbook coefficients) evaluated at each
+    measurement frequency via z = e^(j·2π·f/Fs) with a high virtual Fs for
+    near-analog accuracy.  Re-normalises to 75 dB at 1 kHz afterwards so the
+    returned curve stays on the same reference as the base measurement.
+    """
+    import numpy as np
+    if not measurement or not peq_profile:
+        return measurement
+
+    freqs = np.array([p[0] for p in measurement], dtype=float)
+    spls  = np.array([p[1] for p in measurement], dtype=float).copy()
+
+    spls += float(peq_profile.get('preamp_db') or 0.0)
+
+    Fs = 192000.0   # high virtual sample rate → near-analog accuracy below ~20 kHz
+
+    for filt in (peq_profile.get('filters') or []):
+        if not filt.get('enabled', True):
+            continue
+        ftype = (filt.get('type') or 'PK').upper()
+        if ftype in ('NO', 'AP'):
+            continue        # notch / all-pass: negligible magnitude change
+        fc   = float(filt.get('fc')   or 1000.0)
+        gain = float(filt.get('gain') or 0.0)
+        q    = float(filt.get('q')    or 0.707)
+        if q <= 0:        q = 0.707
+        if fc <= 0 or fc >= Fs / 2:
+            continue
+
+        w0 = 2 * np.pi * fc / Fs
+        cw = np.cos(w0);  sw = np.sin(w0)
+        A  = 10 ** (gain / 40.0)
+        al = sw / (2 * q)
+
+        if ftype == 'PK':
+            b0, b1, b2 = 1 + al*A,  -2*cw, 1 - al*A
+            a0, a1, a2 = 1 + al/A,  -2*cw, 1 - al/A
+        elif ftype in ('LSC', 'LS'):
+            sqA = np.sqrt(A)
+            b0 =    A * ((A+1) - (A-1)*cw + 2*sqA*al)
+            b1 = 2*A  * ((A-1) - (A+1)*cw)
+            b2 =    A * ((A+1) - (A-1)*cw - 2*sqA*al)
+            a0 =        (A+1)  + (A-1)*cw + 2*sqA*al
+            a1 =   -2 * ((A-1) + (A+1)*cw)
+            a2 =        (A+1)  + (A-1)*cw - 2*sqA*al
+        elif ftype in ('HSC', 'HS'):
+            sqA = np.sqrt(A)
+            b0 =    A * ((A+1) + (A-1)*cw + 2*sqA*al)
+            b1 = -2*A * ((A-1) + (A+1)*cw)
+            b2 =    A * ((A+1) + (A-1)*cw - 2*sqA*al)
+            a0 =        (A+1)  - (A-1)*cw + 2*sqA*al
+            a1 =    2 * ((A-1) - (A+1)*cw)
+            a2 =        (A+1)  - (A-1)*cw - 2*sqA*al
+        elif ftype in ('LPQ', 'LP', 'LPF'):
+            b0 = (1 - cw) / 2;  b1 = 1 - cw;   b2 = (1 - cw) / 2
+            a0 = 1 + al;         a1 = -2 * cw;   a2 = 1 - al
+        elif ftype in ('HPQ', 'HP', 'HPF'):
+            b0 = (1 + cw) / 2;  b1 = -(1 + cw); b2 = (1 + cw) / 2
+            a0 = 1 + al;         a1 = -2 * cw;   a2 = 1 - al
+        else:
+            continue
+
+        # Evaluate |H(e^jω)| at each measurement frequency
+        # H(z) = (b0 + b1·z⁻¹ + b2·z⁻²) / (a0 + a1·z⁻¹ + a2·z⁻²)
+        omega = 2 * np.pi * freqs / Fs
+        zin   = np.exp(-1j * omega)
+        num   = b0 + b1 * zin + b2 * zin**2
+        den   = a0 + a1 * zin + a2 * zin**2
+        spls += 20 * np.log10(np.abs(num / den) + 1e-12)
+
+    # Re-normalise to 75 dB at 1 kHz (same convention as base measurement)
+    ref_idx = int(np.argmin(np.abs(freqs - 1000.0)))
+    spls   += 75.0 - spls[ref_idx]
+
+    return [[float(freqs[i]), float(spls[i])] for i in range(len(freqs))]
+
+
+def _fit_score(salience, iem_feat):
+    """
+    Option A scoring: ideal IEM = flat (deviation = 0 for all bands).
+    Loss = Σ(S_b · |D_b|)
+    Raw  = 100 · exp(−0.22 · Loss)
+    Penalties: treble roughness, extreme deviation (> ±5 dB).
+    """
     import numpy as np
     band_keys = [b[0] for b in _FREQ_BANDS]
-    d = np.array([demand[k]          for k in band_keys], dtype=float)
-    s = np.array([sig.get(k, 0.0)   for k in band_keys], dtype=float)
-    s_shifted = s - s.min() + 0.5
-    s_norm    = s_shifted / (s_shifted.sum() + 1e-8)
-    cos = float(np.dot(d, s_norm) / (np.linalg.norm(d) * np.linalg.norm(s_norm) + 1e-8))
-    return round(min(max(cos * 100.0, 0.0), 100.0), 1)
+    S = np.array([salience.get(k, 0.0)                    for k in band_keys])
+    D = np.array([iem_feat['deviation'].get(k, 0.0)        for k in band_keys])
+    R = np.array([iem_feat['roughness'].get(k, 0.0)        for k in band_keys])
+
+    loss    = float((S * np.abs(D)).sum())
+    # k=0.06: neutral IEM (~3 dB avg dev) → ~83%; V-shaped (~10 dB avg dev) → ~55%
+    raw     = 100.0 * np.exp(-0.06 * loss)
+
+    # Roughness penalty — weighted by salience on lower & upper treble (bands 7, 8)
+    p_rough   = 6.0 * float(S[7] * R[7] + S[8] * R[8])
+    # Extreme deviation penalty — only beyond ±12 dB (severe coloring)
+    p_extreme = 2.0 * float((S * np.maximum(0, np.abs(D) - 12.0)).sum())
+
+    return round(float(np.clip(raw - p_rough - p_extreme, 0.0, 100.0)), 1)
 
 
-def _recommendations(demand, iem_results):
-    band_labels = {b[0]: b[4] for b in _FREQ_BANDS}
-    full_labels = {
-        'sub_bass':   'sub-bass extension',
-        'bass':       'mid-bass warmth',
-        'mids':       'midrange presence',
-        'upper_mids': 'upper-midrange detail',
-        'treble':     'treble air',
+def _blindspot_analysis(salience, iem_results):
+    """
+    Per-band coverage = how close the nearest IEM is to neutral in that band.
+    Overall = salience-weighted mean coverage.
+    """
+    import numpy as np
+    if not iem_results:
+        return None
+    band_keys = [b[0] for b in _FREQ_BANDS]
+    band_cov  = {}
+    for k in band_keys:
+        min_dev       = min(abs(r['deviation'].get(k, 0)) for r in iem_results)
+        band_cov[k]   = round(float(100.0 * np.exp(-0.35 * min_dev)), 1)
+    S       = np.array([salience.get(k, 0.0) for k in band_keys])
+    cov_arr = np.array([band_cov[k]          for k in band_keys])
+    overall = round(float((S * cov_arr).sum()), 1)   # already 0-100 weighted
+    # Surface the two weakest bands for UI callouts
+    weakest = sorted(band_keys, key=lambda k: band_cov[k])[:2]
+    return {'band_coverage': band_cov, 'overall': overall, 'weakest_bands': weakest}
+
+
+def _recommendations(salience, iem_results, blindspot):
+    """Plain-English recommendations from salience + blindspot analysis."""
+    band_full = {
+        'sub_bass': 'sub-bass extension', 'bass': 'bass', 'mid_bass': 'mid-bass warmth',
+        'lower_mids': 'lower midrange', 'mids': 'midrange', 'upper_mids': 'upper mids',
+        'presence': 'presence region', 'lower_treble': 'lower treble',
+        'upper_treble': 'upper treble', 'air': 'air / extension',
     }
+    band_labels = {b[0]: b[4] for b in _FREQ_BANDS}
     if not iem_results:
         return ['Add IEMs or headphones to your Gear library to see personalised recommendations.']
 
-    band_keys = [b[0] for b in _FREQ_BANDS]
-    avg_sig = {k: sum(r['signature'].get(k, 0) for r in iem_results) / len(iem_results)
-               for k in band_keys}
-    gear_weakest  = min(avg_sig, key=avg_sig.get)
-    lib_char      = _library_character_label(demand)
     recs = []
+    lib_char = _library_character_label(salience)
 
-    if demand.get(gear_weakest, 0) > 0.18 and avg_sig[gear_weakest] < -1.5:
+    if blindspot:
+        for bk in blindspot.get('weakest_bands', []):
+            cov = blindspot['band_coverage'].get(bk, 100)
+            sal = salience.get(bk, 0)
+            if cov < 55 and sal > 0.08:
+                recs.append(
+                    f"Your collection has limited coverage in the {band_full[bk]} region "
+                    f"({cov:.0f}% coverage), yet your library exercises it notably. "
+                    f"A more neutral IEM in this band would improve fidelity here."
+                )
+
+    band_keys = [b[0] for b in _FREQ_BANDS]
+    avg_dev = {k: sum(r['deviation'].get(k, 0) for r in iem_results) / len(iem_results)
+               for k in band_keys}
+
+    bright_sal = salience.get('lower_treble', 0) + salience.get('upper_treble', 0)
+    bright_dev = avg_dev.get('lower_treble', 0) + avg_dev.get('upper_treble', 0)
+    if bright_sal > 0.20 and bright_dev > 3.0:
         recs.append(
-            f"Your library makes notable use of the {full_labels[gear_weakest]} region, "
-            f"but your gear collection tends to underemphasise it. "
-            f"A sound signature with more {full_labels[gear_weakest]} would fill this gap."
+            "Your library and your gear both lean bright. "
+            "A smoother, more neutral signature in the treble could reduce fatigue on long sessions."
         )
-    if demand.get('treble', 0) > 0.25 and avg_sig.get('treble', 0) > 3.0:
+
+    mid_sal = salience.get('mids', 0) + salience.get('upper_mids', 0)
+    mid_dev = avg_dev.get('mids', 0) + avg_dev.get('upper_mids', 0)
+    if mid_sal > 0.25 and mid_dev < -3.0:
         recs.append(
-            "Both your library and your gear lean bright. "
-            "A smoother, more neutral signature could reduce fatigue on longer sessions."
+            "Your library is vocal and mid-forward, but your gear trends towards recessed mids on average. "
+            "A more neutral or mid-forward tuning would let vocals cut through better."
         )
-    if demand.get('mids', 0) > 0.30 and avg_sig.get('mids', 0) < -2.0:
-        recs.append(
-            "Your library is vocal-forward, but your gear has recessed mids on average. "
-            "A more mid-centric or neutral signature would let vocals cut through better."
-        )
+
     if not recs:
         recs.append(
             f"Your gear collection is well-matched to your {lib_char} library. "
-            "No major gaps detected across your current lineup."
+            "No significant gaps detected across your current lineup."
         )
     return recs
 
@@ -2646,33 +2824,58 @@ def insights_sonic_profile():
 @app.route('/api/insights/gear-fit')
 def insights_gear_fit():
     features = _load_features()
-    demand   = _library_demand(features)
-    if not demand:
-        return jsonify({'error': 'Run audio analysis first'}), 404
+    salience = _library_salience(features)
+    if not salience:
+        return jsonify({
+            'error': 'Re-run audio analysis to compute 10-band library features.'
+        }), 404
 
     iems_path = DATA_DIR / 'iems.json'
     iems = json.loads(iems_path.read_text()) if iems_path.exists() else []
 
     iem_results = []
     for iem in iems:
-        sig = _iem_signature(iem.get('measurement_L'))
-        if not sig:
+        measurement = iem.get('measurement_L')
+        feat = _iem_features(measurement)
+        if not feat:
             continue
+
+        # PEQ variants — apply PEQ, re-compute features and score
+        peq_variants = []
+        for peq in (iem.get('peq_profiles') or []):
+            peq_meas = _apply_peq(measurement, peq)
+            peq_feat = _iem_features(peq_meas)
+            if not peq_feat:
+                continue
+            peq_variants.append({
+                'peq_id':   peq['id'],
+                'name':     peq.get('name', 'PEQ'),
+                'deviation': peq_feat['deviation'],
+                'roughness': peq_feat['roughness'],
+                'character': _iem_character_label(peq_feat['deviation']),
+                'fit_score': _fit_score(salience, peq_feat),
+            })
+
         iem_results.append({
-            'id':        iem['id'],
-            'name':      iem['name'],
-            'signature': sig,
-            'character': _iem_character_label(sig),
-            'fit_score': _fit_score(demand, sig),
+            'id':          iem['id'],
+            'name':        iem['name'],
+            'deviation':   feat['deviation'],
+            'roughness':   feat['roughness'],
+            'character':   _iem_character_label(feat['deviation']),
+            'fit_score':   _fit_score(salience, feat),
+            'peq_variants': peq_variants,
         })
     iem_results.sort(key=lambda x: -x['fit_score'])
 
+    blindspot = _blindspot_analysis(salience, iem_results)
+
     return jsonify({
-        'demand':            demand,
-        'library_character': _library_character_label(demand),
+        'salience':          salience,
+        'library_character': _library_character_label(salience),
         'band_labels':       {b[0]: b[4] for b in _FREQ_BANDS},
         'iems':              iem_results,
-        'recommendations':   _recommendations(demand, iem_results),
+        'blindspot':         blindspot,
+        'recommendations':   _recommendations(salience, iem_results, blindspot),
     })
 
 

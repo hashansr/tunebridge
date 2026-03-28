@@ -3316,6 +3316,7 @@ const App = {
   loadInsightsView,
   startLibraryAnalysis,
   cancelLibraryAnalysis,
+  _switchIemGearTab,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -3756,72 +3757,164 @@ function _renderInsightsSonicProfile(d) {
    Insights — Phase 3: Gear Fit
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function _renderInsightsGearFit(d) {
-  const el = document.getElementById('insights-gear-content');
-  const bandKeys   = ['sub_bass', 'bass', 'mids', 'upper_mids', 'treble'];
-  const bandLabels = d.band_labels;
-  const MAX_DB = 10;  // visual range ±10 dB
+// Cached gear-fit response for tab switching
+let _gearFitData = null;
 
-  // Library demand bars
-  const demandBarsHtml = bandKeys.map(k => {
-    const pct = Math.round(d.demand[k] * 100);
+const _GEAR_BAND_KEYS = ['sub_bass','bass','mid_bass','lower_mids','mids',
+                          'upper_mids','presence','lower_treble','upper_treble','air'];
+
+function _gearBarsHtml(deviation, bandLabels) {
+  const MAX_DB = 10;
+  return _GEAR_BAND_KEYS.map(k => {
+    const val     = deviation[k] || 0;
+    const pct     = Math.min(Math.abs(val) / MAX_DB * 50, 50);
+    const isPos   = val >= 0;
+    const col     = isPos ? 'rgba(173,198,255,0.75)' : 'rgba(255,179,181,0.75)';
+    const leftPct = isPos ? 50 : 50 - pct;
+    return `<div class="gear-sig-band">
+      <div class="gear-sig-band-label">${bandLabels[k] || k}</div>
+      <div class="gear-sig-band-bar-wrap">
+        <div class="gear-sig-band-bar-track">
+          <div class="gear-sig-band-bar-fill" style="left:${leftPct}%;width:${pct}%;background:${col}"></div>
+        </div>
+      </div>
+      <div class="gear-sig-band-val">${val > 0 ? '+' : ''}${val.toFixed(1)}</div>
+    </div>`;
+  }).join('');
+}
+
+function _gearBadgeClass(score) {
+  return score >= 70 ? 'gear-fit-badge--high' : score >= 50 ? 'gear-fit-badge--mid' : 'gear-fit-badge--low';
+}
+
+function _switchIemGearTab(iemId, variantIdx) {
+  if (!_gearFitData) return;
+  const iem = _gearFitData.iems.find(i => i.id === iemId);
+  if (!iem) return;
+
+  const variant = variantIdx === -1 ? iem : (iem.peq_variants || [])[variantIdx];
+  if (!variant) return;
+
+  const sid  = iemId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const card = document.getElementById(`gear-card-${sid}`);
+  if (!card) return;
+
+  // Update tab active state
+  card.querySelectorAll('.gear-iem-tab').forEach((btn, i) => {
+    btn.classList.toggle('active', i === variantIdx + 1);
+  });
+
+  // Score badge
+  const badge = document.getElementById(`gear-score-${sid}`);
+  if (badge) {
+    badge.textContent = `${variant.fit_score}%`;
+    badge.className   = `gear-fit-badge ${_gearBadgeClass(variant.fit_score)}`;
+  }
+
+  // Character label
+  const charEl = document.getElementById(`gear-char-${sid}`);
+  if (charEl) charEl.textContent = variant.character;
+
+  // Band bars — use deviation from the selected variant
+  const bandsEl = document.getElementById(`gear-bands-${sid}`);
+  if (bandsEl) bandsEl.innerHTML = _gearBarsHtml(variant.deviation, _gearFitData.band_labels);
+}
+
+function _renderInsightsGearFit(d) {
+  _gearFitData = d;
+  const el         = document.getElementById('insights-gear-content');
+  const bandLabels = d.band_labels;
+
+  // ── Library salience bars ──────────────────────────────────────────
+  const salienceBarsHtml = _GEAR_BAND_KEYS.map(k => {
+    const pct = Math.round((d.salience[k] || 0) * 100 * 10);  // scale ×10 for visual width
+    const pctLabel = ((d.salience[k] || 0) * 100).toFixed(1);
     return `<div class="gear-demand-row">
-      <div class="gear-demand-label"><span>${bandLabels[k]}</span><span class="gear-demand-pct">${pct}%</span></div>
-      <div class="gear-demand-track"><div class="gear-demand-fill" style="width:${pct*4}%"></div></div>
+      <div class="gear-demand-label"><span>${bandLabels[k] || k}</span><span class="gear-demand-pct">${pctLabel}%</span></div>
+      <div class="gear-demand-track"><div class="gear-demand-fill" style="width:${Math.min(pct * 3, 100)}%"></div></div>
     </div>`;
   }).join('');
 
-  // IEM cards
+  // ── IEM cards ──────────────────────────────────────────────────────
   const iemCardsHtml = d.iems.length === 0
     ? `<p class="insights-empty-note" style="padding:12px 0">No IEMs with frequency response data found. Add IEMs with squig.link measurements in the Gear section.</p>`
     : d.iems.map(iem => {
-        const score = iem.fit_score;
-        const badgeClass = score >= 70 ? 'gear-fit-badge--high' : score >= 50 ? 'gear-fit-badge--mid' : 'gear-fit-badge--low';
-        const barsHtml = bandKeys.map(k => {
-          const val = iem.signature[k] || 0;
-          const pct = Math.min(Math.abs(val) / MAX_DB * 50, 50);  // 50% = max half-width
-          const isPos = val >= 0;
-          const col = isPos ? 'rgba(173,198,255,0.7)' : 'rgba(255,179,181,0.7)';
-          const leftPct  = isPos ? 50 : 50 - pct;
-          const widthPct = pct;
-          return `<div class="gear-sig-band">
-            <div class="gear-sig-band-label">${bandLabels[k].replace(' ', '&nbsp;')}</div>
-            <div class="gear-sig-band-bar-wrap">
-              <div class="gear-sig-band-bar-track">
-                <div class="gear-sig-band-bar-fill" style="left:${leftPct}%;width:${widthPct}%;background:${col}"></div>
-              </div>
-            </div>
-            <div class="gear-sig-band-val">${val > 0 ? '+' : ''}${val.toFixed(1)}</div>
-          </div>`;
-        }).join('');
-        return `<div class="gear-iem-card">
+        const score    = iem.fit_score;
+        const variants = iem.peq_variants || [];
+        const sid      = iem.id.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+        const tabsHtml = variants.length > 0
+          ? `<div class="gear-iem-tabs">
+              <button class="gear-iem-tab active" onclick="App._switchIemGearTab('${esc(iem.id)}', -1)">Factory</button>
+              ${variants.map((v, i) => `<button class="gear-iem-tab" onclick="App._switchIemGearTab('${esc(iem.id)}', ${i})">${esc(v.name)}</button>`).join('')}
+            </div>`
+          : '';
+
+        return `<div class="gear-iem-card" id="gear-card-${sid}">
+          ${tabsHtml}
           <div class="gear-iem-header">
-            <div><div class="gear-iem-name">${esc(iem.name)}</div><div class="gear-iem-char">${esc(iem.character)}</div></div>
-            <span class="gear-fit-badge ${badgeClass}">${score}%</span>
+            <div style="min-width:0;flex:1">
+              <div class="gear-iem-name">${esc(iem.name)}</div>
+              <div class="gear-iem-char" id="gear-char-${sid}">${esc(iem.character)}</div>
+            </div>
+            <span class="gear-fit-badge ${_gearBadgeClass(score)}" id="gear-score-${sid}">${score}%</span>
           </div>
-          <div class="gear-sig-bands">${barsHtml}</div>
+          <div class="gear-sig-bands" id="gear-bands-${sid}">${_gearBarsHtml(iem.deviation, bandLabels)}</div>
         </div>`;
       }).join('');
 
-  // Recommendations
+  // ── Blindspot section ──────────────────────────────────────────────
+  let blindspotHtml = '';
+  if (d.blindspot && d.iems.length > 0) {
+    const bs = d.blindspot;
+    const overallClass = bs.overall >= 70 ? 'gear-bs-overall--high'
+                       : bs.overall >= 45 ? 'gear-bs-overall--mid' : 'gear-bs-overall--low';
+    const covBarsHtml = _GEAR_BAND_KEYS.map(k => {
+      const cov = bs.band_coverage[k] || 0;
+      const isWeak = bs.weakest_bands.includes(k);
+      const col = cov >= 70 ? 'rgba(83,225,111,0.6)' : cov >= 45 ? 'rgba(240,180,41,0.6)' : 'rgba(255,179,181,0.6)';
+      return `<div class="gear-bs-band${isWeak ? ' gear-bs-band--weak' : ''}">
+        <div class="gear-bs-band-label">${bandLabels[k] || k}</div>
+        <div class="gear-bs-bar-track">
+          <div class="gear-bs-bar-fill" style="width:${cov}%;background:${col}"></div>
+        </div>
+        <div class="gear-bs-band-val">${cov.toFixed(0)}%</div>
+      </div>`;
+    }).join('');
+    blindspotHtml = `
+      <div class="insights-subsection">
+        <h4 class="insights-subsection-title">Collection Coverage</h4>
+        <div class="gear-bs-header">
+          <span class="gear-bs-overall-label">Overall coverage</span>
+          <span class="gear-bs-overall ${overallClass}">${bs.overall.toFixed(0)}%</span>
+        </div>
+        <div class="gear-bs-bands">${covBarsHtml}</div>
+        ${bs.weakest_bands.length ? `<p class="gear-bs-note">Weakest bands: <strong>${bs.weakest_bands.map(k => bandLabels[k] || k).join(', ')}</strong> — no IEM in your collection is close to neutral here.</p>` : ''}
+      </div>`;
+  }
+
+  // ── Recommendations ────────────────────────────────────────────────
   const recsHtml = d.recommendations.map(r => `<div class="gear-rec-item">${esc(r)}</div>`).join('');
 
   el.innerHTML = `
     <div class="gear-library-char">
       <div class="gear-library-char-label">Library character</div>
       <div class="gear-library-char-value">${esc(d.library_character)}</div>
-      <div class="gear-demand-bars">${demandBarsHtml}</div>
+      <p class="gear-library-char-sub">Band salience — how much your library exercises each frequency region</p>
+      <div class="gear-demand-bars">${salienceBarsHtml}</div>
     </div>
     <div class="insights-subsection">
       <h4 class="insights-subsection-title">IEM Fit Scores</h4>
+      <p class="gear-section-note">Deviation from neutral (flat) weighted by library salience. Lower deviation in bands your library uses heavily = higher score.</p>
       <div class="gear-iem-list">${iemCardsHtml}</div>
     </div>
+    ${blindspotHtml}
     <div class="insights-subsection">
       <h4 class="insights-subsection-title">Recommendations</h4>
       <div class="gear-recs-list">${recsHtml}</div>
     </div>
     <div class="gear-caveat">
-      <strong>Caveat</strong> — Fit scores compare your library's spectral centroid distribution against each IEM's frequency response curve. This is a directional heuristic, not a precise acoustic measurement. It reflects broad tonal alignment and should be treated as a starting point for exploration rather than a definitive ranking.
+      <strong>Caveat</strong> — Scores measure how close each IEM is to neutral (flat response), weighted by the frequency bands your library actually exercises. A neutral IEM scores highest for all libraries; deviations in heavily-used bands cost more. Treat this as a directional guide, not a definitive ranking.
     </div>`;
 }
 
