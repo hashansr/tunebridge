@@ -3320,6 +3320,7 @@ const App = {
   _switchIemGearTab,
   showInsightsHelp,
   changeGearFitTarget,
+  changeGearFitSort,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -3642,7 +3643,7 @@ async function _pollInsightsScan() {
     if (tagRes.ok)      _renderInsightsTagHealth(await tagRes.json());
     // Also refresh analysis info (track count may have changed)
     const infoRes = await fetch('/api/insights/analyse/info').catch(() => null);
-    if (infoRes && infoRes.ok) _updateAnalysisCta(await infoRes.json());
+    if (infoRes && infoRes.ok) _updateAnalysisInfo(await infoRes.json());
   }
 }
 
@@ -3696,7 +3697,10 @@ function _updateAnalysisInfo(info) {
   const el  = document.getElementById('insights-analyse-status');
   const btn = document.getElementById('insights-analyse-btn');
   if (!el) return;
-  if (info.status === 'up_to_date') {
+  if (info.status === 'needs_upgrade' || info.needs_upgrade) {
+    el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--warn"></span>Model upgraded — re-analysis required for Library Fit`;
+    if (btn && !btn.disabled) btn.textContent = 'Re-analyse Library';
+  } else if (info.status === 'up_to_date') {
     el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--ok"></span>Analysis up to date — ${info.analysed.toLocaleString()} tracks analysed`;
     if (btn && !btn.disabled) btn.textContent = 'Re-analyse';
   } else if (info.status === 'pending') {
@@ -3952,8 +3956,9 @@ function _renderInsightsSonicProfile(d) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 // Cached gear-fit response for tab switching
-let _gearFitData   = null;
-let _gearFitTarget = 'flat';   // persists selected target across re-renders
+let _gearFitData     = null;
+let _gearFitTarget   = 'flat';          // persists selected target across re-renders
+let _gearFitSortMode = 'target_fidelity'; // persists sort mode across re-renders
 
 const _GEAR_BAND_KEYS = ['sub_bass','bass','mid_bass','lower_mids','mids',
                           'upper_mids','presence','lower_treble','upper_treble','air'];
@@ -3999,18 +4004,34 @@ function _switchIemGearTab(iemId, variantIdx) {
     btn.classList.toggle('active', i === variantIdx + 1);
   });
 
-  // Score badge
-  const badge = document.getElementById(`gear-score-${sid}`);
-  if (badge) {
-    badge.textContent = `${variant.fit_score}%`;
-    badge.className   = `gear-fit-badge ${_gearBadgeClass(variant.fit_score)}`;
+  // Update both score pills
+  const scores = variant.scores || {};
+  const tf = scores.target_fidelity ?? 0;
+  const lf = scores.library_fit    ?? 0;
+  const isPrimaryTF = _gearFitSortMode === 'target_fidelity';
+  const primaryScore    = isPrimaryTF ? tf : lf;
+  const secondaryScore  = isPrimaryTF ? lf : tf;
+  const primaryLabel    = isPrimaryTF ? 'Target Fit' : 'Library Fit';
+  const secondaryLabel  = isPrimaryTF ? 'Library Fit' : 'Target Fit';
+
+  const pillPrimary   = document.getElementById(`gear-score-primary-${sid}`);
+  const pillSecondary = document.getElementById(`gear-score-secondary-${sid}`);
+  if (pillPrimary) {
+    pillPrimary.textContent = `${primaryScore}%`;
+    pillPrimary.className = `gear-score-pill gear-score-pill--primary ${_gearBadgeClass(primaryScore)}`;
+    pillPrimary.title = primaryLabel;
+  }
+  if (pillSecondary) {
+    pillSecondary.textContent = `${secondaryScore}%`;
+    pillSecondary.className = `gear-score-pill gear-score-pill--secondary`;
+    pillSecondary.title = secondaryLabel;
   }
 
   // Character label
   const charEl = document.getElementById(`gear-char-${sid}`);
   if (charEl) charEl.textContent = variant.character;
 
-  // Band bars — use deviation from the selected variant
+  // Band bars
   const bandsEl = document.getElementById(`gear-bands-${sid}`);
   if (bandsEl) bandsEl.innerHTML = _gearBarsHtml(variant.deviation, _gearFitData.band_labels);
 }
@@ -4019,18 +4040,28 @@ async function changeGearFitTarget(selectEl) {
   _gearFitTarget = selectEl.value;
   const el = document.getElementById('insights-gear-content');
   if (el) el.innerHTML = '<div class="insights-spinner-wrap"><div class="spinner"></div></div>';
-  const res = await fetch(`/api/insights/gear-fit?target=${encodeURIComponent(_gearFitTarget)}`);
+  const res = await fetch(`/api/insights/gear-fit?target=${encodeURIComponent(_gearFitTarget)}&sort=${_gearFitSortMode}`);
+  if (res.ok) _renderInsightsGearFit(await res.json());
+}
+
+async function changeGearFitSort(mode) {
+  _gearFitSortMode = mode;
+  const el = document.getElementById('insights-gear-content');
+  if (el) el.innerHTML = '<div class="insights-spinner-wrap"><div class="spinner"></div></div>';
+  const res = await fetch(`/api/insights/gear-fit?target=${encodeURIComponent(_gearFitTarget)}&sort=${_gearFitSortMode}`);
   if (res.ok) _renderInsightsGearFit(await res.json());
 }
 
 function _renderInsightsGearFit(d) {
-  _gearFitData = d;
+  _gearFitData     = d;
+  _gearFitSortMode = d.sort_mode || 'target_fidelity';
   const el         = document.getElementById('insights-gear-content');
   const bandLabels = d.band_labels;
+  const isPrimaryTF = _gearFitSortMode === 'target_fidelity';
 
   // ── Library salience bars ──────────────────────────────────────────
   const salienceBarsHtml = _GEAR_BAND_KEYS.map(k => {
-    const pct = Math.round((d.salience[k] || 0) * 100 * 10);  // scale ×10 for visual width
+    const pct = Math.round((d.salience[k] || 0) * 100 * 10);
     const pctLabel = ((d.salience[k] || 0) * 100).toFixed(1);
     return `<div class="gear-demand-row">
       <div class="gear-demand-label"><span>${bandLabels[k] || k}</span><span class="gear-demand-pct">${pctLabel}%</span></div>
@@ -4042,7 +4073,13 @@ function _renderInsightsGearFit(d) {
   const iemCardsHtml = d.iems.length === 0
     ? `<p class="insights-empty-note" style="padding:12px 0">No IEMs with frequency response data found. Add IEMs with squig.link measurements in the Gear section.</p>`
     : d.iems.map(iem => {
-        const score    = iem.fit_score;
+        const scores   = iem.scores || {};
+        const tf       = scores.target_fidelity ?? 0;
+        const lf       = scores.library_fit ?? 0;
+        const primaryScore   = isPrimaryTF ? tf : lf;
+        const secondaryScore = isPrimaryTF ? lf : tf;
+        const primaryLabel   = isPrimaryTF ? 'Target Fit' : 'Library Fit';
+        const secondaryLabel = isPrimaryTF ? 'Library Fit' : 'Target Fit';
         const variants = iem.peq_variants || [];
         const sid      = iem.id.replace(/[^a-zA-Z0-9_-]/g, '_');
 
@@ -4060,7 +4097,12 @@ function _renderInsightsGearFit(d) {
               <div class="gear-iem-name">${esc(iem.name)}</div>
               <div class="gear-iem-char" id="gear-char-${sid}">${esc(iem.character)}</div>
             </div>
-            <span class="gear-fit-badge ${_gearBadgeClass(score)}" id="gear-score-${sid}">${score}%</span>
+            <div class="gear-scores-row">
+              <span class="gear-score-pill gear-score-pill--primary ${_gearBadgeClass(primaryScore)}"
+                    id="gear-score-primary-${sid}" title="${primaryLabel}">${primaryScore}%</span>
+              <span class="gear-score-pill gear-score-pill--secondary"
+                    id="gear-score-secondary-${sid}" title="${secondaryLabel}">${secondaryScore}%</span>
+            </div>
           </div>
           <div class="gear-sig-bands" id="gear-bands-${sid}">${_gearBarsHtml(iem.deviation, bandLabels)}</div>
         </div>`;
@@ -4108,11 +4150,27 @@ function _renderInsightsGearFit(d) {
     ? `<span class="gear-target-hint">No targets added yet — <a class="gear-target-link" href="#" onclick="App.showView('settings');return false">add one in Settings</a> to score against Harman, Rtings, etc.</span>`
     : `<span class="gear-target-hint">Targets are FR curves you've added in <a class="gear-target-link" href="#" onclick="App.showView('settings');return false">Settings</a>.</span>`;
 
+  // ── Sort mode toggle ───────────────────────────────────────────────
+  const sortToggleHtml = `
+    <div class="gear-mode-toggle">
+      <button class="gear-mode-btn${_gearFitSortMode === 'target_fidelity' ? ' active' : ''}"
+              onclick="App.changeGearFitSort('target_fidelity')">Target Fidelity</button>
+      <button class="gear-mode-btn${_gearFitSortMode === 'library_fit' ? ' active' : ''}"
+              onclick="App.changeGearFitSort('library_fit')">Library Fit</button>
+    </div>`;
+
+  const sectionNote = isPrimaryTF
+    ? `Sorted by <strong>Target Fidelity</strong> — how close each IEM is to <strong>${esc(d.target_name)}</strong>, weighted by library salience. Secondary pill shows Library Fit.`
+    : `Sorted by <strong>Library Fit</strong> — how closely each IEM's tonal shape matches your library's character. Secondary pill shows Target Fidelity.`;
+
   el.innerHTML = `
-    <div class="gear-target-row">
-      <label class="gear-target-label" for="gear-target-select">Scoring target</label>
-      <select class="gear-target-select" id="gear-target-select" onchange="App.changeGearFitTarget(this)">${targetOptions}</select>
-      ${targetHelpHtml}
+    <div class="gear-controls-row">
+      <div class="gear-target-group">
+        <label class="gear-target-label" for="gear-target-select">Target</label>
+        <select class="gear-target-select" id="gear-target-select" onchange="App.changeGearFitTarget(this)">${targetOptions}</select>
+        ${targetHelpHtml}
+      </div>
+      ${sortToggleHtml}
     </div>
     <div class="gear-library-char">
       <div class="gear-library-char-label">Library character</div>
@@ -4122,7 +4180,7 @@ function _renderInsightsGearFit(d) {
     </div>
     <div class="insights-subsection">
       <h4 class="insights-subsection-title">IEM Fit Scores</h4>
-      <p class="gear-section-note">Deviation from <strong>${esc(d.target_name)}</strong>, weighted by library salience. Lower deviation in bands your library uses heavily = higher score.</p>
+      <p class="gear-section-note">${sectionNote}</p>
       <div class="gear-iem-list">${iemCardsHtml}</div>
     </div>
     ${blindspotHtml}
@@ -4131,7 +4189,8 @@ function _renderInsightsGearFit(d) {
       <div class="gear-recs-list">${recsHtml}</div>
     </div>
     <div class="gear-caveat">
-      <strong>Caveat</strong> — Scores measure how close each IEM is to the selected target, weighted by the frequency bands your library exercises. Deviations in heavily-used bands cost more. Treat this as a directional guide, not a definitive ranking.
+      <strong>Target Fidelity</strong> — How close is this IEM to the chosen target, weighted by library salience? Answers: "how accurate is this IEM for my music?"<br>
+      <strong>Library Fit</strong> — How well does this IEM's tonal shape match your library's character? Answers: "which IEM sounds most like my music?"
     </div>`;
 }
 

@@ -3718,6 +3718,27 @@ tr.player-active .track-title { color: var(--accent); }
 
 /* ── Gear Fit ──────────────────────────────────────────────────────────── */
 /* ── Gear Fit target selector ──────────────────────────────────────────── */
+/* Controls row: target selector + mode toggle side by side */
+.gear-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+.gear-target-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+/* Keep legacy .gear-target-row for any other uses */
 .gear-target-row {
   display: flex;
   align-items: center;
@@ -3727,6 +3748,34 @@ tr.player-active .track-title { color: var(--accent); }
   border-radius: 10px;
   padding: 12px 16px;
   margin-bottom: 16px;
+}
+
+/* Mode toggle (Target Fidelity / Library Fit) */
+.gear-mode-toggle {
+  display: flex;
+  background: var(--surface-3);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.gear-mode-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.gear-mode-btn:hover:not(.active) { color: var(--text-secondary); }
+.gear-mode-btn.active {
+  background: var(--surface-4, #424241);
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .gear-target-label {
@@ -3899,6 +3948,36 @@ tr.player-active .track-title { color: var(--accent); }
 .gear-fit-badge--high   { background: rgba(83,225,111,0.15);  color: #53e16f; }
 .gear-fit-badge--mid    { background: rgba(240,180,41,0.15);  color: #f0b429; }
 .gear-fit-badge--low    { background: rgba(255,179,181,0.15); color: var(--accent-secondary); }
+
+/* Dual score pills (primary + secondary) */
+.gear-scores-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.gear-score-pill {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+  transition: opacity 0.15s;
+}
+.gear-score-pill--primary {
+  /* colour classes (--high/--mid/--low) are added dynamically */
+}
+.gear-score-pill--secondary {
+  background: transparent;
+  border: 1px solid rgba(173,198,255,0.18);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+/* Primary pill inherits .gear-fit-badge colour classes */
+.gear-score-pill.gear-fit-badge--high   { background: rgba(83,225,111,0.15);  color: #53e16f; }
+.gear-score-pill.gear-fit-badge--mid    { background: rgba(240,180,41,0.15);  color: #f0b429; }
+.gear-score-pill.gear-fit-badge--low    { background: rgba(255,179,181,0.15); color: var(--accent-secondary); }
 
 /* IEM band signature mini-bars */
 /* ── 10-band deviation bars (vertical list) ──────────────────────── */

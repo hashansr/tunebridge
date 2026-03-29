@@ -2404,10 +2404,11 @@ def _run_analysis():
         analysis_state['done'] = i
         tid = track['id']
 
-        # Cache is valid only if band_energy (10 bands) is already present
+        # Cache valid only if multi-window v2 analysis (analysis_version == 2)
         cached = existing.get(tid)
-        if cached and cached.get('brightness') is not None \
-                and cached.get('band_energy') and len(cached['band_energy']) == 10:
+        if (cached and cached.get('brightness') is not None
+                and cached.get('band_energy') and len(cached['band_energy']) == 10
+                and cached.get('analysis_version') == 2):
             results.append(cached)
             continue
 
@@ -2415,34 +2416,60 @@ def _run_analysis():
             path = Path(music_base) / track['path']
             data, sr = sf.read(str(path), dtype='float32', always_2d=True)
             mono = data[:, 0]
+            total_samples = len(mono)
 
-            # RMS energy (full track)
-            rms = float(np.sqrt(np.mean(mono ** 2)))
+            # Multi-window analysis: 7 windows spread across the musical portion
+            # Skip first 10% (intro) and last 10% of the track
+            WIN_N     = 65536
+            N_WINDOWS = 7
+            RMS_FLOOR = 0.01
+            start_s   = max(int(total_samples * 0.10), WIN_N)
+            end_s     = max(int(total_samples * 0.90), start_s + WIN_N)
+            offsets   = [int(start_s + (end_s - start_s - WIN_N) * i / max(N_WINDOWS - 1, 1))
+                         for i in range(N_WINDOWS)]
+            offsets   = [o for o in offsets if o + WIN_N <= total_samples]
+            if not offsets:   # very short file — fall back to start
+                offsets = [0]
 
-            # Spectral centroid + per-band power fractions (first ~1.5 s)
-            n     = min(len(mono), 65536)
-            frame = mono[:n] * np.hanning(n)
-            fft_mag = np.abs(np.fft.rfft(frame))
-            freqs   = np.fft.rfftfreq(n, d=1.0 / sr)
-            centroid = float(np.sum(freqs * fft_mag) / (np.sum(fft_mag) + 1e-8))
+            window_func = np.hanning(WIN_N)
+            bright_list, energy_list, band_list = [], [], []
 
-            power       = fft_mag ** 2
-            total_power = power.sum() + 1e-12
-            band_energy = [
-                round(float(power[(freqs >= f_lo) & (freqs < f_hi)].sum() / total_power), 6)
-                for _, f_lo, f_hi, _, _ in _FREQ_BANDS
-            ]
+            for off in offsets:
+                frame = mono[off:off + WIN_N]
+                if len(frame) < WIN_N:
+                    frame = np.pad(frame, (0, WIN_N - len(frame)))
+                rms_w = float(np.sqrt(np.mean(frame ** 2)))
+                if rms_w < RMS_FLOOR:
+                    continue  # skip near-silent window
+                fft_mag = np.abs(np.fft.rfft(frame * window_func))
+                freqs   = np.fft.rfftfreq(WIN_N, d=1.0 / sr)
+                centroid = float(np.sum(freqs * fft_mag) / (np.sum(fft_mag) + 1e-8))
+                power        = fft_mag ** 2
+                total_power  = power.sum() + 1e-12
+                be = [float(power[(freqs >= f_lo) & (freqs < f_hi)].sum() / total_power)
+                      for _, f_lo, f_hi, _, _ in _FREQ_BANDS]
+                bright_list.append(centroid)
+                energy_list.append(rms_w)
+                band_list.append(be)
+
+            if not bright_list:   # all windows silent — treat as failed
+                raise ValueError('no valid windows')
+
+            band_energy = [round(float(np.mean([w[b] for w in band_list])), 6)
+                           for b in range(len(_FREQ_BANDS))]
 
             results.append({
-                'track_id':   tid,
-                'brightness': round(centroid, 2),
-                'energy':     round(rms, 6),
-                'band_energy': band_energy,
-                'cluster':    None,
+                'track_id':        tid,
+                'brightness':      round(float(np.mean(bright_list)), 2),
+                'energy':          round(float(np.mean(energy_list)), 6),
+                'band_energy':     band_energy,
+                'analysis_version': 2,
+                'cluster':         None,
             })
-        except Exception:
-            results.append({'track_id': tid, 'brightness': None, 'energy': None,
-                            'band_energy': None, 'cluster': None})
+        except Exception as exc:
+            reason = 'unsupported_format' if 'sndfile' in str(exc).lower() else 'read_error'
+            results.append({'track_id': tid, 'failed': True, 'reason': reason,
+                            'brightness': None, 'band_energy': None, 'cluster': None})
 
         # Flush to disk every 200 tracks so progress survives a crash
         if i > 0 and i % 200 == 0:
@@ -2491,9 +2518,10 @@ def insights_analysis_status():
 @app.route('/api/insights/analyse/info')
 def insights_analyse_info():
     """Return per-track analysis coverage: how many library tracks have been processed."""
-    total     = len(library)
-    processed = 0   # valid features OR permanently failed (brightness=None saved)
-    valid     = 0   # has full feature set (brightness + 10-band energy)
+    total      = len(library)
+    processed  = 0   # attempted — valid OR permanently failed
+    valid      = 0   # has full v2 feature set
+    needs_upgrade = False   # v1 cache exists but needs re-analysis
     fp = _features_file()
     if fp.exists():
         try:
@@ -2501,22 +2529,29 @@ def insights_analyse_info():
             for f in json.loads(fp.read_text()):
                 if f.get('track_id') not in lib_ids:
                     continue
-                processed += 1  # attempted — either succeeded or failed
+                processed += 1
+                if f.get('failed'):
+                    continue  # permanently failed — counts as processed, not valid
                 if (f.get('brightness') is not None
                         and f.get('band_energy') and len(f['band_energy']) == 10):
-                    valid += 1
+                    if f.get('analysis_version') == 2:
+                        valid += 1
+                    else:
+                        needs_upgrade = True  # v1 entry — present but needs re-analysis
         except Exception:
             processed = valid = 0
     pending = max(0, total - processed)
     if processed == 0:
         status = 'not_run'
+    elif needs_upgrade:
+        status = 'needs_upgrade'
     elif pending == 0:
         status = 'up_to_date'
     else:
         status = 'pending'
     return jsonify({
         'total': total, 'analysed': valid, 'processed': processed,
-        'pending': pending, 'status': status,
+        'pending': pending, 'status': status, 'needs_upgrade': needs_upgrade,
     })
 
 
@@ -2570,6 +2605,34 @@ def _library_salience(features):
     S_b = 0.7 * _norm01(L_b) + 0.3 * _norm01(V_b)
     S_b = S_b / (S_b.sum() + 1e-12)  # normalise to sum = 1
     return {b[0]: round(float(v), 6) for b, v in zip(_FREQ_BANDS, S_b)}
+
+
+def _library_shape(features, alpha=6.0):
+    """
+    10-band tonal-shape profile of the library in dB-like space.
+    Used by Library Fit to define what the library 'sounds like'.
+
+    Process:
+      E_b     = mean band_energy[b] across all tracks
+      logE_b  = log(E_b)  — converts power fractions to log scale
+      shape_b = logE_b - mean(logE)   — centre around zero
+      shape_b = shape_b / max(|shape|) — normalise to [-1, 1]
+      profile_db[b] = alpha * shape_b  — scale to dB-like space
+    """
+    import numpy as np
+    valid = [f for f in features
+             if f.get('band_energy') and len(f['band_energy']) == 10]
+    if not valid:
+        return None
+    matrix  = np.array([f['band_energy'] for f in valid], dtype=float)  # (N, 10)
+    E_b     = matrix.mean(axis=0)
+    logE_b  = np.log(np.maximum(E_b, 1e-12))
+    shape   = logE_b - logE_b.mean()
+    max_abs = np.abs(shape).max()
+    if max_abs > 1e-8:
+        shape = shape / max_abs                # normalise to [-1, 1]
+    profile_db = alpha * shape
+    return {b[0]: round(float(v), 4) for b, v in zip(_FREQ_BANDS, profile_db)}
 
 
 def _iem_features(measurement, target_measurement=None):
@@ -2737,29 +2800,61 @@ def _apply_peq(measurement, peq_profile):
     return [[float(freqs[i]), float(spls[i])] for i in range(len(freqs))]
 
 
-def _fit_score(salience, iem_feat):
+def _target_fidelity_score(salience, iem_feat):
     """
-    Option A scoring: ideal IEM = flat (deviation = 0 for all bands).
-    Loss = Σ(S_b · |D_b|)
-    Raw  = 100 · exp(−0.22 · Loss)
-    Penalties: treble roughness, extreme deviation (> ±5 dB).
+    Target Fidelity: how close is this IEM to the chosen target,
+    weighted by library salience?
+
+    Loss    = Σ_b( S_b * |D_b| )
+    Raw     = 100 * exp(-0.06 * Loss)
+    Penalties: treble roughness + extreme deviation > ±12 dB
     """
     import numpy as np
     band_keys = [b[0] for b in _FREQ_BANDS]
-    S = np.array([salience.get(k, 0.0)                    for k in band_keys])
-    D = np.array([iem_feat['deviation'].get(k, 0.0)        for k in band_keys])
-    R = np.array([iem_feat['roughness'].get(k, 0.0)        for k in band_keys])
+    S = np.array([salience.get(k, 0.0)              for k in band_keys])
+    D = np.array([iem_feat['deviation'].get(k, 0.0) for k in band_keys])
+    R = np.array([iem_feat['roughness'].get(k, 0.0) for k in band_keys])
 
-    loss    = float((S * np.abs(D)).sum())
-    # k=0.06: neutral IEM (~3 dB avg dev) → ~83%; V-shaped (~10 dB avg dev) → ~55%
-    raw     = 100.0 * np.exp(-0.06 * loss)
+    loss      = float((S * np.abs(D)).sum())
+    raw       = 100.0 * np.exp(-0.06 * loss)
 
-    # Roughness penalty — weighted by salience on lower & upper treble (bands 7, 8)
+    # k=0.06: neutral (~3 dB avg dev) → ~83%; V-shaped (~10 dB avg dev) → ~55%
     p_rough   = 6.0 * float(S[7] * R[7] + S[8] * R[8])
-    # Extreme deviation penalty — only beyond ±12 dB (severe coloring)
     p_extreme = 2.0 * float((S * np.maximum(0, np.abs(D) - 12.0)).sum())
 
     return round(float(np.clip(raw - p_rough - p_extreme, 0.0, 100.0)), 1)
+
+
+def _library_fit_score(library_profile_db, salience, iem_feat):
+    """
+    Library Fit: how closely does this IEM's tonal shape match the library?
+
+    W_b      = 0.5*(1/10) + 0.5*salience[b]  — softened salience (already sums to 1)
+    ShapeLoss = Σ_b( W_b * |iem_shape[b] - library_profile_db[b]| )
+    ShapeRaw  = 100 * exp(-0.08 * ShapeLoss)
+    Penalties: treble roughness + extreme deviation from target > ±8 dB
+    """
+    import numpy as np
+    band_keys = [b[0] for b in _FREQ_BANDS]
+    S   = np.array([salience.get(k, 0.0)                for k in band_keys])
+    D   = np.array([iem_feat['deviation'].get(k, 0.0)   for k in band_keys])
+    R   = np.array([iem_feat['roughness'].get(k, 0.0)   for k in band_keys])
+    LP  = np.array([library_profile_db.get(k, 0.0)      for k in band_keys])
+
+    # iem_shape = deviation (relative to chosen target baseline)
+    iem_shape = D
+
+    # Softened salience weights: W_b = 0.5*(1/10) + 0.5*S_b
+    # Since Σ(1/10)=1 and Σ(S)=1, Σ(W_b) = 1 already — no renormalisation needed
+    W = 0.5 * (1.0 / len(band_keys)) + 0.5 * S
+
+    shape_loss = float((W * np.abs(iem_shape - LP)).sum())
+    shape_raw  = 100.0 * np.exp(-0.08 * shape_loss)
+
+    p_rough         = 4.0  * float(S[7] * R[7] + S[8] * R[8])
+    p_target_extreme = 1.5 * float((S * np.maximum(0, np.abs(D) - 8.0)).sum())
+
+    return round(float(np.clip(shape_raw - p_rough - p_target_extreme, 0.0, 100.0)), 1)
 
 
 def _blindspot_analysis(salience, iem_results):
@@ -2774,7 +2869,7 @@ def _blindspot_analysis(salience, iem_results):
     band_cov  = {}
     for k in band_keys:
         min_dev       = min(abs(r['deviation'].get(k, 0)) for r in iem_results)
-        band_cov[k]   = round(float(100.0 * np.exp(-0.35 * min_dev)), 1)
+        band_cov[k]   = round(float(100.0 * np.exp(-0.25 * min_dev)), 1)
     S       = np.array([salience.get(k, 0.0) for k in band_keys])
     cov_arr = np.array([band_cov[k]          for k in band_keys])
     overall = round(float((S * cov_arr).sum()), 1)   # already 0-100 weighted
@@ -2832,7 +2927,8 @@ def _recommendations(salience, iem_results, blindspot):
     if not recs:
         recs.append(
             f"Your gear collection is well-matched to your {lib_char} library. "
-            "No significant gaps detected across your current lineup."
+            "No significant gaps detected. Try sorting by Library Fit to see which IEM "
+            "best mirrors your library's tonal character."
         )
     return recs
 
@@ -2880,8 +2976,14 @@ def insights_gear_fit():
             'error': 'Re-run audio analysis to compute 10-band library features.'
         }), 404
 
+    # Library shape — used by Library Fit model
+    library_profile_db = _library_shape(features) or {b[0]: 0.0 for b in _FREQ_BANDS}
+
     # Resolve target baseline (flat = default)
     target_id   = request.args.get('target', 'flat')
+    sort_mode   = request.args.get('sort', 'target_fidelity')
+    if sort_mode not in ('target_fidelity', 'library_fit'):
+        sort_mode = 'target_fidelity'
     target_name = 'Flat / Neutral'
     target_meas = None
     baselines   = load_baselines()
@@ -2891,7 +2993,7 @@ def insights_gear_fit():
             target_name = bl['name']
             target_meas = bl['measurement']
         else:
-            target_id = 'flat'  # baseline not found or has no data → fall back
+            target_id = 'flat'
 
     available_targets = (
         [{'id': 'flat', 'name': 'Flat / Neutral'}] +
@@ -2909,7 +3011,7 @@ def insights_gear_fit():
         if not feat:
             continue
 
-        # PEQ variants — apply PEQ, re-compute features and score against same target
+        # PEQ variants — both models scored against same target + library profile
         peq_variants = []
         for peq in (iem.get('peq_profiles') or []):
             peq_meas = _apply_peq(measurement, peq)
@@ -2922,7 +3024,10 @@ def insights_gear_fit():
                 'deviation': peq_feat['deviation'],
                 'roughness': peq_feat['roughness'],
                 'character': _iem_character_label(peq_feat['deviation']),
-                'fit_score': _fit_score(salience, peq_feat),
+                'scores': {
+                    'target_fidelity': _target_fidelity_score(salience, peq_feat),
+                    'library_fit':     _library_fit_score(library_profile_db, salience, peq_feat),
+                },
             })
 
         iem_results.append({
@@ -2931,15 +3036,22 @@ def insights_gear_fit():
             'deviation':    feat['deviation'],
             'roughness':    feat['roughness'],
             'character':    _iem_character_label(feat['deviation']),
-            'fit_score':    _fit_score(salience, feat),
+            'scores': {
+                'target_fidelity': _target_fidelity_score(salience, feat),
+                'library_fit':     _library_fit_score(library_profile_db, salience, feat),
+            },
             'peq_variants': peq_variants,
         })
-    iem_results.sort(key=lambda x: -x['fit_score'])
+
+    # Sort by selected mode
+    sort_key = lambda x: -x['scores'][sort_mode]
+    iem_results.sort(key=sort_key)
 
     blindspot = _blindspot_analysis(salience, iem_results)
 
     return jsonify({
         'salience':           salience,
+        'library_profile':    library_profile_db,
         'library_character':  _library_character_label(salience),
         'band_labels':        {b[0]: b[4] for b in _FREQ_BANDS},
         'iems':               iem_results,
@@ -2948,6 +3060,11 @@ def insights_gear_fit():
         'target_id':          target_id,
         'target_name':        target_name,
         'available_targets':  available_targets,
+        'sort_mode':          sort_mode,
+        'available_sort_modes': [
+            {'id': 'target_fidelity', 'name': 'Target Fidelity'},
+            {'id': 'library_fit',     'name': 'Library Fit'},
+        ],
     })
 
 
