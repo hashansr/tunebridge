@@ -282,7 +282,10 @@
         <!-- IEMs section -->
         <div class="gear-section-header" style="margin-top:32px">
           <h2>IEMs &amp; Headphones</h2>
-          <button class="btn-primary" onclick="App.showAddIemModal()">+ Add</button>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="iems-compare-btn" class="gear-compare-toggle" onclick="App.toggleIemCompareMode()" style="display:none">Compare</button>
+            <button class="btn-primary" onclick="App.showAddIemModal()">+ Add</button>
+          </div>
         </div>
         <div id="gear-iems-panel">
           <div id="iems-grid" class="gear-grid"></div>
@@ -291,6 +294,28 @@
             <p>No IEMs or headphones added yet.</p>
             <p class="muted">Add your gear to upload PEQ files and view frequency response graphs.</p>
             <button class="btn-primary" onclick="App.showAddIemModal()">+ Add IEM / Headphone</button>
+          </div>
+        </div>
+
+        <!-- Floating compare action bar -->
+        <div id="iem-compare-bar" class="iem-compare-bar" style="display:none">
+          <span id="iem-compare-bar-label" class="iem-compare-bar-label">Select 2 or more IEMs</span>
+          <button id="iem-compare-submit-btn" class="btn-primary" onclick="App.showIemCompare()" disabled>Compare</button>
+        </div>
+      </div>
+
+      <!-- IEM Frequency Response Compare Modal -->
+      <div id="iem-compare-modal" class="modal-overlay" style="display:none" onclick="App.closeIemCompare(event)">
+        <div class="iem-compare-dialog" onclick="event.stopPropagation()">
+          <div class="iem-compare-hdr">
+            <h3 class="iem-compare-title">FR Comparison</h3>
+            <button class="modal-x-btn" onclick="App.closeIemCompare()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div id="iem-compare-legend" class="iem-compare-legend"></div>
+          <div class="iem-compare-chart-wrap">
+            <canvas id="iem-compare-canvas"></canvas>
           </div>
         </div>
       </div>

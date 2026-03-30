@@ -1964,31 +1964,246 @@ async function syncScanAgain() {
 /* ── DAP management ─────────────────────────────────────────────────── */
 
 // SVG icon used for all DAP cards/headers
-const _DAP_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg>`;
+const _DAP_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg>`;
+const _IEM_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`;
+
 async function loadDapsView() {
   document.getElementById('daps-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
   const daps = await api('/daps').catch(() => []);
-  const grid = document.getElementById('daps-grid');
+  const grid  = document.getElementById('daps-grid');
   const empty = document.getElementById('daps-empty');
-  if (!daps.length) {
+  if (!daps.length) { grid.innerHTML = ''; empty.style.display = 'flex'; return; }
+  empty.style.display = 'none';
+  grid.innerHTML = daps.map(d => {
+    const syncRow = (d.stale_count > 0 || d.never_exported > 0) ? `
+      <div class="gear-card-row">
+        ${d.stale_count  > 0 ? `<span class="gear-sync-badge gear-sync-stale">⚠ ${d.stale_count} outdated</span>` : ''}
+        ${d.never_exported > 0 ? `<span class="gear-sync-badge gear-sync-never">${d.never_exported} unsynced</span>` : ''}
+      </div>` : '';
+    return `
+    <div class="gear-card" onclick="App.showDapDetail('${d.id}')">
+      <div class="gear-card-icon">${_DAP_SVG}</div>
+      <div class="gear-card-body">
+        <div class="gear-card-name">${esc(d.name)}</div>
+        <div class="gear-card-row">
+          <span class="gear-badge ${d.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected'}">
+            ${d.mounted ? '● Connected' : '○ Not connected'}
+          </span>
+        </div>
+        ${syncRow}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ── IEM compare state ───────────────────────────────────────────────── */
+let _iemCompareMode     = false;
+let _iemCompareSelected = new Set();
+let _iemCompareChart    = null;
+
+async function loadIemsView() {
+  document.getElementById('iems-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
+  const iems  = await api('/iems').catch(() => []);
+  const grid  = document.getElementById('iems-grid');
+  const empty = document.getElementById('iems-empty');
+  const cmpBtn = document.getElementById('iems-compare-btn');
+  if (!iems.length) {
     grid.innerHTML = '';
     empty.style.display = 'flex';
+    if (cmpBtn) cmpBtn.style.display = 'none';
     return;
   }
   empty.style.display = 'none';
-  grid.innerHTML = daps.map(d => `
-    <div class="gear-card" onclick="App.showDapDetail('${d.id}')">
-      <div class="gear-card-icon">${_DAP_SVG}</div>
-      <div class="gear-card-name">${esc(d.name)}</div>
-      <div class="gear-card-meta">
-        <span class="gear-badge ${d.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected'}">
-          ${d.mounted ? '● Connected' : '○ Not connected'}
-        </span>
-        ${d.stale_count > 0 ? `<span class="gear-sync-badge gear-sync-stale">⚠ ${d.stale_count} outdated</span>` : ''}
-        ${d.never_exported > 0 ? `<span class="gear-sync-badge gear-sync-never">${d.never_exported} unsynced</span>` : ''}
+  // Show compare button only when 2+ IEMs exist
+  if (cmpBtn) cmpBtn.style.display = iems.length >= 2 ? '' : 'none';
+  _renderIemCards(iems);
+}
+
+function _renderIemCards(iems) {
+  const grid = document.getElementById('iems-grid');
+  if (!grid) return;
+  grid.innerHTML = iems.map(i => {
+    const badgeClass  = i.type === 'Headphone' ? 'gear-badge-hp' : 'gear-badge-iem';
+    const peqCount    = i.peq_profiles?.length || 0;
+    const peqStr      = peqCount ? `${peqCount} EQ${peqCount !== 1 ? 's' : ''}` : '';
+    const isSelected  = _iemCompareSelected.has(i.id);
+    const clickAction = _iemCompareMode
+      ? `App.toggleIemCompareSelect('${i.id}', event)`
+      : `App.showIemDetail('${i.id}')`;
+    return `
+    <div class="gear-card${isSelected ? ' gear-card--selected' : ''}" id="gear-iem-card-${i.id}" onclick="${clickAction}">
+      <div class="gear-card-icon">${_IEM_SVG}</div>
+      <div class="gear-card-body">
+        <div class="gear-card-name">${esc(i.name)}</div>
+        <div class="gear-card-row">
+          <span class="gear-badge ${badgeClass}">${esc(i.type || 'IEM')}</span>
+          ${peqStr ? `<span class="gear-card-meta-text">${peqStr}</span>` : ''}
+        </div>
       </div>
-    </div>
-  `).join('');
+      ${_iemCompareMode ? `<div class="gear-compare-check${isSelected ? ' checked' : ''}"></div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function toggleIemCompareMode() {
+  _iemCompareMode = !_iemCompareMode;
+  _iemCompareSelected.clear();
+  const btn = document.getElementById('iems-compare-btn');
+  if (btn) {
+    btn.textContent = _iemCompareMode ? 'Cancel' : 'Compare';
+    btn.classList.toggle('active', _iemCompareMode);
+  }
+  _updateIemCompareBar();
+  // Re-render cards to show/hide checkboxes
+  api('/iems').then(iems => _renderIemCards(iems)).catch(() => {});
+}
+
+function toggleIemCompareSelect(iemId, event) {
+  if (event) event.stopPropagation();
+  if (_iemCompareSelected.has(iemId)) {
+    _iemCompareSelected.delete(iemId);
+  } else {
+    _iemCompareSelected.add(iemId);
+  }
+  const card = document.getElementById(`gear-iem-card-${iemId}`);
+  if (card) {
+    card.classList.toggle('gear-card--selected', _iemCompareSelected.has(iemId));
+    const chk = card.querySelector('.gear-compare-check');
+    if (chk) chk.classList.toggle('checked', _iemCompareSelected.has(iemId));
+  }
+  _updateIemCompareBar();
+}
+
+function _updateIemCompareBar() {
+  const bar   = document.getElementById('iem-compare-bar');
+  const label = document.getElementById('iem-compare-bar-label');
+  const btn   = document.getElementById('iem-compare-submit-btn');
+  if (!bar) return;
+  const n = _iemCompareSelected.size;
+  if (_iemCompareMode) {
+    bar.style.display = 'flex';
+    if (label) label.textContent = n < 2 ? 'Select 2 or more IEMs to compare' : `${n} IEMs selected`;
+    if (btn) { btn.textContent = `Compare ${n > 0 ? n : ''}`; btn.disabled = n < 2; }
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+async function showIemCompare() {
+  const ids = [..._iemCompareSelected];
+  if (ids.length < 2) return;
+  const [primary, ...rest] = ids;
+  const params = rest.map(id => `compare=${encodeURIComponent(id)}`).join('&');
+  const res = await fetch(`/api/iems/${encodeURIComponent(primary)}/graph?${params}`).catch(() => null);
+  if (!res || !res.ok) { showToast('Could not load comparison data.'); return; }
+  const data = await res.json();
+  document.getElementById('iem-compare-modal').style.display = 'flex';
+  _buildIemCompareChart(data);
+}
+
+function closeIemCompare(event) {
+  if (event && event.target !== document.getElementById('iem-compare-modal')) return;
+  document.getElementById('iem-compare-modal').style.display = 'none';
+  if (_iemCompareChart) { _iemCompareChart.destroy(); _iemCompareChart = null; }
+}
+
+function _buildIemCompareChart(data) {
+  const canvas = document.getElementById('iem-compare-canvas');
+  const legendEl = document.getElementById('iem-compare-legend');
+  if (!canvas) return;
+  if (_iemCompareChart) { _iemCompareChart.destroy(); _iemCompareChart = null; }
+
+  // Use backend-assigned colors directly — each IEM has its own palette color
+  const datasets = data.curves.map(c => ({
+    label:       c.label,
+    data:        c.data.map(([f, spl]) => ({ x: f, y: spl })),
+    borderColor: c.color,
+    borderWidth: c.id.startsWith('baseline-') ? 1.4 : 1.9,
+    borderDash:  c.dash ? [6, 4] : undefined,
+    pointRadius: 0,
+    tension:     0.3,
+    hidden:      c.id.startsWith('baseline-'),
+  }));
+
+  const regionPlugin = {
+    id: 'compareRegions',
+    beforeDatasetsDraw(chart) {
+      const { ctx, chartArea: { left, right, top, bottom }, scales: { x } } = chart;
+      [{ f1:20,f2:80,c:.04 },{ f1:80,f2:300,c:.025 },{ f1:300,f2:1000,c:.015 },
+       { f1:1000,f2:4000,c:.025 },{ f1:4000,f2:6000,c:.04 },{ f1:6000,f2:10000,c:.025 },
+       { f1:10000,f2:20000,c:.04 }].forEach(r => {
+        ctx.fillStyle = `rgba(173,198,255,${r.c})`;
+        ctx.fillRect(Math.max(x.getPixelForValue(r.f1), left), top,
+          Math.min(x.getPixelForValue(r.f2), right) - Math.max(x.getPixelForValue(r.f1), left),
+          bottom - top);
+      });
+    },
+  };
+
+  _iemCompareChart = new Chart(canvas, {
+    type: 'line',
+    plugins: [regionPlugin],
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 200 },
+      scales: {
+        x: {
+          type: 'logarithmic', min: 20, max: 20000,
+          title: { display: true, text: 'Frequency (Hz)', color: '#6b6b7b', font: { size: 11 } },
+          ticks: {
+            color: '#6b6b7b', font: { size: 9 }, autoSkip: false, maxRotation: 0,
+            callback: v => [20,50,100,200,500,1000,2000,5000,10000,20000].includes(v)
+              ? (v >= 1000 ? v/1000+'k' : v) : '',
+          },
+          grid: { color: ctx => [100,1000,10000].includes(ctx.tick?.value)
+            ? 'rgba(173,198,255,.12)' : 'rgba(173,198,255,.04)' },
+          afterBuildTicks: axis => {
+            axis.ticks = [20,30,40,50,60,80,100,150,200,300,400,500,600,800,1000,1500,2000,
+              3000,4000,5000,6000,8000,10000,15000,20000].map(v => ({ value: v }));
+          },
+        },
+        y: {
+          min: 50, max: 110,
+          title: { display: true, text: 'dB', color: '#6b6b7b', font: { size: 11 } },
+          ticks: { color: '#6b6b7b', font: { size: 10 }, stepSize: 10 },
+          grid: { color: 'rgba(173,198,255,.06)' },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(53,53,52,0.95)', titleColor: '#e5e2e1',
+          bodyColor: '#c1c6d7', borderColor: 'rgba(65,71,85,0.3)', borderWidth: 1,
+          callbacks: {
+            title: items => { const f = items[0].parsed.x; return f >= 1000 ? (f/1000).toFixed(1)+' kHz' : Math.round(f)+' Hz'; },
+            label: item => ` ${item.dataset.label}: ${item.parsed.y.toFixed(1)} dB`,
+          },
+        },
+      },
+    },
+  });
+
+  // Render compact legend
+  if (legendEl) {
+    legendEl.innerHTML = datasets.map((ds, i) => {
+      const dash = ds.borderDash ? 'stroke-dasharray="5 4"' : '';
+      return `<div class="compare-legend-item" onclick="App._toggleCompareDataset(${i})" id="cmp-legend-${i}">
+        <svg width="24" height="8" viewBox="0 0 24 8">
+          <line x1="0" y1="4" x2="24" y2="4" stroke="${ds.borderColor}" stroke-width="${ds.borderWidth||1.5}" ${dash}/>
+        </svg>
+        <span>${esc(ds.label)}</span>
+      </div>`;
+    }).join('');
+  }
+}
+
+function _toggleCompareDataset(idx) {
+  if (!_iemCompareChart) return;
+  const visible = !_iemCompareChart.isDatasetVisible(idx);
+  _iemCompareChart.setDatasetVisibility(idx, visible);
+  _iemCompareChart.update();
+  const item = document.getElementById(`cmp-legend-${idx}`);
+  if (item) item.style.opacity = visible ? '1' : '0.35';
 }
 
 async function loadGearView() {
@@ -2218,34 +2433,6 @@ async function deleteDap(id) {
 let _iemChart = null;
 let _currentIemId = null;
 let _activePeqId = null;
-
-async function loadIemsView() {
-  document.getElementById('iems-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
-  const iems = await api('/iems').catch(() => []);
-  const grid = document.getElementById('iems-grid');
-  const empty = document.getElementById('iems-empty');
-  if (!iems.length) {
-    grid.innerHTML = '';
-    empty.style.display = 'flex';
-    return;
-  }
-  empty.style.display = 'none';
-  grid.innerHTML = iems.map(i => {
-    const badgeClass = i.type === 'Headphone' ? 'gear-badge-hp' : 'gear-badge-iem';
-    return `
-      <div class="gear-card" onclick="App.showIemDetail('${i.id}')">
-        <div class="gear-card-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
-        </div>
-        <div class="gear-card-name">${esc(i.name)}</div>
-        <div class="gear-card-meta">
-          <span class="gear-badge ${badgeClass}">${esc(i.type || 'IEM')}</span>
-          ${i.peq_profiles?.length ? `<span style="font-size:var(--text-xs);color:var(--text-muted)">${i.peq_profiles.length} PEQ${i.peq_profiles.length !== 1 ? 's' : ''}</span>` : ''}
-        </div>
-      </div>
-    `;
-  }).join('');
-}
 
 async function showIemDetail(id) {
   const iem = await api(`/iems/${id}`);
@@ -3225,6 +3412,11 @@ const App = {
   scrollToAlbumLetter,
   backToGear,
   loadGearView,
+  toggleIemCompareMode,
+  toggleIemCompareSelect,
+  showIemCompare,
+  closeIemCompare,
+  _toggleCompareDataset,
 
   loadPlaylistsView,
   togglePlViewSort,

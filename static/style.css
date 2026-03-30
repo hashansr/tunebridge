@@ -1638,45 +1638,72 @@ tr.track-selected .track-check-indicator {
 /* ── Gear (DAP / IEM) views ────────────────────────────────────────── */
 .gear-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
   padding: 4px 0 24px;
 }
 
+/* Horizontal compact card */
 .gear-card {
   background: var(--bg-elevated);
   border: none;
-  border-radius: 1.5rem;
-  padding: 18px 16px 14px;
+  border-radius: 12px;
+  padding: 10px 14px;
   cursor: pointer;
-  transition: background .2s;
+  transition: background .15s;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  position: relative;
 }
 .gear-card:hover { background: var(--bg-hover); }
+.gear-card--selected {
+  background: rgba(173,198,255,.08);
+  outline: 1.5px solid rgba(173,198,255,.35);
+}
 
 .gear-card-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   background: var(--bg-active);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-sub);
-  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+.gear-card-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .gear-card-name {
-  font-size: var(--text-md);
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.3;
 }
 
+/* Replaces .gear-card-meta — used for each info row */
+.gear-card-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+}
+.gear-card-meta-text {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* Legacy .gear-card-meta kept for other uses */
 .gear-card-meta {
   font-size: var(--text-sm);
   color: var(--text-muted);
@@ -1684,6 +1711,74 @@ tr.track-selected .track-check-indicator {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+/* Compare checkbox overlay */
+.gear-compare-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(173,198,255,.4);
+  flex-shrink: 0;
+  background: transparent;
+  transition: background .15s, border-color .15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gear-compare-check.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.gear-compare-check.checked::after {
+  content: '';
+  display: block;
+  width: 5px;
+  height: 9px;
+  border: 2px solid #131313;
+  border-top: none;
+  border-left: none;
+  transform: rotate(40deg) translate(-1px, -1px);
+}
+
+/* Compare mode toggle button (in IEM section header) */
+.gear-compare-toggle {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.gear-compare-toggle:hover { background: var(--surface-3); color: var(--text-primary); }
+.gear-compare-toggle.active {
+  background: rgba(173,198,255,.15);
+  color: var(--accent);
+}
+
+/* Floating compare action bar */
+.iem-compare-bar {
+  position: fixed;
+  bottom: 90px;   /* above the player bar */
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--surface-3);
+  border: 1px solid rgba(173,198,255,.15);
+  border-radius: 40px;
+  padding: 10px 10px 10px 20px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.45);
+  z-index: 400;
+}
+.iem-compare-bar-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .gear-badge {
@@ -1714,6 +1809,56 @@ tr.track-selected .track-check-indicator {
 .gear-sync-ok    { background: rgba(83,225,111,.08);  color: var(--accent-success); }
 .gear-sync-stale { background: rgba(251,191,36,.1); color: #fbbf24; }
 .gear-sync-never { background: rgba(255,255,255,.04); color: var(--text-muted); }
+
+/* ── IEM FR Compare modal ──────────────────────────────────────────── */
+.iem-compare-dialog {
+  background: var(--surface-1);
+  border-radius: 16px;
+  width: min(780px, 95vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0,0,0,.6);
+}
+.iem-compare-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px 14px;
+  flex-shrink: 0;
+}
+.iem-compare-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+.iem-compare-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 0 22px 14px;
+  flex-shrink: 0;
+}
+.compare-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: background .15s;
+}
+.compare-legend-item:hover { background: var(--surface-2); }
+.iem-compare-chart-wrap {
+  flex: 1;
+  min-height: 0;
+  height: 420px;
+  padding: 0 22px 22px;
+}
 
 /* DAP detail */
 .dap-detail-header {
