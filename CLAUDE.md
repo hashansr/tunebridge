@@ -187,11 +187,11 @@ Public `App` object exposes all functions called from HTML `onclick` attributes.
 - [x] Double-click to play track — `ondblclick="Player.playTrackById(id)"` on all track rows (library, songs, playlist views).
 - [x] Marquee scroll for long track/artist names in player bar — `overflow:visible` on `.player-title.marquee`; parent `.player-track-info` clips.
 - [x] Player bar artist/album nav links — clicking artist or album name in player bar navigates to that artist/album page.
-- [x] Insights feature — Overview (stat cards + donut charts), Tag Health (completeness bars), Sonic Profile (brightness/energy histograms + scatter), Gear Fit (IEM scoring)
-- [x] Sonic analysis — multi-window FFT (7 windows, 10–90% of track, 65536-sample Hanning), 10 frequency bands (sub_bass→air), `analysis_version=2` cache stamp, incremental re-analysis, M4A/AAC failures recorded gracefully
+- [x] Insights feature — Overview (stat cards + donut charts), Tag Health (completeness bars), Sonic Profile (brightness/energy histograms + scatter + 12-band profile), IEM Match
+- [x] Sonic analysis v3 — multi-window FFT (7 windows, 10–90% of track, 65536-sample Hanning), 12 overlapping perceptual bands (`_PERC_BANDS`), `analysis_version=3` cache stamp, incremental re-analysis, M4A/AAC failures recorded gracefully
 - [x] Library salience — `S_b = 0.7·norm(mean) + 0.3·norm(std)`, normalised to sum=1; weighted per-band importance
-- [x] Gear Fit v2 — two scoring models: *Target Fidelity* (vs user-chosen baseline, k=0.06) + *Library Fit* (vs library tonal shape, alpha=6.0, k=0.08); dual score pills; sort toggle; PEQ variant tabs; blindspot analysis
-- [x] Gear Fit target dropdown — user picks "Flat/Neutral" or any saved squig.link baseline; help text links to Settings if no baselines added; library average rejected (circular reasoning)
+- [x] IEM Match — replaces old Gear Fit v2. Full genre-matching module: 17-dimension IEM scoring (12 band + 5 derived), genre fingerprints from library FFT, match matrix, library-weighted summary score, blindspot detection, Chart.js radar (up to 3 IEMs), genre×IEM heatmap with cell detail popup
+- [x] IEM Match API — POST /analyse, GET /overview, /matrix, /recommend, /blindspots, /iem/<id>/radar, /genre/<genre>/fingerprint, /targets; match matrix persisted to `data/match-matrix.json`
 - [x] Help text popovers — `?` button on every Insights subsection with explanatory text, increased background opacity for readability
 - [x] Rescan tags button — in Insights view header, POSTs to `/api/library/scan`, shows inline progress banner, reloads overview + tag health on completion
 - [x] IEM compare feature — multi-select IEMs in Gear view, floating action bar, FR overlay modal with Chart.js log-scale graph; reuses `/api/iems/<primary>/graph?compare=...` endpoint; clickable legend per curve
@@ -284,6 +284,24 @@ Key findings:
 - **Effort estimate**: PoC 2–3 sessions; playlists + delta sync +3–4; transcoding pipeline +2–3; artwork +3–4; Sequoia workarounds unpredictable. Total: 10–15+ sessions for production quality.
 
 ## Last Updated
+2026-03-31 — Session 23: IEM Match module — full genre-matching, 17-dimension scoring, radar, heatmap, blindspot
+
+- **IEM Match replaces Gear Fit v2**: Complete rebuild of the Insights "Gear Fit" section into a genre-matching module serving three goals: (1) library coverage overview, (2) IEM recommender per genre, (3) blindspot detector.
+- **12 overlapping perceptual bands (`_PERC_BANDS`)**: sub_bass, bass, bass_feel, slam, lower_mids, upper_mids, note_weight, lower_treble, upper_treble, detail, sibilance, texture. Overlap is intentional — each band measures a distinct perceptual quality.
+- **5 derived dimensions**: sound_stage, timbre_color, masking, layering, tonality — computed from IEM FR curve shape, not FFT energy.
+- **`_score_iem_17d()`**: Scores each IEM on all 17 axes vs normalised FR target. Band scores: `10·exp(-0.08·|deviation_dB|)`. Derived dims from curve-shape heuristics. Returns `{scores: {dim: 1-10}, deviation: {band: dB}}`.
+- **`analysis_version=3`**: Bumped from v2. 12-band cache invalidates all v2 10-band caches. Cache validity check: `len(band_energy)==12 and analysis_version==3`.
+- **Genre fingerprints**: Per-genre average of 12-band FFT energy, normalised per-band across genres to [0,1]. Stored in `data/match-matrix.json`.
+- **Match score**: `score(iem, genre) = Σ(energy[b]·iem_score[b]) / Σ(energy[b]) × 10` → 0–100. Library match = track-count-weighted average.
+- **New API routes**: `POST /api/insights/matching/analyse`, `GET /overview`, `/matrix`, `/recommend`, `/blindspots`, `/iem/<id>/radar`, `/genre/<genre>/fingerprint`, `/targets`.
+- **Sonic Profile updated**: Added 12-band energy profile bar chart (`_sonicBandChart`) showing normalised library average per perceptual band.
+- **Frontend**: `_renderInsightsMatchOverview()` (coverage badge, summary, IEM score cards), `_renderHeatmap()` (genre×IEM HTML table with inline colour coding), `_showHeatmapDetail()` (cell detail popup), `_rebuildRadar()` (Chart.js radar, up to 3 IEMs, all 17 axes), `_renderBlindspot()` (well-covered + blindspot lists).
+- **App exports**: Added `runMatchingAnalysis`, `changeMatchTarget`, `_openRadarForIem`, `_showHeatmapDetail` to `App` object.
+- **index.html**: Section title "Gear Fit" → "IEM Match" with updated description.
+- **style.css**: +280 lines — all new `match-*` classes, `sonic-band-card`, radar legend, heatmap, blindspot rows, coverage badge.
+- **Removed**: `_FREQ_BANDS`, `_iem_features()`, `_target_fidelity_score()`, `_library_fit_score()`, old `insights_gear_fit()` route.
+- **Note**: All existing v2 (10-band) audio analysis cache triggers `needs_upgrade`. Users must re-run "Analyse Library" to populate v3 12-band features before IEM Match becomes functional.
+
 2026-03-29 — Session 22: Gear Fit v2, Library Fit model, IEM compare, compact Gear cards, Rescan tags, Insights polish
 
 - **Multi-window sonic analysis (v2)**: `_run_analysis()` now uses 7 evenly-spaced windows across 10–90% of each track (65536-sample Hanning FFT). `analysis_version=2` cache stamp. Existing v1 cache triggers `needs_upgrade` status in `insights_analyse_info()`. Re-analysis is required; significantly slower but much more robust than single-window.
