@@ -3509,7 +3509,7 @@ const App = {
   startLibraryAnalysis,
   cancelLibraryAnalysis,
   insightsRescanLibrary,
-  _switchIemGearTab,
+
   showInsightsHelp,
   changeGearFitTarget,
   changeGearFitSort,
@@ -4592,7 +4592,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Close dropdown on outside click
   document.addEventListener('click', (e) => {
     const dd = document.getElementById('add-dropdown');
-    if (!dd.contains(e.target)) hideDropdown();
+    if (dd && !dd.contains(e.target)) hideDropdown();
 
     // Close any open mapping results dropdowns
     if (!e.target.closest('.map-row-target')) {
