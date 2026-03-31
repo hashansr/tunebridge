@@ -3513,6 +3513,11 @@ const App = {
   showInsightsHelp,
   changeGearFitTarget,
   changeGearFitSort,
+  // IEM Match
+  runMatchingAnalysis,
+  changeMatchTarget,
+  _openRadarForIem,
+  _showHeatmapDetail,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -3579,12 +3584,13 @@ async function loadInsightsView() {
   }
 
   // Phase 2 & 3 — only available after analysis has been run
-  const [sonicRes, gearRes] = await Promise.all([
+  const [sonicRes, matchRes] = await Promise.all([
     fetch('/api/insights/sonic-profile'),
-    fetch(`/api/insights/gear-fit?target=${encodeURIComponent(_gearFitTarget)}`),
+    fetch('/api/insights/matching/overview'),
   ]);
-  if (sonicRes.ok) _renderInsightsSonicProfile(await sonicRes.json());
-  if (gearRes.ok)  _renderInsightsGearFit(await gearRes.json());
+  if (sonicRes.ok)  _renderInsightsSonicProfile(await sonicRes.json());
+  if (matchRes.ok)  _renderInsightsMatchOverview(await matchRes.json());
+  else              _renderInsightsMatchOverview(null);  // show CTA to run analysis
 }
 
 function _renderInsightsOverview(d) {
@@ -4049,12 +4055,14 @@ function _updateAnalysisBanner(s) {
 let _sonicBrightnessChart = null;
 let _sonicEnergyChart     = null;
 let _sonicScatterChart    = null;
+let _sonicBandChart       = null;
 
 function _renderInsightsSonicProfile(d) {
   const el = document.getElementById('insights-sonic-content');
 
-  [_sonicBrightnessChart, _sonicEnergyChart, _sonicScatterChart].forEach(c => { if (c) c.destroy(); });
-  _sonicBrightnessChart = _sonicEnergyChart = _sonicScatterChart = null;
+  [_sonicBrightnessChart, _sonicEnergyChart, _sonicScatterChart, _sonicBandChart]
+    .forEach(c => { if (c) c.destroy(); });
+  _sonicBrightnessChart = _sonicEnergyChart = _sonicScatterChart = _sonicBandChart = null;
 
   const _hz = v => v >= 1000 ? `${(v/1000).toFixed(v%1000===0?0:1)}k` : Math.round(v).toString();
   const _barOpts = (xlabel) => ({
@@ -4072,6 +4080,15 @@ function _renderInsightsSonicProfile(d) {
 
   const bs = d.brightness.stats;
   const es = d.energy.stats;
+
+  // Band energy profile section (only when 12-band v3 data is available)
+  const bandProfileHtml = d.band_profile
+    ? `<div class="sonic-band-card">
+        <div class="sonic-chart-title">Perceptual Band Energy Profile</div>
+        <div class="sonic-chart-subtitle">Average energy per perceptual band across your library (normalised)</div>
+        <div class="insights-chart-wrap" style="height:180px"><canvas id="sonic-band-canvas"></canvas></div>
+       </div>`
+    : '';
 
   el.innerHTML = `
     <div class="sonic-charts-grid">
@@ -4094,12 +4111,13 @@ function _renderInsightsSonicProfile(d) {
         </div>
       </div>
     </div>
+    ${bandProfileHtml}
     <div class="sonic-scatter-card">
       <div class="sonic-chart-title">Brightness vs Energy — ${d.track_count.toLocaleString()} tracks sampled</div>
       <div class="insights-chart-wrap" style="height:220px"><canvas id="sonic-scatter-canvas"></canvas></div>
     </div>
     <div class="sonic-caveat">
-      <strong>About this data</strong> — Spectral brightness (spectral centroid) is the frequency-weighted average of a track's spectrum and indicates where energy is concentrated. RMS energy reflects overall loudness. These are computed from the first ~1.5 s of each file, which is representative for most tracks but may differ for songs with extended intros. Values are derived from raw PCM data and are independent of any mastering or loudness normalisation.
+      <strong>About this data</strong> — Spectral brightness (spectral centroid) is the frequency-weighted average of a track's spectrum. RMS energy reflects overall loudness. The band energy profile shows relative spectral emphasis across 12 perceptual bands using multi-window FFT analysis. Values are derived from raw PCM data.
     </div>`;
 
   _sonicBrightnessChart = new Chart(document.getElementById('sonic-brightness-canvas'), {
@@ -4121,6 +4139,41 @@ function _renderInsightsSonicProfile(d) {
                       callback: function(_, i) { return this.chart.data.labels[i].toFixed(2); } } } },
     },
   });
+
+  // Band energy profile chart
+  if (d.band_profile && document.getElementById('sonic-band-canvas')) {
+    const bl     = d.band_labels || {};
+    const bKeys  = Object.keys(d.band_profile);
+    const bVals  = bKeys.map(k => d.band_profile[k]);
+    const bLabels = bKeys.map(k => bl[k] || k);
+    _sonicBandChart = new Chart(document.getElementById('sonic-band-canvas'), {
+      type: 'bar',
+      data: {
+        labels: bLabels,
+        datasets: [{
+          data: bVals,
+          backgroundColor: bVals.map(v => `rgba(173,198,255,${0.3 + v * 0.5})`),
+          borderColor: 'rgba(173,198,255,0.8)',
+          borderWidth: 1, borderRadius: 3,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { color: '#6b6b7b', font: { size: 9 }, maxRotation: 45 },
+               grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
+          y: { min: 0, max: 1,
+               ticks: { color: '#6b6b7b', font: { size: 9 },
+                        callback: v => (v * 100).toFixed(0) + '%' },
+               grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' },
+               title: { display: true, text: 'Relative energy', color: '#6b6b7b', font: { size: 10 } } },
+        },
+        plugins: { legend: { display: false },
+                   tooltip: { ..._insightsTooltipDefaults(),
+                              callbacks: { label: ctx => `${(ctx.parsed.y * 100).toFixed(1)}% of peak band` } } },
+      },
+    });
+  }
 
   _sonicScatterChart = new Chart(document.getElementById('sonic-scatter-canvas'), {
     type: 'scatter',
@@ -4144,247 +4197,395 @@ function _renderInsightsSonicProfile(d) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Insights — Phase 3: Gear Fit
+   Insights — Phase 3: IEM Match (Genre-IEM Matching Module)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-// Cached gear-fit response for tab switching
-let _gearFitData     = null;
-let _gearFitTarget   = 'flat';          // persists selected target across re-renders
-let _gearFitSortMode = 'target_fidelity'; // persists sort mode across re-renders
+let _matchData      = null;   // cached full matrix response
+let _matchTarget    = 'flat'; // currently selected scoring target
+let _matchRadarChart = null;  // Chart.js radar instance
+let _matchRadarIems = [];     // IEM IDs currently on radar (up to 3)
 
-const _GEAR_BAND_KEYS = ['sub_bass','bass','mid_bass','lower_mids','mids',
-                          'upper_mids','presence','lower_treble','upper_treble','air'];
+// ── Band keys (12 perceptual bands) ───────────────────────────────────────────
+const _PERC_BAND_KEYS = [
+  'sub_bass','bass','bass_feel','slam','lower_mids','upper_mids',
+  'note_weight','lower_treble','upper_treble','detail','sibilance','texture',
+];
+const _ALL_DIM_KEYS_FE = [
+  ..._PERC_BAND_KEYS,
+  'sound_stage','timbre_color','masking','layering','tonality',
+];
 
-function _gearBarsHtml(deviation, bandLabels) {
-  const MAX_DB = 10;
-  return _GEAR_BAND_KEYS.map(k => {
-    const val     = deviation[k] || 0;
-    const pct     = Math.min(Math.abs(val) / MAX_DB * 50, 50);
-    const isPos   = val >= 0;
-    const col     = isPos ? 'rgba(173,198,255,0.75)' : 'rgba(255,179,181,0.75)';
-    const leftPct = isPos ? 50 : 50 - pct;
-    return `<div class="gear-sig-band">
-      <div class="gear-sig-band-label">${bandLabels[k] || k}</div>
-      <div class="gear-sig-band-bar-wrap">
-        <div class="gear-sig-band-bar-track">
-          <div class="gear-sig-band-bar-fill" style="left:${leftPct}%;width:${pct}%;background:${col}"></div>
+// ── Score colour ──────────────────────────────────────────────────────────────
+function _matchScoreColor(s) {
+  return s >= 75 ? '#53e16f' : s >= 55 ? '#f0b429' : '#ffb3b5';
+}
+function _matchScoreBg(s) {
+  return s >= 75 ? 'rgba(83,225,111,0.15)' : s >= 55 ? 'rgba(240,180,41,0.12)' : 'rgba(255,179,181,0.15)';
+}
+
+// ── Run matching analysis (fast — no audio I/O) ───────────────────────────────
+async function runMatchingAnalysis() {
+  const el = document.getElementById('insights-gear-content');
+  if (el) el.innerHTML = '<div class="insights-spinner-wrap"><div class="spinner"></div></div>';
+  try {
+    const res = await fetch('/api/insights/matching/analyse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: _matchTarget }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      _renderInsightsMatchOverview(null, d.error || 'Matching analysis failed.');
+      return;
+    }
+    // Reload overview after analysis
+    const ovRes = await fetch('/api/insights/matching/overview');
+    if (ovRes.ok) _renderInsightsMatchOverview(await ovRes.json());
+    else          _renderInsightsMatchOverview(null);
+  } catch (e) {
+    _renderInsightsMatchOverview(null, 'Network error — is the server running?');
+  }
+}
+
+async function changeMatchTarget(selectEl) {
+  _matchTarget = selectEl.value;
+  // Re-run analysis with new target (fast)
+  await runMatchingAnalysis();
+}
+
+// ── Overview panel ────────────────────────────────────────────────────────────
+function _renderInsightsMatchOverview(d, errMsg) {
+  const el = document.getElementById('insights-gear-content');
+  if (!el) return;
+
+  if (!d) {
+    // No analysis data — show CTA
+    const msg = errMsg || '';
+    el.innerHTML = `
+      <div class="match-no-data">
+        <div class="match-no-data-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+          </svg>
         </div>
+        <div class="match-no-data-title">Run IEM Match Analysis</div>
+        <div class="match-no-data-desc">Scores each IEM against every genre in your library using 17 perceptual dimensions. Requires audio analysis to be completed first.${msg ? `<br><span style="color:var(--accent-secondary)">${esc(msg)}</span>` : ''}</div>
+        <button class="btn-primary" onclick="App.runMatchingAnalysis()">Run Match Analysis</button>
+      </div>`;
+    return;
+  }
+
+  // Target selector
+  const _buildTargetSelector = (targets, currentId) => {
+    const opts = (targets || [{ id: 'flat', name: 'Flat / Neutral' }])
+      .map(t => `<option value="${esc(t.id)}" ${t.id === currentId ? 'selected' : ''}>${esc(t.name)}</option>`)
+      .join('');
+    const noExtra = !targets || targets.length <= 1;
+    const hint = noExtra
+      ? `<span class="gear-target-hint">No targets added yet — <a class="gear-target-link" href="#" onclick="App.showView('settings');return false">add one in Settings</a>.</span>`
+      : `<span class="gear-target-hint">Scoring target from <a class="gear-target-link" href="#" onclick="App.showView('settings');return false">Settings</a>.</span>`;
+    return `<div class="gear-controls-row" style="margin-bottom:16px">
+      <div class="gear-target-group">
+        <label class="gear-target-label">Scoring target</label>
+        <select class="gear-target-select" onchange="App.changeMatchTarget(this)">${opts}</select>
+        ${hint}
       </div>
-      <div class="gear-sig-band-val">${val > 0 ? '+' : ''}${val.toFixed(1)}</div>
+      <button class="match-rerun-btn" onclick="App.runMatchingAnalysis()">Re-analyse</button>
     </div>`;
-  }).join('');
-}
+  };
 
-function _gearBadgeClass(score) {
-  return score >= 70 ? 'gear-fit-badge--high' : score >= 50 ? 'gear-fit-badge--mid' : 'gear-fit-badge--low';
-}
-
-function _switchIemGearTab(iemId, variantIdx) {
-  if (!_gearFitData) return;
-  const iem = _gearFitData.iems.find(i => i.id === iemId);
-  if (!iem) return;
-
-  const variant = variantIdx === -1 ? iem : (iem.peq_variants || [])[variantIdx];
-  if (!variant) return;
-
-  const sid  = iemId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const card = document.getElementById(`gear-card-${sid}`);
-  if (!card) return;
-
-  // Update tab active state
-  card.querySelectorAll('.gear-iem-tab').forEach((btn, i) => {
-    btn.classList.toggle('active', i === variantIdx + 1);
-  });
-
-  // Update both score pills
-  const scores = variant.scores || {};
-  const tf = scores.target_fidelity ?? 0;
-  const lf = scores.library_fit    ?? 0;
-  const isPrimaryTF = _gearFitSortMode === 'target_fidelity';
-  const primaryScore    = isPrimaryTF ? tf : lf;
-  const secondaryScore  = isPrimaryTF ? lf : tf;
-  const primaryLabel    = isPrimaryTF ? 'Target Fit' : 'Library Fit';
-  const secondaryLabel  = isPrimaryTF ? 'Library Fit' : 'Target Fit';
-
-  const pillPrimary   = document.getElementById(`gear-score-primary-${sid}`);
-  const pillSecondary = document.getElementById(`gear-score-secondary-${sid}`);
-  if (pillPrimary) {
-    pillPrimary.textContent = `${primaryScore}%`;
-    pillPrimary.className = `gear-score-pill gear-score-pill--primary ${_gearBadgeClass(primaryScore)}`;
-    pillPrimary.title = primaryLabel;
-  }
-  if (pillSecondary) {
-    pillSecondary.textContent = `${secondaryScore}%`;
-    pillSecondary.className = `gear-score-pill gear-score-pill--secondary`;
-    pillSecondary.title = secondaryLabel;
-  }
-
-  // Character label
-  const charEl = document.getElementById(`gear-char-${sid}`);
-  if (charEl) charEl.textContent = variant.character;
-
-  // Band bars
-  const bandsEl = document.getElementById(`gear-bands-${sid}`);
-  if (bandsEl) bandsEl.innerHTML = _gearBarsHtml(variant.deviation, _gearFitData.band_labels);
-}
-
-async function changeGearFitTarget(selectEl) {
-  _gearFitTarget = selectEl.value;
-  const el = document.getElementById('insights-gear-content');
-  if (el) el.innerHTML = '<div class="insights-spinner-wrap"><div class="spinner"></div></div>';
-  const res = await fetch(`/api/insights/gear-fit?target=${encodeURIComponent(_gearFitTarget)}&sort=${_gearFitSortMode}`);
-  if (res.ok) _renderInsightsGearFit(await res.json());
-}
-
-async function changeGearFitSort(mode) {
-  _gearFitSortMode = mode;
-  const el = document.getElementById('insights-gear-content');
-  if (el) el.innerHTML = '<div class="insights-spinner-wrap"><div class="spinner"></div></div>';
-  const res = await fetch(`/api/insights/gear-fit?target=${encodeURIComponent(_gearFitTarget)}&sort=${_gearFitSortMode}`);
-  if (res.ok) _renderInsightsGearFit(await res.json());
-}
-
-function _renderInsightsGearFit(d) {
-  _gearFitData     = d;
-  _gearFitSortMode = d.sort_mode || 'target_fidelity';
-  const el         = document.getElementById('insights-gear-content');
-  const bandLabels = d.band_labels;
-  const isPrimaryTF = _gearFitSortMode === 'target_fidelity';
-
-  // ── Library salience bars ──────────────────────────────────────────
-  const salienceBarsHtml = _GEAR_BAND_KEYS.map(k => {
-    const pct = Math.round((d.salience[k] || 0) * 100 * 10);
-    const pctLabel = ((d.salience[k] || 0) * 100).toFixed(1);
-    return `<div class="gear-demand-row">
-      <div class="gear-demand-label"><span>${bandLabels[k] || k}</span><span class="gear-demand-pct">${pctLabel}%</span></div>
-      <div class="gear-demand-track"><div class="gear-demand-fill" style="width:${Math.min(pct * 3, 100)}%"></div></div>
-    </div>`;
-  }).join('');
-
-  // ── IEM cards ──────────────────────────────────────────────────────
-  const iemCardsHtml = d.iems.length === 0
-    ? `<p class="insights-empty-note" style="padding:12px 0">No IEMs with frequency response data found. Add IEMs with squig.link measurements in the Gear section.</p>`
-    : d.iems.map(iem => {
-        const scores   = iem.scores || {};
-        const tf       = scores.target_fidelity ?? 0;
-        const lf       = scores.library_fit ?? 0;
-        const primaryScore   = isPrimaryTF ? tf : lf;
-        const secondaryScore = isPrimaryTF ? lf : tf;
-        const primaryLabel   = isPrimaryTF ? 'Target Fit' : 'Library Fit';
-        const secondaryLabel = isPrimaryTF ? 'Library Fit' : 'Target Fit';
-        const variants = iem.peq_variants || [];
-        const sid      = iem.id.replace(/[^a-zA-Z0-9_-]/g, '_');
-
-        const tabsHtml = variants.length > 0
-          ? `<div class="gear-iem-tabs">
-              <button class="gear-iem-tab active" onclick="App._switchIemGearTab('${esc(iem.id)}', -1)">Factory</button>
-              ${variants.map((v, i) => `<button class="gear-iem-tab" onclick="App._switchIemGearTab('${esc(iem.id)}', ${i})">${esc(v.name)}</button>`).join('')}
-            </div>`
-          : '';
-
-        return `<div class="gear-iem-card" id="gear-card-${sid}">
-          ${tabsHtml}
-          <div class="gear-iem-header">
-            <div style="min-width:0;flex:1">
-              <div class="gear-iem-name">${esc(iem.name)}</div>
-              <div class="gear-iem-char" id="gear-char-${sid}">${esc(iem.character)}</div>
+  // IEM summary cards
+  const iemSummaryHtml = (d.iem_summary || []).length === 0
+    ? `<p class="insights-empty-note">No IEMs with FR data found. Add IEMs in the Gear section.</p>`
+    : (d.iem_summary || []).map(iem => {
+        const s = iem.library_match_score;
+        const bg = _matchScoreBg(s);
+        const col = _matchScoreColor(s);
+        return `<div class="match-iem-card" onclick="App._openRadarForIem('${esc(iem.iem_id)}')" title="View 17-dimension radar">
+          <div class="match-iem-score" style="color:${col}">${s.toFixed(0)}%</div>
+          <div class="match-iem-info">
+            <div class="match-iem-name">${esc(iem.iem_name)}</div>
+            <div class="match-iem-meta">
+              ${iem.best_genre ? `Best: <strong>${esc(iem.best_genre)}</strong>` : ''}
+              ${iem.worst_genre ? ` · Worst: <strong>${esc(iem.worst_genre)}</strong>` : ''}
             </div>
-            <div class="gear-scores-row">
-              <span class="gear-score-pill gear-score-pill--primary ${_gearBadgeClass(primaryScore)}"
-                    id="gear-score-primary-${sid}" title="${primaryLabel}">${primaryScore}%</span>
-              <span class="gear-score-pill gear-score-pill--secondary"
-                    id="gear-score-secondary-${sid}" title="${secondaryLabel}">${secondaryScore}%</span>
-            </div>
+            <div class="match-iem-coverage">${iem.genres_above_70} / ${iem.genres_total} genres ≥ 70%</div>
           </div>
-          <div class="gear-sig-bands" id="gear-bands-${sid}">${_gearBarsHtml(iem.deviation, bandLabels)}</div>
+          <div class="match-iem-radar-hint">Radar →</div>
         </div>`;
       }).join('');
 
-  // ── Blindspot section ──────────────────────────────────────────────
-  let blindspotHtml = '';
-  if (d.blindspot && d.iems.length > 0) {
-    const bs = d.blindspot;
-    const overallClass = bs.overall >= 70 ? 'gear-bs-overall--high'
-                       : bs.overall >= 45 ? 'gear-bs-overall--mid' : 'gear-bs-overall--low';
-    const covBarsHtml = _GEAR_BAND_KEYS.map(k => {
-      const cov = bs.band_coverage[k] || 0;
-      const isWeak = bs.weakest_bands.includes(k);
-      const col = cov >= 70 ? 'rgba(83,225,111,0.6)' : cov >= 45 ? 'rgba(240,180,41,0.6)' : 'rgba(255,179,181,0.6)';
-      return `<div class="gear-bs-band${isWeak ? ' gear-bs-band--weak' : ''}">
-        <div class="gear-bs-band-label">${bandLabels[k] || k}</div>
-        <div class="gear-bs-bar-track">
-          <div class="gear-bs-bar-fill" style="width:${cov}%;background:${col}"></div>
-        </div>
-        <div class="gear-bs-band-val">${cov.toFixed(0)}%</div>
-      </div>`;
-    }).join('');
-    blindspotHtml = `
-      <div class="insights-subsection">
-        <h4 class="insights-subsection-title">Collection Coverage</h4>
-        <div class="gear-bs-header">
-          <span class="gear-bs-overall-label">Overall coverage</span>
-          <span class="gear-bs-overall ${overallClass}">${bs.overall.toFixed(0)}%</span>
-        </div>
-        <div class="gear-bs-bands">${covBarsHtml}</div>
-        ${bs.weakest_bands.length ? `<p class="gear-bs-note">Weakest bands: <strong>${bs.weakest_bands.map(k => bandLabels[k] || k).join(', ')}</strong> — no IEM in your collection is close to neutral here.</p>` : ''}
-      </div>`;
-  }
-
-  // ── Recommendations ────────────────────────────────────────────────
-  const recsHtml = d.recommendations.map(r => `<div class="gear-rec-item">${esc(r)}</div>`).join('');
-
-  // ── Target selector ────────────────────────────────────────────────
-  const targetOptions = (d.available_targets || [{ id: 'flat', name: 'Flat / Neutral' }])
-    .map(t => `<option value="${esc(t.id)}" ${t.id === d.target_id ? 'selected' : ''}>${esc(t.name)}</option>`)
-    .join('');
-  const noExtraTargets = (d.available_targets || []).length <= 1;
-  const targetHelpHtml = noExtraTargets
-    ? `<span class="gear-target-hint">No targets added yet — <a class="gear-target-link" href="#" onclick="App.showView('settings');return false">add one in Settings</a> to score against Harman, Rtings, etc.</span>`
-    : `<span class="gear-target-hint">Targets are FR curves you've added in <a class="gear-target-link" href="#" onclick="App.showView('settings');return false">Settings</a>.</span>`;
-
-  // ── Sort mode toggle ───────────────────────────────────────────────
-  const sortToggleHtml = `
-    <div class="gear-mode-toggle">
-      <button class="gear-mode-btn${_gearFitSortMode === 'target_fidelity' ? ' active' : ''}"
-              onclick="App.changeGearFitSort('target_fidelity')">Target Fidelity</button>
-      <button class="gear-mode-btn${_gearFitSortMode === 'library_fit' ? ' active' : ''}"
-              onclick="App.changeGearFitSort('library_fit')">Library Fit</button>
-    </div>`;
-
-  const sectionNote = isPrimaryTF
-    ? `Sorted by <strong>Target Fidelity</strong> — how close each IEM is to <strong>${esc(d.target_name)}</strong>, weighted by library salience. Secondary pill shows Library Fit.`
-    : `Sorted by <strong>Library Fit</strong> — how closely each IEM's tonal shape matches your library's character. Secondary pill shows Target Fidelity.`;
+  const coveragePct = d.overall_coverage_pct || 0;
+  const covClass = coveragePct >= 70 ? 'match-coverage--high' : coveragePct >= 45 ? 'match-coverage--mid' : 'match-coverage--low';
 
   el.innerHTML = `
-    <div class="gear-controls-row">
-      <div class="gear-target-group">
-        <label class="gear-target-label" for="gear-target-select">Target</label>
-        <select class="gear-target-select" id="gear-target-select" onchange="App.changeGearFitTarget(this)">${targetOptions}</select>
-        ${targetHelpHtml}
+    ${_buildTargetSelector(d.available_targets, d.target_id || 'flat')}
+    <div class="match-overview-header">
+      <div class="match-coverage-badge ${covClass}">
+        <span class="match-coverage-pct">${coveragePct.toFixed(0)}%</span>
+        <span class="match-coverage-label">Library matched</span>
       </div>
-      ${sortToggleHtml}
+      <div class="match-summary-text">${esc(d.summary_text || '')}</div>
     </div>
-    <div class="gear-library-char">
-      <div class="gear-library-char-label">Library character</div>
-      <div class="gear-library-char-value">${esc(d.library_character)}</div>
-      <p class="gear-library-char-sub">Band salience — how much your library exercises each frequency region</p>
-      <div class="gear-demand-bars">${salienceBarsHtml}</div>
+    <div class="match-iem-cards">${iemSummaryHtml}</div>
+
+    <div class="insights-subsection" id="match-heatmap-section">
+      <h4 class="insights-subsection-title">Genre × IEM Heatmap
+        <span class="match-section-hint">Scores 0–100 — darker = better match</span>
+      </h4>
+      <div id="match-heatmap-wrap"><div class="insights-spinner-wrap"><div class="spinner"></div></div></div>
     </div>
-    <div class="insights-subsection">
-      <h4 class="insights-subsection-title">IEM Fit Scores</h4>
-      <p class="gear-section-note">${sectionNote}</p>
-      <div class="gear-iem-list">${iemCardsHtml}</div>
+
+    <div class="insights-subsection" id="match-radar-section">
+      <h4 class="insights-subsection-title">17-Dimension Radar
+        <span class="match-section-hint">Up to 3 IEMs — click IEM card above to add</span>
+      </h4>
+      <div id="match-radar-wrap">
+        <p class="insights-empty-note">Click an IEM card above to load its radar chart.</p>
+      </div>
     </div>
-    ${blindspotHtml}
-    <div class="insights-subsection">
-      <h4 class="insights-subsection-title">Recommendations</h4>
-      <div class="gear-recs-list">${recsHtml}</div>
+
+    <div class="insights-subsection" id="match-blindspot-section">
+      <h4 class="insights-subsection-title">Blindspot Detector</h4>
+      <div id="match-blindspot-wrap"><div class="insights-spinner-wrap"><div class="spinner"></div></div></div>
+    </div>`;
+
+  // Load heatmap + blindspot async
+  _loadMatchHeatmap();
+  _loadMatchBlindspot();
+}
+
+// ── Heatmap ───────────────────────────────────────────────────────────────────
+async function _loadMatchHeatmap() {
+  const wrap = document.getElementById('match-heatmap-wrap');
+  if (!wrap) return;
+  try {
+    const res = await fetch('/api/insights/matching/matrix');
+    if (!res.ok) { wrap.innerHTML = '<p class="insights-error">Could not load heatmap.</p>'; return; }
+    const d = await res.json();
+    _renderHeatmap(d, wrap);
+  } catch (_) { wrap.innerHTML = '<p class="insights-error">Network error.</p>'; }
+}
+
+function _renderHeatmap(d, wrap) {
+  const matrix = d.matrix || [];
+  const bl     = d.band_labels || {};
+  if (!matrix.length) {
+    wrap.innerHTML = '<p class="insights-empty-note">No genre data. Tag your tracks with genres and re-run analysis.</p>';
+    return;
+  }
+  // Collect unique IEM columns
+  const iemCols = [];
+  const seenIds = new Set();
+  matrix.forEach(row => row.matches.forEach(m => {
+    if (!seenIds.has(m.iem_id)) { seenIds.add(m.iem_id); iemCols.push({ id: m.iem_id, name: m.iem_name }); }
+  }));
+
+  if (!iemCols.length) {
+    wrap.innerHTML = '<p class="insights-empty-note">No IEMs scored. Add IEMs with FR data in the Gear section.</p>';
+    return;
+  }
+
+  let html = `<div class="match-heatmap-scroll"><table class="match-heatmap">
+    <thead><tr><th class="match-heatmap-genre-col">Genre</th>
+    ${iemCols.map(c => `<th class="match-heatmap-iem-col">${esc(c.name)}</th>`).join('')}
+    </tr></thead><tbody>`;
+
+  matrix.forEach(row => {
+    const scoreMap = {};
+    row.matches.forEach(m => { scoreMap[m.iem_id] = m; });
+    html += `<tr><td class="match-heatmap-genre">${esc(row.genre)} <span class="match-heatmap-tc">${row.track_count}</span></td>`;
+    iemCols.forEach(col => {
+      const m = scoreMap[col.id];
+      const s = m ? m.score : 0;
+      const bg = s >= 75 ? `rgba(83,225,111,${0.15 + s/100*0.55})` : s >= 55 ? `rgba(240,180,41,${0.1+s/100*0.5})` : `rgba(255,179,181,${0.1+s/100*0.4})`;
+      const tc = s >= 60 ? '#e0e0e0' : '#6b6b7b';
+      const bestDims = m && m.best_dimensions ? m.best_dimensions.map(k => bl[k] || k).join(', ') : '';
+      html += `<td class="match-heatmap-cell" style="background:${bg};color:${tc}" title="${bestDims ? 'Best: '+bestDims : ''}" onclick="App._showHeatmapDetail('${esc(row.genre)}','${esc(col.id)}','${esc(col.name)}',${s},'${esc(bestDims)}')">${s.toFixed(0)}</td>`;
+    });
+    html += `</tr>`;
+  });
+  html += `</tbody></table></div>
+  <div id="match-heatmap-detail" class="match-heatmap-detail" style="display:none"></div>`;
+  wrap.innerHTML = html;
+}
+
+function _showHeatmapDetail(genre, iemId, iemName, score, bestDims) {
+  const el = document.getElementById('match-heatmap-detail');
+  if (!el) return;
+  el.style.display = 'block';
+  el.innerHTML = `<div class="match-detail-inner">
+    <strong>${esc(genre)}</strong> × <strong>${esc(iemName)}</strong>
+    — Match score: <span style="color:${_matchScoreColor(score)};font-weight:600">${score.toFixed(0)}%</span>
+    ${bestDims ? `<br><span class="match-detail-dims">Top dimensions: ${esc(bestDims)}</span>` : ''}
+    <button class="match-detail-radar-btn" onclick="App._openRadarForIem('${esc(iemId)}')">View radar</button>
+  </div>`;
+}
+
+// ── Radar chart ───────────────────────────────────────────────────────────────
+async function _openRadarForIem(iemId) {
+  // Toggle: remove if already on chart
+  const idx = _matchRadarIems.indexOf(iemId);
+  if (idx !== -1) {
+    _matchRadarIems.splice(idx, 1);
+  } else {
+    if (_matchRadarIems.length >= 3) _matchRadarIems.shift();
+    _matchRadarIems.push(iemId);
+  }
+  await _rebuildRadar();
+  // Scroll to radar
+  const sec = document.getElementById('match-radar-section');
+  if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function _rebuildRadar() {
+  const wrap = document.getElementById('match-radar-wrap');
+  if (!wrap) return;
+  if (_matchRadarChart) { _matchRadarChart.destroy(); _matchRadarChart = null; }
+  if (!_matchRadarIems.length) {
+    wrap.innerHTML = '<p class="insights-empty-note">Click an IEM card to load its radar chart.</p>';
+    return;
+  }
+
+  wrap.innerHTML = `<div class="match-radar-legend" id="match-radar-legend"></div>
+    <div class="match-radar-chart-wrap"><canvas id="match-radar-canvas"></canvas></div>`;
+
+  const COLORS = ['rgba(173,198,255,0.85)', 'rgba(255,179,181,0.85)', 'rgba(83,225,111,0.85)'];
+  const FILL   = ['rgba(173,198,255,0.12)', 'rgba(255,179,181,0.12)', 'rgba(83,225,111,0.12)'];
+
+  const datasets = [];
+  const legendItems = [];
+
+  for (let i = 0; i < _matchRadarIems.length; i++) {
+    const iemId = _matchRadarIems[i];
+    try {
+      const res = await fetch(`/api/insights/matching/iem/${encodeURIComponent(iemId)}/radar`);
+      if (!res.ok) continue;
+      const d = await res.json();
+      const vals = _ALL_DIM_KEYS_FE.map(k => d.scores[k] ?? 1);
+      datasets.push({
+        label: d.iem_name,
+        data:  vals,
+        borderColor: COLORS[i], backgroundColor: FILL[i],
+        borderWidth: 2, pointRadius: 3, pointHoverRadius: 5,
+        pointBackgroundColor: COLORS[i],
+      });
+      legendItems.push({ name: d.iem_name, color: COLORS[i], iemId });
+    } catch (_) {}
+  }
+
+  if (!datasets.length) {
+    wrap.innerHTML = '<p class="insights-error">Could not load IEM data.</p>';
+    return;
+  }
+
+  // Legend
+  const legendEl = document.getElementById('match-radar-legend');
+  if (legendEl) {
+    legendEl.innerHTML = legendItems.map(it =>
+      `<div class="match-radar-legend-item" onclick="App._openRadarForIem('${esc(it.iemId)}')">
+        <span class="match-radar-legend-dot" style="background:${it.color}"></span>
+        <span>${esc(it.name)}</span>
+        <span class="match-radar-legend-remove">✕</span>
+      </div>`
+    ).join('');
+  }
+
+  const labels = _ALL_DIM_KEYS_FE.map(k => _ALL_DIM_LABELS_FE[k] || k);
+  _matchRadarChart = new Chart(document.getElementById('match-radar-canvas'), {
+    type: 'radar',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: true, aspectRatio: 1.6,
+      scales: {
+        r: {
+          min: 1, max: 10,
+          ticks: { stepSize: 2, color: '#4a4a5a', font: { size: 9 },
+                   backdropColor: 'transparent' },
+          grid:        { color: 'rgba(173,198,255,0.12)' },
+          angleLines:  { color: 'rgba(173,198,255,0.12)' },
+          pointLabels: { color: '#8a8aa0', font: { size: 10 } },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(20,20,32,0.92)',
+          titleColor: '#adc6ff', bodyColor: '#c8c8d8',
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.toFixed(1)}/10` },
+        },
+      },
+    },
+  });
+}
+
+// Dimension labels for radar (frontend copy of _ALL_DIM_LABELS from backend)
+const _ALL_DIM_LABELS_FE = {
+  sub_bass: 'Sub-bass', bass: 'Bass', bass_feel: 'Bass feel', slam: 'Slam',
+  lower_mids: 'Lower mids', upper_mids: 'Upper mids', note_weight: 'Note weight',
+  lower_treble: 'Lower treble', upper_treble: 'Upper treble', detail: 'Detail',
+  sibilance: 'Sibilance', texture: 'Texture',
+  sound_stage: 'Sound stage', timbre_color: 'Timbre / color',
+  masking: 'Masking', layering: 'Layering', tonality: 'Tonality',
+};
+
+// ── Blindspot detector ────────────────────────────────────────────────────────
+async function _loadMatchBlindspot() {
+  const wrap = document.getElementById('match-blindspot-wrap');
+  if (!wrap) return;
+  try {
+    const res = await fetch('/api/insights/matching/blindspots');
+    if (!res.ok) { wrap.innerHTML = '<p class="insights-error">Could not load blindspot data.</p>'; return; }
+    const d = await res.json();
+    _renderBlindspot(d, wrap);
+  } catch (_) { wrap.innerHTML = '<p class="insights-error">Network error.</p>'; }
+}
+
+function _renderBlindspot(d, wrap) {
+  const bl   = d.band_labels || {};
+  const good = d.well_covered || [];
+  const bad  = d.blindspots   || [];
+
+  const goodHtml = good.length === 0
+    ? '<p class="insights-empty-note">No well-covered genres yet.</p>'
+    : good.map(g => `<div class="match-bs-row match-bs-row--good">
+        <div class="match-bs-genre">${esc(g.genre)}</div>
+        <div class="match-bs-score" style="color:#53e16f">${g.best_score.toFixed(0)}%</div>
+        <div class="match-bs-iem">${g.best_iem_name ? esc(g.best_iem_name) : ''}</div>
+      </div>`).join('');
+
+  const badHtml = bad.length === 0
+    ? '<p class="insights-empty-note">No blindspots detected.</p>'
+    : bad.map(g => {
+        const dims = (g.missing_dimensions || []).map(k => bl[k] || k).join(', ');
+        return `<div class="match-bs-row match-bs-row--bad">
+          <div class="match-bs-genre">${esc(g.genre)}</div>
+          <div class="match-bs-score" style="color:#ffb3b5">${g.best_score.toFixed(0)}%</div>
+          <div class="match-bs-detail">
+            ${dims ? `<span class="match-bs-missing">Missing: ${esc(dims)}</span>` : ''}
+            <span class="match-bs-suggestion">${esc(g.suggestion)}</span>
+          </div>
+        </div>`;
+      }).join('');
+
+  wrap.innerHTML = `
+    <div class="match-bs-counts">
+      <span class="match-bs-count match-bs-count--good">${good.length} well-covered</span>
+      <span class="match-bs-count match-bs-count--bad">${bad.length} blindspot${bad.length !== 1 ? 's' : ''}</span>
     </div>
-    <div class="gear-caveat">
-      <strong>Target Fidelity</strong> — How close is this IEM to the chosen target, weighted by library salience? Answers: "how accurate is this IEM for my music?"<br>
-      <strong>Library Fit</strong> — How well does this IEM's tonal shape match your library's character? Answers: "which IEM sounds most like my music?"
+    <div class="match-bs-section">
+      <div class="match-bs-section-label">Well covered (≥ 70%)</div>
+      ${goodHtml}
+    </div>
+    <div class="match-bs-section">
+      <div class="match-bs-section-label">Blindspots (&lt; 65%)</div>
+      ${badHtml}
     </div>`;
 }
+
+// Stubs kept for backward compat (called by loadInsightsView in some paths)
+function changeGearFitTarget() {}
+function changeGearFitSort() {}
 
 /* ── Init ───────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {

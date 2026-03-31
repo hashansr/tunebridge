@@ -2404,11 +2404,11 @@ def _run_analysis():
         analysis_state['done'] = i
         tid = track['id']
 
-        # Cache valid only if multi-window v2 analysis (analysis_version == 2)
+        # Cache valid only if multi-window v3 analysis (analysis_version == 3, 12 bands)
         cached = existing.get(tid)
         if (cached and cached.get('brightness') is not None
-                and cached.get('band_energy') and len(cached['band_energy']) == 10
-                and cached.get('analysis_version') == 2):
+                and cached.get('band_energy') and len(cached['band_energy']) == 12
+                and cached.get('analysis_version') == 3):
             results.append(cached)
             continue
 
@@ -2447,7 +2447,7 @@ def _run_analysis():
                 power        = fft_mag ** 2
                 total_power  = power.sum() + 1e-12
                 be = [float(power[(freqs >= f_lo) & (freqs < f_hi)].sum() / total_power)
-                      for _, f_lo, f_hi, _, _ in _FREQ_BANDS]
+                      for _, f_lo, f_hi, _ in _PERC_BANDS]
                 bright_list.append(centroid)
                 energy_list.append(rms_w)
                 band_list.append(be)
@@ -2456,14 +2456,14 @@ def _run_analysis():
                 raise ValueError('no valid windows')
 
             band_energy = [round(float(np.mean([w[b] for w in band_list])), 6)
-                           for b in range(len(_FREQ_BANDS))]
+                           for b in range(len(_PERC_BANDS))]
 
             results.append({
                 'track_id':        tid,
                 'brightness':      round(float(np.mean(bright_list)), 2),
                 'energy':          round(float(np.mean(energy_list)), 6),
                 'band_energy':     band_energy,
-                'analysis_version': 2,
+                'analysis_version': 3,
                 'cluster':         None,
             })
         except Exception as exc:
@@ -2533,11 +2533,11 @@ def insights_analyse_info():
                 if f.get('failed'):
                     continue  # permanently failed — counts as processed, not valid
                 if (f.get('brightness') is not None
-                        and f.get('band_energy') and len(f['band_energy']) == 10):
-                    if f.get('analysis_version') == 2:
+                        and f.get('band_energy') and len(f['band_energy']) == 12):
+                    if f.get('analysis_version') == 3:
                         valid += 1
                     else:
-                        needs_upgrade = True  # v1 entry — present but needs re-analysis
+                        needs_upgrade = True  # old entry — needs re-analysis for 12-band v3
         except Exception:
             processed = valid = 0
     pending = max(0, total - processed)
@@ -2556,21 +2556,39 @@ def insights_analyse_info():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Insights — Phase 2 & 3: Sonic Profile + Gear Fit
+# Insights — Phase 2 & 3: Sonic Profile + IEM-Genre Matching
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_FREQ_BANDS = [
-    ('sub_bass',       20,    40,    28,   'Sub-bass'),
-    ('bass',           40,    80,    57,   'Bass'),
-    ('mid_bass',       80,   160,   113,   'Mid-bass'),
-    ('lower_mids',    160,   320,   226,   'Lower mids'),
-    ('mids',          320,  1000,   566,   'Mids'),
-    ('upper_mids',   1000,  2500,  1581,   'Upper mids'),
-    ('presence',     2500,  5000,  3536,   'Presence'),
-    ('lower_treble', 5000,  8000,  6325,   'Lower treble'),
-    ('upper_treble', 8000, 12000,  9798,   'Upper treble'),
-    ('air',         12000, 20000, 15492,   'Air'),
+# 12 overlapping perceptual frequency-band dimensions.
+# Overlap is intentional — each dimension captures a distinct perceptual quality.
+# Format: (key, f_lo Hz, f_hi Hz, label)
+_PERC_BANDS = [
+    ('sub_bass',      20,    60,   'Sub-bass'),
+    ('bass',          60,   120,   'Bass'),
+    ('bass_feel',     80,   200,   'Bass feel'),
+    ('slam',          80,   150,   'Slam'),
+    ('lower_mids',   200,   500,   'Lower mids'),
+    ('upper_mids',   500,  1500,   'Upper mids'),
+    ('note_weight',  200,  1000,   'Note weight'),
+    ('lower_treble', 3000, 6000,   'Lower treble'),
+    ('upper_treble', 6000, 20000,  'Upper treble'),
+    ('detail',       4000, 10000,  'Detail'),
+    ('sibilance',    5000, 10000,  'Sibilance'),
+    ('texture',      6000, 15000,  'Texture'),
 ]
+
+# 5 derived perceptual dimensions (computed from IEM FR shape, not FFT energy)
+_DERIVED_DIMS = ['sound_stage', 'timbre_color', 'masking', 'layering', 'tonality']
+
+_ALL_DIM_LABELS = {b[0]: b[3] for b in _PERC_BANDS}
+_ALL_DIM_LABELS.update({
+    'sound_stage':  'Sound stage',
+    'timbre_color': 'Timbre / color',
+    'masking':      'Masking',
+    'layering':     'Layering',
+    'tonality':     'Tonality',
+})
+_ALL_DIM_KEYS = [b[0] for b in _PERC_BANDS] + _DERIVED_DIMS
 
 
 def _load_features():
@@ -2585,120 +2603,152 @@ def _load_features():
 
 def _library_salience(features):
     """
-    Per-band salience weights derived from actual track band energies.
-    S_b = 0.7 * normalised(L_b) + 0.3 * normalised(V_b)
-    where L_b = mean band energy fraction, V_b = std across tracks.
-    Returns None if no tracks have 10-band data (analysis needs re-run).
+    Per-band salience S_b = 0.7·norm(mean) + 0.3·norm(std), sums to 1.
+    Uses the 12-band v3 scheme. Returns None if no v3 data exists.
     """
     import numpy as np
     valid = [f for f in features
-             if f.get('band_energy') and len(f['band_energy']) == 10]
+             if f.get('band_energy') and len(f['band_energy']) == 12]
     if not valid:
         return None
-    matrix = np.array([f['band_energy'] for f in valid], dtype=float)  # (N, 10)
-    L_b = matrix.mean(axis=0)
-    V_b = matrix.std(axis=0)
-    # Normalise each to [0, 1] before combining so scales are comparable
-    def _norm01(arr):
-        rng = arr.max() - arr.min()
-        return (arr - arr.min()) / (rng + 1e-12)
-    S_b = 0.7 * _norm01(L_b) + 0.3 * _norm01(V_b)
-    S_b = S_b / (S_b.sum() + 1e-12)  # normalise to sum = 1
-    return {b[0]: round(float(v), 6) for b, v in zip(_FREQ_BANDS, S_b)}
+    matrix = np.array([f['band_energy'] for f in valid], dtype=float)
+    L_b, V_b = matrix.mean(axis=0), matrix.std(axis=0)
+    def _n(a):
+        r = a.max() - a.min()
+        return (a - a.min()) / (r + 1e-12)
+    S_b = 0.7 * _n(L_b) + 0.3 * _n(V_b)
+    S_b /= S_b.sum() + 1e-12
+    return {b[0]: round(float(v), 6) for b, v in zip(_PERC_BANDS, S_b)}
 
 
 def _library_shape(features, alpha=6.0):
     """
-    10-band tonal-shape profile of the library in dB-like space.
-    Used by Library Fit to define what the library 'sounds like'.
-
-    Process:
-      E_b     = mean band_energy[b] across all tracks
-      logE_b  = log(E_b)  — converts power fractions to log scale
-      shape_b = logE_b - mean(logE)   — centre around zero
-      shape_b = shape_b / max(|shape|) — normalise to [-1, 1]
-      profile_db[b] = alpha * shape_b  — scale to dB-like space
+    12-band tonal-shape profile of the library in dB-like space.
+    E_b → log → centre → normalise to [-1,1] → ×alpha.
     """
     import numpy as np
     valid = [f for f in features
-             if f.get('band_energy') and len(f['band_energy']) == 10]
+             if f.get('band_energy') and len(f['band_energy']) == 12]
     if not valid:
         return None
-    matrix  = np.array([f['band_energy'] for f in valid], dtype=float)  # (N, 10)
-    E_b     = matrix.mean(axis=0)
-    logE_b  = np.log(np.maximum(E_b, 1e-12))
-    shape   = logE_b - logE_b.mean()
-    max_abs = np.abs(shape).max()
-    if max_abs > 1e-8:
-        shape = shape / max_abs                # normalise to [-1, 1]
-    profile_db = alpha * shape
-    return {b[0]: round(float(v), 4) for b, v in zip(_FREQ_BANDS, profile_db)}
+    E_b   = np.array([f['band_energy'] for f in valid], dtype=float).mean(axis=0)
+    logE  = np.log(np.maximum(E_b, 1e-12))
+    shape = logE - logE.mean()
+    ma    = np.abs(shape).max()
+    if ma > 1e-8:
+        shape /= ma
+    return {b[0]: round(float(v), 4) for b, v in zip(_PERC_BANDS, alpha * shape)}
 
 
-def _iem_features(measurement, target_measurement=None):
+def _score_iem_17d(measurement, target_measurement=None):
     """
-    Per-band deviation and roughness (within-band SPL std).
-    Both IEM and target are normalised to 75 dB at 1 kHz.
-    Deviation = IEM_band_mean − target_band_mean  (target defaults to flat = 75 dB).
-    Returns {'deviation': {band: dB}, 'roughness': {band: dB}} or None.
+    Score an IEM across all 17 perceptual dimensions on a 1–10 scale each.
+
+    12 frequency-band scores: 10·exp(-0.08·|deviation_dB|)
+      — k=0.08: 0 dB→10, 3 dB→7.9, 6 dB→6.2, 10 dB→4.5, 15 dB→3.0
+
+    5 derived dimension scores computed from FR shape:
+      sound_stage  — mids recession vs surrounding bands → clip(5+recession×0.5, 1,10)
+      timbre_color — RMS deviation 200–6 kHz vs target  → 10·exp(-0.05·dev)
+      masking      — 500–1500 Hz elevation vs neighbours  → clip(7-elev×0.6, 1,10)
+      layering     — std of 1/3-octave bands 300–5000 Hz → clip(1+std×0.7, 1,10)
+      tonality     — mean abs deviation full range        → 10·exp(-0.05·dev)
+
+    Returns {'scores': {dim: float 1–10}, 'deviation': {band: dB}} or None.
     """
     import numpy as np
     if not measurement or len(measurement) < 50:
         return None
-    # Normalise IEM to 75 dB at 1 kHz
+
     ref = _spl_at_1khz(measurement)
     if ref is not None:
         measurement = _shift(measurement, NORM_REF_DB - ref)
+
     freqs = np.array([p[0] for p in measurement], dtype=float)
     spls  = np.array([p[1] for p in measurement], dtype=float)
 
-    # Pre-compute per-band mean of the target curve (default: flat = 75 dB everywhere)
+    # Target: pre-compute band means and interpolated curve
+    t_freqs = t_spls_arr = None
     target_band_mean = {}
     if target_measurement and len(target_measurement) >= 50:
-        t_ref = _spl_at_1khz(target_measurement)
-        t_meas = _shift(target_measurement, NORM_REF_DB - t_ref) if t_ref is not None else target_measurement
-        t_freqs = np.array([p[0] for p in t_meas], dtype=float)
-        t_spls  = np.array([p[1] for p in t_meas], dtype=float)
-        for key, f_lo, f_hi, _, _ in _FREQ_BANDS:
-            mask = (t_freqs >= f_lo) & (t_freqs < f_hi)
-            target_band_mean[key] = float(t_spls[mask].mean()) if mask.any() else NORM_REF_DB
+        t_ref       = _spl_at_1khz(target_measurement)
+        t_meas      = _shift(target_measurement, NORM_REF_DB - t_ref) if t_ref is not None else target_measurement
+        t_freqs     = np.array([p[0] for p in t_meas], dtype=float)
+        t_spls_arr  = np.array([p[1] for p in t_meas], dtype=float)
+        for key, f_lo, f_hi, _ in _PERC_BANDS:
+            m = (t_freqs >= f_lo) & (t_freqs < f_hi)
+            target_band_mean[key] = float(t_spls_arr[m].mean()) if m.any() else NORM_REF_DB
     else:
-        for key, *_ in _FREQ_BANDS:
-            target_band_mean[key] = NORM_REF_DB  # flat
+        for key, *_ in _PERC_BANDS:
+            target_band_mean[key] = NORM_REF_DB
 
-    deviation = {}
-    roughness = {}
-    for key, f_lo, f_hi, _, _ in _FREQ_BANDS:
-        mask = (freqs >= f_lo) & (freqs < f_hi)
-        if mask.any():
-            band_spls      = spls[mask]
-            deviation[key] = round(float(band_spls.mean()) - target_band_mean[key], 2)
-            roughness[key] = round(float(band_spls.std()), 2)
-        else:
-            deviation[key] = 0.0
-            roughness[key] = 0.0
-    return {'deviation': deviation, 'roughness': roughness}
+    # ── 12 frequency-band scores ──────────────────────────────────────────────
+    k = 0.08
+    scores, deviation = {}, {}
+    for key, f_lo, f_hi, _ in _PERC_BANDS:
+        m   = (freqs >= f_lo) & (freqs < f_hi)
+        dev = float(spls[m].mean()) - target_band_mean[key] if m.any() else 0.0
+        deviation[key] = round(dev, 2)
+        scores[key]    = round(float(10.0 * np.exp(-k * abs(dev))), 2)
+
+    def _bm(lo, hi):
+        m = (freqs >= lo) & (freqs < hi)
+        return float(spls[m].mean()) if m.any() else NORM_REF_DB
+
+    # ── Derived: Sound stage ──────────────────────────────────────────────────
+    recession = (_bm(60, 300) + _bm(3000, 10000)) / 2 - _bm(300, 3000)
+    scores['sound_stage'] = round(float(np.clip(5.0 + recession * 0.5, 1.0, 10.0)), 2)
+
+    # ── Derived: Timbre / color ───────────────────────────────────────────────
+    m_tc = (freqs >= 200) & (freqs < 6000)
+    if m_tc.any():
+        ref_tc = (np.interp(freqs[m_tc], t_freqs, t_spls_arr)
+                  if t_freqs is not None else np.full(m_tc.sum(), NORM_REF_DB))
+        scores['timbre_color'] = round(
+            float(10.0 * np.exp(-0.05 * float(np.mean(np.abs(spls[m_tc] - ref_tc))))), 2)
+    else:
+        scores['timbre_color'] = 5.0
+
+    # ── Derived: Masking ──────────────────────────────────────────────────────
+    masking_elev = _bm(500, 1500) - (_bm(200, 500) + _bm(1500, 4000)) / 2
+    scores['masking'] = round(float(np.clip(7.0 - masking_elev * 0.6, 1.0, 10.0)), 2)
+
+    # ── Derived: Layering ─────────────────────────────────────────────────────
+    ctrs = [315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000]
+    lv   = [float(spls[(freqs >= c * 0.89) & (freqs < c * 1.12)].mean())
+            for c in ctrs if ((freqs >= c * 0.89) & (freqs < c * 1.12)).any()]
+    scores['layering'] = (
+        round(float(np.clip(1.0 + float(np.std(lv)) * 0.7, 1.0, 10.0)), 2)
+        if len(lv) >= 3 else 5.0)
+
+    # ── Derived: Tonality ─────────────────────────────────────────────────────
+    ref_full = (np.interp(freqs, t_freqs, t_spls_arr)
+                if t_freqs is not None else np.full(len(freqs), NORM_REF_DB))
+    scores['tonality'] = round(
+        float(10.0 * np.exp(-0.05 * float(np.mean(np.abs(spls - ref_full))))), 2)
+
+    return {'scores': scores, 'deviation': deviation}
 
 
 def _iem_character_label(deviation):
-    """Human-readable tonal character from 10-band deviation dict."""
+    """Human-readable tonal character from 12-band deviation dict."""
     low_end  = (deviation.get('sub_bass', 0) + deviation.get('bass', 0)
-                + deviation.get('mid_bass', 0)) / 3
-    body     = (deviation.get('lower_mids', 0) + deviation.get('mids', 0)) / 2
-    detail   = (deviation.get('upper_mids', 0) + deviation.get('presence', 0)) / 2
-    bright   = (deviation.get('lower_treble', 0) + deviation.get('upper_treble', 0)
-                + deviation.get('air', 0)) / 3
+                + deviation.get('bass_feel', 0)) / 3
+    body     = (deviation.get('lower_mids', 0) + deviation.get('note_weight', 0)) / 2
+    presence = deviation.get('upper_mids', 0)
+    detail   = (deviation.get('detail', 0) + deviation.get('lower_treble', 0)) / 2
+    air      = (deviation.get('upper_treble', 0) + deviation.get('texture', 0)) / 2
     tags = []
     if   low_end >  4:  tags.append('bass-heavy')
     elif low_end >  2:  tags.append('warm')
     elif low_end < -3:  tags.append('bass-light')
     if   body    >  3:  tags.append('full-bodied')
     elif body    < -3:  tags.append('lean mids')
-    if   detail  >  4:  tags.append('forward presence')
-    elif detail  < -3:  tags.append('smooth mids')
-    if   bright  >  4:  tags.append('bright')
-    elif bright  >  2:  tags.append('airy')
-    elif bright  < -4:  tags.append('dark')
+    if   presence > 4:  tags.append('forward presence')
+    elif presence < -3: tags.append('smooth mids')
+    if   detail  >  4:  tags.append('bright')
+    elif detail  >  2:  tags.append('airy')
+    elif detail  < -4:  tags.append('dark')
     if not tags:        tags.append('neutral')
     return ', '.join(tags)
 
@@ -2707,16 +2757,12 @@ def _library_character_label(salience):
     """Top-band description of the library's spectral salience profile."""
     top = max(salience, key=salience.get)
     return {
-        'sub_bass':      'sub-bass heavy',
-        'bass':          'bass-driven',
-        'mid_bass':      'warm and punchy',
-        'lower_mids':    'full lower midrange',
-        'mids':          'mid-centric and vocal',
-        'upper_mids':    'detail and clarity focused',
-        'presence':      'presence-forward',
-        'lower_treble':  'bright lower treble',
-        'upper_treble':  'upper treble emphasis',
-        'air':           'airy and extended',
+        'sub_bass':     'sub-bass heavy',   'bass':         'bass-driven',
+        'bass_feel':    'warm and full',     'slam':         'punchy and dynamic',
+        'lower_mids':   'full lower midrange', 'upper_mids': 'presence-forward',
+        'note_weight':  'full-bodied',       'lower_treble': 'bright and detailed',
+        'upper_treble': 'airy and extended', 'detail':       'detail-focused',
+        'sibilance':    'treble-forward',    'texture':      'textured treble',
     }.get(top, 'balanced')
 
 
@@ -2800,144 +2846,209 @@ def _apply_peq(measurement, peq_profile):
     return [[float(freqs[i]), float(spls[i])] for i in range(len(freqs))]
 
 
-def _target_fidelity_score(salience, iem_feat):
-    """
-    Target Fidelity: how close is this IEM to the chosen target,
-    weighted by library salience?
+# ── Genre fingerprinting ──────────────────────────────────────────────────────
 
-    Loss    = Σ_b( S_b * |D_b| )
-    Raw     = 100 * exp(-0.06 * Loss)
-    Penalties: treble roughness + extreme deviation > ±12 dB
+def _compute_genre_fingerprints(features, library_tracks):
+    """
+    Group tracks by genre tag. Average + per-band-normalise 12-band energy.
+    Returns {slug: {genre, slug, track_count, fingerprint: {band: 0-1}}}
     """
     import numpy as np
-    band_keys = [b[0] for b in _FREQ_BANDS]
-    S = np.array([salience.get(k, 0.0)              for k in band_keys])
-    D = np.array([iem_feat['deviation'].get(k, 0.0) for k in band_keys])
-    R = np.array([iem_feat['roughness'].get(k, 0.0) for k in band_keys])
+    band_keys   = [b[0] for b in _PERC_BANDS]
+    id_to_genre = {t['id']: (t.get('genre') or '').strip() for t in library_tracks}
 
-    loss      = float((S * np.abs(D)).sum())
-    raw       = 100.0 * np.exp(-0.06 * loss)
+    genre_lists = {}
+    for f in features:
+        if f.get('failed') or not f.get('band_energy') or len(f['band_energy']) != 12:
+            continue
+        if f.get('analysis_version') != 3:
+            continue
+        genre = id_to_genre.get(f['track_id'], '') or 'Unknown'
+        genre_lists.setdefault(genre, []).append(f['band_energy'])
 
-    # k=0.06: neutral (~3 dB avg dev) → ~83%; V-shaped (~10 dB avg dev) → ~55%
-    p_rough   = 6.0 * float(S[7] * R[7] + S[8] * R[8])
-    p_extreme = 2.0 * float((S * np.maximum(0, np.abs(D) - 12.0)).sum())
+    if not genre_lists:
+        return {}
 
-    return round(float(np.clip(raw - p_rough - p_extreme, 0.0, 100.0)), 1)
+    raw = {g: {'tc': len(bls), 'avg': np.array(bls).mean(axis=0)}
+           for g, bls in genre_lists.items()}
+
+    # Per-band min-max normalisation across genres
+    for b_i in range(len(band_keys)):
+        vals = [raw[g]['avg'][b_i] for g in raw]
+        mn, mx = min(vals), max(vals)
+        rng = mx - mn + 1e-12
+        for g in raw:
+            raw[g]['avg'][b_i] = (raw[g]['avg'][b_i] - mn) / rng
+
+    result = {}
+    for genre, data in raw.items():
+        slug = re.sub(r'[^a-z0-9_-]', '_', genre.lower().strip())
+        result[slug] = {
+            'genre': genre, 'slug': slug, 'track_count': data['tc'],
+            'fingerprint': {k: round(float(v), 4)
+                            for k, v in zip(band_keys, data['avg'])},
+        }
+    return result
 
 
-def _library_fit_score(library_profile_db, salience, iem_feat):
+# ── Match matrix ──────────────────────────────────────────────────────────────
+
+def _build_match_matrix(genre_fps, iem_profiles):
     """
-    Library Fit: how closely does this IEM's tonal shape match the library?
-
-    W_b      = 0.5*(1/10) + 0.5*salience[b]  — softened salience (already sums to 1)
-    ShapeLoss = Σ_b( W_b * |iem_shape[b] - library_profile_db[b]| )
-    ShapeRaw  = 100 * exp(-0.08 * ShapeLoss)
-    Penalties: treble roughness + extreme deviation from target > ±8 dB
-    """
-    import numpy as np
-    band_keys = [b[0] for b in _FREQ_BANDS]
-    S   = np.array([salience.get(k, 0.0)                for k in band_keys])
-    D   = np.array([iem_feat['deviation'].get(k, 0.0)   for k in band_keys])
-    R   = np.array([iem_feat['roughness'].get(k, 0.0)   for k in band_keys])
-    LP  = np.array([library_profile_db.get(k, 0.0)      for k in band_keys])
-
-    # iem_shape = deviation (relative to chosen target baseline)
-    iem_shape = D
-
-    # Softened salience weights: W_b = 0.5*(1/10) + 0.5*S_b
-    # Since Σ(1/10)=1 and Σ(S)=1, Σ(W_b) = 1 already — no renormalisation needed
-    W = 0.5 * (1.0 / len(band_keys)) + 0.5 * S
-
-    shape_loss = float((W * np.abs(iem_shape - LP)).sum())
-    shape_raw  = 100.0 * np.exp(-0.08 * shape_loss)
-
-    p_rough         = 4.0  * float(S[7] * R[7] + S[8] * R[8])
-    p_target_extreme = 1.5 * float((S * np.maximum(0, np.abs(D) - 8.0)).sum())
-
-    return round(float(np.clip(shape_raw - p_rough - p_target_extreme, 0.0, 100.0)), 1)
-
-
-def _blindspot_analysis(salience, iem_results):
-    """
-    Per-band coverage = how close the nearest IEM is to neutral in that band.
-    Overall = salience-weighted mean coverage.
+    Compute IEM × genre match scores (0–100).
+    score(iem, genre) = Σ(energy[b] · iem_score[b]) / Σ(energy[b]) × 10
+    where energy[b] ∈ [0,1] and iem_score[b] ∈ [1,10].
     """
     import numpy as np
-    if not iem_results:
-        return None
-    band_keys = [b[0] for b in _FREQ_BANDS]
-    band_cov  = {}
-    for k in band_keys:
-        min_dev       = min(abs(r['deviation'].get(k, 0)) for r in iem_results)
-        band_cov[k]   = round(float(100.0 * np.exp(-0.25 * min_dev)), 1)
-    S       = np.array([salience.get(k, 0.0) for k in band_keys])
-    cov_arr = np.array([band_cov[k]          for k in band_keys])
-    overall = round(float((S * cov_arr).sum()), 1)   # already 0-100 weighted
-    # Surface the two weakest bands for UI callouts
-    weakest = sorted(band_keys, key=lambda k: band_cov[k])[:2]
-    return {'band_coverage': band_cov, 'overall': overall, 'weakest_bands': weakest}
+    band_keys    = [b[0] for b in _PERC_BANDS]
+    total_tracks = sum(fp['track_count'] for fp in genre_fps.values())
 
+    matrix = []
+    iem_sw = {iem['id']: [] for iem in iem_profiles}   # [(score, weight)]
 
-def _recommendations(salience, iem_results, blindspot):
-    """Plain-English recommendations from salience + blindspot analysis."""
-    band_full = {
-        'sub_bass': 'sub-bass extension', 'bass': 'bass', 'mid_bass': 'mid-bass warmth',
-        'lower_mids': 'lower midrange', 'mids': 'midrange', 'upper_mids': 'upper mids',
-        'presence': 'presence region', 'lower_treble': 'lower treble',
-        'upper_treble': 'upper treble', 'air': 'air / extension',
+    for slug, fp in sorted(genre_fps.items(), key=lambda x: -x[1]['track_count']):
+        ge = np.array([fp['fingerprint'].get(k, 0.0) for k in band_keys])
+        te = ge.sum() + 1e-12
+        wt = fp['track_count'] / max(total_tracks, 1)
+        matches = []
+        for iem in iem_profiles:
+            is_ = np.array([iem['scores_12band'].get(k, 5.0) for k in band_keys])
+            pct = round(min(float((ge * is_).sum() / te) * 10.0, 100.0), 1)
+            top = [band_keys[i] for i in np.argsort(-(ge * is_))[:3] if ge[i] > 0.1]
+            matches.append({'iem_id': iem['id'], 'iem_name': iem['name'],
+                            'score': pct, 'best_dimensions': top})
+            iem_sw[iem['id']].append((pct, wt))
+        matches.sort(key=lambda x: -x['score'])
+        matrix.append({'genre': fp['genre'], 'slug': slug,
+                       'track_count': fp['track_count'], 'matches': matches})
+
+    # IEM library-weighted summary
+    iem_summary = []
+    for iem in iem_profiles:
+        sw = iem_sw.get(iem['id'], [])
+        if not sw:
+            continue
+        tw  = sum(w for _, w in sw) + 1e-12
+        lib = round(sum(s * w for s, w in sw) / tw, 1)
+        gs  = {r['genre']: next((m['score'] for m in r['matches'] if m['iem_id'] == iem['id']), 0)
+               for r in matrix}
+        iem_summary.append({
+            'iem_id': iem['id'], 'iem_name': iem['name'],
+            'library_match_score': lib,
+            'best_genre':  max(gs, key=gs.get)  if gs else None,
+            'worst_genre': min(gs, key=gs.get)  if gs else None,
+            'genres_above_70': sum(1 for s in gs.values() if s >= 70),
+            'genres_total': len(gs),
+        })
+    iem_summary.sort(key=lambda x: -x['library_match_score'])
+
+    # Overall coverage %
+    cov_tracks = sum(
+        fp['track_count'] for slug, fp in genre_fps.items()
+        if any(m['score'] >= 70 for r in matrix if r['slug'] == slug for m in r['matches'])
+    )
+    cov_pct = round(cov_tracks / max(total_tracks, 1) * 100, 1)
+
+    # Summary text
+    good = [r['genre'] for r in matrix if max((m['score'] for m in r['matches']), default=0) >= 70]
+    bad  = [r['genre'] for r in matrix if max((m['score'] for m in r['matches']), default=0) < 65]
+    if not iem_profiles:
+        sumtext = 'Add IEMs with FR data in the Gear section to start matching.'
+    elif good and bad:
+        sumtext = (f"Your collection covers {', '.join(good[:3])} well. "
+                   f"{', '.join(bad[:3])} {'are' if len(bad) > 1 else 'is'} underserved.")
+    elif good:
+        sumtext = f"Your collection covers {', '.join(good[:3])} well. No significant blindspots."
+    elif bad:
+        sumtext = f"No genres are well-covered yet. Focus areas: {', '.join(bad[:3])}."
+    else:
+        sumtext = 'Analysis complete. Tag your tracks with genres for richer insights.'
+
+    # Blindspot / well-covered lists
+    _dphr = {
+        'sub_bass': 'strong sub-bass extension below 60 Hz',
+        'bass': 'solid bass punch (60–120 Hz)',       'bass_feel': 'warmth (80–200 Hz)',
+        'slam': 'transient attack / slam (80–150 Hz)', 'lower_mids': 'body (200–500 Hz)',
+        'upper_mids': 'presence (500 Hz–1.5 kHz)',    'note_weight': 'note weight (200 Hz–1 kHz)',
+        'lower_treble': 'lower treble bite (3–6 kHz)', 'upper_treble': 'upper treble air (6–20 kHz)',
+        'detail': 'micro-detail (4–10 kHz)',           'sibilance': 'controlled sibilance (5–10 kHz)',
+        'texture': 'surface texture (6–15 kHz)',
     }
-    band_labels = {b[0]: b[4] for b in _FREQ_BANDS}
-    if not iem_results:
-        return ['Add IEMs or headphones to your Gear library to see personalised recommendations.']
+    blindspots, well_covered = [], []
+    for row in matrix:
+        bm = max((m['score'] for m in row['matches']), default=0)
+        bx = max(row['matches'], key=lambda m: m['score'], default=None)
+        if bm < 65:
+            fp      = genre_fps[row['slug']]
+            missing = [k for k in band_keys
+                       if fp['fingerprint'].get(k, 0) > 0.5
+                       and min((iem['scores_12band'].get(k, 5.0) for iem in iem_profiles),
+                               default=5.0) < 6.0][:3]
+            phrases = [_dphr[d] for d in missing if d in _dphr][:2]
+            sugg    = ('An IEM with ' + ' and '.join(phrases) + ' would improve coverage.'
+                       if phrases else 'A neutral, well-extended IEM would help.')
+            blindspots.append({
+                'genre': row['genre'], 'slug': row['slug'],
+                'track_count': row['track_count'], 'best_score': bm,
+                'best_iem_id': bx['iem_id'] if bx else None,
+                'best_iem_name': bx['iem_name'] if bx else None,
+                'missing_dimensions': missing, 'suggestion': sugg,
+            })
+        elif bm >= 70:
+            well_covered.append({
+                'genre': row['genre'], 'track_count': row['track_count'],
+                'best_score': bm, 'best_iem_name': bx['iem_name'] if bx else None,
+            })
 
-    recs = []
-    lib_char = _library_character_label(salience)
+    return {
+        'library_overview': {
+            'total_tracks': total_tracks, 'total_genres': len(genre_fps),
+            'overall_coverage_pct': cov_pct, 'iem_summary': iem_summary,
+            'summary_text': sumtext,
+        },
+        'matrix': matrix, 'blindspots': blindspots, 'well_covered': well_covered,
+        'band_labels': _ALL_DIM_LABELS, 'dim_keys': _ALL_DIM_KEYS,
+    }
 
-    if blindspot:
-        for bk in blindspot.get('weakest_bands', []):
-            cov = blindspot['band_coverage'].get(bk, 100)
-            sal = salience.get(bk, 0)
-            if cov < 55 and sal > 0.08:
-                recs.append(
-                    f"Your collection has limited coverage in the {band_full[bk]} region "
-                    f"({cov:.0f}% coverage), yet your library exercises it notably. "
-                    f"A more neutral IEM in this band would improve fidelity here."
-                )
 
-    band_keys = [b[0] for b in _FREQ_BANDS]
-    avg_dev = {k: sum(r['deviation'].get(k, 0) for r in iem_results) / len(iem_results)
-               for k in band_keys}
+def _score_iem_peq_variants(iem, target_meas):
+    """Score all PEQ variants for an IEM."""
+    variants = []
+    for peq in (iem.get('peq_profiles') or []):
+        pm = _apply_peq(iem.get('measurement_L'), peq)
+        r  = _score_iem_17d(pm, target_meas)
+        if not r:
+            continue
+        variants.append({
+            'peq_id': peq['id'], 'name': peq.get('name', 'PEQ'),
+            'scores_12band': {k: r['scores'][k] for k in [b[0] for b in _PERC_BANDS]},
+            'scores_all': r['scores'], 'deviation': r['deviation'],
+            'character': _iem_character_label(r['deviation']),
+        })
+    return variants
 
-    bright_sal = salience.get('lower_treble', 0) + salience.get('upper_treble', 0)
-    bright_dev = avg_dev.get('lower_treble', 0) + avg_dev.get('upper_treble', 0)
-    if bright_sal > 0.20 and bright_dev > 3.0:
-        recs.append(
-            "Your library and your gear both lean bright. "
-            "A smoother, more neutral signature in the treble could reduce fatigue on long sessions."
-        )
 
-    mid_sal = salience.get('mids', 0) + salience.get('upper_mids', 0)
-    mid_dev = avg_dev.get('mids', 0) + avg_dev.get('upper_mids', 0)
-    if mid_sal > 0.25 and mid_dev < -3.0:
-        recs.append(
-            "Your library is vocal and mid-forward, but your gear trends towards recessed mids on average. "
-            "A more neutral or mid-forward tuning would let vocals cut through better."
-        )
+def _match_matrix_path():
+    return DATA_DIR / 'match-matrix.json'
 
-    if not recs:
-        recs.append(
-            f"Your gear collection is well-matched to your {lib_char} library. "
-            "No significant gaps detected. Try sorting by Library Fit to see which IEM "
-            "best mirrors your library's tonal character."
-        )
-    return recs
 
+def _load_match_data():
+    p = _match_matrix_path()
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return None
+
+
+# ── API routes ────────────────────────────────────────────────────────────────
 
 @app.route('/api/insights/sonic-profile')
 def insights_sonic_profile():
     import numpy as np, random as _rnd
     features = _load_features()
-    valid = [f for f in features if f.get('brightness') and f.get('energy') is not None]
+    valid    = [f for f in features if f.get('brightness') and f.get('energy') is not None]
     if not valid:
         return jsonify({'error': 'Run audio analysis first'}), 404
 
@@ -2946,7 +3057,7 @@ def insights_sonic_profile():
 
     def _hist(arr, n=25):
         counts, edges = np.histogram(arr, bins=n)
-        mids = [(edges[i] + edges[i+1]) / 2 for i in range(len(edges) - 1)]
+        mids = [(edges[i] + edges[i+1]) / 2 for i in range(n)]
         return {'counts': counts.tolist(), 'midpoints': [round(m, 2) for m in mids]}
 
     def _stats(arr):
@@ -2956,116 +3067,184 @@ def insights_sonic_profile():
             'p75': np.percentile(arr, 75),
         }.items()}
 
-    sample = _rnd.sample(valid, min(600, len(valid)))
+    sample  = _rnd.sample(valid, min(600, len(valid)))
     scatter = [{'x': round(f['brightness'], 0), 'y': round(f['energy'], 5)} for f in sample]
 
+    # 12-band energy profile (normalised to 0–1 relative to max band)
+    valid12 = [f for f in features
+               if f.get('band_energy') and len(f['band_energy']) == 12
+               and f.get('analysis_version') == 3 and not f.get('failed')]
+    band_profile = None
+    if valid12:
+        bm  = np.array([f['band_energy'] for f in valid12]).mean(axis=0)
+        mx  = bm.max() + 1e-12
+        band_profile = {b[0]: round(float(v / mx), 4) for b, v in zip(_PERC_BANDS, bm)}
+
     return jsonify({
-        'track_count': len(valid),
-        'brightness':  {'histogram': _hist(brightness), 'stats': _stats(brightness)},
-        'energy':      {'histogram': _hist(energy),     'stats': _stats(energy)},
-        'scatter':     scatter,
+        'track_count':  len(valid),
+        'brightness':   {'histogram': _hist(brightness), 'stats': _stats(brightness)},
+        'energy':       {'histogram': _hist(energy),     'stats': _stats(energy)},
+        'scatter':      scatter,
+        'band_profile': band_profile,
+        'band_labels':  {b[0]: b[3] for b in _PERC_BANDS},
     })
 
 
-@app.route('/api/insights/gear-fit')
-def insights_gear_fit():
+@app.route('/api/insights/matching/analyse', methods=['POST'])
+def insights_matching_analyse():
+    """
+    Compute genre fingerprints + IEM 17-dim scores + match matrix.
+    Fast (no audio I/O) — reads existing track_features.json + IEM FR curves.
+    """
     features = _load_features()
-    salience = _library_salience(features)
-    if not salience:
-        return jsonify({
-            'error': 'Re-run audio analysis to compute 10-band library features.'
-        }), 404
+    valid12  = [f for f in features
+                if f.get('band_energy') and len(f['band_energy']) == 12
+                and f.get('analysis_version') == 3 and not f.get('failed')]
+    if not valid12:
+        return jsonify({'error': 'Run audio analysis first to generate 12-band track features.'}), 404
 
-    # Library shape — used by Library Fit model
-    library_profile_db = _library_shape(features) or {b[0]: 0.0 for b in _FREQ_BANDS}
-
-    # Resolve target baseline (flat = default)
-    target_id   = request.args.get('target', 'flat')
-    sort_mode   = request.args.get('sort', 'target_fidelity')
-    if sort_mode not in ('target_fidelity', 'library_fit'):
-        sort_mode = 'target_fidelity'
-    target_name = 'Flat / Neutral'
+    body        = request.get_json(silent=True) or {}
+    target_id   = body.get('target', 'flat')
     target_meas = None
     baselines   = load_baselines()
     if target_id != 'flat':
         bl = next((b for b in baselines if b['id'] == target_id), None)
         if bl and bl.get('measurement'):
-            target_name = bl['name']
             target_meas = bl['measurement']
         else:
             target_id = 'flat'
 
-    available_targets = (
-        [{'id': 'flat', 'name': 'Flat / Neutral'}] +
-        [{'id': b['id'], 'name': b['name']}
-         for b in baselines if b.get('measurement')]
-    )
-
     iems_path = DATA_DIR / 'iems.json'
     iems = json.loads(iems_path.read_text()) if iems_path.exists() else []
 
-    iem_results = []
+    iem_profiles = []
     for iem in iems:
-        measurement = iem.get('measurement_L')
-        feat = _iem_features(measurement, target_meas)
-        if not feat:
+        r = _score_iem_17d(iem.get('measurement_L'), target_meas)
+        if not r:
             continue
-
-        # PEQ variants — both models scored against same target + library profile
-        peq_variants = []
-        for peq in (iem.get('peq_profiles') or []):
-            peq_meas = _apply_peq(measurement, peq)
-            peq_feat = _iem_features(peq_meas, target_meas)
-            if not peq_feat:
-                continue
-            peq_variants.append({
-                'peq_id':    peq['id'],
-                'name':      peq.get('name', 'PEQ'),
-                'deviation': peq_feat['deviation'],
-                'roughness': peq_feat['roughness'],
-                'character': _iem_character_label(peq_feat['deviation']),
-                'scores': {
-                    'target_fidelity': _target_fidelity_score(salience, peq_feat),
-                    'library_fit':     _library_fit_score(library_profile_db, salience, peq_feat),
-                },
-            })
-
-        iem_results.append({
-            'id':           iem['id'],
-            'name':         iem['name'],
-            'deviation':    feat['deviation'],
-            'roughness':    feat['roughness'],
-            'character':    _iem_character_label(feat['deviation']),
-            'scores': {
-                'target_fidelity': _target_fidelity_score(salience, feat),
-                'library_fit':     _library_fit_score(library_profile_db, salience, feat),
-            },
-            'peq_variants': peq_variants,
+        iem_profiles.append({
+            'id': iem['id'], 'name': iem['name'],
+            'scores_12band': {k: r['scores'][k] for k in [b[0] for b in _PERC_BANDS]},
+            'scores_all':    r['scores'],
+            'deviation':     r['deviation'],
+            'character':     _iem_character_label(r['deviation']),
+            'peq_variants':  _score_iem_peq_variants(iem, target_meas),
         })
 
-    # Sort by selected mode
-    sort_key = lambda x: -x['scores'][sort_mode]
-    iem_results.sort(key=sort_key)
+    genre_fps   = _compute_genre_fingerprints(valid12, library)
+    matrix_data = _build_match_matrix(genre_fps, iem_profiles) if genre_fps else None
 
-    blindspot = _blindspot_analysis(salience, iem_results)
+    out = {
+        'generated_at': int(time.time()),
+        'target_id':    target_id,
+        'genre_fps':    genre_fps,
+        'iem_profiles': iem_profiles,
+        'matrix_data':  matrix_data,
+    }
+    try:
+        _match_matrix_path().write_text(json.dumps(out))
+    except Exception:
+        pass
 
     return jsonify({
-        'salience':           salience,
-        'library_profile':    library_profile_db,
-        'library_character':  _library_character_label(salience),
-        'band_labels':        {b[0]: b[4] for b in _FREQ_BANDS},
-        'iems':               iem_results,
-        'blindspot':          blindspot,
-        'recommendations':    _recommendations(salience, iem_results, blindspot),
-        'target_id':          target_id,
-        'target_name':        target_name,
-        'available_targets':  available_targets,
-        'sort_mode':          sort_mode,
-        'available_sort_modes': [
-            {'id': 'target_fidelity', 'name': 'Target Fidelity'},
-            {'id': 'library_fit',     'name': 'Library Fit'},
-        ],
+        'status':          'complete',
+        'tracks_analysed': len(valid12),
+        'genres_found':    len(genre_fps),
+        'iems_scored':     len(iem_profiles),
     })
+
+
+@app.route('/api/insights/matching/overview')
+def insights_matching_overview():
+    data = _load_match_data()
+    if not data or not data.get('matrix_data'):
+        return jsonify({'error': 'Run matching analysis first.'}), 404
+    md = data['matrix_data']
+    return jsonify({**md['library_overview'],
+                    'band_labels':   md.get('band_labels', {}),
+                    'generated_at':  data.get('generated_at'),
+                    'target_id':     data.get('target_id', 'flat')})
+
+
+@app.route('/api/insights/matching/matrix')
+def insights_matching_matrix():
+    data = _load_match_data()
+    if not data or not data.get('matrix_data'):
+        return jsonify({'error': 'Run matching analysis first.'}), 404
+    md = data['matrix_data']
+    return jsonify({'matrix': md['matrix'], 'band_labels': md['band_labels'],
+                    'dim_keys': md['dim_keys']})
+
+
+@app.route('/api/insights/matching/recommend')
+def insights_matching_recommend():
+    genre = request.args.get('genre', '')
+    data  = _load_match_data()
+    if not data or not data.get('matrix_data'):
+        return jsonify({'error': 'Run matching analysis first.'}), 404
+    row = next((r for r in data['matrix_data']['matrix']
+                if r['genre'] == genre or r.get('slug') == genre), None)
+    if not row:
+        return jsonify({'error': 'Genre not found.'}), 404
+    return jsonify({'genre': row['genre'],
+                    'recommendations': sorted(row['matches'], key=lambda m: -m['score'])})
+
+
+@app.route('/api/insights/matching/blindspots')
+def insights_matching_blindspots():
+    data = _load_match_data()
+    if not data or not data.get('matrix_data'):
+        return jsonify({'error': 'Run matching analysis first.'}), 404
+    md = data['matrix_data']
+    return jsonify({'blindspots': md['blindspots'], 'well_covered': md['well_covered'],
+                    'band_labels': md['band_labels']})
+
+
+@app.route('/api/insights/matching/iem/<iem_id>/radar')
+def insights_matching_iem_radar(iem_id):
+    data = _load_match_data()
+    if not data:
+        return jsonify({'error': 'Run matching analysis first.'}), 404
+    prof = next((p for p in (data.get('iem_profiles') or []) if p['id'] == iem_id), None)
+    if not prof:
+        return jsonify({'error': 'IEM not found in analysis.'}), 404
+    best_genres = []
+    if data.get('matrix_data'):
+        gs = {r['genre']: next((m['score'] for m in r['matches'] if m['iem_id'] == iem_id), 0)
+              for r in data['matrix_data']['matrix']}
+        best_genres = sorted(gs, key=lambda g: -gs[g])[:3]
+    scores   = prof['scores_all']
+    dim_keys = _ALL_DIM_KEYS
+    return jsonify({
+        'iem_id': iem_id, 'iem_name': prof['name'],
+        'scores': scores, 'dim_keys': dim_keys, 'dim_labels': _ALL_DIM_LABELS,
+        'best_genres': best_genres,
+        'weakest_dimensions': sorted(dim_keys, key=lambda k: scores.get(k, 0))[:3],
+        'peq_variants': [{'peq_id': v['peq_id'], 'name': v['name'],
+                          'scores': v['scores_all']} for v in prof.get('peq_variants', [])],
+    })
+
+
+@app.route('/api/insights/matching/genre/<genre>/fingerprint')
+def insights_matching_genre_fingerprint(genre):
+    data = _load_match_data()
+    if not data or not data.get('genre_fps'):
+        return jsonify({'error': 'Run matching analysis first.'}), 404
+    fp = data['genre_fps'].get(genre) or next(
+        (v for v in data['genre_fps'].values() if v['genre'] == genre), None)
+    if not fp:
+        return jsonify({'error': 'Genre not found.'}), 404
+    return jsonify({**fp, 'band_labels': {b[0]: b[3] for b in _PERC_BANDS}})
+
+
+@app.route('/api/insights/matching/targets')
+def insights_matching_targets():
+    baselines  = load_baselines()
+    targets    = [{'id': 'flat', 'name': 'Flat / Neutral'}] + [
+        {'id': b['id'], 'name': b['name']} for b in baselines if b.get('measurement')]
+    data       = _load_match_data()
+    current_id = data.get('target_id', 'flat') if data else 'flat'
+    return jsonify({'targets': targets, 'current_target_id': current_id})
 
 
 load_library()

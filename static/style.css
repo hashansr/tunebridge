@@ -4312,3 +4312,404 @@ tr.player-active .track-title { color: var(--accent); }
   border-left: 2px solid rgba(240,180,41,0.3);
   margin-top: 12px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   IEM Match — Insights Phase 3
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* No-data / empty state */
+.match-no-data {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  text-align: center;
+}
+.match-no-data-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+.match-no-data-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.match-no-data-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 320px;
+  line-height: 1.55;
+}
+
+/* Overview header */
+.match-overview-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.match-coverage-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  flex-shrink: 0;
+}
+.match-coverage-pct {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+.match-coverage-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 3px;
+}
+.match-coverage--high .match-coverage-pct { color: #53e16f; }
+.match-coverage--mid  .match-coverage-pct { color: #f0b429; }
+.match-coverage--low  .match-coverage-pct { color: var(--accent-secondary); }
+
+.match-summary-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  flex: 1;
+  min-width: 180px;
+}
+
+/* IEM score cards */
+.match-iem-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.match-iem-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface-3);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.match-iem-card:hover {
+  background: var(--surface-4, #353534);
+}
+.match-iem-score {
+  font-size: 18px;
+  font-weight: 700;
+  min-width: 44px;
+  text-align: right;
+}
+.match-iem-info {
+  flex: 1;
+  min-width: 0;
+}
+.match-iem-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.match-iem-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.match-iem-coverage {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.match-iem-radar-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.match-section-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+.match-rerun-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--surface-3);
+  border: none;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  margin-top: 12px;
+  transition: background 0.15s, color 0.15s;
+}
+.match-rerun-btn:hover {
+  background: var(--surface-4, #353534);
+  color: var(--text-primary);
+}
+
+/* Heatmap */
+.match-heatmap-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 16px;
+}
+.match-heatmap {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-size: 12px;
+}
+.match-heatmap th,
+.match-heatmap td {
+  padding: 0;
+}
+.match-heatmap-genre-col {
+  padding: 8px 12px 8px 0;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 12px;
+  white-space: nowrap;
+  text-align: left;
+  vertical-align: middle;
+}
+.match-heatmap-iem-col {
+  padding: 6px 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+.match-heatmap-genre {
+  padding: 6px 12px 6px 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.match-heatmap-tc {
+  padding: 6px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  vertical-align: middle;
+}
+.match-heatmap-cell {
+  padding: 5px 10px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 44px;
+  vertical-align: middle;
+  transition: opacity 0.1s;
+}
+.match-heatmap-cell:hover {
+  opacity: 0.8;
+}
+
+/* Heatmap detail popup */
+.match-heatmap-detail {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+.match-detail-inner {
+  background: var(--surface-2);
+  border-radius: 14px;
+  padding: 20px 24px;
+  max-width: 360px;
+  width: 90%;
+}
+.match-detail-dims {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 10px 0;
+}
+.match-detail-radar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  background: var(--accent-primary-faint, rgba(173,198,255,0.1));
+  border: none;
+  border-radius: 8px;
+  color: var(--accent-primary);
+  font-size: 12px;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: background 0.15s;
+}
+.match-detail-radar-btn:hover {
+  background: rgba(173,198,255,0.18);
+}
+
+/* Radar */
+.match-radar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.match-radar-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  background: var(--surface-3);
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.match-radar-legend-item:hover {
+  background: var(--surface-4, #353534);
+}
+.match-radar-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.match-radar-legend-remove {
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+.match-radar-chart-wrap {
+  position: relative;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+/* Blindspot */
+.match-bs-counts {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.match-bs-count {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.match-bs-count--good {
+  background: rgba(83,225,111,0.12);
+  color: #53e16f;
+}
+.match-bs-count--bad {
+  background: rgba(255,179,181,0.12);
+  color: var(--accent-secondary);
+}
+
+.match-bs-section {
+  margin-bottom: 16px;
+}
+.match-bs-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.match-bs-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 4px;
+  background: var(--surface-3);
+}
+.match-bs-row--good {
+  border-left: 2px solid rgba(83,225,111,0.35);
+}
+.match-bs-row--bad {
+  border-left: 2px solid rgba(255,179,181,0.35);
+  flex-wrap: wrap;
+}
+.match-bs-genre {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 100px;
+}
+.match-bs-score {
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 40px;
+}
+.match-bs-iem {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex: 1;
+}
+.match-bs-detail {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex: 1;
+  line-height: 1.55;
+  width: 100%;
+}
+.match-bs-missing {
+  display: block;
+  margin-bottom: 2px;
+}
+.match-bs-suggestion {
+  display: block;
+  color: var(--text-secondary);
+}
+
+/* Sonic Profile — 12-band energy chart */
+.sonic-band-card {
+  background: var(--surface-3);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-top: 16px;
+}
+.sonic-chart-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
