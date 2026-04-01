@@ -4298,6 +4298,25 @@ const _RADAR_AXES = [
   { key: 'staging',    label: 'Staging',    dims: ['sound_stage', 'layering'] },
   { key: 'neutrality', label: 'Neutrality', dims: ['timbre_color', 'tonality'] },
 ];
+// Derived dims use penalty-based scores (already directional in meaning)
+const _DERIVED_DIM_KEYS = new Set(['sound_stage', 'timbre_color', 'masking', 'layering', 'tonality']);
+
+// Map signed dB deviation to radar scale: 0 dB = 5 (neutral), ±14 dB ≈ full range
+function _devToRadar(dev) {
+  return Math.max(1, Math.min(10, 5 + dev * 0.35));
+}
+
+// Directional grouping: band axes use dB deviation → shape; derived dims keep penalty score
+function _groupRadarDirectional(deviation, scores) {
+  return _RADAR_AXES.map(ax => {
+    const vals = ax.dims.map(d =>
+      _DERIVED_DIM_KEYS.has(d) ? (scores[d] ?? 5) : _devToRadar(deviation[d] ?? 0)
+    );
+    return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10;
+  });
+}
+
+// Penalty-based grouping — kept for match score computation
 function _groupRadarScores(scores) {
   return _RADAR_AXES.map(ax => {
     const vals = ax.dims.map(d => scores[d] ?? 5);
@@ -4507,7 +4526,7 @@ function _renderIemDetail(iemId, container) {
       <div class="iemfit-detail-section">
         <div class="iemfit-detail-section-hdr">
           <span class="iemfit-detail-section-title">Sonic Signature</span>
-          <span class="iemfit-detail-section-hint">8 perceptual axes — 1 (recessed) to 10 (elevated)</span>
+          <span class="iemfit-detail-section-hint">5 = neutral/flat · &gt;5 elevated · &lt;5 recessed</span>
           <div class="iemfit-radar-controls" id="iemfit-radar-controls-${esc(iemId)}"></div>
         </div>
         <div class="iemfit-radar-body" id="iemfit-radar-body-${esc(iemId)}">
@@ -4608,11 +4627,10 @@ async function _renderIemRadarPanel(iemId, activePeqId) {
   // Destroy old chart
   if (_iemFitRadarCharts[iemId]) { _iemFitRadarCharts[iemId].destroy(); delete _iemFitRadarCharts[iemId]; }
 
-  // Factory grouped to 8 axes
-  const factoryScores = radarData.scores || {};
-  const factoryData   = _groupRadarScores(factoryScores);
-  const factoryLabel  = radarData.iem_name || 'IEM';
-  const labels        = _RADAR_AXES.map(ax => ax.label);
+  // Factory grouped to 8 axes — directional: 5=flat, >5=elevated, <5=recessed
+  const factoryData  = _groupRadarDirectional(radarData.deviation || {}, radarData.scores || {});
+  const factoryLabel = radarData.iem_name || 'IEM';
+  const labels       = _RADAR_AXES.map(ax => ax.label);
 
   const datasets    = [{ label: factoryLabel, data: factoryData,
     borderColor: 'rgba(173,198,255,0.9)', backgroundColor: 'rgba(173,198,255,0.12)',
@@ -4626,7 +4644,7 @@ async function _renderIemRadarPanel(iemId, activePeqId) {
   if (peqId) {
     const variant = peqVariants.find(v => v.peq_id === peqId);
     if (variant) {
-      peqGrouped = _groupRadarScores(variant.scores);
+      peqGrouped = _groupRadarDirectional(variant.deviation || {}, variant.scores);
       datasets.push({ label: variant.name, data: peqGrouped,
         borderColor: 'rgba(83,225,111,0.85)', backgroundColor: 'rgba(83,225,111,0.08)',
         borderWidth: 1.5, borderDash: [4, 3],
@@ -4653,8 +4671,11 @@ async function _renderIemRadarPanel(iemId, activePeqId) {
       scales: {
         r: {
           min: 1, max: 10,
-          ticks: { stepSize: 2, color: '#4a4a5a', font: { size: 9 }, backdropColor: 'transparent' },
-          grid:        { color: 'rgba(173,198,255,0.1)' },
+          ticks: {
+            stepSize: 1, color: '#4a4a5a', font: { size: 9 }, backdropColor: 'transparent',
+            callback: v => v === 5 ? '5 ◆' : v % 2 === 1 ? v : '',
+          },
+          grid:        { color: ctx => ctx.tick?.value === 5 ? 'rgba(173,198,255,0.3)' : 'rgba(173,198,255,0.08)' },
           angleLines:  { color: 'rgba(173,198,255,0.1)' },
           pointLabels: { color: '#8a8aa0', font: { size: 11 } },
         },
@@ -4663,7 +4684,13 @@ async function _renderIemRadarPanel(iemId, activePeqId) {
         legend: { display: false },
         tooltip: {
           backgroundColor: 'rgba(20,20,32,0.92)', titleColor: '#adc6ff', bodyColor: '#c8c8d8',
-          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.toFixed(1)}/10` },
+          callbacks: {
+            label: ctx => {
+              const v = ctx.raw;
+              const dir = v > 5.2 ? '▲ elevated' : v < 4.8 ? '▼ recessed' : '● neutral';
+              return ` ${ctx.dataset.label}: ${v.toFixed(1)} ${dir}`;
+            },
+          },
         },
       },
     },

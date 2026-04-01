@@ -3233,15 +3233,18 @@ def insights_matching_iem_radar(iem_id):
         gs = {r['genre']: next((m['score'] for m in r['matches'] if m['iem_id'] == iem_id), 0)
               for r in data['matrix_data']['matrix']}
         best_genres = sorted(gs, key=lambda g: -gs[g])[:3]
-    scores   = prof['scores_all']
-    dim_keys = _ALL_DIM_KEYS
+    scores    = prof['scores_all']
+    deviation = prof.get('deviation', {})
+    dim_keys  = _ALL_DIM_KEYS
     return jsonify({
         'iem_id': iem_id, 'iem_name': prof['name'],
-        'scores': scores, 'dim_keys': dim_keys, 'dim_labels': _ALL_DIM_LABELS,
+        'scores': scores, 'deviation': deviation,
+        'dim_keys': dim_keys, 'dim_labels': _ALL_DIM_LABELS,
         'best_genres': best_genres,
         'weakest_dimensions': sorted(dim_keys, key=lambda k: scores.get(k, 0))[:3],
         'peq_variants': [{'peq_id': v['peq_id'], 'name': v['name'],
-                          'scores': v['scores_all']} for v in prof.get('peq_variants', [])],
+                          'scores': v['scores_all'], 'deviation': v.get('deviation', {})}
+                         for v in prof.get('peq_variants', [])],
     })
 
 
