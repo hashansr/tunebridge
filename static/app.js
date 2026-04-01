@@ -4712,8 +4712,11 @@ async function _renderIemFRPanel(iemId, activePeqId) {
   if (activePeqId !== undefined) _iemFitPeqState[iemId] = activePeqId || null;
   const peqId = _iemFitPeqState[iemId] || null;
 
-  // Fetch PEQ variants + 12-band scores from radar endpoint (cached per IEM)
+  // Fetch PEQ variants + 12-band scores (two-tier: radar endpoint if analysis has been run,
+  // otherwise fall back to /api/iems/<id> so the PEQ dropdown always shows)
   if (!_iemFitPeqVariants[iemId]) {
+    // Tier 1: radar endpoint — gives 12-band scores needed for genre/blindspot recomputation
+    // Requires matching analysis to have been run; returns 404 otherwise.
     try {
       const r = await fetch(`/api/insights/matching/iem/${encodeURIComponent(iemId)}/radar`);
       if (r.ok) {
@@ -4722,7 +4725,31 @@ async function _renderIemFRPanel(iemId, activePeqId) {
           factory_scores: rd.scores || {},
           peq_variants:   rd.peq_variants || [],
           iem_name:       rd.iem_name || iemId,
+          has_scores:     true,
         };
+      }
+    } catch (_) {}
+  }
+  // Tier 2: IEM endpoint — always available; used when analysis hasn't been run or
+  // the IEM has PEQ profiles that aren't reflected in the (stale) analysis data.
+  const cachedVariants = _iemFitPeqVariants[iemId]?.peq_variants || [];
+  if (!_iemFitPeqVariants[iemId] || cachedVariants.length === 0) {
+    try {
+      const r2 = await fetch(`/api/iems/${encodeURIComponent(iemId)}`);
+      if (r2.ok) {
+        const iemRaw = await r2.json();
+        const profiles = (iemRaw.peq_profiles || []).map(p => ({
+          peq_id: p.id, name: p.name || 'PEQ',
+          scores: null,  // no 12-band scores without analysis — genre/blindspot unchanged
+        }));
+        if (!_iemFitPeqVariants[iemId]) {
+          _iemFitPeqVariants[iemId] = {
+            factory_scores: {}, peq_variants: profiles,
+            iem_name: iemRaw.name || iemId, has_scores: false,
+          };
+        } else if (profiles.length > 0) {
+          _iemFitPeqVariants[iemId].peq_variants = profiles;
+        }
       }
     } catch (_) {}
   }

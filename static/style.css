@@ -1815,8 +1815,8 @@ tr.track-selected .track-check-indicator {
 .iem-compare-dialog {
   background: var(--surface-1);
   border-radius: 16px;
-  width: min(960px, 96vw);
-  max-height: 92vh;
+  width: min(780px, 95vw);
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1857,7 +1857,7 @@ tr.track-selected .track-check-indicator {
 .iem-compare-chart-wrap {
   flex: 1;
   min-height: 0;
-  height: 540px;
+  height: 420px;
   padding: 0 22px 22px;
 }
 
