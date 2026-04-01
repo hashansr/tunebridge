@@ -3263,6 +3263,44 @@ def insights_matching_targets():
     return jsonify({'targets': targets, 'current_target_id': current_id})
 
 
+# ── Insights heatmap genre config ──────────────────────────────────────────────
+
+INSIGHTS_CONFIG_PATH = DATA_DIR / 'insights_config.json'
+
+def load_insights_config():
+    try:
+        if INSIGHTS_CONFIG_PATH.exists():
+            with open(INSIGHTS_CONFIG_PATH) as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def save_insights_config(cfg):
+    try:
+        with open(INSIGHTS_CONFIG_PATH, 'w') as f:
+            json.dump(cfg, f, indent=2)
+    except Exception as e:
+        print(f'Could not save insights config: {e}')
+
+@app.route('/api/insights/matching/heatmap-genres', methods=['GET'])
+def get_heatmap_genres():
+    cfg = load_insights_config()
+    return jsonify({'extra_genres': cfg.get('heatmap_extra_genres', [])})
+
+@app.route('/api/insights/matching/heatmap-genres', methods=['POST'])
+def set_heatmap_genres():
+    data = request.get_json() or {}
+    genres = data.get('extra_genres', [])
+    if not isinstance(genres, list):
+        return jsonify({'error': 'extra_genres must be a list'}), 400
+    genres = [str(g) for g in genres if g][:5]
+    cfg = load_insights_config()
+    cfg['heatmap_extra_genres'] = genres
+    save_insights_config(cfg)
+    return jsonify({'extra_genres': genres})
+
+
 load_library()
 
 if __name__ == '__main__':

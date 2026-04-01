@@ -618,6 +618,17 @@
           <div id="problem-tracks-modal-body" class="problem-tracks-modal-body"></div>
         </div>
       </div>
+
+      <!-- IEM blindspot all-genres modal -->
+      <div id="iem-blindspot-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeAllBlindspots()">
+        <div class="modal modal-wide" onclick="event.stopPropagation()">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+            <h3 id="iem-blindspot-modal-title" style="font-size:15px;font-weight:700;margin:0">All Genres</h3>
+            <button style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;line-height:1;padding:0 2px" onclick="App.closeAllBlindspots()">✕</button>
+          </div>
+          <div id="iem-blindspot-modal-body" style="max-height:60vh;overflow-y:auto"></div>
+        </div>
+      </div>
     </main>
 
   <!-- Shared Insights help popover -->

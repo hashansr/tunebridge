@@ -3515,11 +3515,16 @@ const App = {
   showInsightsHelp,
   changeGearFitTarget,
   changeGearFitSort,
-  // IEM Match
+  // IEM / Headphone Fit
   runMatchingAnalysis,
   changeMatchTarget,
-  _openRadarForIem,
-  _showHeatmapDetail,
+  _toggleIemAccordion,
+  iemFitChangePeq,
+  iemFitChangeGenre,
+  iemFitAddGenreToHeatmap,
+  iemFitRemoveGenreFromHeatmap,
+  showAllIemBlindspots,
+  closeAllBlindspots,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -4251,8 +4256,17 @@ function _renderInsightsSonicProfile(d) {
 
 let _matchData      = null;   // cached full matrix response
 let _matchTarget    = 'flat'; // currently selected scoring target
-let _matchRadarChart = null;  // Chart.js radar instance
-let _matchRadarIems = [];     // IEM IDs currently on radar (up to 3)
+let _matchRadarChart = null;  // kept for compat
+let _matchRadarIems  = [];    // kept for compat
+
+// IEM / Headphone Fit state
+let _iemFitSelectedId  = null;  // currently expanded IEM id
+let _iemFitMatrixData  = null;  // cached matrix response
+let _iemFitRadarData   = {};    // iemId → radar API response
+let _iemFitRadarCharts = {};    // iemId → Chart.js instance
+let _iemFitRadarState  = {};    // iemId → {peqId, genre}
+let _iemFitExtraGenres = [];    // user-added heatmap genres
+let _iemFitIemSummary  = [];    // cached IEM summary list
 
 // ── Band keys (12 perceptual bands) ───────────────────────────────────────────
 const _PERC_BAND_KEYS = [
@@ -4302,14 +4316,12 @@ async function changeMatchTarget(selectEl) {
   await runMatchingAnalysis();
 }
 
-// ── Overview panel ────────────────────────────────────────────────────────────
+// ── IEM / Headphone Fit ────────────────────────────────────────────────────────
 function _renderInsightsMatchOverview(d, errMsg) {
   const el = document.getElementById('insights-gear-content');
   if (!el) return;
 
   if (!d) {
-    // No analysis data — show CTA
-    const msg = errMsg || '';
     el.innerHTML = `
       <div class="match-no-data">
         <div class="match-no-data-icon">
@@ -4318,249 +4330,332 @@ function _renderInsightsMatchOverview(d, errMsg) {
           </svg>
         </div>
         <div class="match-no-data-title">Run IEM Match Analysis</div>
-        <div class="match-no-data-desc">Scores each IEM against every genre in your library using 17 perceptual dimensions. Requires audio analysis to be completed first.${msg ? `<br><span style="color:var(--accent-secondary)">${esc(msg)}</span>` : ''}</div>
+        <div class="match-no-data-desc">Scores each IEM against every genre in your library using 17 perceptual dimensions. Requires audio analysis to be completed first.${errMsg ? `<br><span style="color:var(--accent-secondary)">${esc(errMsg)}</span>` : ''}</div>
         <button class="btn-primary" onclick="App.runMatchingAnalysis()">Run Match Analysis</button>
       </div>`;
     return;
   }
 
-  // Target selector
-  const _buildTargetSelector = (targets, currentId) => {
-    const opts = (targets || [{ id: 'flat', name: 'Flat / Neutral' }])
-      .map(t => `<option value="${esc(t.id)}" ${t.id === currentId ? 'selected' : ''}>${esc(t.name)}</option>`)
-      .join('');
-    const noExtra = !targets || targets.length <= 1;
-    const hint = noExtra
-      ? `<span class="gear-target-hint">No targets added yet — <a class="gear-target-link" href="#" onclick="App.showView('settings');return false">add one in Settings</a>.</span>`
-      : `<span class="gear-target-hint">Scoring target from <a class="gear-target-link" href="#" onclick="App.showView('settings');return false">Settings</a>.</span>`;
-    return `<div class="gear-controls-row" style="margin-bottom:16px">
-      <div class="gear-target-group">
-        <label class="gear-target-label">Scoring target</label>
-        <select class="gear-target-select" onchange="App.changeMatchTarget(this)">${opts}</select>
-        ${hint}
-      </div>
-      <button class="match-rerun-btn" onclick="App.runMatchingAnalysis()">Re-analyse</button>
-    </div>`;
-  };
-
-  // IEM summary cards
-  const iemSummaryHtml = (d.iem_summary || []).length === 0
-    ? `<p class="insights-empty-note">No IEMs with FR data found. Add IEMs in the Gear section.</p>`
-    : (d.iem_summary || []).map(iem => {
-        const s = iem.library_match_score;
-        const bg = _matchScoreBg(s);
-        const col = _matchScoreColor(s);
-        return `<div class="match-iem-card" onclick="App._openRadarForIem('${esc(iem.iem_id)}')" title="View 17-dimension radar">
-          <div class="match-iem-score" style="color:${col}">${s.toFixed(0)}%</div>
-          <div class="match-iem-info">
-            <div class="match-iem-name">${esc(iem.iem_name)}</div>
-            <div class="match-iem-meta">
-              ${iem.best_genre ? `Best: <strong>${esc(iem.best_genre)}</strong>` : ''}
-              ${iem.worst_genre ? ` · Worst: <strong>${esc(iem.worst_genre)}</strong>` : ''}
-            </div>
-            <div class="match-iem-coverage">${iem.genres_above_70} / ${iem.genres_total} genres ≥ 70%</div>
-          </div>
-          <div class="match-iem-radar-hint">Radar →</div>
-        </div>`;
-      }).join('');
+  // Reset accordion state
+  _iemFitIemSummary  = d.iem_summary || [];
+  _iemFitSelectedId  = null;
+  _iemFitRadarData   = {};
+  _iemFitRadarCharts = {};
+  _iemFitRadarState  = {};
 
   const coveragePct = d.overall_coverage_pct || 0;
-  const covClass = coveragePct >= 70 ? 'match-coverage--high' : coveragePct >= 45 ? 'match-coverage--mid' : 'match-coverage--low';
+  const covColor = coveragePct >= 70 ? '#53e16f' : coveragePct >= 45 ? '#f0b429' : '#ffb3b5';
+
+  const targets    = d.available_targets || [{ id: 'flat', name: 'Flat / Neutral' }];
+  const targetOpts = targets.map(t =>
+    `<option value="${esc(t.id)}" ${t.id === (d.target_id || 'flat') ? 'selected' : ''}>${esc(t.name)}</option>`
+  ).join('');
+  const targetHint = targets.length <= 1
+    ? `<a class="iemfit-target-link" href="#" onclick="App.showView('settings');return false">Add a target in Settings</a>`
+    : '';
+
+  const iemListHtml = _iemFitIemSummary.length === 0
+    ? `<p class="insights-empty-note">No IEMs with FR data found. Add IEMs in the Gear section.</p>`
+    : _iemFitIemSummary.map(iem => {
+        const col = _matchScoreColor(iem.library_match_score);
+        return `
+          <div class="iemfit-iem-item" id="iemfit-item-${esc(iem.iem_id)}">
+            <div class="iemfit-iem-card" onclick="App._toggleIemAccordion('${esc(iem.iem_id)}')">
+              <div class="iemfit-iem-score-col">
+                <span class="iemfit-iem-pct" style="color:${col}">${iem.library_match_score.toFixed(0)}%</span>
+              </div>
+              <div class="iemfit-iem-info-col">
+                <div class="iemfit-iem-name">${esc(iem.iem_name)}</div>
+                <div class="iemfit-iem-meta">
+                  ${iem.best_genre  ? `Best for <strong>${esc(iem.best_genre)}</strong>` : ''}
+                  ${iem.worst_genre ? ` · Worst for <strong>${esc(iem.worst_genre)}</strong>` : ''}
+                  ${iem.genres_total ? ` · <span>${iem.genres_above_70}/${iem.genres_total} genres ≥70%</span>` : ''}
+                </div>
+              </div>
+              <svg class="iemfit-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="iemfit-detail-panel" id="iemfit-detail-${esc(iem.iem_id)}" style="display:none"></div>
+          </div>`;
+      }).join('');
 
   el.innerHTML = `
-    ${_buildTargetSelector(d.available_targets, d.target_id || 'flat')}
-    <div class="match-overview-header">
-      <div class="match-coverage-badge ${covClass}">
-        <span class="match-coverage-pct">${coveragePct.toFixed(0)}%</span>
-        <span class="match-coverage-label">Library matched</span>
+    <div class="iemfit-summary-card">
+      <div class="iemfit-summary-score">
+        <div class="iemfit-summary-pct" style="color:${covColor}">${coveragePct.toFixed(0)}%</div>
+        <div class="iemfit-summary-pct-label">of your library<br>matched</div>
       </div>
-      <div class="match-summary-text">${esc(d.summary_text || '')}</div>
-    </div>
-    <div class="match-iem-cards">${iemSummaryHtml}</div>
-
-    <div class="insights-subsection" id="match-heatmap-section">
-      <h4 class="insights-subsection-title">Genre × IEM Heatmap
-        <span class="match-section-hint">Scores 0–100 — darker = better match</span>
-      </h4>
-      <div id="match-heatmap-wrap"><div class="insights-spinner-wrap"><div class="spinner"></div></div></div>
-    </div>
-
-    <div class="insights-subsection" id="match-radar-section">
-      <h4 class="insights-subsection-title">17-Dimension Radar
-        <span class="match-section-hint">Up to 3 IEMs — click IEM card above to add</span>
-      </h4>
-      <div id="match-radar-wrap">
-        <p class="insights-empty-note">Click an IEM card above to load its radar chart.</p>
+      <div class="iemfit-summary-body">
+        <div class="iemfit-summary-text">${esc(d.summary_text || '')}</div>
+        <div class="iemfit-target-row">
+          <label class="iemfit-target-label">Scoring target</label>
+          <select class="iemfit-target-select" onchange="App.changeMatchTarget(this)">${targetOpts}</select>
+          ${targetHint}
+          <button class="iemfit-reanalyse-btn" onclick="App.runMatchingAnalysis()">Re-analyse</button>
+        </div>
       </div>
     </div>
-
-    <div class="insights-subsection" id="match-blindspot-section">
-      <h4 class="insights-subsection-title">Blindspot Detector</h4>
-      <div id="match-blindspot-wrap"><div class="insights-spinner-wrap"><div class="spinner"></div></div></div>
-    </div>`;
-
-  // Load heatmap + blindspot async
-  _loadMatchHeatmap();
-  _loadMatchBlindspot();
+    <div class="iemfit-iem-list">${iemListHtml}</div>`;
 }
 
-// ── Heatmap ───────────────────────────────────────────────────────────────────
-async function _loadMatchHeatmap() {
-  const wrap = document.getElementById('match-heatmap-wrap');
-  if (!wrap) return;
-  try {
-    const res = await fetch('/api/insights/matching/matrix');
-    if (!res.ok) { wrap.innerHTML = '<p class="insights-error">Could not load heatmap.</p>'; return; }
-    const d = await res.json();
-    _renderHeatmap(d, wrap);
-  } catch (_) { wrap.innerHTML = '<p class="insights-error">Network error.</p>'; }
-}
+async function _toggleIemAccordion(iemId) {
+  const panel = document.getElementById(`iemfit-detail-${iemId}`);
+  const card  = panel && panel.previousElementSibling;
+  if (!panel) return;
 
-function _renderHeatmap(d, wrap) {
-  const matrix = d.matrix || [];
-  const bl     = d.band_labels || {};
-  if (!matrix.length) {
-    wrap.innerHTML = '<p class="insights-empty-note">No genre data. Tag your tracks with genres and re-run analysis.</p>';
-    return;
+  const isOpen = panel.style.display !== 'none';
+
+  // Close a previously open panel (different IEM)
+  if (_iemFitSelectedId && _iemFitSelectedId !== iemId) {
+    const prev     = document.getElementById(`iemfit-detail-${_iemFitSelectedId}`);
+    const prevCard = prev && prev.previousElementSibling;
+    if (prev)     prev.style.display = 'none';
+    if (prevCard) prevCard.classList.remove('iemfit-iem-card--open');
+    if (_iemFitRadarCharts[_iemFitSelectedId]) {
+      _iemFitRadarCharts[_iemFitSelectedId].destroy();
+      delete _iemFitRadarCharts[_iemFitSelectedId];
+    }
   }
-  // Collect unique IEM columns
-  const iemCols = [];
-  const seenIds = new Set();
-  matrix.forEach(row => row.matches.forEach(m => {
-    if (!seenIds.has(m.iem_id)) { seenIds.add(m.iem_id); iemCols.push({ id: m.iem_id, name: m.iem_name }); }
-  }));
 
-  if (!iemCols.length) {
-    wrap.innerHTML = '<p class="insights-empty-note">No IEMs scored. Add IEMs with FR data in the Gear section.</p>';
+  if (isOpen) {
+    // Collapse this panel
+    panel.style.display = 'none';
+    if (card) card.classList.remove('iemfit-iem-card--open');
+    if (_iemFitRadarCharts[iemId]) {
+      _iemFitRadarCharts[iemId].destroy();
+      delete _iemFitRadarCharts[iemId];
+    }
+    _iemFitSelectedId = null;
     return;
   }
 
-  let html = `<div class="match-heatmap-scroll"><table class="match-heatmap">
-    <thead><tr><th class="match-heatmap-genre-col">Genre</th>
-    ${iemCols.map(c => `<th class="match-heatmap-iem-col">${esc(c.name)}</th>`).join('')}
-    </tr></thead><tbody>`;
+  // Expand
+  _iemFitSelectedId = iemId;
+  if (card) card.classList.add('iemfit-iem-card--open');
+  panel.style.display = 'block';
+  panel.innerHTML = '<div class="insights-spinner-wrap"><div class="spinner"></div></div>';
 
-  matrix.forEach(row => {
-    const scoreMap = {};
-    row.matches.forEach(m => { scoreMap[m.iem_id] = m; });
-    html += `<tr><td class="match-heatmap-genre">${esc(row.genre)} <span class="match-heatmap-tc">${row.track_count}</span></td>`;
-    iemCols.forEach(col => {
-      const m = scoreMap[col.id];
-      const s = m ? m.score : 0;
-      const bg = s >= 75 ? `rgba(83,225,111,${0.15 + s/100*0.55})` : s >= 55 ? `rgba(240,180,41,${0.1+s/100*0.5})` : `rgba(255,179,181,${0.1+s/100*0.4})`;
-      const tc = s >= 60 ? '#e0e0e0' : '#6b6b7b';
-      const bestDims = m && m.best_dimensions ? m.best_dimensions.map(k => bl[k] || k).join(', ') : '';
-      html += `<td class="match-heatmap-cell" style="background:${bg};color:${tc}" title="${bestDims ? 'Best: '+bestDims : ''}" onclick="App._showHeatmapDetail('${esc(row.genre)}','${esc(col.id)}','${esc(col.name)}',${s},'${esc(bestDims)}')">${s.toFixed(0)}</td>`;
-    });
-    html += `</tr>`;
-  });
-  html += `</tbody></table></div>
-  <div id="match-heatmap-detail" class="match-heatmap-detail" style="display:none"></div>`;
-  wrap.innerHTML = html;
-}
-
-function _showHeatmapDetail(genre, iemId, iemName, score, bestDims) {
-  const el = document.getElementById('match-heatmap-detail');
-  if (!el) return;
-  el.style.display = 'block';
-  el.innerHTML = `<div class="match-detail-inner">
-    <strong>${esc(genre)}</strong> × <strong>${esc(iemName)}</strong>
-    — Match score: <span style="color:${_matchScoreColor(score)};font-weight:600">${score.toFixed(0)}%</span>
-    ${bestDims ? `<br><span class="match-detail-dims">Top dimensions: ${esc(bestDims)}</span>` : ''}
-    <button class="match-detail-radar-btn" onclick="App._openRadarForIem('${esc(iemId)}')">View radar</button>
-  </div>`;
-}
-
-// ── Radar chart ───────────────────────────────────────────────────────────────
-async function _openRadarForIem(iemId) {
-  // Toggle: remove if already on chart
-  const idx = _matchRadarIems.indexOf(iemId);
-  if (idx !== -1) {
-    _matchRadarIems.splice(idx, 1);
-  } else {
-    if (_matchRadarIems.length >= 3) _matchRadarIems.shift();
-    _matchRadarIems.push(iemId);
-  }
-  await _rebuildRadar();
-  // Scroll to radar
-  const sec = document.getElementById('match-radar-section');
-  if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-async function _rebuildRadar() {
-  const wrap = document.getElementById('match-radar-wrap');
-  if (!wrap) return;
-  if (_matchRadarChart) { _matchRadarChart.destroy(); _matchRadarChart = null; }
-  if (!_matchRadarIems.length) {
-    wrap.innerHTML = '<p class="insights-empty-note">Click an IEM card to load its radar chart.</p>';
-    return;
-  }
-
-  wrap.innerHTML = `<div class="match-radar-legend" id="match-radar-legend"></div>
-    <div class="match-radar-chart-wrap"><canvas id="match-radar-canvas"></canvas></div>`;
-
-  const COLORS = ['rgba(173,198,255,0.85)', 'rgba(255,179,181,0.85)', 'rgba(83,225,111,0.85)'];
-  const FILL   = ['rgba(173,198,255,0.12)', 'rgba(255,179,181,0.12)', 'rgba(83,225,111,0.12)'];
-
-  const datasets = [];
-  const legendItems = [];
-
-  for (let i = 0; i < _matchRadarIems.length; i++) {
-    const iemId = _matchRadarIems[i];
+  // Fetch matrix if not cached
+  if (!_iemFitMatrixData) {
     try {
-      const res = await fetch(`/api/insights/matching/iem/${encodeURIComponent(iemId)}/radar`);
-      if (!res.ok) continue;
-      const d = await res.json();
-      const vals = _ALL_DIM_KEYS_FE.map(k => d.scores[k] ?? 1);
-      datasets.push({
-        label: d.iem_name,
-        data:  vals,
-        borderColor: COLORS[i], backgroundColor: FILL[i],
-        borderWidth: 2, pointRadius: 3, pointHoverRadius: 5,
-        pointBackgroundColor: COLORS[i],
-      });
-      legendItems.push({ name: d.iem_name, color: COLORS[i], iemId });
+      const r = await fetch('/api/insights/matching/matrix');
+      if (r.ok) _iemFitMatrixData = await r.json();
     } catch (_) {}
   }
 
-  if (!datasets.length) {
-    wrap.innerHTML = '<p class="insights-error">Could not load IEM data.</p>';
+  // Fetch extra heatmap genres if not loaded
+  if (!_iemFitExtraGenres.length) {
+    try {
+      const r = await fetch('/api/insights/matching/heatmap-genres');
+      if (r.ok) { const cfg = await r.json(); _iemFitExtraGenres = cfg.extra_genres || []; }
+    } catch (_) {}
+  }
+
+  // Fetch radar data for this IEM
+  if (!_iemFitRadarData[iemId]) {
+    try {
+      const r = await fetch(`/api/insights/matching/iem/${encodeURIComponent(iemId)}/radar`);
+      if (r.ok) _iemFitRadarData[iemId] = await r.json();
+    } catch (_) {}
+  }
+
+  _renderIemDetail(iemId, panel);
+  setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
+}
+
+function _renderIemDetail(iemId, container) {
+  container.innerHTML = `
+    <div class="iemfit-detail-inner">
+      <div class="iemfit-detail-section">
+        <div class="iemfit-detail-section-hdr">
+          <span class="iemfit-detail-section-title">Genre Scores</span>
+          <span class="iemfit-detail-section-hint">How well this IEM matches each genre in your library</span>
+        </div>
+        <div id="iemfit-heatmap-${esc(iemId)}" class="iemfit-heatmap-body"></div>
+      </div>
+      <div class="iemfit-detail-section">
+        <div class="iemfit-detail-section-hdr">
+          <span class="iemfit-detail-section-title">Sonic Signature</span>
+          <div class="iemfit-radar-controls" id="iemfit-radar-controls-${esc(iemId)}"></div>
+        </div>
+        <div class="iemfit-radar-wrap"><canvas id="iemfit-radar-canvas-${esc(iemId)}"></canvas></div>
+        <div id="iemfit-radar-legend-${esc(iemId)}" class="iemfit-radar-legend"></div>
+      </div>
+      <div class="iemfit-detail-section">
+        <div class="iemfit-detail-section-hdr">
+          <span class="iemfit-detail-section-title">Blindspot Detector</span>
+          <span class="iemfit-detail-section-hint">Genres this IEM handles least well</span>
+        </div>
+        <div id="iemfit-bs-${esc(iemId)}" class="iemfit-bs-body"></div>
+      </div>
+    </div>`;
+
+  _renderIemHeatmapPanel(iemId);
+  _renderIemRadarPanel(iemId, null, null);
+  _renderIemBlindspotPanel(iemId);
+}
+
+function _renderIemHeatmapPanel(iemId) {
+  const el = document.getElementById(`iemfit-heatmap-${iemId}`);
+  if (!el) return;
+  if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) {
+    el.innerHTML = '<p class="insights-empty-note">Matrix data unavailable.</p>';
+    return;
+  }
+  const allRows   = _iemFitMatrixData.matrix;
+  const topGenres = [...allRows].sort((a, b) => b.track_count - a.track_count)
+    .slice(0, 10).map(r => r.genre);
+  const configured = [...new Set([...topGenres, ..._iemFitExtraGenres])];
+
+  const scoreMap = {};
+  allRows.forEach(row => {
+    const m = (row.matches || []).find(m => m.iem_id === iemId);
+    if (m) scoreMap[row.genre] = { score: m.score, tc: row.track_count };
+  });
+
+  const available = allRows.map(r => r.genre).filter(g => !configured.includes(g));
+
+  const rowsHtml = configured.map(genre => {
+    const entry = scoreMap[genre];
+    if (!entry) return '';
+    const { score, tc } = entry;
+    const isExtra   = _iemFitExtraGenres.includes(genre);
+    const fillColor = score >= 75 ? 'rgba(83,225,111,0.75)' : score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
+    const textColor = _matchScoreColor(score);
+    const removeBtn = isExtra
+      ? `<button class="iemfit-heatmap-remove" title="Remove" onclick="App.iemFitRemoveGenreFromHeatmap('${esc(genre)}','${esc(iemId)}')">✕</button>`
+      : '';
+    return `<div class="iemfit-heatmap-row">
+      <div class="iemfit-heatmap-genre">${esc(genre)}${removeBtn}</div>
+      <div class="iemfit-heatmap-bar-wrap">
+        <div class="iemfit-heatmap-bar-track">
+          <div class="iemfit-heatmap-bar-fill" style="width:${score.toFixed(0)}%;background:${fillColor}"></div>
+        </div>
+      </div>
+      <div class="iemfit-heatmap-score" style="color:${textColor}">${score.toFixed(0)}%</div>
+      <div class="iemfit-heatmap-tc">${tc.toLocaleString()}</div>
+    </div>`;
+  }).join('');
+
+  const addControl = available.length > 0 && _iemFitExtraGenres.length < 5
+    ? `<div class="iemfit-heatmap-add-row">
+        <select class="iemfit-heatmap-add-select" id="iemfit-add-genre-${esc(iemId)}">
+          <option value="">+ Add genre…</option>
+          ${available.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('')}
+        </select>
+        <button class="iemfit-heatmap-add-btn" onclick="App.iemFitAddGenreToHeatmap('${esc(iemId)}')">Add</button>
+      </div>`
+    : '';
+
+  el.innerHTML = `<div class="iemfit-heatmap-list">${rowsHtml}</div>${addControl}`;
+}
+
+async function _renderIemRadarPanel(iemId, activePeqId, genreOverlay) {
+  const canvas     = document.getElementById(`iemfit-radar-canvas-${iemId}`);
+  const controlsEl = document.getElementById(`iemfit-radar-controls-${iemId}`);
+  const legendEl   = document.getElementById(`iemfit-radar-legend-${iemId}`);
+  if (!canvas) return;
+
+  const radarData = _iemFitRadarData[iemId];
+  if (!radarData) {
+    if (canvas.parentElement) canvas.parentElement.innerHTML = '<p class="insights-error">Radar data unavailable. Re-run analysis.</p>';
     return;
   }
 
-  // Legend
-  const legendEl = document.getElementById('match-radar-legend');
+  if (!_iemFitRadarState[iemId]) _iemFitRadarState[iemId] = { peqId: null, genre: null };
+  if (activePeqId  !== undefined) _iemFitRadarState[iemId].peqId = activePeqId;
+  if (genreOverlay !== undefined) _iemFitRadarState[iemId].genre = genreOverlay;
+  const { peqId, genre } = _iemFitRadarState[iemId];
+
+  // Build controls
+  const peqVariants = radarData.peq_variants || [];
+  const peqControl  = peqVariants.length > 0
+    ? `<div class="iemfit-radar-ctrl-group">
+        <label class="iemfit-radar-ctrl-label">PEQ</label>
+        <select class="iemfit-radar-select" onchange="App.iemFitChangePeq('${esc(iemId)}',this.value)">
+          <option value="">Factory</option>
+          ${peqVariants.map(v => `<option value="${esc(v.peq_id)}" ${v.peq_id === peqId ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}
+        </select>
+      </div>` : '';
+
+  const allGenres    = _iemFitMatrixData && _iemFitMatrixData.matrix ? _iemFitMatrixData.matrix.map(r => r.genre) : [];
+  const genreControl = allGenres.length > 0
+    ? `<div class="iemfit-radar-ctrl-group">
+        <label class="iemfit-radar-ctrl-label">Compare genre</label>
+        <select class="iemfit-radar-select" onchange="App.iemFitChangeGenre('${esc(iemId)}',this.value)">
+          <option value="">None</option>
+          ${allGenres.map(g => `<option value="${esc(g)}" ${g === genre ? 'selected' : ''}>${esc(g)}</option>`).join('')}
+        </select>
+      </div>` : '';
+
+  if (controlsEl) controlsEl.innerHTML = peqControl + genreControl;
+
+  // Destroy old chart
+  if (_iemFitRadarCharts[iemId]) { _iemFitRadarCharts[iemId].destroy(); delete _iemFitRadarCharts[iemId]; }
+
+  // Primary dataset: factory or PEQ variant
+  let primaryScores = radarData.scores || {};
+  let primaryLabel  = radarData.iem_name || 'IEM';
+  if (peqId) {
+    const variant = peqVariants.find(v => v.peq_id === peqId);
+    if (variant) { primaryScores = variant.scores; primaryLabel = `${radarData.iem_name} + ${variant.name}`; }
+  }
+
+  const datasets    = [{
+    label: primaryLabel,
+    data:  _ALL_DIM_KEYS_FE.map(k => primaryScores[k] ?? 1),
+    borderColor: 'rgba(173,198,255,0.9)', backgroundColor: 'rgba(173,198,255,0.12)',
+    borderWidth: 2, pointRadius: 3, pointHoverRadius: 5,
+    pointBackgroundColor: 'rgba(173,198,255,0.9)',
+  }];
+  const legendItems = [{ label: primaryLabel, color: 'rgba(173,198,255,0.9)', dashed: false }];
+
+  // Genre overlay: scale fingerprint band energies [0,1] → [1,10]
+  if (genre) {
+    try {
+      const r = await fetch(`/api/insights/matching/genre/${encodeURIComponent(genre)}/fingerprint`);
+      if (r.ok) {
+        const fp = await r.json();
+        datasets.push({
+          label: genre,
+          data:  _ALL_DIM_KEYS_FE.map(k => _PERC_BAND_KEYS.includes(k) ? 1 + (fp[k] || 0) * 9 : 5.0),
+          borderColor: 'rgba(255,179,181,0.85)', backgroundColor: 'rgba(255,179,181,0.08)',
+          borderWidth: 1.5, borderDash: [4, 3],
+          pointRadius: 2, pointHoverRadius: 4,
+          pointBackgroundColor: 'rgba(255,179,181,0.85)',
+        });
+        legendItems.push({ label: `Genre: ${genre}`, color: 'rgba(255,179,181,0.85)', dashed: true });
+      }
+    } catch (_) {}
+  }
+
   if (legendEl) {
-    legendEl.innerHTML = legendItems.map(it =>
-      `<div class="match-radar-legend-item" onclick="App._openRadarForIem('${esc(it.iemId)}')">
-        <span class="match-radar-legend-dot" style="background:${it.color}"></span>
-        <span>${esc(it.name)}</span>
-        <span class="match-radar-legend-remove">✕</span>
+    legendEl.innerHTML = legendItems.map(item =>
+      `<div class="iemfit-radar-legend-item">
+        <span style="display:inline-block;width:14px;border-top:2px ${item.dashed ? 'dashed' : 'solid'};border-color:${item.color};margin-right:4px;vertical-align:middle"></span>
+        <span>${esc(item.label)}</span>
       </div>`
     ).join('');
   }
 
   const labels = _ALL_DIM_KEYS_FE.map(k => _ALL_DIM_LABELS_FE[k] || k);
-  _matchRadarChart = new Chart(document.getElementById('match-radar-canvas'), {
+  _iemFitRadarCharts[iemId] = new Chart(canvas, {
     type: 'radar',
     data: { labels, datasets },
     options: {
-      responsive: true, maintainAspectRatio: true, aspectRatio: 1.6,
+      responsive: true, maintainAspectRatio: true, aspectRatio: 1.5,
       scales: {
         r: {
           min: 1, max: 10,
-          ticks: { stepSize: 2, color: '#4a4a5a', font: { size: 9 },
-                   backdropColor: 'transparent' },
-          grid:        { color: 'rgba(173,198,255,0.12)' },
-          angleLines:  { color: 'rgba(173,198,255,0.12)' },
+          ticks: { stepSize: 2, color: '#4a4a5a', font: { size: 9 }, backdropColor: 'transparent' },
+          grid:        { color: 'rgba(173,198,255,0.1)' },
+          angleLines:  { color: 'rgba(173,198,255,0.1)' },
           pointLabels: { color: '#8a8aa0', font: { size: 10 } },
         },
       },
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(20,20,32,0.92)',
-          titleColor: '#adc6ff', bodyColor: '#c8c8d8',
+          backgroundColor: 'rgba(20,20,32,0.92)', titleColor: '#adc6ff', bodyColor: '#c8c8d8',
           callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.toFixed(1)}/10` },
         },
       },
@@ -4568,71 +4663,120 @@ async function _rebuildRadar() {
   });
 }
 
-// Dimension labels for radar (frontend copy of _ALL_DIM_LABELS from backend)
-const _ALL_DIM_LABELS_FE = {
-  sub_bass: 'Sub-bass', bass: 'Bass', bass_feel: 'Bass feel', slam: 'Slam',
-  lower_mids: 'Lower mids', upper_mids: 'Upper mids', note_weight: 'Note weight',
-  lower_treble: 'Lower treble', upper_treble: 'Upper treble', detail: 'Detail',
-  sibilance: 'Sibilance', texture: 'Texture',
-  sound_stage: 'Sound stage', timbre_color: 'Timbre / color',
-  masking: 'Masking', layering: 'Layering', tonality: 'Tonality',
-};
+function _renderIemBlindspotPanel(iemId) {
+  const el = document.getElementById(`iemfit-bs-${iemId}`);
+  if (!el) return;
+  if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) {
+    el.innerHTML = '<p class="insights-empty-note">Matrix data unavailable.</p>';
+    return;
+  }
+  const genreScores = _iemFitMatrixData.matrix
+    .map(row => ({
+      genre: row.genre,
+      score: ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null,
+      tc:    row.track_count,
+    }))
+    .filter(g => g.score !== null)
+    .sort((a, b) => a.score - b.score);
 
-// ── Blindspot detector ────────────────────────────────────────────────────────
-async function _loadMatchBlindspot() {
-  const wrap = document.getElementById('match-blindspot-wrap');
-  if (!wrap) return;
-  try {
-    const res = await fetch('/api/insights/matching/blindspots');
-    if (!res.ok) { wrap.innerHTML = '<p class="insights-error">Could not load blindspot data.</p>'; return; }
-    const d = await res.json();
-    _renderBlindspot(d, wrap);
-  } catch (_) { wrap.innerHTML = '<p class="insights-error">Network error.</p>'; }
-}
+  const shown  = genreScores.slice(0, 10);
+  const total  = genreScores.length;
 
-function _renderBlindspot(d, wrap) {
-  const bl   = d.band_labels || {};
-  const good = d.well_covered || [];
-  const bad  = d.blindspots   || [];
-
-  const goodHtml = good.length === 0
-    ? '<p class="insights-empty-note">No well-covered genres yet.</p>'
-    : good.map(g => `<div class="match-bs-row match-bs-row--good">
-        <div class="match-bs-genre">${esc(g.genre)}</div>
-        <div class="match-bs-score" style="color:#53e16f">${g.best_score.toFixed(0)}%</div>
-        <div class="match-bs-iem">${g.best_iem_name ? esc(g.best_iem_name) : ''}</div>
-      </div>`).join('');
-
-  const badHtml = bad.length === 0
-    ? '<p class="insights-empty-note">No blindspots detected.</p>'
-    : bad.map(g => {
-        const dims = (g.missing_dimensions || []).map(k => bl[k] || k).join(', ');
-        return `<div class="match-bs-row match-bs-row--bad">
-          <div class="match-bs-genre">${esc(g.genre)}</div>
-          <div class="match-bs-score" style="color:#ffb3b5">${g.best_score.toFixed(0)}%</div>
-          <div class="match-bs-detail">
-            ${dims ? `<span class="match-bs-missing">Missing: ${esc(dims)}</span>` : ''}
-            <span class="match-bs-suggestion">${esc(g.suggestion)}</span>
-          </div>
-        </div>`;
-      }).join('');
-
-  wrap.innerHTML = `
-    <div class="match-bs-counts">
-      <span class="match-bs-count match-bs-count--good">${good.length} well-covered</span>
-      <span class="match-bs-count match-bs-count--bad">${bad.length} blindspot${bad.length !== 1 ? 's' : ''}</span>
-    </div>
-    <div class="match-bs-section">
-      <div class="match-bs-section-label">Well covered (≥ 70%)</div>
-      ${goodHtml}
-    </div>
-    <div class="match-bs-section">
-      <div class="match-bs-section-label">Blindspots (&lt; 65%)</div>
-      ${badHtml}
+  const rowsHtml = shown.map(g => {
+    const fillColor = g.score >= 75 ? 'rgba(83,225,111,0.75)' : g.score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
+    return `<div class="iemfit-bs-row">
+      <div class="iemfit-bs-genre">${esc(g.genre)}</div>
+      <div class="iemfit-bs-bar-wrap">
+        <div class="iemfit-bs-bar-track">
+          <div class="iemfit-bs-bar-fill" style="width:${g.score.toFixed(0)}%;background:${fillColor}"></div>
+        </div>
+      </div>
+      <div class="iemfit-bs-score" style="color:${_matchScoreColor(g.score)}">${g.score.toFixed(0)}%</div>
     </div>`;
+  }).join('');
+
+  const moreBtn = total > 10
+    ? `<button class="iemfit-bs-more-btn" onclick="App.showAllIemBlindspots('${esc(iemId)}')">${total} genres total — view all →</button>`
+    : '';
+
+  el.innerHTML = `<div class="iemfit-bs-list">${rowsHtml}</div>${moreBtn}`;
 }
 
-// Stubs kept for backward compat (called by loadInsightsView in some paths)
+// Controls
+async function iemFitChangePeq(iemId, peqId) {
+  await _renderIemRadarPanel(iemId, peqId || null, undefined);
+}
+async function iemFitChangeGenre(iemId, genre) {
+  await _renderIemRadarPanel(iemId, undefined, genre || null);
+}
+async function iemFitAddGenreToHeatmap(iemId) {
+  const sel = document.getElementById(`iemfit-add-genre-${iemId}`);
+  if (!sel || !sel.value) return;
+  const genre = sel.value;
+  if (_iemFitExtraGenres.includes(genre) || _iemFitExtraGenres.length >= 5) return;
+  _iemFitExtraGenres = [..._iemFitExtraGenres, genre];
+  try {
+    await fetch('/api/insights/matching/heatmap-genres', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ extra_genres: _iemFitExtraGenres }),
+    });
+  } catch (_) {}
+  _renderIemHeatmapPanel(iemId);
+}
+async function iemFitRemoveGenreFromHeatmap(genre, iemId) {
+  _iemFitExtraGenres = _iemFitExtraGenres.filter(g => g !== genre);
+  try {
+    await fetch('/api/insights/matching/heatmap-genres', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ extra_genres: _iemFitExtraGenres }),
+    });
+  } catch (_) {}
+  _renderIemHeatmapPanel(iemId);
+}
+
+function showAllIemBlindspots(iemId) {
+  if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) return;
+  const iemInfo = _iemFitIemSummary.find(i => i.iem_id === iemId);
+  const iemName = iemInfo ? iemInfo.iem_name : iemId;
+
+  const genreScores = _iemFitMatrixData.matrix
+    .map(row => ({
+      genre: row.genre,
+      score: ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null,
+    }))
+    .filter(g => g.score !== null)
+    .sort((a, b) => a.score - b.score);
+
+  const titleEl = document.getElementById('iem-blindspot-modal-title');
+  const bodyEl  = document.getElementById('iem-blindspot-modal-body');
+  const modal   = document.getElementById('iem-blindspot-modal');
+  if (!modal || !bodyEl) return;
+  if (titleEl) titleEl.textContent = `All Genres — ${iemName}`;
+
+  bodyEl.innerHTML = genreScores.map(g => {
+    const fillColor = g.score >= 75 ? 'rgba(83,225,111,0.75)' : g.score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
+    return `<div class="iemfit-bs-row" style="margin-bottom:10px">
+      <div class="iemfit-bs-genre">${esc(g.genre)}</div>
+      <div class="iemfit-bs-bar-wrap">
+        <div class="iemfit-bs-bar-track">
+          <div class="iemfit-bs-bar-fill" style="width:${g.score.toFixed(0)}%;background:${fillColor}"></div>
+        </div>
+      </div>
+      <div class="iemfit-bs-score" style="color:${_matchScoreColor(g.score)};min-width:42px;text-align:right">${g.score.toFixed(0)}%</div>
+    </div>`;
+  }).join('');
+
+  modal.style.display = 'flex';
+}
+
+function closeAllBlindspots() {
+  const modal = document.getElementById('iem-blindspot-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+// Compat stubs
+function _openRadarForIem(iemId) { _toggleIemAccordion(iemId); }
+function _showHeatmapDetail() {}
 function changeGearFitTarget() {}
 function changeGearFitSort() {}
 
