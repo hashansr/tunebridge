@@ -5141,17 +5141,6 @@ tr.player-active .track-title { color: var(--accent); }
   gap: 3px;
   overflow: hidden;
 }
-.iemfit-heatmap-remove {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 9px;
-  cursor: pointer;
-  padding: 0 1px;
-  opacity: 0.5;
-  flex-shrink: 0;
-}
-.iemfit-heatmap-remove:hover { opacity: 1; color: var(--accent-secondary); }
 .iemfit-heatmap-bar-wrap { flex: 1; min-width: 0; }
 .iemfit-heatmap-bar-track {
   height: 6px;
@@ -5172,46 +5161,6 @@ tr.player-active .track-title { color: var(--accent); }
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
-.iemfit-heatmap-tc {
-  font-size: 10px;
-  color: var(--text-muted);
-  min-width: 52px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-.iemfit-heatmap-add-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255,255,255,0.05);
-}
-.iemfit-heatmap-add-select {
-  flex: 1;
-  background: rgba(255,255,255,0.04);
-  color: var(--text-secondary);
-  border: 1px solid rgba(173,198,255,0.12);
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-}
-.iemfit-heatmap-add-btn {
-  font-size: 12px;
-  color: var(--accent);
-  background: rgba(173,198,255,0.1);
-  border: 1px solid rgba(173,198,255,0.2);
-  border-radius: 8px;
-  padding: 6px 14px;
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-  transition: background 0.15s;
-}
-.iemfit-heatmap-add-btn:hover { background: rgba(173,198,255,0.18); }
 
 /* Radar */
 .iemfit-radar-controls {
@@ -5233,7 +5182,12 @@ tr.player-active .track-title { color: var(--accent); }
   cursor: pointer;
   max-width: 160px;
 }
-.iemfit-radar-wrap { max-width: 440px; margin: 0 auto; }
+/* Radar + delta side-by-side */
+.iemfit-radar-body { display: flex; align-items: flex-start; gap: 24px; }
+.iemfit-radar-col  { flex: 1; min-width: 0; }
+.iemfit-delta-col  { flex: 1; min-width: 0; padding-top: 4px; }
+.iemfit-radar-body--has-delta .iemfit-radar-col { max-width: 300px; flex: 0 0 300px; }
+.iemfit-radar-wrap { /* legacy — no longer used directly */ }
 .iemfit-radar-legend {
   display: flex;
   flex-wrap: wrap;
@@ -5254,9 +5208,7 @@ tr.player-active .track-title { color: var(--accent); }
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 16px 0 8px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(173,198,255,0.07);
+  margin: 0 0 10px;
 }
 .iemfit-delta-list { display: flex; flex-direction: column; gap: 6px; }
 .iemfit-delta-row { display: flex; align-items: center; gap: 8px; }
@@ -5296,13 +5248,13 @@ tr.player-active .track-title { color: var(--accent); }
   flex-shrink: 0;
 }
 
-/* Blindspot list */
-.iemfit-bs-list { display: flex; flex-direction: column; gap: 9px; }
-.iemfit-bs-row { display: flex; align-items: center; gap: 10px; }
+/* Blindspot list — 2 columns */
+.iemfit-bs-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; }
+.iemfit-bs-row { display: flex; align-items: center; gap: 8px; }
 .iemfit-bs-genre {
   font-size: 12px;
   color: var(--text-secondary);
-  width: 130px;
+  width: 100px;
   flex-shrink: 0;
   white-space: nowrap;
   overflow: hidden;

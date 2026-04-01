@@ -3523,6 +3523,7 @@ const App = {
   iemFitChangeGenre,
   iemFitAddGenreToHeatmap,
   iemFitRemoveGenreFromHeatmap,
+  showAllIemGenres,
   showAllIemBlindspots,
   closeAllBlindspots,
 };
@@ -4497,9 +4498,13 @@ function _renderIemDetail(iemId, container) {
           <span class="iemfit-detail-section-hint">8 perceptual axes — 1 (recessed) to 10 (elevated)</span>
           <div class="iemfit-radar-controls" id="iemfit-radar-controls-${esc(iemId)}"></div>
         </div>
-        <div class="iemfit-radar-wrap"><canvas id="iemfit-radar-canvas-${esc(iemId)}"></canvas></div>
-        <div id="iemfit-radar-legend-${esc(iemId)}" class="iemfit-radar-legend"></div>
-        <div id="iemfit-peq-delta-${esc(iemId)}"></div>
+        <div class="iemfit-radar-body" id="iemfit-radar-body-${esc(iemId)}">
+          <div class="iemfit-radar-col">
+            <canvas id="iemfit-radar-canvas-${esc(iemId)}"></canvas>
+            <div id="iemfit-radar-legend-${esc(iemId)}" class="iemfit-radar-legend"></div>
+          </div>
+          <div class="iemfit-delta-col" id="iemfit-peq-delta-${esc(iemId)}" style="display:none"></div>
+        </div>
       </div>
       <div class="iemfit-detail-section">
         <div class="iemfit-detail-section-hdr">
@@ -4522,52 +4527,41 @@ function _renderIemHeatmapPanel(iemId) {
     el.innerHTML = '<p class="insights-empty-note">Matrix data unavailable.</p>';
     return;
   }
-  const allRows   = _iemFitMatrixData.matrix;
-  const topGenres = [...allRows].sort((a, b) => b.track_count - a.track_count)
-    .slice(0, 10).map(r => r.genre);
-  const configured = [...new Set([...topGenres, ..._iemFitExtraGenres])];
-
+  const allRows  = _iemFitMatrixData.matrix;
   const scoreMap = {};
   allRows.forEach(row => {
     const m = (row.matches || []).find(m => m.iem_id === iemId);
     if (m) scoreMap[row.genre] = { score: m.score, tc: row.track_count };
   });
 
-  const available = allRows.map(r => r.genre).filter(g => !configured.includes(g));
+  // Top 8 genres by track count
+  const shown = [...allRows]
+    .sort((a, b) => b.track_count - a.track_count)
+    .slice(0, 8)
+    .map(r => r.genre);
+  const total = allRows.length;
 
-  const rowsHtml = configured.map(genre => {
+  const rowsHtml = shown.map(genre => {
     const entry = scoreMap[genre];
     if (!entry) return '';
     const { score, tc } = entry;
-    const isExtra   = _iemFitExtraGenres.includes(genre);
     const fillColor = score >= 75 ? 'rgba(83,225,111,0.75)' : score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
-    const textColor = _matchScoreColor(score);
-    const removeBtn = isExtra
-      ? `<button class="iemfit-heatmap-remove" title="Remove" onclick="App.iemFitRemoveGenreFromHeatmap('${esc(genre)}','${esc(iemId)}')">✕</button>`
-      : '';
     return `<div class="iemfit-heatmap-row">
-      <div class="iemfit-heatmap-genre">${esc(genre)}${removeBtn}</div>
+      <div class="iemfit-heatmap-genre">${esc(genre)}</div>
       <div class="iemfit-heatmap-bar-wrap">
         <div class="iemfit-heatmap-bar-track">
           <div class="iemfit-heatmap-bar-fill" style="width:${score.toFixed(0)}%;background:${fillColor}"></div>
         </div>
       </div>
-      <div class="iemfit-heatmap-score" style="color:${textColor}">${score.toFixed(0)}%</div>
-      <div class="iemfit-heatmap-tc">${tc.toLocaleString()}</div>
+      <div class="iemfit-heatmap-score" style="color:${_matchScoreColor(score)}">${score.toFixed(0)}%</div>
     </div>`;
   }).join('');
 
-  const addControl = available.length > 0 && _iemFitExtraGenres.length < 5
-    ? `<div class="iemfit-heatmap-add-row">
-        <select class="iemfit-heatmap-add-select" id="iemfit-add-genre-${esc(iemId)}">
-          <option value="">+ Add genre…</option>
-          ${available.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('')}
-        </select>
-        <button class="iemfit-heatmap-add-btn" onclick="App.iemFitAddGenreToHeatmap('${esc(iemId)}')">Add</button>
-      </div>`
+  const viewAllBtn = total > 8
+    ? `<button class="iemfit-bs-more-btn" onclick="App.showAllIemGenres('${esc(iemId)}')">${total} genres total — view all →</button>`
     : '';
 
-  el.innerHTML = `<div class="iemfit-heatmap-grid">${rowsHtml}</div>${addControl}`;
+  el.innerHTML = `<div class="iemfit-heatmap-grid">${rowsHtml}</div>${viewAllBtn}`;
 }
 
 async function _renderIemRadarPanel(iemId, activePeqId) {
@@ -4663,14 +4657,15 @@ async function _renderIemRadarPanel(iemId, activePeqId) {
     },
   });
 
-  // PEQ delta bar chart — shows exactly what the PEQ changes per axis
+  // PEQ delta bar chart — side by side with radar
+  const bodyEl = document.getElementById(`iemfit-radar-body-${iemId}`);
   if (deltaEl) {
     if (peqGrouped && peqId) {
-      const variant    = peqVariants.find(v => v.peq_id === peqId);
+      const variant     = peqVariants.find(v => v.peq_id === peqId);
       const variantName = variant ? variant.name : 'PEQ';
-      const deltaRows  = _RADAR_AXES.map((ax, i) => {
+      const deltaRows   = _RADAR_AXES.map((ax, i) => {
         const delta    = peqGrouped[i] - factoryData[i];
-        const absPct   = Math.min(Math.abs(delta) / 3 * 100, 100); // ±3 pts = full bar
+        const absPct   = Math.min(Math.abs(delta) / 3 * 100, 100);
         const isPos    = delta >= 0;
         const barColor = isPos ? 'rgba(83,225,111,0.75)' : 'rgba(255,179,181,0.75)';
         const txtColor = isPos ? '#53e16f' : '#ffb3b5';
@@ -4690,8 +4685,12 @@ async function _renderIemRadarPanel(iemId, activePeqId) {
           <span class="iemfit-detail-section-hint">${esc(variantName)} vs factory</span>
         </div>
         <div class="iemfit-delta-list">${deltaRows}</div>`;
+      deltaEl.style.display = 'block';
+      if (bodyEl) bodyEl.classList.add('iemfit-radar-body--has-delta');
     } else {
       deltaEl.innerHTML = '';
+      deltaEl.style.display = 'none';
+      if (bodyEl) bodyEl.classList.remove('iemfit-radar-body--has-delta');
     }
   }
 }
@@ -4763,6 +4762,41 @@ async function iemFitRemoveGenreFromHeatmap(genre, iemId) {
     });
   } catch (_) {}
   _renderIemHeatmapPanel(iemId);
+}
+
+function showAllIemGenres(iemId) {
+  if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) return;
+  const iemInfo = _iemFitIemSummary.find(i => i.iem_id === iemId);
+  const iemName = iemInfo ? iemInfo.iem_name : iemId;
+
+  const genreScores = _iemFitMatrixData.matrix
+    .map(row => ({
+      genre: row.genre,
+      score: ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null,
+    }))
+    .filter(g => g.score !== null)
+    .sort((a, b) => b.score - a.score); // best → worst
+
+  const titleEl = document.getElementById('iem-blindspot-modal-title');
+  const bodyEl  = document.getElementById('iem-blindspot-modal-body');
+  const modal   = document.getElementById('iem-blindspot-modal');
+  if (!modal || !bodyEl) return;
+  if (titleEl) titleEl.textContent = `All Genres — ${iemName}`;
+
+  bodyEl.innerHTML = genreScores.map(g => {
+    const fillColor = g.score >= 75 ? 'rgba(83,225,111,0.75)' : g.score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
+    return `<div class="iemfit-bs-row" style="margin-bottom:10px">
+      <div class="iemfit-bs-genre">${esc(g.genre)}</div>
+      <div class="iemfit-bs-bar-wrap">
+        <div class="iemfit-bs-bar-track">
+          <div class="iemfit-bs-bar-fill" style="width:${g.score.toFixed(0)}%;background:${fillColor}"></div>
+        </div>
+      </div>
+      <div class="iemfit-bs-score" style="color:${_matchScoreColor(g.score)};min-width:42px;text-align:right">${g.score.toFixed(0)}%</div>
+    </div>`;
+  }).join('');
+
+  modal.style.display = 'flex';
 }
 
 function showAllIemBlindspots(iemId) {
