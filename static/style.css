@@ -5045,35 +5045,17 @@ tr.player-active .track-title { color: var(--accent); }
   margin-bottom: 14px;
   line-height: 1.6;
 }
-.iemfit-target-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.iemfit-target-label { font-size: 11px; color: var(--text-muted); }
-.iemfit-target-select {
-  background: var(--surface-4, #353534);
-  color: var(--text-secondary);
-  border: none;
-  border-radius: 8px;
-  padding: 5px 10px;
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-}
-.iemfit-target-link { font-size: 11px; color: var(--accent); text-decoration: none; }
 .iemfit-reanalyse-btn {
   font-size: 11px;
   color: var(--text-muted);
   background: var(--surface-4, #353534);
   border: none;
   border-radius: 99px;
-  padding: 5px 12px;
+  padding: 5px 14px;
   cursor: pointer;
   font-family: inherit;
-  margin-left: auto;
   transition: color 0.15s;
+  white-space: nowrap;
 }
 .iemfit-reanalyse-btn:hover { color: var(--text-secondary); }
 
@@ -5146,13 +5128,13 @@ tr.player-active .track-title { color: var(--accent); }
 }
 .iemfit-detail-section-hint { font-size: 11px; color: var(--text-muted); }
 
-/* Genre scores (heatmap panel) */
-.iemfit-heatmap-list { display: flex; flex-direction: column; gap: 9px; }
-.iemfit-heatmap-row { display: flex; align-items: center; gap: 10px; }
+/* Genre scores (heatmap panel) — 2-column grid */
+.iemfit-heatmap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; }
+.iemfit-heatmap-row { display: flex; align-items: center; gap: 8px; }
 .iemfit-heatmap-genre {
   font-size: 12px;
   color: var(--text-secondary);
-  width: 130px;
+  width: 100px;
   flex-shrink: 0;
   display: flex;
   align-items: center;

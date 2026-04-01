@@ -4277,6 +4277,14 @@ const _ALL_DIM_KEYS_FE = [
   ..._PERC_BAND_KEYS,
   'sound_stage','timbre_color','masking','layering','tonality',
 ];
+const _ALL_DIM_LABELS_FE = {
+  sub_bass: 'Sub Bass', bass: 'Bass', bass_feel: 'Bass Feel', slam: 'Slam',
+  lower_mids: 'Low Mids', upper_mids: 'Upper Mids', note_weight: 'Note Weight',
+  lower_treble: 'Low Treble', upper_treble: 'Up Treble', detail: 'Detail',
+  sibilance: 'Sibilance', texture: 'Texture',
+  sound_stage: 'Soundstage', timbre_color: 'Timbre', masking: 'Masking',
+  layering: 'Layering', tonality: 'Tonality',
+};
 
 // ── Score colour ──────────────────────────────────────────────────────────────
 function _matchScoreColor(s) {
@@ -4321,6 +4329,14 @@ function _renderInsightsMatchOverview(d, errMsg) {
   const el = document.getElementById('insights-gear-content');
   if (!el) return;
 
+  // Update section-header action button
+  const hdrActions = document.getElementById('iemfit-header-actions');
+  if (hdrActions) {
+    hdrActions.innerHTML = d
+      ? `<button class="insights-cta-btn iemfit-reanalyse-btn" onclick="App.runMatchingAnalysis()">Re-analyse</button>`
+      : `<button class="insights-cta-btn btn-primary" onclick="App.runMatchingAnalysis()">Run Analysis</button>`;
+  }
+
   if (!d) {
     el.innerHTML = `
       <div class="match-no-data">
@@ -4331,7 +4347,6 @@ function _renderInsightsMatchOverview(d, errMsg) {
         </div>
         <div class="match-no-data-title">Run IEM Match Analysis</div>
         <div class="match-no-data-desc">Scores each IEM against every genre in your library using 17 perceptual dimensions. Requires audio analysis to be completed first.${errMsg ? `<br><span style="color:var(--accent-secondary)">${esc(errMsg)}</span>` : ''}</div>
-        <button class="btn-primary" onclick="App.runMatchingAnalysis()">Run Match Analysis</button>
       </div>`;
     return;
   }
@@ -4345,14 +4360,6 @@ function _renderInsightsMatchOverview(d, errMsg) {
 
   const coveragePct = d.overall_coverage_pct || 0;
   const covColor = coveragePct >= 70 ? '#53e16f' : coveragePct >= 45 ? '#f0b429' : '#ffb3b5';
-
-  const targets    = d.available_targets || [{ id: 'flat', name: 'Flat / Neutral' }];
-  const targetOpts = targets.map(t =>
-    `<option value="${esc(t.id)}" ${t.id === (d.target_id || 'flat') ? 'selected' : ''}>${esc(t.name)}</option>`
-  ).join('');
-  const targetHint = targets.length <= 1
-    ? `<a class="iemfit-target-link" href="#" onclick="App.showView('settings');return false">Add a target in Settings</a>`
-    : '';
 
   const iemListHtml = _iemFitIemSummary.length === 0
     ? `<p class="insights-empty-note">No IEMs with FR data found. Add IEMs in the Gear section.</p>`
@@ -4386,12 +4393,6 @@ function _renderInsightsMatchOverview(d, errMsg) {
       </div>
       <div class="iemfit-summary-body">
         <div class="iemfit-summary-text">${esc(d.summary_text || '')}</div>
-        <div class="iemfit-target-row">
-          <label class="iemfit-target-label">Scoring target</label>
-          <select class="iemfit-target-select" onchange="App.changeMatchTarget(this)">${targetOpts}</select>
-          ${targetHint}
-          <button class="iemfit-reanalyse-btn" onclick="App.runMatchingAnalysis()">Re-analyse</button>
-        </div>
       </div>
     </div>
     <div class="iemfit-iem-list">${iemListHtml}</div>`;
@@ -4546,7 +4547,7 @@ function _renderIemHeatmapPanel(iemId) {
       </div>`
     : '';
 
-  el.innerHTML = `<div class="iemfit-heatmap-list">${rowsHtml}</div>${addControl}`;
+  el.innerHTML = `<div class="iemfit-heatmap-grid">${rowsHtml}</div>${addControl}`;
 }
 
 async function _renderIemRadarPanel(iemId, activePeqId, genreOverlay) {
