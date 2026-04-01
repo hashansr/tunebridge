@@ -4604,6 +4604,13 @@ function _renderIemDetail(iemId, container) {
       </div>
       <div class="iemfit-detail-section">
         <div class="iemfit-detail-section-hdr">
+          <span class="iemfit-detail-section-title">Blindspot Detector</span>
+          <span class="iemfit-detail-section-hint">Genres this IEM handles least well</span>
+        </div>
+        <div id="iemfit-bs-${esc(iemId)}" class="iemfit-bs-body"></div>
+      </div>
+      <div class="iemfit-detail-section">
+        <div class="iemfit-detail-section-hdr">
           <span class="iemfit-detail-section-title">Frequency Response</span>
           <div class="iemfit-fr-controls" id="iemfit-fr-controls-${esc(iemId)}"></div>
         </div>
@@ -4611,13 +4618,6 @@ function _renderIemDetail(iemId, container) {
           <canvas id="iemfit-fr-canvas-${esc(iemId)}"></canvas>
         </div>
         <div id="iemfit-fr-legend-${esc(iemId)}" class="iemfit-fr-legend"></div>
-      </div>
-      <div class="iemfit-detail-section">
-        <div class="iemfit-detail-section-hdr">
-          <span class="iemfit-detail-section-title">Blindspot Detector</span>
-          <span class="iemfit-detail-section-hint">Genres this IEM handles least well</span>
-        </div>
-        <div id="iemfit-bs-${esc(iemId)}" class="iemfit-bs-body"></div>
       </div>
     </div>`;
 
