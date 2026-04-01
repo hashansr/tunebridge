@@ -48,6 +48,7 @@ const Player = (function () {
   _audioB.crossOrigin = 'anonymous';
 
   let _audio = _audioA;       // pointer to currently active element — swaps on crossfade
+  let _consecutiveErrors = 0; // stops rapid-fire skipping when music volume is unmounted
 
   // Web Audio API graph (lazy — created on first play gesture)
   let _ctx        = null;
@@ -713,12 +714,27 @@ const Player = (function () {
 
   function _onError() {
     if (this !== _audio) return;
+    _consecutiveErrors++;
+    if (_consecutiveErrors >= 3) {
+      // All tracks failing — music folder likely unmounted
+      ps.isPlaying = false;
+      _updatePlayBtn();
+      _consecutiveErrors = 0;
+      _toast('Playback stopped — music files may be inaccessible. Check your music folder in Settings.', 5000);
+      return;
+    }
     _toast('Playback error — skipping track');
-    if (ps.queue.length > 1) setTimeout(next, 600);
-    else { ps.isPlaying = false; _updatePlayBtn(); }
+    if (ps.queue.length > 1) setTimeout(next, 800);
+    else { ps.isPlaying = false; _updatePlayBtn(); _consecutiveErrors = 0; }
   }
 
-  function _onPlay()  { if (this !== _audio) return; ps.isPlaying = true;  _updatePlayBtn(); _highlightActiveRow(); }
+  function _onPlay()  {
+    if (this !== _audio) return;
+    _consecutiveErrors = 0;  // successful playback resets the error counter
+    ps.isPlaying = true;
+    _updatePlayBtn();
+    _highlightActiveRow();
+  }
   function _onPause() { if (this !== _audio) return; ps.isPlaying = false; _updatePlayBtn(); }
 
   [_audioA, _audioB].forEach(el => {
@@ -1426,9 +1442,9 @@ const Player = (function () {
       .replace(/'/g, '&#39;');
   }
 
-  function _toast(msg) {
+  function _toast(msg, duration) {
     // Delegate to app.js toast if available
-    if (typeof toast === 'function') toast(msg);
+    if (typeof toast === 'function') toast(msg, duration);
   }
 
   /* ── Public API ─────────────────────────────────────────────────────── */

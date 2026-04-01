@@ -99,6 +99,8 @@ async function pollScanStatus() {
           ? `<span class="scan-removed">${status.new_tracks} removed</span>`
           : `<span class="scan-unchanged">No changes</span>`;
       msg.innerHTML = `<span class="scan-ready">Library ready</span><span class="scan-total">${status.total_tracks.toLocaleString()} tracks</span>${newLine}`;
+    } else if (status.status === 'error') {
+      msg.innerHTML = `<span class="scan-error">⚠ ${esc(status.message || 'Library error')}</span>`;
     } else {
       msg.textContent = status.message;
     }
@@ -265,7 +267,15 @@ async function loadPlaylistsView() {
 /* ── Artists view ───────────────────────────────────────────────────── */
 async function loadArtists() {
   document.getElementById('artists-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
-  const artists = await api('/library/artists');
+  let artists;
+  try {
+    artists = await api('/library/artists');
+  } catch (e) {
+    document.getElementById('artists-grid').innerHTML =
+      `<div class="library-error-banner"><p>Could not load library: ${esc(e.message)}</p>
+       <p class="library-error-hint">Check that your music folder is accessible, then rescan in Settings.</p></div>`;
+    return;
+  }
   state.artists = artists;
 
   const grid = document.getElementById('artists-grid');
@@ -348,7 +358,15 @@ function scrollToAlbumLetter(letter) {
 async function loadAlbums(artistFilter = null) {
   document.getElementById('albums-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
   const query = artistFilter ? `?artist=${encodeURIComponent(artistFilter)}` : '';
-  const albums = await api('/library/albums' + query);
+  let albums;
+  try {
+    albums = await api('/library/albums' + query);
+  } catch (e) {
+    document.getElementById('albums-grid').innerHTML =
+      `<div class="library-error-banner"><p>Could not load library: ${esc(e.message)}</p>
+       <p class="library-error-hint">Check that your music folder is accessible, then rescan in Settings.</p></div>`;
+    return;
+  }
   state.albums = albums;
 
   const grid = document.getElementById('albums-grid');
@@ -468,7 +486,13 @@ async function loadTracks(artist = null, album = null) {
   let q = [];
   if (artist) q.push(`artist=${encodeURIComponent(artist)}`);
   if (album) q.push(`album=${encodeURIComponent(album)}`);
-  const tracks = await api('/library/tracks?' + q.join('&'));
+  let tracks;
+  try {
+    tracks = await api('/library/tracks?' + q.join('&'));
+  } catch (e) {
+    toast('Could not load tracks — check your music folder in Settings');
+    return;
+  }
   state.tracks = tracks;
 
   const crumb = document.getElementById('tracks-breadcrumb');
@@ -2934,8 +2958,13 @@ const SONGS_PER_PAGE = 100;
 async function loadSongsView() {
   try {
     _songsData = await api(`/library/songs?sort=${_songsSort.col}&order=${_songsSort.order}`);
-  } catch {
+  } catch (e) {
     _songsData = [];
+    const wrap = document.getElementById('songs-table-wrap');
+    if (wrap) wrap.innerHTML =
+      `<div class="library-error-banner"><p>Could not load songs: ${esc(e.message)}</p>
+       <p class="library-error-hint">Check that your music folder is accessible, then rescan in Settings.</p></div>`;
+    return;
   }
   renderSongsTable();
 }

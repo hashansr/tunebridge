@@ -1873,16 +1873,18 @@ def iem_graph(iid):
             peq = next((p for p in cur.get('peq_profiles', []) if p['id'] == peq_id), None)
             if peq:
                 peq_color = palette[(len(targets)) % len(palette)]
+                # _apply_peq re-normalises to 75 dB at 1 kHz internally, so do NOT
+                # apply the factory offset on top — that would double-shift the curve.
                 if mL:
                     curves.append({'id': f"{cur['id']}-peq-L",
                                    'label': f"{name} + {peq['name']} (L)",
                                    'color': peq_color, 'dash': False,
-                                   'data': _shift(_apply_peq(mL, peq), offset)})
+                                   'data': _apply_peq(mL, peq)})
                 if mR:
                     curves.append({'id': f"{cur['id']}-peq-R",
                                    'label': f"{name} + {peq['name']} (R)",
                                    'color': peq_color, 'dash': False,
-                                   'data': _shift(_apply_peq(mR, peq), offset)})
+                                   'data': _apply_peq(mR, peq)})
 
     # Append baseline/target curves — each normalised independently
     for bl in load_baselines():
