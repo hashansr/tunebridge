@@ -3550,6 +3550,7 @@ const App = {
   _toggleIemAccordion,
   iemFitChangePeq,
   iemFitChangeGenre,
+  iemFitChangeGenreOverlay,
   iemFitAddGenreToHeatmap,
   iemFitRemoveGenreFromHeatmap,
   showAllIemGenres,
@@ -4295,6 +4296,7 @@ let _iemFitMatrixData  = null;  // cached matrix response
 let _iemFitFRCharts    = {};    // iemId → Chart.js FR instance
 let _iemFitPeqState    = {};    // iemId → active peqId (string | null)
 let _iemFitPeqVariants = {};    // iemId → {factory_scores, peq_variants, iem_name}
+let _iemFitGenreState  = {};    // iemId → selected genre key for FR overlay (string | null)
 let _iemFitExtraGenres = [];    // user-added heatmap genres
 let _iemFitIemSummary  = [];    // cached IEM summary list
 
@@ -4302,6 +4304,23 @@ let _iemFitIemSummary  = [];    // cached IEM summary list
 const _PERC_BAND_KEYS = [
   'sub_bass','bass','bass_feel','slam','lower_mids','upper_mids',
   'note_weight','lower_treble','upper_treble','detail','sibilance','texture',
+];
+
+// Frequency ranges for each perceptual band — mirrors backend _PERC_BANDS exactly.
+// Used to map genre fingerprint energy onto the FR chart x-axis.
+const _FR_BAND_RANGES = [
+  { key: 'sub_bass',      f1: 20,   f2: 60    },
+  { key: 'bass',          f1: 60,   f2: 120   },
+  { key: 'bass_feel',     f1: 80,   f2: 200   },
+  { key: 'slam',          f1: 80,   f2: 150   },
+  { key: 'lower_mids',    f1: 200,  f2: 500   },
+  { key: 'upper_mids',    f1: 500,  f2: 1500  },
+  { key: 'note_weight',   f1: 200,  f2: 1000  },
+  { key: 'lower_treble',  f1: 3000, f2: 6000  },
+  { key: 'upper_treble',  f1: 6000, f2: 20000 },
+  { key: 'detail',        f1: 4000, f2: 10000 },
+  { key: 'sibilance',     f1: 5000, f2: 10000 },
+  { key: 'texture',       f1: 6000, f2: 15000 },
 ];
 const _ALL_DIM_KEYS_FE = [
   ..._PERC_BAND_KEYS,
@@ -4319,11 +4338,15 @@ const _ALL_DIM_LABELS_FE = {
 // ── Compact FR chart builder (reused in IEM Fit accordion) ───────────────────
 // Builds a self-contained Chart.js line chart into `canvas` using curves from
 // /api/iems/<id>/graph.  Returns the Chart instance.
-function _buildCompactFRChart(canvas, curves) {
+// genreFingerprint: {bandKey: 0–1} — when provided draws genre salience shading.
+// genreLabel: display name for the selected genre (shown as chart annotation).
+function _buildCompactFRChart(canvas, curves, genreFingerprint = null, genreLabel = null) {
   const regionPlugin = {
     id: 'fitFRRegions',
     beforeDatasetsDraw(chart) {
       const { ctx, chartArea: { left, right, top, bottom }, scales: { x } } = chart;
+
+      // ── 1. Frequency region bands (cool blue tint, always shown) ──────────
       const regions = [
         { f1: 20,    f2: 80,    color: 'rgba(173,198,255,.05)' },
         { f1: 80,    f2: 300,   color: 'rgba(173,198,255,.03)' },
@@ -4339,6 +4362,60 @@ function _buildCompactFRChart(canvas, curves) {
         ctx.fillStyle = r.color;
         ctx.fillRect(x1, top, x2 - x1, bottom - top);
       });
+
+      // ── 2. Genre salience shading (amber, shown when a genre is selected) ──
+      if (genreFingerprint) {
+        // Sample 300 log-spaced frequencies and sum band energies at each point.
+        // Bands overlap intentionally — summing creates a smooth "importance terrain".
+        const N = 300;
+        const logMin = Math.log10(20);
+        const logMax = Math.log10(20000);
+        const saliences = [];
+        const freqs = [];
+        for (let i = 0; i < N; i++) {
+          const f = Math.pow(10, logMin + (logMax - logMin) * i / (N - 1));
+          freqs.push(f);
+          let s = 0;
+          for (const { key, f1, f2 } of _FR_BAND_RANGES) {
+            if (f >= f1 && f <= f2) s += genreFingerprint[key] || 0;
+          }
+          saliences.push(s);
+        }
+        const maxS = Math.max(...saliences, 1e-9);
+
+        // Draw filled path rising from the bottom of the chart
+        const MAX_H = 0.42 * (bottom - top);  // salience fills up to 42% of chart height
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(left, bottom);
+        for (let i = 0; i < N; i++) {
+          const px = Math.max(left, Math.min(right, x.getPixelForValue(freqs[i])));
+          const py = bottom - (saliences[i] / maxS) * MAX_H;
+          ctx.lineTo(px, py);
+        }
+        ctx.lineTo(right, bottom);
+        ctx.closePath();
+
+        // Vertical gradient: brighter at peak, fades toward the bottom
+        const grad = ctx.createLinearGradient(0, bottom - MAX_H, 0, bottom);
+        grad.addColorStop(0,   'rgba(240,168,48,0.28)');
+        grad.addColorStop(0.5, 'rgba(240,168,48,0.18)');
+        grad.addColorStop(1,   'rgba(240,168,48,0.06)');
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.restore();
+
+        // Genre name label — bottom-right corner, subtle amber
+        if (genreLabel) {
+          ctx.save();
+          ctx.font = '600 10px Inter, sans-serif';
+          ctx.fillStyle = 'rgba(240,168,48,0.75)';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(genreLabel, right - 4, bottom - 4);
+          ctx.restore();
+        }
+      }
     },
   };
 
@@ -4497,6 +4574,7 @@ function _renderInsightsMatchOverview(d, errMsg) {
   _iemFitFRCharts    = {};
   _iemFitPeqState    = {};
   _iemFitPeqVariants = {};
+  _iemFitGenreState  = {};
 
   const coveragePct = d.overall_coverage_pct || 0;
   const covColor = coveragePct >= 70 ? '#53e16f' : coveragePct >= 45 ? '#f0b429' : '#ffb3b5';
@@ -4652,19 +4730,38 @@ async function _renderIemFRPanel(iemId, activePeqId) {
   const iemData     = _iemFitPeqVariants[iemId] || {};
   const peqVariants = iemData.peq_variants || [];
 
-  // Render PEQ dropdown
+  // Genre overlay state
+  const genreKey   = _iemFitGenreState[iemId] || null;
+  const genreRow   = (_iemFitMatrixData?.matrix || []).find(r => r.genre === genreKey);
+  const genreFingerprint = genreRow?.fingerprint || null;
+
+  // Render controls — PEQ dropdown + Genre overlay dropdown
   if (controlsEl) {
-    controlsEl.innerHTML = peqVariants.length > 0
+    const peqCtrl = peqVariants.length > 0
       ? `<div class="iemfit-fr-ctrl-group">
-           <label class="iemfit-fr-ctrl-label">Compare with PEQ</label>
+           <label class="iemfit-fr-ctrl-label">PEQ</label>
            <select class="iemfit-radar-select" onchange="App.iemFitChangePeq('${esc(iemId)}',this.value)">
-             <option value="">Factory only</option>
+             <option value="">Factory</option>
              ${peqVariants.map(v =>
                `<option value="${esc(v.peq_id)}" ${v.peq_id === peqId ? 'selected' : ''}>${esc(v.name)}</option>`
              ).join('')}
            </select>
-         </div>`
-      : '';
+         </div>` : '';
+
+    const genres = (_iemFitMatrixData?.matrix || [])
+      .slice().sort((a, b) => b.track_count - a.track_count);
+    const genreCtrl = genres.length > 0
+      ? `<div class="iemfit-fr-ctrl-group">
+           <label class="iemfit-fr-ctrl-label">Genre overlay</label>
+           <select class="iemfit-radar-select" onchange="App.iemFitChangeGenreOverlay('${esc(iemId)}',this.value)">
+             <option value="">None</option>
+             ${genres.map(r =>
+               `<option value="${esc(r.genre)}" ${r.genre === genreKey ? 'selected' : ''}>${esc(r.genre)}</option>`
+             ).join('')}
+           </select>
+         </div>` : '';
+
+    controlsEl.innerHTML = peqCtrl + genreCtrl;
   }
 
   // Fetch FR curves from graph endpoint
@@ -4693,17 +4790,24 @@ async function _renderIemFRPanel(iemId, activePeqId) {
     return;
   }
 
-  _iemFitFRCharts[iemId] = _buildCompactFRChart(canvas, curves);
+  _iemFitFRCharts[iemId] = _buildCompactFRChart(canvas, curves, genreFingerprint, genreKey);
 
-  // Legend
+  // Legend — genre swatch first (if active), then IEM curves
   if (legendEl) {
-    legendEl.innerHTML = curves.map(c => {
+    const genreSwatch = genreKey
+      ? `<div class="iemfit-fr-legend-item">
+           <span style="display:inline-block;width:14px;height:8px;background:rgba(240,168,48,0.45);margin-right:5px;vertical-align:middle;border-radius:2px"></span>
+           <span style="color:rgba(240,168,48,0.9)">${esc(genreKey)} energy</span>
+         </div>`
+      : '';
+    const curveLegend = curves.map(c => {
       const col = c.id.includes('-peq-') ? '#53e16f' : c.id.endsWith('-R') ? '#e05c5c' : '#5b8dee';
       return `<div class="iemfit-fr-legend-item">
         <span style="display:inline-block;width:14px;height:2px;background:${col};margin-right:5px;vertical-align:middle;border-radius:1px"></span>
         <span>${esc(c.label || c.id)}</span>
       </div>`;
     }).join('');
+    legendEl.innerHTML = genreSwatch + curveLegend;
   }
 
   // Update genre scores + blindspot panels to match factory or PEQ-adjusted FR
@@ -4805,7 +4909,11 @@ function _renderIemBlindspotPanel(iemId, peqScores12 = null) {
 async function iemFitChangePeq(iemId, peqId) {
   await _renderIemFRPanel(iemId, peqId || null);
 }
-function iemFitChangeGenre() {} // genre overlay removed — genre scores panel covers this
+function iemFitChangeGenre() {} // legacy stub — kept for safety
+async function iemFitChangeGenreOverlay(iemId, genre) {
+  _iemFitGenreState[iemId] = genre || null;
+  await _renderIemFRPanel(iemId, _iemFitPeqState[iemId] || null);
+}
 async function iemFitAddGenreToHeatmap(iemId) {
   const sel = document.getElementById(`iemfit-add-genre-${iemId}`);
   if (!sel || !sel.value) return;
