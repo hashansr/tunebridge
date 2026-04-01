@@ -3600,7 +3600,6 @@ let _insightsGenreChart = null;
 function _renderInsightsOverview(d) {
   const el = document.getElementById('insights-overview-content');
 
-  // Destroy old chart instances
   [_insightsFormatChart, _insightsSrChart, _insightsBdChart, _insightsGenreChart]
     .forEach(c => { if (c) c.destroy(); });
   _insightsFormatChart = _insightsSrChart = _insightsBdChart = _insightsGenreChart = null;
@@ -3609,97 +3608,126 @@ function _renderInsightsOverview(d) {
     ? Math.round(d.genres_tagged / d.total_tracks * 100)
     : null;
 
+  // Icons
+  const _noteSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+  const _discSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>`;
+  const _peopleSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
+
+  const _statCard = (icon, badge, number, label) => `
+    <div class="ov-stat-card">
+      <div class="ov-stat-card-top">
+        <span class="ov-stat-icon">${icon}</span>
+        <span class="ov-stat-badge">${badge}</span>
+      </div>
+      <div class="ov-stat-number">${number}</div>
+      <div class="ov-stat-label">${label}</div>
+    </div>`;
+
+  // Top format for donut center
+  const fmtEntries = Object.entries(d.formats || {}).sort((a, b) => b[1] - a[1]);
+  const topFmt      = fmtEntries[0] ? fmtEntries[0][0] : 'FLAC';
+  const topFmtCount = fmtEntries[0] ? fmtEntries[0][1] : 0;
+  const topFmtPct   = d.total_tracks > 0 ? Math.round(topFmtCount / d.total_tracks * 100) : 0;
+  const topFmtLabel = ['FLAC','ALAC','WAV','AIFF'].includes(topFmt.toUpperCase())
+    ? `${topFmt.toUpperCase()} LOSSLESS` : topFmt.toUpperCase();
+
+  // CSS bar renderer (no Chart.js needed for SR/BD)
+  const _cssBars = (data, color) => {
+    const entries = Object.entries(data || {}).sort((a, b) => b[1] - a[1]);
+    const maxVal  = entries.length > 0 ? Math.max(...entries.map(([,v]) => v)) : 1;
+    return entries.map(([label, count]) => {
+      const pct = Math.round(count / maxVal * 100);
+      return `<div class="ov-bar-row">
+        <div class="ov-bar-label">${esc(label)}</div>
+        <div class="ov-bar-track"><div class="ov-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+        <div class="ov-bar-count">${count.toLocaleString()}</div>
+      </div>`;
+    }).join('');
+  };
+
+  // Format legend (below donut)
+  const fmtLegendHtml = fmtEntries.map(([label, count], i) => `
+    <div class="ov-legend-item">
+      <span class="ov-legend-dot" style="background:${_INSIGHTS_COLORS[i]}"></span>
+      <span class="ov-legend-name">${esc(label)}</span>
+      <span class="ov-legend-count">${count.toLocaleString()}</span>
+    </div>`).join('');
+
+  const genreKeys  = Object.keys(d.genres || {});
+  const genreH     = Math.max(140, Math.min(genreKeys.length * 24, 400));
+
   el.innerHTML = `
-    <div class="insights-stat-cards">
-      <div class="insights-stat-card">
-        <div class="insights-stat-value">${d.total_tracks.toLocaleString()}</div>
-        <div class="insights-stat-label">Tracks</div>
-      </div>
-      <div class="insights-stat-card">
-        <div class="insights-stat-value">${d.total_albums.toLocaleString()}</div>
-        <div class="insights-stat-label">Albums</div>
-      </div>
-      <div class="insights-stat-card">
-        <div class="insights-stat-value">${d.total_artists.toLocaleString()}</div>
-        <div class="insights-stat-label">Artists</div>
-      </div>
-      ${taggedPct != null ? `<div class="insights-stat-card">
-        <div class="insights-stat-value">${taggedPct}%</div>
-        <div class="insights-stat-label">Genre tagged</div>
-      </div>` : ''}
+    <div class="ov-stat-grid">
+      ${_statCard(_noteSvg, 'FLAC library', d.total_tracks.toLocaleString(), 'Total Tracks')}
+      ${_statCard(_discSvg, `${d.total_albums.toLocaleString()} in library`, d.total_albums.toLocaleString(), 'Albums')}
+      ${_statCard(_peopleSvg, 'Unique artists', d.total_artists.toLocaleString(), 'Artists')}
     </div>
-    <div class="insights-charts-grid insights-charts-grid--2col">
-      <div class="insights-chart-card">
-        <div class="insights-chart-title">File Format</div>
-        <div class="insights-chart-donut-wrap">
-          <div class="insights-chart-wrap" style="height:160px"><canvas id="insights-format-canvas"></canvas></div>
-          <div class="insights-chart-legend" id="insights-format-legend"></div>
+
+    <div class="ov-charts-row">
+      <div class="ov-card ov-format-card">
+        <div class="ov-card-title">File Format Distribution</div>
+        <div class="ov-format-inner">
+          <div class="ov-donut-wrap">
+            <canvas id="insights-format-canvas"></canvas>
+            <div class="ov-donut-center">
+              <div class="ov-donut-pct">${topFmtPct}%</div>
+              <div class="ov-donut-lbl">${topFmtLabel}</div>
+            </div>
+          </div>
+          <div class="ov-format-legend">${fmtLegendHtml}</div>
         </div>
       </div>
-      <div class="insights-chart-card">
-        <div class="insights-chart-title">Genre Distribution
-          ${taggedPct != null && taggedPct < 80 ? `<span class="insights-chart-note">${taggedPct}% tagged</span>` : ''}
+
+      <div class="ov-bars-col">
+        <div class="ov-card ov-bars-card">
+          <div class="ov-card-title">Sample Rate
+            <svg class="ov-card-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 12 Q5 4 8 12 Q11 20 14 12 Q17 4 20 12 Q21 16 22 12"/></svg>
+          </div>
+          <div class="ov-bar-list">${_cssBars(d.sample_rates, 'rgba(173,198,255,0.8)')}</div>
         </div>
-        <div class="insights-chart-wrap" style="height:200px"><canvas id="insights-genre-canvas"></canvas></div>
+        <div class="ov-card ov-bars-card">
+          <div class="ov-card-title">Bit Depth
+            <svg class="ov-card-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg>
+          </div>
+          <div class="ov-bar-list">${_cssBars(d.bit_depths, 'rgba(83,225,111,0.8)')}</div>
+        </div>
       </div>
     </div>
-    <div class="insights-charts-grid insights-charts-grid--2col">
-      <div class="insights-chart-card">
-        <div class="insights-chart-title">Sample Rate</div>
-        <div class="insights-chart-wrap" style="height:160px"><canvas id="insights-sr-canvas"></canvas></div>
+
+    ${genreKeys.length > 0 ? `
+    <div class="ov-card ov-genre-card">
+      <div class="ov-card-title">Genre Distribution
+        ${taggedPct != null && taggedPct < 90 ? `<span class="ov-card-badge">${taggedPct}% tagged</span>` : ''}
       </div>
-      <div class="insights-chart-card">
-        <div class="insights-chart-title">Bit Depth</div>
-        <div class="insights-chart-wrap" style="height:160px"><canvas id="insights-bd-canvas"></canvas></div>
-      </div>
-    </div>
+      <div style="height:${genreH}px"><canvas id="insights-genre-canvas"></canvas></div>
+    </div>` : ''}
   `;
 
-  const _sharedBarOpts = (color) => ({
-    responsive: true, maintainAspectRatio: false,
-    scales: {
-      x: { ticks: { color: '#6b6b7b', font: { size: 10 } }, grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
-      y: { ticks: { color: '#6b6b7b', font: { size: 9 } }, grid: { color: 'rgba(173,198,255,0.06)' }, border: { color: 'transparent' } },
-    },
-    plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() },
-  });
-  const _rescanNote = `<p class="insights-rescan-note">Rescan your library to populate this data.</p>`;
-
-  // Format doughnut
-  const fmtLabels = Object.keys(d.formats);
-  const fmtValues = Object.values(d.formats);
+  // Doughnut chart (no SR/BD charts needed — pure CSS bars now)
   _insightsFormatChart = new Chart(document.getElementById('insights-format-canvas'), {
     type: 'doughnut',
     data: {
-      labels: fmtLabels,
-      datasets: [{ data: fmtValues, backgroundColor: _INSIGHTS_COLORS.slice(0, fmtLabels.length), borderWidth: 0, hoverOffset: 4 }],
+      labels: fmtEntries.map(([l]) => l),
+      datasets: [{ data: fmtEntries.map(([,v]) => v),
+        backgroundColor: _INSIGHTS_COLORS.slice(0, fmtEntries.length),
+        borderWidth: 0, hoverOffset: 6 }],
     },
     options: {
-      responsive: true, maintainAspectRatio: false,
-      cutout: '65%',
+      responsive: true, maintainAspectRatio: true,
+      cutout: '70%',
       plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() },
     },
   });
-  document.getElementById('insights-format-legend').innerHTML = fmtLabels.map((l, i) =>
-    `<div class="insights-legend-item">
-      <span class="insights-legend-dot" style="background:${_INSIGHTS_COLORS[i]}"></span>
-      <span class="insights-legend-label">${esc(l)}</span>
-      <span class="insights-legend-count">${fmtValues[i].toLocaleString()}</span>
-    </div>`
-  ).join('');
 
-  // Genre horizontal bar chart (top 20)
-  const genreKeys = Object.keys(d.genres || {});
-  if (genreKeys.length === 0) {
-    document.getElementById('insights-genre-canvas').replaceWith(
-      Object.assign(document.createElement('div'), { innerHTML: _rescanNote }));
-  } else {
-    // Horizontal bar — genres on Y, counts on X
+  // Genre horizontal bar chart
+  if (genreKeys.length > 0 && document.getElementById('insights-genre-canvas')) {
     _insightsGenreChart = new Chart(document.getElementById('insights-genre-canvas'), {
       type: 'bar',
       data: {
         labels: genreKeys,
-        datasets: [{ data: Object.values(d.genres), backgroundColor: 'rgba(173,198,255,0.5)', borderColor: 'rgba(173,198,255,0.85)', borderWidth: 1, borderRadius: 3 }],
+        datasets: [{ data: Object.values(d.genres),
+          backgroundColor: 'rgba(173,198,255,0.5)', borderColor: 'rgba(173,198,255,0.85)',
+          borderWidth: 1, borderRadius: 3 }],
       },
       options: {
         indexAxis: 'y',
@@ -3708,34 +3736,9 @@ function _renderInsightsOverview(d) {
           x: { ticks: { color: '#6b6b7b', font: { size: 9 } }, grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
           y: { ticks: { color: '#8a8aa0', font: { size: 9 } }, grid: { color: 'rgba(173,198,255,0.03)' }, border: { color: 'transparent' } },
         },
-        plugins: { legend: { display: false }, tooltip: { ..._insightsTooltipDefaults(), callbacks: { label: ctx => ` ${ctx.parsed.x.toLocaleString()} tracks` } } },
+        plugins: { legend: { display: false },
+          tooltip: { ..._insightsTooltipDefaults(), callbacks: { label: ctx => ` ${ctx.parsed.x.toLocaleString()} tracks` } } },
       },
-    });
-  }
-
-  // Sample rate bar
-  const srKeys = Object.keys(d.sample_rates);
-  const srUnknownOnly = srKeys.length === 1 && srKeys[0] === 'Unknown';
-  if (srUnknownOnly) {
-    document.getElementById('insights-sr-canvas').replaceWith(Object.assign(document.createElement('div'), { innerHTML: _rescanNote }));
-  } else {
-    _insightsSrChart = new Chart(document.getElementById('insights-sr-canvas'), {
-      type: 'bar',
-      data: { labels: srKeys, datasets: [{ data: Object.values(d.sample_rates), backgroundColor: 'rgba(173,198,255,0.55)', borderColor: 'rgba(173,198,255,0.85)', borderWidth: 1, borderRadius: 4 }] },
-      options: _sharedBarOpts(),
-    });
-  }
-
-  // Bit depth bar
-  const bdKeys = Object.keys(d.bit_depths);
-  const bdUnknownOnly = bdKeys.length === 1 && bdKeys[0] === 'Unknown';
-  if (bdUnknownOnly) {
-    document.getElementById('insights-bd-canvas').replaceWith(Object.assign(document.createElement('div'), { innerHTML: _rescanNote }));
-  } else {
-    _insightsBdChart = new Chart(document.getElementById('insights-bd-canvas'), {
-      type: 'bar',
-      data: { labels: bdKeys, datasets: [{ data: Object.values(d.bit_depths), backgroundColor: 'rgba(83,225,111,0.55)', borderColor: 'rgba(83,225,111,0.85)', borderWidth: 1, borderRadius: 4 }] },
-      options: _sharedBarOpts(),
     });
   }
 }
@@ -3987,7 +3990,7 @@ const _INSIGHTS_HELP = {
            <p><strong>Note:</strong> Analysis covers FLAC files only. M4A/AAC tracks are skipped (libsndfile limitation). Results update after running "Analyse Library" in this section.</p>`,
   },
   gear: {
-    title: 'Gear Fit',
+    title: 'IEM / Headphone Fit',
     body: `<p>Scores how well each IEM matches your library's tonal demands, measured against a chosen target curve.</p>
            <p><strong>Scoring target</strong> — the FR curve each IEM is scored against. <em>Flat / Neutral</em> (default) = perfectly flat response. You can also pick any target you've added in Settings (e.g. Harman, Rtings) to score IEMs against a preferred tuning signature instead.</p>
            <p><strong>Library character</strong> — which frequency bands your music exercises most (salience). Deviations from the target in heavily-used bands cost more points.</p>
