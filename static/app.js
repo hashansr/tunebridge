@@ -4305,6 +4305,18 @@ function _groupRadarScores(scores) {
   });
 }
 
+// Recompute a genre match score for any set of 12-band IEM scores (e.g. PEQ variant)
+// fingerprint: {band: 0-1}  scores12: {band: 1-10}
+function _recomputeGenreScore(fingerprint, scores12) {
+  let sumEW = 0, sumE = 0;
+  for (const k of _PERC_BAND_KEYS) {
+    const e = fingerprint[k] ?? 0;
+    sumEW += e * (scores12[k] ?? 5);
+    sumE  += e;
+  }
+  return sumE > 0 ? Math.min(sumEW / sumE * 10, 100) : 50;
+}
+
 // ── Score colour ──────────────────────────────────────────────────────────────
 function _matchScoreColor(s) {
   return s >= 75 ? '#53e16f' : s >= 55 ? '#f0b429' : '#ffb3b5';
@@ -4515,30 +4527,30 @@ function _renderIemDetail(iemId, container) {
       </div>
     </div>`;
 
-  _renderIemHeatmapPanel(iemId);
-  _renderIemRadarPanel(iemId, null, null);
-  _renderIemBlindspotPanel(iemId);
+  _renderIemRadarPanel(iemId, null); // also drives heatmap + blindspot
 }
 
-function _renderIemHeatmapPanel(iemId) {
+function _renderIemHeatmapPanel(iemId, peqScores12 = null) {
   const el = document.getElementById(`iemfit-heatmap-${iemId}`);
   if (!el) return;
   if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) {
     el.innerHTML = '<p class="insights-empty-note">Matrix data unavailable.</p>';
     return;
   }
-  const allRows  = _iemFitMatrixData.matrix;
+  const allRows = _iemFitMatrixData.matrix;
+
+  // Build score map — recompute from fingerprint when PEQ is active
   const scoreMap = {};
   allRows.forEach(row => {
-    const m = (row.matches || []).find(m => m.iem_id === iemId);
-    if (m) scoreMap[row.genre] = { score: m.score, tc: row.track_count };
+    const score = peqScores12
+      ? _recomputeGenreScore(row.fingerprint || {}, peqScores12)
+      : ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null;
+    if (score !== null) scoreMap[row.genre] = { score, tc: row.track_count };
   });
 
-  // Top 8 genres by track count
-  const shown = [...allRows]
-    .sort((a, b) => b.track_count - a.track_count)
-    .slice(0, 8)
-    .map(r => r.genre);
+  // Top 8 by track count
+  const shown = [...allRows].sort((a, b) => b.track_count - a.track_count)
+    .slice(0, 8).map(r => r.genre);
   const total = allRows.length;
 
   const rowsHtml = shown.map(genre => {
@@ -4585,7 +4597,7 @@ async function _renderIemRadarPanel(iemId, activePeqId) {
   const peqVariants = radarData.peq_variants || [];
   const peqControl  = peqVariants.length > 0
     ? `<div class="iemfit-radar-ctrl-group">
-        <label class="iemfit-radar-ctrl-label">Compare PEQ</label>
+        <label class="iemfit-radar-ctrl-label">Compare with PEQ</label>
         <select class="iemfit-radar-select" onchange="App.iemFitChangePeq('${esc(iemId)}',this.value)">
           <option value="">Factory only</option>
           ${peqVariants.map(v => `<option value="${esc(v.peq_id)}" ${v.peq_id === peqId ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}
@@ -4693,9 +4705,15 @@ async function _renderIemRadarPanel(iemId, activePeqId) {
       if (bodyEl) bodyEl.classList.remove('iemfit-radar-body--has-delta');
     }
   }
+
+  // Update genre scores + blindspot panels to reflect factory or PEQ-adjusted FR
+  const activePeqVariant = peqId ? peqVariants.find(v => v.peq_id === peqId) : null;
+  const peqScores12 = activePeqVariant ? activePeqVariant.scores : null;
+  _renderIemHeatmapPanel(iemId, peqScores12);
+  _renderIemBlindspotPanel(iemId, peqScores12);
 }
 
-function _renderIemBlindspotPanel(iemId) {
+function _renderIemBlindspotPanel(iemId, peqScores12 = null) {
   const el = document.getElementById(`iemfit-bs-${iemId}`);
   if (!el) return;
   if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) {
@@ -4705,8 +4723,10 @@ function _renderIemBlindspotPanel(iemId) {
   const genreScores = _iemFitMatrixData.matrix
     .map(row => ({
       genre: row.genre,
-      score: ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null,
-      tc:    row.track_count,
+      score: peqScores12
+        ? _recomputeGenreScore(row.fingerprint || {}, peqScores12)
+        : ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null,
+      tc: row.track_count,
     }))
     .filter(g => g.score !== null)
     .sort((a, b) => a.score - b.score);
@@ -4764,15 +4784,27 @@ async function iemFitRemoveGenreFromHeatmap(genre, iemId) {
   _renderIemHeatmapPanel(iemId);
 }
 
+function _activePeqScores12(iemId) {
+  const state = _iemFitRadarState[iemId];
+  if (!state || !state.peqId) return null;
+  const rd = _iemFitRadarData[iemId];
+  if (!rd) return null;
+  const v = (rd.peq_variants || []).find(v => v.peq_id === state.peqId);
+  return v ? v.scores : null;
+}
+
 function showAllIemGenres(iemId) {
   if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) return;
-  const iemInfo = _iemFitIemSummary.find(i => i.iem_id === iemId);
-  const iemName = iemInfo ? iemInfo.iem_name : iemId;
+  const iemInfo    = _iemFitIemSummary.find(i => i.iem_id === iemId);
+  const iemName    = iemInfo ? iemInfo.iem_name : iemId;
+  const peqScores12 = _activePeqScores12(iemId);
 
   const genreScores = _iemFitMatrixData.matrix
     .map(row => ({
       genre: row.genre,
-      score: ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null,
+      score: peqScores12
+        ? _recomputeGenreScore(row.fingerprint || {}, peqScores12)
+        : ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null,
     }))
     .filter(g => g.score !== null)
     .sort((a, b) => b.score - a.score); // best → worst
@@ -4801,13 +4833,16 @@ function showAllIemGenres(iemId) {
 
 function showAllIemBlindspots(iemId) {
   if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) return;
-  const iemInfo = _iemFitIemSummary.find(i => i.iem_id === iemId);
-  const iemName = iemInfo ? iemInfo.iem_name : iemId;
+  const iemInfo     = _iemFitIemSummary.find(i => i.iem_id === iemId);
+  const iemName     = iemInfo ? iemInfo.iem_name : iemId;
+  const peqScores12 = _activePeqScores12(iemId);
 
   const genreScores = _iemFitMatrixData.matrix
     .map(row => ({
       genre: row.genre,
-      score: ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null,
+      score: peqScores12
+        ? _recomputeGenreScore(row.fingerprint || {}, peqScores12)
+        : ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null,
     }))
     .filter(g => g.score !== null)
     .sort((a, b) => a.score - b.score);

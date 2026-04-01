@@ -3187,8 +3187,12 @@ def insights_matching_matrix():
     data = _load_match_data()
     if not data or not data.get('matrix_data'):
         return jsonify({'error': 'Run matching analysis first.'}), 404
-    md = data['matrix_data']
-    return jsonify({'matrix': md['matrix'], 'band_labels': md['band_labels'],
+    md       = data['matrix_data']
+    fps      = data.get('genre_fps', {})
+    # Attach fingerprint to each row so the client can recompute scores for PEQ variants
+    matrix   = [dict(row, fingerprint=fps.get(row['slug'], {}).get('fingerprint', {}))
+                for row in md['matrix']]
+    return jsonify({'matrix': matrix, 'band_labels': md['band_labels'],
                     'dim_keys': md['dim_keys']})
 
 
