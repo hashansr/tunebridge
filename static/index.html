@@ -507,7 +507,6 @@
       <div id="view-insights" class="view insights-view" style="display:none">
         <div class="view-header">
           <h2>Library Insights</h2>
-          <button class="insights-rescan-btn" id="insights-rescan-btn" onclick="App.insightsRescanLibrary()" title="Re-read all file tags from disk">Rescan tags</button>
         </div>
         <!-- Inline scan progress — shown during rescan -->
         <div id="insights-scan-banner" class="insights-scan-banner" style="display:none">
@@ -524,9 +523,12 @@
             <div class="insights-section-hdr">
               <div class="insights-section-hdr-text">
                 <h3 class="insights-section-title">Library Overview</h3>
-                <p class="insights-section-desc">Format, sample rate, and bit depth distribution across your library.</p>
+                <p class="insights-section-desc">Format, sample rate, bit depth, and genre breakdown.</p>
               </div>
-              <button class="insights-help-btn" onclick="App.showInsightsHelp('overview', event)" title="What is this?">?</button>
+              <div class="insights-section-hdr-actions">
+                <button class="insights-rescan-btn" id="insights-rescan-btn" onclick="App.insightsRescanLibrary()" title="Re-read all file tags from disk">Rescan tags</button>
+                <button class="insights-help-btn" onclick="App.showInsightsHelp('overview', event)" title="What is this?">?</button>
+              </div>
             </div>
             <div id="insights-overview-content">
               <div class="insights-spinner-wrap"><div class="spinner"></div></div>
@@ -547,71 +549,73 @@
             </div>
           </div>
 
-          <!-- Sonic Profile -->
+          <!-- Sonic Profile (includes analysis CTA) -->
           <div class="insights-section" id="insights-sonic-section">
             <div class="insights-section-hdr">
               <div class="insights-section-hdr-text">
                 <h3 class="insights-section-title">Sonic Profile</h3>
-                <p class="insights-section-desc">Spectral brightness and energy distribution across your library, derived from audio analysis.</p>
+                <p class="insights-section-desc">Spectral characteristics derived from audio analysis of your FLAC library.</p>
               </div>
               <button class="insights-help-btn" onclick="App.showInsightsHelp('sonic', event)" title="What is this?">?</button>
             </div>
-            <div id="insights-sonic-content">
-              <div class="insights-locked-state">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                <span>Run audio analysis to unlock this section.</span>
+            <!-- Analysis CTA + progress banner live inside sonic section -->
+            <div id="insights-sonic-analysis-wrap" class="insights-sonic-analysis-wrap">
+              <div class="insights-cta-inner">
+                <div class="insights-cta-icon-wrap">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 12 Q5 4 8 12 Q11 20 14 12 Q17 4 20 12 Q21 16 22 12"/>
+                  </svg>
+                </div>
+                <div class="insights-cta-body">
+                  <p id="insights-analyse-status" class="insights-analyse-status"></p>
+                </div>
+                <button class="btn-primary insights-cta-btn" id="insights-analyse-btn" onclick="App.startLibraryAnalysis()">Analyse Library</button>
+              </div>
+              <div id="insights-analysis-banner" class="insights-analysis-banner" style="display:none">
+                <div class="insights-analysis-banner-inner">
+                  <div class="insights-analysis-icon" id="insights-analysis-icon"></div>
+                  <div class="insights-analysis-text">
+                    <span id="insights-analysis-label">Analysing library…</span>
+                    <span id="insights-analysis-sub"></span>
+                  </div>
+                  <div class="insights-analysis-bar-wrap">
+                    <div class="insights-analysis-bar" id="insights-analysis-bar"></div>
+                  </div>
+                  <button id="insights-cancel-btn" class="insights-cancel-btn" onclick="App.cancelLibraryAnalysis()" style="display:none">Cancel</button>
+                </div>
               </div>
             </div>
+            <div id="insights-sonic-content"></div>
           </div>
 
-          <!-- IEM Match -->
+          <!-- Collection Fit (formerly IEM Match) -->
           <div class="insights-section" id="insights-gear-section">
             <div class="insights-section-hdr">
               <div class="insights-section-hdr-text">
-                <h3 class="insights-section-title">IEM Match</h3>
-                <p class="insights-section-desc">How well each IEM covers your library's genres across 17 perceptual dimensions.</p>
+                <h3 class="insights-section-title">Collection Fit</h3>
+                <p class="insights-section-desc">How well each IEM matches your library's sonic character across 17 perceptual dimensions.</p>
               </div>
               <button class="insights-help-btn" onclick="App.showInsightsHelp('gear', event)" title="What is this?">?</button>
             </div>
             <div id="insights-gear-content">
               <div class="insights-locked-state">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                <span>Run audio analysis to unlock this section.</span>
+                <span>Run audio analysis above to unlock this section.</span>
               </div>
             </div>
           </div>
 
-          <!-- Sonic Analysis CTA -->
-          <div class="insights-section insights-cta-section">
-            <div class="insights-cta-inner">
-              <div class="insights-cta-icon-wrap">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M2 12 Q5 4 8 12 Q11 20 14 12 Q17 4 20 12 Q21 16 22 12"/>
-                </svg>
-              </div>
-              <div class="insights-cta-body">
-                <h3 class="insights-cta-title">Sonic Analysis</h3>
-                <p class="insights-cta-desc">Unlock deeper insights: spectral brightness profile, timbral clusters, gear-to-library fit scores, and blindspot detection. Requires reading each audio file — runs in the background.</p>
-                <p id="insights-analyse-status" class="insights-analyse-status"></p>
-              </div>
-              <button class="btn-primary insights-cta-btn" id="insights-analyse-btn" onclick="App.startLibraryAnalysis()">Analyse Library</button>
-            </div>
-            <!-- Progress banner sits here, inside the CTA card -->
-            <div id="insights-analysis-banner" class="insights-analysis-banner" style="display:none">
-              <div class="insights-analysis-banner-inner">
-                <div class="insights-analysis-icon" id="insights-analysis-icon"></div>
-                <div class="insights-analysis-text">
-                  <span id="insights-analysis-label">Analysing library…</span>
-                  <span id="insights-analysis-sub"></span>
-                </div>
-                <div class="insights-analysis-bar-wrap">
-                  <div class="insights-analysis-bar" id="insights-analysis-bar"></div>
-                </div>
-                <button id="insights-cancel-btn" class="insights-cancel-btn" onclick="App.cancelLibraryAnalysis()" style="display:none">Cancel</button>
-              </div>
-            </div>
-          </div>
+        </div>
+      </div>
 
+      <!-- Problem tracks modal -->
+      <div id="problem-tracks-modal" class="modal-backdrop" style="display:none" onclick="if(event.target===this)App.closeProblemTracksModal()">
+        <div class="modal-box" style="max-width:560px">
+          <div class="modal-header">
+            <h3 class="modal-title" id="problem-tracks-modal-title">Problem Tracks</h3>
+            <button class="modal-close" onclick="App.closeProblemTracksModal()">✕</button>
+          </div>
+          <div id="problem-tracks-modal-body" class="problem-tracks-modal-body"></div>
         </div>
       </div>
     </main>

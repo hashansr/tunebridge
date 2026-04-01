@@ -3509,6 +3509,8 @@ const App = {
   startLibraryAnalysis,
   cancelLibraryAnalysis,
   insightsRescanLibrary,
+  openProblemTracksModal,
+  closeProblemTracksModal,
 
   showInsightsHelp,
   changeGearFitTarget,
@@ -3593,12 +3595,19 @@ async function loadInsightsView() {
   else              _renderInsightsMatchOverview(null);  // show CTA to run analysis
 }
 
+let _insightsGenreChart = null;
+
 function _renderInsightsOverview(d) {
   const el = document.getElementById('insights-overview-content');
 
-  // Destroy old chart instances before replacing canvas elements
-  [_insightsFormatChart, _insightsSrChart, _insightsBdChart].forEach(c => { if (c) c.destroy(); });
-  _insightsFormatChart = _insightsSrChart = _insightsBdChart = null;
+  // Destroy old chart instances
+  [_insightsFormatChart, _insightsSrChart, _insightsBdChart, _insightsGenreChart]
+    .forEach(c => { if (c) c.destroy(); });
+  _insightsFormatChart = _insightsSrChart = _insightsBdChart = _insightsGenreChart = null;
+
+  const taggedPct = d.genres_tagged != null
+    ? Math.round(d.genres_tagged / d.total_tracks * 100)
+    : null;
 
   el.innerHTML = `
     <div class="insights-stat-cards">
@@ -3614,23 +3623,47 @@ function _renderInsightsOverview(d) {
         <div class="insights-stat-value">${d.total_artists.toLocaleString()}</div>
         <div class="insights-stat-label">Artists</div>
       </div>
+      ${taggedPct != null ? `<div class="insights-stat-card">
+        <div class="insights-stat-value">${taggedPct}%</div>
+        <div class="insights-stat-label">Genre tagged</div>
+      </div>` : ''}
     </div>
-    <div class="insights-charts-grid">
+    <div class="insights-charts-grid insights-charts-grid--2col">
       <div class="insights-chart-card">
         <div class="insights-chart-title">File Format</div>
-        <div class="insights-chart-wrap" style="height:180px"><canvas id="insights-format-canvas"></canvas></div>
-        <div class="insights-chart-legend" id="insights-format-legend"></div>
+        <div class="insights-chart-donut-wrap">
+          <div class="insights-chart-wrap" style="height:160px"><canvas id="insights-format-canvas"></canvas></div>
+          <div class="insights-chart-legend" id="insights-format-legend"></div>
+        </div>
       </div>
       <div class="insights-chart-card">
+        <div class="insights-chart-title">Genre Distribution
+          ${taggedPct != null && taggedPct < 80 ? `<span class="insights-chart-note">${taggedPct}% tagged</span>` : ''}
+        </div>
+        <div class="insights-chart-wrap" style="height:200px"><canvas id="insights-genre-canvas"></canvas></div>
+      </div>
+    </div>
+    <div class="insights-charts-grid insights-charts-grid--2col">
+      <div class="insights-chart-card">
         <div class="insights-chart-title">Sample Rate</div>
-        <div class="insights-chart-wrap" style="height:180px"><canvas id="insights-sr-canvas"></canvas></div>
+        <div class="insights-chart-wrap" style="height:160px"><canvas id="insights-sr-canvas"></canvas></div>
       </div>
       <div class="insights-chart-card">
         <div class="insights-chart-title">Bit Depth</div>
-        <div class="insights-chart-wrap" style="height:180px"><canvas id="insights-bd-canvas"></canvas></div>
+        <div class="insights-chart-wrap" style="height:160px"><canvas id="insights-bd-canvas"></canvas></div>
       </div>
     </div>
   `;
+
+  const _sharedBarOpts = (color) => ({
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#6b6b7b', font: { size: 10 } }, grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
+      y: { ticks: { color: '#6b6b7b', font: { size: 9 } }, grid: { color: 'rgba(173,198,255,0.06)' }, border: { color: 'transparent' } },
+    },
+    plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() },
+  });
+  const _rescanNote = `<p class="insights-rescan-note">Rescan your library to populate this data.</p>`;
 
   // Format doughnut
   const fmtLabels = Object.keys(d.formats);
@@ -3647,7 +3680,6 @@ function _renderInsightsOverview(d) {
       plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() },
     },
   });
-  // Custom legend
   document.getElementById('insights-format-legend').innerHTML = fmtLabels.map((l, i) =>
     `<div class="insights-legend-item">
       <span class="insights-legend-dot" style="background:${_INSIGHTS_COLORS[i]}"></span>
@@ -3656,14 +3688,32 @@ function _renderInsightsOverview(d) {
     </div>`
   ).join('');
 
-  const _barScales = {
-    x: { ticks: { color: '#6b6b7b', font: { size: 10 } }, grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
-    y: { ticks: { color: '#6b6b7b', font: { size: 10 } }, grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
-  };
-  const _barOpts = { responsive: true, maintainAspectRatio: false, scales: _barScales, plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() } };
-  const _rescanNote = `<p class="insights-rescan-note">Rescan your library to populate this data.</p>`;
+  // Genre horizontal bar chart (top 20)
+  const genreKeys = Object.keys(d.genres || {});
+  if (genreKeys.length === 0) {
+    document.getElementById('insights-genre-canvas').replaceWith(
+      Object.assign(document.createElement('div'), { innerHTML: _rescanNote }));
+  } else {
+    // Horizontal bar — genres on Y, counts on X
+    _insightsGenreChart = new Chart(document.getElementById('insights-genre-canvas'), {
+      type: 'bar',
+      data: {
+        labels: genreKeys,
+        datasets: [{ data: Object.values(d.genres), backgroundColor: 'rgba(173,198,255,0.5)', borderColor: 'rgba(173,198,255,0.85)', borderWidth: 1, borderRadius: 3 }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { color: '#6b6b7b', font: { size: 9 } }, grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
+          y: { ticks: { color: '#8a8aa0', font: { size: 9 } }, grid: { color: 'rgba(173,198,255,0.03)' }, border: { color: 'transparent' } },
+        },
+        plugins: { legend: { display: false }, tooltip: { ..._insightsTooltipDefaults(), callbacks: { label: ctx => ` ${ctx.parsed.x.toLocaleString()} tracks` } } },
+      },
+    });
+  }
 
-  // Sample rate bar — show rescan note if all unknown
+  // Sample rate bar
   const srKeys = Object.keys(d.sample_rates);
   const srUnknownOnly = srKeys.length === 1 && srKeys[0] === 'Unknown';
   if (srUnknownOnly) {
@@ -3671,12 +3721,12 @@ function _renderInsightsOverview(d) {
   } else {
     _insightsSrChart = new Chart(document.getElementById('insights-sr-canvas'), {
       type: 'bar',
-      data: { labels: srKeys, datasets: [{ data: Object.values(d.sample_rates), backgroundColor: 'rgba(173,198,255,0.65)', borderColor: 'rgba(173,198,255,0.9)', borderWidth: 1, borderRadius: 4 }] },
-      options: _barOpts,
+      data: { labels: srKeys, datasets: [{ data: Object.values(d.sample_rates), backgroundColor: 'rgba(173,198,255,0.55)', borderColor: 'rgba(173,198,255,0.85)', borderWidth: 1, borderRadius: 4 }] },
+      options: _sharedBarOpts(),
     });
   }
 
-  // Bit depth bar — show rescan note if all unknown
+  // Bit depth bar
   const bdKeys = Object.keys(d.bit_depths);
   const bdUnknownOnly = bdKeys.length === 1 && bdKeys[0] === 'Unknown';
   if (bdUnknownOnly) {
@@ -3684,8 +3734,8 @@ function _renderInsightsOverview(d) {
   } else {
     _insightsBdChart = new Chart(document.getElementById('insights-bd-canvas'), {
       type: 'bar',
-      data: { labels: bdKeys, datasets: [{ data: Object.values(d.bit_depths), backgroundColor: 'rgba(83,225,111,0.65)', borderColor: 'rgba(83,225,111,0.9)', borderWidth: 1, borderRadius: 4 }] },
-      options: _barOpts,
+      data: { labels: bdKeys, datasets: [{ data: Object.values(d.bit_depths), backgroundColor: 'rgba(83,225,111,0.55)', borderColor: 'rgba(83,225,111,0.85)', borderWidth: 1, borderRadius: 4 }] },
+      options: _sharedBarOpts(),
     });
   }
 }
@@ -3694,7 +3744,6 @@ function _renderInsightsTagHealth(d) {
   const el = document.getElementById('insights-tag-health-content');
 
   const fieldLabels = { title: 'Title', artist: 'Artist', album: 'Album', year: 'Year', genre: 'Genre' };
-  // Explicit order — Flask JSON encoder may alpha-sort dict keys
   const fieldOrder = ['title', 'artist', 'album', 'year', 'genre'];
 
   const barsHtml = fieldOrder.filter(f => d.completeness[f]).map(field => { const s = d.completeness[field];
@@ -3702,41 +3751,47 @@ function _renderInsightsTagHealth(d) {
     return `<div class="tag-bar-row">
       <div class="tag-bar-label"><span>${fieldLabels[field] || field}</span><span class="tag-bar-pct" style="color:${col}">${s.pct}%</span></div>
       <div class="tag-bar-track"><div class="tag-bar-fill" style="width:${s.pct}%;background:${col}"></div></div>
-      <div class="tag-bar-counts">${s.present.toLocaleString()} present · ${s.missing.toLocaleString()} missing</div>
     </div>`;
   }).join('');
 
-  const dupsHtml = d.artist_duplicates.length === 0
-    ? `<p class="insights-empty-note">No inconsistent artist names detected.</p>`
-    : `<div class="insights-info-note">${d.artist_duplicates.length} artist name${d.artist_duplicates.length > 1 ? 's have' : ' has'} case or spacing variations. These create duplicate entries in the library browser.</div>
-       <div class="duplicates-list">${d.artist_duplicates.slice(0, 20).map(dup =>
-         `<div class="dup-row"><div class="dup-variants">${dup.variants.map(v => `<span class="dup-chip">${esc(v)}</span>`).join('')}</div><div class="dup-count">${dup.track_count} tracks</div></div>`
-       ).join('')}</div>`;
+  // Pre-populate problem tracks modal
+  const modalTitle = document.getElementById('problem-tracks-modal-title');
+  const modalBody  = document.getElementById('problem-tracks-modal-body');
+  if (d.problem_track_count > 0 && modalBody) {
+    if (modalTitle) modalTitle.textContent = `Problem Tracks (${d.problem_track_count.toLocaleString()})`;
+    modalBody.innerHTML = d.problem_tracks.map(t =>
+      `<div class="problem-track-row">
+        <div class="problem-track-info"><span class="problem-track-title">${esc(t.title)}</span><span class="problem-track-artist">${esc(t.artist)}</span></div>
+        <div class="problem-track-issues">${t.issues.map(i => `<span class="tag-issue-chip">${esc(i)}</span>`).join('')}</div>
+      </div>`
+    ).join('');
+  }
 
-  const problemHtml = d.problem_track_count === 0
-    ? `<p class="insights-empty-note">All tracks have complete metadata.</p>`
-    : `<div class="insights-info-note">${d.problem_track_count.toLocaleString()} track${d.problem_track_count > 1 ? 's' : ''} with missing metadata.${d.problem_track_count > 100 ? ' Showing worst 100.' : ''}</div>
-       <div class="problem-tracks-list">${d.problem_tracks.map(t =>
-         `<div class="problem-track-row">
-           <div class="problem-track-info"><span class="problem-track-title">${esc(t.title)}</span><span class="problem-track-artist">${esc(t.artist)}</span></div>
-           <div class="problem-track-issues">${t.issues.map(i => `<span class="tag-issue-chip">${esc(i)}</span>`).join('')}</div>
-         </div>`
-       ).join('')}</div>`;
+  const problemFooter = d.problem_track_count === 0
+    ? `<span class="tag-health-ok-note">All tracks have complete metadata</span>`
+    : `<button class="tag-health-problem-btn" onclick="App.openProblemTracksModal()">
+        View ${d.problem_track_count.toLocaleString()} track${d.problem_track_count > 1 ? 's' : ''} with missing tags →
+      </button>`;
+
+  const dupNote = d.artist_duplicates.length > 0
+    ? `<span class="tag-health-dup-note">${d.artist_duplicates.length} artist name${d.artist_duplicates.length > 1 ? 's have' : ' has'} case/spacing inconsistencies</span>`
+    : '';
 
   el.innerHTML = `
-    <div class="insights-subsection">
-      <h4 class="insights-subsection-title">Metadata Completeness</h4>
-      <p class="insights-hint">Based on ${d.total.toLocaleString()} tracks. Year and genre are commonly absent and don't affect playback.</p>
-      <div class="tag-health-bars">${barsHtml}</div>
-    </div>
-    <div class="insights-subsection">
-      <h4 class="insights-subsection-title">Artist Name Consistency</h4>
-      ${dupsHtml}
-    </div>
-    <div class="insights-subsection">
-      <h4 class="insights-subsection-title">Problem Tracks</h4>
-      ${problemHtml}
+    <p class="insights-hint" style="margin-bottom:12px">${d.total.toLocaleString()} tracks scanned</p>
+    <div class="tag-health-bars">${barsHtml}</div>
+    <div class="tag-health-footer">
+      ${problemFooter}
+      ${dupNote}
     </div>`;
+}
+
+function openProblemTracksModal() {
+  document.getElementById('problem-tracks-modal').style.display = 'flex';
+}
+
+function closeProblemTracksModal() {
+  document.getElementById('problem-tracks-modal').style.display = 'none';
 }
 
 let _analysisPoller = null;
@@ -3926,10 +3981,10 @@ const _INSIGHTS_HELP = {
   },
   sonic: {
     title: 'Sonic Profile',
-    body: `<p><strong>Spectral Brightness</strong> — the spectral centroid is the "centre of mass" of a track's frequency content. Higher values (e.g. 4–6 kHz) mean bright, treble-forward music; lower values (1–2 kHz) indicate warm, bass-heavy music.</p>
+    body: `<p><strong>Spectral Brightness</strong> — the spectral centroid is the "centre of mass" of a track's frequency content. Higher values (4–6 kHz) mean bright, treble-forward music; lower values (1–2 kHz) indicate warm, bass-heavy music.</p>
            <p><strong>RMS Energy</strong> — average loudness. Heavily compressed recordings (modern pop, metal) score higher than dynamic classical recordings.</p>
-           <p><strong>Scatter plot</strong> — each dot is one track. Top-right = loud and bright (e.g. pop/EDM); bottom-left = quiet and warm (e.g. acoustic/classical).</p>
-           <p><strong>Example:</strong> A tight cluster around 2–3 kHz with medium energy suggests a balanced, midrange-forward library. A wide spread means your collection spans many genres.</p>`,
+           <p><strong>Band Energy Profile</strong> — relative spectral emphasis across 12 perceptual bands averaged across your library. Shows which frequency ranges your collection emphasises most.</p>
+           <p><strong>Note:</strong> Analysis covers FLAC files only. M4A/AAC tracks are skipped (libsndfile limitation). Results update after running "Analyse Library" in this section.</p>`,
   },
   gear: {
     title: 'Gear Fit',
@@ -3964,14 +4019,31 @@ function showInsightsHelp(sectionKey, e) {
   pop.dataset.openFor = sectionKey;
   pop.style.display   = 'block';
 
-  // Position: fixed, right-aligned below the ? button
-  const rect = btn.getBoundingClientRect();
-  const popW = 360;
-  let left   = rect.right - popW;
-  if (left < 10) left = 10;
-  pop.style.top   = (rect.bottom + 8) + 'px';
-  pop.style.left  = left + 'px';
-  pop.style.width = popW + 'px';
+  // Position: fixed, right-aligned; open above button if not enough space below
+  const rect    = btn.getBoundingClientRect();
+  const popW    = 360;
+  const margin  = 12;
+  const vGap    = 8;
+  const maxH    = Math.min(window.innerHeight * 0.65, 420);
+
+  let left = rect.right - popW;
+  if (left < margin) left = margin;
+  if (left + popW > window.innerWidth - margin) left = window.innerWidth - popW - margin;
+
+  const spaceBelow = window.innerHeight - rect.bottom - vGap - margin;
+  let top;
+  if (spaceBelow >= 160) {
+    top = rect.bottom + vGap;
+  } else {
+    top = rect.top - vGap - maxH;
+    if (top < margin) top = margin;
+  }
+
+  pop.style.top       = top + 'px';
+  pop.style.left      = left + 'px';
+  pop.style.width     = popW + 'px';
+  pop.style.maxHeight = maxH + 'px';
+  pop.style.overflowY = 'auto';
 
   // Close on outside click
   if (_helpCloseHandler) document.removeEventListener('click', _helpCloseHandler);
@@ -4065,15 +4137,11 @@ function _renderInsightsSonicProfile(d) {
   _sonicBrightnessChart = _sonicEnergyChart = _sonicScatterChart = _sonicBandChart = null;
 
   const _hz = v => v >= 1000 ? `${(v/1000).toFixed(v%1000===0?0:1)}k` : Math.round(v).toString();
-  const _barOpts = (xlabel) => ({
+  const _barOpts = () => ({
     responsive: true, maintainAspectRatio: false,
     scales: {
-      x: { ticks: { color: '#6b6b7b', font: { size: 9 }, maxRotation: 45, callback: function(_, i) { return _hz(this.chart.data.labels[i]); } },
-           grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' },
-           title: { display: true, text: xlabel, color: '#6b6b7b', font: { size: 10 } } },
-      y: { ticks: { color: '#6b6b7b', font: { size: 9 } },
-           grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' },
-           title: { display: true, text: 'Tracks', color: '#6b6b7b', font: { size: 10 } } },
+      x: { ticks: { color: '#6b6b7b', font: { size: 10 } }, grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
+      y: { ticks: { color: '#6b6b7b', font: { size: 9 } }, grid: { color: 'rgba(173,198,255,0.06)' }, border: { color: 'transparent' } },
     },
     plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() },
   });
@@ -4081,7 +4149,6 @@ function _renderInsightsSonicProfile(d) {
   const bs = d.brightness.stats;
   const es = d.energy.stats;
 
-  // Band energy profile section (only when 12-band v3 data is available)
   const bandProfileHtml = d.band_profile
     ? `<div class="sonic-band-card">
         <div class="sonic-chart-title">Perceptual Band Energy Profile</div>
@@ -4112,19 +4179,20 @@ function _renderInsightsSonicProfile(d) {
       </div>
     </div>
     ${bandProfileHtml}
-    <div class="sonic-scatter-card">
-      <div class="sonic-chart-title">Brightness vs Energy — ${d.track_count.toLocaleString()} tracks sampled</div>
-      <div class="insights-chart-wrap" style="height:220px"><canvas id="sonic-scatter-canvas"></canvas></div>
-    </div>
     <div class="sonic-caveat">
-      <strong>About this data</strong> — Spectral brightness (spectral centroid) is the frequency-weighted average of a track's spectrum. RMS energy reflects overall loudness. The band energy profile shows relative spectral emphasis across 12 perceptual bands using multi-window FFT analysis. Values are derived from raw PCM data.
+      <strong>About this data</strong> — Spectral brightness (spectral centroid) is the frequency-weighted average of a track's spectrum. RMS energy reflects overall loudness. Band profile shows relative spectral emphasis using multi-window FFT. <strong>Analysis covers FLAC files only</strong> — M4A/AAC tracks are skipped.
     </div>`;
 
   _sonicBrightnessChart = new Chart(document.getElementById('sonic-brightness-canvas'), {
     type: 'bar',
     data: { labels: d.brightness.histogram.midpoints,
             datasets: [{ data: d.brightness.histogram.counts, backgroundColor: 'rgba(173,198,255,0.65)', borderColor: 'rgba(173,198,255,0.9)', borderWidth: 1, borderRadius: 3 }] },
-    options: _barOpts('Spectral Centroid (Hz)'),
+    options: {
+      ..._barOpts(),
+      scales: { ..._barOpts().scales,
+        x: { ..._barOpts().scales.x,
+             ticks: { ...(_barOpts().scales.x.ticks), callback: function(_, i) { return _hz(this.chart.data.labels[i]); } } } },
+    },
   });
 
   _sonicEnergyChart = new Chart(document.getElementById('sonic-energy-canvas'), {
@@ -4132,15 +4200,13 @@ function _renderInsightsSonicProfile(d) {
     data: { labels: d.energy.histogram.midpoints,
             datasets: [{ data: d.energy.histogram.counts, backgroundColor: 'rgba(83,225,111,0.65)', borderColor: 'rgba(83,225,111,0.9)', borderWidth: 1, borderRadius: 3 }] },
     options: {
-      ...(_barOpts('RMS Energy')),
-      scales: { ..._barOpts('RMS Energy').scales,
-        x: { ..._barOpts('RMS Energy').scales.x,
-             ticks: { ...(_barOpts('RMS Energy').scales.x.ticks),
-                      callback: function(_, i) { return this.chart.data.labels[i].toFixed(2); } } } },
+      ..._barOpts(),
+      scales: { ..._barOpts().scales,
+        x: { ..._barOpts().scales.x,
+             ticks: { ...(_barOpts().scales.x.ticks), callback: function(_, i) { return this.chart.data.labels[i].toFixed(2); } } } },
     },
   });
 
-  // Band energy profile chart
   if (d.band_profile && document.getElementById('sonic-band-canvas')) {
     const bl     = d.band_labels || {};
     const bKeys  = Object.keys(d.band_profile);
@@ -4174,26 +4240,6 @@ function _renderInsightsSonicProfile(d) {
       },
     });
   }
-
-  _sonicScatterChart = new Chart(document.getElementById('sonic-scatter-canvas'), {
-    type: 'scatter',
-    data: { datasets: [{ data: d.scatter, pointRadius: 2.5,
-                          pointBackgroundColor: 'rgba(173,198,255,0.45)', pointBorderWidth: 0 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      scales: {
-        x: { type: 'logarithmic',
-             title: { display: true, text: 'Brightness (Hz)', color: '#6b6b7b', font: { size: 10 } },
-             ticks: { color: '#6b6b7b', font: { size: 9 }, callback: v => _hz(v) },
-             grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
-        y: { title: { display: true, text: 'Energy (RMS)', color: '#6b6b7b', font: { size: 10 } },
-             ticks: { color: '#6b6b7b', font: { size: 9 } },
-             grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
-      },
-      plugins: { legend: { display: false }, tooltip: { ..._insightsTooltipDefaults(),
-        callbacks: { label: ctx => `Brightness: ${_hz(ctx.parsed.x)} Hz · Energy: ${ctx.parsed.y.toFixed(3)}` } } },
-    },
-  });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

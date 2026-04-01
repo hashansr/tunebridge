@@ -2256,6 +2256,14 @@ def insights_overview():
     sample_rates = dict(sorted(sample_rates.items(), key=lambda x: _sr_num(x[0])))
     bit_depths   = dict(sorted(bit_depths.items()))
 
+    # Genre distribution — top 20 by track count
+    genres_raw = {}
+    for t in tracks:
+        g = (t.get('genre') or '').strip()
+        if g:
+            genres_raw[g] = genres_raw.get(g, 0) + 1
+    genres = dict(sorted(genres_raw.items(), key=lambda x: -x[1])[:20])
+
     return jsonify({
         'total_tracks':  len(tracks),
         'total_albums':  len(album_set),
@@ -2263,6 +2271,8 @@ def insights_overview():
         'formats':       formats,
         'sample_rates':  sample_rates,
         'bit_depths':    bit_depths,
+        'genres':        genres,
+        'genres_tagged': sum(1 for t in tracks if (t.get('genre') or '').strip()),
     })
 
 
@@ -3160,10 +3170,16 @@ def insights_matching_overview():
     if not data or not data.get('matrix_data'):
         return jsonify({'error': 'Run matching analysis first.'}), 404
     md = data['matrix_data']
+    # Build available targets: Flat/Neutral + any saved baselines
+    bl = load_baselines()
+    available_targets = [{'id': 'flat', 'name': 'Flat / Neutral'}] + [
+        {'id': b['id'], 'name': b['name']} for b in bl
+    ]
     return jsonify({**md['library_overview'],
-                    'band_labels':   md.get('band_labels', {}),
-                    'generated_at':  data.get('generated_at'),
-                    'target_id':     data.get('target_id', 'flat')})
+                    'band_labels':       md.get('band_labels', {}),
+                    'generated_at':      data.get('generated_at'),
+                    'target_id':         data.get('target_id', 'flat'),
+                    'available_targets': available_targets})
 
 
 @app.route('/api/insights/matching/matrix')
