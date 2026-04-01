@@ -5162,15 +5162,16 @@ tr.player-active .track-title { color: var(--accent); }
   flex-shrink: 0;
 }
 
-/* Radar */
-.iemfit-radar-controls {
+/* FR panel — controls, chart, legend */
+.iemfit-fr-controls {
   display: flex;
+  align-items: center;
   gap: 14px;
-  flex-wrap: wrap;
   margin-left: auto;
 }
-.iemfit-radar-ctrl-group { display: flex; align-items: center; gap: 6px; }
-.iemfit-radar-ctrl-label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.iemfit-fr-ctrl-group { display: flex; align-items: center; gap: 6px; }
+.iemfit-fr-ctrl-label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+/* Reuse .iemfit-radar-select for the dropdown (same visual style) */
 .iemfit-radar-select {
   background: rgba(255,255,255,0.04);
   color: var(--text-secondary);
@@ -5180,72 +5181,25 @@ tr.player-active .track-title { color: var(--accent); }
   font-size: 11px;
   font-family: inherit;
   cursor: pointer;
-  max-width: 160px;
+  max-width: 180px;
 }
-/* Radar + delta side-by-side */
-.iemfit-radar-body { display: flex; align-items: flex-start; gap: 24px; }
-.iemfit-radar-col  { flex: 1; min-width: 0; }
-.iemfit-delta-col  { flex: 1; min-width: 0; padding-top: 4px; }
-.iemfit-radar-body--has-delta .iemfit-radar-col { max-width: 300px; flex: 0 0 300px; }
-.iemfit-radar-wrap { /* legacy — no longer used directly */ }
-.iemfit-radar-legend {
+.iemfit-fr-wrap {
+  position: relative;
+  height: 300px;
+  margin-top: 8px;
+}
+.iemfit-fr-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
   margin-top: 10px;
-  justify-content: center;
+  padding-left: 4px;
 }
-.iemfit-radar-legend-item {
+.iemfit-fr-legend-item {
   display: flex;
   align-items: center;
-  gap: 6px;
   font-size: 11px;
   color: var(--text-muted);
-}
-
-/* PEQ delta bar chart */
-.iemfit-delta-hdr {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 10px;
-}
-.iemfit-delta-list { display: flex; flex-direction: column; gap: 6px; }
-.iemfit-delta-row { display: flex; align-items: center; gap: 8px; }
-.iemfit-delta-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-  width: 82px;
-  flex-shrink: 0;
-}
-.iemfit-delta-bar-wrap {
-  flex: 1;
-  height: 10px;
-  position: relative;
-  background: rgba(255,255,255,0.04);
-  border-radius: 5px;
-  overflow: hidden;
-}
-.iemfit-delta-center {
-  position: absolute;
-  left: 50%;
-  top: 0; bottom: 0;
-  width: 1px;
-  background: rgba(173,198,255,0.18);
-}
-.iemfit-delta-bar {
-  position: absolute;
-  top: 0; bottom: 0;
-  border-radius: 5px;
-}
-.iemfit-delta-bar--pos { left: 50%; }
-.iemfit-delta-bar--neg { right: 50%; }
-.iemfit-delta-val {
-  font-size: 11px;
-  font-weight: 600;
-  width: 34px;
-  text-align: right;
-  flex-shrink: 0;
 }
 
 /* Blindspot list — 2 columns */
