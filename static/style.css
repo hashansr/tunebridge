@@ -5249,6 +5249,53 @@ tr.player-active .track-title { color: var(--accent); }
   color: var(--text-muted);
 }
 
+/* PEQ delta bar chart */
+.iemfit-delta-hdr {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 8px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(173,198,255,0.07);
+}
+.iemfit-delta-list { display: flex; flex-direction: column; gap: 6px; }
+.iemfit-delta-row { display: flex; align-items: center; gap: 8px; }
+.iemfit-delta-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  width: 82px;
+  flex-shrink: 0;
+}
+.iemfit-delta-bar-wrap {
+  flex: 1;
+  height: 10px;
+  position: relative;
+  background: rgba(255,255,255,0.04);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.iemfit-delta-center {
+  position: absolute;
+  left: 50%;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: rgba(173,198,255,0.18);
+}
+.iemfit-delta-bar {
+  position: absolute;
+  top: 0; bottom: 0;
+  border-radius: 5px;
+}
+.iemfit-delta-bar--pos { left: 50%; }
+.iemfit-delta-bar--neg { right: 50%; }
+.iemfit-delta-val {
+  font-size: 11px;
+  font-weight: 600;
+  width: 34px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
 /* Blindspot list */
 .iemfit-bs-list { display: flex; flex-direction: column; gap: 9px; }
 .iemfit-bs-row { display: flex; align-items: center; gap: 10px; }

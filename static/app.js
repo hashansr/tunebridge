@@ -4286,6 +4286,24 @@ const _ALL_DIM_LABELS_FE = {
   layering: 'Layering', tonality: 'Tonality',
 };
 
+// ── 8-axis grouped radar ──────────────────────────────────────────────────────
+const _RADAR_AXES = [
+  { key: 'sub_bass',   label: 'Sub-bass',   dims: ['sub_bass'] },
+  { key: 'bass',       label: 'Bass',       dims: ['bass', 'bass_feel', 'slam'] },
+  { key: 'warmth',     label: 'Warmth',     dims: ['note_weight', 'lower_mids'] },
+  { key: 'mids',       label: 'Mids',       dims: ['upper_mids', 'masking'] },
+  { key: 'treble',     label: 'Treble',     dims: ['lower_treble', 'detail'] },
+  { key: 'air',        label: 'Air',        dims: ['upper_treble', 'texture', 'sibilance'] },
+  { key: 'staging',    label: 'Staging',    dims: ['sound_stage', 'layering'] },
+  { key: 'neutrality', label: 'Neutrality', dims: ['timbre_color', 'tonality'] },
+];
+function _groupRadarScores(scores) {
+  return _RADAR_AXES.map(ax => {
+    const vals = ax.dims.map(d => scores[d] ?? 5);
+    return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 10) / 10;
+  });
+}
+
 // ── Score colour ──────────────────────────────────────────────────────────────
 function _matchScoreColor(s) {
   return s >= 75 ? '#53e16f' : s >= 55 ? '#f0b429' : '#ffb3b5';
@@ -4476,10 +4494,12 @@ function _renderIemDetail(iemId, container) {
       <div class="iemfit-detail-section">
         <div class="iemfit-detail-section-hdr">
           <span class="iemfit-detail-section-title">Sonic Signature</span>
+          <span class="iemfit-detail-section-hint">8 perceptual axes — 1 (recessed) to 10 (elevated)</span>
           <div class="iemfit-radar-controls" id="iemfit-radar-controls-${esc(iemId)}"></div>
         </div>
         <div class="iemfit-radar-wrap"><canvas id="iemfit-radar-canvas-${esc(iemId)}"></canvas></div>
         <div id="iemfit-radar-legend-${esc(iemId)}" class="iemfit-radar-legend"></div>
+        <div id="iemfit-peq-delta-${esc(iemId)}"></div>
       </div>
       <div class="iemfit-detail-section">
         <div class="iemfit-detail-section-hdr">
@@ -4550,10 +4570,11 @@ function _renderIemHeatmapPanel(iemId) {
   el.innerHTML = `<div class="iemfit-heatmap-grid">${rowsHtml}</div>${addControl}`;
 }
 
-async function _renderIemRadarPanel(iemId, activePeqId, genreOverlay) {
+async function _renderIemRadarPanel(iemId, activePeqId) {
   const canvas     = document.getElementById(`iemfit-radar-canvas-${iemId}`);
   const controlsEl = document.getElementById(`iemfit-radar-controls-${iemId}`);
   const legendEl   = document.getElementById(`iemfit-radar-legend-${iemId}`);
+  const deltaEl    = document.getElementById(`iemfit-peq-delta-${iemId}`);
   if (!canvas) return;
 
   const radarData = _iemFitRadarData[iemId];
@@ -4562,95 +4583,74 @@ async function _renderIemRadarPanel(iemId, activePeqId, genreOverlay) {
     return;
   }
 
-  if (!_iemFitRadarState[iemId]) _iemFitRadarState[iemId] = { peqId: null, genre: null };
-  if (activePeqId  !== undefined) _iemFitRadarState[iemId].peqId = activePeqId;
-  if (genreOverlay !== undefined) _iemFitRadarState[iemId].genre = genreOverlay;
-  const { peqId, genre } = _iemFitRadarState[iemId];
+  if (!_iemFitRadarState[iemId]) _iemFitRadarState[iemId] = { peqId: null };
+  if (activePeqId !== undefined) _iemFitRadarState[iemId].peqId = activePeqId;
+  const { peqId } = _iemFitRadarState[iemId];
 
-  // Build controls
+  // PEQ dropdown control
   const peqVariants = radarData.peq_variants || [];
   const peqControl  = peqVariants.length > 0
     ? `<div class="iemfit-radar-ctrl-group">
-        <label class="iemfit-radar-ctrl-label">PEQ</label>
+        <label class="iemfit-radar-ctrl-label">Compare PEQ</label>
         <select class="iemfit-radar-select" onchange="App.iemFitChangePeq('${esc(iemId)}',this.value)">
-          <option value="">Factory</option>
+          <option value="">Factory only</option>
           ${peqVariants.map(v => `<option value="${esc(v.peq_id)}" ${v.peq_id === peqId ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}
         </select>
       </div>` : '';
-
-  const allGenres    = _iemFitMatrixData && _iemFitMatrixData.matrix ? _iemFitMatrixData.matrix.map(r => r.genre) : [];
-  const genreControl = allGenres.length > 0
-    ? `<div class="iemfit-radar-ctrl-group">
-        <label class="iemfit-radar-ctrl-label">Compare genre</label>
-        <select class="iemfit-radar-select" onchange="App.iemFitChangeGenre('${esc(iemId)}',this.value)">
-          <option value="">None</option>
-          ${allGenres.map(g => `<option value="${esc(g)}" ${g === genre ? 'selected' : ''}>${esc(g)}</option>`).join('')}
-        </select>
-      </div>` : '';
-
-  if (controlsEl) controlsEl.innerHTML = peqControl + genreControl;
+  if (controlsEl) controlsEl.innerHTML = peqControl;
 
   // Destroy old chart
   if (_iemFitRadarCharts[iemId]) { _iemFitRadarCharts[iemId].destroy(); delete _iemFitRadarCharts[iemId]; }
 
-  // Primary dataset: factory or PEQ variant
-  let primaryScores = radarData.scores || {};
-  let primaryLabel  = radarData.iem_name || 'IEM';
-  if (peqId) {
-    const variant = peqVariants.find(v => v.peq_id === peqId);
-    if (variant) { primaryScores = variant.scores; primaryLabel = `${radarData.iem_name} + ${variant.name}`; }
-  }
+  // Factory grouped to 8 axes
+  const factoryScores = radarData.scores || {};
+  const factoryData   = _groupRadarScores(factoryScores);
+  const factoryLabel  = radarData.iem_name || 'IEM';
+  const labels        = _RADAR_AXES.map(ax => ax.label);
 
-  const datasets    = [{
-    label: primaryLabel,
-    data:  _ALL_DIM_KEYS_FE.map(k => primaryScores[k] ?? 1),
+  const datasets    = [{ label: factoryLabel, data: factoryData,
     borderColor: 'rgba(173,198,255,0.9)', backgroundColor: 'rgba(173,198,255,0.12)',
     borderWidth: 2, pointRadius: 3, pointHoverRadius: 5,
     pointBackgroundColor: 'rgba(173,198,255,0.9)',
   }];
-  const legendItems = [{ label: primaryLabel, color: 'rgba(173,198,255,0.9)', dashed: false }];
+  const legendItems = [{ label: factoryLabel, color: 'rgba(173,198,255,0.9)', dashed: false }];
 
-  // Genre overlay: scale fingerprint band energies [0,1] → [1,10]
-  if (genre) {
-    try {
-      const r = await fetch(`/api/insights/matching/genre/${encodeURIComponent(genre)}/fingerprint`);
-      if (r.ok) {
-        const fp = await r.json();
-        datasets.push({
-          label: genre,
-          data:  _ALL_DIM_KEYS_FE.map(k => _PERC_BAND_KEYS.includes(k) ? 1 + (fp[k] || 0) * 9 : 5.0),
-          borderColor: 'rgba(255,179,181,0.85)', backgroundColor: 'rgba(255,179,181,0.08)',
-          borderWidth: 1.5, borderDash: [4, 3],
-          pointRadius: 2, pointHoverRadius: 4,
-          pointBackgroundColor: 'rgba(255,179,181,0.85)',
-        });
-        legendItems.push({ label: `Genre: ${genre}`, color: 'rgba(255,179,181,0.85)', dashed: true });
-      }
-    } catch (_) {}
+  // PEQ overlay on radar
+  let peqGrouped = null;
+  if (peqId) {
+    const variant = peqVariants.find(v => v.peq_id === peqId);
+    if (variant) {
+      peqGrouped = _groupRadarScores(variant.scores);
+      datasets.push({ label: variant.name, data: peqGrouped,
+        borderColor: 'rgba(83,225,111,0.85)', backgroundColor: 'rgba(83,225,111,0.08)',
+        borderWidth: 1.5, borderDash: [4, 3],
+        pointRadius: 2, pointHoverRadius: 4,
+        pointBackgroundColor: 'rgba(83,225,111,0.85)',
+      });
+      legendItems.push({ label: variant.name, color: 'rgba(83,225,111,0.85)', dashed: true });
+    }
   }
 
   if (legendEl) {
     legendEl.innerHTML = legendItems.map(item =>
       `<div class="iemfit-radar-legend-item">
-        <span style="display:inline-block;width:14px;border-top:2px ${item.dashed ? 'dashed' : 'solid'};border-color:${item.color};margin-right:4px;vertical-align:middle"></span>
+        <span style="display:inline-block;width:14px;border-top:2px ${item.dashed?'dashed':'solid'};border-color:${item.color};margin-right:4px;vertical-align:middle"></span>
         <span>${esc(item.label)}</span>
-      </div>`
-    ).join('');
+      </div>`).join('');
   }
 
-  const labels = _ALL_DIM_KEYS_FE.map(k => _ALL_DIM_LABELS_FE[k] || k);
   _iemFitRadarCharts[iemId] = new Chart(canvas, {
     type: 'radar',
     data: { labels, datasets },
     options: {
-      responsive: true, maintainAspectRatio: true, aspectRatio: 1.5,
+      responsive: true, maintainAspectRatio: true, aspectRatio: 1.4,
       scales: {
         r: {
           min: 1, max: 10,
           ticks: { stepSize: 2, color: '#4a4a5a', font: { size: 9 }, backdropColor: 'transparent' },
           grid:        { color: 'rgba(173,198,255,0.1)' },
           angleLines:  { color: 'rgba(173,198,255,0.1)' },
-          pointLabels: { color: '#8a8aa0', font: { size: 10 } },
+          pointLabels: { color: '#8a8aa0', font: { size: 11 } },
         },
       },
       plugins: {
@@ -4662,6 +4662,38 @@ async function _renderIemRadarPanel(iemId, activePeqId, genreOverlay) {
       },
     },
   });
+
+  // PEQ delta bar chart — shows exactly what the PEQ changes per axis
+  if (deltaEl) {
+    if (peqGrouped && peqId) {
+      const variant    = peqVariants.find(v => v.peq_id === peqId);
+      const variantName = variant ? variant.name : 'PEQ';
+      const deltaRows  = _RADAR_AXES.map((ax, i) => {
+        const delta    = peqGrouped[i] - factoryData[i];
+        const absPct   = Math.min(Math.abs(delta) / 3 * 100, 100); // ±3 pts = full bar
+        const isPos    = delta >= 0;
+        const barColor = isPos ? 'rgba(83,225,111,0.75)' : 'rgba(255,179,181,0.75)';
+        const txtColor = isPos ? '#53e16f' : '#ffb3b5';
+        return `<div class="iemfit-delta-row">
+          <div class="iemfit-delta-label">${ax.label}</div>
+          <div class="iemfit-delta-bar-wrap">
+            <div class="iemfit-delta-center"></div>
+            <div class="iemfit-delta-bar iemfit-delta-bar--${isPos?'pos':'neg'}"
+                 style="width:${absPct.toFixed(1)}%;background:${barColor}"></div>
+          </div>
+          <div class="iemfit-delta-val" style="color:${txtColor}">${delta>=0?'+':''}${delta.toFixed(1)}</div>
+        </div>`;
+      }).join('');
+      deltaEl.innerHTML = `
+        <div class="iemfit-delta-hdr">
+          <span class="iemfit-detail-section-title" style="font-size:11px">PEQ Impact</span>
+          <span class="iemfit-detail-section-hint">${esc(variantName)} vs factory</span>
+        </div>
+        <div class="iemfit-delta-list">${deltaRows}</div>`;
+    } else {
+      deltaEl.innerHTML = '';
+    }
+  }
 }
 
 function _renderIemBlindspotPanel(iemId) {
@@ -4705,11 +4737,9 @@ function _renderIemBlindspotPanel(iemId) {
 
 // Controls
 async function iemFitChangePeq(iemId, peqId) {
-  await _renderIemRadarPanel(iemId, peqId || null, undefined);
+  await _renderIemRadarPanel(iemId, peqId || null);
 }
-async function iemFitChangeGenre(iemId, genre) {
-  await _renderIemRadarPanel(iemId, undefined, genre || null);
-}
+function iemFitChangeGenre() {} // genre overlay removed — genre scores panel covers this
 async function iemFitAddGenreToHeatmap(iemId) {
   const sel = document.getElementById(`iemfit-add-genre-${iemId}`);
   if (!sel || !sel.value) return;
