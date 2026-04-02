@@ -3193,13 +3193,15 @@ tr.player-active .track-title { color: var(--accent); }
 /* ── Insights rescan button ────────────────────────────────────────────── */
 .insights-rescan-btn {
   margin-left: auto;
-  padding: 6px 14px;
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: var(--surface-2);
+  padding: 6px 16px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(173,198,255,0.1);
   border: none;
-  border-radius: 8px;
+  border-radius: 9999px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
   flex-shrink: 0;
@@ -3250,17 +3252,16 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 .insights-content {
-  max-width: 900px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 28px;
 }
 
 /* Section card */
 .insights-section {
-  background: var(--surface-2);
-  border-radius: 14px;
-  padding: 24px;
+  background: var(--surface-1, #1c1b1b);
+  border-radius: 2rem;
+  padding: 28px 28px;
 }
 
 .insights-section-hdr {
@@ -3280,14 +3281,15 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 .insights-section-title {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   color: var(--text-primary);
   margin: 0 0 4px;
 }
 
 .insights-section-desc {
-  font-size: var(--text-sm);
+  font-size: 0.875rem;
   color: var(--text-muted);
   margin: 0;
   line-height: 1.5;
@@ -3330,8 +3332,8 @@ tr.player-active .track-title { color: var(--accent); }
 
 .ov-stat-card {
   background: var(--surface-3);
-  border-radius: 14px;
-  padding: 18px 20px 20px;
+  border-radius: 2rem;
+  padding: 24px 22px 26px;
   min-width: 0;
 }
 
@@ -3346,7 +3348,7 @@ tr.player-active .track-title { color: var(--accent); }
   width: 34px;
   height: 34px;
   background: rgba(173,198,255,0.1);
-  border-radius: 9px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3367,9 +3369,9 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 .ov-stat-number {
-  font-size: 38px;
+  font-size: 3.5rem;
   font-weight: 700;
-  letter-spacing: -1.5px;
+  letter-spacing: -0.02em;
   color: var(--text-primary);
   line-height: 1;
   margin-bottom: 7px;
@@ -3377,11 +3379,11 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 .ov-stat-label {
-  font-size: 10px;
+  font-size: 0.6875rem;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
-  font-weight: 500;
+  letter-spacing: 0.1em;
+  font-weight: 600;
 }
 
 /* Charts layout */
@@ -3400,15 +3402,17 @@ tr.player-active .track-title { color: var(--accent); }
 
 .ov-card {
   background: var(--surface-3);
-  border-radius: 14px;
+  border-radius: 2rem;
   padding: 18px 20px;
   min-width: 0;
 }
 
 .ov-card-title {
-  font-size: 13px;
+  font-size: 0.6875rem;
   font-weight: 600;
-  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
   margin-bottom: 16px;
   display: flex;
   align-items: center;
@@ -3527,15 +3531,15 @@ tr.player-active .track-title { color: var(--accent); }
 
 .ov-bar-track {
   flex: 1;
-  height: 6px;
-  background: rgba(255,255,255,0.06);
-  border-radius: 99px;
+  height: 8px;
+  background: #353534;
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .ov-bar-fill {
   height: 100%;
-  border-radius: 99px;
+  border-radius: 4px;
   transition: width 0.6s ease;
 }
 
@@ -3557,11 +3561,11 @@ tr.player-active .track-title { color: var(--accent); }
 .insights-stat-cards { display: none; }
 .insights-charts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .insights-charts-grid--2col { grid-template-columns: repeat(2, 1fr); }
-.insights-chart-card { background: var(--surface-3); border-radius: 10px; padding: 16px; min-width: 0; overflow: hidden; }
+.insights-chart-card { background: var(--surface-3); border-radius: 2rem; padding: 16px; min-width: 0; overflow: hidden; }
 
 .insights-chart-card {
   background: var(--surface-3);
-  border-radius: 10px;
+  border-radius: 2rem;
   padding: 16px;
   min-width: 0;
   overflow: hidden;
@@ -3672,12 +3676,12 @@ tr.player-active .track-title { color: var(--accent); }
 .insights-subsection:last-child { margin-bottom: 0; }
 
 .insights-subsection-title {
-  font-size: 13px;
+  font-size: 0.6875rem;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   margin: 0 0 10px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.1em;
 }
 
 .insights-hint {
@@ -3703,15 +3707,15 @@ tr.player-active .track-title { color: var(--accent); }
 .tag-bar-pct { font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .tag-bar-track {
-  height: 6px;
+  height: 8px;
   background: var(--surface-4, #353534);
-  border-radius: 99px;
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .tag-bar-fill {
   height: 100%;
-  border-radius: 99px;
+  border-radius: 4px;
   transition: width 0.5s ease;
 }
 
@@ -3824,7 +3828,6 @@ tr.player-active .track-title { color: var(--accent); }
   flex-wrap: wrap;
   margin-top: 16px;
   padding-top: 14px;
-  border-top: 1px solid rgba(173,198,255,0.07);
 }
 
 .tag-health-problem-btn {
@@ -3875,7 +3878,6 @@ tr.player-active .track-title { color: var(--accent); }
 /* Sonic Analysis CTA section */
 .insights-cta-section {
   background: var(--surface-2);
-  border: 1px solid rgba(173,198,255,0.08);
 }
 
 .insights-cta-inner {
@@ -3888,7 +3890,7 @@ tr.player-active .track-title { color: var(--accent); }
   width: 56px;
   height: 56px;
   background: rgba(173,198,255,0.08);
-  border-radius: 12px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3942,7 +3944,6 @@ tr.player-active .track-title { color: var(--accent); }
 .insights-analysis-banner {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid rgba(173,198,255,0.08);
 }
 
 .insights-analysis-banner-inner {
@@ -4019,13 +4020,13 @@ tr.player-active .track-title { color: var(--accent); }
   flex-shrink: 0;
   padding: 5px 14px;
   border-radius: 99px;
-  border: 1px solid rgba(255,179,181,0.35);
+  border: none;
   background: rgba(255,179,181,0.08);
   color: var(--accent-secondary);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s;
   white-space: nowrap;
 }
 .insights-cancel-btn:hover {
@@ -4060,7 +4061,7 @@ tr.player-active .track-title { color: var(--accent); }
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  border: 1px solid rgba(173,198,255,0.2);
+  border: none;
   background: rgba(173,198,255,0.06);
   color: var(--text-muted);
   font-size: 12px;
@@ -4070,14 +4071,13 @@ tr.player-active .track-title { color: var(--accent); }
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s;
   line-height: 1;
   margin-top: 2px;
 }
 
 .insights-help-btn:hover {
   background: rgba(173,198,255,0.14);
-  border-color: rgba(173,198,255,0.45);
   color: var(--accent);
 }
 
@@ -4086,7 +4086,6 @@ tr.player-active .track-title { color: var(--accent); }
   position: fixed;
   z-index: 900;
   background: #2a2a2a;
-  border: 1px solid rgba(173,198,255,0.18);
   border-radius: 12px;
   padding: 16px 18px;
   box-shadow: 0 12px 40px rgba(0,0,0,0.75);
@@ -4133,7 +4132,7 @@ tr.player-active .track-title { color: var(--accent); }
 
 .sonic-chart-card {
   background: var(--surface-3);
-  border-radius: 10px;
+  border-radius: 2rem;
   padding: 16px;
   min-width: 0;
   overflow: hidden;
@@ -4167,7 +4166,7 @@ tr.player-active .track-title { color: var(--accent); }
 
 .sonic-scatter-card {
   background: var(--surface-3);
-  border-radius: 10px;
+  border-radius: 2rem;
   padding: 16px;
   min-width: 0;
   overflow: hidden;
@@ -4180,8 +4179,7 @@ tr.player-active .track-title { color: var(--accent); }
   line-height: 1.55;
   padding: 12px 14px;
   background: var(--surface-3);
-  border-radius: 8px;
-  border-left: 2px solid rgba(173,198,255,0.2);
+  border-radius: 0.5rem;
 }
 
 /* ── Gear Fit ──────────────────────────────────────────────────────────── */
@@ -4193,7 +4191,7 @@ tr.player-active .track-title { color: var(--accent); }
   gap: 12px;
   flex-wrap: wrap;
   background: var(--surface-2);
-  border-radius: 10px;
+  border-radius: 0.5rem;
   padding: 12px 16px;
   margin-bottom: 16px;
 }
@@ -4213,7 +4211,7 @@ tr.player-active .track-title { color: var(--accent); }
   gap: 10px;
   flex-wrap: wrap;
   background: var(--surface-2);
-  border-radius: 10px;
+  border-radius: 0.5rem;
   padding: 12px 16px;
   margin-bottom: 16px;
 }
@@ -4257,7 +4255,7 @@ tr.player-active .track-title { color: var(--accent); }
 
 .gear-target-select {
   background: var(--surface-3);
-  border: 1px solid rgba(173,198,255,0.14);
+  border: none;
   border-radius: 8px;
   color: var(--text-primary);
   font-size: 13px;
@@ -4265,11 +4263,10 @@ tr.player-active .track-title { color: var(--accent); }
   padding: 5px 10px;
   cursor: pointer;
   outline: none;
-  transition: border-color 0.15s;
 }
 
-.gear-target-select:hover  { border-color: rgba(173,198,255,0.3); }
-.gear-target-select:focus  { border-color: var(--accent); }
+.gear-target-select:hover  { }
+.gear-target-select:focus  { }
 
 .gear-target-hint {
   font-size: 12px;
@@ -4347,7 +4344,7 @@ tr.player-active .track-title { color: var(--accent); }
 
 .gear-iem-card {
   background: var(--surface-3);
-  border-radius: 10px;
+  border-radius: 2rem;
   padding: 14px 16px;
 }
 
@@ -4688,7 +4685,7 @@ tr.player-active .track-title { color: var(--accent); }
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  background: var(--surface-3);
+  background: rgba(173,198,255,0.08);
   flex-shrink: 0;
 }
 .match-coverage-pct {
@@ -4726,9 +4723,9 @@ tr.player-active .track-title { color: var(--accent); }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 16px 20px;
   background: var(--surface-3);
-  border-radius: 10px;
+  border-radius: 2rem;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -4736,8 +4733,9 @@ tr.player-active .track-title { color: var(--accent); }
   background: var(--surface-4, #353534);
 }
 .match-iem-score {
-  font-size: 18px;
+  font-size: 1.5rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
   min-width: 44px;
   text-align: right;
 }
@@ -5029,7 +5027,7 @@ tr.player-active .track-title { color: var(--accent); }
   gap: 24px;
   align-items: flex-start;
   background: var(--surface-3);
-  border-radius: 14px;
+  border-radius: 2rem;
   padding: 22px 24px;
   margin-bottom: 12px;
 }
@@ -5076,28 +5074,28 @@ tr.player-active .track-title { color: var(--accent); }
 
 /* IEM list */
 .iemfit-iem-list { display: flex; flex-direction: column; gap: 6px; }
-.iemfit-iem-item { border-radius: 12px; overflow: hidden; }
+.iemfit-iem-item { border-radius: 2rem; overflow: hidden; }
 .iemfit-iem-card {
   display: flex;
   align-items: center;
   gap: 14px;
   background: var(--surface-3);
-  padding: 14px 18px;
+  padding: 16px 20px;
   cursor: pointer;
-  border-radius: 12px;
+  border-radius: 2rem;
   transition: background 0.15s;
   user-select: none;
 }
 .iemfit-iem-card:hover { background: var(--surface-4, #353534); }
 .iemfit-iem-card--open {
   background: var(--surface-4, #353534);
-  border-radius: 12px 12px 0 0;
+  border-radius: 2rem 2rem 0 0;
 }
 .iemfit-iem-score-col { min-width: 52px; flex-shrink: 0; }
 .iemfit-iem-pct {
-  font-size: 22px;
+  font-size: 1.75rem;
   font-weight: 700;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
@@ -5119,7 +5117,7 @@ tr.player-active .track-title { color: var(--accent); }
 /* Detail accordion panel */
 .iemfit-detail-panel {
   background: rgba(14, 14, 20, 0.75);
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 2rem 2rem;
 }
 .iemfit-detail-inner {
   padding: 18px 20px 22px;
@@ -5135,11 +5133,11 @@ tr.player-active .track-title { color: var(--accent); }
   flex-wrap: wrap;
 }
 .iemfit-detail-section-title {
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 700;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.1em;
 }
 .iemfit-detail-section-hint { font-size: 11px; color: var(--text-muted); }
 
@@ -5158,14 +5156,14 @@ tr.player-active .track-title { color: var(--accent); }
 }
 .iemfit-heatmap-bar-wrap { flex: 1; min-width: 0; }
 .iemfit-heatmap-bar-track {
-  height: 6px;
+  height: 7px;
   background: rgba(255,255,255,0.06);
-  border-radius: 99px;
+  border-radius: 4px;
   overflow: hidden;
 }
 .iemfit-heatmap-bar-fill {
   height: 100%;
-  border-radius: 99px;
+  border-radius: 4px;
   transition: width 0.55s ease;
 }
 .iemfit-heatmap-score {
@@ -5175,6 +5173,32 @@ tr.player-active .track-title { color: var(--accent); }
   text-align: right;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+/* Score delta badge — shown when PEQ is active */
+.iemfit-score-delta {
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 4px;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+.iemfit-score-delta.pos {
+  background: rgba(83, 225, 111, 0.15);
+  color: #53e16f;
+}
+.iemfit-score-delta.neg {
+  background: rgba(255, 179, 181, 0.15);
+  color: #ffb3b5;
+}
+.iemfit-score-delta.neu {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
 }
 
 /* FR panel — controls, chart, legend */
@@ -5231,14 +5255,14 @@ tr.player-active .track-title { color: var(--accent); }
 }
 .iemfit-bs-bar-wrap { flex: 1; min-width: 0; }
 .iemfit-bs-bar-track {
-  height: 6px;
+  height: 7px;
   background: rgba(255,255,255,0.06);
-  border-radius: 99px;
+  border-radius: 4px;
   overflow: hidden;
 }
 .iemfit-bs-bar-fill {
   height: 100%;
-  border-radius: 99px;
+  border-radius: 4px;
   transition: width 0.55s ease;
 }
 .iemfit-bs-score {
@@ -5248,6 +5272,10 @@ tr.player-active .track-title { color: var(--accent); }
   text-align: right;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
 }
 .iemfit-bs-more-btn {
   display: block;

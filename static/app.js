@@ -3603,19 +3603,23 @@ async function loadInsightsView() {
   }
 
   const [overviewRes, tagRes] = await Promise.all([
-    fetch('/api/insights/overview'),
-    fetch('/api/insights/tag-health'),
+    fetch('/api/insights/overview').catch(() => null),
+    fetch('/api/insights/tag-health').catch(() => null),
   ]);
 
-  if (overviewRes.ok) {
-    _renderInsightsOverview(await overviewRes.json());
+  if (overviewRes && overviewRes.ok) {
+    try { _renderInsightsOverview(await overviewRes.json()); }
+    catch (e) { document.getElementById('insights-overview-content').innerHTML =
+      '<p class="insights-error">Error rendering overview. Check console for details.</p>'; }
   } else {
     document.getElementById('insights-overview-content').innerHTML =
       '<p class="insights-error">Could not load overview. Try rescanning your library first.</p>';
   }
 
-  if (tagRes.ok) {
-    _renderInsightsTagHealth(await tagRes.json());
+  if (tagRes && tagRes.ok) {
+    try { _renderInsightsTagHealth(await tagRes.json()); }
+    catch (e) { document.getElementById('insights-tag-health-content').innerHTML =
+      '<p class="insights-error">Error rendering tag health data.</p>'; }
   } else {
     document.getElementById('insights-tag-health-content').innerHTML =
       '<p class="insights-error">Could not load tag health data.</p>';
@@ -3623,12 +3627,12 @@ async function loadInsightsView() {
 
   // Phase 2 & 3 — only available after analysis has been run
   const [sonicRes, matchRes] = await Promise.all([
-    fetch('/api/insights/sonic-profile'),
-    fetch('/api/insights/matching/overview'),
+    fetch('/api/insights/sonic-profile').catch(() => null),
+    fetch('/api/insights/matching/overview').catch(() => null),
   ]);
-  if (sonicRes.ok)  _renderInsightsSonicProfile(await sonicRes.json());
-  if (matchRes.ok)  _renderInsightsMatchOverview(await matchRes.json());
-  else              _renderInsightsMatchOverview(null);  // show CTA to run analysis
+  if (sonicRes && sonicRes.ok)  { try { _renderInsightsSonicProfile(await sonicRes.json()); } catch (_) {} }
+  if (matchRes && matchRes.ok)  { try { _renderInsightsMatchOverview(await matchRes.json()); } catch (_) { _renderInsightsMatchOverview(null); } }
+  else                          _renderInsightsMatchOverview(null);  // show CTA to run analysis
 }
 
 let _insightsGenreChart = null;
@@ -4712,44 +4716,39 @@ async function _renderIemFRPanel(iemId, activePeqId) {
   if (activePeqId !== undefined) _iemFitPeqState[iemId] = activePeqId || null;
   const peqId = _iemFitPeqState[iemId] || null;
 
-  // Fetch PEQ variants + 12-band scores (two-tier: radar endpoint if analysis has been run,
-  // otherwise fall back to /api/iems/<id> so the PEQ dropdown always shows)
+  // Fetch PEQ profiles + optional 12-band scores on first open.
+  // Strategy: always fetch the live IEM endpoint for the up-to-date PEQ profile list
+  // (so the dropdown is never stale), then layer in 12-band scores from the radar
+  // endpoint if matching analysis has been run.
   if (!_iemFitPeqVariants[iemId]) {
-    // Tier 1: radar endpoint — gives 12-band scores needed for genre/blindspot recomputation
-    // Requires matching analysis to have been run; returns 404 otherwise.
+    // Seed an empty entry so both fetches can populate it in any order
+    _iemFitPeqVariants[iemId] = { factory_scores: {}, peq_variants: [], iem_name: iemId, has_scores: false };
+
+    // Tier 1: radar endpoint — 12-band scores for genre/blindspot recomputation
+    // Optional: returns 404 when analysis hasn't been run yet; safe to skip.
+    let radarVariantMap = {};  // peq_id → scores_12band, for merging below
     try {
-      const r = await fetch(`/api/insights/matching/iem/${encodeURIComponent(iemId)}/radar`);
-      if (r.ok) {
-        const rd = await r.json();
-        _iemFitPeqVariants[iemId] = {
-          factory_scores: rd.scores || {},
-          peq_variants:   rd.peq_variants || [],
-          iem_name:       rd.iem_name || iemId,
-          has_scores:     true,
-        };
+      const r1 = await fetch(`/api/insights/matching/iem/${encodeURIComponent(iemId)}/radar`);
+      if (r1.ok) {
+        const rd = await r1.json();
+        _iemFitPeqVariants[iemId].factory_scores = rd.scores || {};
+        _iemFitPeqVariants[iemId].iem_name       = rd.iem_name || iemId;
+        _iemFitPeqVariants[iemId].has_scores     = true;
+        (rd.peq_variants || []).forEach(v => { radarVariantMap[v.peq_id] = v.scores || null; });
       }
     } catch (_) {}
-  }
-  // Tier 2: IEM endpoint — always available; used when analysis hasn't been run or
-  // the IEM has PEQ profiles that aren't reflected in the (stale) analysis data.
-  const cachedVariants = _iemFitPeqVariants[iemId]?.peq_variants || [];
-  if (!_iemFitPeqVariants[iemId] || cachedVariants.length === 0) {
+
+    // Tier 2: IEM endpoint — always available, gives current PEQ profile list
     try {
       const r2 = await fetch(`/api/iems/${encodeURIComponent(iemId)}`);
       if (r2.ok) {
         const iemRaw = await r2.json();
-        const profiles = (iemRaw.peq_profiles || []).map(p => ({
-          peq_id: p.id, name: p.name || 'PEQ',
-          scores: null,  // no 12-band scores without analysis — genre/blindspot unchanged
+        if (iemRaw.name) _iemFitPeqVariants[iemId].iem_name = iemRaw.name;
+        _iemFitPeqVariants[iemId].peq_variants = (iemRaw.peq_profiles || []).map(p => ({
+          peq_id: p.id,
+          name:   p.name || 'PEQ',
+          scores: radarVariantMap[p.id] || null,  // merge 12-band scores if available
         }));
-        if (!_iemFitPeqVariants[iemId]) {
-          _iemFitPeqVariants[iemId] = {
-            factory_scores: {}, peq_variants: profiles,
-            iem_name: iemRaw.name || iemId, has_scores: false,
-          };
-        } else if (profiles.length > 0) {
-          _iemFitPeqVariants[iemId].peq_variants = profiles;
-        }
       }
     } catch (_) {}
   }
@@ -4856,10 +4855,11 @@ function _renderIemHeatmapPanel(iemId, peqScores12 = null) {
   // Build score map — recompute from fingerprint when PEQ is active
   const scoreMap = {};
   allRows.forEach(row => {
-    const score = peqScores12
-      ? _recomputeGenreScore(row.fingerprint || {}, peqScores12)
-      : ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null;
-    if (score !== null) scoreMap[row.genre] = { score, tc: row.track_count };
+    const factoryScore = ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null;
+    const peqScore     = peqScores12 ? _recomputeGenreScore(row.fingerprint || {}, peqScores12) : null;
+    const score        = peqScore !== null ? peqScore : factoryScore;
+    const delta        = (peqScore !== null && factoryScore !== null) ? peqScore - factoryScore : null;
+    if (score !== null) scoreMap[row.genre] = { score, delta, tc: row.track_count };
   });
 
   // Top 8 by track count
@@ -4870,8 +4870,11 @@ function _renderIemHeatmapPanel(iemId, peqScores12 = null) {
   const rowsHtml = shown.map(genre => {
     const entry = scoreMap[genre];
     if (!entry) return '';
-    const { score, tc } = entry;
+    const { score, delta, tc } = entry;
     const fillColor = score >= 75 ? 'rgba(83,225,111,0.75)' : score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
+    const deltaBadge = delta !== null
+      ? `<span class="iemfit-score-delta ${delta >= 0.5 ? 'pos' : delta <= -0.5 ? 'neg' : 'neu'}">${delta >= 0 ? '+' : ''}${delta.toFixed(0)}</span>`
+      : '';
     return `<div class="iemfit-heatmap-row">
       <div class="iemfit-heatmap-genre">${esc(genre)}</div>
       <div class="iemfit-heatmap-bar-wrap">
@@ -4879,7 +4882,7 @@ function _renderIemHeatmapPanel(iemId, peqScores12 = null) {
           <div class="iemfit-heatmap-bar-fill" style="width:${score.toFixed(0)}%;background:${fillColor}"></div>
         </div>
       </div>
-      <div class="iemfit-heatmap-score" style="color:${_matchScoreColor(score)}">${score.toFixed(0)}%</div>
+      <div class="iemfit-heatmap-score" style="color:${_matchScoreColor(score)}">${score.toFixed(0)}%${deltaBadge}</div>
     </div>`;
   }).join('');
 
@@ -4899,13 +4902,13 @@ function _renderIemBlindspotPanel(iemId, peqScores12 = null) {
     return;
   }
   const genreScores = _iemFitMatrixData.matrix
-    .map(row => ({
-      genre: row.genre,
-      score: peqScores12
-        ? _recomputeGenreScore(row.fingerprint || {}, peqScores12)
-        : ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null,
-      tc: row.track_count,
-    }))
+    .map(row => {
+      const factoryScore = ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null;
+      const peqScore     = peqScores12 ? _recomputeGenreScore(row.fingerprint || {}, peqScores12) : null;
+      const score        = peqScore !== null ? peqScore : factoryScore;
+      const delta        = (peqScore !== null && factoryScore !== null) ? peqScore - factoryScore : null;
+      return { genre: row.genre, score, delta, tc: row.track_count };
+    })
     .filter(g => g.score !== null)
     .sort((a, b) => a.score - b.score);
 
@@ -4914,6 +4917,9 @@ function _renderIemBlindspotPanel(iemId, peqScores12 = null) {
 
   const rowsHtml = shown.map(g => {
     const fillColor = g.score >= 75 ? 'rgba(83,225,111,0.75)' : g.score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
+    const deltaBadge = g.delta !== null
+      ? `<span class="iemfit-score-delta ${g.delta >= 0.5 ? 'pos' : g.delta <= -0.5 ? 'neg' : 'neu'}">${g.delta >= 0 ? '+' : ''}${g.delta.toFixed(0)}</span>`
+      : '';
     return `<div class="iemfit-bs-row">
       <div class="iemfit-bs-genre">${esc(g.genre)}</div>
       <div class="iemfit-bs-bar-wrap">
@@ -4921,7 +4927,7 @@ function _renderIemBlindspotPanel(iemId, peqScores12 = null) {
           <div class="iemfit-bs-bar-fill" style="width:${g.score.toFixed(0)}%;background:${fillColor}"></div>
         </div>
       </div>
-      <div class="iemfit-bs-score" style="color:${_matchScoreColor(g.score)}">${g.score.toFixed(0)}%</div>
+      <div class="iemfit-bs-score" style="color:${_matchScoreColor(g.score)}">${g.score.toFixed(0)}%${deltaBadge}</div>
     </div>`;
   }).join('');
 
