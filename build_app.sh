@@ -92,6 +92,14 @@ mkdir -p "$MACOS" "$RESOURCES" "$PACKAGES_DIR"
 mkdir -p "${RESOURCES}/data/artwork"
 mkdir -p "${RESOURCES}/data/playlist_artwork"
 
+# Bundle analysis features cache if it exists (~1-2 MB).
+# _migrate_features() in app.py copies this to App Support on first launch
+# so Insights data is available immediately without re-running Analyse Library.
+if [ -d "${PROJECT_DIR}/data/features" ]; then
+    cp -R "${PROJECT_DIR}/data/features" "${RESOURCES}/data/"
+    echo "  Bundled data/features/ (analysis cache)"
+fi
+
 # ── Copy application source files ────────────────────────────────────────────
 echo "  Copying app source..."
 cp "${PROJECT_DIR}/app.py"            "${RESOURCES}/app.py"

@@ -126,6 +126,33 @@ def _migrate_legacy_data():
 
 _migrate_legacy_data()
 
+
+def _migrate_features():
+    """
+    Migrate bundled analysis features into App Support.
+
+    Runs independently of _migrate_legacy_data() so it applies even after
+    the one-time JSON migration has already completed.  The build script
+    copies data/features/ into Contents/Resources/data/features/ at build
+    time; this function copies it into DATA_DIR on first run if missing.
+    """
+    if not _BUNDLED:
+        return
+
+    dest_dir  = DATA_DIR / 'features'
+    dest_file = dest_dir / 'track_features.json'
+    if dest_file.exists():
+        return  # already present in App Support
+
+    bundle_features = Path(__file__).parent / 'data' / 'features' / 'track_features.json'
+    if bundle_features.exists():
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(bundle_features, dest_file)
+        print('[TuneBridge] Migrated analysis features from bundle to App Support.')
+
+
+_migrate_features()
+
 DEVICE_PATHS = {
     'poweramp': Path('/Volumes/FIIO M21'),
     'ap80': Path('/Volumes/AP80'),
@@ -467,7 +494,13 @@ def save_playlists(playlists):
 
 @app.route('/')
 def index():
-    return send_file('static/index.html')
+    response = send_file('static/index.html')
+    # Prevent WKWebView from caching the HTML page across app launches.
+    # If the HTML is cached, the browser never sees updated ?v= query strings
+    # on JS/CSS assets, so new builds appear unchanged on cold start.
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    return response
 
 
 @app.route('/api/library/status')
