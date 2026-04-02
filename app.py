@@ -29,6 +29,15 @@ from PIL import Image
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
 
+# Prevent WKWebView (pywebview) from aggressively caching JS/CSS across app launches.
+# Without this, updated static files are invisible until the WKWebView disk cache expires.
+@app.after_request
+def add_cache_headers(response):
+    if request.path.endswith(('.css', '.js')):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+    return response
+
 _ARTICLE_RE = re.compile(r'^(the|a|an)\s+', re.IGNORECASE)
 
 def artist_sort_key(name):
