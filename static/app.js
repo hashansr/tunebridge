@@ -3540,6 +3540,8 @@ const App = {
   insightsRescanLibrary,
   openProblemTracksModal,
   closeProblemTracksModal,
+  openGenreDistributionModal,
+  closeGenreDistributionModal,
 
   showInsightsHelp,
   changeGearFitTarget,
@@ -3608,12 +3610,20 @@ async function loadInsightsView() {
   ]);
 
   if (overviewRes && overviewRes.ok) {
-    try { _renderInsightsOverview(await overviewRes.json()); }
+    try {
+      const overviewData = await overviewRes.json();
+      _renderInsightsOverview(overviewData);
+      _renderInsightsGenreDistribution(overviewData);
+    }
     catch (e) { document.getElementById('insights-overview-content').innerHTML =
-      '<p class="insights-error">Error rendering overview. Check console for details.</p>'; }
+      '<p class="insights-error">Error rendering overview. Check console for details.</p>';
+      document.getElementById('insights-genre-content').innerHTML =
+      '<p class="insights-error">Could not load genre distribution.</p>'; }
   } else {
     document.getElementById('insights-overview-content').innerHTML =
       '<p class="insights-error">Could not load overview. Try rescanning your library first.</p>';
+    document.getElementById('insights-genre-content').innerHTML =
+      '<p class="insights-error">Could not load genre distribution.</p>';
   }
 
   if (tagRes && tagRes.ok) {
@@ -3636,6 +3646,7 @@ async function loadInsightsView() {
 }
 
 let _insightsGenreChart = null;
+let _allInsightGenres = [];
 
 function _renderInsightsOverview(d) {
   const el = document.getElementById('insights-overview-content');
@@ -3644,14 +3655,11 @@ function _renderInsightsOverview(d) {
     .forEach(c => { if (c) c.destroy(); });
   _insightsFormatChart = _insightsSrChart = _insightsBdChart = _insightsGenreChart = null;
 
-  const taggedPct = d.genres_tagged != null
-    ? Math.round(d.genres_tagged / d.total_tracks * 100)
-    : null;
-
   // Icons
   const _noteSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
   const _discSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>`;
   const _peopleSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
+  const _genreSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10V4H4v16h8"/><path d="M4 8h16"/><path d="M10 4v4"/><path d="M17 17l2 2 3-3"/></svg>`;
 
   const _statCard = (icon, badge, number, label) => `
     <div class="ov-stat-card">
@@ -3693,14 +3701,12 @@ function _renderInsightsOverview(d) {
       <span class="ov-legend-count">${count.toLocaleString()}</span>
     </div>`).join('');
 
-  const genreKeys  = Object.keys(d.genres || {});
-  const genreH     = Math.max(140, Math.min(genreKeys.length * 24, 400));
-
   el.innerHTML = `
     <div class="ov-stat-grid">
       ${_statCard(_noteSvg, 'FLAC library', d.total_tracks.toLocaleString(), 'Total Tracks')}
       ${_statCard(_discSvg, `${d.total_albums.toLocaleString()} in library`, d.total_albums.toLocaleString(), 'Albums')}
       ${_statCard(_peopleSvg, 'Unique artists', d.total_artists.toLocaleString(), 'Artists')}
+      ${_statCard(_genreSvg, 'Tagged categories', (d.genres_total != null ? d.genres_total : Object.keys(d.genres || {}).length).toLocaleString(), 'Genres')}
     </div>
 
     <div class="ov-charts-row">
@@ -3718,29 +3724,19 @@ function _renderInsightsOverview(d) {
         </div>
       </div>
 
-      <div class="ov-bars-col">
-        <div class="ov-card ov-bars-card">
-          <div class="ov-card-title">Sample Rate
-            <svg class="ov-card-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 12 Q5 4 8 12 Q11 20 14 12 Q17 4 20 12 Q21 16 22 12"/></svg>
-          </div>
-          <div class="ov-bar-list">${_cssBars(d.sample_rates, 'rgba(173,198,255,0.8)')}</div>
+      <div class="ov-card ov-bars-card">
+        <div class="ov-card-title">Sample Rate
+          <svg class="ov-card-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 12 Q5 4 8 12 Q11 20 14 12 Q17 4 20 12 Q21 16 22 12"/></svg>
         </div>
-        <div class="ov-card ov-bars-card">
-          <div class="ov-card-title">Bit Depth
-            <svg class="ov-card-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg>
-          </div>
-          <div class="ov-bar-list">${_cssBars(d.bit_depths, 'rgba(83,225,111,0.8)')}</div>
+        <div class="ov-bar-list">${_cssBars(d.sample_rates, 'rgba(173,198,255,0.8)')}</div>
+      </div>
+      <div class="ov-card ov-bars-card">
+        <div class="ov-card-title">Bit Depth
+          <svg class="ov-card-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg>
         </div>
+        <div class="ov-bar-list">${_cssBars(d.bit_depths, 'rgba(83,225,111,0.8)')}</div>
       </div>
     </div>
-
-    ${genreKeys.length > 0 ? `
-    <div class="ov-card ov-genre-card">
-      <div class="ov-card-title">Genre Distribution
-        ${taggedPct != null && taggedPct < 90 ? `<span class="ov-card-badge">${taggedPct}% tagged</span>` : ''}
-      </div>
-      <div style="height:${genreH}px"><canvas id="insights-genre-canvas"></canvas></div>
-    </div>` : ''}
   `;
 
   // Doughnut chart (no SR/BD charts needed — pure CSS bars now)
@@ -3759,28 +3755,52 @@ function _renderInsightsOverview(d) {
     },
   });
 
-  // Genre horizontal bar chart
-  if (genreKeys.length > 0 && document.getElementById('insights-genre-canvas')) {
-    _insightsGenreChart = new Chart(document.getElementById('insights-genre-canvas'), {
-      type: 'bar',
-      data: {
-        labels: genreKeys,
-        datasets: [{ data: Object.values(d.genres),
-          backgroundColor: 'rgba(173,198,255,0.5)', borderColor: 'rgba(173,198,255,0.85)',
-          borderWidth: 1, borderRadius: 3 }],
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true, maintainAspectRatio: false,
-        scales: {
-          x: { ticks: { color: '#6b6b7b', font: { size: 9 } }, grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
-          y: { ticks: { color: '#8a8aa0', font: { size: 9 } }, grid: { color: 'rgba(173,198,255,0.03)' }, border: { color: 'transparent' } },
-        },
-        plugins: { legend: { display: false },
-          tooltip: { ..._insightsTooltipDefaults(), callbacks: { label: ctx => ` ${ctx.parsed.x.toLocaleString()} tracks` } } },
-      },
-    });
+  _insightsGenreChart = null;
+}
+
+function _renderInsightsGenreDistribution(d) {
+  const el = document.getElementById('insights-genre-content');
+  if (!el) return;
+
+  const totalTracks = d.total_tracks || 0;
+  const taggedPct = d.genres_tagged != null && totalTracks > 0
+    ? Math.round(d.genres_tagged / totalTracks * 100)
+    : null;
+  const genreSource = d.genres_all || d.genres || {};
+  const genreEntries = Object.entries(genreSource).sort((a, b) => b[1] - a[1]);
+  _allInsightGenres = genreEntries;
+
+  if (!genreEntries.length) {
+    el.innerHTML = '<p class="insights-empty-note">No genre metadata found in library tags.</p>';
+    return;
   }
+
+  const topGenres = genreEntries.slice(0, 5);
+  const maxGenreCount = topGenres[0][1] || 1;
+
+  el.innerHTML = `
+    <div class="ov-genre-header-row">
+      <p class="insights-hint">${totalTracks.toLocaleString()} tracks scanned</p>
+      ${taggedPct != null ? `<span class="ov-card-badge">${taggedPct}% tagged</span>` : ''}
+    </div>
+    <div class="ov-genre-list ov-genre-list--compact">
+      ${topGenres.map(([genre, count], idx) => {
+        const pct = Math.max(8, Math.round((count / maxGenreCount) * 100));
+        return `<div class="ov-genre-row">
+          <div class="ov-genre-name-wrap">
+            <span class="ov-genre-rank">${idx + 1}</span>
+            <span class="ov-genre-name">${esc(genre)}</span>
+          </div>
+          <div class="ov-genre-bar-track"><div class="ov-genre-bar-fill" style="width:${pct}%"></div></div>
+          <div class="ov-genre-count">${count.toLocaleString()}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="ov-genre-actions">
+      <button class="tag-health-problem-btn" onclick="App.openGenreDistributionModal()">
+        View all ${genreEntries.length.toLocaleString()} genres →
+      </button>
+    </div>`;
 }
 
 function _renderInsightsTagHealth(d) {
@@ -3789,11 +3809,16 @@ function _renderInsightsTagHealth(d) {
   const fieldLabels = { title: 'Title', artist: 'Artist', album: 'Album', year: 'Year', genre: 'Genre' };
   const fieldOrder = ['title', 'artist', 'album', 'year', 'genre'];
 
-  const barsHtml = fieldOrder.filter(f => d.completeness[f]).map(field => { const s = d.completeness[field];
+  const barsHtml = fieldOrder.filter(f => d.completeness[f]).map(field => {
+    const s = d.completeness[field];
     const col = s.pct >= 95 ? '#53e16f' : s.pct >= 70 ? '#f0b429' : '#ffb3b5';
-    return `<div class="tag-bar-row">
-      <div class="tag-bar-label"><span>${fieldLabels[field] || field}</span><span class="tag-bar-pct" style="color:${col}">${s.pct}%</span></div>
-      <div class="tag-bar-track"><div class="tag-bar-fill" style="width:${s.pct}%;background:${col}"></div></div>
+    return `<div class="tag-health-pill">
+      <div class="tag-health-pill-top">
+        <span class="tag-health-pill-label">${fieldLabels[field] || field}</span>
+        <span class="tag-health-pill-pct" style="color:${col}">${s.pct}%</span>
+      </div>
+      <div class="tag-health-pill-track"><div class="tag-health-pill-fill" style="width:${s.pct}%;background:${col}"></div></div>
+      <div class="tag-health-pill-meta">${s.present.toLocaleString()} / ${d.total.toLocaleString()} tracks</div>
     </div>`;
   }).join('');
 
@@ -3821,11 +3846,15 @@ function _renderInsightsTagHealth(d) {
     : '';
 
   el.innerHTML = `
-    <p class="insights-hint" style="margin-bottom:12px">${d.total.toLocaleString()} tracks scanned</p>
-    <div class="tag-health-bars">${barsHtml}</div>
+    <div class="tag-health-meta-row">
+      <p class="insights-hint">${d.total.toLocaleString()} tracks scanned</p>
+      <div class="tag-health-meta-right">
+        ${dupNote || ''}
+      </div>
+    </div>
+    <div class="tag-health-bars tag-health-bars--compact">${barsHtml}</div>
     <div class="tag-health-footer">
       ${problemFooter}
-      ${dupNote}
     </div>`;
 }
 
@@ -3835,6 +3864,30 @@ function openProblemTracksModal() {
 
 function closeProblemTracksModal() {
   document.getElementById('problem-tracks-modal').style.display = 'none';
+}
+
+function openGenreDistributionModal() {
+  const modal = document.getElementById('genre-distribution-modal');
+  const body  = document.getElementById('genre-distribution-modal-body');
+  if (!modal || !body) return;
+  const maxCount = _allInsightGenres.length ? _allInsightGenres[0][1] : 1;
+  body.innerHTML = _allInsightGenres.map(([genre, count], idx) => {
+    const pct = Math.max(4, Math.round((count / maxCount) * 100));
+    return `<div class="genre-modal-row">
+      <div class="genre-modal-rank">${idx + 1}</div>
+      <div class="genre-modal-main">
+        <div class="genre-modal-name">${esc(genre)}</div>
+        <div class="genre-modal-track"><div class="genre-modal-fill" style="width:${pct}%"></div></div>
+      </div>
+      <div class="genre-modal-count">${count.toLocaleString()}</div>
+    </div>`;
+  }).join('');
+  modal.style.display = 'flex';
+}
+
+function closeGenreDistributionModal() {
+  const modal = document.getElementById('genre-distribution-modal');
+  if (modal) modal.style.display = 'none';
 }
 
 let _analysisPoller = null;
@@ -3855,6 +3908,12 @@ async function startLibraryAnalysis() {
     return;
   }
   const d = await res.json().catch(() => ({}));
+  if (d.already_up_to_date) {
+    showToast('Analysis is already up to date.');
+    const infoRes = await fetch('/api/insights/analyse/info').catch(() => null);
+    if (infoRes && infoRes.ok) _updateAnalysisInfo(await infoRes.json());
+    return;
+  }
   // Immediately show the banner — don't wait for the first poll tick
   _updateAnalysisBanner({ status: 'running', done: 0, total: d.total || 0 });
   // Scroll the banner into view so the user sees it appear
@@ -3930,12 +3989,16 @@ async function _pollInsightsScan() {
   if (btn) { btn.disabled = false; btn.textContent = 'Rescan tags'; }
 
   // Reload overview + tag health so updated tags are reflected
-  if (state.view === 'insights') {
-    const [overviewRes, tagRes] = await Promise.all([
-      fetch('/api/insights/overview'),
-      fetch('/api/insights/tag-health'),
-    ]);
-    if (overviewRes.ok) _renderInsightsOverview(await overviewRes.json());
+    if (state.view === 'insights') {
+      const [overviewRes, tagRes] = await Promise.all([
+        fetch('/api/insights/overview'),
+        fetch('/api/insights/tag-health'),
+      ]);
+    if (overviewRes.ok) {
+      const overviewData = await overviewRes.json();
+      _renderInsightsOverview(overviewData);
+      _renderInsightsGenreDistribution(overviewData);
+    }
     if (tagRes.ok)      _renderInsightsTagHealth(await tagRes.json());
     // Also refresh analysis info (track count may have changed)
     const infoRes = await fetch('/api/insights/analyse/info').catch(() => null);
@@ -4021,6 +4084,12 @@ const _INSIGHTS_HELP = {
     body: `<p>Measures how <strong>complete</strong> the metadata tags are across your library files.</p>
            <p><strong>How to read:</strong> Green = high coverage, red = many tracks missing that tag. Title, Artist, and Album are critical for browsing; Genre and Year are optional but useful for filtering and playlists.</p>
            <p><strong>Example:</strong> A Genre score of 45% means more than half your tracks have no genre tag — worth fixing before building genre-based playlists.</p>`,
+  },
+  genre: {
+    title: 'Genre Distribution',
+    body: `<p>Shows your most common genres by <strong>track count</strong> so you can quickly understand collection balance.</p>
+           <p><strong>How to read:</strong> The inline card shows the <strong>top 5</strong> genres for fast scanning. Use <em>View all genres</em> to drill into the complete list.</p>
+           <p><strong>Note:</strong> Results are only as good as your file tags. Sparse or inconsistent genre tags will reduce accuracy.</p>`,
   },
   sonic: {
     title: 'Sonic Profile',

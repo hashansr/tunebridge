@@ -33,7 +33,7 @@ app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
 # Without this, updated static files are invisible until the WKWebView disk cache expires.
 @app.after_request
 def add_cache_headers(response):
-    if request.path.endswith(('.css', '.js')):
+    if request.path.endswith(('.css', '.js', '.html')) or request.path == '/':
         response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
         response.headers['Pragma'] = 'no-cache'
     return response
@@ -1041,7 +1041,13 @@ def put_settings():
 
 @app.route('/api/health')
 def health():
-    return jsonify({'status': 'ok'})
+    return jsonify({
+        'status': 'ok',
+        # Lets the GUI launcher verify it connected to the server instance
+        # started by the current process (not a stale older process on the port).
+        'instance_token': os.environ.get('TUNEBRIDGE_INSTANCE_TOKEN'),
+        'pid': os.getpid(),
+    })
 
 
 # ── Player state persistence ───────────────────────────────────────────────
@@ -1118,11 +1124,13 @@ def health_status():
 @app.route('/api/restart', methods=['POST'])
 def restart_server():
     def do_restart():
-        time.sleep(1.2)  # let response flush
-        subprocess.Popen([sys.executable] + sys.argv,
-                         close_fds=True, start_new_session=True)
-        time.sleep(0.8)  # new process imports before we release the port
-        os._exit(0)
+        # In-place re-exec keeps restart single-instance (no duplicate windows).
+        # The process is replaced with a fresh interpreter running the same args.
+        time.sleep(0.6)  # let response flush
+        try:
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        except Exception:
+            os._exit(1)
     threading.Thread(target=do_restart, daemon=False).start()
     return jsonify({'message': 'Restarting…'})
 
@@ -2184,11 +2192,17 @@ def export_backup():
     buf = io.BytesIO()
     timestamp = time.strftime('%Y%m%d_%H%M%S')
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for fname in ['playlists.json', 'settings.json', 'daps.json',
-                      'iems.json', 'baselines.json']:
+        for fname in [
+            'playlists.json', 'settings.json', 'daps.json',
+            'iems.json', 'baselines.json', 'match-matrix.json',
+            'insights_config.json',
+        ]:
             p = DATA_DIR / fname
             if p.exists():
                 zf.write(p, fname)
+        feat = _features_file()
+        if feat.exists():
+            zf.write(feat, 'features/track_features.json')
         art = DATA_DIR / 'playlist_artwork'
         if art.is_dir():
             for item in art.iterdir():
@@ -2209,8 +2223,11 @@ def import_backup():
         raw = f.read()
         with zipfile.ZipFile(io.BytesIO(raw)) as zf:
             names = zf.namelist()
-            for fname in ['playlists.json', 'settings.json', 'daps.json',
-                          'iems.json', 'baselines.json']:
+            for fname in [
+                'playlists.json', 'settings.json', 'daps.json',
+                'iems.json', 'baselines.json', 'match-matrix.json',
+                'insights_config.json',
+            ]:
                 if fname in names:
                     content = json.loads(zf.read(fname))   # validate JSON
                     dest = DATA_DIR / fname
@@ -2218,6 +2235,16 @@ def import_backup():
                     with open(tmp, 'w') as out:
                         json.dump(content, out, indent=2)
                     Path(tmp).replace(dest)
+            feature_name = 'features/track_features.json' if 'features/track_features.json' in names else (
+                'track_features.json' if 'track_features.json' in names else None
+            )
+            if feature_name:
+                features = json.loads(zf.read(feature_name))
+                dest = _features_file()
+                tmp = str(dest) + '.import.tmp'
+                with open(tmp, 'w') as out:
+                    json.dump(features, out, indent=2)
+                Path(tmp).replace(dest)
             art_dir = DATA_DIR / 'playlist_artwork'
             art_dir.mkdir(exist_ok=True)
             for name in names:
@@ -2306,7 +2333,8 @@ def insights_overview():
         g = (t.get('genre') or '').strip()
         if g:
             genres_raw[g] = genres_raw.get(g, 0) + 1
-    genres = dict(sorted(genres_raw.items(), key=lambda x: -x[1])[:20])
+    genres_sorted = dict(sorted(genres_raw.items(), key=lambda x: -x[1]))
+    genres = dict(list(genres_sorted.items())[:20])
 
     return jsonify({
         'total_tracks':  len(tracks),
@@ -2316,6 +2344,8 @@ def insights_overview():
         'sample_rates':  sample_rates,
         'bit_depths':    bit_depths,
         'genres':        genres,
+        'genres_all':    genres_sorted,
+        'genres_total':  len(genres_sorted),
         'genres_tagged': sum(1 for t in tracks if (t.get('genre') or '').strip()),
     })
 
@@ -2419,6 +2449,40 @@ def _features_file():
     return p / 'track_features.json'
 
 
+def _load_feature_entries():
+    fp = _features_file()
+    if not fp.exists():
+        return []
+    try:
+        raw = json.loads(fp.read_text())
+        return raw if isinstance(raw, list) else []
+    except Exception:
+        return []
+
+
+def _track_source_mtime(track):
+    try:
+        return int(track.get('date_added') or 0)
+    except Exception:
+        return 0
+
+
+def _is_cached_feature_current(cached, track):
+    """Return True when a cached entry is valid for the current track revision."""
+    if not cached:
+        return False
+    if cached.get('analysis_version') != 3:
+        return False
+    if cached.get('source_path') != track.get('path'):
+        return False
+    if int(cached.get('source_mtime') or 0) != _track_source_mtime(track):
+        return False
+    if cached.get('failed'):
+        return True
+    band_energy = cached.get('band_energy') or []
+    return (cached.get('brightness') is not None and len(band_energy) == 12)
+
+
 def _run_analysis():
     global analysis_state
     try:
@@ -2428,46 +2492,42 @@ def _run_analysis():
         analysis_state.update({'status': 'error', 'error': 'soundfile / numpy not installed. Run: pip install soundfile numpy'})
         return
 
-    tracks = library
+    tracks = list(library)
+    track_ids = {t.get('id') for t in tracks}
+    existing_entries = _load_feature_entries()
+    existing_map = {}
+    for entry in existing_entries:
+        tid = entry.get('track_id')
+        if tid in track_ids:
+            existing_map[tid] = entry
+
+    pending_tracks = [t for t in tracks if not _is_cached_feature_current(existing_map.get(t['id']), t)]
+
     analysis_state.update({
         'status':     'running',
         'done':       0,
-        'total':      len(tracks),
+        'total':      len(pending_tracks),
         'started_at': int(time.time()),
         'error':      None,
     })
 
     feat_path = _features_file()
 
-    # Load existing results for incremental re-use
-    existing = {}
-    if feat_path.exists():
-        try:
-            for f in json.loads(feat_path.read_text()):
-                existing[f['track_id']] = f
-        except Exception:
-            existing = {}
-
     music_base = get_music_base()
-    results = []
+    # Start with existing entries for current library tracks so cancellation keeps prior work.
+    results_map = {t['id']: existing_map[t['id']] for t in tracks if t['id'] in existing_map}
 
-    for i, track in enumerate(tracks):
+    for i, track in enumerate(pending_tracks):
         if analysis_state['status'] != 'running':
             break  # allow external cancellation in future
 
         analysis_state['done'] = i
         tid = track['id']
-
-        # Cache valid only if multi-window v3 analysis (analysis_version == 3, 12 bands)
-        cached = existing.get(tid)
-        if (cached and cached.get('brightness') is not None
-                and cached.get('band_energy') and len(cached['band_energy']) == 12
-                and cached.get('analysis_version') == 3):
-            results.append(cached)
-            continue
+        source_path = track.get('path')
+        source_mtime = _track_source_mtime(track)
 
         try:
-            path = Path(music_base) / track['path']
+            path = Path(music_base) / source_path
             data, sr = sf.read(str(path), dtype='float32', always_2d=True)
             mono = data[:, 0]
             total_samples = len(mono)
@@ -2512,38 +2572,55 @@ def _run_analysis():
             band_energy = [round(float(np.mean([w[b] for w in band_list])), 6)
                            for b in range(len(_PERC_BANDS))]
 
-            results.append({
+            results_map[tid] = {
                 'track_id':        tid,
                 'brightness':      round(float(np.mean(bright_list)), 2),
                 'energy':          round(float(np.mean(energy_list)), 6),
                 'band_energy':     band_energy,
                 'analysis_version': 3,
                 'cluster':         None,
-            })
+                'source_path':     source_path,
+                'source_mtime':    source_mtime,
+                'analysed_at':     int(time.time()),
+            }
         except Exception as exc:
             reason = 'unsupported_format' if 'sndfile' in str(exc).lower() else 'read_error'
-            results.append({'track_id': tid, 'failed': True, 'reason': reason,
-                            'brightness': None, 'band_energy': None, 'cluster': None})
+            results_map[tid] = {
+                'track_id': tid,
+                'failed': True,
+                'reason': reason,
+                'brightness': None,
+                'band_energy': None,
+                'cluster': None,
+                'analysis_version': 3,
+                'source_path': source_path,
+                'source_mtime': source_mtime,
+                'analysed_at': int(time.time()),
+            }
 
         # Flush to disk every 200 tracks so progress survives a crash
         if i > 0 and i % 200 == 0:
             try:
-                feat_path.write_text(json.dumps(results))
+                feat_path.write_text(json.dumps([
+                    results_map[t['id']] for t in tracks if t['id'] in results_map
+                ]))
             except Exception:
                 pass
 
     if analysis_state['status'] == 'running':
         # Normal completion
-        feat_path.write_text(json.dumps(results))
+        final_rows = [results_map[t['id']] for t in tracks if t['id'] in results_map]
+        feat_path.write_text(json.dumps(final_rows))
         analysis_state.update({
             'status':       'done',
-            'done':         len(results),
+            'done':         len(pending_tracks),
             'completed_at': int(time.time()),
         })
     else:
-        # Cancelled — save partial results so incremental re-run can resume
-        if results:
-            feat_path.write_text(json.dumps(results))
+        # Cancelled — save partial results so incremental re-run can resume.
+        final_rows = [results_map[t['id']] for t in tracks if t['id'] in results_map]
+        if final_rows:
+            feat_path.write_text(json.dumps(final_rows))
         analysis_state.update({'status': 'idle', 'done': 0, 'total': 0, 'error': None})
 
 
@@ -2551,9 +2628,13 @@ def _run_analysis():
 def insights_start_analysis():
     if analysis_state['status'] == 'running':
         return jsonify({'error': 'Analysis already running'}), 409
+    existing_map = {f.get('track_id'): f for f in _load_feature_entries()}
+    pending = [t for t in library if not _is_cached_feature_current(existing_map.get(t['id']), t)]
+    if not pending:
+        return jsonify({'ok': True, 'already_up_to_date': True, 'total': 0, 'pending': 0})
     t = threading.Thread(target=_run_analysis, daemon=True)
     t.start()
-    return jsonify({'ok': True, 'total': len(library)})
+    return jsonify({'ok': True, 'total': len(pending), 'pending': len(pending)})
 
 
 @app.route('/api/insights/analyse/cancel', methods=['POST'])
@@ -2573,27 +2654,20 @@ def insights_analysis_status():
 def insights_analyse_info():
     """Return per-track analysis coverage: how many library tracks have been processed."""
     total      = len(library)
-    processed  = 0   # attempted — valid OR permanently failed
-    valid      = 0   # has full v2 feature set
-    needs_upgrade = False   # v1 cache exists but needs re-analysis
-    fp = _features_file()
-    if fp.exists():
-        try:
-            lib_ids = {t['id'] for t in library}
-            for f in json.loads(fp.read_text()):
-                if f.get('track_id') not in lib_ids:
-                    continue
-                processed += 1
-                if f.get('failed'):
-                    continue  # permanently failed — counts as processed, not valid
-                if (f.get('brightness') is not None
-                        and f.get('band_energy') and len(f['band_energy']) == 12):
-                    if f.get('analysis_version') == 3:
-                        valid += 1
-                    else:
-                        needs_upgrade = True  # old entry — needs re-analysis for 12-band v3
-        except Exception:
-            processed = valid = 0
+    processed  = 0   # attempted and current for this exact file revision
+    valid      = 0   # has full v3 feature set and current
+    needs_upgrade = False
+    existing_map = {f.get('track_id'): f for f in _load_feature_entries()}
+    for track in library:
+        cached = existing_map.get(track['id'])
+        if not cached:
+            continue
+        if cached.get('analysis_version') != 3:
+            needs_upgrade = True
+        if _is_cached_feature_current(cached, track):
+            processed += 1
+            if not cached.get('failed'):
+                valid += 1
     pending = max(0, total - processed)
     if processed == 0:
         status = 'not_run'

@@ -6,8 +6,24 @@
         "hooks": [
           {
             "type": "command",
+            "command": "pgrep -f playlist_proxy.py > /dev/null 2>&1 || (python3 /Users/hashan/playlist_proxy.py > /dev/null 2>&1 &)",
+            "statusMessage": "Ensuring preview proxy is running..."
+          },
+          {
+            "type": "command",
             "command": "echo '{\"systemMessage\":\"Remember to update CLAUDE.md with any significant changes made.\"}'",
             "statusMessage": "Checking CLAUDE.md reminder..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"systemMessage\":\"[TuneBridge] Verify with curl -s http://localhost:5001/api/health only. Never use preview_screenshot, preview_snapshot, or preview_click. If [Preview Required] appears at next session start, call preview_start(playlist-creator) once to suppress it.\"}'",
+            "statusMessage": "TuneBridge project context..."
           }
         ]
       }
