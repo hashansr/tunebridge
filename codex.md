@@ -1402,3 +1402,98 @@ Observed working tree at time of writing (not touched by this codex update):
 
 - Intent:
   - Ensure docs match current architecture (self-contained packaging + profile-based DAP behavior).
+
+### 2026-04-03 (Insights Sonic Profile compact layout pass)
+- User request:
+  - Tighten `Insights > Sonic Profile` to reduce vertical space usage.
+
+- UI changes implemented (no functionality/data logic changes):
+  - `static/app.js`
+    - Reduced chart canvas heights in Sonic Profile renderer:
+      - Brightness histogram: `180px` -> `138px`
+      - RMS energy histogram: `180px` -> `138px`
+      - Tonal demand (12-band) chart: `180px` -> `148px`
+    - Wrapped Sonic Profile blocks in a new container: `.sonic-profile-stack` for tighter vertical rhythm.
+  - `static/style.css`
+    - Added `.sonic-profile-stack` with compact vertical gap.
+    - Reduced Sonic block spacing:
+      - `.sonic-insight-grid` bottom margin tightened.
+      - `.sonic-caveat` top margin/padding/line-height tightened.
+      - `.sonic-band-card` top margin removed.
+    - Tightened Sonic card internals:
+      - `.sonic-chart-card, .sonic-band-card` padding reduced.
+      - `.sonic-chart-title` and `.sonic-chart-subtitle` bottom margins reduced.
+      - `.sonic-stat-row` gap and top margin reduced.
+
+- Expected outcome:
+  - Sonic Profile occupies less vertical screen real estate while preserving all existing charts, metrics, and compatibility cues.
+
+### 2026-04-03 (Player UI facelift aligned with Obsidian design language)
+- User request:
+  - Review and update player design to match the new UI/UX aesthetic.
+
+- Scope:
+  - UI-only refresh for bottom player, PEQ popover, and queue drawer.
+  - No changes to playback logic in `static/player.js`.
+
+- Implemented changes in `static/style.css`:
+  - Player shell:
+    - Increased player bar height (`74px` -> `86px`) and adjusted layout bottom padding.
+    - Added layered glass background, stronger blur, top glow line, and rounded top corners.
+    - Updated grid columns (`260/1fr/260` -> `300/1fr/300`) with refined spacing.
+  - Left now-playing block:
+    - Larger, rounded album art container with subtle ghost edge and ambient shadow.
+    - Refined title/artist/quality typography for better hierarchy.
+  - Transport controls:
+    - Converted icon controls to pill/ghost button style with hover lift.
+    - Enhanced active state visibility.
+    - Updated play/pause to primary gradient CTA style.
+  - Seek/progress:
+    - Increased track thickness (`4px` -> `6px`), rounded rails, gradient progress fill.
+    - Refined timestamp styling and hover-state contrast.
+  - Right controls:
+    - Slightly increased spacing and restyled volume slider/knob to match accent system.
+  - PEQ popover:
+    - Upgraded to glass panel look (radial tint + blur + ghost edge + softer ambient shadow).
+    - Updated close button and divider to match no-hard-line aesthetic.
+  - Queue drawer:
+    - Repositioned to sit above new player height (`bottom: 86px`).
+    - Updated with glass background, blur, ghost edge, and rounded corners.
+  - Responsive behavior:
+    - Added dedicated breakpoints at `1180px`, `900px`, and `620px`.
+    - On smaller widths, player compacts into a single-column stack with adjusted paddings/heights.
+    - Queue drawer bottom offset tracks responsive player height; on very small screens drawer uses full width.
+
+- Expected outcome:
+  - Player, popovers, and queue visuals now align with the modern “Obsidian/Luminous depth” facelift across Insights/Gear while retaining existing functionality.
+
+### 2026-04-03 (Player micro-interaction polish pass)
+- User request:
+  - Continue with micro-interactions for the refreshed player.
+
+- Changes made:
+  - `static/style.css`
+    - Added subtle player-bar entrance animation (`player-bar-rise`) for first paint.
+    - Improved control feedback:
+      - Press-state scale for `.player-btn`
+      - Enhanced hover/press motion for `.player-play-pause`
+      - Hover glow around seek rail (`.player-seek-wrap::after`)
+      - Volume rail hover tint + inset glow
+    - Enhanced queue motion:
+      - Drawer now animates with opacity + slight scale, not only translate.
+      - Added lightweight stagger for first queue items (`queue-item-fade-up`) on open.
+    - Added animated PEQ popover state class:
+      - Base popover has hidden/offset state.
+      - `.peq-popover.open` handles smooth fade/slide/scale in.
+    - Added `prefers-reduced-motion: reduce` fallback to disable these transitions/animations for accessibility.
+  - `static/player.js`
+    - Added `_setPeqPopoverOpen(open)` helper to coordinate class-based popover animation with delayed `display:none`.
+    - Updated all PEQ close/open paths to use helper:
+      - `togglePeqPopover()`
+      - `applyPeqProfile()`
+      - outside-click close handler
+    - Added `_peqCloseTimer` guard to avoid race conditions when quickly toggling popover.
+
+- Functional impact:
+  - UI behavior is visually smoother.
+  - Playback, queue logic, and EQ processing remain unchanged.

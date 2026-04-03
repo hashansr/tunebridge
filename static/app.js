@@ -4489,11 +4489,12 @@ function _renderInsightsSonicProfile(d) {
     ? `<div class="sonic-band-card">
         <div class="sonic-chart-title">Library Tonal Demand (Compatibility Signal)</div>
         <div class="sonic-chart-subtitle">Relative frequency emphasis used by IEM/headphone matching.</div>
-        <div class="insights-chart-wrap" style="height:180px"><canvas id="sonic-band-canvas"></canvas></div>
+        <div class="insights-chart-wrap" style="height:148px"><canvas id="sonic-band-canvas"></canvas></div>
        </div>`
     : '';
 
   el.innerHTML = `
+    <div class="sonic-profile-stack">
     <div class="sonic-insight-grid">
       <div class="sonic-insight-card">
         <div class="sonic-insight-kicker">Tonal Tilt</div>
@@ -4514,7 +4515,7 @@ function _renderInsightsSonicProfile(d) {
     <div class="sonic-charts-grid">
       <div class="sonic-chart-card">
         <div class="sonic-chart-title">Brightness Distribution (Tonal Tilt)</div>
-        <div class="insights-chart-wrap" style="height:180px"><canvas id="sonic-brightness-canvas"></canvas></div>
+        <div class="insights-chart-wrap" style="height:138px"><canvas id="sonic-brightness-canvas"></canvas></div>
         <div class="sonic-stat-row">
           <span class="sonic-stat">Median <strong>${_hz(bs.median)} Hz</strong></span>
           <span class="sonic-stat">Mean <strong>${_hz(bs.mean)} Hz</strong></span>
@@ -4523,7 +4524,7 @@ function _renderInsightsSonicProfile(d) {
       </div>
       <div class="sonic-chart-card">
         <div class="sonic-chart-title">RMS Energy Distribution (Mastering Density)</div>
-        <div class="insights-chart-wrap" style="height:180px"><canvas id="sonic-energy-canvas"></canvas></div>
+        <div class="insights-chart-wrap" style="height:138px"><canvas id="sonic-energy-canvas"></canvas></div>
         <div class="sonic-stat-row">
           <span class="sonic-stat">Median <strong>${es.median.toFixed(3)}</strong></span>
           <span class="sonic-stat">Mean <strong>${es.mean.toFixed(3)}</strong></span>
@@ -4534,6 +4535,7 @@ function _renderInsightsSonicProfile(d) {
     ${bandProfileHtml}
     <div class="sonic-caveat">
       <strong>Compatibility cues</strong> — ${cues.map(c => esc(c)).join(' ')} <strong>Analysis covers FLAC files only</strong> — M4A/AAC tracks are skipped.
+    </div>
     </div>`;
 
   _sonicBrightnessChart = new Chart(document.getElementById('sonic-brightness-canvas'), {

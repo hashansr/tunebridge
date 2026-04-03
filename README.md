@@ -56,7 +56,7 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 - Bidirectional music sync (local ↔ DAP): scan diff, checkbox preview, file-by-file progress
 
 ### In-App Player
-- Fixed bottom player bar (74px), queue drawer, PEQ popover
+- Refreshed bottom player bar (glass shell, responsive 86px desktop height), queue drawer, PEQ popover
 - Web Audio API signal chain: preamp → biquad PEQ filters → volume
 - Crossfade between tracks: dual A/B `HTMLAudioElement` engine, 0–12s configurable
 - Shuffle (Fisher-Yates), repeat off/all/one
@@ -65,19 +65,21 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 - Double-click track to play
 - Keyboard shortcuts: Space = play/pause, Alt+←/→ = prev/next, M = mute
 - Player state persisted to localStorage and server-side `player_state.json`
+- Motion polish: animated queue/PEQ panel transitions, tactile hover/press feedback, `prefers-reduced-motion` support
 
 ### Gear (IEMs & DAPs)
 - IEM/headphone library: CRUD with squig.link FR measurement import
 - Frequency response graph: Chart.js log-scale, 7 region bands, fixed Y 50–110 dB, 1kHz normalised to 75 dB
 - PEQ profiles: upload APO/AutoEQ `.txt`, overlay on graph, accordion view (filter table + download)
 - **IEM comparison**: multi-select IEMs → single FR graph overlay in a modal
+- Add custom FR references: up to 3 user-provided squig.link URLs with labels, reusable across FR chart selectors
 - FR baselines (tuning targets): add squig.link targets (Harman, Rtings, etc.) with a 10-colour swatch picker
 
 ### Insights (Audio Analytics)
 - **Overview**: stat cards + File Format / Sample Rate / Bit Depth donut charts
 - **Tag Health**: completeness bars for title, artist, album, genre, year, album art
 - **Rescan tags**: one-click re-scan with inline progress for updated library tags
-- **Sonic Profile**: brightness histogram, energy histogram, brightness vs energy scatter (requires analysis)
+- **Sonic Profile**: compact tonal profile cards + brightness/energy histograms + tonal demand chart (requires analysis)
 - **Gear Fit**: score every IEM against your library's sonic character using two models:
   - *Target Fidelity* — how accurately the IEM reproduces a chosen FR target (Harman, flat, etc.)
   - *Library Fit* — how well the IEM matches your library's own tonal balance

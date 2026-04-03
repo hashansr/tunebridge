@@ -69,6 +69,7 @@ const Player = (function () {
   let _saveSeekThrottle     = -1;  // last 5-second bucket saved (throttles timeupdate writes)
   let _remoteSaveTimer      = null; // debounce handle for server-side state saves
   let _remoteSeekThrottle   = -1;  // last 30-second bucket that triggered a remote save
+  let _peqCloseTimer        = null; // delayed hide timer for animated popover close
 
   /* ── Web Audio graph init ───────────────────────────────────────────── */
   function _initAudioContext() {
@@ -754,11 +755,28 @@ const Player = (function () {
     btn.classList.toggle('active', !!ps.activePeqProfileId);
   }
 
-  async function togglePeqPopover() {
+  function _setPeqPopoverOpen(open) {
     const pop = document.getElementById('peq-popover');
     if (!pop) return;
+    if (_peqCloseTimer) {
+      clearTimeout(_peqCloseTimer);
+      _peqCloseTimer = null;
+    }
+    if (open) {
+      pop.style.display = 'block';
+      requestAnimationFrame(() => pop.classList.add('open'));
+      return;
+    }
+    pop.classList.remove('open');
+    _peqCloseTimer = setTimeout(() => {
+      pop.style.display = 'none';
+      _peqCloseTimer = null;
+    }, 210);
+  }
+
+  async function togglePeqPopover() {
     ps.peqOpen = !ps.peqOpen;
-    pop.style.display = ps.peqOpen ? 'block' : 'none';
+    _setPeqPopoverOpen(ps.peqOpen);
     if (ps.peqOpen) {
       await _populatePeqIemList();
       _updateXfadeUI();
@@ -825,8 +843,7 @@ const Player = (function () {
     }
     // Close popover
     ps.peqOpen = false;
-    const pop = document.getElementById('peq-popover');
-    if (pop) pop.style.display = 'none';
+    _setPeqPopoverOpen(false);
   }
 
   /* ── Queue drawer UI ────────────────────────────────────────────────── */
@@ -1350,8 +1367,7 @@ const Player = (function () {
           && !e.target.closest('#peq-popover')
           && !e.target.closest('#player-peq-btn')) {
         ps.peqOpen = false;
-        const pop = document.getElementById('peq-popover');
-        if (pop) pop.style.display = 'none';
+        _setPeqPopoverOpen(false);
       }
       // Close queue drawer — IMPORTANT: skip if target is no longer in the DOM
       // (happens when _renderQueue() re-builds innerHTML while the click is propagating)

@@ -11,6 +11,8 @@ __pycache__/
 dist/
 *.dmg
 build/
+.build-venv/
+*.spec
 .env
 
 # App cache — auto-regenerated on rescan
