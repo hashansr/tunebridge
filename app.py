@@ -29,6 +29,15 @@ from PIL import Image
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
 
+# Prevent WKWebView (pywebview) from aggressively caching JS/CSS across app launches.
+# Without this, updated static files are invisible until the WKWebView disk cache expires.
+@app.after_request
+def add_cache_headers(response):
+    if request.path.endswith(('.css', '.js', '.html')) or request.path == '/':
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+    return response
+
 _ARTICLE_RE = re.compile(r'^(the|a|an)\s+', re.IGNORECASE)
 
 def artist_sort_key(name):
@@ -52,6 +61,7 @@ DAP_FILE = DATA_DIR / 'daps.json'
 IEM_FILE = DATA_DIR / 'iems.json'
 BASELINES_FILE = DATA_DIR / 'baselines.json'
 PLAYER_STATE_FILE = DATA_DIR / 'player_state.json'
+GEAR_PROFILES_FILE = DATA_DIR / 'gear_profiles.json'
 
 DEFAULT_SETTINGS = {
     'library_path':     str(Path.home() / 'Music'),
@@ -59,6 +69,23 @@ DEFAULT_SETTINGS = {
     'ap80_mount':       '/Volumes/AP80',
     'poweramp_prefix':  '',   # internal device path, e.g. /storage/sdcard0
     'ap80_prefix':      '',   # internal device path, e.g. /mnt/sdcard
+}
+
+_DEFAULT_GEAR_PROFILES = {
+    'dap_profiles': [
+        {'model': 'android_generic',  'name': 'Android (Generic DAP OS - FiiO / Sony / iBasso / HiBy)', 'playlist_format': '.m3u8', 'export_folder': 'Playlists',            'path_prefix': '',  'mount_name': 'MyDAP'},
+        {'model': 'uapp',             'name': 'USB Audio Player Pro',                                     'playlist_format': '.m3u8', 'export_folder': 'Music/Playlists',      'path_prefix': '',  'mount_name': 'MyDAP'},
+        {'model': 'poweramp',         'name': 'Poweramp',                                                  'playlist_format': '.m3u8', 'export_folder': 'Music/Playlists',      'path_prefix': '',  'mount_name': 'MyDAP'},
+        {'model': 'hiby_music',       'name': 'HiBy Music',                                                'playlist_format': '.m3u8', 'export_folder': 'HibyMusic/Playlists',  'path_prefix': '',  'mount_name': 'HiBy'},
+        {'model': 'neutron',          'name': 'Neutron Music Player',                                      'playlist_format': '.m3u8', 'export_folder': 'NeutronMP/Playlists',  'path_prefix': '',  'mount_name': 'MyDAP'},
+        {'model': 'foobar2000',       'name': 'Foobar2000',                                                'playlist_format': '.m3u8', 'export_folder': 'foobar2000',           'path_prefix': '',  'mount_name': 'MyDAP'},
+        {'model': 'mango_os',         'name': 'Mango OS (iBasso Pure Mode)',                              'playlist_format': '.m3u',  'export_folder': 'Music',                'path_prefix': '',  'mount_name': 'iBasso'},
+        {'model': 'fiio_pure_music',  'name': 'FiiO Pure Music Mode',                                      'playlist_format': '.m3u8', 'export_folder': 'FiiOMusic/playlist',   'path_prefix': '',  'mount_name': 'FiiO'},
+        {'model': 'sony_walkman',     'name': 'Sony Walkman App',                                          'playlist_format': '.m3u8', 'export_folder': 'Music/Playlists',      'path_prefix': '',  'mount_name': 'WALKMAN'},
+        {'model': 'rockbox',          'name': 'Rockbox',                                                   'playlist_format': '.m3u8', 'export_folder': 'Playlists',            'path_prefix': '',  'mount_name': 'Rockbox'},
+        {'model': 'hidizs_ap80',      'name': 'Hidizs AP80 Pro Max (Hidizs OS)',                          'playlist_format': '.m3u',  'export_folder': 'playlist_data',        'path_prefix': '..','mount_name': 'AP80'},
+    ],
+    'iem_types': ['IEM', 'Headphone'],
 }
 
 
@@ -116,6 +143,33 @@ def _migrate_legacy_data():
 
 
 _migrate_legacy_data()
+
+
+def _migrate_features():
+    """
+    Migrate bundled analysis features into App Support.
+
+    Runs independently of _migrate_legacy_data() so it applies even after
+    the one-time JSON migration has already completed.  The build script
+    copies data/features/ into Contents/Resources/data/features/ at build
+    time; this function copies it into DATA_DIR on first run if missing.
+    """
+    if not _BUNDLED:
+        return
+
+    dest_dir  = DATA_DIR / 'features'
+    dest_file = dest_dir / 'track_features.json'
+    if dest_file.exists():
+        return  # already present in App Support
+
+    bundle_features = Path(__file__).parent / 'data' / 'features' / 'track_features.json'
+    if bundle_features.exists():
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(bundle_features, dest_file)
+        print('[TuneBridge] Migrated analysis features from bundle to App Support.')
+
+
+_migrate_features()
 
 DEVICE_PATHS = {
     'poweramp': Path('/Volumes/FIIO M21'),
@@ -458,7 +512,13 @@ def save_playlists(playlists):
 
 @app.route('/')
 def index():
-    return send_file('static/index.html')
+    response = send_file('static/index.html')
+    # Prevent WKWebView from caching the HTML page across app launches.
+    # If the HTML is cached, the browser never sees updated ?v= query strings
+    # on JS/CSS assets, so new builds appear unchanged on cold start.
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    return response
 
 
 @app.route('/api/library/status')
@@ -999,7 +1059,13 @@ def put_settings():
 
 @app.route('/api/health')
 def health():
-    return jsonify({'status': 'ok'})
+    return jsonify({
+        'status': 'ok',
+        # Lets the GUI launcher verify it connected to the server instance
+        # started by the current process (not a stale older process on the port).
+        'instance_token': os.environ.get('TUNEBRIDGE_INSTANCE_TOKEN'),
+        'pid': os.getpid(),
+    })
 
 
 # ── Player state persistence ───────────────────────────────────────────────
@@ -1076,11 +1142,13 @@ def health_status():
 @app.route('/api/restart', methods=['POST'])
 def restart_server():
     def do_restart():
-        time.sleep(1.2)  # let response flush
-        subprocess.Popen([sys.executable] + sys.argv,
-                         close_fds=True, start_new_session=True)
-        time.sleep(0.8)  # new process imports before we release the port
-        os._exit(0)
+        # In-place re-exec keeps restart single-instance (no duplicate windows).
+        # The process is replaced with a fresh interpreter running the same args.
+        time.sleep(0.6)  # let response flush
+        try:
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        except Exception:
+            os._exit(1)
     threading.Thread(target=do_restart, daemon=False).start()
     return jsonify({'message': 'Restarting…'})
 
@@ -1335,6 +1403,73 @@ def sync_reset():
 
 # ── DAP Management ────────────────────────────────────────────────────────────
 
+def _slugify_model_id(name):
+    s = re.sub(r'[^a-z0-9]+', '_', (name or '').lower()).strip('_')
+    return s or 'other'
+
+
+def _normalize_export_folder(path):
+    if not path:
+        return 'Playlists'
+    return str(path).strip().strip('/').strip('\\') or 'Playlists'
+
+
+def _normalize_gear_profiles(raw):
+    out = {'dap_profiles': [], 'iem_types': []}
+
+    iem_types = raw.get('iem_types') if isinstance(raw, dict) else []
+    if isinstance(iem_types, list):
+        out['iem_types'] = [str(t).strip() for t in iem_types if str(t).strip()]
+
+    dap_profiles = raw.get('dap_profiles') if isinstance(raw, dict) else raw
+    if not isinstance(dap_profiles, list):
+        dap_profiles = []
+
+    seen = set()
+    for p in dap_profiles:
+        if not isinstance(p, dict):
+            continue
+        name = str(p.get('name') or p.get('dapModelOrApp') or '').strip()
+        model = str(p.get('model') or '').strip() or _slugify_model_id(name)
+        if model in seen:
+            continue
+        seen.add(model)
+        out['dap_profiles'].append({
+            'model': model,
+            'name': name or model,
+            'playlist_format': str(p.get('playlist_format') or p.get('playlistFormat') or '.m3u8'),
+            'export_folder': _normalize_export_folder(p.get('export_folder') or p.get('playlistExportFolder') or 'Playlists'),
+            'path_prefix': str(p.get('path_prefix') or ''),
+            'mount_name': str(p.get('mount_name') or p.get('mountName') or 'MyDAP'),
+            'hint': str(p.get('hint') or ''),
+        })
+
+    if not out['dap_profiles']:
+        out['dap_profiles'] = _DEFAULT_GEAR_PROFILES['dap_profiles']
+    if not out['iem_types']:
+        out['iem_types'] = _DEFAULT_GEAR_PROFILES['iem_types']
+    return out
+
+
+def load_gear_profiles():
+    candidates = [
+        GEAR_PROFILES_FILE,
+        Path(__file__).parent / 'data' / 'gear_profiles.json',
+    ]
+    for p in candidates:
+        if not p.exists():
+            continue
+        try:
+            return _normalize_gear_profiles(json.loads(p.read_text()))
+        except Exception:
+            continue
+    return _normalize_gear_profiles(_DEFAULT_GEAR_PROFILES)
+
+
+@app.route('/api/gear/profiles', methods=['GET'])
+def get_gear_profiles():
+    return jsonify(load_gear_profiles())
+
 def load_daps():
     if DAP_FILE.exists():
         try:
@@ -1371,23 +1506,16 @@ def get_daps():
 def create_dap():
     data = request.json or {}
     model = data.get('model', 'generic')
-    # Model-specific defaults
-    model_defaults = {
-        'poweramp': {'export_folder': 'Playlists',         'path_prefix': ''},
-        'hiby':     {'export_folder': 'HiByMusic/Playlist','path_prefix': ''},
-        'fiio':     {'export_folder': 'Playlists',         'path_prefix': ''},
-        'ap80':     {'export_folder': 'playlist_data',     'path_prefix': '..'},
-        'other':    {'export_folder': 'Playlists',         'path_prefix': ''},
-    }
-    defaults = model_defaults.get(model, model_defaults['other'])
+    profile_map = {p['model']: p for p in load_gear_profiles().get('dap_profiles', [])}
+    defaults = profile_map.get(model, {'export_folder': 'Playlists', 'path_prefix': ''})
     dap = {
         'id': str(uuid.uuid4()),
         'name': data.get('name', 'New DAP'),
         'model': model,
         'icon': data.get('icon', '📱'),
         'mount_path': data.get('mount_path', ''),
-        'export_folder': data.get('export_folder') or defaults['export_folder'],
-        'path_prefix': data.get('path_prefix', defaults['path_prefix']),
+        'export_folder': _normalize_export_folder(data.get('export_folder') or defaults.get('export_folder')),
+        'path_prefix': data.get('path_prefix', defaults.get('path_prefix', '')),
         'peq_folder': data.get('peq_folder', 'PEQ'),
         'playlist_exports': {},
     }
@@ -1416,7 +1544,10 @@ def update_dap(did):
         return jsonify({'error': 'Not found'}), 404
     for k in ('name', 'model', 'icon', 'mount_path', 'export_folder', 'path_prefix', 'peq_folder'):
         if k in data:
-            dap[k] = data[k]
+            if k == 'export_folder':
+                dap[k] = _normalize_export_folder(data[k])
+            else:
+                dap[k] = data[k]
     save_daps(daps)
     dap['mounted'] = Path(dap.get('mount_path', '')).exists()
     return jsonify(dap)
@@ -1449,8 +1580,6 @@ def dap_download_playlist(did, pid):
               if (e if isinstance(e, str) else e.get('id')) in lib_map]
 
     prefix = dap.get('path_prefix', '')
-    if dap.get('model') == 'ap80':
-        prefix = prefix or '..'
 
     content = generate_m3u(tracks, playlist['name'], path_prefix=prefix)
     safe_name = playlist['name'].replace('/', '-')
@@ -1485,8 +1614,6 @@ def dap_export_playlist(did, pid):
               if (e if isinstance(e, str) else e.get('id')) in lib_map]
 
     prefix = dap.get('path_prefix', '')
-    if dap.get('model') == 'ap80':
-        prefix = prefix or '..'
 
     out_dir = device_root / dap.get('export_folder', 'Playlists')
     try:
@@ -1510,10 +1637,141 @@ def dap_export_playlist(did, pid):
 
 # ── IEM Management ────────────────────────────────────────────────────────────
 
+def _normalize_iem_source(source, idx=0):
+    """Normalize a single IEM squig source record."""
+    src = source if isinstance(source, dict) else {}
+    sid = str(src.get('id') or f'src-{idx + 1}')
+    label = str(src.get('label') or '').strip() or f'Source {idx + 1}'
+    url = str(src.get('url') or '').strip()
+    return {
+        'id': sid,
+        'label': label,
+        'url': url,
+        'squig_subdomain': str(src.get('squig_subdomain') or ''),
+        'squig_file_key': str(src.get('squig_file_key') or ''),
+        'measurement_L': src.get('measurement_L'),
+        'measurement_R': src.get('measurement_R'),
+    }
+
+
+def _sync_iem_primary_measurements(iem):
+    """
+    Keep legacy top-level measurement fields in sync with primary source.
+    This preserves compatibility with existing scoring/analysis code paths.
+    """
+    sources = iem.get('squig_sources') or []
+    primary = None
+    pref = iem.get('primary_source_id')
+    if pref:
+        primary = next((s for s in sources if s.get('id') == pref), None)
+    if not primary and sources:
+        primary = sources[0]
+    if primary:
+        iem['primary_source_id'] = primary.get('id')
+        iem['squig_url'] = primary.get('url', '')
+        iem['squig_subdomain'] = primary.get('squig_subdomain', '')
+        iem['squig_file_key'] = primary.get('squig_file_key', '')
+        iem['measurement_L'] = primary.get('measurement_L')
+        iem['measurement_R'] = primary.get('measurement_R')
+    else:
+        iem['primary_source_id'] = None
+        iem['squig_url'] = ''
+        iem['squig_subdomain'] = ''
+        iem['squig_file_key'] = ''
+        iem['measurement_L'] = None
+        iem['measurement_R'] = None
+
+
+def _normalize_iem_record(iem):
+    """Migrate/normalize an IEM record in place. Returns True when changed."""
+    changed = False
+    if not isinstance(iem.get('squig_sources'), list):
+        iem['squig_sources'] = []
+        changed = True
+
+    # Migrate legacy single-source fields into squig_sources if needed.
+    if not iem['squig_sources'] and (
+        iem.get('squig_url') or iem.get('measurement_L') or iem.get('measurement_R')
+    ):
+        iem['squig_sources'] = [{
+            'id': 'src-1',
+            'label': 'Primary',
+            'url': iem.get('squig_url', ''),
+            'squig_subdomain': iem.get('squig_subdomain', ''),
+            'squig_file_key': iem.get('squig_file_key', ''),
+            'measurement_L': iem.get('measurement_L'),
+            'measurement_R': iem.get('measurement_R'),
+        }]
+        changed = True
+
+    # Keep only non-empty sources and normalize fields.
+    norm_sources = []
+    for idx, src in enumerate(iem.get('squig_sources') or []):
+        nsrc = _normalize_iem_source(src, idx)
+        if nsrc.get('url') or nsrc.get('measurement_L') or nsrc.get('measurement_R'):
+            norm_sources.append(nsrc)
+    if len(norm_sources) > 3:
+        norm_sources = norm_sources[:3]
+        changed = True
+    if norm_sources != (iem.get('squig_sources') or []):
+        iem['squig_sources'] = norm_sources
+        changed = True
+
+    pref = iem.get('primary_source_id')
+    if pref and not any(s.get('id') == pref for s in norm_sources):
+        iem['primary_source_id'] = None
+        changed = True
+    if not iem.get('primary_source_id') and norm_sources:
+        iem['primary_source_id'] = norm_sources[0].get('id')
+        changed = True
+
+    before = (iem.get('measurement_L'), iem.get('measurement_R'),
+              iem.get('squig_url'), iem.get('squig_subdomain'), iem.get('squig_file_key'))
+    _sync_iem_primary_measurements(iem)
+    after = (iem.get('measurement_L'), iem.get('measurement_R'),
+             iem.get('squig_url'), iem.get('squig_subdomain'), iem.get('squig_file_key'))
+    if before != after:
+        changed = True
+    return changed
+
+
+def _public_iem(iem):
+    """Return IEM payload safe for API responses (without heavy measurement arrays)."""
+    out = {}
+    for k, v in iem.items():
+        if k in ('measurement_L', 'measurement_R'):
+            continue
+        if k == 'squig_sources':
+            cleaned = []
+            for src in (v or []):
+                cleaned.append({
+                    'id': src.get('id'),
+                    'label': src.get('label'),
+                    'url': src.get('url', ''),
+                    'squig_subdomain': src.get('squig_subdomain', ''),
+                    'squig_file_key': src.get('squig_file_key', ''),
+                })
+            out[k] = cleaned
+        else:
+            out[k] = v
+    out['has_measurement'] = bool(
+        iem.get('measurement_L') or iem.get('measurement_R') or
+        any((s.get('measurement_L') or s.get('measurement_R')) for s in (iem.get('squig_sources') or []))
+    )
+    return out
+
 def load_iems():
     if IEM_FILE.exists():
         try:
-            return json.load(open(IEM_FILE))
+            iems = json.load(open(IEM_FILE))
+            if not isinstance(iems, list):
+                return []
+            dirty = False
+            for iem in iems:
+                dirty = _normalize_iem_record(iem) or dirty
+            if dirty:
+                save_iems(iems)
+            return iems
         except Exception:
             pass
     return []
@@ -1738,10 +1996,9 @@ def _apply_peq(measurement, peq_profile):
 
 @app.route('/api/iems', methods=['GET'])
 def get_iems():
-    # Omit large measurement arrays from list view; sort alphabetically by name
+    # Omit measurement arrays from list view; sort alphabetically by name
     result = sorted(
-        [{k: v for k, v in iem.items() if k not in ('measurement_L', 'measurement_R')}
-         for iem in load_iems()],
+        [_public_iem(iem) for iem in load_iems()],
         key=lambda i: i.get('name', '').lower()
     )
     return jsonify(result)
@@ -1750,36 +2007,64 @@ def get_iems():
 @app.route('/api/iems', methods=['POST'])
 def create_iem():
     data = request.json or {}
-    squig_url = data.get('squig_url', '').strip()
+    raw_sources = data.get('squig_sources')
+    if raw_sources is None:
+        legacy_url = str(data.get('squig_url', '')).strip()
+        raw_sources = ([{'label': 'Primary', 'url': legacy_url}] if legacy_url else [])
+    if not isinstance(raw_sources, list):
+        return jsonify({'error': 'squig_sources must be an array'}), 400
+    if len(raw_sources) > 3:
+        return jsonify({'error': 'You can add up to 3 squig.link URLs per IEM.'}), 400
+
+    sources = []
+    first_file_key = None
+    for idx, src in enumerate(raw_sources):
+        if not isinstance(src, dict):
+            continue
+        url = str(src.get('url', '')).strip()
+        if not url:
+            continue
+        label = str(src.get('label') or '').strip() or f'Source {idx + 1}'
+        try:
+            result = fetch_squig_measurement(url)
+            if not result['L'] and not result['R']:
+                return jsonify({'error': f'Could not fetch measurement data for source "{label}". Check the URL and try again.'}), 400
+            file_key = result.get('file_key') or ''
+            if not first_file_key and file_key:
+                first_file_key = file_key
+            sources.append({
+                'id': str(src.get('id') or f'src-{idx + 1}'),
+                'label': label,
+                'url': url,
+                'squig_subdomain': result.get('subdomain', ''),
+                'squig_file_key': file_key,
+                'measurement_L': result['L'],
+                'measurement_R': result['R'],
+            })
+        except Exception as e:
+            return jsonify({'error': f'Failed to fetch source "{label}": {e}'}), 400
+
     iem = {
         'id': str(uuid.uuid4()),
         'name': data.get('name', '').strip() or 'New IEM',
         'type': data.get('type', 'IEM'),
-        'squig_url': squig_url,
+        'squig_url': '',
         'squig_subdomain': '',
         'squig_file_key': '',
         'measurement_L': None,
         'measurement_R': None,
+        'primary_source_id': sources[0]['id'] if sources else None,
+        'squig_sources': sources,
         'peq_profiles': [],
     }
-    if squig_url:
-        try:
-            result = fetch_squig_measurement(squig_url)
-            if not result['L'] and not result['R']:
-                return jsonify({'error': 'Could not fetch measurement data from squig.link. Check the URL and try again.'}), 400
-            iem['measurement_L'] = result['L']
-            iem['measurement_R'] = result['R']
-            iem['squig_subdomain'] = result['subdomain']
-            iem['squig_file_key'] = result['file_key']
-            if not data.get('name'):
-                iem['name'] = result['file_key']
-        except Exception as e:
-            return jsonify({'error': f'Failed to fetch measurement: {e}'}), 400
+    _normalize_iem_record(iem)
+    if not data.get('name') and first_file_key:
+        iem['name'] = first_file_key
 
     iems = load_iems()
     iems.append(iem)
     save_iems(iems)
-    return jsonify({k: v for k, v in iem.items() if k not in ('measurement_L', 'measurement_R')}), 201
+    return jsonify(_public_iem(iem)), 201
 
 
 @app.route('/api/iems/<iid>', methods=['GET'])
@@ -1787,7 +2072,7 @@ def get_iem(iid):
     iem = next((i for i in load_iems() if i['id'] == iid), None)
     if not iem:
         return jsonify({'error': 'Not found'}), 404
-    return jsonify(iem)
+    return jsonify(_public_iem(iem))
 
 
 @app.route('/api/iems/<iid>', methods=['PUT'])
@@ -1800,20 +2085,69 @@ def update_iem(iid):
     for k in ('name', 'type'):
         if k in data:
             iem[k] = data[k]
-    if 'squig_url' in data and (data['squig_url'] != iem.get('squig_url') or data.get('force_refetch') or not iem.get('measurement_L')):
-        iem['squig_url'] = data['squig_url']
-        try:
-            result = fetch_squig_measurement(data['squig_url'])
-            if not result['L'] and not result['R']:
-                return jsonify({'error': 'Could not fetch measurement data from squig.link. Check the URL and try again.'}), 400
-            iem['measurement_L'] = result['L']
-            iem['measurement_R'] = result['R']
-            iem['squig_subdomain'] = result['subdomain']
-            iem['squig_file_key'] = result['file_key']
-        except Exception as e:
-            return jsonify({'error': f'Failed to fetch measurement: {e}'}), 400
+
+    if 'squig_sources' in data or 'squig_url' in data:
+        raw_sources = data.get('squig_sources')
+        if raw_sources is None:
+            legacy_url = str(data.get('squig_url', '')).strip()
+            raw_sources = ([{'label': 'Primary', 'url': legacy_url}] if legacy_url else [])
+        if not isinstance(raw_sources, list):
+            return jsonify({'error': 'squig_sources must be an array'}), 400
+        if len(raw_sources) > 3:
+            return jsonify({'error': 'You can add up to 3 squig.link URLs per IEM.'}), 400
+
+        force_refetch = bool(data.get('force_refetch'))
+        existing_sources = iem.get('squig_sources') or []
+        existing_by_id = {s.get('id'): s for s in existing_sources if s.get('id')}
+        existing_by_url = {s.get('url'): s for s in existing_sources if s.get('url')}
+        new_sources = []
+
+        for idx, src in enumerate(raw_sources):
+            if not isinstance(src, dict):
+                continue
+            url = str(src.get('url', '')).strip()
+            if not url:
+                continue
+            sid = str(src.get('id') or '')
+            label = str(src.get('label') or '').strip() or f'Source {idx + 1}'
+            existing = (existing_by_id.get(sid) if sid else None) or existing_by_url.get(url)
+            can_reuse = (
+                existing and existing.get('url') == url and not force_refetch and
+                (existing.get('measurement_L') or existing.get('measurement_R'))
+            )
+            if can_reuse:
+                new_sources.append({
+                    'id': existing.get('id') or sid or f'src-{idx + 1}',
+                    'label': label,
+                    'url': url,
+                    'squig_subdomain': existing.get('squig_subdomain', ''),
+                    'squig_file_key': existing.get('squig_file_key', ''),
+                    'measurement_L': existing.get('measurement_L'),
+                    'measurement_R': existing.get('measurement_R'),
+                })
+            else:
+                try:
+                    result = fetch_squig_measurement(url)
+                    if not result['L'] and not result['R']:
+                        return jsonify({'error': f'Could not fetch measurement data for source "{label}". Check the URL and try again.'}), 400
+                    new_sources.append({
+                        'id': sid or (existing.get('id') if existing else f'src-{idx + 1}'),
+                        'label': label,
+                        'url': url,
+                        'squig_subdomain': result.get('subdomain', ''),
+                        'squig_file_key': result.get('file_key', ''),
+                        'measurement_L': result['L'],
+                        'measurement_R': result['R'],
+                    })
+                except Exception as e:
+                    return jsonify({'error': f'Failed to fetch source "{label}": {e}'}), 400
+
+        iem['squig_sources'] = new_sources
+        iem['primary_source_id'] = new_sources[0]['id'] if new_sources else None
+        _normalize_iem_record(iem)
+
     save_iems(iems)
-    return jsonify({k: v for k, v in iem.items() if k not in ('measurement_L', 'measurement_R')})
+    return jsonify(_public_iem(iem))
 
 
 @app.route('/api/iems/<iid>', methods=['DELETE'])
@@ -1837,6 +2171,21 @@ def _shift(points, offset):
     return [[p[0], p[1] + offset] for p in points]
 
 
+def _resolve_iem_source(iem, source_id=None):
+    """Return selected (or primary) source dict for an IEM."""
+    sources = iem.get('squig_sources') or []
+    if source_id:
+        src = next((s for s in sources if s.get('id') == source_id), None)
+        if src:
+            return src
+    pref = iem.get('primary_source_id')
+    if pref:
+        src = next((s for s in sources if s.get('id') == pref), None)
+        if src:
+            return src
+    return sources[0] if sources else None
+
+
 @app.route('/api/iems/<iid>/graph')
 def iem_graph(iid):
     iems = load_iems()
@@ -1845,7 +2194,13 @@ def iem_graph(iid):
         return jsonify({'error': 'Not found'}), 404
 
     peq_id = request.args.get('peq', '')
+    source_id = request.args.get('source', '')
     compare_ids = request.args.getlist('compare')
+    compare_source_map = {}
+    for token in request.args.getlist('compare_source'):
+        if ':' in token:
+            did, sid = token.split(':', 1)
+            compare_source_map[did] = sid
     palette = ['#5b8dee', '#e05c5c', '#4caf8f', '#e8a838', '#9c6dd8', '#e05ca0']
 
     curves = []
@@ -1853,9 +2208,14 @@ def iem_graph(iid):
 
     for idx, cur in enumerate(targets):
         color = palette[idx % len(palette)]
+        requested_source_id = source_id if idx == 0 else compare_source_map.get(cur['id'])
+        source = _resolve_iem_source(cur, requested_source_id)
+        source_label = source.get('label') if source else None
         name = cur['name']
-        mL = cur.get('measurement_L')
-        mR = cur.get('measurement_R')
+        if source_label and len(cur.get('squig_sources') or []) > 1:
+            name = f"{name} [{source_label}]"
+        mL = (source or {}).get('measurement_L') or cur.get('measurement_L')
+        mR = (source or {}).get('measurement_R') or cur.get('measurement_R')
 
         # Normalise: use L-channel 1 kHz as reference, apply same offset to R & PEQ
         ref_spl = _spl_at_1khz(mL or mR)
@@ -1873,16 +2233,18 @@ def iem_graph(iid):
             peq = next((p for p in cur.get('peq_profiles', []) if p['id'] == peq_id), None)
             if peq:
                 peq_color = palette[(len(targets)) % len(palette)]
+                # _apply_peq re-normalises to 75 dB at 1 kHz internally, so do NOT
+                # apply the factory offset on top — that would double-shift the curve.
                 if mL:
                     curves.append({'id': f"{cur['id']}-peq-L",
                                    'label': f"{name} + {peq['name']} (L)",
                                    'color': peq_color, 'dash': False,
-                                   'data': _shift(_apply_peq(mL, peq), offset)})
+                                   'data': _apply_peq(mL, peq)})
                 if mR:
                     curves.append({'id': f"{cur['id']}-peq-R",
                                    'label': f"{name} + {peq['name']} (R)",
                                    'color': peq_color, 'dash': False,
-                                   'data': _shift(_apply_peq(mR, peq), offset)})
+                                   'data': _apply_peq(mR, peq)})
 
     # Append baseline/target curves — each normalised independently
     for bl in load_baselines():
@@ -1898,7 +2260,21 @@ def iem_graph(iid):
                 'data': _shift(m, offset),
             })
 
-    return jsonify({'curves': curves, 'iem_name': iem['name']})
+    available_sources = [
+        {
+            'id': s.get('id'),
+            'label': s.get('label'),
+            'url': s.get('url', ''),
+        }
+        for s in (iem.get('squig_sources') or [])
+    ]
+    active_source = _resolve_iem_source(iem, source_id)
+    return jsonify({
+        'curves': curves,
+        'iem_name': iem['name'],
+        'available_sources': available_sources,
+        'selected_source_id': (active_source or {}).get('id'),
+    })
 
 
 @app.route('/api/iems/<iid>/peq', methods=['POST'])
@@ -2098,6 +2474,7 @@ def stream_track(track_id):
     if not range_header:
         resp = send_file(str(path), mimetype=mime, conditional=True)
         resp.headers['Accept-Ranges'] = 'bytes'
+        resp.headers['Access-Control-Allow-Origin'] = '*'
         return resp
 
     # Parse "bytes=start-[end]"
@@ -2126,10 +2503,11 @@ def stream_track(track_id):
                 yield chunk
 
     rv = Response(_generate(), 206, mimetype=mime, direct_passthrough=True)
-    rv.headers['Content-Range']  = f'bytes {byte1}-{byte2}/{file_size}'
-    rv.headers['Accept-Ranges']  = 'bytes'
-    rv.headers['Content-Length'] = str(length)
-    rv.headers['Cache-Control']  = 'no-cache'
+    rv.headers['Content-Range']              = f'bytes {byte1}-{byte2}/{file_size}'
+    rv.headers['Accept-Ranges']              = 'bytes'
+    rv.headers['Content-Length']             = str(length)
+    rv.headers['Cache-Control']              = 'no-cache'
+    rv.headers['Access-Control-Allow-Origin'] = '*'
     return rv
 
 
@@ -2138,11 +2516,17 @@ def export_backup():
     buf = io.BytesIO()
     timestamp = time.strftime('%Y%m%d_%H%M%S')
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for fname in ['playlists.json', 'settings.json', 'daps.json',
-                      'iems.json', 'baselines.json']:
+        for fname in [
+            'playlists.json', 'settings.json', 'daps.json',
+            'iems.json', 'baselines.json', 'match-matrix.json',
+            'insights_config.json',
+        ]:
             p = DATA_DIR / fname
             if p.exists():
                 zf.write(p, fname)
+        feat = _features_file()
+        if feat.exists():
+            zf.write(feat, 'features/track_features.json')
         art = DATA_DIR / 'playlist_artwork'
         if art.is_dir():
             for item in art.iterdir():
@@ -2163,8 +2547,11 @@ def import_backup():
         raw = f.read()
         with zipfile.ZipFile(io.BytesIO(raw)) as zf:
             names = zf.namelist()
-            for fname in ['playlists.json', 'settings.json', 'daps.json',
-                          'iems.json', 'baselines.json']:
+            for fname in [
+                'playlists.json', 'settings.json', 'daps.json',
+                'iems.json', 'baselines.json', 'match-matrix.json',
+                'insights_config.json',
+            ]:
                 if fname in names:
                     content = json.loads(zf.read(fname))   # validate JSON
                     dest = DATA_DIR / fname
@@ -2172,6 +2559,16 @@ def import_backup():
                     with open(tmp, 'w') as out:
                         json.dump(content, out, indent=2)
                     Path(tmp).replace(dest)
+            feature_name = 'features/track_features.json' if 'features/track_features.json' in names else (
+                'track_features.json' if 'track_features.json' in names else None
+            )
+            if feature_name:
+                features = json.loads(zf.read(feature_name))
+                dest = _features_file()
+                tmp = str(dest) + '.import.tmp'
+                with open(tmp, 'w') as out:
+                    json.dump(features, out, indent=2)
+                Path(tmp).replace(dest)
             art_dir = DATA_DIR / 'playlist_artwork'
             art_dir.mkdir(exist_ok=True)
             for name in names:
@@ -2202,6 +2599,1223 @@ def browse_folder():
         return jsonify({'error': 'Browse not available in dev mode — type path manually'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Insights — Phase 1: Library Overview + Tag Health
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/api/insights/overview')
+def insights_overview():
+    tracks = library
+    if not tracks:
+        return jsonify({'error': 'Library is empty or not scanned'}), 404
+
+    artist_set = set()
+    album_set = set()
+    formats = {}
+    sample_rates = {}
+    bit_depths = {}
+
+    for t in tracks:
+        a = (t.get('album_artist') or t.get('artist') or '').strip()
+        if a and a.lower() not in ('unknown artist',):
+            artist_set.add(a.lower())
+        alb = (t.get('album') or '').strip()
+        if alb and alb.lower() not in ('unknown album',):
+            album_set.add(f"{a.lower()}||{alb.lower()}")
+
+        fmt = t.get('format') or 'Unknown'
+        formats[fmt] = formats.get(fmt, 0) + 1
+
+        sr = t.get('sample_rate')
+        if sr:
+            k = f"{sr // 1000} kHz" if sr % 1000 == 0 else f"{sr / 1000:.1f} kHz"
+            sample_rates[k] = sample_rates.get(k, 0) + 1
+        else:
+            sample_rates['Unknown'] = sample_rates.get('Unknown', 0) + 1
+
+        bd = t.get('bits_per_sample')
+        if bd:
+            bit_depths[f"{bd}-bit"] = bit_depths.get(f"{bd}-bit", 0) + 1
+        else:
+            bit_depths['Unknown'] = bit_depths.get('Unknown', 0) + 1
+
+    def _sr_num(k):
+        try:
+            return float(k.replace(' kHz', ''))
+        except Exception:
+            return 9999.0
+
+    sample_rates = dict(sorted(sample_rates.items(), key=lambda x: _sr_num(x[0])))
+    bit_depths   = dict(sorted(bit_depths.items()))
+
+    # Genre distribution — top 20 by track count
+    genres_raw = {}
+    for t in tracks:
+        g = (t.get('genre') or '').strip()
+        if g:
+            genres_raw[g] = genres_raw.get(g, 0) + 1
+    genres_sorted = dict(sorted(genres_raw.items(), key=lambda x: -x[1]))
+    genres = dict(list(genres_sorted.items())[:20])
+
+    return jsonify({
+        'total_tracks':  len(tracks),
+        'total_albums':  len(album_set),
+        'total_artists': len(artist_set),
+        'formats':       formats,
+        'sample_rates':  sample_rates,
+        'bit_depths':    bit_depths,
+        'genres':        genres,
+        'genres_all':    genres_sorted,
+        'genres_total':  len(genres_sorted),
+        'genres_tagged': sum(1 for t in tracks if (t.get('genre') or '').strip()),
+    })
+
+
+@app.route('/api/insights/tag-health')
+def insights_tag_health():
+    from collections import defaultdict
+    tracks = library
+    if not tracks:
+        return jsonify({'error': 'Library is empty'}), 404
+
+    total = len(tracks)
+
+    def _missing(t, field, sentinel=None):
+        v = t.get(field)
+        return not v or (sentinel is not None and v == sentinel)
+
+    field_defs = [
+        ('title',  None),
+        ('artist', 'Unknown Artist'),
+        ('album',  'Unknown Album'),
+        ('year',   None),
+        ('genre',  None),
+    ]
+
+    completeness = {}
+    for field, sentinel in field_defs:
+        n_missing = sum(1 for t in tracks if _missing(t, field, sentinel))
+        present   = total - n_missing
+        completeness[field] = {
+            'present': present,
+            'missing': n_missing,
+            'pct':     round(present / total * 100, 1),
+        }
+
+    artist_groups = defaultdict(list)
+    for t in tracks:
+        raw = (t.get('album_artist') or t.get('artist') or '').strip()
+        if raw and raw.lower() != 'unknown artist':
+            norm = re.sub(r'\s+', ' ', raw.lower())
+            artist_groups[norm].append(raw)
+
+    duplicates = []
+    for norm, raw_list in artist_groups.items():
+        variants = list(dict.fromkeys(raw_list))
+        if len(variants) > 1:
+            duplicates.append({
+                'normalized':  norm,
+                'variants':    variants,
+                'track_count': len(raw_list),
+            })
+    duplicates.sort(key=lambda x: -x['track_count'])
+
+    problem_tracks = []
+    for t in tracks:
+        issues = []
+        if _missing(t, 'title'):                    issues.append('title')
+        if _missing(t, 'artist', 'Unknown Artist'): issues.append('artist')
+        if _missing(t, 'album',  'Unknown Album'):  issues.append('album')
+        if _missing(t, 'year'):                     issues.append('year')
+        if _missing(t, 'genre'):                    issues.append('genre')
+        if issues:
+            problem_tracks.append({
+                'id':     t['id'],
+                'title':  t.get('title') or t.get('filename', '?'),
+                'artist': t.get('artist', ''),
+                'album':  t.get('album', ''),
+                'path':   t.get('path', ''),
+                'issues': issues,
+            })
+    problem_tracks.sort(key=lambda x: -len(x['issues']))
+
+    return jsonify({
+        'total':                total,
+        'completeness':         completeness,
+        'artist_duplicates':    duplicates[:50],
+        'problem_tracks':       problem_tracks[:100],
+        'problem_track_count':  len(problem_tracks),
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Insights — Phase 2: Background Audio Analysis
+# ═══════════════════════════════════════════════════════════════════════════════
+
+analysis_state = {
+    'status':       'idle',   # idle | running | done | error
+    'done':         0,
+    'total':        0,
+    'started_at':   None,
+    'completed_at': None,
+    'error':        None,
+}
+
+_FEATURES_FILE = None   # resolved lazily after DATA_DIR is set
+
+
+def _features_file():
+    p = DATA_DIR / 'features'
+    p.mkdir(parents=True, exist_ok=True)
+    return p / 'track_features.json'
+
+
+def _load_feature_entries():
+    fp = _features_file()
+    if not fp.exists():
+        return []
+    try:
+        raw = json.loads(fp.read_text())
+        return raw if isinstance(raw, list) else []
+    except Exception:
+        return []
+
+
+def _has_valid_v3_payload(entry):
+    if not entry or entry.get('analysis_version') != 3:
+        return False
+    if entry.get('failed'):
+        return True
+    band_energy = entry.get('band_energy') or []
+    return (entry.get('brightness') is not None and len(band_energy) == 12)
+
+
+def _backfill_feature_source_signatures(tracks):
+    """
+    Backfill source signature fields for legacy v3 cache rows.
+
+    Older analysis rows may predate source signature tracking
+    (source_path/source_mtime). Without this backfill, those rows look stale
+    and force a one-time full re-analysis. This function upgrades such rows
+    in place using current library metadata so future runs stay delta-only.
+    """
+    entries = _load_feature_entries()
+    if not entries or not tracks:
+        return entries
+
+    track_by_id = {t.get('id'): t for t in tracks}
+    updated = False
+    for entry in entries:
+        tid = entry.get('track_id')
+        track = track_by_id.get(tid)
+        if not track:
+            continue
+        if not _has_valid_v3_payload(entry):
+            continue
+        if not entry.get('source_path'):
+            entry['source_path'] = track.get('path')
+            updated = True
+        if int(entry.get('source_mtime') or 0) == 0:
+            entry['source_mtime'] = _track_source_mtime(track)
+            updated = True
+
+    if updated:
+        try:
+            _features_file().write_text(json.dumps(entries))
+        except Exception:
+            pass
+    return entries
+
+
+def _track_source_mtime(track):
+    try:
+        return int(track.get('date_added') or 0)
+    except Exception:
+        return 0
+
+
+def _is_cached_feature_current(cached, track):
+    """Return True when a cached entry is valid for the current track revision."""
+    if not cached:
+        return False
+    if cached.get('analysis_version') != 3:
+        return False
+    if cached.get('source_path') != track.get('path'):
+        return False
+    if int(cached.get('source_mtime') or 0) != _track_source_mtime(track):
+        return False
+    if cached.get('failed'):
+        return True
+    band_energy = cached.get('band_energy') or []
+    return (cached.get('brightness') is not None and len(band_energy) == 12)
+
+
+def _run_analysis():
+    global analysis_state
+    try:
+        import soundfile as sf
+        import numpy as np
+    except ImportError:
+        analysis_state.update({'status': 'error', 'error': 'soundfile / numpy not installed. Run: pip install soundfile numpy'})
+        return
+
+    tracks = list(library)
+    track_ids = {t.get('id') for t in tracks}
+    existing_entries = _backfill_feature_source_signatures(tracks)
+    existing_map = {}
+    for entry in existing_entries:
+        tid = entry.get('track_id')
+        if tid in track_ids:
+            existing_map[tid] = entry
+
+    pending_tracks = [t for t in tracks if not _is_cached_feature_current(existing_map.get(t['id']), t)]
+
+    analysis_state.update({
+        'status':     'running',
+        'done':       0,
+        'total':      len(pending_tracks),
+        'started_at': int(time.time()),
+        'error':      None,
+    })
+
+    feat_path = _features_file()
+
+    music_base = get_music_base()
+    # Start with existing entries for current library tracks so cancellation keeps prior work.
+    results_map = {t['id']: existing_map[t['id']] for t in tracks if t['id'] in existing_map}
+
+    for i, track in enumerate(pending_tracks):
+        if analysis_state['status'] != 'running':
+            break  # allow external cancellation in future
+
+        analysis_state['done'] = i
+        tid = track['id']
+        source_path = track.get('path')
+        source_mtime = _track_source_mtime(track)
+
+        try:
+            path = Path(music_base) / source_path
+            data, sr = sf.read(str(path), dtype='float32', always_2d=True)
+            mono = data[:, 0]
+            total_samples = len(mono)
+
+            # Multi-window analysis: 7 windows spread across the musical portion
+            # Skip first 10% (intro) and last 10% of the track
+            WIN_N     = 65536
+            N_WINDOWS = 7
+            RMS_FLOOR = 0.01
+            start_s   = max(int(total_samples * 0.10), WIN_N)
+            end_s     = max(int(total_samples * 0.90), start_s + WIN_N)
+            offsets   = [int(start_s + (end_s - start_s - WIN_N) * i / max(N_WINDOWS - 1, 1))
+                         for i in range(N_WINDOWS)]
+            offsets   = [o for o in offsets if o + WIN_N <= total_samples]
+            if not offsets:   # very short file — fall back to start
+                offsets = [0]
+
+            window_func = np.hanning(WIN_N)
+            bright_list, energy_list, band_list = [], [], []
+
+            for off in offsets:
+                frame = mono[off:off + WIN_N]
+                if len(frame) < WIN_N:
+                    frame = np.pad(frame, (0, WIN_N - len(frame)))
+                rms_w = float(np.sqrt(np.mean(frame ** 2)))
+                if rms_w < RMS_FLOOR:
+                    continue  # skip near-silent window
+                fft_mag = np.abs(np.fft.rfft(frame * window_func))
+                freqs   = np.fft.rfftfreq(WIN_N, d=1.0 / sr)
+                centroid = float(np.sum(freqs * fft_mag) / (np.sum(fft_mag) + 1e-8))
+                power        = fft_mag ** 2
+                total_power  = power.sum() + 1e-12
+                be = [float(power[(freqs >= f_lo) & (freqs < f_hi)].sum() / total_power)
+                      for _, f_lo, f_hi, _ in _PERC_BANDS]
+                bright_list.append(centroid)
+                energy_list.append(rms_w)
+                band_list.append(be)
+
+            if not bright_list:   # all windows silent — treat as failed
+                raise ValueError('no valid windows')
+
+            band_energy = [round(float(np.mean([w[b] for w in band_list])), 6)
+                           for b in range(len(_PERC_BANDS))]
+
+            results_map[tid] = {
+                'track_id':        tid,
+                'brightness':      round(float(np.mean(bright_list)), 2),
+                'energy':          round(float(np.mean(energy_list)), 6),
+                'band_energy':     band_energy,
+                'analysis_version': 3,
+                'cluster':         None,
+                'source_path':     source_path,
+                'source_mtime':    source_mtime,
+                'analysed_at':     int(time.time()),
+            }
+        except Exception as exc:
+            reason = 'unsupported_format' if 'sndfile' in str(exc).lower() else 'read_error'
+            results_map[tid] = {
+                'track_id': tid,
+                'failed': True,
+                'reason': reason,
+                'brightness': None,
+                'band_energy': None,
+                'cluster': None,
+                'analysis_version': 3,
+                'source_path': source_path,
+                'source_mtime': source_mtime,
+                'analysed_at': int(time.time()),
+            }
+
+        # Flush to disk every 200 tracks so progress survives a crash
+        if i > 0 and i % 200 == 0:
+            try:
+                feat_path.write_text(json.dumps([
+                    results_map[t['id']] for t in tracks if t['id'] in results_map
+                ]))
+            except Exception:
+                pass
+
+    if analysis_state['status'] == 'running':
+        # Normal completion
+        final_rows = [results_map[t['id']] for t in tracks if t['id'] in results_map]
+        feat_path.write_text(json.dumps(final_rows))
+        analysis_state.update({
+            'status':       'done',
+            'done':         len(pending_tracks),
+            'completed_at': int(time.time()),
+        })
+    else:
+        # Cancelled — save partial results so incremental re-run can resume.
+        final_rows = [results_map[t['id']] for t in tracks if t['id'] in results_map]
+        if final_rows:
+            feat_path.write_text(json.dumps(final_rows))
+        analysis_state.update({'status': 'idle', 'done': 0, 'total': 0, 'error': None})
+
+
+@app.route('/api/insights/analyse', methods=['POST'])
+def insights_start_analysis():
+    if analysis_state['status'] == 'running':
+        return jsonify({'error': 'Analysis already running'}), 409
+    existing_map = {f.get('track_id'): f for f in _backfill_feature_source_signatures(library)}
+    pending = [t for t in library if not _is_cached_feature_current(existing_map.get(t['id']), t)]
+    if not pending:
+        return jsonify({'ok': True, 'already_up_to_date': True, 'total': 0, 'pending': 0})
+    t = threading.Thread(target=_run_analysis, daemon=True)
+    t.start()
+    return jsonify({'ok': True, 'total': len(pending), 'pending': len(pending)})
+
+
+@app.route('/api/insights/analyse/cancel', methods=['POST'])
+def insights_cancel_analysis():
+    if analysis_state['status'] == 'running':
+        analysis_state['status'] = 'cancelled'
+        return jsonify({'ok': True})
+    return jsonify({'error': 'No analysis is currently running'}), 409
+
+
+@app.route('/api/insights/analyse/status')
+def insights_analysis_status():
+    return jsonify(analysis_state)
+
+
+@app.route('/api/insights/analyse/info')
+def insights_analyse_info():
+    """Return per-track analysis coverage: how many library tracks have been processed."""
+    total      = len(library)
+    processed  = 0   # attempted and current for this exact file revision
+    valid      = 0   # has full v3 feature set and current
+    needs_upgrade = False
+    existing_map = {f.get('track_id'): f for f in _backfill_feature_source_signatures(library)}
+    for track in library:
+        cached = existing_map.get(track['id'])
+        if not cached:
+            continue
+        if cached.get('analysis_version') != 3:
+            needs_upgrade = True
+        if _is_cached_feature_current(cached, track):
+            processed += 1
+            if not cached.get('failed'):
+                valid += 1
+    pending = max(0, total - processed)
+    if processed == 0:
+        status = 'not_run'
+    elif needs_upgrade:
+        status = 'needs_upgrade'
+    elif pending == 0:
+        status = 'up_to_date'
+    else:
+        status = 'pending'
+    return jsonify({
+        'total': total, 'analysed': valid, 'processed': processed,
+        'pending': pending, 'status': status, 'needs_upgrade': needs_upgrade,
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Insights — Phase 2 & 3: Sonic Profile + IEM-Genre Matching
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# 12 overlapping perceptual frequency-band dimensions.
+# Overlap is intentional — each dimension captures a distinct perceptual quality.
+# Format: (key, f_lo Hz, f_hi Hz, label)
+_PERC_BANDS = [
+    ('sub_bass',      20,    60,   'Sub-bass'),
+    ('bass',          60,   120,   'Bass'),
+    ('bass_feel',     80,   200,   'Bass feel'),
+    ('slam',          80,   150,   'Slam'),
+    ('lower_mids',   200,   500,   'Lower mids'),
+    ('upper_mids',   500,  1500,   'Upper mids'),
+    ('note_weight',  200,  1000,   'Note weight'),
+    ('lower_treble', 3000, 6000,   'Lower treble'),
+    ('upper_treble', 6000, 20000,  'Upper treble'),
+    ('detail',       4000, 10000,  'Detail'),
+    ('sibilance',    5000, 10000,  'Sibilance'),
+    ('texture',      6000, 15000,  'Texture'),
+]
+
+# 5 derived perceptual dimensions (computed from IEM FR shape, not FFT energy)
+_DERIVED_DIMS = ['sound_stage', 'timbre_color', 'masking', 'layering', 'tonality']
+
+_ALL_DIM_LABELS = {b[0]: b[3] for b in _PERC_BANDS}
+_ALL_DIM_LABELS.update({
+    'sound_stage':  'Sound stage',
+    'timbre_color': 'Timbre / color',
+    'masking':      'Masking',
+    'layering':     'Layering',
+    'tonality':     'Tonality',
+})
+_ALL_DIM_KEYS = [b[0] for b in _PERC_BANDS] + _DERIVED_DIMS
+
+
+def _load_features():
+    p = _features_file()
+    if not p.exists():
+        return []
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return []
+
+
+def _library_salience(features):
+    """
+    Per-band salience S_b = 0.7·norm(mean) + 0.3·norm(std), sums to 1.
+    Uses the 12-band v3 scheme. Returns None if no v3 data exists.
+    """
+    import numpy as np
+    valid = [f for f in features
+             if f.get('band_energy') and len(f['band_energy']) == 12]
+    if not valid:
+        return None
+    matrix = np.array([f['band_energy'] for f in valid], dtype=float)
+    L_b, V_b = matrix.mean(axis=0), matrix.std(axis=0)
+    def _n(a):
+        r = a.max() - a.min()
+        return (a - a.min()) / (r + 1e-12)
+    S_b = 0.7 * _n(L_b) + 0.3 * _n(V_b)
+    S_b /= S_b.sum() + 1e-12
+    return {b[0]: round(float(v), 6) for b, v in zip(_PERC_BANDS, S_b)}
+
+
+def _library_shape(features, alpha=6.0):
+    """
+    12-band tonal-shape profile of the library in dB-like space.
+    E_b → log → centre → normalise to [-1,1] → ×alpha.
+    """
+    import numpy as np
+    valid = [f for f in features
+             if f.get('band_energy') and len(f['band_energy']) == 12]
+    if not valid:
+        return None
+    E_b   = np.array([f['band_energy'] for f in valid], dtype=float).mean(axis=0)
+    logE  = np.log(np.maximum(E_b, 1e-12))
+    shape = logE - logE.mean()
+    ma    = np.abs(shape).max()
+    if ma > 1e-8:
+        shape /= ma
+    return {b[0]: round(float(v), 4) for b, v in zip(_PERC_BANDS, alpha * shape)}
+
+
+def _score_iem_17d(measurement, target_measurement=None):
+    """
+    Score an IEM across all 17 perceptual dimensions on a 1–10 scale each.
+
+    12 frequency-band scores: 10·exp(-0.08·|deviation_dB|)
+      — k=0.08: 0 dB→10, 3 dB→7.9, 6 dB→6.2, 10 dB→4.5, 15 dB→3.0
+
+    5 derived dimension scores computed from FR shape:
+      sound_stage  — mids recession vs surrounding bands → clip(5+recession×0.5, 1,10)
+      timbre_color — RMS deviation 200–6 kHz vs target  → 10·exp(-0.05·dev)
+      masking      — 500–1500 Hz elevation vs neighbours  → clip(7-elev×0.6, 1,10)
+      layering     — std of 1/3-octave bands 300–5000 Hz → clip(1+std×0.7, 1,10)
+      tonality     — mean abs deviation full range        → 10·exp(-0.05·dev)
+
+    Returns {'scores': {dim: float 1–10}, 'deviation': {band: dB}} or None.
+    """
+    import numpy as np
+    if not measurement or len(measurement) < 50:
+        return None
+
+    ref = _spl_at_1khz(measurement)
+    if ref is not None:
+        measurement = _shift(measurement, NORM_REF_DB - ref)
+
+    freqs = np.array([p[0] for p in measurement], dtype=float)
+    spls  = np.array([p[1] for p in measurement], dtype=float)
+
+    # Target: pre-compute band means and interpolated curve
+    t_freqs = t_spls_arr = None
+    target_band_mean = {}
+    if target_measurement and len(target_measurement) >= 50:
+        t_ref       = _spl_at_1khz(target_measurement)
+        t_meas      = _shift(target_measurement, NORM_REF_DB - t_ref) if t_ref is not None else target_measurement
+        t_freqs     = np.array([p[0] for p in t_meas], dtype=float)
+        t_spls_arr  = np.array([p[1] for p in t_meas], dtype=float)
+        for key, f_lo, f_hi, _ in _PERC_BANDS:
+            m = (t_freqs >= f_lo) & (t_freqs < f_hi)
+            target_band_mean[key] = float(t_spls_arr[m].mean()) if m.any() else NORM_REF_DB
+    else:
+        for key, *_ in _PERC_BANDS:
+            target_band_mean[key] = NORM_REF_DB
+
+    # ── 12 frequency-band scores ──────────────────────────────────────────────
+    k = 0.08
+    scores, deviation = {}, {}
+    for key, f_lo, f_hi, _ in _PERC_BANDS:
+        m   = (freqs >= f_lo) & (freqs < f_hi)
+        dev = float(spls[m].mean()) - target_band_mean[key] if m.any() else 0.0
+        deviation[key] = round(dev, 2)
+        scores[key]    = round(float(10.0 * np.exp(-k * abs(dev))), 2)
+
+    def _bm(lo, hi):
+        m = (freqs >= lo) & (freqs < hi)
+        return float(spls[m].mean()) if m.any() else NORM_REF_DB
+
+    # ── Derived: Sound stage ──────────────────────────────────────────────────
+    recession = (_bm(60, 300) + _bm(3000, 10000)) / 2 - _bm(300, 3000)
+    scores['sound_stage'] = round(float(np.clip(5.0 + recession * 0.5, 1.0, 10.0)), 2)
+
+    # ── Derived: Timbre / color ───────────────────────────────────────────────
+    m_tc = (freqs >= 200) & (freqs < 6000)
+    if m_tc.any():
+        ref_tc = (np.interp(freqs[m_tc], t_freqs, t_spls_arr)
+                  if t_freqs is not None else np.full(m_tc.sum(), NORM_REF_DB))
+        scores['timbre_color'] = round(
+            float(10.0 * np.exp(-0.05 * float(np.mean(np.abs(spls[m_tc] - ref_tc))))), 2)
+    else:
+        scores['timbre_color'] = 5.0
+
+    # ── Derived: Masking ──────────────────────────────────────────────────────
+    masking_elev = _bm(500, 1500) - (_bm(200, 500) + _bm(1500, 4000)) / 2
+    scores['masking'] = round(float(np.clip(7.0 - masking_elev * 0.6, 1.0, 10.0)), 2)
+
+    # ── Derived: Layering ─────────────────────────────────────────────────────
+    ctrs = [315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000]
+    lv   = [float(spls[(freqs >= c * 0.89) & (freqs < c * 1.12)].mean())
+            for c in ctrs if ((freqs >= c * 0.89) & (freqs < c * 1.12)).any()]
+    scores['layering'] = (
+        round(float(np.clip(1.0 + float(np.std(lv)) * 0.7, 1.0, 10.0)), 2)
+        if len(lv) >= 3 else 5.0)
+
+    # ── Derived: Tonality ─────────────────────────────────────────────────────
+    ref_full = (np.interp(freqs, t_freqs, t_spls_arr)
+                if t_freqs is not None else np.full(len(freqs), NORM_REF_DB))
+    scores['tonality'] = round(
+        float(10.0 * np.exp(-0.05 * float(np.mean(np.abs(spls - ref_full))))), 2)
+
+    return {'scores': scores, 'deviation': deviation}
+
+
+def _iem_character_label(deviation):
+    """Human-readable tonal character from 12-band deviation dict."""
+    low_end  = (deviation.get('sub_bass', 0) + deviation.get('bass', 0)
+                + deviation.get('bass_feel', 0)) / 3
+    body     = (deviation.get('lower_mids', 0) + deviation.get('note_weight', 0)) / 2
+    presence = deviation.get('upper_mids', 0)
+    detail   = (deviation.get('detail', 0) + deviation.get('lower_treble', 0)) / 2
+    air      = (deviation.get('upper_treble', 0) + deviation.get('texture', 0)) / 2
+    tags = []
+    if   low_end >  4:  tags.append('bass-heavy')
+    elif low_end >  2:  tags.append('warm')
+    elif low_end < -3:  tags.append('bass-light')
+    if   body    >  3:  tags.append('full-bodied')
+    elif body    < -3:  tags.append('lean mids')
+    if   presence > 4:  tags.append('forward presence')
+    elif presence < -3: tags.append('smooth mids')
+    if   detail  >  4:  tags.append('bright')
+    elif detail  >  2:  tags.append('airy')
+    elif detail  < -4:  tags.append('dark')
+    if not tags:        tags.append('neutral')
+    return ', '.join(tags)
+
+
+def _library_character_label(salience):
+    """Top-band description of the library's spectral salience profile."""
+    top = max(salience, key=salience.get)
+    return {
+        'sub_bass':     'sub-bass heavy',   'bass':         'bass-driven',
+        'bass_feel':    'warm and full',     'slam':         'punchy and dynamic',
+        'lower_mids':   'full lower midrange', 'upper_mids': 'presence-forward',
+        'note_weight':  'full-bodied',       'lower_treble': 'bright and detailed',
+        'upper_treble': 'airy and extended', 'detail':       'detail-focused',
+        'sibilance':    'treble-forward',    'texture':      'textured treble',
+    }.get(top, 'balanced')
+
+
+def _apply_peq(measurement, peq_profile):
+    """
+    Apply a PEQ profile to a [[freq, spl], ...] measurement.
+    Uses biquad filter math (Audio EQ Cookbook coefficients) evaluated at each
+    measurement frequency via z = e^(j·2π·f/Fs) with a high virtual Fs for
+    near-analog accuracy.  Re-normalises to 75 dB at 1 kHz afterwards so the
+    returned curve stays on the same reference as the base measurement.
+    """
+    import numpy as np
+    if not measurement or not peq_profile:
+        return measurement
+
+    freqs = np.array([p[0] for p in measurement], dtype=float)
+    spls  = np.array([p[1] for p in measurement], dtype=float).copy()
+
+    spls += float(peq_profile.get('preamp_db') or 0.0)
+
+    Fs = 192000.0   # high virtual sample rate → near-analog accuracy below ~20 kHz
+
+    for filt in (peq_profile.get('filters') or []):
+        if not filt.get('enabled', True):
+            continue
+        ftype = (filt.get('type') or 'PK').upper()
+        if ftype in ('NO', 'AP'):
+            continue        # notch / all-pass: negligible magnitude change
+        fc   = float(filt.get('fc')   or 1000.0)
+        gain = float(filt.get('gain') or 0.0)
+        q    = float(filt.get('q')    or 0.707)
+        if q <= 0:        q = 0.707
+        if fc <= 0 or fc >= Fs / 2:
+            continue
+
+        w0 = 2 * np.pi * fc / Fs
+        cw = np.cos(w0);  sw = np.sin(w0)
+        A  = 10 ** (gain / 40.0)
+        al = sw / (2 * q)
+
+        if ftype == 'PK':
+            b0, b1, b2 = 1 + al*A,  -2*cw, 1 - al*A
+            a0, a1, a2 = 1 + al/A,  -2*cw, 1 - al/A
+        elif ftype in ('LSC', 'LS'):
+            sqA = np.sqrt(A)
+            b0 =    A * ((A+1) - (A-1)*cw + 2*sqA*al)
+            b1 = 2*A  * ((A-1) - (A+1)*cw)
+            b2 =    A * ((A+1) - (A-1)*cw - 2*sqA*al)
+            a0 =        (A+1)  + (A-1)*cw + 2*sqA*al
+            a1 =   -2 * ((A-1) + (A+1)*cw)
+            a2 =        (A+1)  + (A-1)*cw - 2*sqA*al
+        elif ftype in ('HSC', 'HS'):
+            sqA = np.sqrt(A)
+            b0 =    A * ((A+1) + (A-1)*cw + 2*sqA*al)
+            b1 = -2*A * ((A-1) + (A+1)*cw)
+            b2 =    A * ((A+1) + (A-1)*cw - 2*sqA*al)
+            a0 =        (A+1)  - (A-1)*cw + 2*sqA*al
+            a1 =    2 * ((A-1) - (A+1)*cw)
+            a2 =        (A+1)  - (A-1)*cw - 2*sqA*al
+        elif ftype in ('LPQ', 'LP', 'LPF'):
+            b0 = (1 - cw) / 2;  b1 = 1 - cw;   b2 = (1 - cw) / 2
+            a0 = 1 + al;         a1 = -2 * cw;   a2 = 1 - al
+        elif ftype in ('HPQ', 'HP', 'HPF'):
+            b0 = (1 + cw) / 2;  b1 = -(1 + cw); b2 = (1 + cw) / 2
+            a0 = 1 + al;         a1 = -2 * cw;   a2 = 1 - al
+        else:
+            continue
+
+        # Evaluate |H(e^jω)| at each measurement frequency
+        # H(z) = (b0 + b1·z⁻¹ + b2·z⁻²) / (a0 + a1·z⁻¹ + a2·z⁻²)
+        omega = 2 * np.pi * freqs / Fs
+        zin   = np.exp(-1j * omega)
+        num   = b0 + b1 * zin + b2 * zin**2
+        den   = a0 + a1 * zin + a2 * zin**2
+        spls += 20 * np.log10(np.abs(num / den) + 1e-12)
+
+    # Re-normalise to 75 dB at 1 kHz (same convention as base measurement)
+    ref_idx = int(np.argmin(np.abs(freqs - 1000.0)))
+    spls   += 75.0 - spls[ref_idx]
+
+    return [[float(freqs[i]), float(spls[i])] for i in range(len(freqs))]
+
+
+# ── Genre fingerprinting ──────────────────────────────────────────────────────
+
+def _compute_genre_fingerprints(features, library_tracks):
+    """
+    Group tracks by genre tag. Average + per-band-normalise 12-band energy.
+    Returns {slug: {genre, slug, track_count, fingerprint: {band: 0-1}}}
+    """
+    import numpy as np
+    band_keys   = [b[0] for b in _PERC_BANDS]
+    id_to_genre = {t['id']: (t.get('genre') or '').strip() for t in library_tracks}
+
+    genre_lists = {}
+    for f in features:
+        if f.get('failed') or not f.get('band_energy') or len(f['band_energy']) != 12:
+            continue
+        if f.get('analysis_version') != 3:
+            continue
+        genre = id_to_genre.get(f['track_id'], '') or 'Unknown'
+        genre_lists.setdefault(genre, []).append(f['band_energy'])
+
+    if not genre_lists:
+        return {}
+
+    raw = {g: {'tc': len(bls), 'avg': np.array(bls).mean(axis=0)}
+           for g, bls in genre_lists.items()}
+
+    # Per-band min-max normalisation across genres
+    for b_i in range(len(band_keys)):
+        vals = [raw[g]['avg'][b_i] for g in raw]
+        mn, mx = min(vals), max(vals)
+        rng = mx - mn + 1e-12
+        for g in raw:
+            raw[g]['avg'][b_i] = (raw[g]['avg'][b_i] - mn) / rng
+
+    result = {}
+    for genre, data in raw.items():
+        slug = re.sub(r'[^a-z0-9_-]', '_', genre.lower().strip())
+        result[slug] = {
+            'genre': genre, 'slug': slug, 'track_count': data['tc'],
+            'fingerprint': {k: round(float(v), 4)
+                            for k, v in zip(band_keys, data['avg'])},
+        }
+    return result
+
+
+# ── Match matrix ──────────────────────────────────────────────────────────────
+
+def _build_match_matrix(genre_fps, iem_profiles):
+    """
+    Compute IEM × genre match scores (0–100).
+    score(iem, genre) = Σ(energy[b] · iem_score[b]) / Σ(energy[b]) × 10
+    where energy[b] ∈ [0,1] and iem_score[b] ∈ [1,10].
+    """
+    import numpy as np
+    band_keys    = [b[0] for b in _PERC_BANDS]
+    total_tracks = sum(fp['track_count'] for fp in genre_fps.values())
+
+    matrix = []
+    iem_sw = {iem['id']: [] for iem in iem_profiles}   # [(score, weight)]
+
+    for slug, fp in sorted(genre_fps.items(), key=lambda x: -x[1]['track_count']):
+        ge = np.array([fp['fingerprint'].get(k, 0.0) for k in band_keys])
+        te = ge.sum() + 1e-12
+        wt = fp['track_count'] / max(total_tracks, 1)
+        matches = []
+        for iem in iem_profiles:
+            is_ = np.array([iem['scores_12band'].get(k, 5.0) for k in band_keys])
+            pct = round(min(float((ge * is_).sum() / te) * 10.0, 100.0), 1)
+            top = [band_keys[i] for i in np.argsort(-(ge * is_))[:3] if ge[i] > 0.1]
+            matches.append({'iem_id': iem['id'], 'iem_name': iem['name'],
+                            'score': pct, 'best_dimensions': top})
+            iem_sw[iem['id']].append((pct, wt))
+        matches.sort(key=lambda x: -x['score'])
+        matrix.append({'genre': fp['genre'], 'slug': slug,
+                       'track_count': fp['track_count'], 'matches': matches})
+
+    # IEM library-weighted summary
+    iem_summary = []
+    for iem in iem_profiles:
+        sw = iem_sw.get(iem['id'], [])
+        if not sw:
+            continue
+        tw  = sum(w for _, w in sw) + 1e-12
+        lib = round(sum(s * w for s, w in sw) / tw, 1)
+        gs  = {r['genre']: next((m['score'] for m in r['matches'] if m['iem_id'] == iem['id']), 0)
+               for r in matrix}
+        iem_summary.append({
+            'iem_id': iem['id'], 'iem_name': iem['name'],
+            'library_match_score': lib,
+            'best_genre':  max(gs, key=gs.get)  if gs else None,
+            'worst_genre': min(gs, key=gs.get)  if gs else None,
+            'genres_above_70': sum(1 for s in gs.values() if s >= 70),
+            'genres_total': len(gs),
+        })
+    iem_summary.sort(key=lambda x: -x['library_match_score'])
+
+    # Overall coverage %
+    cov_tracks = sum(
+        fp['track_count'] for slug, fp in genre_fps.items()
+        if any(m['score'] >= 70 for r in matrix if r['slug'] == slug for m in r['matches'])
+    )
+    cov_threshold = 70
+    cov_pct = round(cov_tracks / max(total_tracks, 1) * 100, 1)
+
+    # Summary text
+    good = [r['genre'] for r in matrix if max((m['score'] for m in r['matches']), default=0) >= 70]
+    bad  = [r['genre'] for r in matrix if max((m['score'] for m in r['matches']), default=0) < 65]
+    if not iem_profiles:
+        sumtext = 'Add IEMs with FR data in the Gear section to start matching.'
+    elif good and bad:
+        sumtext = (f"Your collection covers {', '.join(good[:3])} well. "
+                   f"{', '.join(bad[:3])} {'are' if len(bad) > 1 else 'is'} underserved.")
+    elif good:
+        sumtext = f"Your collection covers {', '.join(good[:3])} well. No significant blindspots."
+    elif bad:
+        sumtext = f"No genres are well-covered yet. Focus areas: {', '.join(bad[:3])}."
+    else:
+        sumtext = 'Analysis complete. Tag your tracks with genres for richer insights.'
+
+    # Blindspot / well-covered lists
+    _dphr = {
+        'sub_bass': 'strong sub-bass extension below 60 Hz',
+        'bass': 'solid bass punch (60–120 Hz)',       'bass_feel': 'warmth (80–200 Hz)',
+        'slam': 'transient attack / slam (80–150 Hz)', 'lower_mids': 'body (200–500 Hz)',
+        'upper_mids': 'presence (500 Hz–1.5 kHz)',    'note_weight': 'note weight (200 Hz–1 kHz)',
+        'lower_treble': 'lower treble bite (3–6 kHz)', 'upper_treble': 'upper treble air (6–20 kHz)',
+        'detail': 'micro-detail (4–10 kHz)',           'sibilance': 'controlled sibilance (5–10 kHz)',
+        'texture': 'surface texture (6–15 kHz)',
+    }
+    blindspots, well_covered = [], []
+    for row in matrix:
+        bm = max((m['score'] for m in row['matches']), default=0)
+        bx = max(row['matches'], key=lambda m: m['score'], default=None)
+        if bm < 65:
+            fp      = genre_fps[row['slug']]
+            missing = [k for k in band_keys
+                       if fp['fingerprint'].get(k, 0) > 0.5
+                       and min((iem['scores_12band'].get(k, 5.0) for iem in iem_profiles),
+                               default=5.0) < 6.0][:3]
+            phrases = [_dphr[d] for d in missing if d in _dphr][:2]
+            sugg    = ('An IEM with ' + ' and '.join(phrases) + ' would improve coverage.'
+                       if phrases else 'A neutral, well-extended IEM would help.')
+            blindspots.append({
+                'genre': row['genre'], 'slug': row['slug'],
+                'track_count': row['track_count'], 'best_score': bm,
+                'best_iem_id': bx['iem_id'] if bx else None,
+                'best_iem_name': bx['iem_name'] if bx else None,
+                'missing_dimensions': missing, 'suggestion': sugg,
+            })
+        elif bm >= 70:
+            well_covered.append({
+                'genre': row['genre'], 'track_count': row['track_count'],
+                'best_score': bm, 'best_iem_name': bx['iem_name'] if bx else None,
+            })
+
+    return {
+        'library_overview': {
+            'total_tracks': total_tracks, 'total_genres': len(genre_fps),
+            'overall_coverage_pct': cov_pct, 'iem_summary': iem_summary,
+            'covered_tracks': cov_tracks, 'coverage_threshold_pct': cov_threshold,
+            'summary_text': sumtext,
+        },
+        'matrix': matrix, 'blindspots': blindspots, 'well_covered': well_covered,
+        'band_labels': _ALL_DIM_LABELS, 'dim_keys': _ALL_DIM_KEYS,
+    }
+
+
+def _score_iem_peq_variants(iem, target_meas):
+    """Score all PEQ variants for an IEM."""
+    variants = []
+    for peq in (iem.get('peq_profiles') or []):
+        pm = _apply_peq(iem.get('measurement_L'), peq)
+        r  = _score_iem_17d(pm, target_meas)
+        if not r:
+            continue
+        variants.append({
+            'peq_id': peq['id'], 'name': peq.get('name', 'PEQ'),
+            'scores_12band': {k: r['scores'][k] for k in [b[0] for b in _PERC_BANDS]},
+            'scores_all': r['scores'], 'deviation': r['deviation'],
+            'character': _iem_character_label(r['deviation']),
+        })
+    return variants
+
+
+def _match_matrix_path():
+    return DATA_DIR / 'match-matrix.json'
+
+
+def _load_match_data():
+    p = _match_matrix_path()
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return None
+
+
+# ── API routes ────────────────────────────────────────────────────────────────
+
+@app.route('/api/insights/sonic-profile')
+def insights_sonic_profile():
+    import numpy as np, random as _rnd
+    features = _load_features()
+    valid    = [f for f in features if f.get('brightness') and f.get('energy') is not None]
+    if not valid:
+        return jsonify({'error': 'Run audio analysis first'}), 404
+
+    brightness = np.array([f['brightness'] for f in valid], dtype=float)
+    energy     = np.array([f['energy']     for f in valid], dtype=float)
+
+    def _hist(arr, n=25):
+        counts, edges = np.histogram(arr, bins=n)
+        mids = [(edges[i] + edges[i+1]) / 2 for i in range(n)]
+        return {'counts': counts.tolist(), 'midpoints': [round(m, 2) for m in mids]}
+
+    def _stats(arr):
+        return {k: round(float(v), 2) for k, v in {
+            'min': arr.min(), 'max': arr.max(), 'mean': arr.mean(),
+            'median': np.median(arr), 'p25': np.percentile(arr, 25),
+            'p75': np.percentile(arr, 75),
+        }.items()}
+
+    sample  = _rnd.sample(valid, min(600, len(valid)))
+    scatter = [{'x': round(f['brightness'], 0), 'y': round(f['energy'], 5)} for f in sample]
+
+    # 12-band energy profile (normalised to 0–1 relative to max band)
+    valid12 = [f for f in features
+               if f.get('band_energy') and len(f['band_energy']) == 12
+               and f.get('analysis_version') == 3 and not f.get('failed')]
+    band_profile = None
+    if valid12:
+        bm  = np.array([f['band_energy'] for f in valid12]).mean(axis=0)
+        mx  = bm.max() + 1e-12
+        band_profile = {b[0]: round(float(v / mx), 4) for b, v in zip(_PERC_BANDS, bm)}
+
+    return jsonify({
+        'track_count':  len(valid),
+        'brightness':   {'histogram': _hist(brightness), 'stats': _stats(brightness)},
+        'energy':       {'histogram': _hist(energy),     'stats': _stats(energy)},
+        'scatter':      scatter,
+        'band_profile': band_profile,
+        'band_labels':  {b[0]: b[3] for b in _PERC_BANDS},
+    })
+
+
+@app.route('/api/insights/matching/analyse', methods=['POST'])
+def insights_matching_analyse():
+    """
+    Compute genre fingerprints + IEM 17-dim scores + match matrix.
+    Fast (no audio I/O) — reads existing track_features.json + IEM FR curves.
+    """
+    features = _load_features()
+    valid12  = [f for f in features
+                if f.get('band_energy') and len(f['band_energy']) == 12
+                and f.get('analysis_version') == 3 and not f.get('failed')]
+    if not valid12:
+        return jsonify({'error': 'Run audio analysis first to generate 12-band track features.'}), 404
+
+    body        = request.get_json(silent=True) or {}
+    target_id   = body.get('target', 'flat')
+    target_meas = None
+    baselines   = load_baselines()
+    if target_id != 'flat':
+        bl = next((b for b in baselines if b['id'] == target_id), None)
+        if bl and bl.get('measurement'):
+            target_meas = bl['measurement']
+        else:
+            target_id = 'flat'
+
+    iems_path = DATA_DIR / 'iems.json'
+    iems = json.loads(iems_path.read_text()) if iems_path.exists() else []
+
+    iem_profiles = []
+    for iem in iems:
+        r = _score_iem_17d(iem.get('measurement_L'), target_meas)
+        if not r:
+            continue
+        iem_profiles.append({
+            'id': iem['id'], 'name': iem['name'],
+            'scores_12band': {k: r['scores'][k] for k in [b[0] for b in _PERC_BANDS]},
+            'scores_all':    r['scores'],
+            'deviation':     r['deviation'],
+            'character':     _iem_character_label(r['deviation']),
+            'peq_variants':  _score_iem_peq_variants(iem, target_meas),
+        })
+
+    genre_fps   = _compute_genre_fingerprints(valid12, library)
+    matrix_data = _build_match_matrix(genre_fps, iem_profiles) if genre_fps else None
+
+    out = {
+        'generated_at': int(time.time()),
+        'target_id':    target_id,
+        'genre_fps':    genre_fps,
+        'iem_profiles': iem_profiles,
+        'matrix_data':  matrix_data,
+    }
+    try:
+        _match_matrix_path().write_text(json.dumps(out))
+    except Exception:
+        pass
+
+    return jsonify({
+        'status':          'complete',
+        'tracks_analysed': len(valid12),
+        'genres_found':    len(genre_fps),
+        'iems_scored':     len(iem_profiles),
+    })
+
+
+@app.route('/api/insights/matching/overview')
+def insights_matching_overview():
+    data = _load_match_data()
+    if not data or not data.get('matrix_data'):
+        return jsonify({'error': 'Run matching analysis first.'}), 404
+    md = data['matrix_data']
+    lib_overview = dict(md.get('library_overview') or {})
+
+    # Backward-compatible coverage backfill:
+    # Older cached matrix payloads may not include covered_tracks/threshold fields.
+    # Compute these from matrix rows so overview messaging stays accurate.
+    matrix_rows = md.get('matrix') or []
+    threshold = int(lib_overview.get('coverage_threshold_pct') or 70)
+    total_tracks = sum(int(r.get('track_count') or 0) for r in matrix_rows)
+    covered_tracks = sum(
+        int(r.get('track_count') or 0)
+        for r in matrix_rows
+        if max((m.get('score', 0) for m in (r.get('matches') or [])), default=0) >= threshold
+    )
+    coverage_pct = round(covered_tracks / max(total_tracks, 1) * 100, 1) if total_tracks > 0 else 0.0
+
+    lib_overview['total_tracks'] = total_tracks
+    lib_overview['covered_tracks'] = covered_tracks
+    lib_overview['coverage_threshold_pct'] = threshold
+    lib_overview['overall_coverage_pct'] = coverage_pct
+
+    # Build available targets: Flat/Neutral + any saved baselines
+    bl = load_baselines()
+    available_targets = [{'id': 'flat', 'name': 'Flat / Neutral'}] + [
+        {'id': b['id'], 'name': b['name']} for b in bl
+    ]
+    return jsonify({**lib_overview,
+                    'band_labels':       md.get('band_labels', {}),
+                    'generated_at':      data.get('generated_at'),
+                    'target_id':         data.get('target_id', 'flat'),
+                    'available_targets': available_targets})
+
+
+@app.route('/api/insights/matching/matrix')
+def insights_matching_matrix():
+    data = _load_match_data()
+    if not data or not data.get('matrix_data'):
+        return jsonify({'error': 'Run matching analysis first.'}), 404
+    md       = data['matrix_data']
+    fps      = data.get('genre_fps', {})
+    # Attach fingerprint to each row so the client can recompute scores for PEQ variants
+    matrix   = [dict(row, fingerprint=fps.get(row['slug'], {}).get('fingerprint', {}))
+                for row in md['matrix']]
+    return jsonify({'matrix': matrix, 'band_labels': md['band_labels'],
+                    'dim_keys': md['dim_keys']})
+
+
+@app.route('/api/insights/matching/recommend')
+def insights_matching_recommend():
+    genre = request.args.get('genre', '')
+    data  = _load_match_data()
+    if not data or not data.get('matrix_data'):
+        return jsonify({'error': 'Run matching analysis first.'}), 404
+    row = next((r for r in data['matrix_data']['matrix']
+                if r['genre'] == genre or r.get('slug') == genre), None)
+    if not row:
+        return jsonify({'error': 'Genre not found.'}), 404
+    return jsonify({'genre': row['genre'],
+                    'recommendations': sorted(row['matches'], key=lambda m: -m['score'])})
+
+
+@app.route('/api/insights/matching/blindspots')
+def insights_matching_blindspots():
+    data = _load_match_data()
+    if not data or not data.get('matrix_data'):
+        return jsonify({'error': 'Run matching analysis first.'}), 404
+    md = data['matrix_data']
+    return jsonify({'blindspots': md['blindspots'], 'well_covered': md['well_covered'],
+                    'band_labels': md['band_labels']})
+
+
+@app.route('/api/insights/matching/iem/<iem_id>/radar')
+def insights_matching_iem_radar(iem_id):
+    data = _load_match_data()
+    if not data:
+        return jsonify({'error': 'Run matching analysis first.'}), 404
+    prof = next((p for p in (data.get('iem_profiles') or []) if p['id'] == iem_id), None)
+    if not prof:
+        return jsonify({'error': 'IEM not found in analysis.'}), 404
+    best_genres = []
+    if data.get('matrix_data'):
+        gs = {r['genre']: next((m['score'] for m in r['matches'] if m['iem_id'] == iem_id), 0)
+              for r in data['matrix_data']['matrix']}
+        best_genres = sorted(gs, key=lambda g: -gs[g])[:3]
+    scores    = prof['scores_all']
+    deviation = prof.get('deviation', {})
+    dim_keys  = _ALL_DIM_KEYS
+    return jsonify({
+        'iem_id': iem_id, 'iem_name': prof['name'],
+        'scores': scores, 'deviation': deviation,
+        'dim_keys': dim_keys, 'dim_labels': _ALL_DIM_LABELS,
+        'best_genres': best_genres,
+        'weakest_dimensions': sorted(dim_keys, key=lambda k: scores.get(k, 0))[:3],
+        'peq_variants': [{'peq_id': v['peq_id'], 'name': v['name'],
+                          'scores': v['scores_all'], 'deviation': v.get('deviation', {})}
+                         for v in prof.get('peq_variants', [])],
+    })
+
+
+@app.route('/api/insights/matching/genre/<genre>/fingerprint')
+def insights_matching_genre_fingerprint(genre):
+    data = _load_match_data()
+    if not data or not data.get('genre_fps'):
+        return jsonify({'error': 'Run matching analysis first.'}), 404
+    fp = data['genre_fps'].get(genre) or next(
+        (v for v in data['genre_fps'].values() if v['genre'] == genre), None)
+    if not fp:
+        return jsonify({'error': 'Genre not found.'}), 404
+    return jsonify({**fp, 'band_labels': {b[0]: b[3] for b in _PERC_BANDS}})
+
+
+@app.route('/api/insights/matching/targets')
+def insights_matching_targets():
+    baselines  = load_baselines()
+    targets    = [{'id': 'flat', 'name': 'Flat / Neutral'}] + [
+        {'id': b['id'], 'name': b['name']} for b in baselines if b.get('measurement')]
+    data       = _load_match_data()
+    current_id = data.get('target_id', 'flat') if data else 'flat'
+    return jsonify({'targets': targets, 'current_target_id': current_id})
+
+
+# ── Insights heatmap genre config ──────────────────────────────────────────────
+
+INSIGHTS_CONFIG_PATH = DATA_DIR / 'insights_config.json'
+
+def load_insights_config():
+    try:
+        if INSIGHTS_CONFIG_PATH.exists():
+            with open(INSIGHTS_CONFIG_PATH) as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def save_insights_config(cfg):
+    try:
+        with open(INSIGHTS_CONFIG_PATH, 'w') as f:
+            json.dump(cfg, f, indent=2)
+    except Exception as e:
+        print(f'Could not save insights config: {e}')
+
+@app.route('/api/insights/matching/heatmap-genres', methods=['GET'])
+def get_heatmap_genres():
+    cfg = load_insights_config()
+    return jsonify({'extra_genres': cfg.get('heatmap_extra_genres', [])})
+
+@app.route('/api/insights/matching/heatmap-genres', methods=['POST'])
+def set_heatmap_genres():
+    data = request.get_json() or {}
+    genres = data.get('extra_genres', [])
+    if not isinstance(genres, list):
+        return jsonify({'error': 'extra_genres must be a list'}), 400
+    genres = [str(g) for g in genres if g][:5]
+    cfg = load_insights_config()
+    cfg['heatmap_extra_genres'] = genres
+    save_insights_config(cfg)
+    return jsonify({'extra_genres': genres})
 
 
 load_library()

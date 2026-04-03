@@ -8,7 +8,7 @@ const state = {
   tracks: [],              // tracks in current library view
   artists: [],
   albums: [],
-  devices: { poweramp: false, ap80: false },
+  devices: {},
   scanStatus: null,
   activeTrackId: null,     // for add-to dropdown
   sortable: null,
@@ -99,6 +99,8 @@ async function pollScanStatus() {
           ? `<span class="scan-removed">${status.new_tracks} removed</span>`
           : `<span class="scan-unchanged">No changes</span>`;
       msg.innerHTML = `<span class="scan-ready">Library ready</span><span class="scan-total">${status.total_tracks.toLocaleString()} tracks</span>${newLine}`;
+    } else if (status.status === 'error') {
+      msg.innerHTML = `<span class="scan-error">⚠ ${esc(status.message || 'Library error')}</span>`;
     } else {
       msg.textContent = status.message;
     }
@@ -265,7 +267,15 @@ async function loadPlaylistsView() {
 /* ── Artists view ───────────────────────────────────────────────────── */
 async function loadArtists() {
   document.getElementById('artists-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
-  const artists = await api('/library/artists');
+  let artists;
+  try {
+    artists = await api('/library/artists');
+  } catch (e) {
+    document.getElementById('artists-grid').innerHTML =
+      `<div class="library-error-banner"><p>Could not load library: ${esc(e.message)}</p>
+       <p class="library-error-hint">Check that your music folder is accessible, then rescan in Settings.</p></div>`;
+    return;
+  }
   state.artists = artists;
 
   const grid = document.getElementById('artists-grid');
@@ -348,7 +358,15 @@ function scrollToAlbumLetter(letter) {
 async function loadAlbums(artistFilter = null) {
   document.getElementById('albums-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
   const query = artistFilter ? `?artist=${encodeURIComponent(artistFilter)}` : '';
-  const albums = await api('/library/albums' + query);
+  let albums;
+  try {
+    albums = await api('/library/albums' + query);
+  } catch (e) {
+    document.getElementById('albums-grid').innerHTML =
+      `<div class="library-error-banner"><p>Could not load library: ${esc(e.message)}</p>
+       <p class="library-error-hint">Check that your music folder is accessible, then rescan in Settings.</p></div>`;
+    return;
+  }
   state.albums = albums;
 
   const grid = document.getElementById('albums-grid');
@@ -468,7 +486,13 @@ async function loadTracks(artist = null, album = null) {
   let q = [];
   if (artist) q.push(`artist=${encodeURIComponent(artist)}`);
   if (album) q.push(`album=${encodeURIComponent(album)}`);
-  const tracks = await api('/library/tracks?' + q.join('&'));
+  let tracks;
+  try {
+    tracks = await api('/library/tracks?' + q.join('&'));
+  } catch (e) {
+    toast('Could not load tracks — check your music folder in Settings');
+    return;
+  }
   state.tracks = tracks;
 
   const crumb = document.getElementById('tracks-breadcrumb');
@@ -1447,10 +1471,11 @@ function showView(viewName) {
   else if (viewName === 'gear') loadGearView();
   else if (viewName === 'playlists') loadPlaylistsView();
   else if (viewName === 'settings') loadSettings();
+  else if (viewName === 'insights') loadInsightsView();
 }
 
 function showViewEl(name) {
-  const views = ['artists', 'albums', 'tracks', 'songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists'];
+  const views = ['artists', 'albums', 'tracks', 'songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.style.display = v === name ? (v === 'playlist' ? 'flex' : 'block') : 'none';
@@ -1576,8 +1601,52 @@ async function saveSettings() {
 }
 
 /* ── Help modal ─────────────────────────────────────────────────────── */
+async function renderHelpCenter() {
+  const [settings, daps] = await Promise.all([
+    api('/settings').catch(() => ({})),
+    api('/daps').catch(() => []),
+  ]);
+
+  const libraryRoot = settings.library_path || '/Volumes/Storage/Music/FLAC';
+  const dataDir = settings._data_dir || 'App data folder';
+  const libraryRootEl = document.getElementById('help-library-root');
+  const dataDirEl = document.getElementById('help-data-dir');
+  if (libraryRootEl) libraryRootEl.textContent = libraryRoot;
+  if (dataDirEl) dataDirEl.textContent = dataDir;
+
+  const listEl = document.getElementById('help-device-list');
+  if (!listEl) return;
+  if (!daps.length) {
+    listEl.innerHTML = `
+      <div class="help-device-empty">
+        No DAPs configured yet. Add one in <strong>Gear</strong> to see export path guidance here.
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = daps.map(dap => {
+    const mounted = !!dap.mounted;
+    const mountPath = dap.mount_path || 'Not set';
+    const exportFolder = dap.export_folder || 'Playlists';
+    const pathPrefix = dap.path_prefix || '(none)';
+    return `
+      <div class="help-device-card">
+        <div class="help-device-top">
+          <div class="help-device-name">${esc(dap.name || 'Unnamed device')}</div>
+          <span class="help-device-status ${mounted ? 'ok' : 'warn'}">${mounted ? 'Connected' : 'Not connected'}</span>
+        </div>
+        <p class="help-device-kv"><strong>Mount path:</strong> <code>${esc(mountPath)}</code></p>
+        <p class="help-device-kv"><strong>Export folder:</strong> <code>${esc(exportFolder)}</code></p>
+        <p class="help-device-kv"><strong>Track path prefix:</strong> <code>${esc(pathPrefix)}</code></p>
+      </div>
+    `;
+  }).join('');
+}
+
 function showHelp() {
   document.getElementById('help-modal').style.display = 'flex';
+  renderHelpCenter();
 }
 function closeHelp() {
   document.getElementById('help-modal').style.display = 'none';
@@ -1789,7 +1858,35 @@ function _updateMappingCount() {
 /* ── Sync ────────────────────────────────────────────────────────────── */
 let _syncPollTimer = null;
 
+function _formatSyncPhaseMessage(raw, phase) {
+  const msg = String(raw || '').trim();
+  if (!msg) {
+    if (phase === 'scan') return 'Scanning your library files…';
+    if (phase === 'copy') return 'Copying selected files…';
+    if (phase === 'done') return 'Sync complete.';
+    return '';
+  }
+  const progressMatch = msg.match(/(\d+)\s*\/\s*(\d+)/);
+  if (phase === 'scan') {
+    if (progressMatch) return `Scanning files (${progressMatch[1]} / ${progressMatch[2]})…`;
+    return msg;
+  }
+  if (phase === 'copy') {
+    if (progressMatch) return `Copying files (${progressMatch[1]} / ${progressMatch[2]})…`;
+    return msg;
+  }
+  if (phase === 'done') {
+    return msg;
+  }
+  return msg;
+}
+
 function _syncPhase(name) {
+  const modal = document.getElementById('sync-modal');
+  if (modal) modal.setAttribute('data-phase', name);
+  document.querySelectorAll('#sync-modal .sync-phase-step').forEach(el => {
+    el.classList.toggle('active', el.dataset.step === name);
+  });
   ['pick', 'scanning', 'preview', 'copying', 'done'].forEach(p => {
     const el = document.getElementById(`sync-phase-${p}`);
     if (el) el.style.display = p === name ? 'block' : 'none';
@@ -1799,6 +1896,10 @@ function _syncPhase(name) {
 async function showSync() {
   await api('/sync/reset', { method: 'POST' }).catch(() => {});
   _syncPhase('pick');
+  const errWrap = document.getElementById('sync-errors-wrap');
+  if (errWrap) errWrap.style.display = 'none';
+  const doneMsg = document.getElementById('sync-done-msg');
+  if (doneMsg) doneMsg.textContent = '';
 
   const daps = await api('/daps').catch(() => []);
   const container = document.getElementById('sync-device-list');
@@ -1838,7 +1939,7 @@ function closeSyncModal() {
 
 async function startSyncScan(dapId) {
   _syncPhase('scanning');
-  document.getElementById('sync-scanning-msg').textContent = 'Scanning files…';
+  document.getElementById('sync-scanning-msg').textContent = 'Scanning your library files…';
 
   const res = await api('/sync/scan', { method: 'POST', body: { dap_id: dapId } });
   if (res.error) { toast(res.error); _syncPhase('pick'); return; }
@@ -1849,14 +1950,15 @@ async function startSyncScan(dapId) {
     const status = await api('/sync/status').catch(() => null);
     if (!status) return;
 
-    document.getElementById('sync-scanning-msg').textContent = status.current || status.message;
+    document.getElementById('sync-scanning-msg').textContent =
+      _formatSyncPhaseMessage(status.current || status.message, 'scan');
 
     if (status.status === 'ready') {
       clearInterval(_syncPollTimer);
       renderSyncPreview(status);
     } else if (status.status === 'error') {
       clearInterval(_syncPollTimer);
-      toast('Scan error: ' + status.message);
+      toast('Could not complete scan: ' + status.message);
       _syncPhase('pick');
     }
   }, 600);
@@ -1864,7 +1966,7 @@ async function startSyncScan(dapId) {
 
 function _syncFileRows(paths, side) {
   if (!paths.length) {
-    return `<div class="sync-empty">Nothing to copy</div>`;
+    return `<div class="sync-empty">No files to sync in this direction.</div>`;
   }
   return paths.map((p, i) => {
     const parts = p.replace(/\\/g, '/').split('/');
@@ -1910,12 +2012,12 @@ async function executeSync() {
   const device_paths = [...document.querySelectorAll('.sync-chk-device:checked')].map(cb => cb.dataset.path);
 
   if (!local_paths.length && !device_paths.length) {
-    toast('Select at least one file to sync');
+    toast('Select at least one file to sync.');
     return;
   }
 
   _syncPhase('copying');
-  document.getElementById('sync-copying-msg').textContent = `Copying 0 / ${local_paths.length + device_paths.length} files…`;
+  document.getElementById('sync-copying-msg').textContent = `Preparing to copy 0 / ${local_paths.length + device_paths.length} files…`;
   document.getElementById('sync-copy-bar').style.width = '0%';
   document.getElementById('sync-copying-current').textContent = '';
 
@@ -1928,7 +2030,8 @@ async function executeSync() {
 
     const pct = status.total > 0 ? Math.round((status.progress / status.total) * 100) : 0;
     document.getElementById('sync-copy-bar').style.width = pct + '%';
-    document.getElementById('sync-copying-msg').textContent = status.message;
+    document.getElementById('sync-copying-msg').textContent =
+      _formatSyncPhaseMessage(status.message, 'copy');
     document.getElementById('sync-copying-current').textContent = status.current || '';
 
     if (status.status === 'done') {
@@ -1936,13 +2039,17 @@ async function executeSync() {
       _showSyncDone(status);
     } else if (status.status === 'error') {
       clearInterval(_syncPollTimer);
-      toast('Sync error: ' + status.message);
+      toast('Sync failed: ' + status.message);
     }
   }, 600);
 }
 
 function _showSyncDone(status) {
-  document.getElementById('sync-done-msg').textContent = status.message;
+  const issueCount = Array.isArray(status.errors) ? status.errors.length : 0;
+  const baseDone = _formatSyncPhaseMessage(status.message, 'done') || 'Sync complete.';
+  document.getElementById('sync-done-msg').textContent = issueCount
+    ? `${baseDone} Completed with ${issueCount} issue${issueCount === 1 ? '' : 's'}.`
+    : baseDone;
   const errWrap = document.getElementById('sync-errors-wrap');
   if (status.errors?.length) {
     errWrap.style.display = 'block';
@@ -1963,31 +2070,246 @@ async function syncScanAgain() {
 /* ── DAP management ─────────────────────────────────────────────────── */
 
 // SVG icon used for all DAP cards/headers
-const _DAP_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg>`;
+const _DAP_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg>`;
+const _IEM_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`;
+
 async function loadDapsView() {
   document.getElementById('daps-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
   const daps = await api('/daps').catch(() => []);
-  const grid = document.getElementById('daps-grid');
+  const grid  = document.getElementById('daps-grid');
   const empty = document.getElementById('daps-empty');
-  if (!daps.length) {
+  if (!daps.length) { grid.innerHTML = ''; empty.style.display = 'flex'; return; }
+  empty.style.display = 'none';
+  grid.innerHTML = daps.map(d => {
+    const syncRow = (d.stale_count > 0 || d.never_exported > 0) ? `
+      <div class="gear-card-row">
+        ${d.stale_count  > 0 ? `<span class="gear-sync-badge gear-sync-stale">⚠ ${d.stale_count} outdated</span>` : ''}
+        ${d.never_exported > 0 ? `<span class="gear-sync-badge gear-sync-never">${d.never_exported} unsynced</span>` : ''}
+      </div>` : '';
+    return `
+    <div class="gear-card" onclick="App.showDapDetail('${d.id}')">
+      <div class="gear-card-icon">${_DAP_SVG}</div>
+      <div class="gear-card-body">
+        <div class="gear-card-name">${esc(d.name)}</div>
+        <div class="gear-card-row">
+          <span class="gear-badge ${d.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected'}">
+            ${d.mounted ? '● Connected' : '○ Not connected'}
+          </span>
+        </div>
+        ${syncRow}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ── IEM compare state ───────────────────────────────────────────────── */
+let _iemCompareMode     = false;
+let _iemCompareSelected = new Set();
+let _iemCompareChart    = null;
+
+async function loadIemsView() {
+  document.getElementById('iems-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
+  const iems  = await api('/iems').catch(() => []);
+  const grid  = document.getElementById('iems-grid');
+  const empty = document.getElementById('iems-empty');
+  const cmpBtn = document.getElementById('iems-compare-btn');
+  if (!iems.length) {
     grid.innerHTML = '';
     empty.style.display = 'flex';
+    if (cmpBtn) cmpBtn.style.display = 'none';
     return;
   }
   empty.style.display = 'none';
-  grid.innerHTML = daps.map(d => `
-    <div class="gear-card" onclick="App.showDapDetail('${d.id}')">
-      <div class="gear-card-icon">${_DAP_SVG}</div>
-      <div class="gear-card-name">${esc(d.name)}</div>
-      <div class="gear-card-meta">
-        <span class="gear-badge ${d.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected'}">
-          ${d.mounted ? '● Connected' : '○ Not connected'}
-        </span>
-        ${d.stale_count > 0 ? `<span class="gear-sync-badge gear-sync-stale">⚠ ${d.stale_count} outdated</span>` : ''}
-        ${d.never_exported > 0 ? `<span class="gear-sync-badge gear-sync-never">${d.never_exported} unsynced</span>` : ''}
+  // Show compare button only when 2+ IEMs exist
+  if (cmpBtn) cmpBtn.style.display = iems.length >= 2 ? '' : 'none';
+  _renderIemCards(iems);
+}
+
+function _renderIemCards(iems) {
+  const grid = document.getElementById('iems-grid');
+  if (!grid) return;
+  grid.innerHTML = iems.map(i => {
+    const badgeClass  = i.type === 'Headphone' ? 'gear-badge-hp' : 'gear-badge-iem';
+    const peqCount    = i.peq_profiles?.length || 0;
+    const peqStr      = peqCount ? `${peqCount} EQ${peqCount !== 1 ? 's' : ''}` : '';
+    const isSelected  = _iemCompareSelected.has(i.id);
+    const clickAction = _iemCompareMode
+      ? `App.toggleIemCompareSelect('${i.id}', event)`
+      : `App.showIemDetail('${i.id}')`;
+    return `
+    <div class="gear-card${isSelected ? ' gear-card--selected' : ''}" id="gear-iem-card-${i.id}" onclick="${clickAction}">
+      <div class="gear-card-icon">${_IEM_SVG}</div>
+      <div class="gear-card-body">
+        <div class="gear-card-name">${esc(i.name)}</div>
+        <div class="gear-card-row">
+          <span class="gear-badge ${badgeClass}">${esc(i.type || 'IEM')}</span>
+          ${peqStr ? `<span class="gear-card-meta-text">${peqStr}</span>` : ''}
+        </div>
       </div>
-    </div>
-  `).join('');
+      ${_iemCompareMode ? `<div class="gear-compare-check${isSelected ? ' checked' : ''}"></div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function toggleIemCompareMode() {
+  _iemCompareMode = !_iemCompareMode;
+  _iemCompareSelected.clear();
+  const btn = document.getElementById('iems-compare-btn');
+  if (btn) {
+    btn.textContent = _iemCompareMode ? 'Cancel' : 'Compare';
+    btn.classList.toggle('active', _iemCompareMode);
+  }
+  _updateIemCompareBar();
+  // Re-render cards to show/hide checkboxes
+  api('/iems').then(iems => _renderIemCards(iems)).catch(() => {});
+}
+
+function toggleIemCompareSelect(iemId, event) {
+  if (event) event.stopPropagation();
+  if (_iemCompareSelected.has(iemId)) {
+    _iemCompareSelected.delete(iemId);
+  } else {
+    _iemCompareSelected.add(iemId);
+  }
+  const card = document.getElementById(`gear-iem-card-${iemId}`);
+  if (card) {
+    card.classList.toggle('gear-card--selected', _iemCompareSelected.has(iemId));
+    const chk = card.querySelector('.gear-compare-check');
+    if (chk) chk.classList.toggle('checked', _iemCompareSelected.has(iemId));
+  }
+  _updateIemCompareBar();
+}
+
+function _updateIemCompareBar() {
+  const bar   = document.getElementById('iem-compare-bar');
+  const label = document.getElementById('iem-compare-bar-label');
+  const btn   = document.getElementById('iem-compare-submit-btn');
+  if (!bar) return;
+  const n = _iemCompareSelected.size;
+  if (_iemCompareMode) {
+    bar.style.display = 'flex';
+    if (label) label.textContent = n < 2 ? 'Select 2 or more IEMs to compare' : `${n} IEMs selected`;
+    if (btn) { btn.textContent = `Compare ${n > 0 ? n : ''}`; btn.disabled = n < 2; }
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+async function showIemCompare() {
+  const ids = [..._iemCompareSelected];
+  if (ids.length < 2) return;
+  const [primary, ...rest] = ids;
+  const params = rest.map(id => `compare=${encodeURIComponent(id)}`).join('&');
+  const res = await fetch(`/api/iems/${encodeURIComponent(primary)}/graph?${params}`).catch(() => null);
+  if (!res || !res.ok) { showToast('Could not load comparison data.'); return; }
+  const data = await res.json();
+  document.getElementById('iem-compare-modal').style.display = 'flex';
+  _buildIemCompareChart(data);
+}
+
+function closeIemCompare(event) {
+  if (event && event.target !== document.getElementById('iem-compare-modal')) return;
+  document.getElementById('iem-compare-modal').style.display = 'none';
+  if (_iemCompareChart) { _iemCompareChart.destroy(); _iemCompareChart = null; }
+}
+
+function _buildIemCompareChart(data) {
+  const canvas = document.getElementById('iem-compare-canvas');
+  const legendEl = document.getElementById('iem-compare-legend');
+  if (!canvas) return;
+  if (_iemCompareChart) { _iemCompareChart.destroy(); _iemCompareChart = null; }
+
+  // Use backend-assigned colors directly — each IEM has its own palette color
+  const datasets = data.curves.map(c => ({
+    label:       c.label,
+    data:        c.data.map(([f, spl]) => ({ x: f, y: spl })),
+    borderColor: c.color,
+    borderWidth: c.id.startsWith('baseline-') ? 1.5 : 2.1,
+    borderDash:  c.dash ? [6, 4] : undefined,
+    pointRadius: 0,
+    tension:     0.3,
+    hidden:      c.id.startsWith('baseline-'),
+  }));
+
+  const regionPlugin = {
+    id: 'compareRegions',
+    beforeDatasetsDraw(chart) {
+      const { ctx, chartArea: { left, right, top, bottom }, scales: { x } } = chart;
+      [{ f1:20,f2:80,c:.04 },{ f1:80,f2:300,c:.025 },{ f1:300,f2:1000,c:.015 },
+       { f1:1000,f2:4000,c:.025 },{ f1:4000,f2:6000,c:.04 },{ f1:6000,f2:10000,c:.025 },
+       { f1:10000,f2:20000,c:.04 }].forEach(r => {
+        ctx.fillStyle = `rgba(173,198,255,${r.c})`;
+        ctx.fillRect(Math.max(x.getPixelForValue(r.f1), left), top,
+          Math.min(x.getPixelForValue(r.f2), right) - Math.max(x.getPixelForValue(r.f1), left),
+          bottom - top);
+      });
+    },
+  };
+
+  _iemCompareChart = new Chart(canvas, {
+    type: 'line',
+    plugins: [regionPlugin],
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 200 },
+      scales: {
+        x: {
+          type: 'logarithmic', min: 20, max: 20000,
+          title: { display: true, text: 'Frequency (Hz)', color: '#6b6b7b', font: { size: 10, family: 'Inter, sans-serif' } },
+          ticks: {
+            color: '#6b6b7b', font: { size: 9, family: 'Inter, sans-serif' }, autoSkip: false, maxRotation: 0,
+            callback: v => [20,50,100,200,500,1000,2000,5000,10000,20000].includes(v)
+              ? (v >= 1000 ? v/1000+'k' : v) : '',
+          },
+          grid: { color: ctx => [100,1000,10000].includes(ctx.tick?.value)
+            ? 'rgba(173,198,255,.12)' : 'rgba(173,198,255,.04)' },
+          afterBuildTicks: axis => {
+            axis.ticks = [20,30,40,50,60,80,100,150,200,300,400,500,600,800,1000,1500,2000,
+              3000,4000,5000,6000,8000,10000,15000,20000].map(v => ({ value: v }));
+          },
+        },
+        y: {
+          min: 50, max: 110,
+          title: { display: true, text: 'dB', color: '#6b6b7b', font: { size: 10, family: 'Inter, sans-serif' } },
+          ticks: { color: '#6b6b7b', font: { size: 9, family: 'Inter, sans-serif' }, stepSize: 10 },
+          grid: { color: 'rgba(173,198,255,.06)' },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(30,30,42,0.95)', titleColor: '#adc6ff',
+          bodyColor: '#c1c6d7', borderColor: 'rgba(65,71,85,0.3)', borderWidth: 1,
+          callbacks: {
+            title: items => { const f = items[0].parsed.x; return f >= 1000 ? (f/1000).toFixed(1)+' kHz' : Math.round(f)+' Hz'; },
+            label: item => ` ${item.dataset.label}: ${item.parsed.y.toFixed(1)} dB`,
+          },
+        },
+      },
+    },
+  });
+
+  // Render compact legend
+  if (legendEl) {
+    legendEl.innerHTML = datasets.map((ds, i) => {
+      const dash = ds.borderDash ? 'stroke-dasharray="5 4"' : '';
+      return `<div class="compare-legend-item${ds.hidden ? ' compare-legend-item--off' : ''}" onclick="App._toggleCompareDataset(${i})" id="cmp-legend-${i}">
+        <svg width="24" height="8" viewBox="0 0 24 8">
+          <line x1="0" y1="4" x2="24" y2="4" stroke="${ds.borderColor}" stroke-width="${ds.borderWidth||1.5}" ${dash}/>
+        </svg>
+        <span class="compare-legend-label">${esc(ds.label)}</span>
+      </div>`;
+    }).join('');
+  }
+}
+
+function _toggleCompareDataset(idx) {
+  if (!_iemCompareChart) return;
+  const visible = !_iemCompareChart.isDatasetVisible(idx);
+  _iemCompareChart.setDatasetVisibility(idx, visible);
+  _iemCompareChart.update();
+  const item = document.getElementById(`cmp-legend-${idx}`);
+  if (item) item.classList.toggle('compare-legend-item--off', !visible);
 }
 
 async function loadGearView() {
@@ -2029,7 +2351,7 @@ async function showDapDetail(id) {
         <td class="dap-pl-name" onclick="App.openPlaylist('${pl.id}')" title="Open playlist">${esc(pl.name)}</td>
         <td>${pl.tracks?.length ?? 0} tracks</td>
         <td>${statusHtml}</td>
-        <td style="text-align:right">
+        <td class="dap-pl-export-cell">
           <button class="dap-pl-export-btn" ${canExport ? '' : 'disabled title="Device not mounted"'}
             onclick="App.dapExportPlaylist('${dap.id}','${pl.id}',this)">
             ${dap.mounted ? '→ Export' : 'Not mounted'}
@@ -2062,15 +2384,15 @@ async function showDapDetail(id) {
       <div class="dap-config-field"><label>Path prefix</label><span>${esc(dap.path_prefix || '(none)')}</span></div>
       <div class="dap-config-field"><label>Model</label><span>${esc(dap.model || 'generic')}</span></div>
     </div>
-    <div style="font-size:var(--text-xs);font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">
-      Playlist Sync Status
+    <div class="dap-section-title">Playlist Sync Status</div>
+    <div class="dap-table-shell">
+      <table class="dap-pl-table">
+        <thead><tr>
+          <th>Playlist</th><th>Tracks</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody>${plRows || '<tr><td colspan="4" class="dap-pl-empty-row">No playlists yet</td></tr>'}</tbody>
+      </table>
     </div>
-    <table class="dap-pl-table">
-      <thead><tr>
-        <th>Playlist</th><th>Tracks</th><th>Status</th><th></th>
-      </tr></thead>
-      <tbody>${plRows || '<tr><td colspan="4" style="color:var(--text-muted);text-align:center;padding:20px">No playlists yet</td></tr>'}</tbody>
-    </table>
   `;
 }
 
@@ -2095,27 +2417,38 @@ async function dapExportPlaylist(dapId, plId, btn) {
 }
 
 function showAddDapModal() {
+  _ensureGearProfileSelects();
+  const firstModel = Object.keys(DAP_MODEL_PRESETS)[0] || 'other';
+  const firstPreset = DAP_MODEL_PRESETS[firstModel] || { folder: 'Playlists', prefix: '' };
   document.getElementById('dap-modal-title').textContent = 'Add DAP';
   document.getElementById('dap-modal-id').value = '';
   document.getElementById('dap-name').value = '';
-  document.getElementById('dap-model').value = 'poweramp';
+  document.getElementById('dap-model').value = firstModel;
   document.getElementById('dap-mount').value = '';
-  document.getElementById('dap-export-folder').value = 'Playlists';
-  document.getElementById('dap-prefix').value = '';
-  dapModelPreset('poweramp');
+  document.getElementById('dap-export-folder').value = firstPreset.folder || 'Playlists';
+  document.getElementById('dap-prefix').value = firstPreset.prefix || '';
+  dapModelPreset(firstModel);
   document.getElementById('dap-modal').style.display = 'flex';
 }
 
 async function showEditDapModal(id) {
+  _ensureGearProfileSelects();
   const dap = await api(`/daps/${id}`);
   document.getElementById('dap-modal-title').textContent = 'Edit DAP';
   document.getElementById('dap-modal-id').value = id;
   document.getElementById('dap-name').value = dap.name || '';
-  document.getElementById('dap-model').value = dap.model || 'poweramp';
+  const modelSel = document.getElementById('dap-model');
+  if (modelSel && dap.model && !Array.from(modelSel.options).some(o => o.value === dap.model)) {
+    const opt = document.createElement('option');
+    opt.value = dap.model;
+    opt.textContent = dap.model;
+    modelSel.appendChild(opt);
+  }
+  document.getElementById('dap-model').value = dap.model || (Object.keys(DAP_MODEL_PRESETS)[0] || 'other');
   document.getElementById('dap-mount').value = dap.mount_path || '';
   document.getElementById('dap-export-folder').value = dap.export_folder || 'Playlists';
   document.getElementById('dap-prefix').value = dap.path_prefix || '';
-  _updateDapFolderHint(dap.model || 'poweramp');
+  _updateDapFolderHint(dap.model || (Object.keys(DAP_MODEL_PRESETS)[0] || 'other'));
   document.getElementById('dap-modal').style.display = 'flex';
 }
 
@@ -2130,35 +2463,73 @@ const _mountPrefix = (() => {
   return { base: '/Volumes/', sep: '/' };
 })();
 
-const DAP_MODEL_PRESETS = {
-  poweramp: {
-    mount: _mountPrefix.base + 'FIIO M21',
-    folder: 'Playlists',
-    prefix: '',
-    hint: 'Poweramp scans all storage for .m3u files. Filename = playlist name.',
-  },
-  hiby: {
-    mount: _mountPrefix.base + 'HiBy',
-    folder: 'HiByMusic/Playlist',
-    prefix: '',
-    hint: 'HiBy OS reads playlists from HiByMusic/Playlist/ on SD card.',
-  },
-  fiio: {
-    mount: _mountPrefix.base + 'FiiO',
-    folder: 'Playlists',
-    prefix: '',
-    hint: 'FiiO Music finds M3U files via Browse Files on the same storage as music.',
-  },
-  other: {
-    mount: _mountPrefix.base + 'MyDAP',
-    folder: 'Playlists',
-    prefix: '',
-    hint: '',
-  },
-};
+let DAP_MODEL_PRESETS = {};
+let _gearIemTypes = ['IEM', 'Headphone'];
+let _gearProfilesLoaded = false;
+
+function _normalizeDapPreset(profile) {
+  const mountName = (profile.mount_name || 'MyDAP').replace(/[\\/]/g, '').trim() || 'MyDAP';
+  return {
+    label: profile.name || profile.model || 'Other',
+    mount: _mountPrefix.base + mountName,
+    folder: (profile.export_folder || 'Playlists').replace(/^[/\\]+|[/\\]+$/g, ''),
+    prefix: profile.path_prefix || '',
+    hint: profile.hint || '',
+  };
+}
+
+function _populateDapModelSelect() {
+  const sel = document.getElementById('dap-model');
+  if (!sel) return;
+  const models = Object.keys(DAP_MODEL_PRESETS);
+  sel.innerHTML = models.map(m => `<option value="${esc(m)}">${esc(DAP_MODEL_PRESETS[m].label || m)}</option>`).join('');
+  if (!models.length) {
+    sel.innerHTML = '<option value="other">Other</option>';
+    DAP_MODEL_PRESETS = { other: { label: 'Other', mount: _mountPrefix.base + 'MyDAP', folder: 'Playlists', prefix: '', hint: '' } };
+  }
+}
+
+function _populateIemTypeSelect() {
+  const sel = document.getElementById('iem-type');
+  if (!sel) return;
+  const types = (_gearIemTypes && _gearIemTypes.length) ? _gearIemTypes : ['IEM', 'Headphone'];
+  sel.innerHTML = types.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+}
+
+function _ensureGearProfileSelects() {
+  if (!_gearProfilesLoaded) return;
+  _populateDapModelSelect();
+  _populateIemTypeSelect();
+}
+
+async function loadGearProfiles() {
+  try {
+    const data = await api('/gear/profiles');
+    const profiles = Array.isArray(data.dap_profiles) ? data.dap_profiles : [];
+    DAP_MODEL_PRESETS = {};
+    profiles.forEach(p => {
+      if (!p.model) return;
+      DAP_MODEL_PRESETS[p.model] = _normalizeDapPreset(p);
+    });
+    if (!Object.keys(DAP_MODEL_PRESETS).length) {
+      DAP_MODEL_PRESETS.other = { label: 'Other', mount: _mountPrefix.base + 'MyDAP', folder: 'Playlists', prefix: '', hint: '' };
+    }
+    _gearIemTypes = Array.isArray(data.iem_types) && data.iem_types.length ? data.iem_types : ['IEM', 'Headphone'];
+  } catch (_) {
+    DAP_MODEL_PRESETS = {
+      other: { label: 'Other', mount: _mountPrefix.base + 'MyDAP', folder: 'Playlists', prefix: '', hint: '' },
+    };
+    _gearIemTypes = ['IEM', 'Headphone'];
+  } finally {
+    _gearProfilesLoaded = true;
+    _populateDapModelSelect();
+    _populateIemTypeSelect();
+  }
+}
 
 function dapModelPreset(model) {
-  const preset = DAP_MODEL_PRESETS[model] || DAP_MODEL_PRESETS.other;
+  const fallback = DAP_MODEL_PRESETS.other || Object.values(DAP_MODEL_PRESETS)[0] || { mount: _mountPrefix.base + 'MyDAP', folder: 'Playlists', prefix: '', hint: '' };
+  const preset = DAP_MODEL_PRESETS[model] || fallback;
   const mountInput = document.getElementById('dap-mount');
   // Only update mount if field is empty or user hasn't customized it
   if (!mountInput.value || Object.values(DAP_MODEL_PRESETS).some(p => mountInput.value === p.mount)) {
@@ -2172,7 +2543,7 @@ function dapModelPreset(model) {
 function _updateDapFolderHint(model) {
   const el = document.getElementById('dap-folder-hint');
   if (!el) return;
-  const preset = DAP_MODEL_PRESETS[model] || DAP_MODEL_PRESETS.other;
+  const preset = DAP_MODEL_PRESETS[model] || DAP_MODEL_PRESETS.other || Object.values(DAP_MODEL_PRESETS)[0] || { hint: '' };
   el.textContent = preset.hint;
 }
 
@@ -2217,39 +2588,37 @@ async function deleteDap(id) {
 let _iemChart = null;
 let _currentIemId = null;
 let _activePeqId = null;
+let _activeIemSourceId = null;
 
-async function loadIemsView() {
-  document.getElementById('iems-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
-  const iems = await api('/iems').catch(() => []);
-  const grid = document.getElementById('iems-grid');
-  const empty = document.getElementById('iems-empty');
-  if (!iems.length) {
-    grid.innerHTML = '';
-    empty.style.display = 'flex';
-    return;
+function _collectIemModalSources() {
+  const sources = [];
+  for (let i = 1; i <= 3; i++) {
+    const label = (document.getElementById(`iem-source-label-${i}`)?.value || '').trim();
+    const url = (document.getElementById(`iem-source-url-${i}`)?.value || '').trim();
+    if (!url) continue;
+    sources.push({
+      label: label || `Source ${i}`,
+      url,
+    });
   }
-  empty.style.display = 'none';
-  grid.innerHTML = iems.map(i => {
-    const badgeClass = i.type === 'Headphone' ? 'gear-badge-hp' : 'gear-badge-iem';
-    return `
-      <div class="gear-card" onclick="App.showIemDetail('${i.id}')">
-        <div class="gear-card-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
-        </div>
-        <div class="gear-card-name">${esc(i.name)}</div>
-        <div class="gear-card-meta">
-          <span class="gear-badge ${badgeClass}">${esc(i.type || 'IEM')}</span>
-          ${i.peq_profiles?.length ? `<span style="font-size:var(--text-xs);color:var(--text-muted)">${i.peq_profiles.length} PEQ${i.peq_profiles.length !== 1 ? 's' : ''}</span>` : ''}
-        </div>
-      </div>
-    `;
-  }).join('');
+  return sources.slice(0, 3);
+}
+
+function _setIemModalSources(sources = []) {
+  for (let i = 1; i <= 3; i++) {
+    const src = sources[i - 1] || {};
+    const labelEl = document.getElementById(`iem-source-label-${i}`);
+    const urlEl = document.getElementById(`iem-source-url-${i}`);
+    if (labelEl) labelEl.value = src.label || '';
+    if (urlEl) urlEl.value = src.url || '';
+  }
 }
 
 async function showIemDetail(id) {
   const iem = await api(`/iems/${id}`);
   _currentIemId = id;
   _activePeqId = null;
+  _activeIemSourceId = iem.primary_source_id || ((iem.squig_sources || [])[0] || {}).id || null;
   state.view = 'iem-detail';
   clearSelection();
   setActiveNav('gear');
@@ -2262,7 +2631,11 @@ async function showIemDetail(id) {
   `;
 
   const typeBadge = iem.type === 'Headphone' ? 'gear-badge-hp' : 'gear-badge-iem';
-  const hasMeasurement = iem.measurement_L || iem.measurement_R;
+  const hasMeasurement = !!iem.has_measurement;
+  const sourceOptions = (iem.squig_sources || []).map(s =>
+    `<option value="${esc(s.id || '')}" ${s.id === _activeIemSourceId ? 'selected' : ''}>${esc(s.label || 'Source')}</option>`
+  ).join('');
+  const sourceLink = (iem.squig_sources || []).find(s => s.id === _activeIemSourceId) || (iem.squig_sources || [])[0];
   const peqOptions = (iem.peq_profiles || []).map(p =>
     `<option value="${p.id}">${esc(p.name)}</option>`
   ).join('');
@@ -2276,7 +2649,7 @@ async function showIemDetail(id) {
         <div class="iem-detail-title">${esc(iem.name)}</div>
         <div class="iem-detail-sub">
           <span class="gear-badge ${typeBadge}">${esc(iem.type || 'IEM')}</span>
-          ${iem.squig_url ? `<a href="${esc(iem.squig_url)}" target="_blank" style="font-size:var(--text-xs);color:var(--accent);text-decoration:none">squig.link ↗</a>` : ''}
+          ${sourceLink && sourceLink.url ? `<a href="${esc(sourceLink.url)}" target="_blank" style="font-size:var(--text-xs);color:var(--accent);text-decoration:none">squig.link ↗</a>` : ''}
         </div>
         <div class="gear-edit-actions">
           <button class="btn-secondary" onclick="App.showEditIemModal('${iem.id}')">Edit</button>
@@ -2287,6 +2660,10 @@ async function showIemDetail(id) {
 
     <div class="freq-graph-wrap">
       <div class="freq-graph-toolbar">
+        ${sourceOptions ? `<label>Source:</label>
+        <select id="iem-source-select" onchange="App.applyIemSourceToGraph(this.value)">
+          ${sourceOptions}
+        </select>` : ''}
         <label>PEQ:</label>
         <select id="peq-select" onchange="App.applyPeqToGraph(this.value)">
           <option value="">None (raw measurement)</option>
@@ -2315,7 +2692,7 @@ async function showIemDetail(id) {
   `;
 
   if (hasMeasurement) {
-    await _loadIemGraph(id, null);
+    await _loadIemGraph(id, null, _activeIemSourceId);
   }
 }
 
@@ -2405,8 +2782,11 @@ async function downloadPeq(peqId, name) {
   }
 }
 
-async function _loadIemGraph(iemId, peqId) {
-  const params = peqId ? `?peq=${peqId}` : '';
+async function _loadIemGraph(iemId, peqId, sourceId = null) {
+  const qp = [];
+  if (peqId) qp.push(`peq=${encodeURIComponent(peqId)}`);
+  if (sourceId) qp.push(`source=${encodeURIComponent(sourceId)}`);
+  const params = qp.length ? `?${qp.join('&')}` : '';
   let data;
   try {
     data = await api(`/iems/${iemId}/graph${params}`);
@@ -2415,6 +2795,7 @@ async function _loadIemGraph(iemId, peqId) {
     return;
   }
   if (!data || !data.curves || !data.curves.length) return;
+  _activeIemSourceId = data.selected_source_id || sourceId || _activeIemSourceId;
 
   const canvas = document.getElementById('freq-canvas');
   if (!canvas) return;
@@ -2604,15 +2985,24 @@ async function applyPeqToGraph(peqId) {
     const activeRow = document.getElementById(`peq-row-${peqId}`);
     if (activeRow) activeRow.classList.add('active');
   }
-  if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId);
+  if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId, _activeIemSourceId);
+}
+
+async function applyIemSourceToGraph(sourceId) {
+  _activeIemSourceId = sourceId || null;
+  const sel = document.getElementById('iem-source-select');
+  if (sel) sel.value = sourceId || '';
+  if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId, _activeIemSourceId);
 }
 
 function showAddIemModal() {
+  _ensureGearProfileSelects();
   document.getElementById('iem-modal-title').textContent = 'Add IEM / Headphone';
   document.getElementById('iem-modal-id').value = '';
   document.getElementById('iem-name').value = '';
-  document.getElementById('iem-type').value = 'IEM';
-  document.getElementById('iem-squig-url').value = '';
+  const typeSel = document.getElementById('iem-type');
+  if (typeSel && typeSel.options.length > 0) typeSel.value = typeSel.options[0].value;
+  _setIemModalSources([]);
   document.getElementById('iem-modal-error').style.display = 'none';
   document.getElementById('iem-save-btn').disabled = false;
   document.getElementById('iem-save-btn').textContent = 'Save';
@@ -2620,12 +3010,22 @@ function showAddIemModal() {
 }
 
 async function showEditIemModal(id) {
+  _ensureGearProfileSelects();
   const iem = await api(`/iems/${id}`);
   document.getElementById('iem-modal-title').textContent = 'Edit IEM';
   document.getElementById('iem-modal-id').value = id;
   document.getElementById('iem-name').value = iem.name || '';
-  document.getElementById('iem-type').value = iem.type || 'IEM';
-  document.getElementById('iem-squig-url').value = iem.squig_url || '';
+  const typeSel = document.getElementById('iem-type');
+  if (typeSel && iem.type && !Array.from(typeSel.options).some(o => o.value === iem.type)) {
+    const opt = document.createElement('option');
+    opt.value = iem.type;
+    opt.textContent = iem.type;
+    typeSel.appendChild(opt);
+  }
+  document.getElementById('iem-type').value = iem.type || (typeSel && typeSel.options.length ? typeSel.options[0].value : 'IEM');
+  const srcs = (iem.squig_sources || []).slice(0, 3).map(s => ({ label: s.label || '', url: s.url || '' }));
+  if (!srcs.length && iem.squig_url) srcs.push({ label: 'Primary', url: iem.squig_url });
+  _setIemModalSources(srcs);
   document.getElementById('iem-modal-error').style.display = 'none';
   document.getElementById('iem-save-btn').disabled = false;
   document.getElementById('iem-save-btn').textContent = 'Save';
@@ -2638,15 +3038,16 @@ function closeIemModal() {
 
 async function saveIem() {
   const id = document.getElementById('iem-modal-id').value;
+  const squigSources = _collectIemModalSources();
   const body = {
     name: document.getElementById('iem-name').value.trim() || 'New IEM',
     type: document.getElementById('iem-type').value,
-    squig_url: document.getElementById('iem-squig-url').value.trim(),
+    squig_sources: squigSources,
   };
   const errEl = document.getElementById('iem-modal-error');
   const btn = document.getElementById('iem-save-btn');
   btn.disabled = true;
-  btn.textContent = body.squig_url ? 'Fetching measurement…' : 'Saving…';
+  btn.textContent = squigSources.length ? 'Fetching measurement…' : 'Saving…';
   errEl.style.display = 'none';
   try {
     let saved;
@@ -2746,8 +3147,13 @@ const SONGS_PER_PAGE = 100;
 async function loadSongsView() {
   try {
     _songsData = await api(`/library/songs?sort=${_songsSort.col}&order=${_songsSort.order}`);
-  } catch {
+  } catch (e) {
     _songsData = [];
+    const wrap = document.getElementById('songs-table-wrap');
+    if (wrap) wrap.innerHTML =
+      `<div class="library-error-banner"><p>Could not load songs: ${esc(e.message)}</p>
+       <p class="library-error-hint">Check that your music folder is accessible, then rescan in Settings.</p></div>`;
+    return;
   }
   renderSongsTable();
 }
@@ -3224,6 +3630,11 @@ const App = {
   scrollToAlbumLetter,
   backToGear,
   loadGearView,
+  toggleIemCompareMode,
+  toggleIemCompareSelect,
+  showIemCompare,
+  closeIemCompare,
+  _toggleCompareDataset,
 
   loadPlaylistsView,
   togglePlViewSort,
@@ -3304,6 +3715,7 @@ const App = {
   saveIem,
   deleteIem,
   applyPeqToGraph,
+  applyIemSourceToGraph,
   toggleIemCurve,
   runHealthCheck,
   togglePeqAccordion,
@@ -3312,14 +3724,1685 @@ const App = {
   closePeqModal,
   savePeq,
   deletePeq,
+  loadInsightsView,
+  startLibraryAnalysis,
+  cancelLibraryAnalysis,
+  insightsRescanLibrary,
+  openProblemTracksModal,
+  closeProblemTracksModal,
+  openGenreDistributionModal,
+  closeGenreDistributionModal,
+
+  showInsightsHelp,
+  changeGearFitTarget,
+  changeGearFitSort,
+  // IEM / Headphone Fit
+  runMatchingAnalysis,
+  changeMatchTarget,
+  _toggleIemAccordion,
+  iemFitChangePeq,
+  iemFitChangeSource,
+  iemFitChangeGenre,
+  iemFitChangeGenreOverlay,
+  iemFitAddGenreToHeatmap,
+  iemFitRemoveGenreFromHeatmap,
+  showAllIemGenres,
+  showAllIemBlindspots,
+  closeAllBlindspots,
 };
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Insights — Phase 1: Library Overview + Tag Health
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+let _insightsFormatChart = null;
+let _insightsSrChart     = null;
+let _insightsBdChart     = null;
+
+const _INSIGHTS_COLORS = [
+  '#adc6ff', '#53e16f', '#ffb3b5', '#f0b429',
+  '#a78bfa', '#fb923c', '#38bdf8', '#f472b6', '#34d399', '#4ecdc4',
+];
+
+function _insightsTooltipDefaults() {
+  return {
+    backgroundColor: 'rgba(53,53,52,0.95)',
+    titleColor: '#e5e2e1',
+    bodyColor: '#c1c6d7',
+    borderColor: 'rgba(65,71,85,0.3)',
+    borderWidth: 1,
+    padding: 10,
+    cornerRadius: 8,
+  };
+}
+
+async function loadInsightsView() {
+  state.view = 'insights';
+  setActiveNav('insights');
+  showViewEl('insights');
+
+  // Resume polling if analysis is already running + show coverage status
+  const [statusRes, infoRes] = await Promise.all([
+    fetch('/api/insights/analyse/status').catch(() => null),
+    fetch('/api/insights/analyse/info').catch(() => null),
+  ]);
+  if (statusRes && statusRes.ok) {
+    const s = await statusRes.json();
+    _updateAnalysisBanner(s);
+    if (s.status === 'running') _startAnalysisPolling();
+  }
+  if (infoRes && infoRes.ok) {
+    _updateAnalysisInfo(await infoRes.json());
+  }
+
+  const [overviewRes, tagRes] = await Promise.all([
+    fetch('/api/insights/overview').catch(() => null),
+    fetch('/api/insights/tag-health').catch(() => null),
+  ]);
+
+  if (overviewRes && overviewRes.ok) {
+    try {
+      const overviewData = await overviewRes.json();
+      _renderInsightsOverview(overviewData);
+      _renderInsightsGenreDistribution(overviewData);
+    }
+    catch (e) { document.getElementById('insights-overview-content').innerHTML =
+      '<p class="insights-error">Error rendering overview. Check console for details.</p>';
+      document.getElementById('insights-genre-content').innerHTML =
+      '<p class="insights-error">Could not load genre distribution.</p>'; }
+  } else {
+    document.getElementById('insights-overview-content').innerHTML =
+      '<p class="insights-error">Could not load overview. Try rescanning your library first.</p>';
+    document.getElementById('insights-genre-content').innerHTML =
+      '<p class="insights-error">Could not load genre distribution.</p>';
+  }
+
+  if (tagRes && tagRes.ok) {
+    try { _renderInsightsTagHealth(await tagRes.json()); }
+    catch (e) { document.getElementById('insights-tag-health-content').innerHTML =
+      '<p class="insights-error">Error rendering tag health data.</p>'; }
+  } else {
+    document.getElementById('insights-tag-health-content').innerHTML =
+      '<p class="insights-error">Could not load tag health data.</p>';
+  }
+
+  // Phase 2 & 3 — only available after analysis has been run
+  const [sonicRes, matchRes] = await Promise.all([
+    fetch('/api/insights/sonic-profile').catch(() => null),
+    fetch('/api/insights/matching/overview').catch(() => null),
+  ]);
+  if (sonicRes && sonicRes.ok)  { try { _renderInsightsSonicProfile(await sonicRes.json()); } catch (_) {} }
+  if (matchRes && matchRes.ok)  { try { _renderInsightsMatchOverview(await matchRes.json()); } catch (_) { _renderInsightsMatchOverview(null); } }
+  else                          _renderInsightsMatchOverview(null);  // show CTA to run analysis
+}
+
+let _insightsGenreChart = null;
+let _allInsightGenres = [];
+
+function _renderInsightsOverview(d) {
+  const el = document.getElementById('insights-overview-content');
+
+  [_insightsFormatChart, _insightsSrChart, _insightsBdChart, _insightsGenreChart]
+    .forEach(c => { if (c) c.destroy(); });
+  _insightsFormatChart = _insightsSrChart = _insightsBdChart = _insightsGenreChart = null;
+
+  // Icons
+  const _noteSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+  const _discSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>`;
+  const _peopleSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
+  const _genreSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10V4H4v16h8"/><path d="M4 8h16"/><path d="M10 4v4"/><path d="M17 17l2 2 3-3"/></svg>`;
+
+  const _statCard = (icon, badge, number, label) => `
+    <div class="ov-stat-card">
+      <div class="ov-stat-card-top">
+        <span class="ov-stat-icon">${icon}</span>
+        <span class="ov-stat-badge">${badge}</span>
+      </div>
+      <div class="ov-stat-number">${number}</div>
+      <div class="ov-stat-label">${label}</div>
+    </div>`;
+
+  // Top format for donut center
+  const fmtEntries = Object.entries(d.formats || {}).sort((a, b) => b[1] - a[1]);
+  const topFmt      = fmtEntries[0] ? fmtEntries[0][0] : 'FLAC';
+  const topFmtCount = fmtEntries[0] ? fmtEntries[0][1] : 0;
+  const topFmtPct   = d.total_tracks > 0 ? Math.round(topFmtCount / d.total_tracks * 100) : 0;
+  const topFmtLabel = ['FLAC','ALAC','WAV','AIFF'].includes(topFmt.toUpperCase())
+    ? `${topFmt.toUpperCase()} LOSSLESS` : topFmt.toUpperCase();
+
+  // CSS bar renderer (no Chart.js needed for SR/BD)
+  const _cssBars = (data, color) => {
+    const entries = Object.entries(data || {}).sort((a, b) => b[1] - a[1]);
+    const maxVal  = entries.length > 0 ? Math.max(...entries.map(([,v]) => v)) : 1;
+    return entries.map(([label, count]) => {
+      const pct = Math.round(count / maxVal * 100);
+      return `<div class="ov-bar-row">
+        <div class="ov-bar-label">${esc(label)}</div>
+        <div class="ov-bar-track"><div class="ov-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+        <div class="ov-bar-count">${count.toLocaleString()}</div>
+      </div>`;
+    }).join('');
+  };
+
+  // Format legend (below donut)
+  const fmtLegendHtml = fmtEntries.map(([label, count], i) => `
+    <div class="ov-legend-item">
+      <span class="ov-legend-dot" style="background:${_INSIGHTS_COLORS[i]}"></span>
+      <span class="ov-legend-name">${esc(label)}</span>
+      <span class="ov-legend-count">${count.toLocaleString()}</span>
+    </div>`).join('');
+
+  el.innerHTML = `
+    <div class="ov-stat-grid">
+      ${_statCard(_noteSvg, 'FLAC library', d.total_tracks.toLocaleString(), 'Total Tracks')}
+      ${_statCard(_discSvg, `${d.total_albums.toLocaleString()} in library`, d.total_albums.toLocaleString(), 'Albums')}
+      ${_statCard(_peopleSvg, 'Unique artists', d.total_artists.toLocaleString(), 'Artists')}
+      ${_statCard(_genreSvg, 'Tagged categories', (d.genres_total != null ? d.genres_total : Object.keys(d.genres || {}).length).toLocaleString(), 'Genres')}
+    </div>
+
+    <div class="ov-charts-row">
+      <div class="ov-card ov-format-card">
+        <div class="ov-card-title">File Format Distribution</div>
+        <div class="ov-format-inner">
+          <div class="ov-donut-wrap">
+            <canvas id="insights-format-canvas"></canvas>
+            <div class="ov-donut-center">
+              <div class="ov-donut-pct">${topFmtPct}%</div>
+              <div class="ov-donut-lbl">${topFmtLabel}</div>
+            </div>
+          </div>
+          <div class="ov-format-legend">${fmtLegendHtml}</div>
+        </div>
+      </div>
+
+      <div class="ov-card ov-bars-card">
+        <div class="ov-card-title">Sample Rate
+          <svg class="ov-card-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 12 Q5 4 8 12 Q11 20 14 12 Q17 4 20 12 Q21 16 22 12"/></svg>
+        </div>
+        <div class="ov-bar-list">${_cssBars(d.sample_rates, 'rgba(173,198,255,0.8)')}</div>
+      </div>
+      <div class="ov-card ov-bars-card">
+        <div class="ov-card-title">Bit Depth
+          <svg class="ov-card-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg>
+        </div>
+        <div class="ov-bar-list">${_cssBars(d.bit_depths, 'rgba(83,225,111,0.8)')}</div>
+      </div>
+    </div>
+  `;
+
+  // Doughnut chart (no SR/BD charts needed — pure CSS bars now)
+  _insightsFormatChart = new Chart(document.getElementById('insights-format-canvas'), {
+    type: 'doughnut',
+    data: {
+      labels: fmtEntries.map(([l]) => l),
+      datasets: [{ data: fmtEntries.map(([,v]) => v),
+        backgroundColor: _INSIGHTS_COLORS.slice(0, fmtEntries.length),
+        borderWidth: 0, hoverOffset: 6 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      cutout: '70%',
+      plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() },
+    },
+  });
+
+  _insightsGenreChart = null;
+}
+
+function _renderInsightsGenreDistribution(d) {
+  const el = document.getElementById('insights-genre-content');
+  if (!el) return;
+
+  const totalTracks = d.total_tracks || 0;
+  const taggedPct = d.genres_tagged != null && totalTracks > 0
+    ? Math.round(d.genres_tagged / totalTracks * 100)
+    : null;
+  const genreSource = d.genres_all || d.genres || {};
+  const genreEntries = Object.entries(genreSource).sort((a, b) => b[1] - a[1]);
+  _allInsightGenres = genreEntries;
+
+  if (!genreEntries.length) {
+    el.innerHTML = '<p class="insights-empty-note">No genre metadata found in library tags.</p>';
+    return;
+  }
+
+  const topGenres = genreEntries.slice(0, 5);
+  const maxGenreCount = topGenres[0][1] || 1;
+
+  el.innerHTML = `
+    <div class="ov-genre-header-row">
+      <p class="insights-hint">${totalTracks.toLocaleString()} tracks scanned</p>
+      ${taggedPct != null ? `<span class="ov-card-badge">${taggedPct}% tagged</span>` : ''}
+    </div>
+    <div class="ov-genre-list ov-genre-list--compact">
+      ${topGenres.map(([genre, count], idx) => {
+        const pct = Math.max(8, Math.round((count / maxGenreCount) * 100));
+        return `<div class="ov-genre-row">
+          <div class="ov-genre-name-wrap">
+            <span class="ov-genre-rank">${idx + 1}</span>
+            <span class="ov-genre-name">${esc(genre)}</span>
+          </div>
+          <div class="ov-genre-bar-track"><div class="ov-genre-bar-fill" style="width:${pct}%"></div></div>
+          <div class="ov-genre-count">${count.toLocaleString()}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="ov-genre-actions">
+      <button class="tag-health-problem-btn" onclick="App.openGenreDistributionModal()">
+        View all ${genreEntries.length.toLocaleString()} genres →
+      </button>
+    </div>`;
+}
+
+function _renderInsightsTagHealth(d) {
+  const el = document.getElementById('insights-tag-health-content');
+
+  const fieldLabels = { title: 'Title', artist: 'Artist', album: 'Album', year: 'Year', genre: 'Genre' };
+  const fieldOrder = ['title', 'artist', 'album', 'year', 'genre'];
+
+  const barsHtml = fieldOrder.filter(f => d.completeness[f]).map(field => {
+    const s = d.completeness[field];
+    const col = s.pct >= 95 ? '#53e16f' : s.pct >= 70 ? '#f0b429' : '#ffb3b5';
+    return `<div class="tag-health-pill">
+      <div class="tag-health-pill-top">
+        <span class="tag-health-pill-label">${fieldLabels[field] || field}</span>
+        <span class="tag-health-pill-pct" style="color:${col}">${s.pct}%</span>
+      </div>
+      <div class="tag-health-pill-track"><div class="tag-health-pill-fill" style="width:${s.pct}%;background:${col}"></div></div>
+      <div class="tag-health-pill-meta">${s.present.toLocaleString()} / ${d.total.toLocaleString()} tracks</div>
+    </div>`;
+  }).join('');
+
+  // Pre-populate problem tracks modal
+  const modalTitle = document.getElementById('problem-tracks-modal-title');
+  const modalBody  = document.getElementById('problem-tracks-modal-body');
+  if (d.problem_track_count > 0 && modalBody) {
+    if (modalTitle) modalTitle.textContent = `Problem Tracks (${d.problem_track_count.toLocaleString()})`;
+    modalBody.innerHTML = d.problem_tracks.map(t =>
+      `<div class="problem-track-row">
+        <div class="problem-track-info"><span class="problem-track-title">${esc(t.title)}</span><span class="problem-track-artist">${esc(t.artist)}</span></div>
+        <div class="problem-track-issues">${t.issues.map(i => `<span class="tag-issue-chip">${esc(i)}</span>`).join('')}</div>
+      </div>`
+    ).join('');
+  }
+
+  const problemFooter = d.problem_track_count === 0
+    ? `<span class="tag-health-ok-note">All tracks have complete metadata</span>`
+    : `<button class="tag-health-problem-btn" onclick="App.openProblemTracksModal()">
+        View ${d.problem_track_count.toLocaleString()} track${d.problem_track_count > 1 ? 's' : ''} with missing tags →
+      </button>`;
+
+  const dupNote = d.artist_duplicates.length > 0
+    ? `<span class="tag-health-dup-note">${d.artist_duplicates.length} artist name${d.artist_duplicates.length > 1 ? 's have' : ' has'} case/spacing inconsistencies</span>`
+    : '';
+
+  el.innerHTML = `
+    <div class="tag-health-meta-row">
+      <p class="insights-hint">${d.total.toLocaleString()} tracks scanned</p>
+      <div class="tag-health-meta-right">
+        ${dupNote || ''}
+      </div>
+    </div>
+    <div class="tag-health-bars tag-health-bars--compact">${barsHtml}</div>
+    <div class="tag-health-footer">
+      ${problemFooter}
+    </div>`;
+}
+
+function openProblemTracksModal() {
+  document.getElementById('problem-tracks-modal').style.display = 'flex';
+}
+
+function closeProblemTracksModal() {
+  document.getElementById('problem-tracks-modal').style.display = 'none';
+}
+
+function openGenreDistributionModal() {
+  const modal = document.getElementById('genre-distribution-modal');
+  const body  = document.getElementById('genre-distribution-modal-body');
+  if (!modal || !body) return;
+  const maxCount = _allInsightGenres.length ? _allInsightGenres[0][1] : 1;
+  body.innerHTML = _allInsightGenres.map(([genre, count], idx) => {
+    const pct = Math.max(4, Math.round((count / maxCount) * 100));
+    return `<div class="genre-modal-row">
+      <div class="genre-modal-rank">${idx + 1}</div>
+      <div class="genre-modal-main">
+        <div class="genre-modal-name">${esc(genre)}</div>
+        <div class="genre-modal-track"><div class="genre-modal-fill" style="width:${pct}%"></div></div>
+      </div>
+      <div class="genre-modal-count">${count.toLocaleString()}</div>
+    </div>`;
+  }).join('');
+  modal.style.display = 'flex';
+}
+
+function closeGenreDistributionModal() {
+  const modal = document.getElementById('genre-distribution-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+let _analysisPoller = null;
+
+async function startLibraryAnalysis() {
+  const ok = await _showConfirm({
+    title: 'Analyse Library',
+    message: 'Audio analysis reads every file in your library. This runs in the background and may take a while depending on library size and machine speed.',
+    okText: 'Start Analysis',
+    danger: false,
+  });
+  if (!ok) return;
+
+  const res = await fetch('/api/insights/analyse', { method: 'POST' });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    showToast(d.error || 'Could not start analysis.');
+    return;
+  }
+  const d = await res.json().catch(() => ({}));
+  if (d.already_up_to_date) {
+    showToast('Analysis is already up to date.');
+    const infoRes = await fetch('/api/insights/analyse/info').catch(() => null);
+    if (infoRes && infoRes.ok) _updateAnalysisInfo(await infoRes.json());
+    return;
+  }
+  // Immediately show the banner — don't wait for the first poll tick
+  _updateAnalysisBanner({ status: 'running', done: 0, total: d.total || 0 });
+  // Scroll the banner into view so the user sees it appear
+  const banner = document.getElementById('insights-analysis-banner');
+  if (banner) banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  _startAnalysisPolling();
+}
+
+async function cancelLibraryAnalysis() {
+  const res = await fetch('/api/insights/analyse/cancel', { method: 'POST' });
+  if (!res.ok) {
+    showToast('Could not cancel analysis.');
+    return;
+  }
+  // Optimistically reset UI; poller will reconcile on next tick
+  _updateAnalysisBanner({ status: 'idle' });
+  if (_analysisPoller) { clearInterval(_analysisPoller); _analysisPoller = null; }
+}
+
+/* ── Insights: rescan library tags ──────────────────────────────────────── */
+let _insightsScanPoller = null;
+
+async function insightsRescanLibrary() {
+  const btn = document.getElementById('insights-rescan-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Scanning…'; }
+
+  const res = await fetch('/api/library/scan', { method: 'POST' }).catch(() => null);
+  if (!res || !res.ok) {
+    showToast('Could not start rescan.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Rescan tags'; }
+    return;
+  }
+
+  _showInsightsScanBanner('Scanning library…', 0);
+  if (_insightsScanPoller) clearInterval(_insightsScanPoller);
+  _insightsScanPoller = setInterval(_pollInsightsScan, 900);
+}
+
+async function _pollInsightsScan() {
+  const status = await fetch('/api/library/status').then(r => r.json()).catch(() => null);
+  if (!status) return;
+
+  // Also update the sidebar scan display
+  const msg = document.getElementById('scan-msg');
+  const bar = document.getElementById('scan-bar');
+  const barWrap = document.getElementById('scan-bar-wrap');
+
+  if (status.status === 'scanning') {
+    const pct = status.total > 0 ? Math.round(status.progress / status.total * 100) : 0;
+    _showInsightsScanBanner(`Scanning… ${status.progress} / ${status.total} tracks`, pct);
+    if (msg) msg.textContent = `Scanning… ${status.progress}/${status.total}`;
+    if (barWrap) barWrap.style.display = 'block';
+    if (bar) bar.style.width = pct + '%';
+    return;
+  }
+
+  // Scan finished — stop poller
+  clearInterval(_insightsScanPoller);
+  _insightsScanPoller = null;
+
+  // Update sidebar
+  if (barWrap) barWrap.style.display = 'none';
+  if (status.status === 'done' && status.total_tracks != null) {
+    const newLine = status.new_tracks > 0 ? `<span class="scan-new">+${status.new_tracks} new</span>`
+      : status.new_tracks < 0 ? `<span class="scan-removed">${status.new_tracks} removed</span>`
+      : `<span class="scan-unchanged">No changes</span>`;
+    if (msg) msg.innerHTML = `<span class="scan-ready">Library ready</span><span class="scan-total">${status.total_tracks.toLocaleString()} tracks</span>${newLine}`;
+  }
+
+  // Hide banner and restore button
+  _hideInsightsScanBanner();
+  const btn = document.getElementById('insights-rescan-btn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Rescan tags'; }
+
+  // Reload overview + tag health so updated tags are reflected
+    if (state.view === 'insights') {
+      const [overviewRes, tagRes] = await Promise.all([
+        fetch('/api/insights/overview'),
+        fetch('/api/insights/tag-health'),
+      ]);
+    if (overviewRes.ok) {
+      const overviewData = await overviewRes.json();
+      _renderInsightsOverview(overviewData);
+      _renderInsightsGenreDistribution(overviewData);
+    }
+    if (tagRes.ok)      _renderInsightsTagHealth(await tagRes.json());
+    // Also refresh analysis info (track count may have changed)
+    const infoRes = await fetch('/api/insights/analyse/info').catch(() => null);
+    if (infoRes && infoRes.ok) _updateAnalysisInfo(await infoRes.json());
+  }
+}
+
+function _showInsightsScanBanner(message, pct) {
+  const banner = document.getElementById('insights-scan-banner');
+  const msgEl  = document.getElementById('insights-scan-msg');
+  const barEl  = document.getElementById('insights-scan-bar');
+  if (!banner) return;
+  banner.style.display = 'block';
+  if (msgEl) msgEl.textContent = message;
+  if (barEl) barEl.style.width = (pct || 0) + '%';
+}
+
+function _hideInsightsScanBanner() {
+  const banner = document.getElementById('insights-scan-banner');
+  if (banner) banner.style.display = 'none';
+}
+
+function _startAnalysisPolling() {
+  if (_analysisPoller) return;  // already polling
+  _analysisPoller = setInterval(_pollAnalysisStatus, 1500);
+  // No immediate tick — the banner was already shown by startLibraryAnalysis()
+  // calling _updateAnalysisBanner({ status: 'running' }). An immediate poll risks
+  // a race condition where the background thread hasn't set analysis_state yet
+  // (e.g. it's still importing soundfile/numpy), so the server still returns
+  // 'idle', which would hide the banner we just showed.
+}
+
+async function _pollAnalysisStatus() {
+  try {
+    const res = await fetch('/api/insights/analyse/status');
+    if (!res.ok) return;
+    const s = await res.json();
+    _updateAnalysisBanner(s);
+
+    if (s.status === 'done' || s.status === 'error' || s.status === 'idle') {
+      clearInterval(_analysisPoller);
+      _analysisPoller = null;
+      if (s.status === 'done') {
+        // Refresh overview charts now that sample_rate/bit_depth data is fresh
+        setTimeout(() => {
+          if (state.view === 'insights') loadInsightsView();
+        }, 800);
+      }
+    }
+  } catch (_) { /* network hiccup — keep polling */ }
+}
+
+/* ── Analysis coverage status (incremental delta display) ──────────────── */
+function _updateAnalysisInfo(info) {
+  const el  = document.getElementById('insights-analyse-status');
+  const btn = document.getElementById('insights-analyse-btn');
+  if (!el) return;
+  if (info.status === 'needs_upgrade' || info.needs_upgrade) {
+    el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--warn"></span>Model upgraded — re-analysis required for Library Fit`;
+    if (btn && !btn.disabled) btn.textContent = 'Re-analyse Library';
+  } else if (info.status === 'up_to_date') {
+    el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--ok"></span>Analysis up to date — ${info.analysed.toLocaleString()} tracks analysed`;
+    if (btn && !btn.disabled) btn.textContent = 'Re-analyse';
+  } else if (info.status === 'pending') {
+    el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--warn"></span>${info.pending.toLocaleString()} song${info.pending !== 1 ? 's' : ''} pending analysis`;
+    if (btn && !btn.disabled) btn.textContent = 'Analyse Library';
+  } else {
+    el.textContent = '';
+    if (btn && !btn.disabled) btn.textContent = 'Analyse Library';
+  }
+}
+
+/* ── Insights section help popovers ────────────────────────────────────── */
+const _INSIGHTS_HELP = {
+  overview: {
+    title: 'Library Overview',
+    body: `<p>Shows the distribution of <strong>file formats</strong>, <strong>sample rates</strong>, and <strong>bit depths</strong> across your entire library.</p>
+           <p><strong>How to read:</strong> Taller bars = more tracks in that category. Ideally your library is consistent — e.g. mostly FLAC at 44.1 kHz / 16-bit for CD rips, or 96–192 kHz for Hi-Res downloads.</p>
+           <p><strong>Example:</strong> If 95% of your tracks are FLAC at 44.1 kHz / 16-bit, your library is clean and consistent. A large MP3 slice alongside FLAC suggests rips from mixed sources.</p>`,
+  },
+  'tag-health': {
+    title: 'Tag Health',
+    body: `<p>Measures how <strong>complete</strong> the metadata tags are across your library files.</p>
+           <p><strong>How to read:</strong> Green = high coverage, red = many tracks missing that tag. Title, Artist, and Album are critical for browsing; Genre and Year are optional but useful for filtering and playlists.</p>
+           <p><strong>Example:</strong> A Genre score of 45% means more than half your tracks have no genre tag — worth fixing before building genre-based playlists.</p>`,
+  },
+  genre: {
+    title: 'Genre Distribution',
+    body: `<p>Shows your most common genres by <strong>track count</strong> so you can quickly understand collection balance.</p>
+           <p><strong>How to read:</strong> The inline card shows the <strong>top 5</strong> genres for fast scanning. Use <em>View all genres</em> to drill into the complete list.</p>
+           <p><strong>Note:</strong> Results are only as good as your file tags. Sparse or inconsistent genre tags will reduce accuracy.</p>`,
+  },
+  sonic: {
+    title: 'Sonic Profile',
+    body: `<p>Summarises your library's <strong>tonal demand</strong> so you can understand what IEM/headphone signatures are likely to suit your collection.</p>
+           <p><strong>Library Tonal Demand</strong> shows where your music places most emphasis across perceptual frequency bands. This is the same signal used in compatibility scoring.</p>
+           <p><strong>Brightness Distribution</strong> indicates how often tracks skew warm/dark vs bright/forward.</p>
+           <p><strong>RMS Energy Distribution</strong> reflects mastering density (more compressed vs more dynamic recordings).</p>
+           <p><strong>Note:</strong> Analysis covers FLAC files only. M4A/AAC tracks are skipped (libsndfile limitation). Results update after running "Analyse Library".</p>`,
+  },
+  gear: {
+    title: 'IEM / Headphone Fit',
+    body: `<p>Scores how well each IEM matches your library's tonal demands, measured against a chosen target curve.</p>
+           <p><strong>Scoring target</strong> — the FR curve each IEM is scored against. <em>Flat / Neutral</em> (default) = perfectly flat response. You can also pick any target you've added in Settings (e.g. Harman, Rtings) to score IEMs against a preferred tuning signature instead.</p>
+           <p><strong>Library character</strong> — which frequency bands your music exercises most (salience). Deviations from the target in heavily-used bands cost more points.</p>
+           <p><strong>IEM Fit Score</strong> — 100% = matches the target exactly. Factory vs PEQ tabs let you compare the raw measurement against a PEQ-equalised version.</p>
+           <p><strong>Band bars</strong> — deviation from the target at 0 dB centre. Left = recessed vs target; right = boosted vs target.</p>
+           <p><strong>Collection Coverage</strong> — across all your IEMs, how well is each band covered by at least one IEM close to the target?</p>
+           <p><strong>Example:</strong> Scoring against Harman IEM 2019 instead of flat will favour IEMs with a slight bass shelf and ear-gain peak — penalising overly neutral-sounding IEMs that most listeners find thin.</p>`,
+  },
+};
+
+let _helpCloseHandler = null;
+
+function showInsightsHelp(sectionKey, e) {
+  e.stopPropagation();
+  const btn  = e.currentTarget;
+  const pop  = document.getElementById('insights-help-popover');
+  const help = _INSIGHTS_HELP[sectionKey];
+  if (!pop || !help) return;
+
+  // Toggle off if already showing this section
+  if (pop.dataset.openFor === sectionKey && pop.style.display !== 'none') {
+    pop.style.display = 'none';
+    pop.dataset.openFor = '';
+    return;
+  }
+
+  document.getElementById('insights-help-title').textContent = help.title;
+  document.getElementById('insights-help-body').innerHTML   = help.body;
+  pop.dataset.openFor = sectionKey;
+  pop.style.display   = 'block';
+
+  // Position: fixed, right-aligned; open above button if not enough space below
+  const rect    = btn.getBoundingClientRect();
+  const popW    = 360;
+  const margin  = 12;
+  const vGap    = 8;
+  const maxH    = Math.min(window.innerHeight * 0.65, 420);
+
+  let left = rect.right - popW;
+  if (left < margin) left = margin;
+  if (left + popW > window.innerWidth - margin) left = window.innerWidth - popW - margin;
+
+  const spaceBelow = window.innerHeight - rect.bottom - vGap - margin;
+  let top;
+  if (spaceBelow >= 160) {
+    top = rect.bottom + vGap;
+  } else {
+    top = rect.top - vGap - maxH;
+    if (top < margin) top = margin;
+  }
+
+  pop.style.top       = top + 'px';
+  pop.style.left      = left + 'px';
+  pop.style.width     = popW + 'px';
+  pop.style.maxHeight = maxH + 'px';
+  pop.style.overflowY = 'auto';
+
+  // Close on outside click
+  if (_helpCloseHandler) document.removeEventListener('click', _helpCloseHandler);
+  _helpCloseHandler = function () {
+    pop.style.display = 'none';
+    pop.dataset.openFor = '';
+    document.removeEventListener('click', _helpCloseHandler);
+    _helpCloseHandler = null;
+  };
+  setTimeout(() => document.addEventListener('click', _helpCloseHandler), 0);
+}
+
+function _updateAnalysisBanner(s) {
+  const banner   = document.getElementById('insights-analysis-banner');
+  const navDot   = document.getElementById('insights-nav-dot');
+  const icon       = document.getElementById('insights-analysis-icon');
+  const label      = document.getElementById('insights-analysis-label');
+  const sub        = document.getElementById('insights-analysis-sub');
+  const bar        = document.getElementById('insights-analysis-bar');
+  const cta        = document.getElementById('insights-analyse-btn');
+  const cancelBtn  = document.getElementById('insights-cancel-btn');
+  if (!banner) return;
+
+  if (s.status === 'idle') {
+    banner.style.display = 'none';
+    if (navDot) navDot.style.display = 'none';
+    if (cta) { cta.disabled = false; cta.innerHTML = 'Analyse Library'; }
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    return;
+  }
+
+  banner.style.display = 'block';
+  banner.className = 'insights-analysis-banner';
+
+  const _spinnerSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></path></svg>`;
+  const _doneSvg   = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+  const _errorSvg  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+
+  if (s.status === 'running') {
+    if (navDot) navDot.style.display = 'flex';
+    icon.innerHTML = _spinnerSvg;
+    label.textContent = 'Analysing library…';
+    const pct = s.total > 0 ? Math.round(s.done / s.total * 100) : 0;
+    sub.textContent = s.total > 0
+      ? `${s.done.toLocaleString()} / ${s.total.toLocaleString()} tracks · ${pct}%`
+      : 'Starting…';
+    bar.className = 'insights-analysis-bar';
+    bar.style.width = `${pct}%`;
+    if (cta) {
+      cta.disabled = true;
+      cta.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:spin 1s linear infinite;flex-shrink:0"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Analysing…`;
+    }
+    if (cancelBtn) cancelBtn.style.display = 'inline-flex';
+  } else if (s.status === 'done') {
+    if (navDot) navDot.style.display = 'none';
+    banner.classList.add('insights-analysis-banner--done');
+    icon.innerHTML = _doneSvg;
+    label.textContent = 'Analysis complete';
+    const ts = s.completed_at ? new Date(s.completed_at * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    sub.textContent = `${s.total.toLocaleString()} tracks analysed${ts ? ' · ' + ts : ''}`;
+    bar.className = 'insights-analysis-bar';
+    bar.style.width = '100%';
+    if (cta) { cta.disabled = false; cta.innerHTML = 'Re-analyse'; }
+    if (cancelBtn) cancelBtn.style.display = 'none';
+  } else if (s.status === 'error') {
+    if (navDot) navDot.style.display = 'none';
+    banner.classList.add('insights-analysis-banner--error');
+    icon.innerHTML = _errorSvg;
+    label.textContent = 'Analysis failed';
+    sub.textContent = s.error || 'Unknown error';
+    bar.style.width = '0%';
+    if (cta) { cta.disabled = false; cta.innerHTML = 'Analyse Library'; }
+    if (cancelBtn) cancelBtn.style.display = 'none';
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Insights — Phase 2: Sonic Profile
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+let _sonicBrightnessChart = null;
+let _sonicEnergyChart     = null;
+let _sonicScatterChart    = null;
+let _sonicBandChart       = null;
+
+function _renderInsightsSonicProfile(d) {
+  const el = document.getElementById('insights-sonic-content');
+
+  [_sonicBrightnessChart, _sonicEnergyChart, _sonicScatterChart, _sonicBandChart]
+    .forEach(c => { if (c) c.destroy(); });
+  _sonicBrightnessChart = _sonicEnergyChart = _sonicScatterChart = _sonicBandChart = null;
+
+  const _hz = v => v >= 1000 ? `${(v/1000).toFixed(v%1000===0?0:1)}k` : Math.round(v).toString();
+  const _barOpts = () => ({
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: '#6b6b7b', font: { size: 10 } }, grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
+      y: { ticks: { color: '#6b6b7b', font: { size: 9 } }, grid: { color: 'rgba(173,198,255,0.06)' }, border: { color: 'transparent' } },
+    },
+    plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() },
+  });
+
+  const bs = d.brightness.stats;
+  const es = d.energy.stats;
+  const bandLabels = d.band_labels || {};
+  const bandEntries = Object.entries(d.band_profile || {}).sort((a, b) => b[1] - a[1]);
+
+  const _sumBands = keys => keys.reduce((acc, k) => acc + Number((d.band_profile || {})[k] || 0), 0);
+  const bassDemand   = _sumBands(['sub_bass', 'bass', 'bass_feel', 'slam']);
+  const midDemand    = _sumBands(['lower_mids', 'upper_mids', 'note_weight']);
+  const trebleDemand = _sumBands(['lower_treble', 'upper_treble', 'detail', 'sibilance', 'texture']);
+
+  const topBands = bandEntries.slice(0, 3).map(([k]) => bandLabels[k] || k).join(' · ');
+  const brightnessMedian = Number(bs.median || 0);
+  const energySpread = Math.max(0, Number(es.p75 || 0) - Number(es.p25 || 0));
+
+  let tonalTilt = 'Balanced tonal demand';
+  if (bassDemand > trebleDemand + 0.08) tonalTilt = 'Low-end weighted demand';
+  else if (trebleDemand > bassDemand + 0.08) tonalTilt = 'Treble-weighted demand';
+  else if (midDemand > bassDemand && midDemand > trebleDemand) tonalTilt = 'Mid-centric demand';
+
+  let brightnessRead = 'Mixed brightness profile';
+  if (brightnessMedian >= 4500) brightnessRead = 'Mostly bright / detail-forward';
+  else if (brightnessMedian <= 2500) brightnessRead = 'Mostly warm / low-end-forward';
+
+  let dynamicsRead = 'Moderate mastering spread';
+  if (energySpread >= 0.08) dynamicsRead = 'Wide spread (dynamic + compressed)';
+  else if (energySpread <= 0.03) dynamicsRead = 'Consistent mastering density';
+
+  const cues = [];
+  if (bassDemand > trebleDemand + 0.08) cues.push('Prioritise bass control and low-end separation.');
+  if (trebleDemand > bassDemand + 0.08) cues.push('Smoother upper mids/treble can reduce fatigue.');
+  if (brightnessMedian <= 2500) cues.push('A touch more upper-mid/treble presence may improve clarity.');
+  if (brightnessMedian >= 4500) cues.push('Neutral-to-warm signatures may sound more natural.');
+  if (energySpread >= 0.08) cues.push('Good dynamics help across mixed mastering quality.');
+  if (!cues.length) cues.push('Balanced signatures should perform consistently across your library.');
+
+  const bandProfileHtml = d.band_profile
+    ? `<div class="sonic-band-card">
+        <div class="sonic-chart-title">Library Tonal Demand (Compatibility Signal)</div>
+        <div class="sonic-chart-subtitle">Relative frequency emphasis used by IEM/headphone matching.</div>
+        <div class="insights-chart-wrap" style="height:180px"><canvas id="sonic-band-canvas"></canvas></div>
+       </div>`
+    : '';
+
+  el.innerHTML = `
+    <div class="sonic-insight-grid">
+      <div class="sonic-insight-card">
+        <div class="sonic-insight-kicker">Tonal Tilt</div>
+        <div class="sonic-insight-title">${tonalTilt}</div>
+        <div class="sonic-insight-meta">Top demand: ${esc(topBands || 'N/A')}</div>
+      </div>
+      <div class="sonic-insight-card">
+        <div class="sonic-insight-kicker">Brightness Read</div>
+        <div class="sonic-insight-title">${brightnessRead}</div>
+        <div class="sonic-insight-meta">Median centroid: ${_hz(bs.median)} Hz</div>
+      </div>
+      <div class="sonic-insight-card">
+        <div class="sonic-insight-kicker">Dynamics Read</div>
+        <div class="sonic-insight-title">${dynamicsRead}</div>
+        <div class="sonic-insight-meta">RMS IQR: ${es.p25.toFixed(3)} - ${es.p75.toFixed(3)}</div>
+      </div>
+    </div>
+    <div class="sonic-charts-grid">
+      <div class="sonic-chart-card">
+        <div class="sonic-chart-title">Brightness Distribution (Tonal Tilt)</div>
+        <div class="insights-chart-wrap" style="height:180px"><canvas id="sonic-brightness-canvas"></canvas></div>
+        <div class="sonic-stat-row">
+          <span class="sonic-stat">Median <strong>${_hz(bs.median)} Hz</strong></span>
+          <span class="sonic-stat">Mean <strong>${_hz(bs.mean)} Hz</strong></span>
+          <span class="sonic-stat">IQR <strong>${_hz(bs.p25)}–${_hz(bs.p75)} Hz</strong></span>
+        </div>
+      </div>
+      <div class="sonic-chart-card">
+        <div class="sonic-chart-title">RMS Energy Distribution (Mastering Density)</div>
+        <div class="insights-chart-wrap" style="height:180px"><canvas id="sonic-energy-canvas"></canvas></div>
+        <div class="sonic-stat-row">
+          <span class="sonic-stat">Median <strong>${es.median.toFixed(3)}</strong></span>
+          <span class="sonic-stat">Mean <strong>${es.mean.toFixed(3)}</strong></span>
+          <span class="sonic-stat">IQR <strong>${es.p25.toFixed(3)}–${es.p75.toFixed(3)}</strong></span>
+        </div>
+      </div>
+    </div>
+    ${bandProfileHtml}
+    <div class="sonic-caveat">
+      <strong>Compatibility cues</strong> — ${cues.map(c => esc(c)).join(' ')} <strong>Analysis covers FLAC files only</strong> — M4A/AAC tracks are skipped.
+    </div>`;
+
+  _sonicBrightnessChart = new Chart(document.getElementById('sonic-brightness-canvas'), {
+    type: 'bar',
+    data: { labels: d.brightness.histogram.midpoints,
+            datasets: [{ data: d.brightness.histogram.counts, backgroundColor: 'rgba(173,198,255,0.65)', borderColor: 'rgba(173,198,255,0.9)', borderWidth: 1, borderRadius: 3 }] },
+    options: {
+      ..._barOpts(),
+      scales: { ..._barOpts().scales,
+        x: { ..._barOpts().scales.x,
+             ticks: { ...(_barOpts().scales.x.ticks), callback: function(_, i) { return _hz(this.chart.data.labels[i]); } } } },
+    },
+  });
+
+  _sonicEnergyChart = new Chart(document.getElementById('sonic-energy-canvas'), {
+    type: 'bar',
+    data: { labels: d.energy.histogram.midpoints,
+            datasets: [{ data: d.energy.histogram.counts, backgroundColor: 'rgba(83,225,111,0.65)', borderColor: 'rgba(83,225,111,0.9)', borderWidth: 1, borderRadius: 3 }] },
+    options: {
+      ..._barOpts(),
+      scales: { ..._barOpts().scales,
+        x: { ..._barOpts().scales.x,
+             ticks: { ...(_barOpts().scales.x.ticks), callback: function(_, i) { return this.chart.data.labels[i].toFixed(2); } } } },
+    },
+  });
+
+  if (d.band_profile && document.getElementById('sonic-band-canvas')) {
+    const bl     = d.band_labels || {};
+    const bKeys  = Object.keys(d.band_profile);
+    const bVals  = bKeys.map(k => d.band_profile[k]);
+    const bLabels = bKeys.map(k => bl[k] || k);
+    _sonicBandChart = new Chart(document.getElementById('sonic-band-canvas'), {
+      type: 'bar',
+      data: {
+        labels: bLabels,
+        datasets: [{
+          data: bVals,
+          backgroundColor: bVals.map(v => `rgba(173,198,255,${0.3 + v * 0.5})`),
+          borderColor: 'rgba(173,198,255,0.8)',
+          borderWidth: 1, borderRadius: 3,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { color: '#6b6b7b', font: { size: 9 }, maxRotation: 45 },
+               grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
+          y: { min: 0, max: 1,
+               ticks: { color: '#6b6b7b', font: { size: 9 },
+                        callback: v => (v * 100).toFixed(0) + '%' },
+               grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' },
+               title: { display: true, text: 'Relative energy', color: '#6b6b7b', font: { size: 10 } } },
+        },
+        plugins: { legend: { display: false },
+                   tooltip: { ..._insightsTooltipDefaults(),
+                              callbacks: { label: ctx => `${(ctx.parsed.y * 100).toFixed(1)}% of peak band` } } },
+      },
+    });
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Insights — Phase 3: IEM Match (Genre-IEM Matching Module)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+let _matchData      = null;   // cached full matrix response
+let _matchTarget    = 'flat'; // currently selected scoring target
+let _matchRadarChart = null;  // kept for compat
+let _matchRadarIems  = [];    // kept for compat
+
+// IEM / Headphone Fit state
+let _iemFitSelectedId  = null;  // currently expanded IEM id
+let _iemFitMatrixData  = null;  // cached matrix response
+let _iemFitFRCharts    = {};    // iemId → Chart.js FR instance
+let _iemFitPeqState    = {};    // iemId → active peqId (string | null)
+let _iemFitPeqVariants = {};    // iemId → {factory_scores, peq_variants, iem_name}
+let _iemFitGenreState  = {};    // iemId → selected genre key for FR overlay (string | null)
+let _iemFitSourceState = {};    // iemId → selected source id (string | null)
+let _iemFitExtraGenres = [];    // user-added heatmap genres
+let _iemFitIemSummary  = [];    // cached IEM summary list
+
+// ── Band keys (12 perceptual bands) ───────────────────────────────────────────
+const _PERC_BAND_KEYS = [
+  'sub_bass','bass','bass_feel','slam','lower_mids','upper_mids',
+  'note_weight','lower_treble','upper_treble','detail','sibilance','texture',
+];
+
+// Frequency ranges for each perceptual band — mirrors backend _PERC_BANDS exactly.
+// Used to map genre fingerprint energy onto the FR chart x-axis.
+const _FR_BAND_RANGES = [
+  { key: 'sub_bass',      f1: 20,   f2: 60    },
+  { key: 'bass',          f1: 60,   f2: 120   },
+  { key: 'bass_feel',     f1: 80,   f2: 200   },
+  { key: 'slam',          f1: 80,   f2: 150   },
+  { key: 'lower_mids',    f1: 200,  f2: 500   },
+  { key: 'upper_mids',    f1: 500,  f2: 1500  },
+  { key: 'note_weight',   f1: 200,  f2: 1000  },
+  { key: 'lower_treble',  f1: 3000, f2: 6000  },
+  { key: 'upper_treble',  f1: 6000, f2: 20000 },
+  { key: 'detail',        f1: 4000, f2: 10000 },
+  { key: 'sibilance',     f1: 5000, f2: 10000 },
+  { key: 'texture',       f1: 6000, f2: 15000 },
+];
+const _ALL_DIM_KEYS_FE = [
+  ..._PERC_BAND_KEYS,
+  'sound_stage','timbre_color','masking','layering','tonality',
+];
+const _ALL_DIM_LABELS_FE = {
+  sub_bass: 'Sub Bass', bass: 'Bass', bass_feel: 'Bass Feel', slam: 'Slam',
+  lower_mids: 'Low Mids', upper_mids: 'Upper Mids', note_weight: 'Note Weight',
+  lower_treble: 'Low Treble', upper_treble: 'Up Treble', detail: 'Detail',
+  sibilance: 'Sibilance', texture: 'Texture',
+  sound_stage: 'Soundstage', timbre_color: 'Timbre', masking: 'Masking',
+  layering: 'Layering', tonality: 'Tonality',
+};
+
+// ── Compact FR chart builder (reused in IEM Fit accordion) ───────────────────
+// Builds a self-contained Chart.js line chart into `canvas` using curves from
+// /api/iems/<id>/graph.  Returns the Chart instance.
+// genreFingerprint: {bandKey: 0–1} — when provided draws genre salience shading.
+// genreLabel: display name for the selected genre (shown as chart annotation).
+function _buildCompactFRChart(canvas, curves, genreFingerprint = null, genreLabel = null) {
+  const regionPlugin = {
+    id: 'fitFRRegions',
+    beforeDatasetsDraw(chart) {
+      const { ctx, chartArea: { left, right, top, bottom }, scales: { x } } = chart;
+
+      // ── 1. Frequency region bands (cool blue tint, always shown) ──────────
+      const regions = [
+        { f1: 20,    f2: 80,    color: 'rgba(173,198,255,.05)' },
+        { f1: 80,    f2: 300,   color: 'rgba(173,198,255,.03)' },
+        { f1: 300,   f2: 1000,  color: 'rgba(173,198,255,.015)' },
+        { f1: 1000,  f2: 4000,  color: 'rgba(173,198,255,.03)' },
+        { f1: 4000,  f2: 6000,  color: 'rgba(173,198,255,.05)' },
+        { f1: 6000,  f2: 10000, color: 'rgba(173,198,255,.03)' },
+        { f1: 10000, f2: 20000, color: 'rgba(173,198,255,.05)' },
+      ];
+      regions.forEach(r => {
+        const x1 = Math.max(x.getPixelForValue(r.f1), left);
+        const x2 = Math.min(x.getPixelForValue(r.f2), right);
+        ctx.fillStyle = r.color;
+        ctx.fillRect(x1, top, x2 - x1, bottom - top);
+      });
+
+      // ── 2. Genre salience shading (amber, shown when a genre is selected) ──
+      if (genreFingerprint) {
+        // Sample 300 log-spaced frequencies and sum band energies at each point.
+        // Bands overlap intentionally — summing creates a smooth "importance terrain".
+        const N = 300;
+        const logMin = Math.log10(20);
+        const logMax = Math.log10(20000);
+        const saliences = [];
+        const freqs = [];
+        for (let i = 0; i < N; i++) {
+          const f = Math.pow(10, logMin + (logMax - logMin) * i / (N - 1));
+          freqs.push(f);
+          let s = 0;
+          for (const { key, f1, f2 } of _FR_BAND_RANGES) {
+            if (f >= f1 && f <= f2) s += genreFingerprint[key] || 0;
+          }
+          saliences.push(s);
+        }
+        const maxS = Math.max(...saliences, 1e-9);
+
+        // Draw filled path rising from the bottom of the chart
+        const MAX_H = 0.42 * (bottom - top);  // salience fills up to 42% of chart height
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(left, bottom);
+        for (let i = 0; i < N; i++) {
+          const px = Math.max(left, Math.min(right, x.getPixelForValue(freqs[i])));
+          const py = bottom - (saliences[i] / maxS) * MAX_H;
+          ctx.lineTo(px, py);
+        }
+        ctx.lineTo(right, bottom);
+        ctx.closePath();
+
+        // Vertical gradient: brighter at peak, fades toward the bottom
+        const grad = ctx.createLinearGradient(0, bottom - MAX_H, 0, bottom);
+        grad.addColorStop(0,   'rgba(240,168,48,0.28)');
+        grad.addColorStop(0.5, 'rgba(240,168,48,0.18)');
+        grad.addColorStop(1,   'rgba(240,168,48,0.06)');
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.restore();
+
+        // Genre name label — bottom-right corner, subtle amber
+        if (genreLabel) {
+          ctx.save();
+          ctx.font = '600 10px Inter, sans-serif';
+          ctx.fillStyle = 'rgba(240,168,48,0.75)';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(genreLabel, right - 4, bottom - 4);
+          ctx.restore();
+        }
+      }
+    },
+  };
+
+  function _frCurveColor(id) {
+    if (id.includes('-peq-')) return '#53e16f';
+    if (id.endsWith('-R'))   return '#e05c5c';
+    return '#5b8dee';
+  }
+
+  const datasets = curves.map(c => ({
+    label: c.label,
+    data: c.data.map(([f, spl]) => ({ x: f, y: spl })),
+    borderColor: _frCurveColor(c.id),
+    borderWidth: c.id.includes('-peq-') ? 1.6 : 1.9,
+    pointRadius: 0,
+    tension: 0.3,
+  }));
+
+  return new Chart(canvas, {
+    type: 'line',
+    plugins: [regionPlugin],
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 180 },
+      scales: {
+        x: {
+          type: 'logarithmic',
+          min: 20, max: 20000,
+          ticks: {
+            color: '#6b6b7b',
+            font: { size: 9, family: 'Inter, sans-serif' },
+            callback(v) {
+              const labeled = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+              if (!labeled.includes(v)) return '';
+              return v >= 1000 ? (v / 1000) + 'k' : v;
+            },
+            autoSkip: false, maxRotation: 0,
+          },
+          afterBuildTicks(axis) {
+            axis.ticks = [20,30,40,50,60,80,100,150,200,300,400,500,600,800,
+              1000,1500,2000,3000,4000,5000,6000,8000,10000,15000,20000
+            ].map(v => ({ value: v }));
+          },
+          grid: {
+            color: ctx => [100, 1000, 10000].includes(ctx.tick?.value)
+              ? 'rgba(173,198,255,.12)' : 'rgba(173,198,255,.04)',
+          },
+        },
+        y: {
+          min: 50, max: 110,
+          title: { display: true, text: 'dB', color: '#6b6b7b', font: { size: 10, family: 'Inter, sans-serif' } },
+          ticks: { color: '#6b6b7b', font: { size: 9, family: 'Inter, sans-serif' }, stepSize: 10 },
+          grid: { color: 'rgba(173,198,255,.06)' },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(30,30,42,0.95)',
+          titleColor: '#adc6ff', bodyColor: '#c1c6d7',
+          callbacks: {
+            title: items => {
+              const f = items[0].parsed.x;
+              return f >= 1000 ? (f / 1000).toFixed(1) + ' kHz' : Math.round(f) + ' Hz';
+            },
+            label: item => ` ${item.dataset.label}: ${item.parsed.y.toFixed(1)} dB`,
+          },
+        },
+      },
+    },
+  });
+}
+
+// Recompute a genre match score for any set of 12-band IEM scores (e.g. PEQ variant)
+// fingerprint: {band: 0-1}  scores12: {band: 1-10}
+function _recomputeGenreScore(fingerprint, scores12) {
+  let sumEW = 0, sumE = 0;
+  for (const k of _PERC_BAND_KEYS) {
+    const e = fingerprint[k] ?? 0;
+    sumEW += e * (scores12[k] ?? 5);
+    sumE  += e;
+  }
+  return sumE > 0 ? Math.min(sumEW / sumE * 10, 100) : 50;
+}
+
+// ── Score colour ──────────────────────────────────────────────────────────────
+function _matchScoreColor(s) {
+  return s >= 75 ? '#53e16f' : s >= 55 ? '#f0b429' : '#ffb3b5';
+}
+function _matchScoreBg(s) {
+  return s >= 75 ? 'rgba(83,225,111,0.15)' : s >= 55 ? 'rgba(240,180,41,0.12)' : 'rgba(255,179,181,0.15)';
+}
+
+// ── Run matching analysis (fast — no audio I/O) ───────────────────────────────
+async function runMatchingAnalysis() {
+  const el = document.getElementById('insights-gear-content');
+  if (el) el.innerHTML = '<div class="insights-spinner-wrap"><div class="spinner"></div></div>';
+  try {
+    const res = await fetch('/api/insights/matching/analyse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: _matchTarget }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      _renderInsightsMatchOverview(null, d.error || 'Matching analysis failed.');
+      return;
+    }
+    // Reload overview after analysis
+    const ovRes = await fetch('/api/insights/matching/overview');
+    if (ovRes.ok) _renderInsightsMatchOverview(await ovRes.json());
+    else          _renderInsightsMatchOverview(null);
+  } catch (e) {
+    _renderInsightsMatchOverview(null, 'Network error — is the server running?');
+  }
+}
+
+async function changeMatchTarget(selectEl) {
+  _matchTarget = selectEl.value;
+  // Re-run analysis with new target (fast)
+  await runMatchingAnalysis();
+}
+
+// ── IEM / Headphone Fit ────────────────────────────────────────────────────────
+function _renderInsightsMatchOverview(d, errMsg) {
+  const el = document.getElementById('insights-gear-content');
+  if (!el) return;
+
+  // Update section-header action button
+  const hdrActions = document.getElementById('iemfit-header-actions');
+  if (hdrActions) {
+    hdrActions.innerHTML = d
+      ? `<button class="insights-cta-btn iemfit-reanalyse-btn" onclick="App.runMatchingAnalysis()">Re-analyse</button>`
+      : `<button class="insights-cta-btn btn-primary" onclick="App.runMatchingAnalysis()">Run Analysis</button>`;
+  }
+
+  if (!d) {
+    el.innerHTML = `
+      <div class="match-no-data">
+        <div class="match-no-data-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+          </svg>
+        </div>
+        <div class="match-no-data-title">Run IEM Match Analysis</div>
+        <div class="match-no-data-desc">Scores each IEM against every genre in your library using 17 perceptual dimensions. Requires audio analysis to be completed first.${errMsg ? `<br><span style="color:var(--accent-secondary)">${esc(errMsg)}</span>` : ''}</div>
+      </div>`;
+    return;
+  }
+
+  // Reset accordion state
+  _iemFitIemSummary  = d.iem_summary || [];
+  _iemFitSelectedId  = null;
+  _iemFitFRCharts    = {};
+  _iemFitPeqState    = {};
+  _iemFitPeqVariants = {};
+  _iemFitGenreState  = {};
+  _iemFitSourceState = {};
+
+  const iemListHtml = _iemFitIemSummary.length === 0
+    ? `<p class="insights-empty-note">No IEMs with FR data found. Add IEMs in the Gear section.</p>`
+    : _iemFitIemSummary.map(iem => {
+        const col = _matchScoreColor(iem.library_match_score);
+        return `
+          <div class="iemfit-iem-item" id="iemfit-item-${esc(iem.iem_id)}">
+            <div class="iemfit-iem-card" onclick="App._toggleIemAccordion('${esc(iem.iem_id)}')">
+              <div class="iemfit-iem-score-col">
+                <span class="iemfit-iem-pct" style="color:${col}">${iem.library_match_score.toFixed(0)}%</span>
+              </div>
+              <div class="iemfit-iem-info-col">
+                <div class="iemfit-iem-name">${esc(iem.iem_name)}</div>
+                <div class="iemfit-iem-meta">
+                  ${iem.best_genre  ? `Best for <strong>${esc(iem.best_genre)}</strong>` : ''}
+                  ${iem.worst_genre ? ` · Worst for <strong>${esc(iem.worst_genre)}</strong>` : ''}
+                  ${iem.genres_total ? ` · <span>${iem.genres_above_70}/${iem.genres_total} genres ≥70%</span>` : ''}
+                </div>
+              </div>
+              <svg class="iemfit-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="iemfit-detail-panel" id="iemfit-detail-${esc(iem.iem_id)}" style="display:none"></div>
+          </div>`;
+      }).join('');
+
+  el.innerHTML = `<div class="iemfit-iem-list">${iemListHtml}</div>`;
+}
+
+async function _toggleIemAccordion(iemId) {
+  const panel = document.getElementById(`iemfit-detail-${iemId}`);
+  const card  = panel && panel.previousElementSibling;
+  if (!panel) return;
+
+  const isOpen = panel.style.display !== 'none';
+
+  // Close previously open panel (different IEM)
+  if (_iemFitSelectedId && _iemFitSelectedId !== iemId) {
+    const prev     = document.getElementById(`iemfit-detail-${_iemFitSelectedId}`);
+    const prevCard = prev && prev.previousElementSibling;
+    if (prev)     prev.style.display = 'none';
+    if (prevCard) prevCard.classList.remove('iemfit-iem-card--open');
+    if (_iemFitFRCharts[_iemFitSelectedId]) {
+      _iemFitFRCharts[_iemFitSelectedId].destroy();
+      delete _iemFitFRCharts[_iemFitSelectedId];
+    }
+  }
+
+  if (isOpen) {
+    panel.style.display = 'none';
+    if (card) card.classList.remove('iemfit-iem-card--open');
+    if (_iemFitFRCharts[iemId]) {
+      _iemFitFRCharts[iemId].destroy();
+      delete _iemFitFRCharts[iemId];
+    }
+    _iemFitSelectedId = null;
+    return;
+  }
+
+  // Expand
+  _iemFitSelectedId = iemId;
+  if (card) card.classList.add('iemfit-iem-card--open');
+  panel.style.display = 'block';
+  panel.innerHTML = '<div class="insights-spinner-wrap"><div class="spinner"></div></div>';
+
+  // Fetch matrix + heatmap config if not cached
+  if (!_iemFitMatrixData) {
+    try {
+      const r = await fetch('/api/insights/matching/matrix');
+      if (r.ok) _iemFitMatrixData = await r.json();
+    } catch (_) {}
+  }
+  if (!_iemFitExtraGenres.length) {
+    try {
+      const r = await fetch('/api/insights/matching/heatmap-genres');
+      if (r.ok) { const cfg = await r.json(); _iemFitExtraGenres = cfg.extra_genres || []; }
+    } catch (_) {}
+  }
+
+  _renderIemDetail(iemId, panel);
+  setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
+}
+
+function _renderIemDetail(iemId, container) {
+  container.innerHTML = `
+    <div class="iemfit-detail-inner">
+      <div class="iemfit-detail-top-grid">
+        <div class="iemfit-detail-section">
+          <div class="iemfit-detail-section-hdr">
+            <span class="iemfit-detail-section-title">Genre Scores</span>
+            <span class="iemfit-detail-section-hint">How well this IEM matches each genre in your library</span>
+          </div>
+          <div id="iemfit-heatmap-${esc(iemId)}" class="iemfit-heatmap-body"></div>
+        </div>
+        <div class="iemfit-detail-section">
+          <div class="iemfit-detail-section-hdr">
+            <span class="iemfit-detail-section-title">Blindspot Detector</span>
+            <span class="iemfit-detail-section-hint">Genres this IEM handles least well</span>
+          </div>
+          <div id="iemfit-bs-${esc(iemId)}" class="iemfit-bs-body"></div>
+        </div>
+      </div>
+      <div class="iemfit-detail-section">
+        <div class="iemfit-detail-section-hdr">
+          <span class="iemfit-detail-section-title">Frequency Response</span>
+          <div class="iemfit-fr-controls" id="iemfit-fr-controls-${esc(iemId)}"></div>
+        </div>
+        <div class="iemfit-fr-wrap">
+          <canvas id="iemfit-fr-canvas-${esc(iemId)}"></canvas>
+        </div>
+        <div id="iemfit-fr-legend-${esc(iemId)}" class="iemfit-fr-legend"></div>
+      </div>
+    </div>`;
+
+  _renderIemFRPanel(iemId, null); // also drives heatmap + blindspot
+}
+
+async function _renderIemFRPanel(iemId, activePeqId) {
+  const canvas     = document.getElementById(`iemfit-fr-canvas-${iemId}`);
+  const controlsEl = document.getElementById(`iemfit-fr-controls-${iemId}`);
+  const legendEl   = document.getElementById(`iemfit-fr-legend-${iemId}`);
+  if (!canvas) return;
+
+  // Track active PEQ
+  if (activePeqId !== undefined) _iemFitPeqState[iemId] = activePeqId || null;
+  const peqId = _iemFitPeqState[iemId] || null;
+
+  // Fetch PEQ profiles + optional 12-band scores on first open.
+  // Strategy: always fetch the live IEM endpoint for the up-to-date PEQ profile list
+  // (so the dropdown is never stale), then layer in 12-band scores from the radar
+  // endpoint if matching analysis has been run.
+  if (!_iemFitPeqVariants[iemId]) {
+    // Seed an empty entry so both fetches can populate it in any order
+    _iemFitPeqVariants[iemId] = {
+      factory_scores: {}, peq_variants: [], iem_name: iemId,
+      has_scores: false, sources: [], selected_source_id: null,
+    };
+
+    // Tier 1: radar endpoint — 12-band scores for genre/blindspot recomputation
+    // Optional: returns 404 when analysis hasn't been run yet; safe to skip.
+    let radarVariantMap = {};  // peq_id → scores_12band, for merging below
+    try {
+      const r1 = await fetch(`/api/insights/matching/iem/${encodeURIComponent(iemId)}/radar`);
+      if (r1.ok) {
+        const rd = await r1.json();
+        _iemFitPeqVariants[iemId].factory_scores = rd.scores || {};
+        _iemFitPeqVariants[iemId].iem_name       = rd.iem_name || iemId;
+        _iemFitPeqVariants[iemId].has_scores     = true;
+        (rd.peq_variants || []).forEach(v => { radarVariantMap[v.peq_id] = v.scores || null; });
+      }
+    } catch (_) {}
+
+    // Tier 2: IEM endpoint — always available, gives current PEQ profile list
+    try {
+      const r2 = await fetch(`/api/iems/${encodeURIComponent(iemId)}`);
+      if (r2.ok) {
+        const iemRaw = await r2.json();
+        if (iemRaw.name) _iemFitPeqVariants[iemId].iem_name = iemRaw.name;
+        _iemFitPeqVariants[iemId].sources = iemRaw.squig_sources || [];
+        _iemFitPeqVariants[iemId].selected_source_id = iemRaw.primary_source_id || ((_iemFitPeqVariants[iemId].sources[0] || {}).id) || null;
+        if (_iemFitSourceState[iemId] == null) {
+          _iemFitSourceState[iemId] = _iemFitPeqVariants[iemId].selected_source_id;
+        }
+        _iemFitPeqVariants[iemId].peq_variants = (iemRaw.peq_profiles || []).map(p => ({
+          peq_id: p.id,
+          name:   p.name || 'PEQ',
+          scores: radarVariantMap[p.id] || null,  // merge 12-band scores if available
+        }));
+      }
+    } catch (_) {}
+  }
+
+  const iemData     = _iemFitPeqVariants[iemId] || {};
+  const peqVariants = iemData.peq_variants || [];
+  const sourceVariants = iemData.sources || [];
+  const sourceId = _iemFitSourceState[iemId] || iemData.selected_source_id || (sourceVariants[0] || {}).id || null;
+
+  // Genre overlay state
+  const genreKey   = _iemFitGenreState[iemId] || null;
+  const genreRow   = (_iemFitMatrixData?.matrix || []).find(r => r.genre === genreKey);
+  const genreFingerprint = genreRow?.fingerprint || null;
+
+  // Render controls — PEQ dropdown + Genre overlay dropdown
+  if (controlsEl) {
+    const peqCtrl = peqVariants.length > 0
+      ? `<div class="iemfit-fr-ctrl-group">
+           <label class="iemfit-fr-ctrl-label">PEQ</label>
+           <select class="iemfit-radar-select" onchange="App.iemFitChangePeq('${esc(iemId)}',this.value)">
+             <option value="">Factory</option>
+             ${peqVariants.map(v =>
+               `<option value="${esc(v.peq_id)}" ${v.peq_id === peqId ? 'selected' : ''}>${esc(v.name)}</option>`
+             ).join('')}
+           </select>
+         </div>` : '';
+
+    const sourceCtrl = sourceVariants.length > 1
+      ? `<div class="iemfit-fr-ctrl-group">
+           <label class="iemfit-fr-ctrl-label">Source</label>
+           <select class="iemfit-radar-select" onchange="App.iemFitChangeSource('${esc(iemId)}',this.value)">
+             ${sourceVariants.map(s =>
+               `<option value="${esc(s.id || '')}" ${(s.id || '') === (sourceId || '') ? 'selected' : ''}>${esc(s.label || 'Source')}</option>`
+             ).join('')}
+           </select>
+         </div>` : '';
+
+    const genres = (_iemFitMatrixData?.matrix || [])
+      .slice().sort((a, b) => b.track_count - a.track_count);
+    const genreCtrl = genres.length > 0
+      ? `<div class="iemfit-fr-ctrl-group">
+           <label class="iemfit-fr-ctrl-label">Genre overlay</label>
+           <select class="iemfit-radar-select" onchange="App.iemFitChangeGenreOverlay('${esc(iemId)}',this.value)">
+             <option value="">None</option>
+             ${genres.map(r =>
+               `<option value="${esc(r.genre)}" ${r.genre === genreKey ? 'selected' : ''}>${esc(r.genre)}</option>`
+             ).join('')}
+           </select>
+         </div>` : '';
+
+    controlsEl.innerHTML = sourceCtrl + peqCtrl + genreCtrl;
+  }
+
+  // Fetch FR curves from graph endpoint
+  let curves = [];
+  try {
+    const graphParams = [];
+    if (peqId) graphParams.push(`peq=${encodeURIComponent(peqId)}`);
+    if (sourceId) graphParams.push(`source=${encodeURIComponent(sourceId)}`);
+    const url = graphParams.length
+      ? `/api/iems/${encodeURIComponent(iemId)}/graph?${graphParams.join('&')}`
+      : `/api/iems/${encodeURIComponent(iemId)}/graph`;
+    const r = await fetch(url);
+    if (r.ok) {
+      const gd = await r.json();
+      if (gd.selected_source_id) _iemFitSourceState[iemId] = gd.selected_source_id;
+      // Filter out baselines — keep only L, R, and PEQ overlay curves
+      curves = (gd.curves || []).filter(c => c.id && !c.id.startsWith('baseline-'));
+    }
+  } catch (_) {}
+
+  // Destroy stale chart
+  if (_iemFitFRCharts[iemId]) {
+    _iemFitFRCharts[iemId].destroy();
+    delete _iemFitFRCharts[iemId];
+  }
+
+  if (!curves.length) {
+    const wrap = canvas.parentElement;
+    if (wrap) wrap.innerHTML = '<p class="insights-error" style="padding:1rem 0">FR data unavailable. Check this IEM\'s squig.link URL.</p>';
+    return;
+  }
+
+  _iemFitFRCharts[iemId] = _buildCompactFRChart(canvas, curves, genreFingerprint, genreKey);
+
+  // Legend — genre swatch first (if active), then IEM curves
+  if (legendEl) {
+    const genreSwatch = genreKey
+      ? `<div class="iemfit-fr-legend-item">
+           <span style="display:inline-block;width:14px;height:8px;background:rgba(240,168,48,0.45);margin-right:5px;vertical-align:middle;border-radius:2px"></span>
+           <span style="color:rgba(240,168,48,0.9)">${esc(genreKey)} energy</span>
+         </div>`
+      : '';
+    const curveLegend = curves.map(c => {
+      const col = c.id.includes('-peq-') ? '#53e16f' : c.id.endsWith('-R') ? '#e05c5c' : '#5b8dee';
+      return `<div class="iemfit-fr-legend-item">
+        <span style="display:inline-block;width:14px;height:2px;background:${col};margin-right:5px;vertical-align:middle;border-radius:1px"></span>
+        <span>${esc(c.label || c.id)}</span>
+      </div>`;
+    }).join('');
+    legendEl.innerHTML = genreSwatch + curveLegend;
+  }
+
+  // Update genre scores + blindspot panels to match factory or PEQ-adjusted FR
+  const activePeqVariant = peqId ? peqVariants.find(v => v.peq_id === peqId) : null;
+  const peqScores12 = activePeqVariant ? activePeqVariant.scores : null;
+  _renderIemHeatmapPanel(iemId, peqScores12);
+  _renderIemBlindspotPanel(iemId, peqScores12);
+}
+
+function _renderIemHeatmapPanel(iemId, peqScores12 = null) {
+  const el = document.getElementById(`iemfit-heatmap-${iemId}`);
+  if (!el) return;
+  if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) {
+    el.innerHTML = '<p class="insights-empty-note">Matrix data unavailable.</p>';
+    return;
+  }
+  const allRows = _iemFitMatrixData.matrix;
+
+  // Build score map — recompute from fingerprint when PEQ is active
+  const scoreMap = {};
+  allRows.forEach(row => {
+    const factoryScore = ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null;
+    const peqScore     = peqScores12 ? _recomputeGenreScore(row.fingerprint || {}, peqScores12) : null;
+    const score        = peqScore !== null ? peqScore : factoryScore;
+    const delta        = (peqScore !== null && factoryScore !== null) ? peqScore - factoryScore : null;
+    if (score !== null) scoreMap[row.genre] = { score, delta, tc: row.track_count };
+  });
+
+  // Top 8 by track count
+  const shown = [...allRows].sort((a, b) => b.track_count - a.track_count)
+    .slice(0, 8).map(r => r.genre);
+  const total = allRows.length;
+
+  const rowsHtml = shown.map(genre => {
+    const entry = scoreMap[genre];
+    if (!entry) return '';
+    const { score, delta, tc } = entry;
+    const fillColor = score >= 75 ? 'rgba(83,225,111,0.75)' : score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
+    const deltaBadge = delta !== null
+      ? `<span class="iemfit-score-delta ${delta >= 0.5 ? 'pos' : delta <= -0.5 ? 'neg' : 'neu'}">${delta >= 0 ? '+' : ''}${delta.toFixed(0)}</span>`
+      : '';
+    return `<div class="iemfit-heatmap-row">
+      <div class="iemfit-heatmap-genre">${esc(genre)}</div>
+      <div class="iemfit-heatmap-bar-wrap">
+        <div class="iemfit-heatmap-bar-track">
+          <div class="iemfit-heatmap-bar-fill" style="width:${score.toFixed(0)}%;background:${fillColor}"></div>
+        </div>
+      </div>
+      <div class="iemfit-heatmap-score" style="color:${_matchScoreColor(score)}">${score.toFixed(0)}%${deltaBadge}</div>
+    </div>`;
+  }).join('');
+
+  const viewAllBtn = total > 8
+    ? `<button class="iemfit-bs-more-btn iemfit-panel-cta" onclick="App.showAllIemGenres('${esc(iemId)}')">${total} genres total — view all →</button>`
+    : '';
+
+  el.innerHTML = `<div class="iemfit-heatmap-grid">${rowsHtml}</div>${viewAllBtn}`;
+}
+
+
+function _renderIemBlindspotPanel(iemId, peqScores12 = null) {
+  const el = document.getElementById(`iemfit-bs-${iemId}`);
+  if (!el) return;
+  if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) {
+    el.innerHTML = '<p class="insights-empty-note">Matrix data unavailable.</p>';
+    return;
+  }
+  const genreScores = _iemFitMatrixData.matrix
+    .map(row => {
+      const factoryScore = ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null;
+      const peqScore     = peqScores12 ? _recomputeGenreScore(row.fingerprint || {}, peqScores12) : null;
+      const score        = peqScore !== null ? peqScore : factoryScore;
+      const delta        = (peqScore !== null && factoryScore !== null) ? peqScore - factoryScore : null;
+      return { genre: row.genre, score, delta, tc: row.track_count };
+    })
+    .filter(g => g.score !== null)
+    .sort((a, b) => a.score - b.score);
+
+  const shown  = genreScores.slice(0, 10);
+  const total  = genreScores.length;
+
+  const rowsHtml = shown.map(g => {
+    const fillColor = g.score >= 75 ? 'rgba(83,225,111,0.75)' : g.score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
+    const deltaBadge = g.delta !== null
+      ? `<span class="iemfit-score-delta ${g.delta >= 0.5 ? 'pos' : g.delta <= -0.5 ? 'neg' : 'neu'}">${g.delta >= 0 ? '+' : ''}${g.delta.toFixed(0)}</span>`
+      : '';
+    return `<div class="iemfit-bs-row">
+      <div class="iemfit-bs-genre">${esc(g.genre)}</div>
+      <div class="iemfit-bs-bar-wrap">
+        <div class="iemfit-bs-bar-track">
+          <div class="iemfit-bs-bar-fill" style="width:${g.score.toFixed(0)}%;background:${fillColor}"></div>
+        </div>
+      </div>
+      <div class="iemfit-bs-score" style="color:${_matchScoreColor(g.score)}">${g.score.toFixed(0)}%${deltaBadge}</div>
+    </div>`;
+  }).join('');
+
+  const moreBtn = total > 10
+    ? `<button class="iemfit-bs-more-btn iemfit-panel-cta" onclick="App.showAllIemBlindspots('${esc(iemId)}')">${total} genres total — view all →</button>`
+    : '';
+
+  el.innerHTML = `<div class="iemfit-bs-list">${rowsHtml}</div>${moreBtn}`;
+}
+
+// Controls
+async function iemFitChangePeq(iemId, peqId) {
+  await _renderIemFRPanel(iemId, peqId || null);
+}
+async function iemFitChangeSource(iemId, sourceId) {
+  _iemFitSourceState[iemId] = sourceId || null;
+  await _renderIemFRPanel(iemId, _iemFitPeqState[iemId] || null);
+}
+function iemFitChangeGenre() {} // legacy stub — kept for safety
+async function iemFitChangeGenreOverlay(iemId, genre) {
+  _iemFitGenreState[iemId] = genre || null;
+  await _renderIemFRPanel(iemId, _iemFitPeqState[iemId] || null);
+}
+async function iemFitAddGenreToHeatmap(iemId) {
+  const sel = document.getElementById(`iemfit-add-genre-${iemId}`);
+  if (!sel || !sel.value) return;
+  const genre = sel.value;
+  if (_iemFitExtraGenres.includes(genre) || _iemFitExtraGenres.length >= 5) return;
+  _iemFitExtraGenres = [..._iemFitExtraGenres, genre];
+  try {
+    await fetch('/api/insights/matching/heatmap-genres', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ extra_genres: _iemFitExtraGenres }),
+    });
+  } catch (_) {}
+  _renderIemHeatmapPanel(iemId);
+}
+async function iemFitRemoveGenreFromHeatmap(genre, iemId) {
+  _iemFitExtraGenres = _iemFitExtraGenres.filter(g => g !== genre);
+  try {
+    await fetch('/api/insights/matching/heatmap-genres', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ extra_genres: _iemFitExtraGenres }),
+    });
+  } catch (_) {}
+  _renderIemHeatmapPanel(iemId);
+}
+
+function _activePeqScores12(iemId) {
+  const peqId = _iemFitPeqState[iemId];
+  if (!peqId) return null;
+  const iemData = _iemFitPeqVariants[iemId];
+  if (!iemData) return null;
+  const v = (iemData.peq_variants || []).find(v => v.peq_id === peqId);
+  return v ? v.scores : null;
+}
+
+function showAllIemGenres(iemId) {
+  if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) return;
+  const iemInfo    = _iemFitIemSummary.find(i => i.iem_id === iemId);
+  const iemName    = iemInfo ? iemInfo.iem_name : iemId;
+  const peqScores12 = _activePeqScores12(iemId);
+
+  const genreScores = _iemFitMatrixData.matrix
+    .map(row => ({
+      genre: row.genre,
+      score: peqScores12
+        ? _recomputeGenreScore(row.fingerprint || {}, peqScores12)
+        : ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null,
+    }))
+    .filter(g => g.score !== null)
+    .sort((a, b) => b.score - a.score); // best → worst
+
+  const titleEl = document.getElementById('iem-blindspot-modal-title');
+  const bodyEl  = document.getElementById('iem-blindspot-modal-body');
+  const modal   = document.getElementById('iem-blindspot-modal');
+  if (!modal || !bodyEl) return;
+  if (titleEl) titleEl.textContent = `All Genres — ${iemName}`;
+
+  bodyEl.innerHTML = genreScores.map(g => {
+    const fillColor = g.score >= 75 ? 'rgba(83,225,111,0.75)' : g.score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
+    return `<div class="iemfit-bs-row" style="margin-bottom:10px">
+      <div class="iemfit-bs-genre">${esc(g.genre)}</div>
+      <div class="iemfit-bs-bar-wrap">
+        <div class="iemfit-bs-bar-track">
+          <div class="iemfit-bs-bar-fill" style="width:${g.score.toFixed(0)}%;background:${fillColor}"></div>
+        </div>
+      </div>
+      <div class="iemfit-bs-score" style="color:${_matchScoreColor(g.score)};min-width:42px;text-align:right">${g.score.toFixed(0)}%</div>
+    </div>`;
+  }).join('');
+
+  modal.style.display = 'flex';
+}
+
+function showAllIemBlindspots(iemId) {
+  if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) return;
+  const iemInfo     = _iemFitIemSummary.find(i => i.iem_id === iemId);
+  const iemName     = iemInfo ? iemInfo.iem_name : iemId;
+  const peqScores12 = _activePeqScores12(iemId);
+
+  const genreScores = _iemFitMatrixData.matrix
+    .map(row => ({
+      genre: row.genre,
+      score: peqScores12
+        ? _recomputeGenreScore(row.fingerprint || {}, peqScores12)
+        : ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null,
+    }))
+    .filter(g => g.score !== null)
+    .sort((a, b) => a.score - b.score);
+
+  const titleEl = document.getElementById('iem-blindspot-modal-title');
+  const bodyEl  = document.getElementById('iem-blindspot-modal-body');
+  const modal   = document.getElementById('iem-blindspot-modal');
+  if (!modal || !bodyEl) return;
+  if (titleEl) titleEl.textContent = `All Genres — ${iemName}`;
+
+  bodyEl.innerHTML = genreScores.map(g => {
+    const fillColor = g.score >= 75 ? 'rgba(83,225,111,0.75)' : g.score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
+    return `<div class="iemfit-bs-row" style="margin-bottom:10px">
+      <div class="iemfit-bs-genre">${esc(g.genre)}</div>
+      <div class="iemfit-bs-bar-wrap">
+        <div class="iemfit-bs-bar-track">
+          <div class="iemfit-bs-bar-fill" style="width:${g.score.toFixed(0)}%;background:${fillColor}"></div>
+        </div>
+      </div>
+      <div class="iemfit-bs-score" style="color:${_matchScoreColor(g.score)};min-width:42px;text-align:right">${g.score.toFixed(0)}%</div>
+    </div>`;
+  }).join('');
+
+  modal.style.display = 'flex';
+}
+
+function closeAllBlindspots() {
+  const modal = document.getElementById('iem-blindspot-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+// Compat stubs
+function _openRadarForIem(iemId) { _toggleIemAccordion(iemId); }
+function _showHeatmapDetail() {}
+function changeGearFitTarget() {}
+function changeGearFitSort() {}
 
 /* ── Init ───────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
   // Close dropdown on outside click
   document.addEventListener('click', (e) => {
     const dd = document.getElementById('add-dropdown');
-    if (!dd.contains(e.target)) hideDropdown();
+    if (dd && !dd.contains(e.target)) hideDropdown();
 
     // Close any open mapping results dropdowns
     if (!e.target.closest('.map-row-target')) {
@@ -3344,6 +5427,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }, true);
 
   Player.init();
+  await loadGearProfiles();
   // Enter submits create playlist modal
   const cpInput = document.getElementById('create-playlist-input');
   if (cpInput) cpInput.addEventListener('keydown', e => { if (e.key === 'Enter') App.submitCreatePlaylist(); });

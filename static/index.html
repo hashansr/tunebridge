@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/style.css?v=24" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -19,11 +19,11 @@
         <img src="/logo.png" width="26" height="26" alt="TuneBridge" style="border-radius:5px" />
         <span>TuneBridge</span>
         <div class="header-icons">
-          <button id="help-btn" onclick="App.showHelp()" title="Help">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="3"/></svg>
+          <button id="help-btn" class="header-orb-btn" onclick="App.showHelp()" title="Help Center" aria-label="Open Help Center">
+            <span class="help-btn-glyph" aria-hidden="true">?</span>
           </button>
-          <button id="settings-btn" onclick="App.showView('settings')" title="Settings">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <button id="settings-btn" class="header-orb-btn" onclick="App.showView('settings')" title="Settings">
+            <svg class="settings-btn-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
         </div>
       </div>
@@ -50,6 +50,12 @@
         <button class="nav-item" data-view="gear" onclick="App.showView('gear')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg>
           Gear
+        </button>
+        <div class="nav-section-label nav-section-sticky" style="margin-top:10px">Insights</div>
+        <button class="nav-item" data-view="insights" onclick="App.showView('insights')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Insights
+          <span id="insights-nav-dot" class="insights-nav-dot" style="display:none"></span>
         </button>
       </nav>
 
@@ -260,7 +266,10 @@
       <div id="view-gear" class="view" style="display:none">
         <!-- DAPs section -->
         <div class="gear-section-header">
-          <h2>Digital Audio Players</h2>
+          <div>
+            <div class="gear-section-overline">Transport</div>
+            <h2>Digital Audio Players</h2>
+          </div>
           <button class="btn-primary" onclick="App.showAddDapModal()">+ Add</button>
         </div>
         <div id="gear-daps-panel">
@@ -275,8 +284,14 @@
 
         <!-- IEMs section -->
         <div class="gear-section-header" style="margin-top:32px">
-          <h2>IEMs &amp; Headphones</h2>
-          <button class="btn-primary" onclick="App.showAddIemModal()">+ Add</button>
+          <div>
+            <div class="gear-section-overline">Monitoring</div>
+            <h2>IEMs &amp; Headphones</h2>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="iems-compare-btn" class="gear-compare-toggle" onclick="App.toggleIemCompareMode()" style="display:none">Compare</button>
+            <button class="btn-primary" onclick="App.showAddIemModal()">+ Add</button>
+          </div>
         </div>
         <div id="gear-iems-panel">
           <div id="iems-grid" class="gear-grid"></div>
@@ -285,6 +300,31 @@
             <p>No IEMs or headphones added yet.</p>
             <p class="muted">Add your gear to upload PEQ files and view frequency response graphs.</p>
             <button class="btn-primary" onclick="App.showAddIemModal()">+ Add IEM / Headphone</button>
+          </div>
+        </div>
+
+        <!-- Floating compare action bar -->
+        <div id="iem-compare-bar" class="iem-compare-bar" style="display:none">
+          <span id="iem-compare-bar-label" class="iem-compare-bar-label">Select 2 or more IEMs</span>
+          <button id="iem-compare-submit-btn" class="btn-primary" onclick="App.showIemCompare()" disabled>Compare</button>
+        </div>
+      </div>
+
+      <!-- IEM Frequency Response Compare Modal -->
+      <div id="iem-compare-modal" class="modal-overlay" style="display:none" onclick="App.closeIemCompare(event)">
+        <div class="iem-compare-dialog" onclick="event.stopPropagation()">
+          <div class="iem-compare-hdr">
+            <div>
+              <h3 class="iem-compare-title">Frequency Response Comparison</h3>
+              <p class="iem-compare-subtitle">Overlay selected gear curves in the same reference scale used across Gear charts.</p>
+            </div>
+            <button class="modal-x-btn" onclick="App.closeIemCompare()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div id="iem-compare-legend" class="iem-compare-legend"></div>
+          <div class="iem-compare-chart-wrap">
+            <canvas id="iem-compare-canvas"></canvas>
           </div>
         </div>
       </div>
@@ -471,7 +511,176 @@
 
         </div>
       </div>
+
+      <!-- ── Insights View ───────────────────────────────────────────── -->
+      <div id="view-insights" class="view insights-view" style="display:none">
+        <div class="insights-hero">
+          <div class="insights-hero-overline">Internal analytics system</div>
+          <div class="insights-hero-row">
+            <h2>Library Insights</h2>
+            <button class="insights-rescan-btn insights-rescan-btn--hero" id="insights-rescan-btn" onclick="App.insightsRescanLibrary()" title="Re-read all file tags from disk">Rescan</button>
+          </div>
+        </div>
+
+        <!-- Inline scan progress — shown during rescan -->
+        <div id="insights-scan-banner" class="insights-scan-banner" style="display:none">
+          <div class="insights-scan-banner-inner">
+            <div class="insights-scan-spinner"></div>
+            <span id="insights-scan-msg">Scanning library…</span>
+            <div class="insights-scan-bar-wrap"><div class="insights-scan-bar" id="insights-scan-bar"></div></div>
+          </div>
+        </div>
+
+        <div class="insights-shell">
+          <div class="insights-main">
+            <div class="insights-content">
+              <!-- Overview -->
+              <div class="insights-section" id="insights-overview-section">
+                <div class="insights-section-hdr">
+                  <div class="insights-section-hdr-text">
+                    <h3 class="insights-section-title">Library Overview</h3>
+                    <p class="insights-section-desc">Format, sample rate, bit depth, and genre breakdown.</p>
+                  </div>
+                  <div class="insights-section-hdr-actions">
+                    <button class="insights-help-btn" onclick="App.showInsightsHelp('overview', event)" title="What is this?">?</button>
+                  </div>
+                </div>
+                <div id="insights-overview-content">
+                  <div class="insights-spinner-wrap"><div class="spinner"></div></div>
+                </div>
+              </div>
+
+              <div class="insights-split-row">
+                <!-- Tag Health -->
+                <div class="insights-section" id="insights-tag-health-section">
+                  <div class="insights-section-hdr">
+                    <div class="insights-section-hdr-text">
+                      <h3 class="insights-section-title">Tag Health</h3>
+                      <p class="insights-section-desc">Metadata completeness and consistency across your library.</p>
+                    </div>
+                    <button class="insights-help-btn" onclick="App.showInsightsHelp('tag-health', event)" title="What is this?">?</button>
+                  </div>
+                  <div id="insights-tag-health-content">
+                    <div class="insights-spinner-wrap"><div class="spinner"></div></div>
+                  </div>
+                </div>
+
+                <!-- Genre Distribution -->
+                <div class="insights-section" id="insights-genre-section">
+                  <div class="insights-section-hdr">
+                    <div class="insights-section-hdr-text">
+                      <h3 class="insights-section-title">Genre Distribution</h3>
+                      <p class="insights-section-desc">Top genres in your library by track count.</p>
+                    </div>
+                    <button class="insights-help-btn" onclick="App.showInsightsHelp('genre', event)" title="What is this?">?</button>
+                  </div>
+                  <div id="insights-genre-content">
+                    <div class="insights-spinner-wrap"><div class="spinner"></div></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Sonic Profile (includes analysis CTA) -->
+              <div class="insights-section" id="insights-sonic-section">
+                <div class="insights-section-hdr">
+                  <div class="insights-section-hdr-text">
+                    <h3 class="insights-section-title">Sonic Profile Analysis</h3>
+                    <p class="insights-section-desc">Spectral characteristics derived from audio analysis of your FLAC library.</p>
+                  </div>
+                  <button class="insights-help-btn" onclick="App.showInsightsHelp('sonic', event)" title="What is this?">?</button>
+                </div>
+                <!-- Analysis CTA + progress banner live inside sonic section -->
+                <div id="insights-sonic-analysis-wrap" class="insights-sonic-analysis-wrap">
+                  <div class="insights-cta-inner">
+                    <div class="insights-cta-icon-wrap">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M2 12 Q5 4 8 12 Q11 20 14 12 Q17 4 20 12 Q21 16 22 12"/>
+                      </svg>
+                    </div>
+                    <div class="insights-cta-body">
+                      <p id="insights-analyse-status" class="insights-analyse-status"></p>
+                    </div>
+                    <button class="btn-primary insights-cta-btn" id="insights-analyse-btn" onclick="App.startLibraryAnalysis()">Analyse Library</button>
+                  </div>
+                  <div id="insights-analysis-banner" class="insights-analysis-banner" style="display:none">
+                    <div class="insights-analysis-banner-inner">
+                      <div class="insights-analysis-icon" id="insights-analysis-icon"></div>
+                      <div class="insights-analysis-text">
+                        <span id="insights-analysis-label">Analysing library…</span>
+                        <span id="insights-analysis-sub"></span>
+                      </div>
+                      <div class="insights-analysis-bar-wrap">
+                        <div class="insights-analysis-bar" id="insights-analysis-bar"></div>
+                      </div>
+                      <button id="insights-cancel-btn" class="insights-cancel-btn" onclick="App.cancelLibraryAnalysis()" style="display:none">Cancel</button>
+                    </div>
+                  </div>
+                </div>
+                <div id="insights-sonic-content"></div>
+              </div>
+
+              <!-- Collection Fit (formerly IEM Match) -->
+              <div class="insights-section" id="insights-gear-section">
+                <div class="insights-section-hdr">
+                  <div class="insights-section-hdr-text">
+                    <h3 class="insights-section-title">Gear Compatibility Analysis</h3>
+                    <p class="insights-section-desc">How well each IEM or headphone matches your library's sonic character across 17 perceptual dimensions.</p>
+                  </div>
+                  <div class="insights-section-hdr-actions" id="iemfit-header-actions"></div>
+                  <button class="insights-help-btn" onclick="App.showInsightsHelp('gear', event)" title="What is this?">?</button>
+                </div>
+                <div id="insights-gear-content">
+                  <div class="insights-locked-state">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <span>Run audio analysis above to unlock this section.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Problem tracks modal -->
+      <div id="problem-tracks-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeProblemTracksModal()">
+        <div class="modal modal-wide" onclick="event.stopPropagation()">
+          <div class="modal-head">
+            <h3 id="problem-tracks-modal-title" class="modal-title-sm">Problem Tracks</h3>
+            <button class="modal-x-btn" onclick="App.closeProblemTracksModal()">✕</button>
+          </div>
+          <div id="problem-tracks-modal-body" class="problem-tracks-modal-body"></div>
+        </div>
+      </div>
+
+      <!-- Genre distribution modal -->
+      <div id="genre-distribution-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeGenreDistributionModal()">
+        <div class="modal modal-wide" onclick="event.stopPropagation()">
+          <div class="modal-head">
+            <h3 id="genre-distribution-modal-title" class="modal-title-sm">All Genres</h3>
+            <button class="modal-x-btn" onclick="App.closeGenreDistributionModal()">✕</button>
+          </div>
+          <div id="genre-distribution-modal-body" class="problem-tracks-modal-body"></div>
+        </div>
+      </div>
+
+      <!-- IEM blindspot all-genres modal -->
+      <div id="iem-blindspot-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeAllBlindspots()">
+        <div class="modal modal-wide" onclick="event.stopPropagation()">
+          <div class="modal-head">
+            <h3 id="iem-blindspot-modal-title" class="modal-title-sm">All Genres</h3>
+            <button class="modal-x-btn" onclick="App.closeAllBlindspots()">✕</button>
+          </div>
+          <div id="iem-blindspot-modal-body" style="max-height:60vh;overflow-y:auto"></div>
+        </div>
+      </div>
     </main>
+
+  <!-- Shared Insights help popover -->
+  <div id="insights-help-popover" class="insights-help-popover" style="display:none" data-open-for="">
+    <h4 class="insights-help-title" id="insights-help-title"></h4>
+    <div class="insights-help-body" id="insights-help-body"></div>
+  </div>
+
   </div>
 
   <!-- Add-to-playlist dropdown -->
@@ -518,7 +727,7 @@
       </div>
       <div style="margin:12px 0 6px">
         <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Playlist name</label>
-        <input id="import-name-input" type="text" style="width:100%;padding:8px 10px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;outline:none" />
+        <input id="import-name-input" type="text" />
       </div>
       <div id="import-summary" style="margin:12px 0;padding:10px 14px;background:var(--bg-elevated);border-radius:6px;font-size:13px"></div>
       <div id="import-unmatched-wrap" style="display:none">
@@ -535,67 +744,52 @@
   <!-- Help modal -->
   <div id="help-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeHelp()">
     <div class="modal modal-help">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-        <h3 style="font-size:18px">Help &amp; Guide</h3>
-        <button onclick="App.closeHelp()" style="color:var(--text-muted);padding:4px;border-radius:4px" class="btn-secondary" style="padding:4px 8px">✕</button>
+      <div class="modal-head modal-head-tight">
+        <h3>Help Center</h3>
+        <button class="modal-x-btn" onclick="App.closeHelp()">✕</button>
       </div>
+      <p class="help-intro">Need quick steps for playlist export, import, and DAP sync? Start here.</p>
 
       <div class="help-section">
         <div class="help-section-title">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Using Playlists on Poweramp (FiiO M21)
+          Quick Start
         </div>
         <ol class="help-steps">
-          <li>Select a playlist and click <strong>Poweramp (M3U)</strong> to download the file.</li>
-          <li>Connect your FiiO M21 to your Mac — it mounts at <code>/Volumes/FIIO M21/</code></li>
-          <li>Copy the <code>.m3u</code> file to <code>FIIO M21 › Playlists › </code></li>
-          <li>Eject the device, open Poweramp → Library → Playlists.</li>
-          <li>If the playlist doesn't appear, go to Poweramp Settings → Library → Rescan.</li>
+          <li>Create or open a playlist in TuneBridge.</li>
+          <li>Choose a connected device from the export controls in the playlist header.</li>
+          <li>If no device is connected, use <strong>Download M3U</strong> and copy it to your device's configured export folder.</li>
+          <li>Run a library rescan on your DAP if the playlist does not appear immediately.</li>
         </ol>
         <div class="help-tip">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="3"/></svg>
-          <span><strong>Playlist name shows with an extension?</strong> Poweramp uses the filename as the playlist display name. Playlists are now exported as <code>.m3u</code> which Poweramp strips from the display name automatically. If you have old <code>.m3u8</code> files on your device, delete them and re-export.</span>
-        </div>
-        <div class="help-tip" style="margin-top:8px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-          Tip: When the FiiO M21 is connected, a device button appears on the playlist page that copies the file directly.
+          <span>TuneBridge exports playlists as <code>.m3u</code> for broad DAP compatibility.</span>
         </div>
       </div>
 
       <div class="help-section">
         <div class="help-section-title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Using Playlists on AP80 Pro Max
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
+          Configured Devices
         </div>
-        <ol class="help-steps">
-          <li><strong>One-time setup:</strong> On the AP80, create and save one playlist using the heart/star icon during playback. This makes the device create the <code>playlist_data/</code> folder on the SD card.</li>
-          <li>Connect your AP80 to your Mac via USB (Settings → USB Mode → Storage) — it mounts at <code>/Volumes/AP80/</code></li>
-          <li>Export using <strong>AP80 Pro Max (M3U)</strong> to download, or click <strong>→ AP80</strong> to copy directly when the device is connected.</li>
-          <li>If copying manually, place the <code>.m3u</code> file in <code>playlist_data/</code> at the SD card root (not in Music/ or a Playlists/ folder).</li>
-          <li>On the AP80: Music → ☆ → Playlists → Load Playlist.</li>
-        </ol>
-        <div class="help-tip">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="3"/></svg>
-          <span><strong>Playlist shows 0 songs?</strong> This happens if you created the <code>playlist_data/</code> folder manually on your Mac. Delete the folder, let the AP80 recreate it by saving a dummy playlist, then re-copy your M3U files.</span>
-        </div>
-        <div class="help-tip" style="margin-top:8px">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-          <span>Can't see <code>playlist_data/</code> from your Mac? It may be hidden. Use the → AP80 direct copy button — it creates the folder automatically.</span>
+        <p style="font-size:13px;color:var(--text-sub);line-height:1.6;margin-bottom:10px">
+          This list is generated from your current DAP setup.
+        </p>
+        <div id="help-device-list" class="help-device-list">
+          <div class="help-device-empty">Loading device guidance…</div>
         </div>
       </div>
 
       <div class="help-section">
         <div class="help-section-title">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v4H3zM3 11h18v4H3zM3 19h18v2H3z" stroke-width="1.5"/></svg>
-          How playlist paths work
+          Path Rules
         </div>
         <p style="font-size:13px;color:var(--text-sub);line-height:1.6;margin-bottom:8px">
-          Playlist path formats differ by device:
+          Path formatting depends on each device profile:
         </p>
-        <p style="font-size:13px;color:var(--text-sub);line-height:1.6;margin-bottom:4px"><strong>Poweramp (FiiO M21)</strong> — relative paths from the SD card root:</p>
         <code class="help-code">Music/Artist/Album/01. Track Title.flac</code>
-        <p style="font-size:13px;color:var(--text-sub);line-height:1.6;margin-top:8px;margin-bottom:4px"><strong>AP80 Pro Max</strong> — relative paths from <code>playlist_data/</code> (one level above Music/):</p>
-        <code class="help-code">../Music/Artist/Album/01. Track Title.flac</code>
+        <code class="help-code" style="margin-top:8px">../Music/Artist/Album/01. Track Title.flac</code>
       </div>
 
       <div class="help-section">
@@ -614,10 +808,12 @@
       <div class="help-section" style="border:none;padding-bottom:0">
         <div class="help-section-title">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="3"/></svg>
-          Music source &amp; library
+          Storage &amp; Library
         </div>
         <p style="font-size:13px;color:var(--text-sub);line-height:1.6">
-          Your library is scanned from <code>/Volumes/Storage/Music/FLAC/</code>. Click the <strong>↺</strong> button at the bottom of the sidebar to rescan after adding new music.
+          Library root: <code id="help-library-root">Loading…</code><br />
+          App data location: <code id="help-data-dir">Loading…</code><br />
+          Use the <strong>↺</strong> button in the sidebar to rescan after adding or removing music.
         </p>
       </div>
     </div>
@@ -626,9 +822,9 @@
   <!-- Device settings modal -->
   <div id="settings-modal" class="modal-overlay" style="display:none">
     <div class="modal modal-wide">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div class="modal-head modal-head-spaced">
         <h3>Device Settings</h3>
-        <button class="btn-secondary" style="padding:4px 8px" onclick="App.closeSettings()">✕</button>
+        <button class="modal-x-btn" onclick="App.closeSettings()">✕</button>
       </div>
 
       <div class="settings-device-block">
@@ -685,9 +881,16 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
+      <div class="sync-phase-rail" aria-hidden="true">
+        <span class="sync-phase-step" data-step="pick">Device</span>
+        <span class="sync-phase-step" data-step="scanning">Scan</span>
+        <span class="sync-phase-step" data-step="preview">Review</span>
+        <span class="sync-phase-step" data-step="copying">Copy</span>
+        <span class="sync-phase-step" data-step="done">Done</span>
+      </div>
 
       <!-- Phase: pick device -->
-      <div id="sync-phase-pick">
+      <div id="sync-phase-pick" class="sync-phase-panel">
         <div class="sync-section-label">Select a device</div>
         <div id="sync-device-list" class="sync-device-list">
           <!-- Populated dynamically from DAP list in showSync() -->
@@ -695,15 +898,15 @@
       </div>
 
       <!-- Phase: scanning -->
-      <div id="sync-phase-scanning" style="display:none">
+      <div id="sync-phase-scanning" class="sync-phase-panel sync-phase-panel--progress" style="display:none">
         <div class="sync-progress-phase">
-          <p class="sync-phase-label" id="sync-scanning-msg">Scanning files…</p>
+          <p class="sync-phase-label" id="sync-scanning-msg">Scanning your library files…</p>
           <div class="sync-progress-wrap"><div class="sync-progress-bar sync-progress-bar--indeterminate" id="sync-scan-bar"></div></div>
         </div>
       </div>
 
       <!-- Phase: preview -->
-      <div id="sync-phase-preview" style="display:none">
+      <div id="sync-phase-preview" class="sync-phase-panel" style="display:none">
 
         <div id="sync-section-local" class="sync-section">
           <div class="sync-section-hdr">
@@ -737,21 +940,21 @@
 
         <div class="modal-actions">
           <button class="btn-secondary" onclick="App.closeSyncModal()">Cancel</button>
-          <button class="btn-primary" id="sync-execute-btn" onclick="App.executeSync()">Sync Selected Files</button>
+          <button class="btn-primary" id="sync-execute-btn" onclick="App.executeSync()">Start Sync</button>
         </div>
       </div>
 
       <!-- Phase: copying -->
-      <div id="sync-phase-copying" style="display:none">
+      <div id="sync-phase-copying" class="sync-phase-panel sync-phase-panel--progress" style="display:none">
         <div class="sync-progress-phase">
-          <p class="sync-phase-label" id="sync-copying-msg">Copying…</p>
+          <p class="sync-phase-label" id="sync-copying-msg">Preparing to copy files…</p>
           <div class="sync-progress-wrap"><div class="sync-progress-bar" id="sync-copy-bar"></div></div>
           <p class="sync-current-file" id="sync-copying-current"></p>
         </div>
       </div>
 
       <!-- Phase: done -->
-      <div id="sync-phase-done" style="display:none">
+      <div id="sync-phase-done" class="sync-phase-panel sync-phase-panel--progress" style="display:none">
         <div class="sync-done-wrap">
           <div class="sync-done-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#53e16f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -763,8 +966,8 @@
           <div class="sync-list" id="sync-errors-list"></div>
         </div>
         <div class="modal-actions">
-          <button class="btn-secondary" onclick="App.syncScanAgain()">Scan Again</button>
-          <button class="btn-primary" onclick="App.closeSyncModal()">Done</button>
+          <button class="btn-secondary" onclick="App.syncScanAgain()">Run Another Scan</button>
+          <button class="btn-primary" onclick="App.closeSyncModal()">Close</button>
         </div>
       </div>
 
@@ -786,9 +989,9 @@
   <!-- DAP add/edit modal -->
   <div id="dap-modal" class="modal-overlay" style="display:none">
     <div class="modal modal-wide">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div class="modal-head modal-head-spaced">
         <h3 id="dap-modal-title">Add DAP</h3>
-        <button class="btn-secondary" style="padding:4px 8px" onclick="App.closeDapModal()">✕</button>
+        <button class="modal-x-btn" onclick="App.closeDapModal()">✕</button>
       </div>
       <input type="hidden" id="dap-modal-id" />
       <div class="settings-row">
@@ -797,11 +1000,8 @@
       </div>
       <div class="settings-row">
         <label>Model preset</label>
-        <select id="dap-model" onchange="App.dapModelPreset(this.value)" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:13px;outline:none;width:100%">
-          <option value="poweramp">Poweramp</option>
-          <option value="hiby">Hiby OS</option>
-          <option value="fiio">FiiO Player</option>
-          <option value="other">Other</option>
+        <select id="dap-model" onchange="App.dapModelPreset(this.value)">
+          <option value="loading">Loading presets...</option>
         </select>
       </div>
       <div class="settings-row">
@@ -833,9 +1033,9 @@
   <!-- IEM add/edit modal -->
   <div id="iem-modal" class="modal-overlay" style="display:none">
     <div class="modal modal-wide">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div class="modal-head modal-head-spaced">
         <h3 id="iem-modal-title">Add IEM / Headphone</h3>
-        <button class="btn-secondary" style="padding:4px 8px" onclick="App.closeIemModal()">✕</button>
+        <button class="modal-x-btn" onclick="App.closeIemModal()">✕</button>
       </div>
       <input type="hidden" id="iem-modal-id" />
       <div class="settings-row">
@@ -844,16 +1044,28 @@
       </div>
       <div class="settings-row">
         <label>Type</label>
-        <select id="iem-type" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:13px;outline:none;width:100%">
+        <select id="iem-type">
           <option value="IEM">IEM</option>
-          <option value="Headphone">Headphone</option>
         </select>
       </div>
       <div class="settings-row">
-        <label><a href="https://squig.link" target="_blank" rel="noopener" class="squig-link">squig.link</a> URL <span style="font-size:11px;color:var(--text-muted)">(optional)</span></label>
-        <input id="iem-squig-url" type="text" />
+        <label>Measurement Sources <span style="font-size:11px;color:var(--text-muted)">(up to 3)</span></label>
+        <div class="iem-source-grid">
+          <div class="iem-source-row">
+            <input id="iem-source-label-1" type="text" placeholder="Label (e.g. Stock tips)" />
+            <input id="iem-source-url-1" type="text" placeholder="squig.link URL (optional)" />
+          </div>
+          <div class="iem-source-row">
+            <input id="iem-source-label-2" type="text" placeholder="Label (e.g. Foam tips)" />
+            <input id="iem-source-url-2" type="text" placeholder="squig.link URL (optional)" />
+          </div>
+          <div class="iem-source-row">
+            <input id="iem-source-label-3" type="text" placeholder="Label (e.g. EQ nozzle)" />
+            <input id="iem-source-url-3" type="text" placeholder="squig.link URL (optional)" />
+          </div>
+        </div>
       </div>
-      <p class="settings-hint" style="margin-top:4px">Paste a share URL from <a href="https://squig.link" target="_blank" rel="noopener" class="squig-link">squig.link</a> to import the frequency response measurement.</p>
+      <p class="settings-hint" style="margin-top:4px">Paste up to three <a href="https://squig.link" target="_blank" rel="noopener" class="squig-link">squig.link</a> share URLs with labels. These become selectable sources across FR graphs.</p>
       <div id="iem-modal-error" style="display:none;color:#e05c5c;font-size:12px;margin-top:8px"></div>
       <div class="modal-actions" style="margin-top:20px">
         <button class="btn-secondary" onclick="App.closeIemModal()">Cancel</button>
@@ -865,9 +1077,9 @@
   <!-- PEQ upload modal -->
   <div id="peq-modal" class="modal-overlay" style="display:none">
     <div class="modal">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-head">
         <h3>Upload PEQ Profile</h3>
-        <button class="btn-secondary" style="padding:4px 8px" onclick="App.closePeqModal()">✕</button>
+        <button class="modal-x-btn" onclick="App.closePeqModal()">✕</button>
       </div>
       <div class="settings-row">
         <label>Profile name</label>
@@ -1066,7 +1278,7 @@
     </div>
   </div>
 
-  <script src="/player.js"></script>
-  <script src="/app.js"></script>
+  <script src="/player.js?v=24"></script>
+  <script src="/app.js?v=24"></script>
 </body>
 </html>

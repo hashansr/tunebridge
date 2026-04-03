@@ -187,6 +187,15 @@ Public `App` object exposes all functions called from HTML `onclick` attributes.
 - [x] Double-click to play track — `ondblclick="Player.playTrackById(id)"` on all track rows (library, songs, playlist views).
 - [x] Marquee scroll for long track/artist names in player bar — `overflow:visible` on `.player-title.marquee`; parent `.player-track-info` clips.
 - [x] Player bar artist/album nav links — clicking artist or album name in player bar navigates to that artist/album page.
+- [x] Insights feature — Overview (stat cards + donut charts), Tag Health (completeness bars), Sonic Profile (brightness/energy histograms + scatter + 12-band profile), IEM Match
+- [x] Sonic analysis v3 — multi-window FFT (7 windows, 10–90% of track, 65536-sample Hanning), 12 overlapping perceptual bands (`_PERC_BANDS`), `analysis_version=3` cache stamp, incremental re-analysis, M4A/AAC failures recorded gracefully
+- [x] Library salience — `S_b = 0.7·norm(mean) + 0.3·norm(std)`, normalised to sum=1; weighted per-band importance
+- [x] IEM Match — replaces old Gear Fit v2. Full genre-matching module: 17-dimension IEM scoring (12 band + 5 derived), genre fingerprints from library FFT, match matrix, library-weighted summary score, blindspot detection, Chart.js radar (up to 3 IEMs), genre×IEM heatmap with cell detail popup
+- [x] IEM Match API — POST /analyse, GET /overview, /matrix, /recommend, /blindspots, /iem/<id>/radar, /genre/<genre>/fingerprint, /targets; match matrix persisted to `data/match-matrix.json`
+- [x] Help text popovers — `?` button on every Insights subsection with explanatory text, increased background opacity for readability
+- [x] Rescan tags button — in Insights view header, POSTs to `/api/library/scan`, shows inline progress banner, reloads overview + tag health on completion
+- [x] IEM compare feature — multi-select IEMs in Gear view, floating action bar, FR overlay modal with Chart.js log-scale graph; reuses `/api/iems/<primary>/graph?compare=...` endpoint; clickable legend per curve
+- [x] Compact horizontal Gear cards — `.gear-card` is `flex-direction:row`, icon tile left + name/badges right; 2-column grid; applies to both DAPs and IEMs
 
 ## Key Files (additional)
 | File | Purpose |
@@ -275,6 +284,44 @@ Key findings:
 - **Effort estimate**: PoC 2–3 sessions; playlists + delta sync +3–4; transcoding pipeline +2–3; artwork +3–4; Sequoia workarounds unpredictable. Total: 10–15+ sessions for production quality.
 
 ## Last Updated
+2026-03-31 — Session 23: IEM Match module — full genre-matching, 17-dimension scoring, radar, heatmap, blindspot
+
+- **IEM Match replaces Gear Fit v2**: Complete rebuild of the Insights "Gear Fit" section into a genre-matching module serving three goals: (1) library coverage overview, (2) IEM recommender per genre, (3) blindspot detector.
+- **12 overlapping perceptual bands (`_PERC_BANDS`)**: sub_bass, bass, bass_feel, slam, lower_mids, upper_mids, note_weight, lower_treble, upper_treble, detail, sibilance, texture. Overlap is intentional — each band measures a distinct perceptual quality.
+- **5 derived dimensions**: sound_stage, timbre_color, masking, layering, tonality — computed from IEM FR curve shape, not FFT energy.
+- **`_score_iem_17d()`**: Scores each IEM on all 17 axes vs normalised FR target. Band scores: `10·exp(-0.08·|deviation_dB|)`. Derived dims from curve-shape heuristics. Returns `{scores: {dim: 1-10}, deviation: {band: dB}}`.
+- **`analysis_version=3`**: Bumped from v2. 12-band cache invalidates all v2 10-band caches. Cache validity check: `len(band_energy)==12 and analysis_version==3`.
+- **Genre fingerprints**: Per-genre average of 12-band FFT energy, normalised per-band across genres to [0,1]. Stored in `data/match-matrix.json`.
+- **Match score**: `score(iem, genre) = Σ(energy[b]·iem_score[b]) / Σ(energy[b]) × 10` → 0–100. Library match = track-count-weighted average.
+- **New API routes**: `POST /api/insights/matching/analyse`, `GET /overview`, `/matrix`, `/recommend`, `/blindspots`, `/iem/<id>/radar`, `/genre/<genre>/fingerprint`, `/targets`.
+- **Sonic Profile updated**: Added 12-band energy profile bar chart (`_sonicBandChart`) showing normalised library average per perceptual band.
+- **Frontend**: `_renderInsightsMatchOverview()` (coverage badge, summary, IEM score cards), `_renderHeatmap()` (genre×IEM HTML table with inline colour coding), `_showHeatmapDetail()` (cell detail popup), `_rebuildRadar()` (Chart.js radar, up to 3 IEMs, all 17 axes), `_renderBlindspot()` (well-covered + blindspot lists).
+- **App exports**: Added `runMatchingAnalysis`, `changeMatchTarget`, `_openRadarForIem`, `_showHeatmapDetail` to `App` object.
+- **index.html**: Section title "Gear Fit" → "IEM Match" with updated description.
+- **style.css**: +280 lines — all new `match-*` classes, `sonic-band-card`, radar legend, heatmap, blindspot rows, coverage badge.
+- **Removed**: `_FREQ_BANDS`, `_iem_features()`, `_target_fidelity_score()`, `_library_fit_score()`, old `insights_gear_fit()` route.
+- **Note**: All existing v2 (10-band) audio analysis cache triggers `needs_upgrade`. Users must re-run "Analyse Library" to populate v3 12-band features before IEM Match becomes functional.
+
+2026-03-29 — Session 22: Gear Fit v2, Library Fit model, IEM compare, compact Gear cards, Rescan tags, Insights polish
+
+- **Multi-window sonic analysis (v2)**: `_run_analysis()` now uses 7 evenly-spaced windows across 10–90% of each track (65536-sample Hanning FFT). `analysis_version=2` cache stamp. Existing v1 cache triggers `needs_upgrade` status in `insights_analyse_info()`. Re-analysis is required; significantly slower but much more robust than single-window.
+- **Incremental analysis**: Cache check requires `analysis_version==2` AND `band_energy` has exactly 10 values. Only re-analyses missing/stale tracks. 200-track flush-to-disk for crash resilience.
+- **M4A/AAC failure handling**: soundfile/libsndfile cannot decode AAC. Failed tracks stored as `{failed:true, reason:'unsupported_format'}`. `insights_analyse_info()` counts them as "processed" so they don't show as "pending" forever. 3 affected tracks in library (Linkin Park M4A files).
+- **Analysis status display**: `GET /api/insights/analyse/info` returns `{status, total, analysed, processed, pending, needs_upgrade}`. CTA card shows live status: "Analysis up to date · 4301 tracks analysed" or "X songs pending analysis". Analyse Library button → spinner + "Analysing…" when running, disabled; Cancel button appears. `_startAnalysisPolling()` has no immediate tick (race condition fix: soundfile/numpy import delays `status='running'` set).
+- **Insights Rescan tags**: "Rescan tags" button in Insights view header. `insightsRescanLibrary()` POSTs to `/api/library/scan`, shows inline scan progress banner with track count, reloads overview + tag health on completion.
+- **Help text popovers**: Every Insights subsection (Sonic Profile, Gear Fit, Blindspot, Salience) has a `?` button with a help popover. Popover background opacity increased for readability.
+- **Gear Fit target dropdown**: User selects "Flat / Neutral" (default) or any saved baseline from Settings. Changing re-fetches `GET /api/insights/gear-fit?target=<baseline_id>`. Help text links to Settings if no baselines saved. Why not library average: circular (IEM matching library average → 100%), double-counts salience weighting.
+- **Gear Fit v2 — Library Fit model**: New second scoring model added alongside original (now "Target Fidelity"). `_library_fit_score()`: `W_b = 0.5/10 + 0.5·S_b` (softened salience), `ShapeLoss = Σ(W_b·|iem_shape[b]-library_profile[b]|)`, `ShapeRaw = 100·exp(-0.08·ShapeLoss)`, treble roughness ×4, extreme >±8 dB ×1.5. Library shape: log-scale band energy, centred, normalised [-1,1], ×alpha=6.0. Exposed via `scores:{target_fidelity, library_fit}` per IEM/PEQ variant.
+- **Dual score pills + mode toggle**: Two-pill UI in Gear Fit — one per model. Sort toggle switches between models. `_gearFitSortMode` state. `_switchIemGearTab()` updates both pills. `changeGearFitSort()` re-renders list sorted by selected metric.
+- **Compact horizontal Gear cards**: `.gear-grid` changed to `repeat(2, 1fr)` columns, 8px gap. `.gear-card` is now `flex-direction:row`, 10px 14px padding, 12px border-radius. Icon tile (36×36px) on the left, name + badges on the right. Applies to both DAP and IEM cards.
+- **IEM compare feature**: Multi-select IEMs in gear view → floating action bar → FR overlay modal. `toggleIemCompareMode()`, `toggleIemCompareSelect()`, `_updateIemCompareBar()`, `showIemCompare()`. Reuses `/api/iems/<primary>/graph?compare=id2&compare=id3`. `_buildIemCompareChart()` uses backend palette colors directly (not `_iemCurveColor` which forces all L-channels blue). Clickable legend rows. `.gear-card--selected` accent tint + `gear-compare-check` circular checkbox overlay.
+- **`crossOrigin='anonymous'` restored**: Was removed in a prior commit. Required by WKWebView `createMediaElementSource` even for same-origin audio. Stream endpoint returns `Access-Control-Allow-Origin: *`.
+- **Biquad bug fix**: Was `num = b0 + (b1/a0)*zin + (b2/a0)*zin²` — catastrophic cancellation at low freq. Fixed to `num = b0 + b1*zin + b2*zin²; den = a0 + a1*zin + a2*zin²`.
+- **k calibration**: 0.22 → 0.06, extreme threshold 5 → 12 dB. squig.link data has bass deviations of 10–15 dB; k=0.22 was calibrated for 1–3 dB deviations and gave all-zero scores.
+- **IEM measurement normalisation fix**: `measurement_L` in iems.json is raw (un-normalised). `_iem_features()` now normalises to 75 dB at 1kHz at the top before computing deviation.
+- **Documentation**: `tunebridge_gear_fit_internals.md` created at `/Users/hashan/Documents/Claude/Music Library/` — full spec of both scoring models, multi-window analysis, API response structure, design decisions log.
+- **README.md**: Rewritten with full tech stack table (Flask, Waitress, pywebview, soundfile, NumPy, scikit-learn, Pillow, Mutagen, Chart.js, SortableJS, Web Audio API), complete feature list, and instruction to keep tech stack updated.
+
 2026-03-28 — Session 20: Distributable DMG, data backup, folder browse, DAP mount hint (continued)
 
 - **Distributable TuneBridge.dmg**: `build_app.sh` bundles all Python deps via `pip install --target Packages/`, writes `.python-version`, compiles `launcher.c` with clang, ad-hoc signs. `--dmg` flag uses `hdiutil create` + `-plist` output parsed by Python `plistlib` for reliable mount point extraction → copies .app → Applications symlink → UDZO compressed DMG. Output: 35 MB .app, 12 MB .dmg.
