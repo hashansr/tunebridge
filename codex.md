@@ -1961,3 +1961,32 @@ Observed working tree at time of writing (not touched by this codex update):
 - Validation:
   - `node --check static/app.js` passed.
   - `python3 -m compileall -q -f -b app.py` passed.
+
+### 2026-04-03 (Playlist detail hero: connected DAP dropdown)
+- User request:
+  - Playlist detail hero should not render all DAPs as individual buttons.
+  - Replace with scalable dropdown and only show connected DAPs.
+
+- Implementation:
+  - Refactored playlist hero DAP export UI from per-device pill list to a single dropdown trigger:
+    - Label: `Connected DAPs (N)`
+    - Menu entries: connected devices only (`mounted == true` from `/daps`).
+  - Added empty-state copy when no devices are connected:
+    - `No connected DAPs detected`
+  - Added dropdown behavior helpers:
+    - `togglePlaylistDapMenu()`
+    - `closePlaylistDapMenu()`
+    - `pickConnectedDapExport(did)`
+  - Added close behavior:
+    - outside-click closes menu
+    - `Escape` closes menu
+
+- Styling:
+  - Added new playlist DAP dropdown styles for trigger/menu/item states to match existing TuneBridge hero aesthetics.
+
+- Files updated:
+  - `static/app.js`
+  - `static/style.css`
+
+- Validation:
+  - `node --check static/app.js` passed.

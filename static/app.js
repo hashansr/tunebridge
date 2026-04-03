@@ -675,30 +675,46 @@ async function renderDapExportPills(pid) {
   if (!container) return;
 
   const daps = await api('/daps').catch(() => []);
-  if (!daps.length) {
-    container.innerHTML = `<span style="color:var(--text-muted);font-size:var(--text-xs)">No DAPs configured — add one in Gear → DAPs</span>`;
+  const connected = daps.filter(d => d.mounted);
+  if (!connected.length) {
+    container.innerHTML = `<span style="color:var(--text-muted);font-size:var(--text-xs)">No connected DAPs detected</span>`;
     return;
   }
 
-  const svgDown = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
   const svgDevice = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>`;
+  const chevron = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+  container.innerHTML = `
+    <div id="pl-dap-export-dd" class="pl-dap-dd" onclick="event.stopPropagation()">
+      <button class="btn-export btn-export-device pl-dap-dd-trigger" onclick="App.togglePlaylistDapMenu()">
+        ${svgDevice}
+        Connected DAPs (${connected.length})
+        ${chevron}
+      </button>
+      <div id="pl-dap-export-menu" class="pl-dap-dd-menu" style="display:none">
+        ${connected.map(dap => `
+          <button class="pl-dap-dd-item" onclick="App.pickConnectedDapExport('${dap.id}')">
+            <span class="pl-dap-dd-item-name">${esc(dap.name)}</span>
+            <span class="pl-dap-dd-item-meta">Copy playlist</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>`;
+}
 
-  container.innerHTML = daps.map(dap => {
-    const deviceBtn = dap.mounted
-      ? `<button class="btn-export btn-export-device"
-           onclick="App.exportToDeviceDap('${dap.id}')"
-           title="Copy directly to ${esc(dap.name)}">
-           ${svgDevice} → ${esc(dap.name)}
-         </button>`
-      : '';
-    return `
-      <div class="export-group">
-        <button class="btn-export" onclick="App.exportPlaylistDap('${dap.id}')">
-          ${svgDown}${esc(dap.name)} (M3U)
-        </button>
-        ${deviceBtn}
-      </div>`;
-  }).join('');
+function togglePlaylistDapMenu() {
+  const menu = document.getElementById('pl-dap-export-menu');
+  if (!menu) return;
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function closePlaylistDapMenu() {
+  const menu = document.getElementById('pl-dap-export-menu');
+  if (menu) menu.style.display = 'none';
+}
+
+async function pickConnectedDapExport(did) {
+  closePlaylistDapMenu();
+  await exportToDeviceDap(did);
 }
 
 function _getDisplayedTracks() {
@@ -4268,6 +4284,9 @@ const App = {
   exportPlaylistDap,
   exportToDeviceDap,
   renderDapExportPills,
+  togglePlaylistDapMenu,
+  closePlaylistDapMenu,
+  pickConnectedDapExport,
   rescan,
   rescanClean,
   toggleRescanMenu,
@@ -6080,6 +6099,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.addEventListener('click', (e) => {
     const dd = document.getElementById('add-dropdown');
     if (dd && !dd.contains(e.target)) hideDropdown();
+    if (!e.target.closest('#pl-dap-export-dd')) closePlaylistDapMenu();
 
     // Close any open mapping results dropdowns
     if (!e.target.closest('.map-row-target')) {
@@ -6090,7 +6110,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Keyboard shortcut: Escape closes dropdown and context menu
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { hideDropdown(); hideCtxMenu(); }
+    if (e.key === 'Escape') { hideDropdown(); hideCtxMenu(); closePlaylistDapMenu(); }
   });
 
   // Close context menu on outside click or scroll

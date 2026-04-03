@@ -1098,6 +1098,55 @@ td.cell-album { color: var(--text-sub); white-space: nowrap; overflow: hidden; t
 
 .export-group { display: flex; gap: 4px; }
 
+.pl-dap-dd {
+  position: relative;
+  display: inline-flex;
+}
+.pl-dap-dd-trigger {
+  min-height: 36px;
+}
+.pl-dap-dd-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 260px;
+  max-width: 320px;
+  max-height: 260px;
+  overflow: auto;
+  background: rgba(24, 24, 26, 0.96);
+  border: 1px solid rgba(173, 198, 255, 0.16);
+  border-radius: 12px;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.42);
+  padding: 6px;
+  z-index: 120;
+}
+.pl-dap-dd-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-sub);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  text-align: left;
+}
+.pl-dap-dd-item:hover {
+  background: rgba(173, 198, 255, 0.12);
+  color: var(--text);
+}
+.pl-dap-dd-item-name {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.pl-dap-dd-item-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .btn-export {
   display: flex; align-items: center; gap: 7px;
   padding: 8px 14px;
