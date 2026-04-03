@@ -4661,6 +4661,7 @@ let _iemFitMatrixData  = null;  // cached matrix response
 let _iemFitFRCharts    = {};    // iemId → Chart.js FR instance
 let _iemFitPeqState    = {};    // iemId → active peqId (string | null)
 let _iemFitPeqVariants = {};    // iemId → {factory_scores, peq_variants, iem_name}
+let _iemFitActiveScores12 = {}; // iemId → active 12-band score map used by current UI render
 let _iemFitGenreState  = {};    // iemId → selected genre key for FR overlay (string | null)
 let _iemFitSourceState = {};    // iemId → selected source id (string | null)
 let _iemFitExtraGenres = [];    // user-added heatmap genres
@@ -5215,6 +5216,7 @@ async function _renderIemFRPanel(iemId, activePeqId) {
   // Update genre scores + blindspot panels to match factory or PEQ-adjusted FR
   const activePeqVariant = peqId ? peqVariants.find(v => v.peq_id === peqId) : null;
   const peqScores12 = activePeqVariant ? activePeqVariant.scores : null;
+  _iemFitActiveScores12[iemId] = peqScores12 || null;
   _renderIemHeatmapPanel(iemId, peqScores12);
   _renderIemBlindspotPanel(iemId, peqScores12);
 }
@@ -5353,6 +5355,9 @@ async function iemFitRemoveGenreFromHeatmap(genre, iemId) {
 }
 
 function _activePeqScores12(iemId) {
+  // Prefer the exact score map used in the current visible panel render.
+  if (_iemFitActiveScores12[iemId]) return _iemFitActiveScores12[iemId];
+
   const peqId = _iemFitPeqState[iemId];
   if (!peqId) return null;
   const iemData = _iemFitPeqVariants[iemId];
@@ -5361,19 +5366,51 @@ function _activePeqScores12(iemId) {
   return v ? v.scores : null;
 }
 
-function showAllIemGenres(iemId) {
+async function _resolveActivePeqScores12(iemId) {
+  const peqId = _iemFitPeqState[iemId];
+  if (!peqId) return null;
+
+  const immediate = _activePeqScores12(iemId);
+  if (immediate) return immediate;
+
+  // Fallback: refresh 12-band variant scores from radar endpoint, then merge.
+  try {
+    const r = await fetch(`/api/insights/matching/iem/${encodeURIComponent(iemId)}/radar`);
+    if (!r.ok) return null;
+    const rd = await r.json();
+    const map = {};
+    (rd.peq_variants || []).forEach(v => { map[v.peq_id] = v.scores || null; });
+
+    const iemData = _iemFitPeqVariants[iemId];
+    if (iemData && Array.isArray(iemData.peq_variants)) {
+      iemData.peq_variants = iemData.peq_variants.map(v => ({
+        ...v,
+        scores: map[v.peq_id] || v.scores || null,
+      }));
+    }
+
+    const refreshed = _activePeqScores12(iemId);
+    if (refreshed) _iemFitActiveScores12[iemId] = refreshed;
+    return refreshed || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function showAllIemGenres(iemId) {
   if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) return;
   const iemInfo    = _iemFitIemSummary.find(i => i.iem_id === iemId);
   const iemName    = iemInfo ? iemInfo.iem_name : iemId;
-  const peqScores12 = _activePeqScores12(iemId);
+  const peqScores12 = await _resolveActivePeqScores12(iemId);
 
   const genreScores = _iemFitMatrixData.matrix
-    .map(row => ({
-      genre: row.genre,
-      score: peqScores12
-        ? _recomputeGenreScore(row.fingerprint || {}, peqScores12)
-        : ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null,
-    }))
+    .map(row => {
+      const factoryScore = ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null;
+      const peqScore = peqScores12 ? _recomputeGenreScore(row.fingerprint || {}, peqScores12) : null;
+      const score = peqScore !== null ? peqScore : factoryScore;
+      const delta = (peqScore !== null && factoryScore !== null) ? peqScore - factoryScore : null;
+      return { genre: row.genre, score, delta };
+    })
     .filter(g => g.score !== null)
     .sort((a, b) => b.score - a.score); // best → worst
 
@@ -5385,6 +5422,9 @@ function showAllIemGenres(iemId) {
 
   bodyEl.innerHTML = genreScores.map(g => {
     const fillColor = g.score >= 75 ? 'rgba(83,225,111,0.75)' : g.score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
+    const deltaBadge = g.delta !== null
+      ? `<span class="iemfit-score-delta ${g.delta >= 0.5 ? 'pos' : g.delta <= -0.5 ? 'neg' : 'neu'}">${g.delta >= 0 ? '+' : ''}${g.delta.toFixed(0)}</span>`
+      : '';
     return `<div class="iemfit-bs-row" style="margin-bottom:10px">
       <div class="iemfit-bs-genre">${esc(g.genre)}</div>
       <div class="iemfit-bs-bar-wrap">
@@ -5392,26 +5432,27 @@ function showAllIemGenres(iemId) {
           <div class="iemfit-bs-bar-fill" style="width:${g.score.toFixed(0)}%;background:${fillColor}"></div>
         </div>
       </div>
-      <div class="iemfit-bs-score" style="color:${_matchScoreColor(g.score)};min-width:42px;text-align:right">${g.score.toFixed(0)}%</div>
+      <div class="iemfit-bs-score" style="color:${_matchScoreColor(g.score)};min-width:42px;text-align:right">${g.score.toFixed(0)}%${deltaBadge}</div>
     </div>`;
   }).join('');
 
   modal.style.display = 'flex';
 }
 
-function showAllIemBlindspots(iemId) {
+async function showAllIemBlindspots(iemId) {
   if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) return;
   const iemInfo     = _iemFitIemSummary.find(i => i.iem_id === iemId);
   const iemName     = iemInfo ? iemInfo.iem_name : iemId;
-  const peqScores12 = _activePeqScores12(iemId);
+  const peqScores12 = await _resolveActivePeqScores12(iemId);
 
   const genreScores = _iemFitMatrixData.matrix
-    .map(row => ({
-      genre: row.genre,
-      score: peqScores12
-        ? _recomputeGenreScore(row.fingerprint || {}, peqScores12)
-        : ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null,
-    }))
+    .map(row => {
+      const factoryScore = ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null;
+      const peqScore = peqScores12 ? _recomputeGenreScore(row.fingerprint || {}, peqScores12) : null;
+      const score = peqScore !== null ? peqScore : factoryScore;
+      const delta = (peqScore !== null && factoryScore !== null) ? peqScore - factoryScore : null;
+      return { genre: row.genre, score, delta };
+    })
     .filter(g => g.score !== null)
     .sort((a, b) => a.score - b.score);
 
@@ -5423,6 +5464,9 @@ function showAllIemBlindspots(iemId) {
 
   bodyEl.innerHTML = genreScores.map(g => {
     const fillColor = g.score >= 75 ? 'rgba(83,225,111,0.75)' : g.score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
+    const deltaBadge = g.delta !== null
+      ? `<span class="iemfit-score-delta ${g.delta >= 0.5 ? 'pos' : g.delta <= -0.5 ? 'neg' : 'neu'}">${g.delta >= 0 ? '+' : ''}${g.delta.toFixed(0)}</span>`
+      : '';
     return `<div class="iemfit-bs-row" style="margin-bottom:10px">
       <div class="iemfit-bs-genre">${esc(g.genre)}</div>
       <div class="iemfit-bs-bar-wrap">
@@ -5430,7 +5474,7 @@ function showAllIemBlindspots(iemId) {
           <div class="iemfit-bs-bar-fill" style="width:${g.score.toFixed(0)}%;background:${fillColor}"></div>
         </div>
       </div>
-      <div class="iemfit-bs-score" style="color:${_matchScoreColor(g.score)};min-width:42px;text-align:right">${g.score.toFixed(0)}%</div>
+      <div class="iemfit-bs-score" style="color:${_matchScoreColor(g.score)};min-width:42px;text-align:right">${g.score.toFixed(0)}%${deltaBadge}</div>
     </div>`;
   }).join('');
 

@@ -1582,3 +1582,67 @@ Observed working tree at time of writing (not touched by this codex update):
 
 - Validation:
   - `bash -n build_app.sh` passed.
+
+### 2026-04-03 (DMG publish to distro/ folder)
+- User request:
+  - Save latest compiled DMGs to a dedicated distribution folder that can be shared with users.
+
+- Implemented (`build_app.sh`):
+  - Added `DISTRO_DIR="${PROJECT_DIR}/distro"`.
+  - During `--dmg` builds:
+    - Ensures `distro/` exists.
+    - Publishes the generated DMG to:
+      - `distro/TuneBridge-latest.dmg` (stable path for sharing)
+      - `distro/TuneBridge-v<version>-<timestamp>.dmg` (archived build copy)
+  - Updated final console summary to list both `dist/` and `distro/` artifacts.
+
+- Documentation:
+  - `README.md` macOS Distribution section now documents `distro/TuneBridge-latest.dmg` and versioned archive naming.
+
+- Functional impact:
+  - Build behavior unchanged except new post-build publish/copy step for DMGs.
+
+### 2026-04-03 (Insights IEM "View all" PEQ-aware scoring fix)
+- User request:
+  - In `Insights > Gear compatibility analysis > IEM`, when PEQ is applied for comparison, the `%` values in "View all" modals must reflect PEQ-adjusted match scores.
+
+- Root cause:
+  - "View all" modal logic relied on cached PEQ variant scores that could be missing/stale vs the currently rendered accordion state.
+
+- Fix implemented (`static/app.js`):
+  - Added `_iemFitActiveScores12` state map:
+    - stores the exact 12-band score map used by the current visible IEM panel render.
+  - In `_renderIemFRPanel(...)`:
+    - persist active scores to `_iemFitActiveScores12[iemId]`.
+  - Enhanced score resolution path:
+    - `_activePeqScores12(iemId)` now prefers `_iemFitActiveScores12`.
+    - added async `_resolveActivePeqScores12(iemId)` fallback that refreshes radar PEQ variant scores from API and merges them into cached variant data when needed.
+  - Updated modal handlers:
+    - `showAllIemGenres(iemId)` -> async and uses `_resolveActivePeqScores12`.
+    - `showAllIemBlindspots(iemId)` -> async and uses `_resolveActivePeqScores12`.
+
+- Outcome:
+  - "View all" modal scores now align with the currently selected PEQ comparison context (same scoring basis as the inline panels).
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-03 (Insights IEM modal row parity with main table)
+- User request:
+  - Make "View all" modal rows show info similar to main table rows (score + delta badge when PEQ is active).
+
+- Update made (`static/app.js`):
+  - In both modal renderers:
+    - `showAllIemGenres(iemId)`
+    - `showAllIemBlindspots(iemId)`
+  - Extended row data to carry:
+    - factory score
+    - PEQ score (if active)
+    - computed delta (`PEQ - factory`)
+  - Added `deltaBadge` rendering using existing class/style logic:
+    - `iemfit-score-delta` with `pos|neg|neu`
+  - Modal score cell now renders:
+    - `XX%` + `delta badge` (e.g. `75%  -8`)
+
+- Outcome:
+  - Modal rows now visually and semantically match the main table behavior when PEQ comparison is enabled.
