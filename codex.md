@@ -1646,3 +1646,18 @@ Observed working tree at time of writing (not touched by this codex update):
 
 - Outcome:
   - Modal rows now visually and semantically match the main table behavior when PEQ comparison is enabled.
+
+### 2026-04-03 (GitHub-visible distro folder + latest DMG tracking)
+- User request:
+  - Make the `distro/` folder visible on GitHub and include the latest local build DMG.
+
+- Changes made:
+  - Updated `.gitignore` to keep only one installer artifact in git:
+    - allow `distro/`
+    - ignore `distro/*.dmg` by default
+    - explicitly allow `distro/TuneBridge-latest.dmg`
+  - Added `distro/README.md` to document distribution intent.
+  - Prepared `distro/TuneBridge-latest.dmg` for tracking in repository.
+
+- Outcome:
+  - GitHub will show a stable `distro/` folder with the latest installer available for users.

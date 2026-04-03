@@ -15,6 +15,11 @@ build/
 *.spec
 .env
 
+# Keep only the public latest installer in-repo for sharing
+!distro/
+distro/*.dmg
+!distro/TuneBridge-latest.dmg
+
 # App cache — auto-regenerated on rescan
 data/library.json
 data/artwork/
