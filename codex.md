@@ -1553,3 +1553,32 @@ Observed working tree at time of writing (not touched by this codex update):
 - Validation:
   - `node --check static/app.js` passed.
   - `python3 -m py_compile app.py` passed.
+
+### 2026-04-03 (build_app.sh console readability pass)
+- User request:
+  - Improve readability/consumability of `bash build_app.sh --dmg` console output while running.
+
+- Changes made (`build_app.sh`):
+  - Added structured log helpers:
+    - `phase`, `step`, `ok`, `warn`, `err`, `kv`, and `hr`.
+  - Replaced ad-hoc echo output with consistent tagged logs:
+    - `[PHASE]`, `[STEP ]`, `[OK   ]`, `[WARN ]`, `[ERROR]`
+  - Added startup metadata lines:
+    - Project path, output path, mode (`App only` vs `App + DMG`)
+  - Added explicit phase grouping:
+    - Environment checks
+    - Build environment
+    - Bundle assembly
+    - DMG packaging (when enabled)
+  - Clarified long-running step messaging:
+    - `Running PyInstaller (this can take a few minutes)`
+  - Improved final summary with split install instructions for:
+    - DMG builds
+    - app-only builds
+
+- Functional impact:
+  - No change to build behavior/artifacts.
+  - Output is easier to scan in real-time and easier to parse after long runs.
+
+- Validation:
+  - `bash -n build_app.sh` passed.

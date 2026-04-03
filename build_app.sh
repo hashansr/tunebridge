@@ -25,22 +25,33 @@ for arg in "$@"; do
   [ "$arg" = "--dmg" ] && BUILD_DMG=1
 done
 
-echo "=== TuneBridge build_app.sh v${APP_VERSION} ==="
-echo "    Project : ${PROJECT_DIR}"
-echo "    Output  : ${APP_PATH}"
+hr()        { printf '%s\n' "------------------------------------------------------------"; }
+phase()     { printf '\n[PHASE] %s\n' "$1"; }
+step()      { printf '[STEP ] %s\n' "$1"; }
+ok()        { printf '[OK   ] %s\n' "$1"; }
+warn()      { printf '[WARN ] %s\n' "$1"; }
+err()       { printf '[ERROR] %s\n' "$1"; }
+kv()        { printf '        %-10s %s\n' "$1" "$2"; }
+
+printf '=== TuneBridge build_app.sh v%s ===\n' "${APP_VERSION}"
+kv "Project:" "${PROJECT_DIR}"
+kv "Output:" "${APP_PATH}"
+kv "Mode:" "$( [ "$BUILD_DMG" = "1" ] && echo "App + DMG" || echo "App only" )"
+hr
 
 if [ "$(uname -s)" != "Darwin" ]; then
-  echo "ERROR: build_app.sh supports macOS only."
+  err "build_app.sh supports macOS only."
   exit 1
 fi
 
 if [ "$(uname -m)" != "arm64" ]; then
-  echo "ERROR: Apple Silicon build only (arm64)."
-  echo "  Current architecture: $(uname -m)"
+  err "Apple Silicon build only (arm64)."
+  kv "Current arch:" "$(uname -m)"
   exit 1
 fi
 
 # ── Select build Python (3.10+) ─────────────────────────────────────────────
+phase "Environment checks"
 BUILD_PYTHON=""
 FOUND_PYTHONS=""
 for candidate in \
@@ -77,31 +88,38 @@ for candidate in \
 done
 
 if [ -z "$BUILD_PYTHON" ]; then
-  echo "ERROR: Python 3.10+ not found."
-  echo "  Detected Python interpreters:${FOUND_PYTHONS:- none}"
-  echo "  Install one of:"
-  echo "    brew install python@3.12"
-  echo "    or download from https://www.python.org/downloads/macos/"
-  echo "  Then rerun: bash build_app.sh --dmg"
+  err "Python 3.10+ not found."
+  printf '        Detected interpreters:%s\n' "${FOUND_PYTHONS:- none}"
+  printf '        Install one of:\n'
+  printf '          brew install python@3.12\n'
+  printf '          or download from https://www.python.org/downloads/macos/\n'
+  printf '        Then rerun: bash build_app.sh --dmg\n'
   exit 1
 fi
 
-echo "    Python  : $BUILD_PYTHON"
+kv "Python:" "$BUILD_PYTHON"
+ok "Host checks passed"
 
 # ── Prepare clean build venv ────────────────────────────────────────────────
+phase "Build environment"
 if [ -d "$BUILD_VENV" ]; then
-  echo "  Removing stale build venv..."
+  step "Removing stale build venv"
   rm -rf "$BUILD_VENV"
 fi
 
+step "Creating isolated build virtualenv"
 "$BUILD_PYTHON" -m venv "$BUILD_VENV"
 source "$BUILD_VENV/bin/activate"
 
+step "Installing build dependencies"
 python -m pip install --upgrade pip wheel setuptools --quiet
 python -m pip install -r "${PROJECT_DIR}/requirements.txt" --quiet
 python -m pip install pyinstaller --quiet
+ok "Build environment ready"
 
 # ── Clean prior outputs ─────────────────────────────────────────────────────
+phase "Bundle assembly"
+step "Cleaning previous outputs"
 rm -rf "${PROJECT_DIR}/build" "${PROJECT_DIR}/dist/${APP_NAME}.app" "${PROJECT_DIR}/dist/${APP_NAME}.dmg" "${PROJECT_DIR}/dist/${APP_NAME}_tmp.dmg"
 mkdir -p "$DIST_DIR"
 
@@ -130,18 +148,20 @@ fi
 
 if [ -d "${PROJECT_DIR}/data/features" ]; then
   PYI_ARGS+=(--add-data "${PROJECT_DIR}/data/features:data/features")
-  echo "  Bundling data/features/ for first-run migration"
+  step "Bundling data/features/ for first-run migration"
 fi
 
-echo "  Building self-contained app bundle with PyInstaller..."
+step "Running PyInstaller (this can take a few minutes)"
 python -m PyInstaller "${PYI_ARGS[@]}" "${PROJECT_DIR}/tunebridge_gui.py"
 
 if [ ! -d "$APP_PATH" ]; then
-  echo "ERROR: Expected app bundle not found at $APP_PATH"
+  err "Expected app bundle not found at $APP_PATH"
   exit 1
 fi
+ok "App bundle created"
 
 # ── Patch Info.plist with app metadata/permissions ──────────────────────────
+step "Patching Info.plist metadata"
 PLIST_PATH="${APP_PATH}/Contents/Info.plist"
 python - "$PLIST_PATH" "$APP_VERSION" <<'PYEOF'
 import plistlib, sys
@@ -168,26 +188,27 @@ p['NSMusicFolderUsageDescription'] = (
 
 with open(plist_path, 'wb') as f:
     plistlib.dump(p, f)
-print('  Info.plist updated')
+print('[OK   ] Info.plist updated')
 PYEOF
 
 # ── Ad-hoc signing + quarantine clear ───────────────────────────────────────
-echo "  Signing bundle (ad-hoc)..."
+step "Signing bundle (ad-hoc)"
 codesign --force --deep --sign - "$APP_PATH" 2>/dev/null && \
-  echo "  Ad-hoc signed" || \
-  echo "  WARNING: codesign failed — app may need manual signing"
+  ok "Ad-hoc signed" || \
+  warn "codesign failed - app may need manual signing"
 
 xattr -cr "$APP_PATH" 2>/dev/null || true
+step "Clearing quarantine xattrs"
 
 BUNDLE_SIZE="$(du -sh "$APP_PATH" | awk '{print $1}')"
-echo ""
-echo "  Bundle size: ${BUNDLE_SIZE}"
-echo "  Location   : ${APP_PATH}"
+ok "Bundle ready"
+kv "Bundle size:" "${BUNDLE_SIZE}"
+kv "App path:" "${APP_PATH}"
 
 # ── Optional DMG creation (drag-and-drop install UX) ───────────────────────
 if [ "$BUILD_DMG" = "1" ]; then
-  echo ""
-  echo "  Creating DMG..."
+  phase "DMG packaging"
+  step "Creating temporary DMG"
   DMG_PATH="${DIST_DIR}/${APP_NAME}.dmg"
   TMP_DMG="${DIST_DIR}/${APP_NAME}_tmp.dmg"
 
@@ -205,34 +226,41 @@ print(mp)
 ')"
 
   if [ -z "$MOUNT_POINT" ]; then
-    echo "  ERROR: Could not determine DMG mount point."
+    err "Could not determine DMG mount point."
     rm -f "$TMP_DMG"
     exit 1
   fi
 
+  step "Staging app + Applications link"
   cp -R "$APP_PATH" "$MOUNT_POINT/"
   ln -s /Applications "$MOUNT_POINT/Applications"
 
+  step "Finalizing compressed DMG"
   hdiutil detach "$MOUNT_POINT" -quiet
   hdiutil convert "$TMP_DMG" -format UDZO -o "$DMG_PATH" -quiet
   rm -f "$TMP_DMG"
 
   DMG_SIZE="$(du -sh "$DMG_PATH" | awk '{print $1}')"
-  echo "  DMG size   : ${DMG_SIZE}"
-  echo "  DMG path   : ${DMG_PATH}"
+  ok "DMG ready"
+  kv "DMG size:" "${DMG_SIZE}"
+  kv "DMG path:" "${DMG_PATH}"
 fi
 
 deactivate || true
 
-echo ""
-echo "=== Build complete ==="
-echo ""
-echo "  Install (distribution):"
-echo "    1) Open TuneBridge.dmg"
-echo "    2) Drag TuneBridge.app to Applications"
-echo "    3) Launch TuneBridge"
-echo ""
-echo "  First launch:"
-echo "    - App bootstrap runs automatically"
-echo "    - User data is created at: ~/Library/Application Support/TuneBridge"
-echo ""
+hr
+printf '=== Build complete ===\n'
+if [ "$BUILD_DMG" = "1" ]; then
+  printf '\nInstall (distribution):\n'
+  printf '  1) Open TuneBridge.dmg\n'
+  printf '  2) Drag TuneBridge.app to Applications\n'
+  printf '  3) Launch TuneBridge\n'
+else
+  printf '\nInstall (local app):\n'
+  printf '  1) Open dist/TuneBridge.app\n'
+  printf '  2) Drag to Applications (optional)\n'
+  printf '  3) Launch TuneBridge\n'
+fi
+printf '\nFirst launch:\n'
+printf '  - App bootstrap runs automatically\n'
+printf '  - User data is created at: ~/Library/Application Support/TuneBridge\n\n'
