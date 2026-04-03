@@ -125,6 +125,27 @@ let _ctxTracks = [];
 
 /* ── Create playlist modal state ────────────────────────────────────── */
 let _createPlPendingIds = [];
+let _mlGenOptions = null;
+let _mlGenPreviewTracks = [];
+let _mlGenPreviewDirty = false;
+let _mlGenContext = 'global';
+let _mlGenSeedTrackIds = [];
+let _mlModeBound = false;
+let _mlSongCatalog = null;
+let _mlRefQuery = '';
+const _ML_MAX_REF_TRACKS = 12;
+let _mlRefDraftIds = [];
+let _mlPreviewSeed = 1337;
+
+const _ML_MOOD_PRESETS = {
+  focus: { energy: 0.42, brightness: 0.4 },
+  late_night: { energy: 0.3, brightness: 0.35 },
+  energetic: { energy: 0.78, brightness: 0.62 },
+  warm_relaxed: { energy: 0.38, brightness: 0.28 },
+  hype: { energy: 0.86, brightness: 0.7 },
+  bright_bouncy: { energy: 0.72, brightness: 0.78 },
+  dark_heavy: { energy: 0.68, brightness: 0.24 },
+};
 
 /* ── Generic confirm modal ──────────────────────────────────────────── */
 let _confirmResolve = null;
@@ -541,6 +562,7 @@ async function loadTracks(artist = null, album = null) {
   const tbody = document.getElementById('tracks-tbody');
   tbody.innerHTML = tracks.map((t, i) => trackRow(t, i + 1, false)).join('');
   Player.registerTracks(tracks);
+  Player.setPlaybackContext(tracks, album ? `Album · ${album}` : (artist ? `Artist · ${artist}` : 'Tracks'));
 
   document.getElementById('add-all-btn').onclick = () => App.addAllToPlaylist(tracks.map(t => t.id));
 
@@ -616,6 +638,7 @@ function trackRow(t, num, inPlaylist) {
 
 /* ── Playlist view ──────────────────────────────────────────────────── */
 async function openPlaylist(pid) {
+  if (!_guardMlGeneratorNavigation()) return;
   const pl = await api(`/playlists/${pid}`);
   state.playlist = pl;
   state.view = 'playlist';
@@ -633,6 +656,7 @@ async function openPlaylist(pid) {
 
   // Register tracks with player and add/update Play button
   Player.registerTracks(pl.tracks);
+  Player.setPlaybackContext(pl.tracks, `Playlist · ${pl.name}`);
   let playAllBtn = document.getElementById('pl-play-all-btn');
   if (!playAllBtn) {
     playAllBtn = document.createElement('button');
@@ -708,7 +732,10 @@ function _getDisplayedTracks() {
 }
 
 function renderPlaylistTracks(tracks) {
-  if (tracks && tracks.length) Player.registerTracks(tracks);
+  if (tracks && tracks.length) {
+    Player.registerTracks(tracks);
+    Player.setPlaybackContext(tracks, `Playlist · ${state.playlist?.name || 'Current'}`);
+  }
   const tbody = document.getElementById('pl-tbody');
   const table = document.getElementById('pl-table');
   const empty = document.getElementById('pl-empty');
@@ -1068,7 +1095,13 @@ function _showCtxMenu(x, y, tracks, label) {
   _ctxTracks = tracks;
   const menu = document.getElementById('ctx-menu');
   const labelEl = document.getElementById('ctx-label');
+  const smartLabel = document.getElementById('ctx-smart-playlist-label');
   if (labelEl) labelEl.textContent = label || (tracks.length === 1 ? tracks[0].title : `${tracks.length} songs`);
+  if (smartLabel) {
+    smartLabel.textContent = tracks.length === 1
+      ? 'Create Smart Playlist from This Song'
+      : `Create Smart Playlist from ${tracks.length} Songs`;
+  }
   menu.style.display = 'block';
   menu.style.left = '-9999px';
   menu.style.top  = '-9999px';
@@ -1137,6 +1170,13 @@ function ctxAddToQueue() {
   hideCtxMenu();
   if (!tracks.length) return;
   Player.addToQueue(tracks);
+}
+
+function ctxCreateSmartPlaylist() {
+  const refs = _ctxTracks.slice(0, _ML_MAX_REF_TRACKS).map(t => t.id).filter(Boolean);
+  hideCtxMenu();
+  if (!refs.length) return;
+  openMlPlaylistGenerator('global', { referenceTrackIds: refs, preferredMode: 'seed' });
 }
 
 function ctxAddToPlaylist(e) {
@@ -1387,6 +1427,520 @@ async function submitCreatePlaylist() {
   await openPlaylist(pl.id);
 }
 
+function _isMlModalOpen() {
+  const modal = document.getElementById('ml-gen-modal');
+  return !!(modal && modal.style.display !== 'none');
+}
+
+function _hasUnsavedMlPreview() {
+  return _mlGenPreviewDirty && _mlGenPreviewTracks.length > 0;
+}
+
+function _resetMlPreviewState() {
+  _mlGenPreviewTracks = [];
+  _mlGenPreviewDirty = false;
+  _mlPreviewSeed = 1337;
+  const summaryEl = document.getElementById('ml-gen-summary');
+  const previewEl = document.getElementById('ml-gen-preview');
+  const previewPane = document.getElementById('ml-gen-preview-pane');
+  const saveBtn = document.getElementById('ml-gen-save-btn');
+  const regenBtn = document.getElementById('ml-gen-regen-btn');
+  if (summaryEl) summaryEl.textContent = '';
+  if (previewEl) previewEl.innerHTML = '';
+  if (previewPane) previewPane.style.display = 'none';
+  if (saveBtn) saveBtn.disabled = true;
+  if (regenBtn) regenBtn.disabled = true;
+}
+
+function _confirmMlDiscard() {
+  if (!_hasUnsavedMlPreview()) return true;
+  return window.confirm('You have an unsaved generated playlist preview. Click OK to discard it and continue.');
+}
+
+function _guardMlGeneratorNavigation() {
+  if (!_isMlModalOpen()) return true;
+  if (!_confirmMlDiscard()) return false;
+  _resetMlPreviewState();
+  const modal = document.getElementById('ml-gen-modal');
+  if (modal) modal.style.display = 'none';
+  return true;
+}
+
+function _getMlSeedCandidates() {
+  const selectedIds = [...state.selectedTrackIds];
+  if (selectedIds.length) return selectedIds.slice(0, 15);
+  if (_mlGenContext === 'playlist' && state.playlist?.tracks?.length) {
+    return state.playlist.tracks.slice(0, 8).map(t => t.id).filter(Boolean);
+  }
+  if (state.playlist?.tracks?.length) {
+    return state.playlist.tracks.slice(0, 5).map(t => t.id).filter(Boolean);
+  }
+  if (state.tracks?.length) {
+    return state.tracks.slice(0, 5).map(t => t.id).filter(Boolean);
+  }
+  return [];
+}
+
+function _renderMlSeedNote() {
+  const note = document.getElementById('ml-gen-seed-note');
+  if (!note) return;
+  if (!_mlGenSeedTrackIds.length) {
+    note.textContent = 'No reference songs selected yet.';
+    return;
+  }
+  note.textContent = `${_mlGenSeedTrackIds.length} reference song${_mlGenSeedTrackIds.length !== 1 ? 's' : ''} selected.`;
+}
+
+async function _ensureMlSongCatalog() {
+  if (_mlSongCatalog) return _mlSongCatalog;
+  _mlSongCatalog = await api('/library/songs?sort=title&order=asc').catch(() => []);
+  return _mlSongCatalog;
+}
+
+function _renderMlReferenceSelected() {
+  const el = document.getElementById('ml-gen-ref-selected');
+  if (!el) return;
+  if (!_mlGenSeedTrackIds.length) {
+    el.innerHTML = '';
+    return;
+  }
+  const map = new Map((_mlSongCatalog || []).map(t => [t.id, t]));
+  el.innerHTML = _mlGenSeedTrackIds.map(tid => {
+    const t = map.get(tid) || {};
+    const name = t.title || tid;
+    const meta = t.artist ? ` · ${t.artist}` : '';
+    return `<span class="ml-gen-ref-chip">${esc(name)}${esc(meta)}<button onclick="App.mlGenRemoveReference('${tid}')" title="Remove">✕</button></span>`;
+  }).join('');
+}
+
+function _renderMlReferenceResults(query = '') {
+  const el = document.getElementById('ml-gen-ref-results');
+  if (!el) return;
+  const q = (query || '').trim().toLowerCase();
+  let pool = _mlSongCatalog || [];
+  if (q) {
+    pool = pool.filter(t =>
+      `${t.title || ''} ${t.artist || ''} ${t.album || ''}`.toLowerCase().includes(q)
+    );
+  }
+  pool = pool.filter(t => t && t.id && !_mlGenSeedTrackIds.includes(t.id)).slice(0, 25);
+  if (!pool.length) {
+    el.innerHTML = '<div class="ml-gen-ref-empty">No matching songs found.</div>';
+    return;
+  }
+  el.innerHTML = pool.map(t => `
+    <button class="ml-gen-ref-option" onclick="App.mlGenAddReference('${t.id}')">
+      <div class="ml-gen-ref-option-title">${esc(t.title || 'Untitled')}</div>
+      <div class="ml-gen-ref-option-meta">${esc(t.artist || 'Unknown Artist')} · ${esc(t.album || 'Unknown Album')}</div>
+    </button>
+  `).join('');
+}
+
+function mlGenSearchRefSongs(query = '') {
+  _mlRefQuery = query || '';
+  _renderMlReferenceResults(_mlRefQuery);
+}
+
+function mlGenAddReference(trackId) {
+  if (!trackId) return;
+  if (_mlGenSeedTrackIds.includes(trackId)) return;
+  if (_mlGenSeedTrackIds.length >= _ML_MAX_REF_TRACKS) {
+    toast(`You can add up to ${_ML_MAX_REF_TRACKS} reference songs.`);
+    return;
+  }
+  _mlGenSeedTrackIds.push(trackId);
+  _renderMlSeedNote();
+  _renderMlReferenceSelected();
+  _renderMlReferenceResults(_mlRefQuery);
+}
+
+function mlGenRemoveReference(trackId) {
+  _mlGenSeedTrackIds = _mlGenSeedTrackIds.filter(id => id !== trackId);
+  _renderMlSeedNote();
+  _renderMlReferenceSelected();
+  _renderMlReferenceResults(_mlRefQuery);
+}
+
+function mlGenClearReferences() {
+  _mlGenSeedTrackIds = [];
+  _renderMlSeedNote();
+  _renderMlReferenceSelected();
+  _renderMlReferenceResults(_mlRefQuery);
+}
+
+function _mlRefRowHtml(t, checked) {
+  return `<label class="ml-ref-row">
+    <input type="checkbox" ${checked ? 'checked' : ''} onchange="App.mlRefBrowserToggle('${t.id}', this.checked)" />
+    <div class="ml-ref-cell-title" title="${esc(t.title || '')}">${esc(t.title || 'Untitled')}</div>
+    <div class="ml-ref-cell-meta" title="${esc(t.artist || '')}">${esc(t.artist || 'Unknown Artist')}</div>
+    <div class="ml-ref-cell-meta" title="${esc(t.album || '')}">${esc(t.album || 'Unknown Album')}</div>
+  </label>`;
+}
+
+function _renderMlRefBrowserResults() {
+  const container = document.getElementById('ml-ref-results');
+  const countEl = document.getElementById('ml-ref-count');
+  if (!container) return;
+  const q = (_mlRefQuery || '').trim().toLowerCase();
+  let rows = _mlSongCatalog || [];
+  if (q) {
+    rows = rows.filter(t => `${t.title || ''} ${t.artist || ''} ${t.album || ''}`.toLowerCase().includes(q));
+  }
+  rows = rows.slice(0, 500);
+  if (!rows.length) {
+    container.innerHTML = '<div class="ml-gen-ref-empty">No matching songs found.</div>';
+  } else {
+    container.innerHTML = rows.map(t => _mlRefRowHtml(t, _mlRefDraftIds.includes(t.id))).join('');
+  }
+  if (countEl) countEl.textContent = `${_mlRefDraftIds.length} selected`;
+}
+
+async function openMlReferenceBrowser() {
+  await _ensureMlSongCatalog();
+  _mlRefDraftIds = [..._mlGenSeedTrackIds];
+  _mlRefQuery = '';
+  const input = document.getElementById('ml-ref-search');
+  const modal = document.getElementById('ml-ref-modal');
+  if (input) input.value = '';
+  _renderMlRefBrowserResults();
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeMlReferenceBrowser() {
+  const modal = document.getElementById('ml-ref-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function mlRefBrowserSearch(query = '') {
+  _mlRefQuery = query || '';
+  _renderMlRefBrowserResults();
+}
+
+function mlRefBrowserToggle(trackId, checked) {
+  if (!trackId) return;
+  if (checked) {
+    if (_mlRefDraftIds.includes(trackId)) return;
+    if (_mlRefDraftIds.length >= _ML_MAX_REF_TRACKS) {
+      toast(`You can add up to ${_ML_MAX_REF_TRACKS} reference songs.`);
+      _renderMlRefBrowserResults();
+      return;
+    }
+    _mlRefDraftIds.push(trackId);
+  } else {
+    _mlRefDraftIds = _mlRefDraftIds.filter(id => id !== trackId);
+  }
+  _renderMlRefBrowserResults();
+}
+
+function applyMlReferenceBrowser() {
+  _mlGenSeedTrackIds = [..._mlRefDraftIds];
+  _renderMlSeedNote();
+  _renderMlReferenceSelected();
+  closeMlReferenceBrowser();
+}
+
+function mlGenUseCurrentSelection() {
+  const ids = [...state.selectedTrackIds].slice(0, _ML_MAX_REF_TRACKS);
+  if (!ids.length) {
+    toast('Select songs in a list first, then use this action.');
+    return;
+  }
+  _mlGenSeedTrackIds = ids;
+  _renderMlSeedNote();
+  _renderMlReferenceSelected();
+}
+
+function _applyMlModeUi() {
+  const mode = document.getElementById('ml-gen-mode')?.value || 'genre';
+  const targetRow = document.getElementById('ml-gen-target-row');
+  const genreModeRow = document.getElementById('ml-gen-genre-mode-row');
+  const seedRow = document.getElementById('ml-gen-seed-row');
+
+  const showGenre = mode === 'genre' || mode === 'hybrid';
+  const showReference = mode === 'seed' || mode === 'hybrid';
+
+  if (targetRow) targetRow.style.display = showGenre ? '' : 'none';
+  if (genreModeRow) genreModeRow.style.display = showGenre ? '' : 'none';
+  if (seedRow) seedRow.style.display = showReference ? '' : 'none';
+}
+
+function _bindMlModeHandlers() {
+  if (_mlModeBound) return;
+  const modeEl = document.getElementById('ml-gen-mode');
+  const moodEl = document.getElementById('ml-gen-mood');
+  if (modeEl) {
+    modeEl.addEventListener('change', _applyMlModeUi);
+  }
+  if (moodEl) moodEl.addEventListener('change', _applyMlMoodPreset);
+  _mlModeBound = true;
+}
+
+async function _loadMlGenerationOptions() {
+  if (_mlGenOptions) return _mlGenOptions;
+  _mlGenOptions = await api('/playlists/generate/options');
+  return _mlGenOptions;
+}
+
+function _renderMlGenreOptions(genres = []) {
+  const genreSel = document.getElementById('ml-gen-target-genre');
+  if (!genreSel) return;
+  genreSel.innerHTML = `<option value="">Any</option>${genres.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('')}`;
+}
+
+function _setMlDefaults(opts) {
+  const defaults = opts?.defaults || {};
+  const limits = opts?.limits || {};
+  const lenRange = limits.playlist_length || [8, 80];
+
+  const modeEl = document.getElementById('ml-gen-mode');
+  const genreModeEl = document.getElementById('ml-gen-genre-mode');
+  const lenEl = document.getElementById('ml-gen-length');
+  const arcEl = document.getElementById('ml-gen-arc');
+  const diversityEl = document.getElementById('ml-gen-diversity');
+  const smoothEl = document.getElementById('ml-gen-smoothness');
+  const deterministicEl = document.getElementById('ml-gen-deterministic');
+  const repeatEl = document.getElementById('ml-gen-repeat-artists');
+  const yearMinEl = document.getElementById('ml-gen-year-min');
+  const yearMaxEl = document.getElementById('ml-gen-year-max');
+
+  if (modeEl) modeEl.value = defaults.mode || 'genre';
+  if (genreModeEl) genreModeEl.value = defaults.genre_mode || 'strict';
+  if (lenEl) {
+    lenEl.min = String(lenRange[0] ?? 8);
+    lenEl.max = String(lenRange[1] ?? 80);
+    lenEl.value = String(defaults.playlist_length ?? 20);
+  }
+  if (arcEl) arcEl.value = defaults.playlist_arc || 'steady';
+  if (diversityEl) diversityEl.value = String(defaults.diversity_strength ?? 0.7);
+  if (smoothEl) smoothEl.value = String(defaults.transition_smoothness ?? 0.8);
+  if (deterministicEl) deterministicEl.value = String(!!(defaults.deterministic ?? true));
+  if (repeatEl) repeatEl.value = String(!!(defaults.allow_repeat_artists ?? false));
+  if (yearMinEl) yearMinEl.value = '';
+  if (yearMaxEl) yearMaxEl.value = '';
+  _applyMlModeUi();
+}
+
+function _mlReadNumber(id, fallback, min = null, max = null) {
+  const el = document.getElementById(id);
+  if (!el) return fallback;
+  if (String(el.value || '').trim() === '') return fallback;
+  const raw = Number(el.value);
+  if (!Number.isFinite(raw)) return fallback;
+  let out = raw;
+  if (min !== null) out = Math.max(min, out);
+  if (max !== null) out = Math.min(max, out);
+  return out;
+}
+
+function _applyMlMoodPreset() {
+  const mood = document.getElementById('ml-gen-mood')?.value || '';
+  const preset = _ML_MOOD_PRESETS[mood];
+  if (!preset) return;
+  const energyEl = document.getElementById('ml-gen-energy');
+  const brightnessEl = document.getElementById('ml-gen-brightness');
+  if (energyEl) energyEl.value = String(preset.energy);
+  if (brightnessEl) brightnessEl.value = String(preset.brightness);
+}
+
+function _currentMlPayload() {
+  const opts = _mlGenOptions || {};
+  const defaults = opts.defaults || {};
+  const mode = document.getElementById('ml-gen-mode')?.value || defaults.mode || 'genre';
+  const targetGenre = document.getElementById('ml-gen-target-genre')?.value || '';
+  const genreMode = document.getElementById('ml-gen-genre-mode')?.value || defaults.genre_mode || 'strict';
+  const arc = document.getElementById('ml-gen-arc')?.value || defaults.playlist_arc || 'steady';
+  const mood = document.getElementById('ml-gen-mood')?.value || '';
+  const yearMin = _mlReadNumber('ml-gen-year-min', null, 1900, 2100);
+  const yearMax = _mlReadNumber('ml-gen-year-max', null, 1900, 2100);
+  const deterministic = String(document.getElementById('ml-gen-deterministic')?.value || 'true') === 'true';
+  const allowRepeatArtists = String(document.getElementById('ml-gen-repeat-artists')?.value || 'false') === 'true';
+
+  return {
+    mode,
+    target_genre: targetGenre || null,
+    genre_mode: genreMode,
+    seed_track_ids: _mlGenSeedTrackIds,
+    mood: mood || null,
+    year_range: (yearMin !== null && yearMax !== null && yearMin <= yearMax) ? [yearMin, yearMax] : null,
+    playlist_length: _mlReadNumber('ml-gen-length', defaults.playlist_length || 20, 8, 80),
+    energy_target: _mlReadNumber('ml-gen-energy', 0.5, 0, 1),
+    brightness_target: _mlReadNumber('ml-gen-brightness', 0.5, 0, 1),
+    diversity_strength: _mlReadNumber('ml-gen-diversity', defaults.diversity_strength || 0.7, 0, 1),
+    transition_smoothness: _mlReadNumber('ml-gen-smoothness', defaults.transition_smoothness || 0.8, 0, 1),
+    playlist_arc: arc,
+    deterministic,
+    allow_repeat_artists: allowRepeatArtists,
+    seed: _mlPreviewSeed,
+  };
+}
+
+function _renderMlPreviewSummary(summary = {}) {
+  const el = document.getElementById('ml-gen-summary');
+  const previewPane = document.getElementById('ml-gen-preview-pane');
+  if (!el) return;
+  if (previewPane) previewPane.style.display = 'block';
+  const generated = summary.generated_length ?? 0;
+  const requested = summary.requested_length ?? generated;
+  const mode = ({ genre: 'Genre Lane', seed: 'Track DNA', hybrid: 'Blend Mode' }[summary.mode] || '-');
+  const pool = summary.candidate_pool_size ?? 0;
+  const considered = summary.library_tracks_considered ?? 0;
+  const target = summary.target_genre || 'Any genre';
+  const seedTag = `run: ${_mlPreviewSeed}`;
+  el.innerHTML = `
+    <strong>${generated}/${requested}</strong> tracks generated ·
+    mode: <strong>${esc(mode)}</strong> ·
+    target: <strong>${esc(target)}</strong> ·
+    pool: <strong>${pool}</strong> from <strong>${considered}</strong> tracks ·
+    <strong>${seedTag}</strong>
+  `;
+}
+
+function _renderMlPreviewTracks(tracks = [], explanations = []) {
+  const el = document.getElementById('ml-gen-preview');
+  const previewPane = document.getElementById('ml-gen-preview-pane');
+  if (!el) return;
+  if (previewPane) previewPane.style.display = 'block';
+  if (!tracks.length) {
+    el.innerHTML = '<p class="insights-empty-note">No tracks generated with current constraints.</p>';
+    return;
+  }
+  const explainById = new Map((explanations || []).map(e => [e.track_id, e]));
+  el.innerHTML = `
+    <table class="insights-table" style="width:100%;min-width:640px">
+      <thead>
+        <tr>
+          <th style="width:44px">#</th>
+          <th>Title</th>
+          <th>Artist</th>
+          <th>Album</th>
+          <th style="width:84px;text-align:right">Fit</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tracks.map((t, i) => {
+          const ex = explainById.get(t.id) || {};
+          const fitPct = Math.max(0, Math.min(100, Math.round((Number(ex.placement_score) || 0) * 100)));
+          return `<tr>
+            <td>${i + 1}</td>
+            <td title="${esc(t.title)}">${esc(t.title)}</td>
+            <td title="${esc(t.artist)}">${esc(t.artist)}</td>
+            <td title="${esc(t.album)}">${esc(t.album)}</td>
+            <td style="text-align:right;color:var(--text-secondary);font-weight:600">${fitPct}%</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function openMlPlaylistGenerator(context = 'global', options = {}) {
+  if (_isMlModalOpen()) {
+    if (!_confirmMlDiscard()) return;
+    _resetMlPreviewState();
+  }
+  _mlGenContext = context === 'playlist' ? 'playlist' : 'global';
+  _mlGenSeedTrackIds = (options.referenceTrackIds && options.referenceTrackIds.length)
+    ? options.referenceTrackIds.slice(0, _ML_MAX_REF_TRACKS).map(String)
+    : _getMlSeedCandidates();
+  _mlRefQuery = '';
+
+  const modal = document.getElementById('ml-gen-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  _bindMlModeHandlers();
+
+  const nameEl = document.getElementById('ml-gen-name');
+  if (nameEl) {
+    const stamp = new Date().toISOString().slice(0, 10);
+    nameEl.value = `Smart Playlist ${stamp}`;
+  }
+  _resetMlPreviewState();
+  try {
+    const opts = await _loadMlGenerationOptions();
+    await _ensureMlSongCatalog();
+    _renderMlGenreOptions(opts.genres || []);
+    _setMlDefaults(opts);
+    const modeEl = document.getElementById('ml-gen-mode');
+    if (options.preferredMode && modeEl) modeEl.value = options.preferredMode;
+    const refSearchEl = document.getElementById('ml-gen-ref-search');
+    if (refSearchEl) refSearchEl.value = '';
+    _renderMlSeedNote();
+    _renderMlReferenceSelected();
+    _renderMlReferenceResults('');
+    _applyMlModeUi();
+  } catch (e) {
+    toast('Could not load generation options: ' + e.message);
+  }
+}
+
+function closeMlPlaylistGenerator() {
+  if (!_confirmMlDiscard()) return;
+  _resetMlPreviewState();
+  closeMlReferenceBrowser();
+  const modal = document.getElementById('ml-gen-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function runMlPlaylistPreview({ regenerate = false } = {}) {
+  const previewBtn = document.getElementById('ml-gen-preview-btn');
+  const regenBtn = document.getElementById('ml-gen-regen-btn');
+  const saveBtn = document.getElementById('ml-gen-save-btn');
+  if (regenerate) _mlPreviewSeed += 1;
+  if (previewBtn) { previewBtn.disabled = true; previewBtn.textContent = 'Generating…'; }
+  if (regenBtn) { regenBtn.disabled = true; regenBtn.textContent = regenerate ? 'Regenerating…' : 'Regenerate'; }
+  try {
+    const payload = _currentMlPayload();
+    if (regenerate) payload.regenerate = true;
+    if (payload.mode === 'seed' && !payload.seed_track_ids.length) {
+      toast('Track DNA works best with selected reference tracks.');
+    }
+    const res = await api('/playlists/generate/preview', { method: 'POST', body: payload });
+    _mlGenPreviewTracks = Array.isArray(res.tracks) ? res.tracks : [];
+    _mlGenPreviewDirty = _mlGenPreviewTracks.length > 0;
+    _renderMlPreviewSummary(res.summary || {});
+    _renderMlPreviewTracks(_mlGenPreviewTracks, res.explanations || []);
+    if (saveBtn) saveBtn.disabled = !_mlGenPreviewTracks.length;
+    if (regenBtn) regenBtn.disabled = !_mlGenPreviewTracks.length;
+    if (!_mlGenPreviewTracks.length) toast('No tracks matched. Try relaxed genre mode or wider targets.');
+  } catch (e) {
+    toast('Preview failed: ' + e.message);
+  } finally {
+    if (previewBtn) {
+      previewBtn.disabled = false;
+      previewBtn.textContent = 'Preview';
+    }
+    if (regenBtn) regenBtn.textContent = 'Regenerate';
+  }
+}
+
+async function regenerateMlPlaylist() {
+  await runMlPlaylistPreview({ regenerate: true });
+}
+
+async function saveMlGeneratedPlaylist() {
+  if (!_mlGenPreviewTracks.length) {
+    toast('Generate a preview first.');
+    return;
+  }
+  const name = (document.getElementById('ml-gen-name')?.value || '').trim();
+  try {
+    const res = await api('/playlists/generate/save', {
+      method: 'POST',
+      body: {
+        name,
+        track_ids: _mlGenPreviewTracks.map(t => t.id).filter(Boolean),
+      },
+    });
+    _mlGenPreviewDirty = false;
+    closeMlPlaylistGenerator();
+    await loadPlaylists();
+    toast(`Saved playlist "${res.name}" (${res.track_count} tracks)`);
+    await openPlaylist(res.id);
+  } catch (e) {
+    toast('Save failed: ' + e.message);
+  }
+}
+
 async function createPlaylist() {
   showCreatePlaylistModal();
 }
@@ -1457,6 +2011,7 @@ async function exportToDeviceDap(did) {
 
 /* ── View navigation ────────────────────────────────────────────────── */
 function showView(viewName) {
+  if (!_guardMlGeneratorNavigation()) return;
   state.view = viewName;
   state.playlist = null;
   clearSelection();
@@ -1496,6 +2051,7 @@ function setActiveNav(view) {
 }
 
 function backToArtists() {
+  if (!_guardMlGeneratorNavigation()) return;
   state.view = 'artists';
   clearSelection();
   setActiveNav('artists');
@@ -1505,6 +2061,7 @@ function backToArtists() {
 }
 
 function backToGear() {
+  if (!_guardMlGeneratorNavigation()) return;
   state.view = 'gear';
   clearSelection();
   setActiveNav('gear');
@@ -1513,6 +2070,7 @@ function backToGear() {
 }
 
 async function showArtist(artist) {
+  if (!_guardMlGeneratorNavigation()) return;
   const main = document.getElementById('main');
   state._artistsScrollTop = main ? main.scrollTop : 0;
   state.artist = artist;
@@ -1525,6 +2083,7 @@ async function showArtist(artist) {
 }
 
 async function showAlbum(artist, album) {
+  if (!_guardMlGeneratorNavigation()) return;
   state.artist = artist;
   state.album = album;
   state.view = 'tracks';
@@ -1536,6 +2095,7 @@ async function showAlbum(artist, album) {
 }
 
 async function showArtistTracks(artist) {
+  if (!_guardMlGeneratorNavigation()) return;
   state.artist = artist;
   state.album = null;
   state.view = 'tracks';
@@ -3219,6 +3779,7 @@ function renderSongsTable() {
   if (arrow) arrow.textContent = _songsSort.order === 'asc' ? ' \u25B2' : ' \u25BC';
 
   Player.registerTracks(page);
+  Player.setPlaybackContext(tracks, 'Songs');
 
   tbody.innerHTML = page.map((t, i) => {
     const globalIdx = start + i;
@@ -3646,6 +4207,20 @@ const App = {
   showCreatePlaylistModal,
   closeCreatePlaylistModal,
   submitCreatePlaylist,
+  openMlPlaylistGenerator,
+  closeMlPlaylistGenerator,
+  runMlPlaylistPreview,
+  regenerateMlPlaylist,
+  saveMlGeneratedPlaylist,
+  mlGenAddReference,
+  mlGenRemoveReference,
+  mlGenClearReferences,
+  mlGenUseCurrentSelection,
+  openMlReferenceBrowser,
+  closeMlReferenceBrowser,
+  mlRefBrowserSearch,
+  mlRefBrowserToggle,
+  applyMlReferenceBrowser,
   _confirmYes,
   _confirmNo,
   deletePlaylist,
@@ -3658,6 +4233,7 @@ const App = {
   hideCtxMenu,
   ctxPlayNext,
   ctxAddToQueue,
+  ctxCreateSmartPlaylist,
   ctxAddToPlaylist,
   openCtxSubmenu,
   closeCtxSubmenu,
@@ -5494,6 +6070,12 @@ function changeGearFitSort() {}
 
 /* ── Init ───────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
+  window.addEventListener('beforeunload', (e) => {
+    if (!_hasUnsavedMlPreview()) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
   // Close dropdown on outside click
   document.addEventListener('click', (e) => {
     const dd = document.getElementById('add-dropdown');

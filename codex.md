@@ -1,6 +1,6 @@
 # TuneBridge Codex Memory
 
-Last updated: 2026-04-02 (Australia/Sydney)
+Last updated: 2026-04-03 (Australia/Sydney)
 Maintainer: Codex agent
 Purpose: Persistent project memory for implementation context, decisions, and progress.
 
@@ -1661,3 +1661,303 @@ Observed working tree at time of writing (not touched by this codex update):
 
 - Outcome:
   - GitHub will show a stable `distro/` folder with the latest installer available for users.
+
+### 2026-04-03 (ML Playlist Generation v1 - initial implementation on new branch)
+- Branch:
+  - `feature/ml-playlist-generation-v1`
+
+- Requirement context:
+  - Launch generation from both Playlists view and Playlist detail view.
+  - Generate preview first, save explicitly, and warn on navigation/close when preview is unsaved.
+  - Use numeric controls, deterministic mode ON by default.
+  - API-only v1.
+  - Handle missing feature data with penalties/fallback scoring.
+
+- Backend work completed (`app.py`):
+  - Added configurable generation support via:
+    - `data/genre_families.json`
+    - `data/playlist_gen_config.json`
+  - Added helper loading functions with safe fallbacks:
+    - `load_genre_families()`
+    - `load_playlist_gen_config()`
+  - Added generation/scoring pipeline:
+    - candidate filtering (`mode`, `target_genre`, `genre_mode`, year range, excludes)
+    - fallback-safe feature extraction from `features/track_features.json`
+    - weighted candidate scoring (similarity/genre/mood/sound/diversity)
+    - transition continuity + playlist arc sequencing
+    - deterministic generation option
+  - Added new APIs:
+    - `GET /api/playlists/generate/options`
+    - `POST /api/playlists/generate/preview`
+    - `POST /api/playlists/generate/save`
+  - Added new config files to backup/export/import payload lists.
+
+- Frontend work completed (`static/index.html`, `static/app.js`):
+  - Added `Generate with ML` CTA in:
+    - Playlist detail hero
+    - Playlists page toolbar
+  - Added `ML Playlist Generator` modal with controls:
+    - name, mode, target genre, genre mode, seed note
+    - playlist length, energy target, brightness target
+    - diversity strength, transition smoothness, arc
+    - actions: Close / Preview / Save Playlist
+  - Implemented end-to-end modal behavior:
+    - `openMlPlaylistGenerator(context)`
+    - `closeMlPlaylistGenerator()`
+    - `runMlPlaylistPreview()`
+    - `saveMlGeneratedPlaylist()`
+  - Implemented preview rendering:
+    - summary metrics from backend
+    - generated track list table with computed fit percentage
+  - Implemented unsaved preview guard:
+    - confirmation on in-app navigation if modal is open with unsaved preview
+    - `beforeunload` browser guard for tab/window close with unsaved preview
+  - Added App API exports for all new ML functions used by inline UI handlers.
+
+- Validation:
+  - `node --check static/app.js` passed.
+  - `python3 -m py_compile app.py` was blocked in sandbox due cache write permissions; no syntax error observed from backend runtime changes.
+
+- Open follow-up (next step):
+  - Run manual UI verification in app for:
+    - context-aware seed behavior
+    - preview/save flow
+    - unsaved preview guard edge cases across all nav paths.
+
+### 2026-04-03 (ML generator modal UX polish)
+- User request:
+  - Tighten modal UI and make controls mode-aware.
+
+- Updates made:
+  - `static/index.html`
+    - Refactored ML generator modal form into a compact two-column grid layout (`.ml-gen-body`).
+    - Added structural row IDs for dynamic visibility:
+      - `ml-gen-target-row`
+      - `ml-gen-genre-mode-row`
+      - `ml-gen-seed-row`
+    - Added semantic class for seed hint (`.ml-gen-seed-note`).
+  - `static/style.css`
+    - Added dedicated ML generator modal styling:
+      - larger but bounded modal shell
+      - scrollable form body
+      - compact row rhythm
+      - styled preview container
+      - responsive single-column fallback on smaller widths
+  - `static/app.js`
+    - Added mode-aware UI controller:
+      - `_applyMlModeUi()`
+      - `_bindMlModeHandlers()`
+    - Behavior:
+      - `genre` mode shows genre controls, hides seed info row.
+      - `seed` mode shows seed row, hides genre controls.
+      - `hybrid` mode shows both.
+    - Added user guidance toast when running `seed` mode with no seed tracks selected.
+
+- Validation:
+  - `node --check static/app.js` passed.
+  - `python3 -m compileall -q -f -b app.py` passed.
+
+### 2026-04-03 (Smart Playlist naming + reference picker + context-aware shuffle)
+- User-requested UX updates implemented:
+
+- Smart Playlist naming + terminology:
+  - Replaced user-facing label `Generate with ML` with `Smart Playlist`.
+  - Renamed modal title from `ML Playlist Generator` to `Smart Playlist`.
+  - Reframed mode terminology:
+    - `Genre` -> `Genre Focus`
+    - `Seed` -> `Reference Match`
+    - `Hybrid` -> `Reference + Genre`
+  - Updated helper copy to refer to `reference songs` (no seed wording in UI).
+
+- Smart Playlist reference-song browser:
+  - Added in-modal reference picker with:
+    - searchable song input
+    - selected reference chips with remove action
+    - results list with add action
+    - clear references action
+  - Backend payload remains compatible (`seed_track_ids`) while UI uses reference terminology.
+  - Reference selection cap: 12 tracks.
+
+- Right-click launch path:
+  - Added context-menu action:
+    - `Create Smart Playlist from This Song` (dynamic text for multi-track selections).
+  - This opens Smart Playlist modal pre-populated with selected track(s) as references and defaults to `Reference Match` mode.
+
+- Player shuffle context fix:
+  - Added player playback context model (`setPlaybackContext(tracks, label)`).
+  - Wired app views to set active context:
+    - playlist view
+    - artist/album tracks view
+    - songs view
+  - Updated `playTrackById` to prefer active context collection so row double-click plays inside that context.
+  - Updated shuffle toggle:
+    - if queue only has one track but active context has more, shuffle now promotes the full context into queue first.
+  - Result: shuffle now behaves as expected relative to current user context (playlist/artist/album/songs).
+
+- Files touched:
+  - `static/index.html`
+  - `static/style.css`
+  - `static/app.js`
+  - `static/player.js`
+
+- Validation:
+  - `node --check static/app.js` passed.
+  - `node --check static/player.js` passed.
+  - `python3 -m compileall -q -f -b app.py` passed.
+
+### 2026-04-03 (Smart Playlist phase-2 UX + regenerate + spec controls)
+- User feedback addressed:
+  1. Add refresh/regenerate capability during preview.
+  2. Improve reference song selection UX (current inline picker felt incomplete).
+  3. Progress toward full implementation from requirements spec.
+
+- Implemented:
+
+- Regenerate during preview:
+  - Added `Regenerate` action in Smart Playlist modal actions.
+  - Regeneration increments run seed while preserving current filters/options.
+  - Preview summary now shows run identifier (seed-based run tag) for traceability.
+
+- Reference selection UX redesign:
+  - Replaced inline reference search/results block with cleaner actions:
+    - `Browse Library`
+    - `Use Current Selection`
+    - `Clear`
+  - Added dedicated reference browser modal:
+    - searchable library list
+    - checkbox multi-select
+    - selected count
+    - apply/cancel flow
+  - Retained quick selected-reference chips in main Smart Playlist modal.
+  - Reference cap remains 12 tracks.
+
+- Spec-aligned generation controls (phase-2):
+  - Added UI controls for:
+    - mood preset (`focus`, `late_night`, `energetic`, `warm_relaxed`)
+    - year range (`year_min`, `year_max`)
+    - artist repetition toggle (`allow_repeat_artists`)
+    - deterministic toggle (`deterministic`)
+  - Wired all controls to payload object sent to generation preview endpoint.
+  - Backend now applies mood preset bias when explicit energy/brightness targets are not set.
+
+- Files updated:
+  - `static/index.html`
+  - `static/style.css`
+  - `static/app.js`
+  - `app.py`
+
+- Validation:
+  - `node --check static/app.js` passed.
+  - `node --check static/player.js` passed.
+  - `python3 -m compileall -q -f -b app.py` passed.
+
+### 2026-04-03 (Smart Playlist visual tightening pass)
+- User feedback:
+  - Modal still felt cramped in the lower area and preview/actions competed for space.
+
+- UX adjustments applied:
+  - Added dedicated preview pane container (`ml-gen-preview-pane`) that is hidden until first preview run.
+  - Kept controls area cleaner on initial open by removing empty preview shell.
+  - Tightened form spacing/rhythm:
+    - slightly smaller grid gaps
+    - reduced action section vertical padding/margin
+  - Improved layout containment:
+    - Smart Playlist modal now uses internal overflow management (`overflow: hidden`)
+    - controls body scroll and preview scroll are isolated for better readability.
+  - Added subtle section separators around actions/preview for clearer visual hierarchy.
+
+- Files updated:
+  - `static/index.html`
+  - `static/style.css`
+  - `static/app.js`
+
+- Validation:
+  - `node --check static/app.js` passed.
+  - `python3 -m compileall -q -f -b app.py` passed.
+
+### 2026-04-03 (Smart Playlist simplification + regenerate fix)
+- User feedback:
+  - Smart Playlist flow still felt too complex for typical users.
+  - Regenerate button did not produce alternative playlist outcomes.
+
+- Simplification updates:
+  - Reduced primary controls to essentials:
+    - Playlist name
+    - Strategy
+    - Target genre (when relevant)
+    - Reference songs (when relevant)
+    - Length (short/standard/long)
+    - Vibe (balanced/chill/energetic)
+  - Moved technical controls into collapsible `Advanced options`:
+    - genre mode
+    - arc
+    - energy / brightness targets
+    - diversity
+    - transition smoothness
+    - year range
+    - artist repeat toggle
+    - deterministic toggle
+  - Result: cleaner default UX with optional depth for power users.
+
+- Regenerate fix (backend):
+  - Root cause:
+    - deterministic mode previously avoided any run-seed-sensitive jitter, so regenerate runs could return identical ordered lists.
+  - Fix:
+    - added deterministic, reproducible tie-break jitter keyed by:
+      - `seed` (run identifier),
+      - position index,
+      - track id.
+    - regenerate now increments run seed on the frontend and backend uses it to produce alternate deterministic selections.
+  - Outcome:
+    - same settings + new regenerate run => different but reproducible playlist ordering/candidate picks.
+
+- Files updated:
+  - `static/index.html`
+  - `static/style.css`
+  - `app.py`
+
+- Validation:
+  - `node --check static/app.js` passed.
+  - `python3 -m compileall -q -f -b app.py` passed.
+
+### 2026-04-03 (Modern terminology + expanded vibe presets)
+- User request:
+  - Add more Strategy and Vibe options.
+  - Make wording more fun/modern.
+  - Ensure regenerate actually returns different song options.
+
+- UX copy updates:
+  - `Strategy` -> `Mix style`
+  - Strategy labels updated:
+    - `Track DNA` (`seed`)
+    - `Genre Lane` (`genre`)
+    - `Blend Mode` (`hybrid`)
+  - `Target genre` -> `Genre lane`
+  - `Reference songs` -> `Reference tracks`
+
+- Vibe expansion:
+  - Added additional vibe options in UI:
+    - `Hype`
+    - `After Hours`
+    - `Deep Focus`
+    - `Bright Pop`
+    - `Dark & Heavy`
+    - `Cardio`
+    - plus existing `Balanced`, `Chill`
+  - Added corresponding frontend + backend mood presets:
+    - `hype`, `bright_bouncy`, `dark_heavy` (new)
+    - existing keys retained for compatibility.
+
+- Regenerate hardening:
+  - Frontend now sends `regenerate: true` on regenerate runs.
+  - Backend uses regenerate mode to choose from a top candidate window per step (seeded), not only best-ranked item.
+  - Outcome: regenerate reliably yields alternate high-quality playlists under deterministic mode.
+
+- Files updated:
+  - `static/index.html`
+  - `static/app.js`
+  - `app.py`
+
+- Validation:
+  - `node --check static/app.js` passed.
+  - `python3 -m compileall -q -f -b app.py` passed.
