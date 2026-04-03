@@ -42,24 +42,47 @@ fi
 
 # ── Select build Python (3.10+) ─────────────────────────────────────────────
 BUILD_PYTHON=""
+FOUND_PYTHONS=""
 for candidate in \
+  "$(command -v python3 2>/dev/null || true)" \
+  "$(command -v python3.13 2>/dev/null || true)" \
+  "$(command -v python3.12 2>/dev/null || true)" \
+  "$(command -v python3.11 2>/dev/null || true)" \
+  "$(command -v python3.10 2>/dev/null || true)" \
   "/opt/homebrew/bin/python3" \
+  "/opt/homebrew/bin/python3.13" \
+  "/opt/homebrew/bin/python3.12" \
+  "/opt/homebrew/bin/python3.11" \
+  "/opt/homebrew/bin/python3.10" \
+  "/usr/local/bin/python3" \
+  "/usr/local/bin/python3.13" \
+  "/usr/local/bin/python3.12" \
+  "/usr/local/bin/python3.11" \
+  "/usr/local/bin/python3.10" \
   "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3" \
   "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3" \
   "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3" \
   "/Library/Frameworks/Python.framework/Versions/3.10/bin/python3"; do
-  if [ -x "$candidate" ]; then
-    _maj=$($candidate -c 'import sys; print(sys.version_info.major)' 2>/dev/null || echo 0)
-    _min=$($candidate -c 'import sys; print(sys.version_info.minor)' 2>/dev/null || echo 0)
-    if [ "${_maj}" = "3" ] && [ "${_min}" -ge 10 ] 2>/dev/null; then
-      BUILD_PYTHON="$candidate"
-      break
-    fi
+  [ -n "$candidate" ] || continue
+  [ -x "$candidate" ] || continue
+  _maj=$($candidate -c 'import sys; print(sys.version_info.major)' 2>/dev/null || echo 0)
+  _min=$($candidate -c 'import sys; print(sys.version_info.minor)' 2>/dev/null || echo 0)
+  if [ "${_maj}" = "3" ]; then
+    FOUND_PYTHONS="${FOUND_PYTHONS}\n  - ${candidate} (${_maj}.${_min})"
+  fi
+  if [ "${_maj}" = "3" ] && [ "${_min}" -ge 10 ] 2>/dev/null; then
+    BUILD_PYTHON="$candidate"
+    break
   fi
 done
 
 if [ -z "$BUILD_PYTHON" ]; then
-  echo "ERROR: Python 3.10+ not found. Install Python for macOS and retry."
+  echo "ERROR: Python 3.10+ not found."
+  echo "  Detected Python interpreters:${FOUND_PYTHONS:- none}"
+  echo "  Install one of:"
+  echo "    brew install python@3.12"
+  echo "    or download from https://www.python.org/downloads/macos/"
+  echo "  Then rerun: bash build_app.sh --dmg"
   exit 1
 fi
 
