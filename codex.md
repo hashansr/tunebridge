@@ -1387,3 +1387,18 @@ Observed working tree at time of writing (not touched by this codex update):
 
 - Validation not run in this session:
   - Full end-to-end DMG build execution (PyInstaller build + macOS launch test) was not executed in this turn.
+
+### 2026-04-03 (README full-pass cleanup for distribution + profile-driven setup)
+- User request:
+  - Commit current state to `main` and ensure README no longer references outdated hardcoded devices/setup.
+
+- README updates made:
+  - Replaced hardcoded DAP preset wording with profile-driven wording in Features.
+  - Fixed Quick Start config key hint:
+    - `music_base` -> `library_path`.
+  - Updated project structure section to include `data/gear_profiles.json`.
+  - Marked `create_app.sh` as legacy dev launcher workflow.
+  - Replaced old "Device Export Reference" hardcoded table with a new "DAP Profiles" section describing runtime profile registry and override path.
+
+- Intent:
+  - Ensure docs match current architecture (self-contained packaging + profile-based DAP behavior).

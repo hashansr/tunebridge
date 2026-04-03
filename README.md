@@ -51,7 +51,7 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 
 ### Device Export & Sync
 - Dynamic per-DAP export pills on every playlist (download or copy directly to device)
-- DAP management: add/edit/delete with model presets (Poweramp, Hiby OS, FiiO Player, Other)
+- DAP management: add/edit/delete with profile-driven presets (no hardcoded device list)
 - Per-playlist sync timestamps — shows stale / up-to-date badge per DAP
 - Bidirectional music sync (local ↔ DAP): scan diff, checkbox preview, file-by-file progress
 
@@ -113,7 +113,7 @@ cd tunebridge
 bash install.sh
 
 # 2. Set your music library path in Settings (in-app) or:
-nano data/settings.json   # set "music_base" to your library path
+nano data/settings.json   # set "library_path" to your library path
 
 # 3. Run
 source venv/bin/activate
@@ -177,10 +177,11 @@ tunebridge/
 │   ├── daps.json
 │   ├── iems.json
 │   ├── baselines.json
+│   ├── gear_profiles.json
 │   ├── features/
 │   │   └── track_features.json
 │   └── playlist_artwork/
-├── create_app.sh           # Build TuneBridge.app (dev use)
+├── create_app.sh           # Legacy dev launcher workflow
 ├── build_app.sh            # Build self-contained .app and drag-drop .dmg
 ├── install.sh              # One-time setup script
 ├── update.sh               # Backup data, pull latest, update deps
@@ -189,11 +190,17 @@ tunebridge/
 
 ---
 
-## Device Export Reference
+## DAP Profiles
 
-| Model preset | Export folder | Path prefix | Notes |
-|---|---|---|---|
-| Poweramp | `Playlists` | _(empty)_ | Filename = playlist name in Poweramp |
-| Hiby OS | `HiByMusic/Playlist` | _(empty)_ | HiBy R5/R6 etc. |
-| FiiO Player | `Playlists` | _(empty)_ | Browse Files (not Playlist menu) |
-| Other / AP80 | `playlist_data` | `..` | Device must create folder first |
+DAP export behavior is profile-driven and not hardcoded in UI logic.
+
+- Profile definitions are stored in:
+  - bundled defaults: `data/gear_profiles.json`
+  - user override location at runtime: `~/Library/Application Support/TuneBridge/gear_profiles.json`
+- Each profile controls fields such as:
+  - model id / display name
+  - playlist format (`.m3u` / `.m3u8`)
+  - export folder
+  - path prefix
+  - suggested mount name
+- Add/edit DAP modal and export logic consume this profile registry at runtime.
