@@ -88,6 +88,7 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 - M4A/AAC files gracefully recorded as unanalysable (soundfile/libsndfile limitation)
 
 ### Settings & Tools
+- First-run onboarding modal for new installs (library path + folder/file format preferences)
 - Configurable music library path with Browse… folder picker
 - Health check panel (library, squig.link, DAPs, data files)
 - Data backup / restore (ZIP of all user data)
@@ -140,6 +141,10 @@ The packaged app is self-contained (no separate Python install needed on target 
 ### First Run Behavior
 - Automatically creates app data at:
   `~/Library/Application Support/TuneBridge/`
+- Shows onboarding for fresh installs to capture:
+  - default library folder
+  - folder structure preference
+  - primary file format preference
 - Migrates bundled defaults and feature cache where applicable.
 - Starts the embedded local server and opens native UI.
 

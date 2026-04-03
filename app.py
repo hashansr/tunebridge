@@ -65,6 +65,9 @@ GEAR_PROFILES_FILE = DATA_DIR / 'gear_profiles.json'
 
 DEFAULT_SETTINGS = {
     'library_path':     str(Path.home() / 'Music'),
+    'library_structure': 'artist_album_track',
+    'preferred_audio_format': 'flac',
+    'onboarding_completed': False,
     'poweramp_mount':   '/Volumes/FIIO M21',
     'ap80_mount':       '/Volumes/AP80',
     'poweramp_prefix':  '',   # internal device path, e.g. /storage/sdcard0
@@ -1043,6 +1046,7 @@ def export_playlist(pid, fmt):
 def get_settings():
     s = load_settings()
     s['_data_dir'] = str(DATA_DIR)
+    s['_settings_exists'] = SETTINGS_FILE.exists()
     return jsonify(s)
 
 

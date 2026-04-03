@@ -1497,3 +1497,59 @@ Observed working tree at time of writing (not touched by this codex update):
 - Functional impact:
   - UI behavior is visually smoother.
   - Playback, queue logic, and EQ processing remain unchanged.
+
+### 2026-04-03 (First-run onboarding modal for new users)
+- User request:
+  - Add an onboarding modal for first-time app launch with hype copy and setup prompts for:
+    - default library location
+    - folder structure
+    - primary file format
+  - Keep design aligned with existing modal system.
+
+- Backend updates (`app.py`):
+  - Extended `DEFAULT_SETTINGS`:
+    - `library_structure` (default: `artist_album_track`)
+    - `preferred_audio_format` (default: `flac`)
+    - `onboarding_completed` (default: `False`)
+  - Extended `GET /api/settings` response with:
+    - `_settings_exists` (boolean, based on `settings.json` presence)
+  - Rationale:
+    - Frontend can now distinguish true first-run installs from existing users with migrated settings.
+
+- Frontend updates:
+  - `static/index.html`
+    - Added `#onboarding-modal` using shared `.modal-overlay` + `.modal` pattern.
+    - Included:
+      - hype intro text
+      - library folder input + Browse action
+      - folder structure select
+      - file format select
+      - actions: `Set Up Later` / `Save & Continue`
+  - `static/style.css`
+    - Added onboarding-specific modal polish classes:
+      - `.onboarding-modal`
+      - `.onboarding-subtitle`
+      - `.onboarding-hype`
+      - row sizing tweaks for labels
+  - `static/app.js`
+    - `loadSettings()` now returns settings object after populating Settings view.
+    - Added onboarding helpers:
+      - `closeOnboarding()`
+      - `_showOnboarding(settings)`
+      - `completeOnboarding()`
+    - `completeOnboarding()` persists:
+      - `library_path`
+      - `library_structure`
+      - `preferred_audio_format`
+      - `onboarding_completed: true`
+    - Init flow (`DOMContentLoaded`) now shows onboarding only when:
+      - `!settings._settings_exists && !settings.onboarding_completed`
+    - Exported onboarding methods via `App` for modal button callbacks.
+
+- Documentation updates:
+  - `README.md`
+    - Added onboarding mention under Settings & Tools and First Run Behavior.
+
+- Validation:
+  - `node --check static/app.js` passed.
+  - `python3 -m py_compile app.py` passed.

@@ -3347,6 +3347,7 @@ async function loadSettings() {
   if (inp) inp.value = settings.library_path || '/Volumes/Storage/Music/FLAC';
   const dirEl = document.getElementById('settings-data-dir');
   if (dirEl && settings._data_dir) dirEl.textContent = settings._data_dir;
+  return settings;
 }
 
 async function saveLibraryPath() {
@@ -3357,6 +3358,52 @@ async function saveLibraryPath() {
     toast('Library path saved. Rescan to apply changes.');
   } catch (e) {
     toast('Error: ' + e.message);
+  }
+}
+
+function closeOnboarding() {
+  const modal = document.getElementById('onboarding-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function _showOnboarding(settings = {}) {
+  const modal = document.getElementById('onboarding-modal');
+  if (!modal) return;
+  const pathEl = document.getElementById('onboard-lib-path');
+  const structureEl = document.getElementById('onboard-folder-format');
+  const formatEl = document.getElementById('onboard-file-format');
+  if (pathEl) pathEl.value = settings.library_path || '/Users/you/Music';
+  if (structureEl) structureEl.value = settings.library_structure || 'artist_album_track';
+  if (formatEl) formatEl.value = settings.preferred_audio_format || 'flac';
+  modal.style.display = 'flex';
+}
+
+async function completeOnboarding() {
+  const path = (document.getElementById('onboard-lib-path')?.value || '').trim();
+  const libraryStructure = document.getElementById('onboard-folder-format')?.value || 'artist_album_track';
+  const preferredAudioFormat = document.getElementById('onboard-file-format')?.value || 'flac';
+
+  if (!path) {
+    toast('Please choose your music library folder.');
+    return;
+  }
+
+  try {
+    await api('/settings', {
+      method: 'PUT',
+      body: {
+        library_path: path,
+        library_structure: libraryStructure,
+        preferred_audio_format: preferredAudioFormat,
+        onboarding_completed: true,
+      },
+    });
+    closeOnboarding();
+    const libInput = document.getElementById('lib-path-input');
+    if (libInput) libInput.value = path;
+    toast('Welcome to TuneBridge. Setup saved.');
+  } catch (e) {
+    toast('Could not save onboarding settings: ' + e.message);
   }
 }
 
@@ -3689,6 +3736,8 @@ const App = {
   // Settings
   loadSettings,
   saveLibraryPath,
+  closeOnboarding,
+  completeOnboarding,
   restartApp,
   browseFolder,
   exportBackup,
@@ -5433,10 +5482,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Enter submits create playlist modal
   const cpInput = document.getElementById('create-playlist-input');
   if (cpInput) cpInput.addEventListener('keydown', e => { if (e.key === 'Enter') App.submitCreatePlaylist(); });
-  await loadSettings();
+  const settings = await loadSettings();
   await loadPlaylists();
   pollScanStatus();
   loadArtists();
+
+  // Show first-run onboarding only when settings file does not exist yet.
+  if (!settings._settings_exists && !settings.onboarding_completed) {
+    _showOnboarding(settings);
+  }
 });
 
 // Expose scrollToLetter globally for inline onclick in alpha bar
