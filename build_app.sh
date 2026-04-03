@@ -17,6 +17,7 @@ APP_NAME="TuneBridge"
 BUNDLE_ID="com.tunebridge.app"
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DIST_DIR="${PROJECT_DIR}/dist"
+DISTRO_DIR="${PROJECT_DIR}/distro"
 APP_PATH="${DIST_DIR}/${APP_NAME}.app"
 BUILD_VENV="${PROJECT_DIR}/.build-venv"
 
@@ -36,6 +37,7 @@ kv()        { printf '        %-10s %s\n' "$1" "$2"; }
 printf '=== TuneBridge build_app.sh v%s ===\n' "${APP_VERSION}"
 kv "Project:" "${PROJECT_DIR}"
 kv "Output:" "${APP_PATH}"
+kv "Distro dir:" "${DISTRO_DIR}"
 kv "Mode:" "$( [ "$BUILD_DMG" = "1" ] && echo "App + DMG" || echo "App only" )"
 hr
 
@@ -211,6 +213,7 @@ if [ "$BUILD_DMG" = "1" ]; then
   step "Creating temporary DMG"
   DMG_PATH="${DIST_DIR}/${APP_NAME}.dmg"
   TMP_DMG="${DIST_DIR}/${APP_NAME}_tmp.dmg"
+  mkdir -p "$DISTRO_DIR"
 
   [ -f "$DMG_PATH" ] && rm -f "$DMG_PATH"
   [ -f "$TMP_DMG" ] && rm -f "$TMP_DMG"
@@ -244,6 +247,16 @@ print(mp)
   ok "DMG ready"
   kv "DMG size:" "${DMG_SIZE}"
   kv "DMG path:" "${DMG_PATH}"
+
+  step "Publishing DMG to distro/ folder"
+  BUILD_STAMP="$(date +%Y%m%d-%H%M%S)"
+  DISTRO_LATEST="${DISTRO_DIR}/${APP_NAME}-latest.dmg"
+  DISTRO_VERSIONED="${DISTRO_DIR}/${APP_NAME}-v${APP_VERSION}-${BUILD_STAMP}.dmg"
+  cp -f "$DMG_PATH" "$DISTRO_LATEST"
+  cp -f "$DMG_PATH" "$DISTRO_VERSIONED"
+  ok "DMG published for distribution"
+  kv "Latest DMG:" "${DISTRO_LATEST}"
+  kv "Archive DMG:" "${DISTRO_VERSIONED}"
 fi
 
 deactivate || true
@@ -252,9 +265,14 @@ hr
 printf '=== Build complete ===\n'
 if [ "$BUILD_DMG" = "1" ]; then
   printf '\nInstall (distribution):\n'
-  printf '  1) Open TuneBridge.dmg\n'
-  printf '  2) Drag TuneBridge.app to Applications\n'
-  printf '  3) Launch TuneBridge\n'
+  printf '  1) Share from distro/: %s-latest.dmg\n' "${APP_NAME}"
+  printf '  2) Open TuneBridge.dmg\n'
+  printf '  3) Drag TuneBridge.app to Applications\n'
+  printf '  4) Launch TuneBridge\n'
+  printf '\nDistribution artifacts:\n'
+  printf '  - dist/TuneBridge.dmg (build output)\n'
+  printf '  - distro/TuneBridge-latest.dmg (stable latest)\n'
+  printf '  - distro/TuneBridge-v%s-<timestamp>.dmg (archived)\n' "${APP_VERSION}"
 else
   printf '\nInstall (local app):\n'
   printf '  1) Open dist/TuneBridge.app\n'

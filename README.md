@@ -129,6 +129,7 @@ python app.py
 ```bash
 bash build_app.sh --dmg
 # → dist/TuneBridge.dmg
+# → distro/TuneBridge-latest.dmg
 ```
 
 Install flow for end users:
@@ -137,6 +138,13 @@ Install flow for end users:
 3. Launch TuneBridge from Applications
 
 The packaged app is self-contained (no separate Python install needed on target machines).
+
+### Distribution Folder
+- Latest shareable build:
+  - `distro/TuneBridge-latest.dmg`
+- Archived per-build DMGs:
+  - `distro/TuneBridge-v<version>-<timestamp>.dmg`
+- `dist/TuneBridge.dmg` remains the raw build output.
 
 ### First Run Behavior
 - Automatically creates app data at:
