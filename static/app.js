@@ -8,7 +8,7 @@ const state = {
   tracks: [],              // tracks in current library view
   artists: [],
   albums: [],
-  devices: { poweramp: false, ap80: false },
+  devices: {},
   scanStatus: null,
   activeTrackId: null,     // for add-to dropdown
   sortable: null,
@@ -1601,8 +1601,52 @@ async function saveSettings() {
 }
 
 /* ── Help modal ─────────────────────────────────────────────────────── */
+async function renderHelpCenter() {
+  const [settings, daps] = await Promise.all([
+    api('/settings').catch(() => ({})),
+    api('/daps').catch(() => []),
+  ]);
+
+  const libraryRoot = settings.library_path || '/Volumes/Storage/Music/FLAC';
+  const dataDir = settings._data_dir || 'App data folder';
+  const libraryRootEl = document.getElementById('help-library-root');
+  const dataDirEl = document.getElementById('help-data-dir');
+  if (libraryRootEl) libraryRootEl.textContent = libraryRoot;
+  if (dataDirEl) dataDirEl.textContent = dataDir;
+
+  const listEl = document.getElementById('help-device-list');
+  if (!listEl) return;
+  if (!daps.length) {
+    listEl.innerHTML = `
+      <div class="help-device-empty">
+        No DAPs configured yet. Add one in <strong>Gear</strong> to see export path guidance here.
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = daps.map(dap => {
+    const mounted = !!dap.mounted;
+    const mountPath = dap.mount_path || 'Not set';
+    const exportFolder = dap.export_folder || 'Playlists';
+    const pathPrefix = dap.path_prefix || '(none)';
+    return `
+      <div class="help-device-card">
+        <div class="help-device-top">
+          <div class="help-device-name">${esc(dap.name || 'Unnamed device')}</div>
+          <span class="help-device-status ${mounted ? 'ok' : 'warn'}">${mounted ? 'Connected' : 'Not connected'}</span>
+        </div>
+        <p class="help-device-kv"><strong>Mount path:</strong> <code>${esc(mountPath)}</code></p>
+        <p class="help-device-kv"><strong>Export folder:</strong> <code>${esc(exportFolder)}</code></p>
+        <p class="help-device-kv"><strong>Track path prefix:</strong> <code>${esc(pathPrefix)}</code></p>
+      </div>
+    `;
+  }).join('');
+}
+
 function showHelp() {
   document.getElementById('help-modal').style.display = 'flex';
+  renderHelpCenter();
 }
 function closeHelp() {
   document.getElementById('help-modal').style.display = 'none';
@@ -1814,7 +1858,35 @@ function _updateMappingCount() {
 /* ── Sync ────────────────────────────────────────────────────────────── */
 let _syncPollTimer = null;
 
+function _formatSyncPhaseMessage(raw, phase) {
+  const msg = String(raw || '').trim();
+  if (!msg) {
+    if (phase === 'scan') return 'Scanning your library files…';
+    if (phase === 'copy') return 'Copying selected files…';
+    if (phase === 'done') return 'Sync complete.';
+    return '';
+  }
+  const progressMatch = msg.match(/(\d+)\s*\/\s*(\d+)/);
+  if (phase === 'scan') {
+    if (progressMatch) return `Scanning files (${progressMatch[1]} / ${progressMatch[2]})…`;
+    return msg;
+  }
+  if (phase === 'copy') {
+    if (progressMatch) return `Copying files (${progressMatch[1]} / ${progressMatch[2]})…`;
+    return msg;
+  }
+  if (phase === 'done') {
+    return msg;
+  }
+  return msg;
+}
+
 function _syncPhase(name) {
+  const modal = document.getElementById('sync-modal');
+  if (modal) modal.setAttribute('data-phase', name);
+  document.querySelectorAll('#sync-modal .sync-phase-step').forEach(el => {
+    el.classList.toggle('active', el.dataset.step === name);
+  });
   ['pick', 'scanning', 'preview', 'copying', 'done'].forEach(p => {
     const el = document.getElementById(`sync-phase-${p}`);
     if (el) el.style.display = p === name ? 'block' : 'none';
@@ -1824,6 +1896,10 @@ function _syncPhase(name) {
 async function showSync() {
   await api('/sync/reset', { method: 'POST' }).catch(() => {});
   _syncPhase('pick');
+  const errWrap = document.getElementById('sync-errors-wrap');
+  if (errWrap) errWrap.style.display = 'none';
+  const doneMsg = document.getElementById('sync-done-msg');
+  if (doneMsg) doneMsg.textContent = '';
 
   const daps = await api('/daps').catch(() => []);
   const container = document.getElementById('sync-device-list');
@@ -1863,7 +1939,7 @@ function closeSyncModal() {
 
 async function startSyncScan(dapId) {
   _syncPhase('scanning');
-  document.getElementById('sync-scanning-msg').textContent = 'Scanning files…';
+  document.getElementById('sync-scanning-msg').textContent = 'Scanning your library files…';
 
   const res = await api('/sync/scan', { method: 'POST', body: { dap_id: dapId } });
   if (res.error) { toast(res.error); _syncPhase('pick'); return; }
@@ -1874,14 +1950,15 @@ async function startSyncScan(dapId) {
     const status = await api('/sync/status').catch(() => null);
     if (!status) return;
 
-    document.getElementById('sync-scanning-msg').textContent = status.current || status.message;
+    document.getElementById('sync-scanning-msg').textContent =
+      _formatSyncPhaseMessage(status.current || status.message, 'scan');
 
     if (status.status === 'ready') {
       clearInterval(_syncPollTimer);
       renderSyncPreview(status);
     } else if (status.status === 'error') {
       clearInterval(_syncPollTimer);
-      toast('Scan error: ' + status.message);
+      toast('Could not complete scan: ' + status.message);
       _syncPhase('pick');
     }
   }, 600);
@@ -1889,7 +1966,7 @@ async function startSyncScan(dapId) {
 
 function _syncFileRows(paths, side) {
   if (!paths.length) {
-    return `<div class="sync-empty">Nothing to copy</div>`;
+    return `<div class="sync-empty">No files to sync in this direction.</div>`;
   }
   return paths.map((p, i) => {
     const parts = p.replace(/\\/g, '/').split('/');
@@ -1935,12 +2012,12 @@ async function executeSync() {
   const device_paths = [...document.querySelectorAll('.sync-chk-device:checked')].map(cb => cb.dataset.path);
 
   if (!local_paths.length && !device_paths.length) {
-    toast('Select at least one file to sync');
+    toast('Select at least one file to sync.');
     return;
   }
 
   _syncPhase('copying');
-  document.getElementById('sync-copying-msg').textContent = `Copying 0 / ${local_paths.length + device_paths.length} files…`;
+  document.getElementById('sync-copying-msg').textContent = `Preparing to copy 0 / ${local_paths.length + device_paths.length} files…`;
   document.getElementById('sync-copy-bar').style.width = '0%';
   document.getElementById('sync-copying-current').textContent = '';
 
@@ -1953,7 +2030,8 @@ async function executeSync() {
 
     const pct = status.total > 0 ? Math.round((status.progress / status.total) * 100) : 0;
     document.getElementById('sync-copy-bar').style.width = pct + '%';
-    document.getElementById('sync-copying-msg').textContent = status.message;
+    document.getElementById('sync-copying-msg').textContent =
+      _formatSyncPhaseMessage(status.message, 'copy');
     document.getElementById('sync-copying-current').textContent = status.current || '';
 
     if (status.status === 'done') {
@@ -1961,13 +2039,17 @@ async function executeSync() {
       _showSyncDone(status);
     } else if (status.status === 'error') {
       clearInterval(_syncPollTimer);
-      toast('Sync error: ' + status.message);
+      toast('Sync failed: ' + status.message);
     }
   }, 600);
 }
 
 function _showSyncDone(status) {
-  document.getElementById('sync-done-msg').textContent = status.message;
+  const issueCount = Array.isArray(status.errors) ? status.errors.length : 0;
+  const baseDone = _formatSyncPhaseMessage(status.message, 'done') || 'Sync complete.';
+  document.getElementById('sync-done-msg').textContent = issueCount
+    ? `${baseDone} Completed with ${issueCount} issue${issueCount === 1 ? '' : 's'}.`
+    : baseDone;
   const errWrap = document.getElementById('sync-errors-wrap');
   if (status.errors?.length) {
     errWrap.style.display = 'block';
@@ -2142,7 +2224,7 @@ function _buildIemCompareChart(data) {
     label:       c.label,
     data:        c.data.map(([f, spl]) => ({ x: f, y: spl })),
     borderColor: c.color,
-    borderWidth: c.id.startsWith('baseline-') ? 1.4 : 1.9,
+    borderWidth: c.id.startsWith('baseline-') ? 1.5 : 2.1,
     borderDash:  c.dash ? [6, 4] : undefined,
     pointRadius: 0,
     tension:     0.3,
@@ -2173,9 +2255,9 @@ function _buildIemCompareChart(data) {
       scales: {
         x: {
           type: 'logarithmic', min: 20, max: 20000,
-          title: { display: true, text: 'Frequency (Hz)', color: '#6b6b7b', font: { size: 11 } },
+          title: { display: true, text: 'Frequency (Hz)', color: '#6b6b7b', font: { size: 10, family: 'Inter, sans-serif' } },
           ticks: {
-            color: '#6b6b7b', font: { size: 9 }, autoSkip: false, maxRotation: 0,
+            color: '#6b6b7b', font: { size: 9, family: 'Inter, sans-serif' }, autoSkip: false, maxRotation: 0,
             callback: v => [20,50,100,200,500,1000,2000,5000,10000,20000].includes(v)
               ? (v >= 1000 ? v/1000+'k' : v) : '',
           },
@@ -2188,15 +2270,15 @@ function _buildIemCompareChart(data) {
         },
         y: {
           min: 50, max: 110,
-          title: { display: true, text: 'dB', color: '#6b6b7b', font: { size: 11 } },
-          ticks: { color: '#6b6b7b', font: { size: 10 }, stepSize: 10 },
+          title: { display: true, text: 'dB', color: '#6b6b7b', font: { size: 10, family: 'Inter, sans-serif' } },
+          ticks: { color: '#6b6b7b', font: { size: 9, family: 'Inter, sans-serif' }, stepSize: 10 },
           grid: { color: 'rgba(173,198,255,.06)' },
         },
       },
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(53,53,52,0.95)', titleColor: '#e5e2e1',
+          backgroundColor: 'rgba(30,30,42,0.95)', titleColor: '#adc6ff',
           bodyColor: '#c1c6d7', borderColor: 'rgba(65,71,85,0.3)', borderWidth: 1,
           callbacks: {
             title: items => { const f = items[0].parsed.x; return f >= 1000 ? (f/1000).toFixed(1)+' kHz' : Math.round(f)+' Hz'; },
@@ -2211,11 +2293,11 @@ function _buildIemCompareChart(data) {
   if (legendEl) {
     legendEl.innerHTML = datasets.map((ds, i) => {
       const dash = ds.borderDash ? 'stroke-dasharray="5 4"' : '';
-      return `<div class="compare-legend-item" onclick="App._toggleCompareDataset(${i})" id="cmp-legend-${i}">
+      return `<div class="compare-legend-item${ds.hidden ? ' compare-legend-item--off' : ''}" onclick="App._toggleCompareDataset(${i})" id="cmp-legend-${i}">
         <svg width="24" height="8" viewBox="0 0 24 8">
           <line x1="0" y1="4" x2="24" y2="4" stroke="${ds.borderColor}" stroke-width="${ds.borderWidth||1.5}" ${dash}/>
         </svg>
-        <span>${esc(ds.label)}</span>
+        <span class="compare-legend-label">${esc(ds.label)}</span>
       </div>`;
     }).join('');
   }
@@ -2227,7 +2309,7 @@ function _toggleCompareDataset(idx) {
   _iemCompareChart.setDatasetVisibility(idx, visible);
   _iemCompareChart.update();
   const item = document.getElementById(`cmp-legend-${idx}`);
-  if (item) item.style.opacity = visible ? '1' : '0.35';
+  if (item) item.classList.toggle('compare-legend-item--off', !visible);
 }
 
 async function loadGearView() {
@@ -2269,7 +2351,7 @@ async function showDapDetail(id) {
         <td class="dap-pl-name" onclick="App.openPlaylist('${pl.id}')" title="Open playlist">${esc(pl.name)}</td>
         <td>${pl.tracks?.length ?? 0} tracks</td>
         <td>${statusHtml}</td>
-        <td style="text-align:right">
+        <td class="dap-pl-export-cell">
           <button class="dap-pl-export-btn" ${canExport ? '' : 'disabled title="Device not mounted"'}
             onclick="App.dapExportPlaylist('${dap.id}','${pl.id}',this)">
             ${dap.mounted ? '→ Export' : 'Not mounted'}
@@ -2302,15 +2384,15 @@ async function showDapDetail(id) {
       <div class="dap-config-field"><label>Path prefix</label><span>${esc(dap.path_prefix || '(none)')}</span></div>
       <div class="dap-config-field"><label>Model</label><span>${esc(dap.model || 'generic')}</span></div>
     </div>
-    <div style="font-size:var(--text-xs);font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">
-      Playlist Sync Status
+    <div class="dap-section-title">Playlist Sync Status</div>
+    <div class="dap-table-shell">
+      <table class="dap-pl-table">
+        <thead><tr>
+          <th>Playlist</th><th>Tracks</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody>${plRows || '<tr><td colspan="4" class="dap-pl-empty-row">No playlists yet</td></tr>'}</tbody>
+      </table>
     </div>
-    <table class="dap-pl-table">
-      <thead><tr>
-        <th>Playlist</th><th>Tracks</th><th>Status</th><th></th>
-      </tr></thead>
-      <tbody>${plRows || '<tr><td colspan="4" style="color:var(--text-muted);text-align:center;padding:20px">No playlists yet</td></tr>'}</tbody>
-    </table>
   `;
 }
 
@@ -2335,27 +2417,38 @@ async function dapExportPlaylist(dapId, plId, btn) {
 }
 
 function showAddDapModal() {
+  _ensureGearProfileSelects();
+  const firstModel = Object.keys(DAP_MODEL_PRESETS)[0] || 'other';
+  const firstPreset = DAP_MODEL_PRESETS[firstModel] || { folder: 'Playlists', prefix: '' };
   document.getElementById('dap-modal-title').textContent = 'Add DAP';
   document.getElementById('dap-modal-id').value = '';
   document.getElementById('dap-name').value = '';
-  document.getElementById('dap-model').value = 'poweramp';
+  document.getElementById('dap-model').value = firstModel;
   document.getElementById('dap-mount').value = '';
-  document.getElementById('dap-export-folder').value = 'Playlists';
-  document.getElementById('dap-prefix').value = '';
-  dapModelPreset('poweramp');
+  document.getElementById('dap-export-folder').value = firstPreset.folder || 'Playlists';
+  document.getElementById('dap-prefix').value = firstPreset.prefix || '';
+  dapModelPreset(firstModel);
   document.getElementById('dap-modal').style.display = 'flex';
 }
 
 async function showEditDapModal(id) {
+  _ensureGearProfileSelects();
   const dap = await api(`/daps/${id}`);
   document.getElementById('dap-modal-title').textContent = 'Edit DAP';
   document.getElementById('dap-modal-id').value = id;
   document.getElementById('dap-name').value = dap.name || '';
-  document.getElementById('dap-model').value = dap.model || 'poweramp';
+  const modelSel = document.getElementById('dap-model');
+  if (modelSel && dap.model && !Array.from(modelSel.options).some(o => o.value === dap.model)) {
+    const opt = document.createElement('option');
+    opt.value = dap.model;
+    opt.textContent = dap.model;
+    modelSel.appendChild(opt);
+  }
+  document.getElementById('dap-model').value = dap.model || (Object.keys(DAP_MODEL_PRESETS)[0] || 'other');
   document.getElementById('dap-mount').value = dap.mount_path || '';
   document.getElementById('dap-export-folder').value = dap.export_folder || 'Playlists';
   document.getElementById('dap-prefix').value = dap.path_prefix || '';
-  _updateDapFolderHint(dap.model || 'poweramp');
+  _updateDapFolderHint(dap.model || (Object.keys(DAP_MODEL_PRESETS)[0] || 'other'));
   document.getElementById('dap-modal').style.display = 'flex';
 }
 
@@ -2370,35 +2463,73 @@ const _mountPrefix = (() => {
   return { base: '/Volumes/', sep: '/' };
 })();
 
-const DAP_MODEL_PRESETS = {
-  poweramp: {
-    mount: _mountPrefix.base + 'FIIO M21',
-    folder: 'Playlists',
-    prefix: '',
-    hint: 'Poweramp scans all storage for .m3u files. Filename = playlist name.',
-  },
-  hiby: {
-    mount: _mountPrefix.base + 'HiBy',
-    folder: 'HiByMusic/Playlist',
-    prefix: '',
-    hint: 'HiBy OS reads playlists from HiByMusic/Playlist/ on SD card.',
-  },
-  fiio: {
-    mount: _mountPrefix.base + 'FiiO',
-    folder: 'Playlists',
-    prefix: '',
-    hint: 'FiiO Music finds M3U files via Browse Files on the same storage as music.',
-  },
-  other: {
-    mount: _mountPrefix.base + 'MyDAP',
-    folder: 'Playlists',
-    prefix: '',
-    hint: '',
-  },
-};
+let DAP_MODEL_PRESETS = {};
+let _gearIemTypes = ['IEM', 'Headphone'];
+let _gearProfilesLoaded = false;
+
+function _normalizeDapPreset(profile) {
+  const mountName = (profile.mount_name || 'MyDAP').replace(/[\\/]/g, '').trim() || 'MyDAP';
+  return {
+    label: profile.name || profile.model || 'Other',
+    mount: _mountPrefix.base + mountName,
+    folder: (profile.export_folder || 'Playlists').replace(/^[/\\]+|[/\\]+$/g, ''),
+    prefix: profile.path_prefix || '',
+    hint: profile.hint || '',
+  };
+}
+
+function _populateDapModelSelect() {
+  const sel = document.getElementById('dap-model');
+  if (!sel) return;
+  const models = Object.keys(DAP_MODEL_PRESETS);
+  sel.innerHTML = models.map(m => `<option value="${esc(m)}">${esc(DAP_MODEL_PRESETS[m].label || m)}</option>`).join('');
+  if (!models.length) {
+    sel.innerHTML = '<option value="other">Other</option>';
+    DAP_MODEL_PRESETS = { other: { label: 'Other', mount: _mountPrefix.base + 'MyDAP', folder: 'Playlists', prefix: '', hint: '' } };
+  }
+}
+
+function _populateIemTypeSelect() {
+  const sel = document.getElementById('iem-type');
+  if (!sel) return;
+  const types = (_gearIemTypes && _gearIemTypes.length) ? _gearIemTypes : ['IEM', 'Headphone'];
+  sel.innerHTML = types.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+}
+
+function _ensureGearProfileSelects() {
+  if (!_gearProfilesLoaded) return;
+  _populateDapModelSelect();
+  _populateIemTypeSelect();
+}
+
+async function loadGearProfiles() {
+  try {
+    const data = await api('/gear/profiles');
+    const profiles = Array.isArray(data.dap_profiles) ? data.dap_profiles : [];
+    DAP_MODEL_PRESETS = {};
+    profiles.forEach(p => {
+      if (!p.model) return;
+      DAP_MODEL_PRESETS[p.model] = _normalizeDapPreset(p);
+    });
+    if (!Object.keys(DAP_MODEL_PRESETS).length) {
+      DAP_MODEL_PRESETS.other = { label: 'Other', mount: _mountPrefix.base + 'MyDAP', folder: 'Playlists', prefix: '', hint: '' };
+    }
+    _gearIemTypes = Array.isArray(data.iem_types) && data.iem_types.length ? data.iem_types : ['IEM', 'Headphone'];
+  } catch (_) {
+    DAP_MODEL_PRESETS = {
+      other: { label: 'Other', mount: _mountPrefix.base + 'MyDAP', folder: 'Playlists', prefix: '', hint: '' },
+    };
+    _gearIemTypes = ['IEM', 'Headphone'];
+  } finally {
+    _gearProfilesLoaded = true;
+    _populateDapModelSelect();
+    _populateIemTypeSelect();
+  }
+}
 
 function dapModelPreset(model) {
-  const preset = DAP_MODEL_PRESETS[model] || DAP_MODEL_PRESETS.other;
+  const fallback = DAP_MODEL_PRESETS.other || Object.values(DAP_MODEL_PRESETS)[0] || { mount: _mountPrefix.base + 'MyDAP', folder: 'Playlists', prefix: '', hint: '' };
+  const preset = DAP_MODEL_PRESETS[model] || fallback;
   const mountInput = document.getElementById('dap-mount');
   // Only update mount if field is empty or user hasn't customized it
   if (!mountInput.value || Object.values(DAP_MODEL_PRESETS).some(p => mountInput.value === p.mount)) {
@@ -2412,7 +2543,7 @@ function dapModelPreset(model) {
 function _updateDapFolderHint(model) {
   const el = document.getElementById('dap-folder-hint');
   if (!el) return;
-  const preset = DAP_MODEL_PRESETS[model] || DAP_MODEL_PRESETS.other;
+  const preset = DAP_MODEL_PRESETS[model] || DAP_MODEL_PRESETS.other || Object.values(DAP_MODEL_PRESETS)[0] || { hint: '' };
   el.textContent = preset.hint;
 }
 
@@ -2457,11 +2588,37 @@ async function deleteDap(id) {
 let _iemChart = null;
 let _currentIemId = null;
 let _activePeqId = null;
+let _activeIemSourceId = null;
+
+function _collectIemModalSources() {
+  const sources = [];
+  for (let i = 1; i <= 3; i++) {
+    const label = (document.getElementById(`iem-source-label-${i}`)?.value || '').trim();
+    const url = (document.getElementById(`iem-source-url-${i}`)?.value || '').trim();
+    if (!url) continue;
+    sources.push({
+      label: label || `Source ${i}`,
+      url,
+    });
+  }
+  return sources.slice(0, 3);
+}
+
+function _setIemModalSources(sources = []) {
+  for (let i = 1; i <= 3; i++) {
+    const src = sources[i - 1] || {};
+    const labelEl = document.getElementById(`iem-source-label-${i}`);
+    const urlEl = document.getElementById(`iem-source-url-${i}`);
+    if (labelEl) labelEl.value = src.label || '';
+    if (urlEl) urlEl.value = src.url || '';
+  }
+}
 
 async function showIemDetail(id) {
   const iem = await api(`/iems/${id}`);
   _currentIemId = id;
   _activePeqId = null;
+  _activeIemSourceId = iem.primary_source_id || ((iem.squig_sources || [])[0] || {}).id || null;
   state.view = 'iem-detail';
   clearSelection();
   setActiveNav('gear');
@@ -2474,7 +2631,11 @@ async function showIemDetail(id) {
   `;
 
   const typeBadge = iem.type === 'Headphone' ? 'gear-badge-hp' : 'gear-badge-iem';
-  const hasMeasurement = iem.measurement_L || iem.measurement_R;
+  const hasMeasurement = !!iem.has_measurement;
+  const sourceOptions = (iem.squig_sources || []).map(s =>
+    `<option value="${esc(s.id || '')}" ${s.id === _activeIemSourceId ? 'selected' : ''}>${esc(s.label || 'Source')}</option>`
+  ).join('');
+  const sourceLink = (iem.squig_sources || []).find(s => s.id === _activeIemSourceId) || (iem.squig_sources || [])[0];
   const peqOptions = (iem.peq_profiles || []).map(p =>
     `<option value="${p.id}">${esc(p.name)}</option>`
   ).join('');
@@ -2488,7 +2649,7 @@ async function showIemDetail(id) {
         <div class="iem-detail-title">${esc(iem.name)}</div>
         <div class="iem-detail-sub">
           <span class="gear-badge ${typeBadge}">${esc(iem.type || 'IEM')}</span>
-          ${iem.squig_url ? `<a href="${esc(iem.squig_url)}" target="_blank" style="font-size:var(--text-xs);color:var(--accent);text-decoration:none">squig.link ↗</a>` : ''}
+          ${sourceLink && sourceLink.url ? `<a href="${esc(sourceLink.url)}" target="_blank" style="font-size:var(--text-xs);color:var(--accent);text-decoration:none">squig.link ↗</a>` : ''}
         </div>
         <div class="gear-edit-actions">
           <button class="btn-secondary" onclick="App.showEditIemModal('${iem.id}')">Edit</button>
@@ -2499,6 +2660,10 @@ async function showIemDetail(id) {
 
     <div class="freq-graph-wrap">
       <div class="freq-graph-toolbar">
+        ${sourceOptions ? `<label>Source:</label>
+        <select id="iem-source-select" onchange="App.applyIemSourceToGraph(this.value)">
+          ${sourceOptions}
+        </select>` : ''}
         <label>PEQ:</label>
         <select id="peq-select" onchange="App.applyPeqToGraph(this.value)">
           <option value="">None (raw measurement)</option>
@@ -2527,7 +2692,7 @@ async function showIemDetail(id) {
   `;
 
   if (hasMeasurement) {
-    await _loadIemGraph(id, null);
+    await _loadIemGraph(id, null, _activeIemSourceId);
   }
 }
 
@@ -2617,8 +2782,11 @@ async function downloadPeq(peqId, name) {
   }
 }
 
-async function _loadIemGraph(iemId, peqId) {
-  const params = peqId ? `?peq=${peqId}` : '';
+async function _loadIemGraph(iemId, peqId, sourceId = null) {
+  const qp = [];
+  if (peqId) qp.push(`peq=${encodeURIComponent(peqId)}`);
+  if (sourceId) qp.push(`source=${encodeURIComponent(sourceId)}`);
+  const params = qp.length ? `?${qp.join('&')}` : '';
   let data;
   try {
     data = await api(`/iems/${iemId}/graph${params}`);
@@ -2627,6 +2795,7 @@ async function _loadIemGraph(iemId, peqId) {
     return;
   }
   if (!data || !data.curves || !data.curves.length) return;
+  _activeIemSourceId = data.selected_source_id || sourceId || _activeIemSourceId;
 
   const canvas = document.getElementById('freq-canvas');
   if (!canvas) return;
@@ -2816,15 +2985,24 @@ async function applyPeqToGraph(peqId) {
     const activeRow = document.getElementById(`peq-row-${peqId}`);
     if (activeRow) activeRow.classList.add('active');
   }
-  if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId);
+  if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId, _activeIemSourceId);
+}
+
+async function applyIemSourceToGraph(sourceId) {
+  _activeIemSourceId = sourceId || null;
+  const sel = document.getElementById('iem-source-select');
+  if (sel) sel.value = sourceId || '';
+  if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId, _activeIemSourceId);
 }
 
 function showAddIemModal() {
+  _ensureGearProfileSelects();
   document.getElementById('iem-modal-title').textContent = 'Add IEM / Headphone';
   document.getElementById('iem-modal-id').value = '';
   document.getElementById('iem-name').value = '';
-  document.getElementById('iem-type').value = 'IEM';
-  document.getElementById('iem-squig-url').value = '';
+  const typeSel = document.getElementById('iem-type');
+  if (typeSel && typeSel.options.length > 0) typeSel.value = typeSel.options[0].value;
+  _setIemModalSources([]);
   document.getElementById('iem-modal-error').style.display = 'none';
   document.getElementById('iem-save-btn').disabled = false;
   document.getElementById('iem-save-btn').textContent = 'Save';
@@ -2832,12 +3010,22 @@ function showAddIemModal() {
 }
 
 async function showEditIemModal(id) {
+  _ensureGearProfileSelects();
   const iem = await api(`/iems/${id}`);
   document.getElementById('iem-modal-title').textContent = 'Edit IEM';
   document.getElementById('iem-modal-id').value = id;
   document.getElementById('iem-name').value = iem.name || '';
-  document.getElementById('iem-type').value = iem.type || 'IEM';
-  document.getElementById('iem-squig-url').value = iem.squig_url || '';
+  const typeSel = document.getElementById('iem-type');
+  if (typeSel && iem.type && !Array.from(typeSel.options).some(o => o.value === iem.type)) {
+    const opt = document.createElement('option');
+    opt.value = iem.type;
+    opt.textContent = iem.type;
+    typeSel.appendChild(opt);
+  }
+  document.getElementById('iem-type').value = iem.type || (typeSel && typeSel.options.length ? typeSel.options[0].value : 'IEM');
+  const srcs = (iem.squig_sources || []).slice(0, 3).map(s => ({ label: s.label || '', url: s.url || '' }));
+  if (!srcs.length && iem.squig_url) srcs.push({ label: 'Primary', url: iem.squig_url });
+  _setIemModalSources(srcs);
   document.getElementById('iem-modal-error').style.display = 'none';
   document.getElementById('iem-save-btn').disabled = false;
   document.getElementById('iem-save-btn').textContent = 'Save';
@@ -2850,15 +3038,16 @@ function closeIemModal() {
 
 async function saveIem() {
   const id = document.getElementById('iem-modal-id').value;
+  const squigSources = _collectIemModalSources();
   const body = {
     name: document.getElementById('iem-name').value.trim() || 'New IEM',
     type: document.getElementById('iem-type').value,
-    squig_url: document.getElementById('iem-squig-url').value.trim(),
+    squig_sources: squigSources,
   };
   const errEl = document.getElementById('iem-modal-error');
   const btn = document.getElementById('iem-save-btn');
   btn.disabled = true;
-  btn.textContent = body.squig_url ? 'Fetching measurement…' : 'Saving…';
+  btn.textContent = squigSources.length ? 'Fetching measurement…' : 'Saving…';
   errEl.style.display = 'none';
   try {
     let saved;
@@ -3526,6 +3715,7 @@ const App = {
   saveIem,
   deleteIem,
   applyPeqToGraph,
+  applyIemSourceToGraph,
   toggleIemCurve,
   runHealthCheck,
   togglePeqAccordion,
@@ -3551,6 +3741,7 @@ const App = {
   changeMatchTarget,
   _toggleIemAccordion,
   iemFitChangePeq,
+  iemFitChangeSource,
   iemFitChangeGenre,
   iemFitChangeGenreOverlay,
   iemFitAddGenreToHeatmap,
@@ -4093,10 +4284,11 @@ const _INSIGHTS_HELP = {
   },
   sonic: {
     title: 'Sonic Profile',
-    body: `<p><strong>Spectral Brightness</strong> — the spectral centroid is the "centre of mass" of a track's frequency content. Higher values (4–6 kHz) mean bright, treble-forward music; lower values (1–2 kHz) indicate warm, bass-heavy music.</p>
-           <p><strong>RMS Energy</strong> — average loudness. Heavily compressed recordings (modern pop, metal) score higher than dynamic classical recordings.</p>
-           <p><strong>Band Energy Profile</strong> — relative spectral emphasis across 12 perceptual bands averaged across your library. Shows which frequency ranges your collection emphasises most.</p>
-           <p><strong>Note:</strong> Analysis covers FLAC files only. M4A/AAC tracks are skipped (libsndfile limitation). Results update after running "Analyse Library" in this section.</p>`,
+    body: `<p>Summarises your library's <strong>tonal demand</strong> so you can understand what IEM/headphone signatures are likely to suit your collection.</p>
+           <p><strong>Library Tonal Demand</strong> shows where your music places most emphasis across perceptual frequency bands. This is the same signal used in compatibility scoring.</p>
+           <p><strong>Brightness Distribution</strong> indicates how often tracks skew warm/dark vs bright/forward.</p>
+           <p><strong>RMS Energy Distribution</strong> reflects mastering density (more compressed vs more dynamic recordings).</p>
+           <p><strong>Note:</strong> Analysis covers FLAC files only. M4A/AAC tracks are skipped (libsndfile limitation). Results update after running "Analyse Library".</p>`,
   },
   gear: {
     title: 'IEM / Headphone Fit',
@@ -4260,19 +4452,68 @@ function _renderInsightsSonicProfile(d) {
 
   const bs = d.brightness.stats;
   const es = d.energy.stats;
+  const bandLabels = d.band_labels || {};
+  const bandEntries = Object.entries(d.band_profile || {}).sort((a, b) => b[1] - a[1]);
+
+  const _sumBands = keys => keys.reduce((acc, k) => acc + Number((d.band_profile || {})[k] || 0), 0);
+  const bassDemand   = _sumBands(['sub_bass', 'bass', 'bass_feel', 'slam']);
+  const midDemand    = _sumBands(['lower_mids', 'upper_mids', 'note_weight']);
+  const trebleDemand = _sumBands(['lower_treble', 'upper_treble', 'detail', 'sibilance', 'texture']);
+
+  const topBands = bandEntries.slice(0, 3).map(([k]) => bandLabels[k] || k).join(' · ');
+  const brightnessMedian = Number(bs.median || 0);
+  const energySpread = Math.max(0, Number(es.p75 || 0) - Number(es.p25 || 0));
+
+  let tonalTilt = 'Balanced tonal demand';
+  if (bassDemand > trebleDemand + 0.08) tonalTilt = 'Low-end weighted demand';
+  else if (trebleDemand > bassDemand + 0.08) tonalTilt = 'Treble-weighted demand';
+  else if (midDemand > bassDemand && midDemand > trebleDemand) tonalTilt = 'Mid-centric demand';
+
+  let brightnessRead = 'Mixed brightness profile';
+  if (brightnessMedian >= 4500) brightnessRead = 'Mostly bright / detail-forward';
+  else if (brightnessMedian <= 2500) brightnessRead = 'Mostly warm / low-end-forward';
+
+  let dynamicsRead = 'Moderate mastering spread';
+  if (energySpread >= 0.08) dynamicsRead = 'Wide spread (dynamic + compressed)';
+  else if (energySpread <= 0.03) dynamicsRead = 'Consistent mastering density';
+
+  const cues = [];
+  if (bassDemand > trebleDemand + 0.08) cues.push('Prioritise bass control and low-end separation.');
+  if (trebleDemand > bassDemand + 0.08) cues.push('Smoother upper mids/treble can reduce fatigue.');
+  if (brightnessMedian <= 2500) cues.push('A touch more upper-mid/treble presence may improve clarity.');
+  if (brightnessMedian >= 4500) cues.push('Neutral-to-warm signatures may sound more natural.');
+  if (energySpread >= 0.08) cues.push('Good dynamics help across mixed mastering quality.');
+  if (!cues.length) cues.push('Balanced signatures should perform consistently across your library.');
 
   const bandProfileHtml = d.band_profile
     ? `<div class="sonic-band-card">
-        <div class="sonic-chart-title">Perceptual Band Energy Profile</div>
-        <div class="sonic-chart-subtitle">Average energy per perceptual band across your library (normalised)</div>
+        <div class="sonic-chart-title">Library Tonal Demand (Compatibility Signal)</div>
+        <div class="sonic-chart-subtitle">Relative frequency emphasis used by IEM/headphone matching.</div>
         <div class="insights-chart-wrap" style="height:180px"><canvas id="sonic-band-canvas"></canvas></div>
        </div>`
     : '';
 
   el.innerHTML = `
+    <div class="sonic-insight-grid">
+      <div class="sonic-insight-card">
+        <div class="sonic-insight-kicker">Tonal Tilt</div>
+        <div class="sonic-insight-title">${tonalTilt}</div>
+        <div class="sonic-insight-meta">Top demand: ${esc(topBands || 'N/A')}</div>
+      </div>
+      <div class="sonic-insight-card">
+        <div class="sonic-insight-kicker">Brightness Read</div>
+        <div class="sonic-insight-title">${brightnessRead}</div>
+        <div class="sonic-insight-meta">Median centroid: ${_hz(bs.median)} Hz</div>
+      </div>
+      <div class="sonic-insight-card">
+        <div class="sonic-insight-kicker">Dynamics Read</div>
+        <div class="sonic-insight-title">${dynamicsRead}</div>
+        <div class="sonic-insight-meta">RMS IQR: ${es.p25.toFixed(3)} - ${es.p75.toFixed(3)}</div>
+      </div>
+    </div>
     <div class="sonic-charts-grid">
       <div class="sonic-chart-card">
-        <div class="sonic-chart-title">Spectral Brightness</div>
+        <div class="sonic-chart-title">Brightness Distribution (Tonal Tilt)</div>
         <div class="insights-chart-wrap" style="height:180px"><canvas id="sonic-brightness-canvas"></canvas></div>
         <div class="sonic-stat-row">
           <span class="sonic-stat">Median <strong>${_hz(bs.median)} Hz</strong></span>
@@ -4281,7 +4522,7 @@ function _renderInsightsSonicProfile(d) {
         </div>
       </div>
       <div class="sonic-chart-card">
-        <div class="sonic-chart-title">RMS Energy</div>
+        <div class="sonic-chart-title">RMS Energy Distribution (Mastering Density)</div>
         <div class="insights-chart-wrap" style="height:180px"><canvas id="sonic-energy-canvas"></canvas></div>
         <div class="sonic-stat-row">
           <span class="sonic-stat">Median <strong>${es.median.toFixed(3)}</strong></span>
@@ -4292,7 +4533,7 @@ function _renderInsightsSonicProfile(d) {
     </div>
     ${bandProfileHtml}
     <div class="sonic-caveat">
-      <strong>About this data</strong> — Spectral brightness (spectral centroid) is the frequency-weighted average of a track's spectrum. RMS energy reflects overall loudness. Band profile shows relative spectral emphasis using multi-window FFT. <strong>Analysis covers FLAC files only</strong> — M4A/AAC tracks are skipped.
+      <strong>Compatibility cues</strong> — ${cues.map(c => esc(c)).join(' ')} <strong>Analysis covers FLAC files only</strong> — M4A/AAC tracks are skipped.
     </div>`;
 
   _sonicBrightnessChart = new Chart(document.getElementById('sonic-brightness-canvas'), {
@@ -4370,6 +4611,7 @@ let _iemFitFRCharts    = {};    // iemId → Chart.js FR instance
 let _iemFitPeqState    = {};    // iemId → active peqId (string | null)
 let _iemFitPeqVariants = {};    // iemId → {factory_scores, peq_variants, iem_name}
 let _iemFitGenreState  = {};    // iemId → selected genre key for FR overlay (string | null)
+let _iemFitSourceState = {};    // iemId → selected source id (string | null)
 let _iemFitExtraGenres = [];    // user-added heatmap genres
 let _iemFitIemSummary  = [];    // cached IEM summary list
 
@@ -4648,9 +4890,7 @@ function _renderInsightsMatchOverview(d, errMsg) {
   _iemFitPeqState    = {};
   _iemFitPeqVariants = {};
   _iemFitGenreState  = {};
-
-  const coveragePct = d.overall_coverage_pct || 0;
-  const covColor = coveragePct >= 70 ? '#53e16f' : coveragePct >= 45 ? '#f0b429' : '#ffb3b5';
+  _iemFitSourceState = {};
 
   const iemListHtml = _iemFitIemSummary.length === 0
     ? `<p class="insights-empty-note">No IEMs with FR data found. Add IEMs in the Gear section.</p>`
@@ -4676,17 +4916,7 @@ function _renderInsightsMatchOverview(d, errMsg) {
           </div>`;
       }).join('');
 
-  el.innerHTML = `
-    <div class="iemfit-summary-card">
-      <div class="iemfit-summary-score">
-        <div class="iemfit-summary-pct" style="color:${covColor}">${coveragePct.toFixed(0)}%</div>
-        <div class="iemfit-summary-pct-label">of your library<br>matched</div>
-      </div>
-      <div class="iemfit-summary-body">
-        <div class="iemfit-summary-text">${esc(d.summary_text || '')}</div>
-      </div>
-    </div>
-    <div class="iemfit-iem-list">${iemListHtml}</div>`;
+  el.innerHTML = `<div class="iemfit-iem-list">${iemListHtml}</div>`;
 }
 
 async function _toggleIemAccordion(iemId) {
@@ -4746,19 +4976,21 @@ async function _toggleIemAccordion(iemId) {
 function _renderIemDetail(iemId, container) {
   container.innerHTML = `
     <div class="iemfit-detail-inner">
-      <div class="iemfit-detail-section">
-        <div class="iemfit-detail-section-hdr">
-          <span class="iemfit-detail-section-title">Genre Scores</span>
-          <span class="iemfit-detail-section-hint">How well this IEM matches each genre in your library</span>
+      <div class="iemfit-detail-top-grid">
+        <div class="iemfit-detail-section">
+          <div class="iemfit-detail-section-hdr">
+            <span class="iemfit-detail-section-title">Genre Scores</span>
+            <span class="iemfit-detail-section-hint">How well this IEM matches each genre in your library</span>
+          </div>
+          <div id="iemfit-heatmap-${esc(iemId)}" class="iemfit-heatmap-body"></div>
         </div>
-        <div id="iemfit-heatmap-${esc(iemId)}" class="iemfit-heatmap-body"></div>
-      </div>
-      <div class="iemfit-detail-section">
-        <div class="iemfit-detail-section-hdr">
-          <span class="iemfit-detail-section-title">Blindspot Detector</span>
-          <span class="iemfit-detail-section-hint">Genres this IEM handles least well</span>
+        <div class="iemfit-detail-section">
+          <div class="iemfit-detail-section-hdr">
+            <span class="iemfit-detail-section-title">Blindspot Detector</span>
+            <span class="iemfit-detail-section-hint">Genres this IEM handles least well</span>
+          </div>
+          <div id="iemfit-bs-${esc(iemId)}" class="iemfit-bs-body"></div>
         </div>
-        <div id="iemfit-bs-${esc(iemId)}" class="iemfit-bs-body"></div>
       </div>
       <div class="iemfit-detail-section">
         <div class="iemfit-detail-section-hdr">
@@ -4791,7 +5023,10 @@ async function _renderIemFRPanel(iemId, activePeqId) {
   // endpoint if matching analysis has been run.
   if (!_iemFitPeqVariants[iemId]) {
     // Seed an empty entry so both fetches can populate it in any order
-    _iemFitPeqVariants[iemId] = { factory_scores: {}, peq_variants: [], iem_name: iemId, has_scores: false };
+    _iemFitPeqVariants[iemId] = {
+      factory_scores: {}, peq_variants: [], iem_name: iemId,
+      has_scores: false, sources: [], selected_source_id: null,
+    };
 
     // Tier 1: radar endpoint — 12-band scores for genre/blindspot recomputation
     // Optional: returns 404 when analysis hasn't been run yet; safe to skip.
@@ -4813,6 +5048,11 @@ async function _renderIemFRPanel(iemId, activePeqId) {
       if (r2.ok) {
         const iemRaw = await r2.json();
         if (iemRaw.name) _iemFitPeqVariants[iemId].iem_name = iemRaw.name;
+        _iemFitPeqVariants[iemId].sources = iemRaw.squig_sources || [];
+        _iemFitPeqVariants[iemId].selected_source_id = iemRaw.primary_source_id || ((_iemFitPeqVariants[iemId].sources[0] || {}).id) || null;
+        if (_iemFitSourceState[iemId] == null) {
+          _iemFitSourceState[iemId] = _iemFitPeqVariants[iemId].selected_source_id;
+        }
         _iemFitPeqVariants[iemId].peq_variants = (iemRaw.peq_profiles || []).map(p => ({
           peq_id: p.id,
           name:   p.name || 'PEQ',
@@ -4824,6 +5064,8 @@ async function _renderIemFRPanel(iemId, activePeqId) {
 
   const iemData     = _iemFitPeqVariants[iemId] || {};
   const peqVariants = iemData.peq_variants || [];
+  const sourceVariants = iemData.sources || [];
+  const sourceId = _iemFitSourceState[iemId] || iemData.selected_source_id || (sourceVariants[0] || {}).id || null;
 
   // Genre overlay state
   const genreKey   = _iemFitGenreState[iemId] || null;
@@ -4843,6 +5085,16 @@ async function _renderIemFRPanel(iemId, activePeqId) {
            </select>
          </div>` : '';
 
+    const sourceCtrl = sourceVariants.length > 1
+      ? `<div class="iemfit-fr-ctrl-group">
+           <label class="iemfit-fr-ctrl-label">Source</label>
+           <select class="iemfit-radar-select" onchange="App.iemFitChangeSource('${esc(iemId)}',this.value)">
+             ${sourceVariants.map(s =>
+               `<option value="${esc(s.id || '')}" ${(s.id || '') === (sourceId || '') ? 'selected' : ''}>${esc(s.label || 'Source')}</option>`
+             ).join('')}
+           </select>
+         </div>` : '';
+
     const genres = (_iemFitMatrixData?.matrix || [])
       .slice().sort((a, b) => b.track_count - a.track_count);
     const genreCtrl = genres.length > 0
@@ -4856,18 +5108,22 @@ async function _renderIemFRPanel(iemId, activePeqId) {
            </select>
          </div>` : '';
 
-    controlsEl.innerHTML = peqCtrl + genreCtrl;
+    controlsEl.innerHTML = sourceCtrl + peqCtrl + genreCtrl;
   }
 
   // Fetch FR curves from graph endpoint
   let curves = [];
   try {
-    const url = peqId
-      ? `/api/iems/${encodeURIComponent(iemId)}/graph?peq=${encodeURIComponent(peqId)}`
+    const graphParams = [];
+    if (peqId) graphParams.push(`peq=${encodeURIComponent(peqId)}`);
+    if (sourceId) graphParams.push(`source=${encodeURIComponent(sourceId)}`);
+    const url = graphParams.length
+      ? `/api/iems/${encodeURIComponent(iemId)}/graph?${graphParams.join('&')}`
       : `/api/iems/${encodeURIComponent(iemId)}/graph`;
     const r = await fetch(url);
     if (r.ok) {
       const gd = await r.json();
+      if (gd.selected_source_id) _iemFitSourceState[iemId] = gd.selected_source_id;
       // Filter out baselines — keep only L, R, and PEQ overlay curves
       curves = (gd.curves || []).filter(c => c.id && !c.id.startsWith('baseline-'));
     }
@@ -4956,7 +5212,7 @@ function _renderIemHeatmapPanel(iemId, peqScores12 = null) {
   }).join('');
 
   const viewAllBtn = total > 8
-    ? `<button class="iemfit-bs-more-btn" onclick="App.showAllIemGenres('${esc(iemId)}')">${total} genres total — view all →</button>`
+    ? `<button class="iemfit-bs-more-btn iemfit-panel-cta" onclick="App.showAllIemGenres('${esc(iemId)}')">${total} genres total — view all →</button>`
     : '';
 
   el.innerHTML = `<div class="iemfit-heatmap-grid">${rowsHtml}</div>${viewAllBtn}`;
@@ -5001,7 +5257,7 @@ function _renderIemBlindspotPanel(iemId, peqScores12 = null) {
   }).join('');
 
   const moreBtn = total > 10
-    ? `<button class="iemfit-bs-more-btn" onclick="App.showAllIemBlindspots('${esc(iemId)}')">${total} genres total — view all →</button>`
+    ? `<button class="iemfit-bs-more-btn iemfit-panel-cta" onclick="App.showAllIemBlindspots('${esc(iemId)}')">${total} genres total — view all →</button>`
     : '';
 
   el.innerHTML = `<div class="iemfit-bs-list">${rowsHtml}</div>${moreBtn}`;
@@ -5010,6 +5266,10 @@ function _renderIemBlindspotPanel(iemId, peqScores12 = null) {
 // Controls
 async function iemFitChangePeq(iemId, peqId) {
   await _renderIemFRPanel(iemId, peqId || null);
+}
+async function iemFitChangeSource(iemId, sourceId) {
+  _iemFitSourceState[iemId] = sourceId || null;
+  await _renderIemFRPanel(iemId, _iemFitPeqState[iemId] || null);
 }
 function iemFitChangeGenre() {} // legacy stub — kept for safety
 async function iemFitChangeGenreOverlay(iemId, genre) {
@@ -5167,6 +5427,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }, true);
 
   Player.init();
+  await loadGearProfiles();
   // Enter submits create playlist modal
   const cpInput = document.getElementById('create-playlist-input');
   if (cpInput) cpInput.addEventListener('keydown', e => { if (e.key === 'Enter') App.submitCreatePlaylist(); });

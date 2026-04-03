@@ -495,3 +495,895 @@ Observed working tree at time of writing (not touched by this codex update):
 - Validation:
   - `node --check static/app.js` passed.
   - `PYTHONPYCACHEPREFIX=/tmp python3 -m py_compile app.py` passed.
+
+### 2026-04-02 (Sonic Profile UX reframing toward end-user compatibility meaning)
+- User request:
+  - Rework Sonic Profile visualization language so the section is more meaningful to end users (library understanding + IEM/headphone compatibility context), without changing core functionality.
+
+- Scope + constraints:
+  - UI/copy interpretation layer only.
+  - No backend analysis math changed.
+  - Existing sonic charts/data sources preserved (`brightness`, `energy`, `band_profile`).
+
+- Changes in `static/app.js`:
+  1. Help content rewrite for `sonic` section (`_INSIGHTS_HELP.sonic`):
+     - shifted from DSP-heavy wording to compatibility-oriented interpretation:
+       - “library tonal demand”
+       - “brightness distribution”
+       - “mastering density”
+     - clarified that tonal demand is the same signal used by matching logic.
+
+  2. `_renderInsightsSonicProfile(d)` reframed:
+     - Added `sonic-insight-grid` summary cards above charts:
+       - `Tonal Tilt`
+       - `Brightness Read`
+       - `Dynamics Read`
+     - Derived lightweight interpretation cues from existing payload:
+       - aggregate bass/mid/treble demand from `band_profile`
+       - brightness read from centroid median
+       - dynamics read from RMS IQR spread
+     - Added top-demand-bands text (from `band_profile` + `band_labels`).
+
+  3. Chart title updates (same charts, new language):
+     - `Spectral Brightness` -> `Brightness Distribution (Tonal Tilt)`
+     - `RMS Energy` -> `RMS Energy Distribution (Mastering Density)`
+     - Band chart title/subtitle now explicitly call it a compatibility signal.
+
+  4. Caveat block update:
+     - replaced generic technical paragraph with dynamic `Compatibility cues` sentence list generated from existing metrics.
+     - retained FLAC-only limitation note.
+
+- Changes in `static/style.css`:
+  - Added new styles for summary interpretation cards:
+    - `.sonic-insight-grid`, `.sonic-insight-card`, `.sonic-insight-kicker`, `.sonic-insight-title`, `.sonic-insight-meta`
+  - Added mobile behavior:
+    - summary cards collapse to one column under small width.
+
+- Why this improves end-user meaning:
+  - keeps analytical depth while adding immediate “what this means for gear” interpretation before raw charts.
+  - better continuity between Sonic Profile and Gear Compatibility analysis.
+  - reduces cognitive load by translating technical metrics into practical reading cues.
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-02 (Data-driven DAP profiles + gear add flow de-hardcoding)
+- User request:
+  1. Pre-populate Add DAP modal using attached DAP export matrix.
+  2. Ensure DAPs/IEMs are not hardcoded in add-gear flows.
+
+- Source data integrated:
+  - Added `data/gear_profiles.json` with:
+    - `dap_profiles` derived from provided matrix (`dap_playlist_export_matrix.json`)
+    - `iem_types` list for IEM add/edit type selector.
+
+- Backend changes (`app.py`):
+  - Added gear profile registry support:
+    - `GEAR_PROFILES_FILE` in user data dir (`DATA_DIR/gear_profiles.json`) for override capability.
+    - Loader + normalizer functions:
+      - `_normalize_gear_profiles(...)`
+      - `_normalize_export_folder(...)`
+      - `_slugify_model_id(...)`
+      - `load_gear_profiles()`
+  - Added API endpoint:
+    - `GET /api/gear/profiles` -> returns normalized `{dap_profiles, iem_types}`.
+  - DAP creation defaults now data-driven:
+    - `POST /api/daps` maps `model` to profile defaults for `export_folder` + `path_prefix`.
+    - removed hardcoded `model_defaults` mapping.
+  - DAP update sanitization:
+    - normalizes `export_folder` on `PUT /api/daps/<id>`.
+  - Removed AP80-specific hardcoded export branch:
+    - export routes now rely on persisted `path_prefix` only (profile-provided), not `model == 'ap80'`.
+
+- Frontend changes (`static/app.js` + `static/index.html`):
+  - Removed hardcoded DAP model preset constants and hardcoded modal options.
+  - Added profile bootstrap:
+    - `loadGearProfiles()` fetches `/api/gear/profiles`.
+    - populates DAP model dropdown and IEM type dropdown dynamically.
+  - Add/Edit DAP modal now profile-driven:
+    - default selected model = first profile from API.
+    - mount/export folder/prefix/hint auto-filled from profile.
+    - handles unknown legacy model ids by appending a temporary option in edit mode.
+  - IEM add/edit modal type selector now profile-driven:
+    - options sourced from `iem_types` in gear profile payload.
+  - Init flow updated:
+    - `DOMContentLoaded` now calls `await loadGearProfiles()` before normal view interaction.
+  - HTML select updates:
+    - DAP model select starts with loading placeholder (replaced at runtime).
+    - IEM type select is runtime-populated.
+
+- Behavior outcomes:
+  - Add DAP modal is now pre-populated from attached matrix data (folder/path behavior by profile).
+  - Gear add flow is data-driven for DAP model presets and IEM type list.
+  - New profiles can be introduced by editing `gear_profiles.json` (bundle or user-data override) without code changes.
+
+- Validation:
+  - `node --check static/app.js` passed.
+  - `PYTHONPYCACHEPREFIX=/tmp python3 -m py_compile app.py` passed.
+
+### 2026-04-02 (Gear compare modal FR UI cleanup + chart consistency)
+- User request:
+  - Clean up `Gear > IEM/Headphones` comparison popup and make chart styling consistent with other FR charts.
+
+- Changes in `static/index.html`:
+  - Updated modal header copy:
+    - title: `Frequency Response Comparison`
+    - added subtitle explaining same reference scale consistency.
+
+- Changes in `static/app.js` (`_buildIemCompareChart`):
+  - Improved curve readability:
+    - primary curves slightly thicker (`2.1`) and baselines at `1.5`.
+  - Aligned chart typography/visuals with compact FR chart style:
+    - Inter font for axis labels/ticks
+    - tooltip colors aligned to Gear FR chart conventions (`rgba(30,30,42,0.95)` + accent title).
+  - Legend behavior improvements:
+    - legend chips now initialize in off-state when datasets are hidden by default.
+    - toggle action now uses class-based state (`compare-legend-item--off`) instead of inline opacity.
+    - long legend names truncated via dedicated label class.
+
+- Changes in `static/style.css`:
+  - Modal container redesigned for better readability:
+    - wider dialog (`min(1040px, 96vw)`)
+    - refined dark gradient panel and border for visual consistency.
+  - Added subtitle styling (`.iem-compare-subtitle`).
+  - Legend chips restyled:
+    - pill chips with borders/background
+    - explicit disabled/off visual state
+    - scrollable legend area for many curves.
+  - Chart area enlarged:
+    - desktop height `540px`
+    - responsive fallback `420px` on smaller screens.
+
+- Outcome:
+  - Comparison chart is easier to read with more vertical space and clearer legends.
+  - Visual language now matches other FR chart modules in Gear and Insights.
+  - No change to comparison data or matching functionality (UI-only cleanup).
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-02 (FR compare modal proportion tweak)
+- User feedback:
+  - Compare popup FR chart still looked horizontally stretched.
+
+- Change:
+  - Increased compare chart area height in `static/style.css`:
+    - desktop: `540px` -> `640px`
+    - <=900px breakpoint: `420px` -> `500px`
+
+- Outcome:
+  - Better aspect ratio for FR overlays in the compare modal and easier visual separation between curve shapes.
+
+### 2026-04-02 (FR compare modal proportion tweak v2 from screenshot feedback)
+- User feedback:
+  - Chart area still appeared horizontally stretched after first height increase.
+
+- Additional UI adjustment:
+  - `static/style.css`
+    - `.iem-compare-dialog` max-height increased: `90vh` -> `94vh`
+    - `.iem-compare-chart-wrap` height increased: `640px` -> `760px`
+    - mobile breakpoint (`<=900px`) chart height: `500px` -> `580px`
+
+- Expected effect:
+  - More vertical plotting area for FR curves in the comparison modal.
+  - Reduced perceived horizontal stretch and improved shape readability.
+
+### 2026-04-02 (Help section copy + header help icon polish)
+- User request:
+  - Update Help section text and improve the header Help icon visual.
+
+- Changes in `static/index.html`:
+  - Header help button:
+    - tooltip text updated from `Help` -> `Help Center`.
+    - added `aria-label="Open Help Center"` for clearer accessibility semantics.
+    - replaced previous question-mark glyph with a cleaner lifebuoy-style support icon (`.help-btn-icon`) to better match surrounding icon language.
+  - Help modal header:
+    - title updated from `Help & Guide` -> `Help Center`.
+    - added intro copy: “Need quick steps for playlist export, import, and DAP sync? Start here.”
+  - Minor cleanup:
+    - removed duplicate `style` attribute on help modal close button.
+
+- Changes in `static/style.css`:
+  - Refined `#help-btn` appearance:
+    - size increased to `26x26` for better balance with adjacent settings icon.
+    - subtle border + low-opacity background added for stronger affordance.
+    - hover state now updates border tint for clearer interaction feedback.
+  - Added `.help-intro` style for modal subheading.
+  - Added `.help-btn-icon` display rule for consistent SVG rendering.
+
+- Scope note:
+  - UI-only polish (no behavior or functionality changes).
+
+### 2026-04-02 (Help icon rollback + dynamic Help Center content)
+- User request:
+  - Keep Help icon as `?` (previous support icon felt unclear).
+  - Replace AP80/M21-specific Help copy with dynamic, device-agnostic guidance.
+
+- Changes in `static/index.html`:
+  - Header help button icon changed back to explicit `?` glyph (`.help-btn-glyph`).
+  - Help Center content rewritten to generic sections:
+    - `Quick Start`
+    - `Configured Devices`
+    - `Path Rules`
+    - `Importing existing playlists`
+    - `Storage & Library`
+  - Added dynamic mount points in Help modal:
+    - `#help-device-list`
+    - `#help-library-root`
+    - `#help-data-dir`
+
+- Changes in `static/app.js`:
+  - Added `renderHelpCenter()`:
+    - fetches `/api/settings` and `/api/daps`.
+    - injects current `library_path` and `_data_dir` into Help modal.
+    - renders a per-device guidance card with:
+      - device name
+      - connected state
+      - mount path
+      - export folder
+      - path prefix
+    - renders fallback message when no DAPs are configured.
+  - `showHelp()` now opens modal and triggers dynamic render.
+
+- Changes in `static/style.css`:
+  - Added styling for `?` glyph icon treatment on header help button.
+  - Added Help device card/grid styles for dynamic device guidance.
+
+- Outcome:
+  - Help content is no longer hardcoded around AP80/M21.
+  - Help guidance now reflects the user’s actual configured device profiles and storage setup.
+
+### 2026-04-03 (Insights IEM accordion layout: Genre + Blindspot side-by-side)
+- User request:
+  - In Insights > IEM accordion, render `Genre Scores` and `Blind Spot Detector` side by side.
+
+- Changes in `static/app.js`:
+  - Updated `_renderIemDetail(iemId, container)` markup:
+    - wrapped the first two detail sections (`Genre Scores`, `Blindspot Detector`) in new layout container:
+      - `.iemfit-detail-top-grid`
+    - kept Frequency Response section below unchanged.
+
+- Changes in `static/style.css`:
+  - Added `.iemfit-detail-top-grid` as a 2-column grid for desktop/tablet.
+  - Added responsive rule at `max-width: 980px` to collapse `.iemfit-detail-top-grid` to one column.
+
+- Outcome:
+  - Genre and blindspot analysis are now presented side by side in each IEM detail panel, reducing vertical scroll while preserving existing functionality/data.
+
+### 2026-04-03 (Insights analysis persistence: legacy cache signature backfill)
+- User requirement reaffirmed:
+  - No full re-analysis after app updates when prior analysis exists.
+  - Keep analysis history and run only delta (added/changed/removed tracks).
+
+- Problem addressed:
+  - Older v3 cache rows without `source_path`/`source_mtime` were treated as stale,
+    causing an unnecessary one-time full re-analysis.
+
+- Changes in `app.py`:
+  - Added `_has_valid_v3_payload(entry)` helper to validate reusable v3 rows.
+  - Added `_backfill_feature_source_signatures(tracks)`:
+    - upgrades legacy v3 rows by filling missing `source_path` and `source_mtime`
+      from current library metadata.
+    - writes upgraded rows back to `features/track_features.json`.
+  - Wired backfill into analysis flows:
+    - `_run_analysis()`
+    - `POST /api/insights/analyse`
+    - `GET /api/insights/analyse/info`
+
+- Behavior outcome:
+  - Existing analysis history is preserved across app version updates.
+  - Start/info checks now auto-upgrade legacy cache rows and only analyze true delta tracks.
+  - Full re-analysis is only needed for genuinely incompatible schema rows or invalid payloads.
+
+- Validation:
+  - `PYTHONPYCACHEPREFIX=/tmp python3 -m py_compile app.py` passed.
+
+### 2026-04-03 (Insights IEM accordion CTA baseline alignment)
+- User request:
+  - Keep `view all` CTAs in `Genre Scores` and `Blindspot Detector` aligned to the same baseline.
+
+- Changes in `static/app.js`:
+  - Added shared CTA class to both panel buttons:
+    - `iemfit-bs-more-btn iemfit-panel-cta`
+  - Applied to:
+    - Genre panel `showAllIemGenres(...)` CTA
+    - Blindspot panel `showAllIemBlindspots(...)` CTA
+
+- Changes in `static/style.css`:
+  - Made both top-row detail sections equal-height flex columns:
+    - `.iemfit-detail-top-grid .iemfit-detail-section`
+  - Made panel bodies flex containers:
+    - `.iemfit-heatmap-body`, `.iemfit-bs-body`
+  - Added bottom spacing under lists and anchored CTA:
+    - `.iemfit-heatmap-grid`, `.iemfit-bs-list` now include `margin-bottom: 12px`
+    - `.iemfit-panel-cta { margin-top: auto; }`
+
+- Outcome:
+  - Genre and Blindspot `view all` buttons stay vertically aligned in the IEM accordion (desktop/tablet), regardless of row-height/content differences.
+
+### 2026-04-03 (Insights compatibility summary card: density + score meaning clarity)
+- User request:
+  1. Reduce negative space in `Insights > Compatibility analysis` overall score card.
+  2. Clarify what the overall percentage means.
+
+- Backend changes (`app.py`):
+  - Extended match overview payload (`library_overview`) with:
+    - `covered_tracks`
+    - `coverage_threshold_pct` (currently `70`)
+  - No scoring math changes; only exposes components already used to compute `overall_coverage_pct`.
+
+- Frontend changes (`static/app.js`):
+  - Updated summary rendering in `_renderInsightsMatchOverview(...)`:
+    - added explicit one-line meaning text:
+      - “X of Y tracks are in genres where at least one IEM scores >= threshold.”
+    - added compact metadata pills:
+      - coverage threshold
+      - qualitative coverage reading
+  - Existing headline summary text remains.
+
+- Style changes (`static/style.css`):
+  - Reworked `.iemfit-summary-card` into denser grid layout:
+    - tighter padding/gap
+    - centered score block
+    - larger percentage figure with improved typography
+  - Added styles for:
+    - `.iemfit-summary-meaning`
+    - `.iemfit-summary-meta`
+    - `.iemfit-summary-pill`
+  - Added mobile behavior to stack summary sections cleanly.
+
+- Clarification on correctness of percentage:
+  - `overall_coverage_pct` is genre-weighted by track count and reflects the share of library tracks that fall into genres where at least one IEM reaches the coverage threshold (>=70%).
+  - This is a genre-level coverage metric (not per-track FR scoring).
+
+- Validation:
+  - `node --check static/app.js` passed.
+  - `PYTHONPYCACHEPREFIX=/tmp python3 -m py_compile app.py` passed.
+
+### 2026-04-03 (Compatibility summary rewrite + CTA styling + coverage consistency backfill)
+- User feedback:
+  - Summary explanation was confusing.
+  - Replace pill-style meta labels with CTA-like visual treatment.
+
+- Backend fix (`app.py`):
+  - `GET /api/insights/matching/overview` now recomputes/overrides coverage fields from matrix rows for backward compatibility with older cached match data:
+    - `total_tracks`
+    - `covered_tracks`
+    - `coverage_threshold_pct`
+    - `overall_coverage_pct`
+  - Purpose: prevent stale/partial payloads from showing contradictory values (e.g. summary says strong coverage while covered count appears as 0).
+
+- Frontend text rewrite (`static/app.js`):
+  - Replaced previous one-liner with plainer language:
+    - “X% means at least one of your IEMs is a strong match for Y of Z tracks (based on track genre).”
+  - Kept qualitative tone line (excellent/good/mixed/low) for quick interpretation.
+
+- CTA visual update (`static/style.css` + `static/app.js`):
+  - Replaced `.iemfit-summary-pill` usage with `.iemfit-summary-cta`.
+  - New CTA-like style:
+    - stronger border/gradient
+    - accent-forward text
+    - heavier weight/letter spacing
+
+- Validation:
+  - `PYTHONPYCACHEPREFIX=/tmp python3 -m py_compile app.py` passed.
+  - `node --check static/app.js` passed.
+
+### 2026-04-03 (Compatibility metric reframing: from "any-IEM coverage" to single-IEM fit)
+- User concern:
+  - The previous wording/metric was misleading: “100% means at least 1 IEM is a strong match”.
+  - This overstates decision value because users listen to one IEM at a time.
+
+- Product decision update:
+  - Reframed the top `overall` card to a **single-IEM metric**.
+  - New headline score uses the top item from `iem_summary`:
+    - `best single-IEM library fit` = highest `library_match_score` among configured IEMs.
+
+- Frontend changes (`static/app.js`):
+  - `_renderInsightsMatchOverview(...)` now:
+    - computes `topIem = iem_summary[0]` (already sorted desc by backend).
+    - displays `topIem.library_match_score` as primary large percentage.
+    - replaces old “of your library matched” semantics.
+    - updates explanation copy to:
+      - weighted average match score for that one IEM across library genres.
+    - adds CTA-style context labels:
+      - Best all-round IEM
+      - Biggest risk area (worst genre)
+      - strongest all-round note
+
+- UX outcome:
+  - Top card now reflects how users actually make listening choices (pick one IEM),
+    rather than an optimistic “some IEM somewhere matches” coverage interpretation.
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-03 (Compatibility analysis cleanup: removed duplicated top summary panel)
+- User request:
+  - Remove the top compatibility information panel because it duplicates score information already visible in the per-IEM list.
+
+- Change in `static/app.js`:
+  - In `_renderInsightsMatchOverview(...)`:
+    - removed rendering of `.iemfit-summary-card` block.
+    - Insights compatibility section now renders directly into `.iemfit-iem-list` only.
+
+- Outcome:
+  - Reduced visual duplication and vertical clutter.
+  - Users now focus directly on actionable per-IEM cards/accordion scores.
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-03 (Multi-source IEM measurements: up to 3 squig URLs with labels)
+- User request:
+  - In Add IEM/Headphone modal, allow up to 3 squig.link URLs with labels.
+  - Ensure these appear as options in FR graph dropdowns across the app.
+
+- Data model / backend (`app.py`):
+  - Added multi-source measurement support on each IEM record:
+    - `squig_sources: [{id,label,url,squig_subdomain,squig_file_key,measurement_L,measurement_R}]`
+    - `primary_source_id`
+  - Added normalization + migration helpers:
+    - `_normalize_iem_source(...)`
+    - `_sync_iem_primary_measurements(...)`
+    - `_normalize_iem_record(...)`
+    - `_public_iem(...)`
+  - `load_iems()` now normalizes/migrates legacy single-source records and persists upgraded shape.
+  - Backward compatibility preserved:
+    - legacy top-level fields (`squig_url`, `measurement_L/R`, etc.) are synced from primary source for existing analysis/scoring code paths.
+
+- IEM CRUD API updates:
+  - `POST /api/iems` now accepts `squig_sources` (max 3), fetches each URL, stores labeled source measurements.
+  - `PUT /api/iems/<id>` now supports updating labeled sources (max 3), reuses existing measurements when URL unchanged, refetches when needed.
+  - `GET /api/iems` and `GET /api/iems/<id>` now return public IEM payloads without large measurement arrays; include:
+    - `squig_sources` metadata (id/label/url/...)
+    - `has_measurement`
+
+- Graph API updates:
+  - `GET /api/iems/<id>/graph` now supports:
+    - `source=<source_id>` for primary IEM curve source selection.
+    - optional `compare_source=<iem_id>:<source_id>` mapping support.
+  - Response now includes:
+    - `available_sources`
+    - `selected_source_id`
+  - Curve labels include source label when IEM has multiple sources.
+
+- Frontend modal updates (`static/index.html`, `static/style.css`, `static/app.js`):
+  - Replaced single squig URL input with 3 labeled source rows.
+  - Added modal helpers:
+    - `_collectIemModalSources()`
+    - `_setIemModalSources(...)`
+  - Add/Edit flows now save/load `squig_sources`.
+
+- FR dropdown integration across app (`static/app.js`):
+  1. Gear > IEM detail FR chart:
+     - Added `Source` dropdown in graph toolbar.
+     - Added `applyIemSourceToGraph(...)`.
+     - Graph fetch now passes `source` query param.
+
+  2. Insights > Compatibility > IEM accordion FR chart:
+     - Added per-IEM `Source` dropdown in FR controls.
+     - Added `_iemFitSourceState` and `iemFitChangeSource(...)`.
+     - FR fetch now includes selected `source` query param.
+
+- Notes:
+  - Matching/analysis math remains tied to the IEM primary source via legacy-compatible top-level measurements; this change targets FR visualisation selection UX.
+
+- Validation:
+  - `PYTHONPYCACHEPREFIX=/tmp python3 -m py_compile app.py` passed.
+  - `node --check static/app.js` passed.
+
+### 2026-04-03 (Design lift pass: header icons + Gear + IEM detail visual facelift)
+- Request scope:
+  1. Update main Settings + Help icons.
+  2. Update Gear page UI.
+  3. Update Gear > IEM page UI.
+  - Reference used: `analysis-design-update.md` (`Luminous Depth / Obsidian Gallery`).
+
+- Design direction applied:
+  - No-line hierarchy emphasis via tonal layering + glow (instead of hard dividers).
+  - Larger radii (`lg/full`), atmospheric gradients, subtle glass blur on interactive/floating surfaces.
+  - Editorial overlines for section structure.
+
+- Changes in `static/index.html`:
+  - Header icons:
+    - applied shared `header-orb-btn` class to Help + Settings buttons.
+    - upgraded Settings icon stroke treatment and class hook (`settings-btn-icon`).
+  - Gear section headers:
+    - added overline labels (`Transport`, `Monitoring`) via `.gear-section-overline`.
+
+- Changes in `static/style.css`:
+  - Header icon refresh:
+    - added `.header-orb-btn` with luminous glass treatment and hover lift.
+    - refined Help glyph sizing/alignment and settings icon alignment.
+  - Gear page facelift:
+    - card grid spacing increased.
+    - `.gear-card` updated to layered gradient surfaces + ghost border + depth shadow + hover lift.
+    - `.gear-card-icon` shifted to circular luminous badge style.
+    - selected-card state updated to tonal glow instead of hard outline.
+    - section headers upgraded (`Title-Lg`) + new uppercase overline style.
+    - page-level atmospheric background + spacing for `#view-gear`.
+  - IEM detail facelift:
+    - `.iem-detail-header` converted to elevated glass panel.
+    - icon chip updated to luminous circular badge.
+    - `.freq-graph-wrap` converted to layered elevated panel with softer border/glow.
+    - graph toolbar selects restyled to rounded glass pills.
+    - page-level atmospheric background + spacing for `#view-iem-detail`.
+
+- Functional impact:
+  - UI-only facelift. No changes to data behavior or feature logic.
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-03 (Design lift expansion: nav + Artists/Albums/Playlists + detail pages)
+- User request:
+  - Apply the same UI facelift language to:
+    1) Left nav
+    2) Artists
+    3) Artist detail page
+    4) Albums
+    5) Album detail page
+    6) Playlists
+    7) Playlist detail page
+
+- Approach:
+  - CSS-only visual lift (no behavior/data changes).
+  - Reused Luminous Depth patterns already applied to Insights/Gear:
+    - tonal layering over hard lines
+    - ghost borders
+    - atmospheric gradients
+    - larger rounded geometry
+    - subtle glass blur + hover lift
+
+- Changes in `static/style.css`:
+  - Left nav:
+    - upgraded `#sidebar`, `#sidebar-header`, `.nav-section-label`, `.nav-item`, `#sync-nav-btn`, `#scan-status`.
+    - active nav state now uses luminous tonal treatment.
+  - Artists + Albums grids/cards:
+    - upgraded `.artist-grid/.artist-card/.artist-thumb` and `.album-grid/.album-card/.album-thumb`.
+  - Artist/Album detail hero:
+    - upgraded `.browse-hero` and related hero text emphasis.
+  - Playlists view:
+    - upgraded `.playlists-view-grid`, `.pl-view-card`, `.pl-view-cover`.
+  - Playlist detail page:
+    - upgraded `.playlist-header`, `#view-playlist .pl-controls`, `#view-playlist #pl-table`.
+  - Shared list/table tone:
+    - refined table header/body tonal contrast for tracks + playlist tables.
+  - Added ambient backgrounds for:
+    - `#view-artists`, `#view-albums`, `#view-tracks`, `#view-playlists`, `#view-playlist`.
+
+- Files touched:
+  - `static/style.css`
+
+- Validation:
+  - `node --check static/app.js` passed (no JS regressions from style-only pass).
+
+### 2026-04-03 (Artist/Album hero action button alignment fix)
+- User issue:
+  - Action buttons in Artist/Album detail hero row were vertically misaligned.
+
+- Root cause:
+  - `.btn-play-all` had `margin-bottom: 12px`, causing it to sit lower than adjacent `.btn-secondary` actions.
+
+- Fix (`static/style.css`):
+  - Updated `.hero-actions`:
+    - set `align-items: center` for consistent vertical alignment.
+  - Added shared hero-action button normalization:
+    - `.hero-actions .btn-play-all, .hero-actions .btn-secondary` now use `min-height: 44px`, `display: inline-flex`, `align-items: center`.
+  - Removed vertical offset from `.btn-play-all`:
+    - removed `margin-bottom: 12px`
+    - set `line-height: 1` for stable internal alignment.
+
+- Outcome:
+  - Play/Add/Browse buttons now align consistently on Artist and Album detail pages.
+
+### 2026-04-03 (Playlist detail overlap fix: controls vs table header)
+- User issue:
+  - On Playlist detail page, table header visually overlapped the search/filter + sort controls bar.
+
+- Root cause:
+  - During the recent playlist facelift, spacing between `#view-playlist .pl-controls` and `#view-playlist #pl-table` was reduced to zero, causing the header row to appear merged/overlapping with the controls area.
+
+- Fix (`static/style.css`):
+  - Updated playlist-only table wrapper spacing:
+    - `#view-playlist #pl-table` now has `margin-top: 10px;`
+  - Kept the change strictly scoped to Playlist detail view so Songs/Artists/Albums table layouts are unaffected.
+
+- Functional impact:
+  - UI-only spacing correction. No behavior/data/API changes.
+
+### 2026-04-03 (Facelift: Gear DAP detail + shared modal system)
+- User request:
+  - Apply UI facelift to `Gear > DAP Detail` and all popup modals.
+  - Keep functionality unchanged.
+
+- DAP detail updates:
+  - Files:
+    - `static/app.js`
+    - `static/style.css`
+  - UI structure refinements in `showDapDetail(...)`:
+    - replaced inline styles with reusable classes:
+      - `dap-section-title`
+      - `dap-table-shell`
+      - `dap-pl-empty-row`
+      - `dap-pl-export-cell`
+  - Visual facelift styles:
+    - Added atmospheric background for `#view-dap-detail`.
+    - Upgraded `.dap-detail-header` to elevated glass card.
+    - Updated `.dap-detail-icon` to luminous badge treatment.
+    - Refined `.dap-config-block` into layered panel.
+    - Wrapped playlist sync table in `.dap-table-shell` with border + depth.
+
+- Popup modal system updates:
+  - Files:
+    - `static/index.html`
+    - `static/style.css`
+  - Introduced shared modal header/close patterns:
+    - `modal-head`, `modal-head-tight`, `modal-head-spaced`
+    - `modal-title-sm`
+    - `modal-x-btn` (reused across compare/help/settings/DAP/IEM/PEQ + insights modals)
+  - Applied header/close cleanup to modals:
+    - Problem tracks
+    - Genre distribution
+    - IEM blindspot
+    - Help
+    - Settings
+    - Add/Edit DAP
+    - Add/Edit IEM
+    - PEQ upload
+  - Unified modal visual language across popups:
+    - upgraded `.modal-overlay` (atmospheric dim + blur)
+    - upgraded `.modal` surface (gradient, ghost border, soft depth)
+    - tightened `.modal-actions` (top divider + spacing)
+    - unified modal form controls (`input/select/textarea/file`) with consistent borders/focus states
+  - Inline style cleanup in modal forms:
+    - removed old inline styling from:
+      - `#import-name-input`
+      - `#dap-model`
+      - `#iem-type`
+    - these now inherit shared modal control styling.
+
+- Functional impact:
+  - UI-only facelift; no workflow or API behavior changes.
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-03 (Modal density pass v2: spacing + typography rhythm)
+- User request:
+  - Do a second pass on popup/modal UX after the initial facelift.
+
+- Scope:
+  - CSS-only refinements to improve readability and reduce perceived visual noise.
+  - No behavior/API/logic changes.
+
+- File updated:
+  - `static/style.css`
+
+- Improvements made:
+  1. Modal size tiers and baseline typography
+    - refined default modal width/padding for non-wide modals.
+    - widened `modal-wide`/`modal-help` for better content fit.
+    - set consistent modal typography rhythm (`font-size`, `line-height`).
+
+  2. Header/action spacing consistency
+    - tightened `modal-head` spacing.
+    - normalized action area button heights in `modal-actions`.
+    - improved settings-row spacing/label cadence inside modals.
+
+  3. Help modal readability
+    - tightened section spacing and section-title hierarchy.
+    - added subtle section separators for scanability.
+    - reduced visual bulk on helper cards/code blocks.
+
+  4. Compare modal balance
+    - reduced header/legend padding slightly.
+    - adjusted title/subtitle and legend chip density.
+    - tightened chart wrapper padding to better use available plotting area.
+
+  5. Insights popup list density
+    - compacted problem-tracks and genre-list row spacing.
+    - slightly reduced modal body max-heights for balanced viewport fit.
+
+  6. Responsive behavior
+    - on narrower screens, modal form rows switch to stacked label+field layout for cleaner wrapping.
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-03 (Sync modal micro-pass: phase consistency)
+- User request:
+  - Improve visual consistency across Sync modal phases (`pick`, `scanning`, `preview`, `copying`, `done`).
+
+- Scope:
+  - UI/UX-only updates for Sync modal flow.
+  - No sync backend/API logic changes.
+
+- Files updated:
+  - `static/index.html`
+  - `static/style.css`
+  - `static/app.js`
+
+- What was implemented:
+  1. Phase rail/navigation context
+    - Added a compact step rail under Sync header:
+      - `Device`, `Scan`, `Review`, `Copy`, `Done`
+    - Added active-step state tied to real phase transitions.
+
+  2. Unified phase containers
+    - Added shared phase panel wrappers for all Sync stages via classes:
+      - `sync-phase-panel`
+      - `sync-phase-panel--progress`
+    - This gives all stages the same elevated surface language and spacing rhythm.
+
+  3. State wiring in JS
+    - `_syncPhase(name)` now:
+      - sets `data-phase` on `#sync-modal`
+      - toggles `.active` on `.sync-phase-step` markers
+      - preserves existing show/hide behavior per phase.
+    - `showSync()` now resets done/error remnants on open (`sync-done-msg`, `sync-errors-wrap`) for cleaner phase re-entry.
+
+  4. Sync-specific styling refinement
+    - Added Sync modal-specific width tuning (`#sync-modal .modal`).
+    - Refined device card spacing and progress visuals.
+    - Standardized preview sections as panel-like blocks.
+    - Improved list container contrast and row density.
+    - Tightened done-state spacing and mobile behavior.
+
+- Functional impact:
+  - Visual/interaction clarity only. Sync behavior remains unchanged.
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-03 (Sync copywriting polish: phase text tone)
+- User request:
+  - Final pass on Sync modal progress messaging wording.
+
+- Scope:
+  - Frontend copy refinement only.
+  - No sync logic/API behavior changes.
+
+- Files updated:
+  - `static/app.js`
+  - `static/index.html`
+
+- Wording/system updates:
+  1. Added message normalizer helper in Sync flow:
+    - `_formatSyncPhaseMessage(raw, phase)`
+    - standardizes scan/copy phrasing, including `x/y` progress patterns.
+
+  2. Scan phase copy:
+    - default: `Scanning your library files…`
+    - error toast: `Could not complete scan: ...`
+
+  3. Review/empty-state copy:
+    - `Nothing to copy` -> `No files to sync in this direction.`
+
+  4. Copy phase copy:
+    - startup: `Preparing to copy 0 / N files…`
+    - in-progress strings normalized through helper.
+    - error toast: `Sync failed: ...`
+
+  5. Done phase copy:
+    - success message now appends issue count when present:
+      - `Completed with X issue(s).`
+
+  6. CTA label updates in Sync modal:
+    - `Sync Selected Files` -> `Start Sync`
+    - `Scan Again` -> `Run Another Scan`
+    - `Done` -> `Close`
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-03 (Playlist detail hero refinement: overlap + compact layout)
+- User request:
+  - Fix overlap between `Play` and DAP download buttons.
+  - Tighten playlist hero vertical footprint.
+  - Scale playlist cover to better match page aesthetic.
+
+- File updated:
+  - `static/style.css`
+
+- Changes (playlist-detail scoped):
+  - `#view-playlist .playlist-header`
+    - compacted padding/margins/radius and aligned content center.
+  - `#view-playlist .playlist-cover-wrap`
+    - reduced cover size to `152x152` (with responsive reductions).
+    - aligned cover corner radius with updated hero geometry.
+  - `#view-playlist .playlist-meta`
+    - set explicit flex-column flow so title/stats/play/export/delete stack predictably.
+  - `#view-playlist #pl-name`
+    - reduced title size for a tighter hero.
+  - `#view-playlist #pl-play-all`
+    - forced explicit bottom spacing to prevent visual collision with export pills.
+  - `#view-playlist .playlist-actions` and `.export-group`
+    - tightened row/column spacing and ensured stable wrapping/alignment.
+  - `#view-playlist .btn-export`
+    - reduced button height/padding/font for denser action row.
+
+- Responsive behavior:
+  - <=1200px: slightly smaller cover/title.
+  - <=860px: hero stacks vertically; cover and title scale down further.
+
+- Functional impact:
+  - UI-only adjustments; no playlist/export/play logic changes.
+
+### 2026-04-03 (Playlist hero follow-up: Play button width + spacing fix)
+- User feedback:
+  - Play button still rendered full-width.
+  - Hover state of first DAP export button visually collided with Play button area.
+
+- Root cause:
+  - Playlist-specific style targeted `#pl-play-all` but actual runtime id is `#pl-play-all-btn`.
+  - In a column flex container, items stretch by default unless constrained (`align-self`).
+
+- Fix (`static/style.css`):
+  - Replaced selector with correct runtime id:
+    - `#view-playlist #pl-play-all-btn`
+  - Enforced compact button sizing in hero:
+    - `align-self: flex-start; width: auto;`
+  - Added additional vertical separation:
+    - increased bottom margin under Play button to `14px`.
+  - Prevented hover growth from causing collision in playlist hero context:
+    - `#view-playlist #pl-play-all-btn:hover { transform: none; }`
+  - Added tiny top spacing before export action row:
+    - `#view-playlist .playlist-actions { margin-top: 2px; }`
+
+- Functional impact:
+  - UI-only tweak; no playback/export logic changes.
+
+### 2026-04-03 (Packaging migration: self-contained Apple Silicon .app + DMG install)
+- User requirements addressed:
+  1. Simple distribution: install by drag-copying app to Applications.
+  2. First run should complete setup automatically (no manual dependency install).
+  3. Persist all data under `~/Library/Application Support/TuneBridge/`.
+
+- Design decision:
+  - Replaced "external system Python + launcher resolution" distribution approach with a self-contained frozen app build.
+  - Runtime dependency installation is no longer required on user machines.
+  - "First run setup" is now bootstrap/migration only (create App Support folders + migrate seeded data/features when needed).
+
+- Implemented changes:
+
+  1. `build_app.sh` rewritten for Apple Silicon distribution
+    - Target: `arm64` macOS builds only.
+    - Builds a self-contained `.app` via PyInstaller (windowed app bundle).
+    - Installs build-time deps in isolated `.build-venv` (includes `pyinstaller`).
+    - Bundles app assets:
+      - `static/`
+      - optional `data/features/` (for first-run feature migration)
+    - Injects/patches `Info.plist` values (bundle metadata + folder usage descriptions).
+    - Ad-hoc signs the app and clears quarantine attributes.
+    - Optional `--dmg` creates drag-and-drop installer image with `/Applications` symlink.
+
+  2. `tunebridge_gui.py` runtime path/bootstrap hardening
+    - Added `_resolve_project_dir()` with fallback order:
+      - `TUNEBRIDGE_PROJECT_DIR` env override
+      - frozen extraction dir (`sys._MEIPASS`)
+      - script directory (dev mode)
+    - In frozen mode, automatically sets:
+      - `TUNEBRIDGE_BUNDLED=1`
+      - `TUNEBRIDGE_PROJECT_DIR=<resolved bundle resource dir>`
+    - Removes reliance on launcher-injected env for packaged app startup.
+
+  3. Documentation updates (`README.md`)
+    - Packaging section updated to self-contained app + drag-drop DMG flow.
+    - Clarified first-run behavior and App Support data location.
+    - Data files table now reflects runtime location under `~/Library/Application Support/TuneBridge/`.
+    - Requirements clarified:
+      - end-user install does not require separate Python.
+      - developer workflow still requires Python 3.10+.
+
+- Notes:
+  - Existing `app.py` App Support strategy already met requirement #3 and was retained.
+  - `create_app.sh`/`launcher.c` remain in repo for legacy/dev workflows; distribution now centers on `build_app.sh`.
+
+- Validation performed:
+  - `bash -n build_app.sh` passed.
+  - `PYTHONPYCACHEPREFIX=/tmp python3 -m py_compile tunebridge_gui.py app.py` passed.
+
+- Validation not run in this session:
+  - Full end-to-end DMG build execution (PyInstaller build + macOS launch test) was not executed in this turn.

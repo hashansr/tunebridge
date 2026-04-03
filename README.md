@@ -22,9 +22,9 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 | Drag & drop | SortableJS |
 | Audio playback | Web Audio API + HTMLAudioElement |
 | Desktop wrapper | pywebview (WKWebView on macOS) |
-| App launcher | C binary (`launcher.c`) compiled via CLT clang |
+| App launcher | Frozen Python runtime (PyInstaller, arm64) |
 | App entrypoint | `tunebridge_gui.py` |
-| Packaging | `build_app.sh` → ad-hoc signed `.app` + UDZO `.dmg` |
+| Packaging | `build_app.sh` → self-contained `.app` + drag-to-install `.dmg` |
 | Data storage | JSON files (no external DB) |
 | VCS | Git → GitHub (`hashansr/tunebridge`) |
 
@@ -95,10 +95,12 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 
 ## Requirements
 
-- macOS (tested on macOS 14+)
-- Python 3.10+
+- macOS (tested on macOS 14+, Apple Silicon for packaged build)
 - Music library organised as: `Artist/Album/NN. Title.ext`
 - Supported formats: FLAC, MP3, AAC, M4A, ALAC, OGG, OPUS, WAV, AIFF, WMA, APE
+
+### Developer Requirements
+- Python 3.10+
 
 ---
 
@@ -119,20 +121,25 @@ python app.py
 # → Open http://localhost:5001
 ```
 
-## macOS Native App
+## macOS Distribution (Recommended)
 
-```bash
-bash create_app.sh
-# → Installs TuneBridge.app — double-click to launch
-```
-
-The app uses a tiny C launcher binary that version-locks to the correct Python, starts Waitress in a background thread, and opens a native WKWebView window.
-
-For a distributable DMG:
 ```bash
 bash build_app.sh --dmg
-# → dist/TuneBridge.dmg (~12 MB)
+# → dist/TuneBridge.dmg
 ```
+
+Install flow for end users:
+1. Open `TuneBridge.dmg`
+2. Drag `TuneBridge.app` to `Applications`
+3. Launch TuneBridge from Applications
+
+The packaged app is self-contained (no separate Python install needed on target machines).
+
+### First Run Behavior
+- Automatically creates app data at:
+  `~/Library/Application Support/TuneBridge/`
+- Migrates bundled defaults and feature cache where applicable.
+- Starts the embedded local server and opens native UI.
 
 ---
 
@@ -140,16 +147,16 @@ bash build_app.sh --dmg
 
 | File | Contents | Committed? |
 |------|---------|---|
-| `data/playlists.json` | Your playlists and track lists | ✓ |
-| `data/settings.json` | Library path, device config | ✓ |
-| `data/daps.json` | DAP devices | ✓ |
-| `data/iems.json` | IEM library + measurements + PEQ profiles | ✓ |
-| `data/baselines.json` | FR tuning targets | ✓ |
-| `data/playlist_artwork/` | Custom playlist cover images | ✓ |
-| `data/features/track_features.json` | Sonic analysis cache | ✓ |
-| `data/library.json` | Track metadata cache (auto-generated) | ✗ |
-| `data/artwork/` | Album art cache (auto-generated) | ✗ |
-| `data/player_state.json` | Runtime player state | ✗ |
+| `~/Library/Application Support/TuneBridge/playlists.json` | Your playlists and track lists | User machine |
+| `~/Library/Application Support/TuneBridge/settings.json` | Library path, device config | User machine |
+| `~/Library/Application Support/TuneBridge/daps.json` | DAP devices | User machine |
+| `~/Library/Application Support/TuneBridge/iems.json` | IEM library + measurements + PEQ profiles | User machine |
+| `~/Library/Application Support/TuneBridge/baselines.json` | FR tuning targets | User machine |
+| `~/Library/Application Support/TuneBridge/playlist_artwork/` | Custom playlist cover images | User machine |
+| `~/Library/Application Support/TuneBridge/features/track_features.json` | Sonic analysis cache | User machine |
+| `~/Library/Application Support/TuneBridge/library.json` | Track metadata cache (auto-generated) | User machine |
+| `~/Library/Application Support/TuneBridge/artwork/` | Album art cache (auto-generated) | User machine |
+| `~/Library/Application Support/TuneBridge/player_state.json` | Runtime player state | User machine |
 
 ---
 
@@ -159,7 +166,6 @@ bash build_app.sh --dmg
 tunebridge/
 ├── app.py                  # Flask backend, all API routes
 ├── tunebridge_gui.py       # pywebview entrypoint (desktop app)
-├── launcher.c              # Tiny C launcher source for TuneBridge.app
 ├── static/
 │   ├── index.html          # Single-page app HTML, all modals
 │   ├── app.js              # All frontend logic
@@ -175,7 +181,7 @@ tunebridge/
 │   │   └── track_features.json
 │   └── playlist_artwork/
 ├── create_app.sh           # Build TuneBridge.app (dev use)
-├── build_app.sh            # Build distributable .app and .dmg
+├── build_app.sh            # Build self-contained .app and drag-drop .dmg
 ├── install.sh              # One-time setup script
 ├── update.sh               # Backup data, pull latest, update deps
 └── requirements.txt        # Python dependencies

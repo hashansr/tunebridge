@@ -61,6 +61,7 @@ DAP_FILE = DATA_DIR / 'daps.json'
 IEM_FILE = DATA_DIR / 'iems.json'
 BASELINES_FILE = DATA_DIR / 'baselines.json'
 PLAYER_STATE_FILE = DATA_DIR / 'player_state.json'
+GEAR_PROFILES_FILE = DATA_DIR / 'gear_profiles.json'
 
 DEFAULT_SETTINGS = {
     'library_path':     str(Path.home() / 'Music'),
@@ -68,6 +69,23 @@ DEFAULT_SETTINGS = {
     'ap80_mount':       '/Volumes/AP80',
     'poweramp_prefix':  '',   # internal device path, e.g. /storage/sdcard0
     'ap80_prefix':      '',   # internal device path, e.g. /mnt/sdcard
+}
+
+_DEFAULT_GEAR_PROFILES = {
+    'dap_profiles': [
+        {'model': 'android_generic',  'name': 'Android (Generic DAP OS - FiiO / Sony / iBasso / HiBy)', 'playlist_format': '.m3u8', 'export_folder': 'Playlists',            'path_prefix': '',  'mount_name': 'MyDAP'},
+        {'model': 'uapp',             'name': 'USB Audio Player Pro',                                     'playlist_format': '.m3u8', 'export_folder': 'Music/Playlists',      'path_prefix': '',  'mount_name': 'MyDAP'},
+        {'model': 'poweramp',         'name': 'Poweramp',                                                  'playlist_format': '.m3u8', 'export_folder': 'Music/Playlists',      'path_prefix': '',  'mount_name': 'MyDAP'},
+        {'model': 'hiby_music',       'name': 'HiBy Music',                                                'playlist_format': '.m3u8', 'export_folder': 'HibyMusic/Playlists',  'path_prefix': '',  'mount_name': 'HiBy'},
+        {'model': 'neutron',          'name': 'Neutron Music Player',                                      'playlist_format': '.m3u8', 'export_folder': 'NeutronMP/Playlists',  'path_prefix': '',  'mount_name': 'MyDAP'},
+        {'model': 'foobar2000',       'name': 'Foobar2000',                                                'playlist_format': '.m3u8', 'export_folder': 'foobar2000',           'path_prefix': '',  'mount_name': 'MyDAP'},
+        {'model': 'mango_os',         'name': 'Mango OS (iBasso Pure Mode)',                              'playlist_format': '.m3u',  'export_folder': 'Music',                'path_prefix': '',  'mount_name': 'iBasso'},
+        {'model': 'fiio_pure_music',  'name': 'FiiO Pure Music Mode',                                      'playlist_format': '.m3u8', 'export_folder': 'FiiOMusic/playlist',   'path_prefix': '',  'mount_name': 'FiiO'},
+        {'model': 'sony_walkman',     'name': 'Sony Walkman App',                                          'playlist_format': '.m3u8', 'export_folder': 'Music/Playlists',      'path_prefix': '',  'mount_name': 'WALKMAN'},
+        {'model': 'rockbox',          'name': 'Rockbox',                                                   'playlist_format': '.m3u8', 'export_folder': 'Playlists',            'path_prefix': '',  'mount_name': 'Rockbox'},
+        {'model': 'hidizs_ap80',      'name': 'Hidizs AP80 Pro Max (Hidizs OS)',                          'playlist_format': '.m3u',  'export_folder': 'playlist_data',        'path_prefix': '..','mount_name': 'AP80'},
+    ],
+    'iem_types': ['IEM', 'Headphone'],
 }
 
 
@@ -1385,6 +1403,73 @@ def sync_reset():
 
 # ── DAP Management ────────────────────────────────────────────────────────────
 
+def _slugify_model_id(name):
+    s = re.sub(r'[^a-z0-9]+', '_', (name or '').lower()).strip('_')
+    return s or 'other'
+
+
+def _normalize_export_folder(path):
+    if not path:
+        return 'Playlists'
+    return str(path).strip().strip('/').strip('\\') or 'Playlists'
+
+
+def _normalize_gear_profiles(raw):
+    out = {'dap_profiles': [], 'iem_types': []}
+
+    iem_types = raw.get('iem_types') if isinstance(raw, dict) else []
+    if isinstance(iem_types, list):
+        out['iem_types'] = [str(t).strip() for t in iem_types if str(t).strip()]
+
+    dap_profiles = raw.get('dap_profiles') if isinstance(raw, dict) else raw
+    if not isinstance(dap_profiles, list):
+        dap_profiles = []
+
+    seen = set()
+    for p in dap_profiles:
+        if not isinstance(p, dict):
+            continue
+        name = str(p.get('name') or p.get('dapModelOrApp') or '').strip()
+        model = str(p.get('model') or '').strip() or _slugify_model_id(name)
+        if model in seen:
+            continue
+        seen.add(model)
+        out['dap_profiles'].append({
+            'model': model,
+            'name': name or model,
+            'playlist_format': str(p.get('playlist_format') or p.get('playlistFormat') or '.m3u8'),
+            'export_folder': _normalize_export_folder(p.get('export_folder') or p.get('playlistExportFolder') or 'Playlists'),
+            'path_prefix': str(p.get('path_prefix') or ''),
+            'mount_name': str(p.get('mount_name') or p.get('mountName') or 'MyDAP'),
+            'hint': str(p.get('hint') or ''),
+        })
+
+    if not out['dap_profiles']:
+        out['dap_profiles'] = _DEFAULT_GEAR_PROFILES['dap_profiles']
+    if not out['iem_types']:
+        out['iem_types'] = _DEFAULT_GEAR_PROFILES['iem_types']
+    return out
+
+
+def load_gear_profiles():
+    candidates = [
+        GEAR_PROFILES_FILE,
+        Path(__file__).parent / 'data' / 'gear_profiles.json',
+    ]
+    for p in candidates:
+        if not p.exists():
+            continue
+        try:
+            return _normalize_gear_profiles(json.loads(p.read_text()))
+        except Exception:
+            continue
+    return _normalize_gear_profiles(_DEFAULT_GEAR_PROFILES)
+
+
+@app.route('/api/gear/profiles', methods=['GET'])
+def get_gear_profiles():
+    return jsonify(load_gear_profiles())
+
 def load_daps():
     if DAP_FILE.exists():
         try:
@@ -1421,23 +1506,16 @@ def get_daps():
 def create_dap():
     data = request.json or {}
     model = data.get('model', 'generic')
-    # Model-specific defaults
-    model_defaults = {
-        'poweramp': {'export_folder': 'Playlists',         'path_prefix': ''},
-        'hiby':     {'export_folder': 'HiByMusic/Playlist','path_prefix': ''},
-        'fiio':     {'export_folder': 'Playlists',         'path_prefix': ''},
-        'ap80':     {'export_folder': 'playlist_data',     'path_prefix': '..'},
-        'other':    {'export_folder': 'Playlists',         'path_prefix': ''},
-    }
-    defaults = model_defaults.get(model, model_defaults['other'])
+    profile_map = {p['model']: p for p in load_gear_profiles().get('dap_profiles', [])}
+    defaults = profile_map.get(model, {'export_folder': 'Playlists', 'path_prefix': ''})
     dap = {
         'id': str(uuid.uuid4()),
         'name': data.get('name', 'New DAP'),
         'model': model,
         'icon': data.get('icon', '📱'),
         'mount_path': data.get('mount_path', ''),
-        'export_folder': data.get('export_folder') or defaults['export_folder'],
-        'path_prefix': data.get('path_prefix', defaults['path_prefix']),
+        'export_folder': _normalize_export_folder(data.get('export_folder') or defaults.get('export_folder')),
+        'path_prefix': data.get('path_prefix', defaults.get('path_prefix', '')),
         'peq_folder': data.get('peq_folder', 'PEQ'),
         'playlist_exports': {},
     }
@@ -1466,7 +1544,10 @@ def update_dap(did):
         return jsonify({'error': 'Not found'}), 404
     for k in ('name', 'model', 'icon', 'mount_path', 'export_folder', 'path_prefix', 'peq_folder'):
         if k in data:
-            dap[k] = data[k]
+            if k == 'export_folder':
+                dap[k] = _normalize_export_folder(data[k])
+            else:
+                dap[k] = data[k]
     save_daps(daps)
     dap['mounted'] = Path(dap.get('mount_path', '')).exists()
     return jsonify(dap)
@@ -1499,8 +1580,6 @@ def dap_download_playlist(did, pid):
               if (e if isinstance(e, str) else e.get('id')) in lib_map]
 
     prefix = dap.get('path_prefix', '')
-    if dap.get('model') == 'ap80':
-        prefix = prefix or '..'
 
     content = generate_m3u(tracks, playlist['name'], path_prefix=prefix)
     safe_name = playlist['name'].replace('/', '-')
@@ -1535,8 +1614,6 @@ def dap_export_playlist(did, pid):
               if (e if isinstance(e, str) else e.get('id')) in lib_map]
 
     prefix = dap.get('path_prefix', '')
-    if dap.get('model') == 'ap80':
-        prefix = prefix or '..'
 
     out_dir = device_root / dap.get('export_folder', 'Playlists')
     try:
@@ -1560,10 +1637,141 @@ def dap_export_playlist(did, pid):
 
 # ── IEM Management ────────────────────────────────────────────────────────────
 
+def _normalize_iem_source(source, idx=0):
+    """Normalize a single IEM squig source record."""
+    src = source if isinstance(source, dict) else {}
+    sid = str(src.get('id') or f'src-{idx + 1}')
+    label = str(src.get('label') or '').strip() or f'Source {idx + 1}'
+    url = str(src.get('url') or '').strip()
+    return {
+        'id': sid,
+        'label': label,
+        'url': url,
+        'squig_subdomain': str(src.get('squig_subdomain') or ''),
+        'squig_file_key': str(src.get('squig_file_key') or ''),
+        'measurement_L': src.get('measurement_L'),
+        'measurement_R': src.get('measurement_R'),
+    }
+
+
+def _sync_iem_primary_measurements(iem):
+    """
+    Keep legacy top-level measurement fields in sync with primary source.
+    This preserves compatibility with existing scoring/analysis code paths.
+    """
+    sources = iem.get('squig_sources') or []
+    primary = None
+    pref = iem.get('primary_source_id')
+    if pref:
+        primary = next((s for s in sources if s.get('id') == pref), None)
+    if not primary and sources:
+        primary = sources[0]
+    if primary:
+        iem['primary_source_id'] = primary.get('id')
+        iem['squig_url'] = primary.get('url', '')
+        iem['squig_subdomain'] = primary.get('squig_subdomain', '')
+        iem['squig_file_key'] = primary.get('squig_file_key', '')
+        iem['measurement_L'] = primary.get('measurement_L')
+        iem['measurement_R'] = primary.get('measurement_R')
+    else:
+        iem['primary_source_id'] = None
+        iem['squig_url'] = ''
+        iem['squig_subdomain'] = ''
+        iem['squig_file_key'] = ''
+        iem['measurement_L'] = None
+        iem['measurement_R'] = None
+
+
+def _normalize_iem_record(iem):
+    """Migrate/normalize an IEM record in place. Returns True when changed."""
+    changed = False
+    if not isinstance(iem.get('squig_sources'), list):
+        iem['squig_sources'] = []
+        changed = True
+
+    # Migrate legacy single-source fields into squig_sources if needed.
+    if not iem['squig_sources'] and (
+        iem.get('squig_url') or iem.get('measurement_L') or iem.get('measurement_R')
+    ):
+        iem['squig_sources'] = [{
+            'id': 'src-1',
+            'label': 'Primary',
+            'url': iem.get('squig_url', ''),
+            'squig_subdomain': iem.get('squig_subdomain', ''),
+            'squig_file_key': iem.get('squig_file_key', ''),
+            'measurement_L': iem.get('measurement_L'),
+            'measurement_R': iem.get('measurement_R'),
+        }]
+        changed = True
+
+    # Keep only non-empty sources and normalize fields.
+    norm_sources = []
+    for idx, src in enumerate(iem.get('squig_sources') or []):
+        nsrc = _normalize_iem_source(src, idx)
+        if nsrc.get('url') or nsrc.get('measurement_L') or nsrc.get('measurement_R'):
+            norm_sources.append(nsrc)
+    if len(norm_sources) > 3:
+        norm_sources = norm_sources[:3]
+        changed = True
+    if norm_sources != (iem.get('squig_sources') or []):
+        iem['squig_sources'] = norm_sources
+        changed = True
+
+    pref = iem.get('primary_source_id')
+    if pref and not any(s.get('id') == pref for s in norm_sources):
+        iem['primary_source_id'] = None
+        changed = True
+    if not iem.get('primary_source_id') and norm_sources:
+        iem['primary_source_id'] = norm_sources[0].get('id')
+        changed = True
+
+    before = (iem.get('measurement_L'), iem.get('measurement_R'),
+              iem.get('squig_url'), iem.get('squig_subdomain'), iem.get('squig_file_key'))
+    _sync_iem_primary_measurements(iem)
+    after = (iem.get('measurement_L'), iem.get('measurement_R'),
+             iem.get('squig_url'), iem.get('squig_subdomain'), iem.get('squig_file_key'))
+    if before != after:
+        changed = True
+    return changed
+
+
+def _public_iem(iem):
+    """Return IEM payload safe for API responses (without heavy measurement arrays)."""
+    out = {}
+    for k, v in iem.items():
+        if k in ('measurement_L', 'measurement_R'):
+            continue
+        if k == 'squig_sources':
+            cleaned = []
+            for src in (v or []):
+                cleaned.append({
+                    'id': src.get('id'),
+                    'label': src.get('label'),
+                    'url': src.get('url', ''),
+                    'squig_subdomain': src.get('squig_subdomain', ''),
+                    'squig_file_key': src.get('squig_file_key', ''),
+                })
+            out[k] = cleaned
+        else:
+            out[k] = v
+    out['has_measurement'] = bool(
+        iem.get('measurement_L') or iem.get('measurement_R') or
+        any((s.get('measurement_L') or s.get('measurement_R')) for s in (iem.get('squig_sources') or []))
+    )
+    return out
+
 def load_iems():
     if IEM_FILE.exists():
         try:
-            return json.load(open(IEM_FILE))
+            iems = json.load(open(IEM_FILE))
+            if not isinstance(iems, list):
+                return []
+            dirty = False
+            for iem in iems:
+                dirty = _normalize_iem_record(iem) or dirty
+            if dirty:
+                save_iems(iems)
+            return iems
         except Exception:
             pass
     return []
@@ -1788,10 +1996,9 @@ def _apply_peq(measurement, peq_profile):
 
 @app.route('/api/iems', methods=['GET'])
 def get_iems():
-    # Omit large measurement arrays from list view; sort alphabetically by name
+    # Omit measurement arrays from list view; sort alphabetically by name
     result = sorted(
-        [{k: v for k, v in iem.items() if k not in ('measurement_L', 'measurement_R')}
-         for iem in load_iems()],
+        [_public_iem(iem) for iem in load_iems()],
         key=lambda i: i.get('name', '').lower()
     )
     return jsonify(result)
@@ -1800,36 +2007,64 @@ def get_iems():
 @app.route('/api/iems', methods=['POST'])
 def create_iem():
     data = request.json or {}
-    squig_url = data.get('squig_url', '').strip()
+    raw_sources = data.get('squig_sources')
+    if raw_sources is None:
+        legacy_url = str(data.get('squig_url', '')).strip()
+        raw_sources = ([{'label': 'Primary', 'url': legacy_url}] if legacy_url else [])
+    if not isinstance(raw_sources, list):
+        return jsonify({'error': 'squig_sources must be an array'}), 400
+    if len(raw_sources) > 3:
+        return jsonify({'error': 'You can add up to 3 squig.link URLs per IEM.'}), 400
+
+    sources = []
+    first_file_key = None
+    for idx, src in enumerate(raw_sources):
+        if not isinstance(src, dict):
+            continue
+        url = str(src.get('url', '')).strip()
+        if not url:
+            continue
+        label = str(src.get('label') or '').strip() or f'Source {idx + 1}'
+        try:
+            result = fetch_squig_measurement(url)
+            if not result['L'] and not result['R']:
+                return jsonify({'error': f'Could not fetch measurement data for source "{label}". Check the URL and try again.'}), 400
+            file_key = result.get('file_key') or ''
+            if not first_file_key and file_key:
+                first_file_key = file_key
+            sources.append({
+                'id': str(src.get('id') or f'src-{idx + 1}'),
+                'label': label,
+                'url': url,
+                'squig_subdomain': result.get('subdomain', ''),
+                'squig_file_key': file_key,
+                'measurement_L': result['L'],
+                'measurement_R': result['R'],
+            })
+        except Exception as e:
+            return jsonify({'error': f'Failed to fetch source "{label}": {e}'}), 400
+
     iem = {
         'id': str(uuid.uuid4()),
         'name': data.get('name', '').strip() or 'New IEM',
         'type': data.get('type', 'IEM'),
-        'squig_url': squig_url,
+        'squig_url': '',
         'squig_subdomain': '',
         'squig_file_key': '',
         'measurement_L': None,
         'measurement_R': None,
+        'primary_source_id': sources[0]['id'] if sources else None,
+        'squig_sources': sources,
         'peq_profiles': [],
     }
-    if squig_url:
-        try:
-            result = fetch_squig_measurement(squig_url)
-            if not result['L'] and not result['R']:
-                return jsonify({'error': 'Could not fetch measurement data from squig.link. Check the URL and try again.'}), 400
-            iem['measurement_L'] = result['L']
-            iem['measurement_R'] = result['R']
-            iem['squig_subdomain'] = result['subdomain']
-            iem['squig_file_key'] = result['file_key']
-            if not data.get('name'):
-                iem['name'] = result['file_key']
-        except Exception as e:
-            return jsonify({'error': f'Failed to fetch measurement: {e}'}), 400
+    _normalize_iem_record(iem)
+    if not data.get('name') and first_file_key:
+        iem['name'] = first_file_key
 
     iems = load_iems()
     iems.append(iem)
     save_iems(iems)
-    return jsonify({k: v for k, v in iem.items() if k not in ('measurement_L', 'measurement_R')}), 201
+    return jsonify(_public_iem(iem)), 201
 
 
 @app.route('/api/iems/<iid>', methods=['GET'])
@@ -1837,7 +2072,7 @@ def get_iem(iid):
     iem = next((i for i in load_iems() if i['id'] == iid), None)
     if not iem:
         return jsonify({'error': 'Not found'}), 404
-    return jsonify(iem)
+    return jsonify(_public_iem(iem))
 
 
 @app.route('/api/iems/<iid>', methods=['PUT'])
@@ -1850,20 +2085,69 @@ def update_iem(iid):
     for k in ('name', 'type'):
         if k in data:
             iem[k] = data[k]
-    if 'squig_url' in data and (data['squig_url'] != iem.get('squig_url') or data.get('force_refetch') or not iem.get('measurement_L')):
-        iem['squig_url'] = data['squig_url']
-        try:
-            result = fetch_squig_measurement(data['squig_url'])
-            if not result['L'] and not result['R']:
-                return jsonify({'error': 'Could not fetch measurement data from squig.link. Check the URL and try again.'}), 400
-            iem['measurement_L'] = result['L']
-            iem['measurement_R'] = result['R']
-            iem['squig_subdomain'] = result['subdomain']
-            iem['squig_file_key'] = result['file_key']
-        except Exception as e:
-            return jsonify({'error': f'Failed to fetch measurement: {e}'}), 400
+
+    if 'squig_sources' in data or 'squig_url' in data:
+        raw_sources = data.get('squig_sources')
+        if raw_sources is None:
+            legacy_url = str(data.get('squig_url', '')).strip()
+            raw_sources = ([{'label': 'Primary', 'url': legacy_url}] if legacy_url else [])
+        if not isinstance(raw_sources, list):
+            return jsonify({'error': 'squig_sources must be an array'}), 400
+        if len(raw_sources) > 3:
+            return jsonify({'error': 'You can add up to 3 squig.link URLs per IEM.'}), 400
+
+        force_refetch = bool(data.get('force_refetch'))
+        existing_sources = iem.get('squig_sources') or []
+        existing_by_id = {s.get('id'): s for s in existing_sources if s.get('id')}
+        existing_by_url = {s.get('url'): s for s in existing_sources if s.get('url')}
+        new_sources = []
+
+        for idx, src in enumerate(raw_sources):
+            if not isinstance(src, dict):
+                continue
+            url = str(src.get('url', '')).strip()
+            if not url:
+                continue
+            sid = str(src.get('id') or '')
+            label = str(src.get('label') or '').strip() or f'Source {idx + 1}'
+            existing = (existing_by_id.get(sid) if sid else None) or existing_by_url.get(url)
+            can_reuse = (
+                existing and existing.get('url') == url and not force_refetch and
+                (existing.get('measurement_L') or existing.get('measurement_R'))
+            )
+            if can_reuse:
+                new_sources.append({
+                    'id': existing.get('id') or sid or f'src-{idx + 1}',
+                    'label': label,
+                    'url': url,
+                    'squig_subdomain': existing.get('squig_subdomain', ''),
+                    'squig_file_key': existing.get('squig_file_key', ''),
+                    'measurement_L': existing.get('measurement_L'),
+                    'measurement_R': existing.get('measurement_R'),
+                })
+            else:
+                try:
+                    result = fetch_squig_measurement(url)
+                    if not result['L'] and not result['R']:
+                        return jsonify({'error': f'Could not fetch measurement data for source "{label}". Check the URL and try again.'}), 400
+                    new_sources.append({
+                        'id': sid or (existing.get('id') if existing else f'src-{idx + 1}'),
+                        'label': label,
+                        'url': url,
+                        'squig_subdomain': result.get('subdomain', ''),
+                        'squig_file_key': result.get('file_key', ''),
+                        'measurement_L': result['L'],
+                        'measurement_R': result['R'],
+                    })
+                except Exception as e:
+                    return jsonify({'error': f'Failed to fetch source "{label}": {e}'}), 400
+
+        iem['squig_sources'] = new_sources
+        iem['primary_source_id'] = new_sources[0]['id'] if new_sources else None
+        _normalize_iem_record(iem)
+
     save_iems(iems)
-    return jsonify({k: v for k, v in iem.items() if k not in ('measurement_L', 'measurement_R')})
+    return jsonify(_public_iem(iem))
 
 
 @app.route('/api/iems/<iid>', methods=['DELETE'])
@@ -1887,6 +2171,21 @@ def _shift(points, offset):
     return [[p[0], p[1] + offset] for p in points]
 
 
+def _resolve_iem_source(iem, source_id=None):
+    """Return selected (or primary) source dict for an IEM."""
+    sources = iem.get('squig_sources') or []
+    if source_id:
+        src = next((s for s in sources if s.get('id') == source_id), None)
+        if src:
+            return src
+    pref = iem.get('primary_source_id')
+    if pref:
+        src = next((s for s in sources if s.get('id') == pref), None)
+        if src:
+            return src
+    return sources[0] if sources else None
+
+
 @app.route('/api/iems/<iid>/graph')
 def iem_graph(iid):
     iems = load_iems()
@@ -1895,7 +2194,13 @@ def iem_graph(iid):
         return jsonify({'error': 'Not found'}), 404
 
     peq_id = request.args.get('peq', '')
+    source_id = request.args.get('source', '')
     compare_ids = request.args.getlist('compare')
+    compare_source_map = {}
+    for token in request.args.getlist('compare_source'):
+        if ':' in token:
+            did, sid = token.split(':', 1)
+            compare_source_map[did] = sid
     palette = ['#5b8dee', '#e05c5c', '#4caf8f', '#e8a838', '#9c6dd8', '#e05ca0']
 
     curves = []
@@ -1903,9 +2208,14 @@ def iem_graph(iid):
 
     for idx, cur in enumerate(targets):
         color = palette[idx % len(palette)]
+        requested_source_id = source_id if idx == 0 else compare_source_map.get(cur['id'])
+        source = _resolve_iem_source(cur, requested_source_id)
+        source_label = source.get('label') if source else None
         name = cur['name']
-        mL = cur.get('measurement_L')
-        mR = cur.get('measurement_R')
+        if source_label and len(cur.get('squig_sources') or []) > 1:
+            name = f"{name} [{source_label}]"
+        mL = (source or {}).get('measurement_L') or cur.get('measurement_L')
+        mR = (source or {}).get('measurement_R') or cur.get('measurement_R')
 
         # Normalise: use L-channel 1 kHz as reference, apply same offset to R & PEQ
         ref_spl = _spl_at_1khz(mL or mR)
@@ -1950,7 +2260,21 @@ def iem_graph(iid):
                 'data': _shift(m, offset),
             })
 
-    return jsonify({'curves': curves, 'iem_name': iem['name']})
+    available_sources = [
+        {
+            'id': s.get('id'),
+            'label': s.get('label'),
+            'url': s.get('url', ''),
+        }
+        for s in (iem.get('squig_sources') or [])
+    ]
+    active_source = _resolve_iem_source(iem, source_id)
+    return jsonify({
+        'curves': curves,
+        'iem_name': iem['name'],
+        'available_sources': available_sources,
+        'selected_source_id': (active_source or {}).get('id'),
+    })
 
 
 @app.route('/api/iems/<iid>/peq', methods=['POST'])
@@ -2460,6 +2784,52 @@ def _load_feature_entries():
         return []
 
 
+def _has_valid_v3_payload(entry):
+    if not entry or entry.get('analysis_version') != 3:
+        return False
+    if entry.get('failed'):
+        return True
+    band_energy = entry.get('band_energy') or []
+    return (entry.get('brightness') is not None and len(band_energy) == 12)
+
+
+def _backfill_feature_source_signatures(tracks):
+    """
+    Backfill source signature fields for legacy v3 cache rows.
+
+    Older analysis rows may predate source signature tracking
+    (source_path/source_mtime). Without this backfill, those rows look stale
+    and force a one-time full re-analysis. This function upgrades such rows
+    in place using current library metadata so future runs stay delta-only.
+    """
+    entries = _load_feature_entries()
+    if not entries or not tracks:
+        return entries
+
+    track_by_id = {t.get('id'): t for t in tracks}
+    updated = False
+    for entry in entries:
+        tid = entry.get('track_id')
+        track = track_by_id.get(tid)
+        if not track:
+            continue
+        if not _has_valid_v3_payload(entry):
+            continue
+        if not entry.get('source_path'):
+            entry['source_path'] = track.get('path')
+            updated = True
+        if int(entry.get('source_mtime') or 0) == 0:
+            entry['source_mtime'] = _track_source_mtime(track)
+            updated = True
+
+    if updated:
+        try:
+            _features_file().write_text(json.dumps(entries))
+        except Exception:
+            pass
+    return entries
+
+
 def _track_source_mtime(track):
     try:
         return int(track.get('date_added') or 0)
@@ -2494,7 +2864,7 @@ def _run_analysis():
 
     tracks = list(library)
     track_ids = {t.get('id') for t in tracks}
-    existing_entries = _load_feature_entries()
+    existing_entries = _backfill_feature_source_signatures(tracks)
     existing_map = {}
     for entry in existing_entries:
         tid = entry.get('track_id')
@@ -2628,7 +2998,7 @@ def _run_analysis():
 def insights_start_analysis():
     if analysis_state['status'] == 'running':
         return jsonify({'error': 'Analysis already running'}), 409
-    existing_map = {f.get('track_id'): f for f in _load_feature_entries()}
+    existing_map = {f.get('track_id'): f for f in _backfill_feature_source_signatures(library)}
     pending = [t for t in library if not _is_cached_feature_current(existing_map.get(t['id']), t)]
     if not pending:
         return jsonify({'ok': True, 'already_up_to_date': True, 'total': 0, 'pending': 0})
@@ -2657,7 +3027,7 @@ def insights_analyse_info():
     processed  = 0   # attempted and current for this exact file revision
     valid      = 0   # has full v3 feature set and current
     needs_upgrade = False
-    existing_map = {f.get('track_id'): f for f in _load_feature_entries()}
+    existing_map = {f.get('track_id'): f for f in _backfill_feature_source_signatures(library)}
     for track in library:
         cached = existing_map.get(track['id'])
         if not cached:
@@ -3075,6 +3445,7 @@ def _build_match_matrix(genre_fps, iem_profiles):
         fp['track_count'] for slug, fp in genre_fps.items()
         if any(m['score'] >= 70 for r in matrix if r['slug'] == slug for m in r['matches'])
     )
+    cov_threshold = 70
     cov_pct = round(cov_tracks / max(total_tracks, 1) * 100, 1)
 
     # Summary text
@@ -3132,6 +3503,7 @@ def _build_match_matrix(genre_fps, iem_profiles):
         'library_overview': {
             'total_tracks': total_tracks, 'total_genres': len(genre_fps),
             'overall_coverage_pct': cov_pct, 'iem_summary': iem_summary,
+            'covered_tracks': cov_tracks, 'coverage_threshold_pct': cov_threshold,
             'summary_text': sumtext,
         },
         'matrix': matrix, 'blindspots': blindspots, 'well_covered': well_covered,
@@ -3288,12 +3660,32 @@ def insights_matching_overview():
     if not data or not data.get('matrix_data'):
         return jsonify({'error': 'Run matching analysis first.'}), 404
     md = data['matrix_data']
+    lib_overview = dict(md.get('library_overview') or {})
+
+    # Backward-compatible coverage backfill:
+    # Older cached matrix payloads may not include covered_tracks/threshold fields.
+    # Compute these from matrix rows so overview messaging stays accurate.
+    matrix_rows = md.get('matrix') or []
+    threshold = int(lib_overview.get('coverage_threshold_pct') or 70)
+    total_tracks = sum(int(r.get('track_count') or 0) for r in matrix_rows)
+    covered_tracks = sum(
+        int(r.get('track_count') or 0)
+        for r in matrix_rows
+        if max((m.get('score', 0) for m in (r.get('matches') or [])), default=0) >= threshold
+    )
+    coverage_pct = round(covered_tracks / max(total_tracks, 1) * 100, 1) if total_tracks > 0 else 0.0
+
+    lib_overview['total_tracks'] = total_tracks
+    lib_overview['covered_tracks'] = covered_tracks
+    lib_overview['coverage_threshold_pct'] = threshold
+    lib_overview['overall_coverage_pct'] = coverage_pct
+
     # Build available targets: Flat/Neutral + any saved baselines
     bl = load_baselines()
     available_targets = [{'id': 'flat', 'name': 'Flat / Neutral'}] + [
         {'id': b['id'], 'name': b['name']} for b in bl
     ]
-    return jsonify({**md['library_overview'],
+    return jsonify({**lib_overview,
                     'band_labels':       md.get('band_labels', {}),
                     'generated_at':      data.get('generated_at'),
                     'target_id':         data.get('target_id', 'flat'),

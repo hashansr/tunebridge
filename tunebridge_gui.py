@@ -7,7 +7,7 @@ native app — no Safari, no external browser.
 
 Works in two modes:
   - Development: python tunebridge_gui.py (from project root)
-  - Installed:   /Applications/TuneBridge.app (PyInstaller bundle)
+  - Installed:   /Applications/TuneBridge.app (self-contained frozen bundle)
 """
 
 import os
@@ -17,17 +17,43 @@ import time
 import uuid
 from pathlib import Path
 
-# ── Locate project directory ─────────────────────────────────────────────────
-# When frozen by PyInstaller, __file__ is inside the .app bundle temp dir.
-# PROJECT_DIR is embedded at build time via the TUNEBRIDGE_PROJECT_DIR env var.
+
+def _resolve_project_dir() -> str:
+    """
+    Resolve runtime project/resources directory.
+
+    Priority order:
+      1) Explicit env override (legacy launcher compatibility)
+      2) PyInstaller/Nuitka-style extraction dir (`sys._MEIPASS`) when frozen
+      3) Current file directory (development mode)
+    """
+    env_dir = os.environ.get('TUNEBRIDGE_PROJECT_DIR', '')
+    if env_dir and os.path.isdir(env_dir):
+        return env_dir
+
+    if getattr(sys, 'frozen', False):
+        mei = getattr(sys, '_MEIPASS', '')
+        if mei and os.path.isdir(mei):
+            return mei
+
+        # Fallback: executable directory (defensive fallback only)
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        if os.path.isdir(exe_dir):
+            return exe_dir
+
+        raise RuntimeError('Cannot resolve bundled resources directory.')
+
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+# ── Locate project/resources directory ───────────────────────────────────────
+PROJECT_DIR = _resolve_project_dir()
+
+# Ensure bundled mode stores user data in App Support even when no external
+# launcher injects TUNEBRIDGE_BUNDLED.
 if getattr(sys, 'frozen', False):
-    PROJECT_DIR = os.environ.get('TUNEBRIDGE_PROJECT_DIR', '')
-    if not PROJECT_DIR or not os.path.isdir(PROJECT_DIR):
-        import tkinter.messagebox as mb
-        mb.showerror('TuneBridge', 'Cannot find project directory.\nRe-run create_app.sh.')
-        sys.exit(1)
-else:
-    PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+    os.environ.setdefault('TUNEBRIDGE_BUNDLED', '1')
+    os.environ.setdefault('TUNEBRIDGE_PROJECT_DIR', PROJECT_DIR)
 
 # Ensure imports and Flask's relative file lookups resolve correctly
 if PROJECT_DIR not in sys.path:

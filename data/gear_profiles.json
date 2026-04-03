@@ -1,0 +1,107 @@
+{
+  "dap_profiles": [
+    {
+      "model": "android_generic",
+      "name": "Android (Generic DAP OS - FiiO / Sony / iBasso / HiBy)",
+      "playlist_format": ".m3u8",
+      "export_folder": "Playlists",
+      "path_prefix": "",
+      "mount_name": "MyDAP",
+      "hint": "Generic Android players usually detect playlists from a Playlists folder on the same storage."
+    },
+    {
+      "model": "uapp",
+      "name": "USB Audio Player Pro",
+      "playlist_format": ".m3u8",
+      "export_folder": "Music/Playlists",
+      "path_prefix": "",
+      "mount_name": "MyDAP",
+      "hint": "UAPP commonly uses Music/Playlists for imported playlist files."
+    },
+    {
+      "model": "poweramp",
+      "name": "Poweramp",
+      "playlist_format": ".m3u8",
+      "export_folder": "Music/Playlists",
+      "path_prefix": "",
+      "mount_name": "FIIO M21",
+      "hint": "Poweramp scans storage for M3U/M3U8 playlists and maps by file paths."
+    },
+    {
+      "model": "hiby_music",
+      "name": "HiBy Music",
+      "playlist_format": ".m3u8",
+      "export_folder": "HibyMusic/Playlists",
+      "path_prefix": "",
+      "mount_name": "HiBy",
+      "hint": "HiBy Music usually reads playlists from HibyMusic/Playlists."
+    },
+    {
+      "model": "neutron",
+      "name": "Neutron Music Player",
+      "playlist_format": ".m3u8",
+      "export_folder": "NeutronMP/Playlists",
+      "path_prefix": "",
+      "mount_name": "MyDAP",
+      "hint": "Neutron commonly stores and imports playlist files in NeutronMP/Playlists."
+    },
+    {
+      "model": "foobar2000",
+      "name": "Foobar2000",
+      "playlist_format": ".m3u8",
+      "export_folder": "foobar2000",
+      "path_prefix": "",
+      "mount_name": "MyDAP",
+      "hint": "Foobar2000 mobile can import playlists from its app data folder."
+    },
+    {
+      "model": "mango_os",
+      "name": "Mango OS (iBasso Pure Mode)",
+      "playlist_format": ".m3u",
+      "export_folder": "Music",
+      "path_prefix": "",
+      "mount_name": "iBasso",
+      "hint": "Mango OS typically expects plain M3U playlists close to the music library."
+    },
+    {
+      "model": "fiio_pure_music",
+      "name": "FiiO Pure Music Mode",
+      "playlist_format": ".m3u8",
+      "export_folder": "FiiOMusic/playlist",
+      "path_prefix": "",
+      "mount_name": "FiiO",
+      "hint": "FiiO Music often reads playlist files from FiiOMusic/playlist."
+    },
+    {
+      "model": "sony_walkman",
+      "name": "Sony Walkman App",
+      "playlist_format": ".m3u8",
+      "export_folder": "Music/Playlists",
+      "path_prefix": "",
+      "mount_name": "WALKMAN",
+      "hint": "Sony Walkman app generally detects M3U8 playlists in Music/Playlists."
+    },
+    {
+      "model": "rockbox",
+      "name": "Rockbox",
+      "playlist_format": ".m3u8",
+      "export_folder": "Playlists",
+      "path_prefix": "",
+      "mount_name": "Rockbox",
+      "hint": "Rockbox can load playlists directly from a Playlists folder."
+    },
+    {
+      "model": "hidizs_ap80",
+      "name": "Hidizs AP80 Pro Max (Hidizs OS)",
+      "playlist_format": ".m3u",
+      "export_folder": "playlist_data",
+      "path_prefix": "..",
+      "mount_name": "AP80",
+      "hint": "Hidizs AP80 typically uses playlist_data and relative parent path prefixes."
+    }
+  ],
+  "iem_types": [
+    "IEM",
+    "Headphone"
+  ]
+}
