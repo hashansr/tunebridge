@@ -15,6 +15,7 @@ import threading
 import time
 import shutil
 import math
+import random
 from pathlib import Path
 from urllib.request import urlopen
 from urllib.parse import urlparse, parse_qs, quote as urlquote
@@ -62,6 +63,8 @@ IEM_FILE = DATA_DIR / 'iems.json'
 BASELINES_FILE = DATA_DIR / 'baselines.json'
 PLAYER_STATE_FILE = DATA_DIR / 'player_state.json'
 GEAR_PROFILES_FILE = DATA_DIR / 'gear_profiles.json'
+GENRE_FAMILIES_FILE = DATA_DIR / 'genre_families.json'
+PLAYLIST_GEN_CONFIG_FILE = DATA_DIR / 'playlist_gen_config.json'
 
 DEFAULT_SETTINGS = {
     'library_path':     str(Path.home() / 'Music'),
@@ -89,6 +92,44 @@ _DEFAULT_GEAR_PROFILES = {
         {'model': 'hidizs_ap80',      'name': 'Hidizs AP80 Pro Max (Hidizs OS)',                          'playlist_format': '.m3u',  'export_folder': 'playlist_data',        'path_prefix': '..','mount_name': 'AP80'},
     ],
     'iem_types': ['IEM', 'Headphone'],
+}
+
+_DEFAULT_GENRE_FAMILIES = {
+    'ambient': ['dark ambient', 'drone', 'new age'],
+    'blues': ['blues rock', 'delta blues', 'electric blues'],
+    'classical': ['baroque', 'romantic', 'orchestral', 'chamber'],
+    'country': ['alt-country', 'americana', 'country rock'],
+    'electronic': ['edm', 'house', 'techno', 'trance', 'drum and bass', 'ambient electronic', 'downtempo'],
+    'folk': ['indie folk', 'traditional folk', 'singer-songwriter'],
+    'hip hop': ['rap', 'trap', 'boom bap', 'lo-fi hip hop'],
+    'jazz': ['vocal jazz', 'jazz fusion', 'contemporary jazz', 'bebop', 'soul jazz'],
+    'metal': ['heavy metal', 'nu metal', 'death metal', 'black metal', 'progressive metal', 'metalcore'],
+    'pop': ['synthpop', 'indie pop', 'dance pop', 'electropop'],
+    'r&b': ['neo soul', 'soul', 'funk'],
+    'reggae': ['dub', 'dancehall', 'ska'],
+    'rock': ['alternative rock', 'hard rock', 'classic rock', 'progressive rock', 'indie rock', 'punk rock'],
+}
+
+_DEFAULT_PLAYLIST_GEN_CONFIG = {
+    'max_library_tracks': 5000,
+    'candidate_pool_cap': 1500,
+    'default_playlist_length': 20,
+    'min_playlist_length': 8,
+    'max_playlist_length': 80,
+    'deterministic_default': True,
+    'weights': {
+        'similarity': 0.35,
+        'genre': 0.2,
+        'mood': 0.2,
+        'sound': 0.1,
+        'diversity': 0.15,
+    },
+    'transition_weights': {
+        'energy': 0.4,
+        'brightness': 0.25,
+        'year': 0.15,
+        'genre': 0.2,
+    },
 }
 
 
@@ -194,8 +235,10 @@ sync_state = {
     'total': 0,
     'local_only': [],
     'device_only': [],
+    'warnings': [],
     'errors': [],
     'current': '',
+    'local_copy_map': {},
 }
 
 library = []
@@ -868,6 +911,519 @@ def remove_track(pid, track_id):
     return jsonify({'total': len(tracks)})
 
 
+# ── ML Playlist Generation (v1) ───────────────────────────────────────────────
+
+def _norm_genre_text(s):
+    return re.sub(r'\s+', ' ', str(s or '').strip().lower())
+
+
+def _split_track_genres(raw):
+    if not raw:
+        return []
+    chunks = re.split(r'[,/;|]', str(raw))
+    out = []
+    for c in chunks:
+        g = _norm_genre_text(c)
+        if g and g not in out:
+            out.append(g)
+    return out
+
+
+def _build_genre_lookup(families):
+    alias_to_base = {}
+    for base, rel in families.items():
+        b = _norm_genre_text(base)
+        if not b:
+            continue
+        alias_to_base[b] = b
+        for r in rel:
+            rr = _norm_genre_text(r)
+            if rr and rr not in alias_to_base:
+                alias_to_base[rr] = b
+    return alias_to_base
+
+
+def _clamp(x, lo, hi):
+    return max(lo, min(hi, x))
+
+
+def _safe_float(v, fallback=None):
+    try:
+        if v is None:
+            return fallback
+        return float(v)
+    except Exception:
+        return fallback
+
+
+def _load_track_feature_map():
+    feat_path = _features_file()
+    if not feat_path.exists():
+        return {}
+    try:
+        rows = json.loads(feat_path.read_text())
+    except Exception:
+        return {}
+    out = {}
+    if not isinstance(rows, list):
+        return out
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        tid = r.get('track_id')
+        if not tid:
+            continue
+        out[tid] = r
+    return out
+
+
+def _track_numeric_features(track, feat_map):
+    """Return normalized generation features with graceful fallbacks."""
+    f = feat_map.get(track.get('id'), {}) if feat_map else {}
+    # Energy fallback: 0.5 center; if band profile exists use mean band energy.
+    band = f.get('band_energy')
+    if isinstance(band, list) and band:
+        vals = [_safe_float(v) for v in band if _safe_float(v) is not None]
+        energy = sum(vals) / len(vals) if vals else 0.5
+        bass = sum(vals[:4]) / max(1, len(vals[:4]))
+        treble = sum(vals[-4:]) / max(1, len(vals[-4:]))
+    else:
+        energy = 0.5
+        bass = 0.5
+        treble = 0.5
+
+    # Brightness can be either normalized 0..1 or centroid in Hz.
+    b = f.get('brightness')
+    if isinstance(b, dict):
+        b = b.get('centroid_hz') or b.get('median_hz') or b.get('value')
+    bb = _safe_float(b)
+    if bb is None:
+        brightness = 0.5
+    elif bb > 2.0:  # likely Hz scale
+        brightness = _clamp((bb - 1500.0) / 5000.0, 0.0, 1.0)
+    else:
+        brightness = _clamp(bb, 0.0, 1.0)
+
+    y = _safe_float(track.get('year'))
+    year_norm = 0.5 if y is None else _clamp((y - 1950.0) / 90.0, 0.0, 1.0)
+    dur = _safe_float(track.get('duration'), 180.0)
+    dur_norm = _clamp((dur - 60.0) / 420.0, 0.0, 1.0)
+
+    missing_penalty = 0.0
+    if f.get('failed'):
+        missing_penalty += 0.08
+    if band is None:
+        missing_penalty += 0.04
+    if bb is None:
+        missing_penalty += 0.03
+
+    return {
+        'energy': energy,
+        'brightness': brightness,
+        'bass': bass,
+        'treble': treble,
+        'year_norm': year_norm,
+        'dur_norm': dur_norm,
+        'missing_penalty': missing_penalty,
+    }
+
+
+def _genre_match_score(track_genres, target_genre, genre_mode, families):
+    if not target_genre:
+        return 0.5
+    tg = _norm_genre_text(target_genre)
+    if not tg:
+        return 0.5
+    alias = _build_genre_lookup(families)
+    track_bases = set(alias.get(g, g) for g in track_genres)
+    target_base = alias.get(tg, tg)
+    if target_base in track_bases:
+        return 1.0
+    if genre_mode == 'strict':
+        return 0.0
+    # relaxed: adjacent family membership gets partial credit
+    related = set([target_base] + families.get(target_base, []))
+    if any(g in related or alias.get(g, g) in related for g in track_genres):
+        return 0.72
+    return 0.0
+
+
+def _similarity_score(track_vec, seed_vec):
+    if not seed_vec:
+        return 0.5
+    de = abs(track_vec['energy'] - seed_vec['energy'])
+    db = abs(track_vec['brightness'] - seed_vec['brightness'])
+    dy = abs(track_vec['year_norm'] - seed_vec['year_norm'])
+    dd = abs(track_vec['dur_norm'] - seed_vec['dur_norm'])
+    dist = (de * 0.45 + db * 0.3 + dy * 0.15 + dd * 0.1)
+    return _clamp(1.0 - dist, 0.0, 1.0)
+
+
+def _transition_score(prev_track, prev_vec, cur_track, cur_vec, tw, transition_smoothness):
+    if not prev_track or not prev_vec:
+        return 0.65
+    energy_cont = 1.0 - abs(prev_vec['energy'] - cur_vec['energy'])
+    bright_cont = 1.0 - abs(prev_vec['brightness'] - cur_vec['brightness'])
+    year_cont = 1.0 - abs(prev_vec['year_norm'] - cur_vec['year_norm'])
+
+    prev_genres = set(_split_track_genres(prev_track.get('genre')))
+    cur_genres = set(_split_track_genres(cur_track.get('genre')))
+    genre_cont = 1.0 if (prev_genres & cur_genres) else 0.45
+
+    raw = (
+        tw.get('energy', 0.4) * energy_cont
+        + tw.get('brightness', 0.25) * bright_cont
+        + tw.get('year', 0.15) * year_cont
+        + tw.get('genre', 0.2) * genre_cont
+    )
+    smooth = _clamp(transition_smoothness if transition_smoothness is not None else 0.8, 0.0, 1.0)
+    return _clamp((raw * smooth) + (0.5 * (1.0 - smooth)), 0.0, 1.0)
+
+
+def _arc_target_energy(idx, total, start_energy, arc):
+    if total <= 1:
+        return start_energy
+    t = idx / max(1, total - 1)
+    s = _clamp(start_energy, 0.0, 1.0)
+    if arc == 'gradual_build':
+        return _clamp(s + 0.28 * t, 0.0, 1.0)
+    if arc == 'peak_release':
+        if t <= 0.55:
+            return _clamp(s + 0.32 * (t / 0.55), 0.0, 1.0)
+        return _clamp((s + 0.32) - 0.35 * ((t - 0.55) / 0.45), 0.0, 1.0)
+    if arc == 'wind_down':
+        return _clamp(s - 0.32 * t, 0.0, 1.0)
+    return s  # steady
+
+
+def _build_playlist_generation_preview(payload):
+    cfg = load_playlist_gen_config()
+    families = load_genre_families()
+    weights = cfg.get('weights', {})
+    tw = cfg.get('transition_weights', {})
+
+    mode = str(payload.get('mode') or 'genre').strip().lower()
+    if mode not in ('seed', 'genre', 'hybrid'):
+        mode = 'genre'
+    genre_mode = str(payload.get('genre_mode') or 'strict').strip().lower()
+    if genre_mode not in ('strict', 'relaxed'):
+        genre_mode = 'strict'
+
+    with library_lock:
+        lib_tracks = list(library)
+
+    max_lib = int(cfg.get('max_library_tracks', 5000) or 5000)
+    if len(lib_tracks) > max_lib:
+        # Keep most recent-ish tracks first for predictable performance.
+        lib_tracks = sorted(lib_tracks, key=lambda t: t.get('date_added') or 0, reverse=True)[:max_lib]
+
+    lib_map = {t.get('id'): t for t in lib_tracks if t.get('id')}
+
+    seed_ids = [str(x) for x in (payload.get('seed_track_ids') or []) if str(x)]
+    seed_ids = [sid for sid in seed_ids if sid in lib_map]
+    target_genre = payload.get('target_genre')
+    playlist_length = int(payload.get('playlist_length') or cfg.get('default_playlist_length', 20))
+    playlist_length = _clamp(playlist_length, int(cfg.get('min_playlist_length', 8)), int(cfg.get('max_playlist_length', 80)))
+    year_range = payload.get('year_range') if isinstance(payload.get('year_range'), list) and len(payload.get('year_range')) == 2 else None
+    energy_target = _safe_float(payload.get('energy_target'))
+    brightness_target = _safe_float(payload.get('brightness_target'))
+    mood = str(payload.get('mood') or '').strip().lower()
+    mood_presets = {
+        'focus': (0.42, 0.40),
+        'late_night': (0.30, 0.35),
+        'energetic': (0.78, 0.62),
+        'warm_relaxed': (0.38, 0.28),
+        'hype': (0.86, 0.70),
+        'bright_bouncy': (0.72, 0.78),
+        'dark_heavy': (0.68, 0.24),
+    }
+    if mood in mood_presets:
+        m_energy, m_brightness = mood_presets[mood]
+        if energy_target is None:
+            energy_target = m_energy
+        if brightness_target is None:
+            brightness_target = m_brightness
+    allow_repeat_artists = bool(payload.get('allow_repeat_artists', False))
+    diversity_strength = _clamp(_safe_float(payload.get('diversity_strength'), 0.7), 0.0, 1.0)
+    transition_smoothness = _clamp(_safe_float(payload.get('transition_smoothness'), 0.8), 0.0, 1.0)
+    deterministic_default = bool(cfg.get('deterministic_default', True))
+    deterministic = bool(payload.get('deterministic', deterministic_default))
+    regenerate_mode = bool(payload.get('regenerate', False))
+    arc = str(payload.get('playlist_arc') or 'steady').strip().lower()
+    if arc not in ('steady', 'gradual_build', 'peak_release', 'wind_down'):
+        arc = 'steady'
+    excluded_track_ids = {str(x) for x in (payload.get('excluded_track_ids') or [])}
+    excluded_artists = {_norm_genre_text(x) for x in (payload.get('excluded_artists') or []) if str(x).strip()}
+
+    payload_seed = int(payload.get('seed', 1337))
+    rng = random.Random(payload_seed if deterministic else time.time_ns())
+    feat_map = _load_track_feature_map()
+
+    # Seed centroid
+    seed_vec = None
+    if seed_ids:
+        vectors = [_track_numeric_features(lib_map[sid], feat_map) for sid in seed_ids]
+        seed_vec = {
+            'energy': sum(v['energy'] for v in vectors) / len(vectors),
+            'brightness': sum(v['brightness'] for v in vectors) / len(vectors),
+            'year_norm': sum(v['year_norm'] for v in vectors) / len(vectors),
+            'dur_norm': sum(v['dur_norm'] for v in vectors) / len(vectors),
+        }
+
+    # Candidate pool
+    candidates = []
+    for t in lib_tracks:
+        tid = t.get('id')
+        if not tid or tid in excluded_track_ids:
+            continue
+        if _norm_genre_text(t.get('artist')) in excluded_artists:
+            continue
+        if year_range:
+            y = _safe_float(t.get('year'))
+            if y is not None and (y < year_range[0] or y > year_range[1]):
+                continue
+
+        genres = _split_track_genres(t.get('genre'))
+        gm = _genre_match_score(genres, target_genre, genre_mode, families)
+        if mode in ('genre', 'hybrid') and target_genre:
+            if genre_mode == 'strict' and gm <= 0:
+                continue
+            if genre_mode == 'relaxed' and gm < 0.72 and mode == 'genre':
+                continue
+
+        v = _track_numeric_features(t, feat_map)
+        sim = _similarity_score(v, seed_vec) if mode in ('seed', 'hybrid') else 0.5
+        mood_parts = []
+        if energy_target is not None:
+            mood_parts.append(1.0 - abs(v['energy'] - _clamp(energy_target, 0.0, 1.0)))
+        if brightness_target is not None:
+            mood_parts.append(1.0 - abs(v['brightness'] - _clamp(brightness_target, 0.0, 1.0)))
+        mood = sum(mood_parts) / len(mood_parts) if mood_parts else 0.5
+        sound = _clamp(1.0 - abs(v['bass'] - v['treble']) * 0.6, 0.0, 1.0)
+        diversity = 0.55 + (0.25 * (1.0 - v['missing_penalty']))
+
+        cand_score = (
+            weights.get('similarity', 0.35) * sim
+            + weights.get('genre', 0.2) * gm
+            + weights.get('mood', 0.2) * mood
+            + weights.get('sound', 0.1) * sound
+            + weights.get('diversity', 0.15) * diversity
+            - v['missing_penalty']
+        )
+        candidates.append({
+            'track': t,
+            'vec': v,
+            'genres': genres,
+            'scores': {
+                'similarity': round(sim, 4),
+                'genre_match': round(gm, 4),
+                'mood_match': round(mood, 4),
+                'sound_match': round(sound, 4),
+                'diversity': round(diversity, 4),
+            },
+            'candidate_score': cand_score,
+        })
+
+    if not candidates:
+        return {'tracks': [], 'explanations': [], 'summary': {'reason': 'No candidates matched filters.'}}
+
+    candidates.sort(key=lambda c: c['candidate_score'], reverse=True)
+    cap = int(cfg.get('candidate_pool_cap', 1500) or 1500)
+    candidates = candidates[:cap]
+
+    # Selection + sequencing
+    selected = []
+    selected_ids = set()
+    artist_counts = {}
+    album_counts = {}
+
+    prev_track = None
+    prev_vec = None
+    base_start_energy = energy_target if energy_target is not None else (seed_vec['energy'] if seed_vec else 0.5)
+
+    # If seeds exist, anchor the first one.
+    if seed_ids and seed_ids[0] in lib_map:
+        s0 = lib_map[seed_ids[0]]
+        v0 = _track_numeric_features(s0, feat_map)
+        selected.append({
+            'track': s0,
+            'candidate_score': 1.0,
+            'transition_score': 0.7,
+            'placement_score': 1.0,
+            'reason': 'Seed anchor',
+        })
+        selected_ids.add(s0['id'])
+        artist_counts[_norm_genre_text(s0.get('artist'))] = 1
+        album_counts[_norm_genre_text(s0.get('album'))] = 1
+        prev_track, prev_vec = s0, v0
+
+    while len(selected) < playlist_length:
+        best = None
+        best_score = -1e9
+        top_alternatives = []
+        idx = len(selected)
+        arc_target = _arc_target_energy(idx, playlist_length, base_start_energy, arc)
+        for c in candidates:
+            tid = c['track'].get('id')
+            if not tid or tid in selected_ids:
+                continue
+
+            artist_k = _norm_genre_text(c['track'].get('artist'))
+            album_k = _norm_genre_text(c['track'].get('album'))
+            repeat_artist_pen = 0.0
+            repeat_album_pen = 0.0
+            if not allow_repeat_artists and artist_counts.get(artist_k, 0) > 0:
+                repeat_artist_pen = 0.22 + 0.10 * artist_counts.get(artist_k, 0)
+            if album_counts.get(album_k, 0) > 0:
+                repeat_album_pen = 0.08 + 0.05 * album_counts.get(album_k, 0)
+
+            trans = _transition_score(prev_track, prev_vec, c['track'], c['vec'], tw, transition_smoothness)
+            arc_pen = abs(c['vec']['energy'] - arc_target) * 0.18
+            diversity_pen = (repeat_artist_pen + repeat_album_pen) * diversity_strength
+            placement = (c['candidate_score'] * (1.0 - transition_smoothness * 0.35)) + (trans * transition_smoothness) - diversity_pen - arc_pen
+
+            # Deterministic mode still gets a reproducible tie-break jitter that changes
+            # across run seeds (used by Regenerate). Non-deterministic uses true random jitter.
+            if deterministic:
+                key = f"{payload_seed}:{idx}:{tid or ''}"
+                digest = hashlib.md5(key.encode()).digest()
+                unit = int.from_bytes(digest[:4], 'big') / 0xFFFFFFFF
+                placement += (unit - 0.5) * 0.016
+            else:
+                placement += rng.uniform(-0.012, 0.012)
+
+            if placement > best_score:
+                best_score = placement
+                best = (c, trans, placement)
+            top_alternatives.append((placement, c, trans))
+
+        if not best:
+            break
+
+        # Regenerate mode intentionally explores the top-ranked window so each run
+        # can return alternate but still high-quality sequences.
+        if regenerate_mode and top_alternatives:
+            top_alternatives.sort(key=lambda x: x[0], reverse=True)
+            window = min(8, len(top_alternatives))
+            pick_rank = int(rng.random() * window)
+            placement, c, trans = top_alternatives[pick_rank]
+        else:
+            c, trans, placement = best
+        t = c['track']
+        selected.append({
+            'track': t,
+            'candidate_score': round(c['candidate_score'], 4),
+            'transition_score': round(trans, 4),
+            'placement_score': round(placement, 4),
+            'reason': 'Genre fit' if c['scores']['genre_match'] >= 0.99 else ('Transition continuity' if trans >= 0.72 else 'Balanced fit'),
+            'score_components': c['scores'],
+        })
+        selected_ids.add(t['id'])
+        artist_counts[_norm_genre_text(t.get('artist'))] = artist_counts.get(_norm_genre_text(t.get('artist')), 0) + 1
+        album_counts[_norm_genre_text(t.get('album'))] = album_counts.get(_norm_genre_text(t.get('album')), 0) + 1
+        prev_track, prev_vec = t, c['vec']
+
+    out_tracks = [s['track'] for s in selected]
+    out_explain = [{
+        'track_id': s['track'].get('id'),
+        'candidate_score': s['candidate_score'],
+        'transition_score': s['transition_score'],
+        'placement_score': s['placement_score'],
+        'reason': s['reason'],
+        'score_components': s.get('score_components', {}),
+    } for s in selected]
+
+    return {
+        'tracks': out_tracks,
+        'explanations': out_explain,
+        'summary': {
+            'mode': mode,
+            'genre_mode': genre_mode,
+            'mood': mood,
+            'target_genre': target_genre or '',
+            'requested_length': playlist_length,
+            'generated_length': len(out_tracks),
+            'seed_count': len(seed_ids),
+            'candidate_pool_size': len(candidates),
+            'deterministic': deterministic,
+            'arc': arc,
+            'library_tracks_considered': len(lib_tracks),
+            'max_library_tracks': max_lib,
+            'note': 'Some tracks used fallback scoring due to missing audio features.',
+        }
+    }
+
+
+@app.route('/api/playlists/generate/options', methods=['GET'])
+def playlist_generate_options():
+    with library_lock:
+        tracks = list(library)
+    genres = {}
+    for t in tracks:
+        for g in _split_track_genres(t.get('genre')):
+            genres[g] = genres.get(g, 0) + 1
+    top_genres = [g for g, _ in sorted(genres.items(), key=lambda kv: (-kv[1], kv[0]))[:80]]
+    cfg = load_playlist_gen_config()
+    return jsonify({
+        'modes': ['seed', 'genre', 'hybrid'],
+        'genre_modes': ['strict', 'relaxed'],
+        'playlist_arcs': ['steady', 'gradual_build', 'peak_release', 'wind_down'],
+        'genres': top_genres,
+        'genre_families': load_genre_families(),
+        'defaults': {
+            'mode': 'genre',
+            'genre_mode': 'strict',
+            'playlist_length': cfg.get('default_playlist_length', 20),
+            'deterministic': cfg.get('deterministic_default', True),
+            'diversity_strength': 0.7,
+            'transition_smoothness': 0.8,
+            'playlist_arc': 'steady',
+            'allow_repeat_artists': False,
+        },
+        'limits': {
+            'playlist_length': [cfg.get('min_playlist_length', 8), cfg.get('max_playlist_length', 80)],
+            'max_library_tracks': cfg.get('max_library_tracks', 5000),
+            'candidate_pool_cap': cfg.get('candidate_pool_cap', 1500),
+        }
+    })
+
+
+@app.route('/api/playlists/generate/preview', methods=['POST'])
+def playlist_generate_preview():
+    data = request.json or {}
+    result = _build_playlist_generation_preview(data)
+    return jsonify(result)
+
+
+@app.route('/api/playlists/generate/save', methods=['POST'])
+def playlist_generate_save():
+    data = request.json or {}
+    name = str(data.get('name') or '').strip() or f"Generated Playlist {time.strftime('%Y-%m-%d %H:%M')}"
+    track_ids = data.get('track_ids') or []
+    if not isinstance(track_ids, list):
+        return jsonify({'error': 'track_ids must be a list'}), 400
+
+    with library_lock:
+        valid_ids = {t.get('id') for t in library}
+    clean_ids = [str(tid) for tid in track_ids if str(tid) in valid_ids]
+    if not clean_ids:
+        return jsonify({'error': 'No valid tracks to save'}), 400
+
+    playlists = load_playlists()
+    pid = str(uuid.uuid4())
+    now = int(time.time())
+    playlists[pid] = {
+        'id': pid,
+        'name': name,
+        'created_at': now,
+        'updated_at': now,
+        'tracks': clean_ids,
+        'generator': 'ml_v1',
+    }
+    save_playlists(playlists)
+    return jsonify({'id': pid, 'name': name, 'track_count': len(clean_ids)}), 201
+
+
 def parse_m3u(content):
     """Return list of {path, title, artist, duration} from M3U/M3U8 text."""
     entries = []
@@ -1233,12 +1789,89 @@ def export_to_device():
 
 SYNC_EXTENSIONS = {'.flac', '.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus', '.wv'}
 
+def _normalize_rel(path):
+    return str(path or '').replace('\\', '/').strip('/')
+
+
+def _safe_segment(value):
+    seg = str(value or '').strip()
+    seg = _INVALID_FS_CHARS_RE.sub('_', seg)
+    seg = re.sub(r'\s+', ' ', seg).strip().rstrip('. ')
+    if not seg:
+        return ''
+    if len(seg) > _MAX_SEGMENT_LEN:
+        seg = seg[:_MAX_SEGMENT_LEN].rstrip('. ')
+    return seg
+
+
+def _track_tokens(track):
+    raw_track = str(track.get('track_number') or '').strip()
+    raw_disc = str(track.get('disc_number') or '').strip()
+    try:
+        track_num = str(int(raw_track.split('/')[0])) if raw_track else ''
+    except Exception:
+        track_num = ''
+    try:
+        disc_num = str(int(raw_disc.split('/')[0])) if raw_disc else ''
+    except Exception:
+        disc_num = ''
+    title = str(track.get('title') or Path(track.get('path') or '').stem or '').strip()
+    album_artist = str(track.get('album_artist') or '').strip()
+    artist = str(track.get('artist') or '').strip()
+    return {
+        'artist': artist or 'Unknown Artist',
+        'albumartist': album_artist or artist or 'Unknown Artist',
+        'album': str(track.get('album') or '').strip() or 'Unknown Album',
+        'title': title or 'Unknown Title',
+        'track': track_num.zfill(2) if track_num else '',
+        'discnumber': disc_num.zfill(2) if disc_num else '',
+        'year': str(track.get('year') or '').strip(),
+        'genre': str(track.get('genre') or '').strip() or 'Unknown Genre',
+    }
+
+
+def _render_device_relpath(track, template):
+    warnings = []
+    tpl = _normalize_path_template(template)
+    tokens = _track_tokens(track)
+    rendered = tpl
+    missing = []
+    for k, v in tokens.items():
+        marker = f'%{k}%'
+        if marker in rendered:
+            safe = _safe_segment(v)
+            if not safe:
+                missing.append(k)
+                safe = _safe_segment(f'Unknown {k}')
+            rendered = rendered.replace(marker, safe)
+    if missing:
+        warnings.append(f"{track.get('path', '')}: missing metadata for {', '.join(sorted(set(missing)))}")
+    rendered = _normalize_rel(rendered)
+    parts = [p for p in rendered.split('/') if p]
+    if not parts:
+        parts = [_safe_segment(Path(track.get('path') or '').name) or 'Unknown.flac']
+    filename = parts[-1]
+    ext = Path(track.get('path') or '').suffix.lower()
+    if not Path(filename).suffix and ext:
+        filename = f'{filename}{ext}'
+    filename = _safe_segment(filename)
+    if ext and not Path(filename).suffix:
+        filename = f'{filename}{ext}'
+    parts[-1] = filename or ('track' + (ext or '.flac'))
+    rel = '/'.join([p for p in parts if p])
+    if rel != rendered:
+        warnings.append(f"{track.get('path', '')}: invalid characters sanitized for device filesystem")
+    return rel, warnings
+
+
 def get_dap_music_path(dap_id):
-    """Return Path to Music folder on the DAP identified by dap_id."""
+    """Return configured music root folder on the DAP identified by dap_id."""
     dap = next((d for d in load_daps() if d['id'] == dap_id), None)
     if not dap:
         return None
-    return Path(dap['mount_path']) / 'Music'
+    mount = Path(dap.get('mount_path') or '')
+    root = _normalize_music_root(dap.get('music_root') or DEFAULT_DAP_MUSIC_ROOT)
+    return mount / root
 
 def walk_music_files(root):
     """Return sorted list of relative path strings for all music files under root."""
@@ -1271,7 +1904,7 @@ def sync_scan():
 
     device_path = get_dap_music_path(dap_id)
     if not device_path or not device_path.exists():
-        return jsonify({'error': 'Device not mounted or Music folder not found'}), 400
+        return jsonify({'error': 'Device not mounted or configured music folder not found'}), 400
 
     sync_state = {
         'status': 'scanning',
@@ -1281,25 +1914,65 @@ def sync_scan():
         'total': 0,
         'local_only': [],
         'device_only': [],
+        'warnings': [],
         'errors': [],
         'current': '',
+        'local_copy_map': {},
     }
 
     def do_scan():
         global sync_state
         try:
-            sync_state['current'] = 'Scanning local library…'
-            local_files = set(walk_music_files(get_music_base()))
-            sync_state['current'] = 'Scanning device…'
-            device_files = set(walk_music_files(device_path))
+            sync_state['current'] = 'Mapping local library structure…'
+            with library_lock:
+                tracks = list(library)
+            daps = load_daps()
+            dap = next((d for d in daps if d.get('id') == dap_id), None)
+            if not dap:
+                raise RuntimeError('DAP not found')
+            template = dap.get('path_template') or DEFAULT_DAP_PATH_TEMPLATE
+            expected_map = {}
+            warnings = []
+            case_collision = set()
+            for t in tracks:
+                local_rel = _normalize_rel(t.get('path'))
+                if not local_rel:
+                    continue
+                rel, warns = _render_device_relpath(t, template)
+                warnings.extend(warns)
+                norm_key = rel.casefold()
+                if norm_key in expected_map and expected_map[norm_key] != local_rel:
+                    case_collision.add(rel)
+                expected_map[norm_key] = local_rel
 
-            local_only = sorted(local_files - device_files)
-            device_only = sorted(device_files - local_files)
+            sync_state['current'] = 'Scanning device…'
+            device_files = sorted(walk_music_files(device_path))
+            device_map = {_normalize_rel(p).casefold(): _normalize_rel(p) for p in device_files}
+
+            expected_keys = set(expected_map.keys())
+            device_keys = set(device_map.keys())
+            rendered_by_key = {}
+            for t in tracks:
+                local_rel = _normalize_rel(t.get('path'))
+                if not local_rel:
+                    continue
+                rel, _ = _render_device_relpath(t, template)
+                rendered_by_key[rel.casefold()] = rel
+
+            local_only = sorted([rendered_by_key[k] for k in (expected_keys - device_keys) if k in rendered_by_key])
+            device_only = sorted([device_map[k] for k in (device_keys - expected_keys)])
+            local_copy_map = {rendered_by_key[k]: expected_map[k] for k in rendered_by_key.keys() if k in expected_map}
+
+            for c in sorted(case_collision):
+                warnings.append(f'Case/filename collision detected for "{c}" — review before syncing.')
+            warnings = sorted(set(warnings))
 
             sync_state.update({
                 'status': 'ready',
                 'local_only': local_only,
                 'device_only': device_only,
+                'warnings': warnings,
+                'local_copy_map': local_copy_map,
                 'total': len(local_only) + len(device_only),
                 'current': '',
                 'message': (
@@ -1327,7 +2000,7 @@ def sync_execute():
         return jsonify({'error': 'Run scan first'}), 400
 
     data = request.json or {}
-    local_paths = data.get('local_paths', [])   # copy local → device
+    local_paths = data.get('local_paths', [])   # copy local → device (device-relative path keys)
     device_paths = data.get('device_paths', []) # copy device → local
     dap_id = sync_state['dap_id']
     device_path = get_dap_music_path(dap_id)
@@ -1352,16 +2025,24 @@ def sync_execute():
         global sync_state
         errors = []
         progress = 0
+        local_copy_map = sync_state.get('local_copy_map') or {}
 
-        for rel in local_paths:
-            src = get_music_base() / rel
-            dst = device_path / rel
-            sync_state['current'] = f'→ Device: {rel}'
+        for device_rel in local_paths:
+            local_rel = local_copy_map.get(device_rel)
+            if not local_rel:
+                errors.append(f'{device_rel}: no local source mapping found')
+                progress += 1
+                sync_state['progress'] = progress
+                sync_state['message'] = f'Copying {progress} / {total} files…'
+                continue
+            src = get_music_base() / local_rel
+            dst = device_path / device_rel
+            sync_state['current'] = f'→ Device: {device_rel}'
             try:
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
             except Exception as e:
-                errors.append(f'{rel}: {e}')
+                errors.append(f'{device_rel}: {e}')
             progress += 1
             sync_state['progress'] = progress
             sync_state['message'] = f'Copying {progress} / {total} files…'
@@ -1400,7 +2081,7 @@ def sync_reset():
     sync_state = {
         'status': 'idle', 'device': None, 'message': '',
         'progress': 0, 'total': 0, 'local_only': [], 'device_only': [],
-        'errors': [], 'current': '',
+        'warnings': [], 'errors': [], 'current': '', 'local_copy_map': {},
     }
     return jsonify({'ok': True})
 
@@ -1410,6 +2091,23 @@ def sync_reset():
 def _slugify_model_id(name):
     s = re.sub(r'[^a-z0-9]+', '_', (name or '').lower()).strip('_')
     return s or 'other'
+
+
+DEFAULT_DAP_MUSIC_ROOT = 'Music'
+DEFAULT_DAP_PATH_TEMPLATE = '%artist%/%album%/%track% - %title%'
+_INVALID_FS_CHARS_RE = re.compile(r'[<>:"/\\\\|?*\\x00-\\x1f]')
+_MAX_SEGMENT_LEN = 120
+
+
+def _normalize_music_root(path):
+    root = str(path or DEFAULT_DAP_MUSIC_ROOT).strip().replace('\\', '/')
+    root = root.strip('/')
+    return root or DEFAULT_DAP_MUSIC_ROOT
+
+
+def _normalize_path_template(tpl):
+    s = str(tpl or DEFAULT_DAP_PATH_TEMPLATE).strip()
+    return s or DEFAULT_DAP_PATH_TEMPLATE
 
 
 def _normalize_export_folder(path):
@@ -1470,6 +2168,53 @@ def load_gear_profiles():
     return _normalize_gear_profiles(_DEFAULT_GEAR_PROFILES)
 
 
+def _load_json_with_fallback(primary: Path, bundled_name: str, default_obj):
+    candidates = [primary, Path(__file__).parent / 'data' / bundled_name]
+    for p in candidates:
+        if not p.exists():
+            continue
+        try:
+            return json.loads(p.read_text())
+        except Exception:
+            continue
+    return default_obj
+
+
+def load_genre_families():
+    raw = _load_json_with_fallback(GENRE_FAMILIES_FILE, 'genre_families.json', _DEFAULT_GENRE_FAMILIES)
+    out = {}
+    if not isinstance(raw, dict):
+        return dict(_DEFAULT_GENRE_FAMILIES)
+    for base, rel in raw.items():
+        b = str(base or '').strip().lower()
+        if not b:
+            continue
+        if not isinstance(rel, list):
+            rel = []
+        vals = []
+        for g in rel:
+            s = str(g or '').strip().lower()
+            if s and s != b and s not in vals:
+                vals.append(s)
+        out[b] = vals
+    return out or dict(_DEFAULT_GENRE_FAMILIES)
+
+
+def load_playlist_gen_config():
+    raw = _load_json_with_fallback(PLAYLIST_GEN_CONFIG_FILE, 'playlist_gen_config.json', _DEFAULT_PLAYLIST_GEN_CONFIG)
+    cfg = dict(_DEFAULT_PLAYLIST_GEN_CONFIG)
+    if isinstance(raw, dict):
+        for k in ['max_library_tracks', 'candidate_pool_cap', 'default_playlist_length',
+                  'min_playlist_length', 'max_playlist_length', 'deterministic_default']:
+            if k in raw:
+                cfg[k] = raw[k]
+        if isinstance(raw.get('weights'), dict):
+            cfg['weights'] = {**cfg['weights'], **raw['weights']}
+        if isinstance(raw.get('transition_weights'), dict):
+            cfg['transition_weights'] = {**cfg['transition_weights'], **raw['transition_weights']}
+    return cfg
+
+
 @app.route('/api/gear/profiles', methods=['GET'])
 def get_gear_profiles():
     return jsonify(load_gear_profiles())
@@ -1477,7 +2222,31 @@ def get_gear_profiles():
 def load_daps():
     if DAP_FILE.exists():
         try:
-            return json.load(open(DAP_FILE))
+            daps = json.load(open(DAP_FILE))
+            changed = False
+            for d in daps:
+                if 'storage_type' not in d:
+                    d['storage_type'] = 'sd'
+                    changed = True
+                if 'music_root' not in d:
+                    d['music_root'] = DEFAULT_DAP_MUSIC_ROOT
+                    changed = True
+                else:
+                    norm_root = _normalize_music_root(d.get('music_root'))
+                    if norm_root != d.get('music_root'):
+                        d['music_root'] = norm_root
+                        changed = True
+                if 'path_template' not in d:
+                    d['path_template'] = DEFAULT_DAP_PATH_TEMPLATE
+                    changed = True
+                else:
+                    norm_tpl = _normalize_path_template(d.get('path_template'))
+                    if norm_tpl != d.get('path_template'):
+                        d['path_template'] = norm_tpl
+                        changed = True
+            if changed:
+                save_daps(daps)
+            return daps
         except Exception:
             pass
     return []
@@ -1512,6 +2281,9 @@ def create_dap():
     model = data.get('model', 'generic')
     profile_map = {p['model']: p for p in load_gear_profiles().get('dap_profiles', [])}
     defaults = profile_map.get(model, {'export_folder': 'Playlists', 'path_prefix': ''})
+    storage_type = str(data.get('storage_type') or 'sd').strip().lower()
+    if storage_type not in ('sd', 'internal'):
+        storage_type = 'sd'
     dap = {
         'id': str(uuid.uuid4()),
         'name': data.get('name', 'New DAP'),
@@ -1520,6 +2292,9 @@ def create_dap():
         'mount_path': data.get('mount_path', ''),
         'export_folder': _normalize_export_folder(data.get('export_folder') or defaults.get('export_folder')),
         'path_prefix': data.get('path_prefix', defaults.get('path_prefix', '')),
+        'storage_type': storage_type,
+        'music_root': _normalize_music_root(data.get('music_root')),
+        'path_template': _normalize_path_template(data.get('path_template')),
         'peq_folder': data.get('peq_folder', 'PEQ'),
         'playlist_exports': {},
     }
@@ -1546,10 +2321,17 @@ def update_dap(did):
     dap = next((d for d in daps if d['id'] == did), None)
     if not dap:
         return jsonify({'error': 'Not found'}), 404
-    for k in ('name', 'model', 'icon', 'mount_path', 'export_folder', 'path_prefix', 'peq_folder'):
+    for k in ('name', 'model', 'icon', 'mount_path', 'export_folder', 'path_prefix', 'storage_type', 'music_root', 'path_template', 'peq_folder'):
         if k in data:
             if k == 'export_folder':
                 dap[k] = _normalize_export_folder(data[k])
+            elif k == 'music_root':
+                dap[k] = _normalize_music_root(data[k])
+            elif k == 'path_template':
+                dap[k] = _normalize_path_template(data[k])
+            elif k == 'storage_type':
+                v = str(data[k] or '').strip().lower()
+                dap[k] = v if v in ('sd', 'internal') else 'sd'
             else:
                 dap[k] = data[k]
     save_daps(daps)
@@ -2523,7 +3305,8 @@ def export_backup():
         for fname in [
             'playlists.json', 'settings.json', 'daps.json',
             'iems.json', 'baselines.json', 'match-matrix.json',
-            'insights_config.json',
+            'insights_config.json', 'genre_families.json',
+            'playlist_gen_config.json',
         ]:
             p = DATA_DIR / fname
             if p.exists():
@@ -2554,7 +3337,8 @@ def import_backup():
             for fname in [
                 'playlists.json', 'settings.json', 'daps.json',
                 'iems.json', 'baselines.json', 'match-matrix.json',
-                'insights_config.json',
+                'insights_config.json', 'genre_families.json',
+                'playlist_gen_config.json',
             ]:
                 if fname in names:
                     content = json.loads(zf.read(fname))   # validate JSON

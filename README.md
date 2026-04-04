@@ -48,6 +48,11 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 - In-playlist text filter and sort (Original / A–Z / Album / Date)
 - Custom cover art per playlist, or auto-generated 2×2 mosaic from album art
 - M3U / M3U8 import with interactive mapping UI for unmatched tracks
+- **Smart Playlist** generator:
+  - quick mode: `Mix style`, `Vibe`, `Length`, optional references/genre lane
+  - advanced controls in collapsible section (arc, constraints, deterministic, etc.)
+  - reference-track browser modal + "use current selection" shortcut
+  - regenerate for alternate high-quality candidate sets before saving
 
 ### Device Export & Sync
 - Dynamic per-DAP export pills on every playlist (download or copy directly to device)
@@ -60,8 +65,12 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 - Web Audio API signal chain: preamp → biquad PEQ filters → volume
 - Crossfade between tracks: dual A/B `HTMLAudioElement` engine, 0–12s configurable
 - Shuffle (Fisher-Yates), repeat off/all/one
+- Context-aware playback + shuffle:
+  - double-click from playlist/artist/album/songs starts from that active context
+  - shuffle acts on the current context collection (not a single-track queue)
 - Playback quality display: `24-bit · 48 kHz · FLAC` or `320 kbps · MP3`
 - Right-click context menu: Play Next / Add to Queue / Add to Playlist on all track rows and cards
+- Right-click Smart Playlist entry: create a Smart Playlist from selected/target tracks
 - Double-click track to play
 - Keyboard shortcuts: Space = play/pause, Alt+←/→ = prev/next, M = mute
 - Player state persisted to localStorage and server-side `player_state.json`

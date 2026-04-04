@@ -203,6 +203,9 @@
       <!-- Playlist view -->
       <div id="view-playlist" class="view" style="display:none">
         <div class="playlist-header">
+          <button class="pl-header-delete-btn" onclick="App.deleteCurrentPlaylist()" title="Delete playlist" aria-label="Delete playlist">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
           <div class="playlist-cover-wrap" onclick="App.triggerArtworkUpload()" title="Click to set cover art">
             <div class="playlist-cover" id="pl-cover"></div>
             <div class="cover-upload-overlay">
@@ -219,10 +222,6 @@
             <div class="playlist-actions" id="dap-export-pills">
               <!-- Populated dynamically from DAP list in openPlaylist() -->
             </div>
-            <button class="pl-header-delete-btn" onclick="App.deleteCurrentPlaylist()" title="Delete playlist">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-              Delete Playlist
-            </button>
           </div>
         </div>
 
@@ -370,6 +369,10 @@
             <button class="btn-secondary" onclick="App.triggerImport()">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               Import
+            </button>
+            <button class="btn-secondary" onclick="App.openMlPlaylistGenerator('global')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/><path d="M7 7h.01M17 7h.01M7 17h.01M17 17h.01"/></svg>
+              Smart Playlist
             </button>
             <button class="btn-primary" onclick="App.createPlaylist()">+ New Playlist</button>
           </div>
@@ -938,6 +941,17 @@
           <div class="sync-list" id="sync-list-device"></div>
         </div>
 
+        <div id="sync-warnings-wrap" class="sync-section" style="display:none">
+          <div class="sync-section-hdr">
+            <div class="sync-section-hdr-left">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round"><path d="M12 3l9 16H3l9-16z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <span class="sync-section-title">Needs review</span>
+              <span class="sync-count-pill" id="sync-warning-count">0</span>
+            </div>
+          </div>
+          <div class="sync-list" id="sync-list-warnings"></div>
+        </div>
+
         <div class="modal-actions">
           <button class="btn-secondary" onclick="App.closeSyncModal()">Cancel</button>
           <button class="btn-primary" id="sync-execute-btn" onclick="App.executeSync()">Start Sync</button>
@@ -1004,24 +1018,87 @@
           <option value="loading">Loading presets...</option>
         </select>
       </div>
-      <div class="settings-row">
-        <label>Mount path</label>
-        <div class="input-browse-group">
-          <input id="dap-mount" type="text" />
-          <button class="btn-browse" onclick="App.browseFolder('dap-mount')">Browse…</button>
+      <div class="settings-row" style="align-items:flex-start">
+        <label class="dap-label-help" style="padding-top:8px">
+          <span>Mount path</span>
+          <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-mount-help')" title="Mount path help">?</button>
+        </label>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <div class="input-browse-group">
+            <input id="dap-mount" type="text" />
+            <button class="btn-browse" onclick="App.browseFolder('dap-mount')">Browse…</button>
+          </div>
+          <p id="dap-mount-help" class="settings-hint dap-inline-help" style="display:none">
+            Connect your DAP via USB, then browse to its mount root (for example <code>/Volumes/FIIO M21</code>).
+          </p>
         </div>
       </div>
-      <p class="settings-hint" style="margin-bottom:10px">Connect your DAP via USB, then Browse to its root folder (e.g. <code>/Volumes/FIIO M21</code>). You can also point directly to the Music folder on its SD card.</p>
       <div class="settings-row" style="align-items:flex-start">
-        <label style="padding-top:8px">Playlist export folder</label>
+        <label class="dap-label-help" style="padding-top:8px">
+          <span>Music folder on DAP</span>
+          <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-music-help')" title="Music folder help">?</button>
+        </label>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <div class="input-browse-group">
+            <input id="dap-music-root" type="text" placeholder="Music" oninput="App.dapTemplateChanged()" />
+            <button class="btn-browse" onclick="App.browseFolder('dap-music-root')">Browse…</button>
+          </div>
+          <p id="dap-music-help" class="settings-hint dap-inline-help" style="display:none">
+            Sync scans and copies files only under this folder (relative to mount path). Example: <code>Music</code> or <code>SDCard/Music</code>.
+          </p>
+        </div>
+      </div>
+      <div class="settings-row">
+        <label>Folder structure</label>
+        <select id="dap-template-preset" onchange="App.dapTemplatePreset(this.value)">
+          <option value="artist_album_track">Artist/Album/song-file.flac (Recommended)</option>
+          <option value="artist_track">Artist/song-file.flac</option>
+          <option value="albumartist_album_track">Artist/Year/song-file.flac</option>
+          <option value="flat_track">Genre/song-file.flac</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="settings-row" style="align-items:flex-start">
+        <label class="dap-label-help" style="padding-top:8px">
+          <span>Path template</span>
+          <button class="settings-help-btn" type="button" onclick="App.toggleDapTemplateHelp()" title="Template help">?</button>
+        </label>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <input id="dap-path-template" type="text" oninput="App.dapTemplateChanged()" placeholder="%artist%/%album%/%track% - %title%" readonly />
+          <div class="token-chip-row">
+            <button class="token-chip" data-token="%artist%" onclick="App.insertDapToken('%artist%')" type="button">Artist</button>
+            <button class="token-chip" data-token="%album%" onclick="App.insertDapToken('%album%')" type="button">Album</button>
+            <button class="token-chip" data-token="%year%" onclick="App.insertDapToken('%year%')" type="button">Year</button>
+            <button class="token-chip" data-token="%genre%" onclick="App.insertDapToken('%genre%')" type="button">Genre</button>
+          </div>
+          <span id="dap-template-validation" style="display:none;font-size:11px;line-height:1.4;color:#fbbf24"></span>
+          <div id="dap-template-preview" class="dap-template-preview"></div>
+          <p id="dap-template-help" class="settings-hint dap-template-help" style="display:none">
+            Sync uses this folder + template to detect differences and copy files. Filename is auto-generated as <code>track - title</code>. Changing the template later remaps by copying into the new structure without deleting old files.
+          </p>
+        </div>
+      </div>
+      <div class="settings-row" style="align-items:flex-start">
+        <label class="dap-label-help" style="padding-top:8px">
+          <span>Playlist export folder</span>
+          <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-folder-hint')" title="Playlist export folder help">?</button>
+        </label>
         <div style="flex:1;display:flex;flex-direction:column;gap:4px">
           <input id="dap-export-folder" type="text" style="width:100%" />
-          <span id="dap-folder-hint" style="font-size:11px;color:var(--text-muted);line-height:1.4"></span>
+          <p id="dap-folder-hint" class="settings-hint dap-inline-help" style="display:none"></p>
         </div>
       </div>
-      <div class="settings-row">
-        <label>Path prefix <span style="font-size:11px;color:var(--text-muted)">(leave blank for relative)</span></label>
-        <input id="dap-prefix" type="text" />
+      <div class="settings-row" style="align-items:flex-start">
+        <label class="dap-label-help" style="padding-top:8px">
+          <span>Path prefix</span>
+          <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-prefix-help')" title="Path prefix help">?</button>
+        </label>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <input id="dap-prefix" type="text" />
+          <p id="dap-prefix-help" class="settings-hint dap-inline-help" style="display:none">
+            Optional. Leave blank to export relative paths (recommended for most DAP players).
+          </p>
+        </div>
       </div>
       <div class="modal-actions" style="margin-top:20px">
         <button class="btn-secondary" onclick="App.closeDapModal()">Cancel</button>
@@ -1297,6 +1374,10 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="11" x2="15" y2="11"/><line x1="3" y1="16" x2="11" y2="16"/><line x1="18" y1="14" x2="18" y2="21"/><line x1="14.5" y1="17.5" x2="21.5" y2="17.5"/></svg>
       Add to Queue
     </div>
+    <div class="ctx-item" id="ctx-smart-playlist-item" onclick="App.ctxCreateSmartPlaylist()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20"/><path d="M2 12h20"/><circle cx="12" cy="12" r="9.2"/></svg>
+      <span id="ctx-smart-playlist-label">Create Smart Playlist</span>
+    </div>
     <div class="ctx-sep"></div>
     <div class="ctx-item ctx-has-submenu" id="ctx-playlist-item"
          onmouseenter="App.openCtxSubmenu(event)"
@@ -1325,6 +1406,172 @@
       <div class="modal-actions" style="margin-top:16px">
         <button class="btn-secondary" onclick="App.closeCreatePlaylistModal()">Cancel</button>
         <button class="btn-primary" onclick="App.submitCreatePlaylist()">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Smart Playlist modal -->
+  <div id="ml-gen-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeMlPlaylistGenerator()">
+    <div class="modal modal-wide ml-gen-modal">
+      <div class="modal-head">
+        <div>
+          <h3>Smart Playlist</h3>
+          <p class="onboarding-subtitle">Deterministic local generation with transparent scoring.</p>
+        </div>
+        <button class="modal-x-btn" onclick="App.closeMlPlaylistGenerator()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="ml-gen-body">
+        <div class="settings-row ml-gen-row ml-gen-row-span2">
+          <label>Playlist name</label>
+          <input id="ml-gen-name" type="text" placeholder="New generated playlist" />
+        </div>
+        <div class="settings-row ml-gen-row">
+          <label>Mix style</label>
+          <select id="ml-gen-mode">
+            <option value="seed">Track DNA</option>
+            <option value="genre">Genre Lane</option>
+            <option value="hybrid">Blend Mode</option>
+          </select>
+        </div>
+        <div class="settings-row ml-gen-row" id="ml-gen-target-row">
+          <label>Genre lane</label>
+          <select id="ml-gen-target-genre">
+            <option value="">Any</option>
+          </select>
+        </div>
+        <div class="settings-row ml-gen-row ml-gen-row-span2" id="ml-gen-seed-row">
+          <label>Reference tracks</label>
+          <div class="ml-gen-ref-wrap">
+            <div id="ml-gen-seed-note" class="ml-gen-seed-note">No reference songs selected yet.</div>
+            <div class="ml-gen-ref-search-row">
+              <button class="btn-secondary" onclick="App.openMlReferenceBrowser()">Browse Library</button>
+              <button class="btn-secondary" onclick="App.mlGenUseCurrentSelection()">Use Current Selection</button>
+              <button class="btn-secondary" onclick="App.mlGenClearReferences()">Clear</button>
+            </div>
+            <div id="ml-gen-ref-selected" class="ml-gen-ref-selected"></div>
+          </div>
+        </div>
+        <div class="settings-row ml-gen-row">
+          <label>Length</label>
+          <select id="ml-gen-length">
+            <option value="12">Short (12 tracks)</option>
+            <option value="20" selected>Standard (20 tracks)</option>
+            <option value="30">Long (30 tracks)</option>
+          </select>
+        </div>
+        <div class="settings-row ml-gen-row">
+          <label>Vibe</label>
+          <select id="ml-gen-mood">
+            <option value="">Balanced</option>
+            <option value="hype">Hype</option>
+            <option value="warm_relaxed">Chill</option>
+            <option value="late_night">After Hours</option>
+            <option value="focus">Deep Focus</option>
+            <option value="bright_bouncy">Bright Pop</option>
+            <option value="dark_heavy">Dark & Heavy</option>
+            <option value="energetic">Cardio</option>
+          </select>
+        </div>
+        <div class="ml-gen-row-span2 ml-gen-advanced-wrap">
+          <details id="ml-gen-advanced">
+            <summary>Advanced options</summary>
+            <div class="ml-gen-advanced-grid">
+              <div class="settings-row ml-gen-row">
+                <label>Genre mode</label>
+                <select id="ml-gen-genre-mode">
+                  <option value="strict">Strict</option>
+                  <option value="relaxed">Relaxed</option>
+                </select>
+              </div>
+              <div class="settings-row ml-gen-row">
+                <label>Arc</label>
+                <select id="ml-gen-arc">
+                  <option value="steady">Steady</option>
+                  <option value="gradual_build">Gradual Build</option>
+                  <option value="peak_release">Peak then Release</option>
+                  <option value="wind_down">Wind Down</option>
+                </select>
+              </div>
+              <div class="settings-row ml-gen-row">
+                <label>Energy target</label>
+                <input id="ml-gen-energy" type="number" min="0" max="1" step="0.05" value="0.5" />
+              </div>
+              <div class="settings-row ml-gen-row">
+                <label>Brightness target</label>
+                <input id="ml-gen-brightness" type="number" min="0" max="1" step="0.05" value="0.5" />
+              </div>
+              <div class="settings-row ml-gen-row">
+                <label>Diversity</label>
+                <input id="ml-gen-diversity" type="number" min="0" max="1" step="0.05" value="0.7" />
+              </div>
+              <div class="settings-row ml-gen-row">
+                <label>Transition smoothness</label>
+                <input id="ml-gen-smoothness" type="number" min="0" max="1" step="0.05" value="0.8" />
+              </div>
+              <div class="settings-row ml-gen-row">
+                <label>Year from</label>
+                <input id="ml-gen-year-min" type="number" min="1900" max="2100" placeholder="Any" />
+              </div>
+              <div class="settings-row ml-gen-row">
+                <label>Year to</label>
+                <input id="ml-gen-year-max" type="number" min="1900" max="2100" placeholder="Any" />
+              </div>
+              <div class="settings-row ml-gen-row">
+                <label>Allow repeat artists</label>
+                <select id="ml-gen-repeat-artists">
+                  <option value="false">No</option>
+                  <option value="true">Yes</option>
+                </select>
+              </div>
+              <div class="settings-row ml-gen-row">
+                <label>Deterministic</label>
+                <select id="ml-gen-deterministic">
+                  <option value="true">On</option>
+                  <option value="false">Off</option>
+                </select>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="App.closeMlPlaylistGenerator()">Close</button>
+        <button id="ml-gen-preview-btn" class="btn-secondary" onclick="App.runMlPlaylistPreview()">Preview</button>
+        <button id="ml-gen-regen-btn" class="btn-secondary" onclick="App.regenerateMlPlaylist()">Regenerate</button>
+        <button id="ml-gen-save-btn" class="btn-primary" onclick="App.saveMlGeneratedPlaylist()">Save Playlist</button>
+      </div>
+
+      <div id="ml-gen-preview-pane" class="ml-gen-preview-pane" style="display:none">
+        <div id="ml-gen-summary" class="settings-hint" style="padding-left:0;margin-top:0"></div>
+        <div id="ml-gen-preview"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Smart Playlist reference browser -->
+  <div id="ml-ref-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeMlReferenceBrowser()">
+    <div class="modal modal-wide ml-ref-modal">
+      <div class="modal-head">
+        <div>
+          <h3>Choose Reference Songs</h3>
+          <p class="onboarding-subtitle">Select up to 12 songs to guide Smart Playlist generation.</p>
+        </div>
+        <button class="modal-x-btn" onclick="App.closeMlReferenceBrowser()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="ml-ref-topbar">
+        <input id="ml-ref-search" type="text" placeholder="Search title, artist, album..." oninput="App.mlRefBrowserSearch(this.value)" />
+        <div id="ml-ref-count" class="ml-ref-count">0 selected</div>
+      </div>
+      <div id="ml-ref-results" class="ml-ref-results"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="App.closeMlReferenceBrowser()">Cancel</button>
+        <button class="btn-primary" onclick="App.applyMlReferenceBrowser()">Use Selected</button>
       </div>
     </div>
   </div>

@@ -30,6 +30,8 @@ const Player = (function () {
     queueOpen:       false,
     peqOpen:         false,
     historyExpanded: false,
+    playbackContextTracks: [],
+    playbackContextLabel: '',
   };
 
   /* ── Track registry (populated by app.js via Player.registerTracks) ── */
@@ -424,6 +426,18 @@ const Player = (function () {
   }
 
   function toggleShuffle() {
+    // If queue is only a single track but we have a richer active context
+    // (playlist/artist/album/songs), promote that context into queue first.
+    if (ps.queue.length <= 1 && ps.playbackContextTracks.length > 1 && currentTrack()) {
+      const curId = currentTrack().id;
+      const ctxIdx = ps.playbackContextTracks.findIndex(t => t.id === curId);
+      if (ctxIdx >= 0) {
+        ps.queue = [...ps.playbackContextTracks];
+        ps.queueIdx = ctxIdx;
+        ps.shuffleOrder = [];
+      }
+    }
+
     // IMPORTANT: read the real queue index BEFORE changing ps.shuffle.
     // _realIdx() branches on ps.shuffle, so toggling it first causes it to
     // return the wrong value when disabling shuffle (it would return the
@@ -489,6 +503,14 @@ const Player = (function () {
 
   /** Look up track by ID (from registry or queue) and play it */
   function playTrackById(id) {
+    // Prefer active playback context so double-click from a view starts from that
+    // collection (playlist/artist/album/songs), not a single-track queue.
+    const ctxIdx = ps.playbackContextTracks.findIndex(t => t.id === id);
+    if (ctxIdx >= 0) {
+      playAll(ps.playbackContextTracks, ctxIdx, ps.playbackContextLabel);
+      return;
+    }
+
     const fromQueue = ps.queue.find(t => t.id === id);
     if (fromQueue) { playTrack(fromQueue); return; }
     const fromReg   = _registry.get(id);
@@ -497,11 +519,12 @@ const Player = (function () {
   }
 
   /** Replace the entire queue with tracks[], start at startIdx */
-  function playAll(tracks, startIdx = 0) {
+  function playAll(tracks, startIdx = 0, contextLabel = '') {
     if (!tracks || tracks.length === 0) return;
     tracks.forEach(t => _registry.set(t.id, t));
     ps.queue    = [...tracks];
     ps.queueIdx = Math.max(0, Math.min(startIdx, tracks.length - 1));
+    if (contextLabel) ps.playbackContextLabel = contextLabel;
     ps.shuffleOrder = [];
     if (ps.shuffle) {
       const rest = ps.queue.map((_, i) => i).filter(i => i !== ps.queueIdx);
@@ -612,13 +635,25 @@ const Player = (function () {
   }
 
   function clearQueue() {
-    ps.queue        = [];
-    ps.queueIdx     = -1;
-    ps.shuffleOrder = [];
-    _audio.src      = '';
-    ps.isPlaying    = false;
-    _updateTrackUI(null);
-    _updatePlayBtn();
+    const keep = currentTrack();
+    if (!keep) {
+      ps.queue        = [];
+      ps.queueIdx     = -1;
+      ps.shuffleOrder = [];
+      _audio.src      = '';
+      ps.isPlaying    = false;
+      _updateTrackUI(null);
+      _updatePlayBtn();
+      _highlightActiveRow();
+      _renderQueue();
+      _saveState();
+      return;
+    }
+
+    // Preserve currently loaded/playing track and clear only upcoming/history items.
+    ps.queue = [keep];
+    ps.queueIdx = 0;
+    ps.shuffleOrder = ps.shuffle ? [0] : [];
     _highlightActiveRow();
     _renderQueue();
     _saveState();
@@ -648,6 +683,17 @@ const Player = (function () {
   function registerTracks(tracks) {
     if (!Array.isArray(tracks)) return;
     tracks.forEach(t => { if (t && t.id) _registry.set(t.id, t); });
+  }
+
+  function setPlaybackContext(tracks, label = '') {
+    if (!Array.isArray(tracks)) {
+      ps.playbackContextTracks = [];
+      ps.playbackContextLabel = '';
+      return;
+    }
+    ps.playbackContextTracks = tracks.filter(t => t && t.id);
+    ps.playbackContextLabel = label || '';
+    ps.playbackContextTracks.forEach(t => _registry.set(t.id, t));
   }
 
   /* ── Audio element events (attached to both A and B; guard ignores inactive) ── */
@@ -941,7 +987,7 @@ const Player = (function () {
     }
 
     // ── Continue Playing section ─────────────────────────────────────
-    const fromLabel = currentTrackObj?.album || upcomingItems[0]?.t?.album || '';
+    const fromLabel = ps.playbackContextLabel || currentTrackObj?.album || upcomingItems[0]?.t?.album || '';
     html += `<div class="queue-section">
       <div class="queue-section-hdr queue-section-hdr-plain">
         <span class="queue-section-title">Continue Playing</span>
@@ -1490,6 +1536,7 @@ const Player = (function () {
     clearHistory,
     // Registry
     registerTracks,
+    setPlaybackContext,
     // PEQ
     togglePeqPopover,
     onPeqIemChange,

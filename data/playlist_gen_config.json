@@ -1,0 +1,21 @@
+{
+  "max_library_tracks": 5000,
+  "candidate_pool_cap": 1500,
+  "default_playlist_length": 20,
+  "min_playlist_length": 8,
+  "max_playlist_length": 80,
+  "deterministic_default": true,
+  "weights": {
+    "similarity": 0.35,
+    "genre": 0.2,
+    "mood": 0.2,
+    "sound": 0.1,
+    "diversity": 0.15
+  },
+  "transition_weights": {
+    "energy": 0.4,
+    "brightness": 0.25,
+    "year": 0.15,
+    "genre": 0.2
+  }
+}

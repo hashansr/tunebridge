@@ -1,0 +1,15 @@
+{
+  "ambient": ["dark ambient", "drone", "new age"],
+  "blues": ["blues rock", "delta blues", "electric blues"],
+  "classical": ["baroque", "romantic", "orchestral", "chamber"],
+  "country": ["alt-country", "americana", "country rock"],
+  "electronic": ["edm", "house", "techno", "trance", "drum and bass", "ambient electronic", "downtempo"],
+  "folk": ["indie folk", "traditional folk", "singer-songwriter"],
+  "hip hop": ["rap", "trap", "boom bap", "lo-fi hip hop"],
+  "jazz": ["vocal jazz", "jazz fusion", "contemporary jazz", "bebop", "soul jazz"],
+  "metal": ["heavy metal", "nu metal", "death metal", "black metal", "progressive metal", "metalcore"],
+  "pop": ["synthpop", "indie pop", "dance pop", "electropop"],
+  "r&b": ["neo soul", "soul", "funk"],
+  "reggae": ["dub", "dancehall", "ska"],
+  "rock": ["alternative rock", "hard rock", "classic rock", "progressive rock", "indie rock", "punk rock"]
+}
