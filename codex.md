@@ -494,6 +494,57 @@ Observed working tree at time of writing (not touched by this codex update):
 
 - Validation:
   - `node --check static/app.js` passed.
+
+### 2026-04-04 (Modal scroll support for long forms)
+- Fixed long modal usability issue where lower fields/actions were unreachable on smaller windows.
+- Implemented shared modal scrolling behavior:
+  - `.modal-overlay` now supports vertical scrolling with responsive padding.
+  - `.modal` now has a viewport-aware `max-height` and internal `overflow-y: auto`.
+  - Added `overscroll-behavior: contain` for smoother in-modal scrolling.
+- Result:
+  - Longer forms like `Add DAP` can now be scrolled end-to-end without clipping.
+
+- Files updated:
+  - `static/style.css`
+
+### 2026-04-04 (Add DAP modal clarity pass)
+- Updated `Folder structure` labels to user-friendly path examples:
+  - `Artist/Album/song-file.flac (Recommended)`
+  - `Artist/song-file.flac`
+  - `Artist/Year/song-file.flac`
+  - `Genre/song-file.flac`
+- Improved token selection visibility by switching active token chips to the app’s success-green treatment.
+- Updated template preview format to a single line:
+  - `📁 Preview: <path>`
+  - Includes selected `Music folder on DAP` prefix.
+- Refined preview typography for readability with a monospace path style aligned to existing design language.
+
+- Files updated:
+  - `static/index.html`
+  - `static/style.css`
+  - `static/app.js`
+
+### 2026-04-04 (Add DAP modal help + simplification pass)
+- Removed `Storage location` selector from Add/Edit DAP modal to reduce complexity.
+  - Frontend no longer sends `storage_type` in DAP save payload.
+  - Existing DAP storage values are preserved on edit; new DAPs continue to default server-side.
+- Moved visible helper copy into `?` toggles for better density and consistency:
+  - `Mount path`
+  - `Music folder on DAP`
+  - `Playlist export folder`
+  - `Path prefix`
+  - Existing `Path template` help remains under `?`.
+- Fixed help-text alignment by rendering helper notes inside each field’s right-hand input column (no floating offset/margin hacks).
+- Added centralized DAP help utilities:
+  - `toggleDapHelp(id)`
+  - `_closeDapHelpPanels()` (called on open/close modal).
+- Improved export-folder help text generation:
+  - Includes a stable base explanation plus model-specific preset note when available.
+
+- Files updated:
+  - `static/index.html`
+  - `static/app.js`
+  - `static/style.css`
   - `PYTHONPYCACHEPREFIX=/tmp python3 -m py_compile app.py` passed.
 
 ### 2026-04-02 (Sonic Profile UX reframing toward end-user compatibility meaning)
@@ -2152,6 +2203,30 @@ Observed working tree at time of writing (not touched by this codex update):
   - Converted top helper paragraphs to aligned inline hints (`settings-hint-inline`) so they line up with input column.
   - Upgraded preview UI to a dedicated preview card with icon/title + code styling.
   - Help note styling refined with left accent border for separation from preview.
+
+- Files updated:
+  - `static/index.html`
+  - `static/app.js`
+  - `static/style.css`
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-04 (Add DAP template simplification)
+- User-requested simplification:
+  - Keep path-template options to `Artist`, `Album`, `Year`, `Genre` only.
+  - Auto-generate file name segment (`%track% - %title%`) instead of exposing Title/Track token picks.
+  - Remove title-terminal messaging.
+  - Show preview as single-line path with folder icon and include selected `Music folder on DAP` root.
+
+- Implemented:
+  - Token chips reduced to: Artist / Album / Year / Genre.
+  - Path template field is now read-only and generated from selected chips.
+  - Presets updated to map into allowed folder-token combinations only.
+  - `Custom` preset now clears the template field; users build structure by toggling chips.
+  - Preview switched to single-line compact card:
+    - format: `📁 <music_root>/<rendered_path>`
+  - Removed prior title-lock status messaging from UI and logic.
 
 - Files updated:
   - `static/index.html`

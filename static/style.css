@@ -3132,6 +3132,18 @@ tbody tr:hover {
   padding-right: 16px;
 }
 
+/* Modal scrolling behavior for long forms/content */
+.modal-overlay {
+  overflow-y: auto;
+  padding: clamp(12px, 2.6vh, 24px);
+}
+.modal {
+  margin: auto;
+  max-height: calc(100vh - clamp(12px, 2.6vh, 24px) * 2);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .token-chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -3150,13 +3162,11 @@ tbody tr:hover {
   background: rgba(173, 198, 255, 0.16);
   color: var(--text);
 }
-.token-chip.is-disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.token-chip.is-disabled:hover {
-  background: rgba(173, 198, 255, 0.08);
-  color: var(--text-sub);
+.token-chip.is-active {
+  background: rgba(83, 225, 111, 0.16);
+  border-color: rgba(83, 225, 111, 0.46);
+  color: #b8f6c5;
+  box-shadow: 0 0 0 1px rgba(83, 225, 111, 0.18) inset;
 }
 .dap-label-help {
   display: inline-flex;
@@ -3182,37 +3192,42 @@ tbody tr:hover {
 .settings-hint-inline {
   margin: -2px 0 10px 170px;
 }
-.dap-template-status {
-  display: none;
-  border: 1px solid rgba(173, 198, 255, 0.18);
-  background: rgba(173, 198, 255, 0.08);
-  color: var(--text-sub);
-  border-radius: 10px;
-  padding: 8px 10px;
+.dap-inline-help {
+  margin: 0;
+  padding-left: 0;
   font-size: 12px;
-  line-height: 1.45;
-}
-.dap-template-status.is-ready {
-  display: block;
-  border-color: rgba(83, 225, 111, 0.28);
-  background: rgba(83, 225, 111, 0.09);
-  color: #9df0af;
-}
-.dap-template-status.is-warning {
-  display: block;
-  border-color: rgba(240, 180, 41, 0.28);
-  background: rgba(240, 180, 41, 0.1);
-  color: #ffd27a;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 .dap-template-preview {
-  display: block;
-  border: 1px solid rgba(173, 198, 255, 0.2);
-  background: rgba(24, 27, 35, 0.72);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(173, 198, 255, 0.24);
+  background: rgba(20, 24, 34, 0.78);
   border-radius: 10px;
-  padding: 8px 10px;
+  padding: 9px 11px;
   font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+.dap-template-preview-label {
   color: #adc6ff;
-  line-height: 1.45;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.dap-template-preview-path {
+  color: #dbe8ff;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
 }
 .dap-template-help {
   margin: 0;

@@ -1018,36 +1018,43 @@
           <option value="loading">Loading presets...</option>
         </select>
       </div>
-      <div class="settings-row">
-        <label>Mount path</label>
-        <div class="input-browse-group">
-          <input id="dap-mount" type="text" />
-          <button class="btn-browse" onclick="App.browseFolder('dap-mount')">Browse…</button>
+      <div class="settings-row" style="align-items:flex-start">
+        <label class="dap-label-help" style="padding-top:8px">
+          <span>Mount path</span>
+          <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-mount-help')" title="Mount path help">?</button>
+        </label>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <div class="input-browse-group">
+            <input id="dap-mount" type="text" />
+            <button class="btn-browse" onclick="App.browseFolder('dap-mount')">Browse…</button>
+          </div>
+          <p id="dap-mount-help" class="settings-hint dap-inline-help" style="display:none">
+            Connect your DAP via USB, then browse to its mount root (for example <code>/Volumes/FIIO M21</code>).
+          </p>
         </div>
       </div>
-      <p class="settings-hint settings-hint-inline">Connect your DAP via USB, then browse to its mount root (e.g. <code>/Volumes/FIIO M21</code>). TuneBridge supports one active storage location per DAP profile.</p>
-      <div class="settings-row">
-        <label>Storage location</label>
-        <select id="dap-storage">
-          <option value="sd">SD card</option>
-          <option value="internal">Internal storage</option>
-        </select>
-      </div>
-      <div class="settings-row">
-        <label>Music folder on DAP</label>
-        <div class="input-browse-group">
-          <input id="dap-music-root" type="text" placeholder="Music" />
-          <button class="btn-browse" onclick="App.browseFolder('dap-music-root')">Browse…</button>
+      <div class="settings-row" style="align-items:flex-start">
+        <label class="dap-label-help" style="padding-top:8px">
+          <span>Music folder on DAP</span>
+          <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-music-help')" title="Music folder help">?</button>
+        </label>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <div class="input-browse-group">
+            <input id="dap-music-root" type="text" placeholder="Music" oninput="App.dapTemplateChanged()" />
+            <button class="btn-browse" onclick="App.browseFolder('dap-music-root')">Browse…</button>
+          </div>
+          <p id="dap-music-help" class="settings-hint dap-inline-help" style="display:none">
+            Sync scans and copies files only under this folder (relative to mount path). Example: <code>Music</code> or <code>SDCard/Music</code>.
+          </p>
         </div>
       </div>
-      <p class="settings-hint settings-hint-inline">Sync scans and copies files under this folder only (relative to mount path). Example: <code>Music</code> or <code>SDCard/Music</code>.</p>
       <div class="settings-row">
         <label>Folder structure</label>
         <select id="dap-template-preset" onchange="App.dapTemplatePreset(this.value)">
-          <option value="artist_album_track">Artist / Album / Track - Title</option>
-          <option value="artist_track">Artist / Track - Title</option>
-          <option value="albumartist_album_track">Album Artist / Album / Track - Title</option>
-          <option value="flat_track">Flat / Track - Title</option>
+          <option value="artist_album_track">Artist/Album/song-file.flac (Recommended)</option>
+          <option value="artist_track">Artist/song-file.flac</option>
+          <option value="albumartist_album_track">Artist/Year/song-file.flac</option>
+          <option value="flat_track">Genre/song-file.flac</option>
           <option value="custom">Custom</option>
         </select>
       </div>
@@ -1057,34 +1064,41 @@
           <button class="settings-help-btn" type="button" onclick="App.toggleDapTemplateHelp()" title="Template help">?</button>
         </label>
         <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-          <input id="dap-path-template" type="text" oninput="App.dapTemplateChanged()" placeholder="%artist%/%album%/%track% - %title%" />
+          <input id="dap-path-template" type="text" oninput="App.dapTemplateChanged()" placeholder="%artist%/%album%/%track% - %title%" readonly />
           <div class="token-chip-row">
-            <button class="token-chip" onclick="App.insertDapToken('%artist%')" type="button">Artist</button>
-            <button class="token-chip" onclick="App.insertDapToken('%albumartist%')" type="button">Album Artist</button>
-            <button class="token-chip" onclick="App.insertDapToken('%album%')" type="button">Album</button>
-            <button class="token-chip" onclick="App.insertDapToken('%track%')" type="button">Track #</button>
-            <button class="token-chip" onclick="App.insertDapToken('%title%')" type="button">Title</button>
-            <button class="token-chip" onclick="App.insertDapToken('%year%')" type="button">Year</button>
-            <button class="token-chip" onclick="App.insertDapToken('%genre%')" type="button">Genre</button>
+            <button class="token-chip" data-token="%artist%" onclick="App.insertDapToken('%artist%')" type="button">Artist</button>
+            <button class="token-chip" data-token="%album%" onclick="App.insertDapToken('%album%')" type="button">Album</button>
+            <button class="token-chip" data-token="%year%" onclick="App.insertDapToken('%year%')" type="button">Year</button>
+            <button class="token-chip" data-token="%genre%" onclick="App.insertDapToken('%genre%')" type="button">Genre</button>
           </div>
-          <div id="dap-template-status" class="dap-template-status"></div>
           <span id="dap-template-validation" style="display:none;font-size:11px;line-height:1.4;color:#fbbf24"></span>
           <div id="dap-template-preview" class="dap-template-preview"></div>
           <p id="dap-template-help" class="settings-hint dap-template-help" style="display:none">
-            Sync uses this folder + template to detect differences and copy files. Keep <code>Title</code> as the final token. Changing the template later remaps by copying into the new structure without deleting old files.
+            Sync uses this folder + template to detect differences and copy files. Filename is auto-generated as <code>track - title</code>. Changing the template later remaps by copying into the new structure without deleting old files.
           </p>
         </div>
       </div>
       <div class="settings-row" style="align-items:flex-start">
-        <label style="padding-top:8px">Playlist export folder</label>
+        <label class="dap-label-help" style="padding-top:8px">
+          <span>Playlist export folder</span>
+          <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-folder-hint')" title="Playlist export folder help">?</button>
+        </label>
         <div style="flex:1;display:flex;flex-direction:column;gap:4px">
           <input id="dap-export-folder" type="text" style="width:100%" />
-          <span id="dap-folder-hint" style="font-size:11px;color:var(--text-muted);line-height:1.4"></span>
+          <p id="dap-folder-hint" class="settings-hint dap-inline-help" style="display:none"></p>
         </div>
       </div>
-      <div class="settings-row">
-        <label>Path prefix <span style="font-size:11px;color:var(--text-muted)">(leave blank for relative)</span></label>
-        <input id="dap-prefix" type="text" />
+      <div class="settings-row" style="align-items:flex-start">
+        <label class="dap-label-help" style="padding-top:8px">
+          <span>Path prefix</span>
+          <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-prefix-help')" title="Path prefix help">?</button>
+        </label>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <input id="dap-prefix" type="text" />
+          <p id="dap-prefix-help" class="settings-hint dap-inline-help" style="display:none">
+            Optional. Leave blank to export relative paths (recommended for most DAP players).
+          </p>
+        </div>
       </div>
       <div class="modal-actions" style="margin-top:20px">
         <button class="btn-secondary" onclick="App.closeDapModal()">Cancel</button>
