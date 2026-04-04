@@ -148,6 +148,27 @@ Install flow for end users:
 
 The packaged app is self-contained (no separate Python install needed on target machines).
 
+### First Launch on macOS (Unsigned / Not Notarized Build)
+
+If macOS shows a warning like:
+- `"TuneBridge" can’t be opened because Apple cannot check it for malicious software`
+- `"TuneBridge" is damaged and can’t be opened` (Gatekeeper quarantine wording)
+
+Use this first-time launch flow:
+1. Move `TuneBridge.app` to `Applications` (do not run directly from DMG).
+2. In `Applications`, right-click `TuneBridge.app` and choose `Open`.
+3. Click `Open` again in the confirmation dialog.
+
+If it is still blocked:
+1. Open `System Settings` → `Privacy & Security`.
+2. Scroll to the security section and find the message about TuneBridge being blocked.
+3. Click `Open Anyway`.
+4. Re-open TuneBridge from `Applications`.
+
+Notes:
+- You usually need to do this once per new app build.
+- This warning appears because the app is currently distributed without Apple notarization.
+
 ### Distribution Folder
 - Latest shareable build:
   - `distro/TuneBridge-latest.dmg`
