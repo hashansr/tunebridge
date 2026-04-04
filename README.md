@@ -1,6 +1,6 @@
 # TuneBridge
 
-A local web-based music manager for a personal FLAC library. Browse your music collection, build playlists with drag-and-drop, export to portable players, sync music to devices, manage IEM/headphone frequency response data, and analyse your library's sonic character.
+A local music manager for a personal FLAC library. Browse your music collection, build playlists with drag-and-drop, export to portable players, sync music to devices, manage IEM/headphone frequency response data, and analyse your library's sonic character.
 
 Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — runs entirely on your machine.
 
