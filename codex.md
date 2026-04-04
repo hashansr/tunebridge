@@ -545,6 +545,97 @@ Observed working tree at time of writing (not touched by this codex update):
   - `static/index.html`
   - `static/app.js`
   - `static/style.css`
+
+### 2026-04-04 (Add DAP modal UX overhaul from `dap_form_ux_improvements_change.md`)
+- Reworked Add/Edit DAP modal into guided sections:
+  - `Device Setup`
+  - `Music Library`
+  - `Playlists`
+- Updated microcopy to reduce technical jargon:
+  - `Add DAP` -> `Add Device`
+  - `Name` -> `Device name`
+  - `Model preset` -> `Device type`
+  - `Mount path` -> `Device location`
+  - `Music folder on DAP` -> `Music folder (on device)`
+  - `Folder structure` -> `Organisation`
+  - `Path template` -> `File naming format`
+  - `Playlist export folder` -> `Playlist folder (on device)`
+  - Save CTA -> `Save Device`
+- Implemented device picker flow for location:
+  - New backend endpoint `GET /api/system/mounts` discovers mounted external volumes.
+  - Frontend dropdown lists detected devices (`<name> (External Drive)`).
+  - Added `Refresh` action.
+  - Added `Advanced: enter path manually` toggle (reveals manual path + Browse).
+- Added inline validation + smarter save behavior:
+  - Save disabled until required fields are valid (device name + valid location + template).
+  - Inline location error shown for missing/disconnected selections.
+- Enhanced preview readability:
+  - `📁 Preview file path:`
+  - Breadcrumb style (`Music › Artist › Album › file.flac`) instead of raw slash path.
+- Moved path prefix under `Advanced settings` in Playlists section (`Path prefix (advanced)`).
+
+- Files updated:
+  - `static/index.html`
+  - `static/style.css`
+  - `static/app.js`
+  - `app.py`
+
+### 2026-04-04 (Add DAP visual facelift alignment with `DESIGN.md`)
+- Applied a scoped visual polish to Add DAP modal only (`.dap-modal-shell`) to align with Luminous Depth principles without impacting other modals.
+- Updated section containers to rely on tonal grouping and negative space instead of line dividers.
+- Refined field styling to a no-line input treatment with bottom-only focus glow.
+- Strengthened glass treatment for modal shell and softened helper/preview surfaces for better depth consistency.
+- Kept changes functionally neutral (UI/UX presentation only; no behavioral regressions introduced by this pass).
+
+- Files updated:
+  - `static/index.html`
+  - `static/style.css`
+
+### 2026-04-04 (Add DAP accessibility contrast pass)
+- Added scoped contrast/readability refinements for Add DAP modal while preserving the same aesthetic:
+  - Stronger label color and section-title contrast
+  - Higher-contrast input text and placeholders
+  - Stronger focus indicator (bottom glow + subtle outer ring)
+  - Improved browse-button contrast/hover visibility
+  - Improved preview label/path contrast
+  - Strengthened help/validation text contrast
+  - Higher-visibility `?` help icon styling
+
+- Files updated:
+  - `static/style.css`
+
+### 2026-04-04 (DAP sync status: music delta + storage checks)
+- Extended sync scan to compute and expose per-DAP music delta summary:
+  - `music_to_add_count`
+  - `music_to_remove_count`
+  - `music_out_of_sync_count`
+- Added storage calculations during scan:
+  - `space_available_bytes`
+  - `space_total_bytes`
+  - `space_required_bytes` (for files to add)
+  - `space_shortfall_bytes`
+  - `space_ok`
+- Persisted per-DAP sync summary in `daps.json` under `sync_summary` so counts survive UI refreshes.
+- Added migration/normalization for `sync_summary` in DAP load path.
+- Added execute-time storage guard:
+  - Re-check available space right before copying.
+  - Return a blocking error if selected add payload exceeds current free space.
+- UI updates:
+  - DAP cards now show always-visible counts:
+    - `Playlists X out of sync`
+    - `Music Y out of sync (A add • R remove)`
+  - DAP detail now shows:
+    - playlists/music out-of-sync counts
+    - device space + required add payload + shortfall badge
+  - Sync preview panel now includes dynamic space summary with state colors:
+    - OK / Warn / Danger
+  - Start Sync button is disabled when selected add payload exceeds available space.
+
+- Files updated:
+  - `app.py`
+  - `static/app.js`
+  - `static/index.html`
+  - `static/style.css`
   - `PYTHONPYCACHEPREFIX=/tmp python3 -m py_compile app.py` passed.
 
 ### 2026-04-02 (Sonic Profile UX reframing toward end-user compatibility meaning)
@@ -2227,6 +2318,105 @@ Observed working tree at time of writing (not touched by this codex update):
   - Preview switched to single-line compact card:
     - format: `📁 <music_root>/<rendered_path>`
   - Removed prior title-lock status messaging from UI and logic.
+
+- Files updated:
+  - `static/index.html`
+  - `static/app.js`
+  - `static/style.css`
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-05 (DAP mount identity hardening: UUID/device-id recognition)
+- Requirement implemented:
+  - DAP connectivity should remain stable even when users rename SD cards/volumes.
+  - Add UUID-based recognition with backward-compatible path fallback.
+
+- Backend (`app.py`) updates:
+  - `/api/system/mounts` now returns identity metadata per mount:
+    - `volume_uuid`
+    - `disk_uuid`
+    - `device_identifier`
+  - Added mount identity helpers:
+    - `_normalize_mount_id(...)`
+    - `_mount_identity_fields()`
+    - `_dap_mount_identity(...)`
+    - `_mount_matches_dap(...)`
+    - `_resolve_dap_mount(...)`
+  - macOS mount discovery now enriches each mount using:
+    - `diskutil info -plist <mount-path>`
+    - parsed via `plistlib`
+  - DAP persistence model now stores mount identity fields:
+    - `mount_volume_uuid`
+    - `mount_disk_uuid`
+    - `mount_device_identifier`
+  - `load_daps()` migration normalizes/backfills these fields for existing DAP records.
+  - DAP mounted-state evaluation now resolves mount by identity first, then path fallback:
+    - `/api/daps` (list)
+    - `/api/daps/<id>` (detail)
+    - `/api/health/status`
+  - Export/sync flows now resolve live mount from identity-aware resolver:
+    - `get_dap_music_path(...)`
+    - `/api/daps/<id>/export/<pid>`
+    - `/api/iems/<iid>/peq/<peq_id>/copy`
+    - sync space checks use resolved mount root.
+
+- Frontend (`static/index.html`, `static/app.js`) updates:
+  - Add DAP modal now includes hidden identity fields:
+    - `dap-mount-volume-uuid`
+    - `dap-mount-disk-uuid`
+    - `dap-mount-device-identifier`
+  - Device dropdown selection stores identity metadata alongside `mount_path`.
+  - Edit DAP preloads stored identity and preselects currently connected mount by identity.
+  - Manual path mode clears identity fields (explicitly path-only mode).
+  - Save payload now submits the three new mount identity fields.
+  - Mount refresh logic now matches by identity first, then by path.
+
+- Compatibility behavior:
+  - Existing DAP profiles without identity fields continue to work via legacy path fallback.
+  - Newly saved/edited DAP profiles become resilient to volume renames.
+
+- Validation:
+  - `node --check static/app.js` passed.
+  - Python syntax validated via AST parse:
+    - `python3 -c "import ast, pathlib; ast.parse(pathlib.Path('app.py').read_text()); print('ok')"`
+
+### 2026-04-05 (Gear DAP cards: compact two-row layout)
+- UX update:
+  - Reduced DAP card vertical footprint in Gear view.
+  - New structure aligns with requested pattern:
+    - Row 1: DAP label, device name, connection status
+    - Row 2: Music sync status, playlist sync status, compact detail text
+
+- Implementation:
+  - `loadDapsView()` now renders DAP cards with dedicated compact classes:
+    - `gear-card-dap`
+    - `gear-card-dap-top`
+    - `gear-card-dap-bottom`
+  - Low-space warning now appears as compact detail text in row 2 (`Short <bytes>`), instead of an extra row.
+  - Added DAP-specific styling in CSS so IEM cards are not affected.
+
+- Files updated:
+  - `static/app.js`
+  - `static/style.css`
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-05 (Gear Add IEM modal aligned to Add DAP pattern)
+- UX/UI alignment update:
+  - Refactored `Add IEM / Headphone` modal to match `Add DAP` modal structure and visual language.
+  - Applied the same section-card pattern, label/help layout, and action footer rhythm.
+
+- Implemented:
+  - Modal shell switched to shared `dap-modal-shell` style treatment for consistent depth and contrast.
+  - Added section blocks:
+    - `Profile` (name, type)
+    - `Measurement Sources` (up to 3 source label + URL rows)
+  - Added `?` help toggle for source guidance (`toggleIemHelp`).
+  - Moved source guidance into inline help panel (instead of static paragraph) to match DAP interaction pattern.
+  - Error feedback now uses shared inline validation styling (`dap-inline-validation`) for consistency.
+  - Save button label updated to `Save IEM`.
 
 - Files updated:
   - `static/index.html`

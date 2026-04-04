@@ -952,6 +952,8 @@
           <div class="sync-list" id="sync-list-warnings"></div>
         </div>
 
+        <div id="sync-space-summary" class="sync-space-summary" style="display:block"></div>
+
         <div class="modal-actions">
           <button class="btn-secondary" onclick="App.closeSyncModal()">Cancel</button>
           <button class="btn-primary" id="sync-execute-btn" onclick="App.executeSync()">Start Sync</button>
@@ -1002,151 +1004,193 @@
 
   <!-- DAP add/edit modal -->
   <div id="dap-modal" class="modal-overlay" style="display:none">
-    <div class="modal modal-wide">
+    <div class="modal modal-wide dap-modal-shell">
       <div class="modal-head modal-head-spaced">
-        <h3 id="dap-modal-title">Add DAP</h3>
+        <h3 id="dap-modal-title">Add Device</h3>
         <button class="modal-x-btn" onclick="App.closeDapModal()">✕</button>
       </div>
       <input type="hidden" id="dap-modal-id" />
-      <div class="settings-row">
-        <label>Name</label>
-        <input id="dap-name" type="text" style="flex:1" />
-      </div>
-      <div class="settings-row">
-        <label>Model preset</label>
-        <select id="dap-model" onchange="App.dapModelPreset(this.value)">
-          <option value="loading">Loading presets...</option>
-        </select>
-      </div>
-      <div class="settings-row" style="align-items:flex-start">
-        <label class="dap-label-help" style="padding-top:8px">
-          <span>Mount path</span>
-          <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-mount-help')" title="Mount path help">?</button>
-        </label>
-        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-          <div class="input-browse-group">
-            <input id="dap-mount" type="text" />
-            <button class="btn-browse" onclick="App.browseFolder('dap-mount')">Browse…</button>
+      <input type="hidden" id="dap-mount-volume-uuid" />
+      <input type="hidden" id="dap-mount-disk-uuid" />
+      <input type="hidden" id="dap-mount-device-identifier" />
+      <div class="dap-form-section">
+        <h4 class="dap-form-section-title">Device Setup</h4>
+        <div class="settings-row">
+          <label>Device name</label>
+          <input id="dap-name" type="text" style="flex:1" oninput="App.validateDapForm(false)" />
+        </div>
+        <div class="settings-row">
+          <label>Device type</label>
+          <select id="dap-model" onchange="App.dapModelPreset(this.value)">
+            <option value="loading">Loading presets...</option>
+          </select>
+        </div>
+        <div class="settings-row" style="align-items:flex-start">
+          <label class="dap-label-help" style="padding-top:8px">
+            <span>Device location</span>
+            <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-mount-help')" title="Device location help">?</button>
+          </label>
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <div class="input-browse-group">
+              <select id="dap-device-select" onchange="App.selectDapMount(this.value)">
+                <option value="">Detecting connected devices…</option>
+              </select>
+              <button class="btn-browse" onclick="App.refreshDapMounts()" type="button">Refresh</button>
+            </div>
+            <label class="dap-advanced-toggle">
+              <input id="dap-mount-manual-toggle" type="checkbox" onchange="App.toggleDapManualMount(this.checked)" />
+              <span>Advanced: enter path manually</span>
+            </label>
+            <div id="dap-mount-manual-wrap" class="input-browse-group" style="display:none">
+              <input id="dap-mount" type="text" oninput="App.validateDapForm(false)" />
+              <button class="btn-browse" onclick="App.browseFolder('dap-mount')" type="button">Browse…</button>
+            </div>
+            <p id="dap-mount-validation" class="dap-inline-validation" style="display:none"></p>
+            <p id="dap-mount-help" class="settings-hint dap-inline-help" style="display:none">
+              Pick a connected external device. If needed, enable advanced mode and enter the mount path manually.
+            </p>
           </div>
-          <p id="dap-mount-help" class="settings-hint dap-inline-help" style="display:none">
-            Connect your DAP via USB, then browse to its mount root (for example <code>/Volumes/FIIO M21</code>).
-          </p>
         </div>
       </div>
-      <div class="settings-row" style="align-items:flex-start">
-        <label class="dap-label-help" style="padding-top:8px">
-          <span>Music folder on DAP</span>
-          <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-music-help')" title="Music folder help">?</button>
-        </label>
-        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-          <div class="input-browse-group">
-            <input id="dap-music-root" type="text" placeholder="Music" oninput="App.dapTemplateChanged()" />
-            <button class="btn-browse" onclick="App.browseFolder('dap-music-root')">Browse…</button>
+
+      <div class="dap-form-section">
+        <h4 class="dap-form-section-title">Music Library</h4>
+        <div class="settings-row" style="align-items:flex-start">
+          <label class="dap-label-help" style="padding-top:8px">
+            <span>Music folder (on device)</span>
+            <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-music-help')" title="Music folder help">?</button>
+          </label>
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <div class="input-browse-group">
+              <input id="dap-music-root" type="text" placeholder="Music" oninput="App.dapTemplateChanged()" />
+              <button class="btn-browse" onclick="App.browseFolder('dap-music-root')" type="button">Browse…</button>
+            </div>
+            <p id="dap-music-help" class="settings-hint dap-inline-help" style="display:none">
+              Where your music files will be stored on the device (for example <code>Music</code>).
+            </p>
           </div>
-          <p id="dap-music-help" class="settings-hint dap-inline-help" style="display:none">
-            Sync scans and copies files only under this folder (relative to mount path). Example: <code>Music</code> or <code>SDCard/Music</code>.
-          </p>
         </div>
-      </div>
-      <div class="settings-row">
-        <label>Folder structure</label>
-        <select id="dap-template-preset" onchange="App.dapTemplatePreset(this.value)">
-          <option value="artist_album_track">Artist/Album/song-file.flac (Recommended)</option>
-          <option value="artist_track">Artist/song-file.flac</option>
-          <option value="albumartist_album_track">Artist/Year/song-file.flac</option>
-          <option value="flat_track">Genre/song-file.flac</option>
-          <option value="custom">Custom</option>
-        </select>
-      </div>
-      <div class="settings-row" style="align-items:flex-start">
-        <label class="dap-label-help" style="padding-top:8px">
-          <span>Path template</span>
-          <button class="settings-help-btn" type="button" onclick="App.toggleDapTemplateHelp()" title="Template help">?</button>
-        </label>
-        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-          <input id="dap-path-template" type="text" oninput="App.dapTemplateChanged()" placeholder="%artist%/%album%/%track% - %title%" readonly />
-          <div class="token-chip-row">
-            <button class="token-chip" data-token="%artist%" onclick="App.insertDapToken('%artist%')" type="button">Artist</button>
-            <button class="token-chip" data-token="%album%" onclick="App.insertDapToken('%album%')" type="button">Album</button>
-            <button class="token-chip" data-token="%year%" onclick="App.insertDapToken('%year%')" type="button">Year</button>
-            <button class="token-chip" data-token="%genre%" onclick="App.insertDapToken('%genre%')" type="button">Genre</button>
+        <div class="settings-row">
+          <label>Organisation</label>
+          <select id="dap-template-preset" onchange="App.dapTemplatePreset(this.value)">
+            <option value="artist_album_track">Artist/Album/song-file.flac (Recommended)</option>
+            <option value="artist_track">Artist/song-file.flac</option>
+            <option value="albumartist_album_track">Artist/Year/song-file.flac</option>
+            <option value="flat_track">Genre/song-file.flac</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="settings-row" style="align-items:flex-start">
+          <label class="dap-label-help" style="padding-top:8px">
+            <span>File naming format</span>
+            <button class="settings-help-btn" type="button" onclick="App.toggleDapTemplateHelp()" title="File naming format help">?</button>
+          </label>
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <input id="dap-path-template" type="text" oninput="App.dapTemplateChanged()" placeholder="%artist%/%album%/%track% - %title%" readonly />
+            <div class="token-chip-row">
+              <button class="token-chip" data-token="%artist%" onclick="App.insertDapToken('%artist%')" type="button">Artist</button>
+              <button class="token-chip" data-token="%album%" onclick="App.insertDapToken('%album%')" type="button">Album</button>
+              <button class="token-chip" data-token="%year%" onclick="App.insertDapToken('%year%')" type="button">Year</button>
+              <button class="token-chip" data-token="%genre%" onclick="App.insertDapToken('%genre%')" type="button">Genre</button>
+            </div>
+            <span id="dap-template-validation" style="display:none;font-size:11px;line-height:1.4;color:#fbbf24"></span>
+            <div id="dap-template-preview" class="dap-template-preview"></div>
+            <p id="dap-template-help" class="settings-hint dap-template-help" style="display:none">
+              Sync uses this folder + template to detect differences and copy files. Filename is auto-generated as <code>track - title</code>. Changing the template later remaps by copying into the new structure without deleting old files.
+            </p>
           </div>
-          <span id="dap-template-validation" style="display:none;font-size:11px;line-height:1.4;color:#fbbf24"></span>
-          <div id="dap-template-preview" class="dap-template-preview"></div>
-          <p id="dap-template-help" class="settings-hint dap-template-help" style="display:none">
-            Sync uses this folder + template to detect differences and copy files. Filename is auto-generated as <code>track - title</code>. Changing the template later remaps by copying into the new structure without deleting old files.
-          </p>
         </div>
       </div>
-      <div class="settings-row" style="align-items:flex-start">
-        <label class="dap-label-help" style="padding-top:8px">
-          <span>Playlist export folder</span>
-          <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-folder-hint')" title="Playlist export folder help">?</button>
-        </label>
-        <div style="flex:1;display:flex;flex-direction:column;gap:4px">
-          <input id="dap-export-folder" type="text" style="width:100%" />
-          <p id="dap-folder-hint" class="settings-hint dap-inline-help" style="display:none"></p>
+
+      <div class="dap-form-section">
+        <h4 class="dap-form-section-title">Playlists</h4>
+        <div class="settings-row" style="align-items:flex-start">
+          <label class="dap-label-help" style="padding-top:8px">
+            <span>Playlist folder (on device)</span>
+            <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-folder-hint')" title="Playlist folder help">?</button>
+          </label>
+          <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+            <input id="dap-export-folder" type="text" style="width:100%" />
+            <p id="dap-folder-hint" class="settings-hint dap-inline-help" style="display:none"></p>
+          </div>
         </div>
-      </div>
-      <div class="settings-row" style="align-items:flex-start">
-        <label class="dap-label-help" style="padding-top:8px">
-          <span>Path Prefix (Optional)</span>
-          <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-prefix-help')" title="Path prefix help">?</button>
-        </label>
-        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-          <input id="dap-prefix" type="text" />
-          <p id="dap-prefix-help" class="settings-hint dap-inline-help" style="display:none">
-            Optional. Leave blank to export relative paths (recommended for most DAP players).
-          </p>
-        </div>
+        <details class="dap-advanced-box">
+          <summary>Advanced settings</summary>
+          <div class="settings-row" style="align-items:flex-start; margin-top:8px">
+            <label class="dap-label-help" style="padding-top:8px">
+              <span>Path prefix (advanced)</span>
+              <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-prefix-help')" title="Path prefix help">?</button>
+            </label>
+            <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+              <input id="dap-prefix" type="text" />
+              <p id="dap-prefix-help" class="settings-hint dap-inline-help" style="display:none">
+                Optional prefix added to playlist paths (for example <code>/Music</code>).
+              </p>
+            </div>
+          </div>
+        </details>
       </div>
       <div class="modal-actions" style="margin-top:20px">
         <button class="btn-secondary" onclick="App.closeDapModal()">Cancel</button>
-        <button class="btn-primary" onclick="App.saveDap()">Save</button>
+        <button id="dap-save-btn" class="btn-primary" onclick="App.saveDap()">Save Device</button>
       </div>
     </div>
   </div>
 
   <!-- IEM add/edit modal -->
   <div id="iem-modal" class="modal-overlay" style="display:none">
-    <div class="modal modal-wide">
+    <div class="modal modal-wide dap-modal-shell">
       <div class="modal-head modal-head-spaced">
         <h3 id="iem-modal-title">Add IEM / Headphone</h3>
         <button class="modal-x-btn" onclick="App.closeIemModal()">✕</button>
       </div>
       <input type="hidden" id="iem-modal-id" />
-      <div class="settings-row">
-        <label>Name</label>
-        <input id="iem-name" type="text" />
+      <div class="dap-form-section">
+        <h4 class="dap-form-section-title">Profile</h4>
+        <div class="settings-row">
+          <label>Name</label>
+          <input id="iem-name" type="text" />
+        </div>
+        <div class="settings-row">
+          <label>Type</label>
+          <select id="iem-type">
+            <option value="IEM">IEM</option>
+          </select>
+        </div>
       </div>
-      <div class="settings-row">
-        <label>Type</label>
-        <select id="iem-type">
-          <option value="IEM">IEM</option>
-        </select>
-      </div>
-      <div class="settings-row">
-        <label>Measurement Sources <span style="font-size:11px;color:var(--text-muted)">(up to 3)</span></label>
-        <div class="iem-source-grid">
-          <div class="iem-source-row">
-            <input id="iem-source-label-1" type="text" placeholder="Label (e.g. Stock tips)" />
-            <input id="iem-source-url-1" type="text" placeholder="squig.link URL (optional)" />
-          </div>
-          <div class="iem-source-row">
-            <input id="iem-source-label-2" type="text" placeholder="Label (e.g. Foam tips)" />
-            <input id="iem-source-url-2" type="text" placeholder="squig.link URL (optional)" />
-          </div>
-          <div class="iem-source-row">
-            <input id="iem-source-label-3" type="text" placeholder="Label (e.g. EQ nozzle)" />
-            <input id="iem-source-url-3" type="text" placeholder="squig.link URL (optional)" />
+
+      <div class="dap-form-section">
+        <h4 class="dap-form-section-title">Measurement Sources</h4>
+        <div class="settings-row" style="align-items:flex-start">
+          <label class="dap-label-help" style="padding-top:8px">
+            <span>Source URLs (up to 3)</span>
+            <button class="settings-help-btn" type="button" onclick="App.toggleIemHelp('iem-source-help')" title="Measurement source help">?</button>
+          </label>
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <div class="iem-source-grid">
+              <div class="iem-source-row">
+                <input id="iem-source-label-1" type="text" placeholder="Label (for example, Stock tips)" />
+                <input id="iem-source-url-1" type="text" placeholder="https://squig.link/..." />
+              </div>
+              <div class="iem-source-row">
+                <input id="iem-source-label-2" type="text" placeholder="Label (for example, Foam tips)" />
+                <input id="iem-source-url-2" type="text" placeholder="https://squig.link/..." />
+              </div>
+              <div class="iem-source-row">
+                <input id="iem-source-label-3" type="text" placeholder="Label (for example, EQ nozzle)" />
+                <input id="iem-source-url-3" type="text" placeholder="https://squig.link/..." />
+              </div>
+            </div>
+            <p id="iem-source-help" class="settings-hint dap-inline-help" style="display:none">
+              Add up to three <a href="https://squig.link" target="_blank" rel="noopener" class="squig-link">squig.link</a> share URLs with labels. These sources become selectable across FR charts.
+            </p>
+            <div id="iem-modal-error" class="dap-inline-validation" style="display:none"></div>
           </div>
         </div>
       </div>
-      <p class="settings-hint" style="margin-top:4px">Paste up to three <a href="https://squig.link" target="_blank" rel="noopener" class="squig-link">squig.link</a> share URLs with labels. These become selectable sources across FR graphs.</p>
-      <div id="iem-modal-error" style="display:none;color:#e05c5c;font-size:12px;margin-top:8px"></div>
       <div class="modal-actions" style="margin-top:20px">
         <button class="btn-secondary" onclick="App.closeIemModal()">Cancel</button>
-        <button class="btn-primary" id="iem-save-btn" onclick="App.saveIem()">Save</button>
+        <button class="btn-primary" id="iem-save-btn" onclick="App.saveIem()">Save IEM</button>
       </div>
     </div>
   </div>

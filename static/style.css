@@ -1821,6 +1821,30 @@ tr.track-selected .track-check-indicator {
   opacity: 0.6;
 }
 
+.sync-space-summary {
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(53, 53, 52, 0.42);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  display: grid;
+  gap: 3px;
+}
+.sync-space-summary--ok {
+  background: rgba(83, 225, 111, 0.1);
+  color: var(--accent-success);
+}
+.sync-space-summary--warn {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+}
+.sync-space-summary--danger {
+  background: rgba(255, 179, 181, 0.14);
+  color: var(--accent-secondary);
+}
+
 /* Done phase */
 .sync-done-wrap {
   display: flex;
@@ -2043,6 +2067,56 @@ tr.track-selected .track-check-indicator {
 .gear-sync-ok    { background: rgba(83,225,111,.08);  color: var(--accent-success); }
 .gear-sync-stale { background: rgba(251,191,36,.1); color: #fbbf24; }
 .gear-sync-never { background: rgba(255,255,255,.04); color: var(--text-muted); }
+
+/* Compact DAP cards */
+.gear-card-dap {
+  align-items: stretch;
+  min-height: 84px;
+  padding: 10px 12px;
+}
+.gear-card-dap-icon {
+  width: 36px;
+  height: 36px;
+  margin-top: 1px;
+}
+.gear-card-dap-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+}
+.gear-card-dap-top,
+.gear-card-dap-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.gear-card-dap-top .gear-card-name {
+  flex: 1;
+  min-width: 0;
+  margin-right: auto;
+}
+.gear-card-dap-bottom .gear-sync-badge {
+  flex-shrink: 0;
+}
+.gear-card-dap-bottom .gear-card-meta-text {
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1100px) {
+  .gear-card-dap-top,
+  .gear-card-dap-bottom {
+    flex-wrap: wrap;
+  }
+  .gear-card-dap-bottom .gear-card-meta-text {
+    margin-left: 0;
+    width: 100%;
+  }
+}
 
 /* ── IEM FR Compare modal ──────────────────────────────────────────── */
 .iem-compare-dialog {
@@ -3199,6 +3273,190 @@ tbody tr:hover {
   line-height: 1.5;
   color: var(--text-muted);
 }
+.dap-inline-validation {
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--accent-secondary);
+  line-height: 1.4;
+}
+.dap-form-section {
+  padding: 14px 14px 12px;
+  margin: 0 0 8px;
+  background: rgba(28, 27, 27, 0.55);
+  border-radius: 16px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.dap-form-section:first-of-type {
+  margin-top: 0;
+}
+.dap-form-section-title {
+  margin: 0 0 12px 170px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: rgba(229, 226, 225, 0.58);
+}
+.dap-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.dap-advanced-toggle span {
+  white-space: nowrap;
+}
+.dap-advanced-toggle input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+.dap-advanced-box {
+  border: none;
+  border-radius: 12px;
+  background: rgba(53, 53, 52, 0.35);
+  padding: 8px 10px;
+}
+.dap-advanced-box summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+#dap-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: saturate(0.75);
+}
+
+/* Add DAP modal: scoped Luminous Depth styling */
+#dap-modal .dap-modal-shell {
+  background:
+    radial-gradient(120% 130% at 16% -8%, rgba(173, 198, 255, 0.12), transparent 58%),
+    linear-gradient(180deg, rgba(35, 35, 36, 0.78), rgba(21, 21, 22, 0.82));
+  backdrop-filter: blur(28px) saturate(116%);
+  -webkit-backdrop-filter: blur(28px) saturate(116%);
+  border: 1px solid rgba(173, 198, 255, 0.14);
+}
+#dap-modal .settings-row label {
+  color: rgba(229, 226, 225, 0.86);
+}
+#dap-modal input,
+#dap-modal select {
+  background: rgba(28, 27, 27, 0.9);
+  color: rgba(229, 226, 225, 0.96);
+  border: none;
+  border-radius: 12px;
+  box-shadow: inset 0 -2px 0 rgba(173, 198, 255, 0);
+  transition: background 0.16s, box-shadow 0.2s;
+}
+#dap-modal input:focus,
+#dap-modal select:focus {
+  background: rgba(48, 48, 48, 0.9);
+  box-shadow:
+    inset 0 -2px 0 rgba(173, 198, 255, 0.78),
+    0 0 0 1px rgba(173, 198, 255, 0.3);
+}
+#dap-modal input::placeholder {
+  color: rgba(229, 226, 225, 0.5);
+}
+#dap-modal .btn-browse {
+  background: rgba(53, 53, 52, 0.8);
+  border: none;
+  color: rgba(229, 226, 225, 0.9);
+}
+#dap-modal .btn-browse:hover {
+  background: rgba(173, 198, 255, 0.24);
+  color: var(--text);
+}
+#dap-modal .dap-template-preview {
+  border: none;
+  background: rgba(28, 32, 43, 0.8);
+}
+#dap-modal .dap-template-preview-label {
+  color: #c6d7ff;
+}
+#dap-modal .dap-template-preview-path {
+  color: #f0f5ff;
+}
+#dap-modal .dap-inline-help {
+  color: rgba(229, 226, 225, 0.72);
+}
+#dap-modal .dap-inline-validation {
+  color: #ffb9ba;
+  font-weight: 600;
+}
+#dap-modal .settings-help-btn {
+  border-color: rgba(173, 198, 255, 0.4);
+  color: rgba(229, 226, 225, 0.9);
+}
+#dap-modal .settings-help-btn:hover {
+  background: rgba(173, 198, 255, 0.28);
+}
+#dap-modal .dap-form-section-title {
+  color: rgba(229, 226, 225, 0.7);
+}
+#iem-modal .dap-modal-shell {
+  background:
+    radial-gradient(120% 130% at 16% -8%, rgba(173, 198, 255, 0.12), transparent 58%),
+    linear-gradient(180deg, rgba(35, 35, 36, 0.78), rgba(21, 21, 22, 0.82));
+  backdrop-filter: blur(28px) saturate(116%);
+  -webkit-backdrop-filter: blur(28px) saturate(116%);
+  border: 1px solid rgba(173, 198, 255, 0.14);
+}
+#iem-modal .settings-row label {
+  color: rgba(229, 226, 225, 0.86);
+}
+#iem-modal input,
+#iem-modal select {
+  background: rgba(28, 27, 27, 0.9);
+  color: rgba(229, 226, 225, 0.96);
+  border: none;
+  border-radius: 12px;
+  box-shadow: inset 0 -2px 0 rgba(173, 198, 255, 0);
+  transition: background 0.16s, box-shadow 0.2s;
+}
+#iem-modal input:focus,
+#iem-modal select:focus {
+  background: rgba(48, 48, 48, 0.9);
+  box-shadow:
+    inset 0 -2px 0 rgba(173, 198, 255, 0.78),
+    0 0 0 1px rgba(173, 198, 255, 0.3);
+}
+#iem-modal input::placeholder {
+  color: rgba(229, 226, 225, 0.5);
+}
+#iem-modal .dap-inline-help {
+  color: rgba(229, 226, 225, 0.72);
+}
+#iem-modal .dap-inline-validation {
+  color: #ffb9ba;
+  font-weight: 600;
+}
+#iem-modal .settings-help-btn {
+  border-color: rgba(173, 198, 255, 0.4);
+  color: rgba(229, 226, 225, 0.9);
+}
+#iem-modal .settings-help-btn:hover {
+  background: rgba(173, 198, 255, 0.28);
+}
+#iem-modal .dap-form-section-title {
+  color: rgba(229, 226, 225, 0.7);
+}
+#iem-modal .iem-source-grid {
+  gap: 10px;
+}
+#iem-modal .iem-source-row {
+  grid-template-columns: minmax(170px, 0.42fr) minmax(0, 1fr);
+  gap: 10px;
+}
+@media (max-width: 760px) {
+  #iem-modal .iem-source-row {
+    grid-template-columns: 1fr;
+  }
+}
 .dap-template-preview {
   display: flex;
   align-items: center;
@@ -3236,6 +3494,9 @@ tbody tr:hover {
 }
 @media (max-width: 960px) {
   .settings-hint-inline {
+    margin-left: 0;
+  }
+  .dap-form-section-title {
     margin-left: 0;
   }
 }

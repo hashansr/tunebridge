@@ -5,6 +5,7 @@ import json
 import io
 import zipfile
 import subprocess
+import plistlib
 try:
     from waitress import serve as waitress_serve
     HAS_WAITRESS = True
@@ -239,6 +240,15 @@ sync_state = {
     'errors': [],
     'current': '',
     'local_copy_map': {},
+    'local_only_sizes': {},
+    'music_out_of_sync_count': 0,
+    'music_to_add_count': 0,
+    'music_to_remove_count': 0,
+    'space_available_bytes': None,
+    'space_total_bytes': None,
+    'space_required_bytes': 0,
+    'space_shortfall_bytes': 0,
+    'space_ok': True,
 }
 
 library = []
@@ -1684,8 +1694,10 @@ def health_status():
 
     # 3. DAPs
     daps = load_daps()
+    mounts = _discover_mount_points()
     for d in daps:
-        d['mounted'] = Path(d.get('mount_path', '')).exists()
+        resolved_mount, _ = _resolve_dap_mount(d, mounts)
+        d['mounted'] = bool(resolved_mount and resolved_mount.exists())
     result['daps'] = [{'id': d['id'], 'name': d['name'], 'mounted': d['mounted']} for d in daps]
 
     # 4. Data files
@@ -1869,7 +1881,9 @@ def get_dap_music_path(dap_id):
     dap = next((d for d in load_daps() if d['id'] == dap_id), None)
     if not dap:
         return None
-    mount = Path(dap.get('mount_path') or '')
+    mount, _ = _resolve_dap_mount(dap)
+    if not mount:
+        return None
     root = _normalize_music_root(dap.get('music_root') or DEFAULT_DAP_MUSIC_ROOT)
     return mount / root
 
@@ -1918,6 +1932,15 @@ def sync_scan():
         'errors': [],
         'current': '',
         'local_copy_map': {},
+        'local_only_sizes': {},
+        'music_out_of_sync_count': 0,
+        'music_to_add_count': 0,
+        'music_to_remove_count': 0,
+        'space_available_bytes': None,
+        'space_total_bytes': None,
+        'space_required_bytes': 0,
+        'space_shortfall_bytes': 0,
+        'space_ok': True,
     }
 
     def do_scan():
@@ -1962,6 +1985,43 @@ def sync_scan():
             local_only = sorted([rendered_by_key[k] for k in (expected_keys - device_keys) if k in rendered_by_key])
             device_only = sorted([device_map[k] for k in (device_keys - expected_keys)])
             local_copy_map = {rendered_by_key[k]: expected_map[k] for k in rendered_by_key.keys() if k in expected_map}
+            local_only_sizes = {}
+            required_bytes = 0
+            music_base = get_music_base()
+            for device_rel in local_only:
+                local_rel = local_copy_map.get(device_rel)
+                if not local_rel:
+                    continue
+                src = music_base / local_rel
+                size = 0
+                try:
+                    if src.exists():
+                        size = int(src.stat().st_size)
+                except Exception:
+                    size = 0
+                local_only_sizes[device_rel] = size
+                required_bytes += size
+
+            mount_root, _ = _resolve_dap_mount(dap)
+            usage_path = mount_root if (mount_root and mount_root.exists()) else device_path
+            available_bytes = None
+            total_bytes = None
+            try:
+                if usage_path.exists():
+                    usage = shutil.disk_usage(usage_path)
+                    available_bytes = int(usage.free)
+                    total_bytes = int(usage.total)
+            except Exception:
+                available_bytes = None
+                total_bytes = None
+
+            space_ok = (available_bytes is None) or (required_bytes <= available_bytes)
+            shortfall_bytes = 0
+            if available_bytes is not None and required_bytes > available_bytes:
+                shortfall_bytes = required_bytes - available_bytes
+                warnings.append(
+                    f'Insufficient device space: need {required_bytes} bytes, available {available_bytes} bytes.'
+                )
 
             for c in sorted(case_collision):
                 warnings.append(f'Case/filename collision detected for "{c}" — review before syncing.')
@@ -1973,12 +2033,32 @@ def sync_scan():
                 'device_only': device_only,
                 'warnings': warnings,
                 'local_copy_map': local_copy_map,
+                'local_only_sizes': local_only_sizes,
                 'total': len(local_only) + len(device_only),
                 'current': '',
+                'music_out_of_sync_count': len(local_only) + len(device_only),
+                'music_to_add_count': len(local_only),
+                'music_to_remove_count': len(device_only),
+                'space_available_bytes': available_bytes,
+                'space_total_bytes': total_bytes,
+                'space_required_bytes': required_bytes,
+                'space_shortfall_bytes': shortfall_bytes,
+                'space_ok': space_ok,
                 'message': (
                     f'{len(local_only)} file(s) to copy to device, '
                     f'{len(device_only)} file(s) to copy to local'
                 ),
+            })
+            _update_dap_sync_summary(dap_id, {
+                'music_out_of_sync_count': len(local_only) + len(device_only),
+                'music_to_add_count': len(local_only),
+                'music_to_remove_count': len(device_only),
+                'space_available_bytes': available_bytes,
+                'space_total_bytes': total_bytes,
+                'space_required_bytes': required_bytes,
+                'space_shortfall_bytes': shortfall_bytes,
+                'space_ok': space_ok,
+                'last_scan_at': int(time.time()),
             })
         except Exception as e:
             sync_state['status'] = 'error'
@@ -2011,6 +2091,32 @@ def sync_execute():
     total = len(local_paths) + len(device_paths)
     if total == 0:
         return jsonify({'error': 'No files selected'}), 400
+
+    # Re-check device free space right before copy starts.
+    required_selected = 0
+    local_only_sizes = sync_state.get('local_only_sizes') or {}
+    for rel in local_paths:
+        try:
+            required_selected += int(local_only_sizes.get(rel) or 0)
+        except Exception:
+            continue
+    available_now = None
+    try:
+        dap = next((d for d in load_daps() if d.get('id') == dap_id), None)
+        mount_root, _ = _resolve_dap_mount(dap)
+        usage_path = mount_root if (mount_root and mount_root.exists()) else device_path
+        if usage_path and usage_path.exists():
+            available_now = int(shutil.disk_usage(usage_path).free)
+    except Exception:
+        available_now = None
+    if available_now is not None and required_selected > available_now:
+        shortfall = required_selected - available_now
+        return jsonify({
+            'error': 'Not enough space on device for selected files',
+            'space_available_bytes': available_now,
+            'space_required_bytes': required_selected,
+            'space_shortfall_bytes': shortfall,
+        }), 400
 
     sync_state.update({
         'status': 'copying',
@@ -2082,6 +2188,15 @@ def sync_reset():
         'status': 'idle', 'device': None, 'message': '',
         'progress': 0, 'total': 0, 'local_only': [], 'device_only': [],
         'warnings': [], 'errors': [], 'current': '', 'local_copy_map': {},
+        'local_only_sizes': {},
+        'music_out_of_sync_count': 0,
+        'music_to_add_count': 0,
+        'music_to_remove_count': 0,
+        'space_available_bytes': None,
+        'space_total_bytes': None,
+        'space_required_bytes': 0,
+        'space_shortfall_bytes': 0,
+        'space_ok': True,
     }
     return jsonify({'ok': True})
 
@@ -2091,6 +2206,71 @@ def sync_reset():
 def _slugify_model_id(name):
     s = re.sub(r'[^a-z0-9]+', '_', (name or '').lower()).strip('_')
     return s or 'other'
+
+
+def _default_sync_summary():
+    return {
+        'playlist_out_of_sync_count': 0,
+        'music_out_of_sync_count': 0,
+        'music_to_add_count': 0,
+        'music_to_remove_count': 0,
+        'space_available_bytes': None,
+        'space_total_bytes': None,
+        'space_required_bytes': 0,
+        'space_shortfall_bytes': 0,
+        'space_ok': True,
+        'last_scan_at': 0,
+    }
+
+
+def _normalize_sync_summary(summary):
+    base = _default_sync_summary()
+    if isinstance(summary, dict):
+        base.update(summary)
+    # Coerce numeric fields safely
+    for k in (
+        'playlist_out_of_sync_count',
+        'music_out_of_sync_count',
+        'music_to_add_count',
+        'music_to_remove_count',
+        'space_required_bytes',
+        'space_shortfall_bytes',
+        'last_scan_at',
+    ):
+        try:
+            base[k] = int(base.get(k) or 0)
+        except Exception:
+            base[k] = 0
+    for k in ('space_available_bytes', 'space_total_bytes'):
+        v = base.get(k)
+        if v is None:
+            continue
+        try:
+            base[k] = int(v)
+        except Exception:
+            base[k] = None
+    base['space_ok'] = bool(base.get('space_ok', True))
+    return base
+
+
+def _update_dap_sync_summary(dap_id, summary_patch):
+    if not dap_id:
+        return
+    daps = load_daps()
+    changed = False
+    for d in daps:
+        if d.get('id') != dap_id:
+            continue
+        merged = _normalize_sync_summary(d.get('sync_summary'))
+        if isinstance(summary_patch, dict):
+            merged.update(summary_patch)
+        merged = _normalize_sync_summary(merged)
+        if d.get('sync_summary') != merged:
+            d['sync_summary'] = merged
+            changed = True
+        break
+    if changed:
+        save_daps(daps)
 
 
 DEFAULT_DAP_MUSIC_ROOT = 'Music'
@@ -2219,6 +2399,59 @@ def load_playlist_gen_config():
 def get_gear_profiles():
     return jsonify(load_gear_profiles())
 
+def _normalize_mount_id(value):
+    return str(value or '').strip()
+
+
+def _mount_identity_fields():
+    return ('mount_volume_uuid', 'mount_disk_uuid', 'mount_device_identifier')
+
+
+def _dap_mount_identity(dap):
+    return {
+        'mount_volume_uuid': _normalize_mount_id((dap or {}).get('mount_volume_uuid')),
+        'mount_disk_uuid': _normalize_mount_id((dap or {}).get('mount_disk_uuid')),
+        'mount_device_identifier': _normalize_mount_id((dap or {}).get('mount_device_identifier')),
+    }
+
+
+def _mount_matches_dap(mount, dap):
+    if not isinstance(mount, dict):
+        return False
+    ids = _dap_mount_identity(dap)
+    if ids['mount_volume_uuid'] and _normalize_mount_id(mount.get('volume_uuid')).lower() == ids['mount_volume_uuid'].lower():
+        return True
+    if ids['mount_disk_uuid'] and _normalize_mount_id(mount.get('disk_uuid')).lower() == ids['mount_disk_uuid'].lower():
+        return True
+    if ids['mount_device_identifier'] and _normalize_mount_id(mount.get('device_identifier')).lower() == ids['mount_device_identifier'].lower():
+        return True
+    return False
+
+
+def _resolve_dap_mount(dap, mounts=None):
+    mounts = mounts if mounts is not None else _discover_mount_points()
+    if not isinstance(mounts, list):
+        mounts = []
+
+    # UUID/device-id based matching survives user volume renames.
+    for m in mounts:
+        if _mount_matches_dap(m, dap):
+            p = str(m.get('path') or '').strip()
+            if p:
+                return Path(p), m
+
+    # Fallback to configured path for legacy profiles/manual paths.
+    mount_path = str((dap or {}).get('mount_path') or '').strip()
+    if mount_path:
+        for m in mounts:
+            if str(m.get('path') or '').strip() == mount_path:
+                return Path(mount_path), m
+        p = Path(mount_path)
+        if p.exists():
+            return p, None
+    return None, None
+
+
 def load_daps():
     if DAP_FILE.exists():
         try:
@@ -2244,6 +2477,15 @@ def load_daps():
                     if norm_tpl != d.get('path_template'):
                         d['path_template'] = norm_tpl
                         changed = True
+                norm_summary = _normalize_sync_summary(d.get('sync_summary'))
+                if d.get('sync_summary') != norm_summary:
+                    d['sync_summary'] = norm_summary
+                    changed = True
+                for field in _mount_identity_fields():
+                    norm_id = _normalize_mount_id(d.get(field))
+                    if d.get(field) != norm_id:
+                        d[field] = norm_id
+                        changed = True
             if changed:
                 save_daps(daps)
             return daps
@@ -2261,8 +2503,13 @@ def save_daps(daps):
 def get_daps():
     daps = load_daps()
     playlists = load_playlists()
+    mounts = _discover_mount_points()
     for d in daps:
-        d['mounted'] = Path(d.get('mount_path', '')).exists()
+        resolved_mount, matched_mount = _resolve_dap_mount(d, mounts)
+        d['mounted'] = bool(resolved_mount and resolved_mount.exists())
+        d['active_mount_path'] = str(resolved_mount) if resolved_mount else ''
+        if matched_mount:
+            d['active_mount_label'] = matched_mount.get('label') or str(resolved_mount)
         # Count out-of-date playlists
         exports = d.get('playlist_exports', {})
         d['stale_count'] = sum(
@@ -2272,6 +2519,9 @@ def get_daps():
         d['never_exported'] = sum(
             1 for pl in playlists.values() if pl['id'] not in exports
         )
+        summary = _normalize_sync_summary(d.get('sync_summary'))
+        summary['playlist_out_of_sync_count'] = int(d['stale_count']) + int(d['never_exported'])
+        d['sync_summary'] = summary
     return jsonify(daps)
 
 
@@ -2290,6 +2540,9 @@ def create_dap():
         'model': model,
         'icon': data.get('icon', '📱'),
         'mount_path': data.get('mount_path', ''),
+        'mount_volume_uuid': _normalize_mount_id(data.get('mount_volume_uuid')),
+        'mount_disk_uuid': _normalize_mount_id(data.get('mount_disk_uuid')),
+        'mount_device_identifier': _normalize_mount_id(data.get('mount_device_identifier')),
         'export_folder': _normalize_export_folder(data.get('export_folder') or defaults.get('export_folder')),
         'path_prefix': data.get('path_prefix', defaults.get('path_prefix', '')),
         'storage_type': storage_type,
@@ -2297,11 +2550,14 @@ def create_dap():
         'path_template': _normalize_path_template(data.get('path_template')),
         'peq_folder': data.get('peq_folder', 'PEQ'),
         'playlist_exports': {},
+        'sync_summary': _default_sync_summary(),
     }
     daps = load_daps()
     daps.append(dap)
     save_daps(daps)
-    dap['mounted'] = Path(dap['mount_path']).exists()
+    resolved_mount, _ = _resolve_dap_mount(dap)
+    dap['mounted'] = bool(resolved_mount and resolved_mount.exists())
+    dap['active_mount_path'] = str(resolved_mount) if resolved_mount else ''
     return jsonify(dap), 201
 
 
@@ -2310,7 +2566,25 @@ def get_dap(did):
     dap = next((d for d in load_daps() if d['id'] == did), None)
     if not dap:
         return jsonify({'error': 'Not found'}), 404
-    dap['mounted'] = Path(dap.get('mount_path', '')).exists()
+    resolved_mount, matched_mount = _resolve_dap_mount(dap)
+    dap['mounted'] = bool(resolved_mount and resolved_mount.exists())
+    dap['active_mount_path'] = str(resolved_mount) if resolved_mount else ''
+    if matched_mount:
+        dap['active_mount_label'] = matched_mount.get('label') or str(resolved_mount)
+    playlists = load_playlists()
+    exports = dap.get('playlist_exports', {})
+    stale_count = sum(
+        1 for pl in playlists.values()
+        if pl['id'] in exports and pl.get('updated_at', 0) > exports[pl['id']]
+    )
+    never_exported = sum(
+        1 for pl in playlists.values() if pl['id'] not in exports
+    )
+    dap['stale_count'] = stale_count
+    dap['never_exported'] = never_exported
+    summary = _normalize_sync_summary(dap.get('sync_summary'))
+    summary['playlist_out_of_sync_count'] = int(stale_count) + int(never_exported)
+    dap['sync_summary'] = summary
     return jsonify(dap)
 
 
@@ -2321,7 +2595,7 @@ def update_dap(did):
     dap = next((d for d in daps if d['id'] == did), None)
     if not dap:
         return jsonify({'error': 'Not found'}), 404
-    for k in ('name', 'model', 'icon', 'mount_path', 'export_folder', 'path_prefix', 'storage_type', 'music_root', 'path_template', 'peq_folder'):
+    for k in ('name', 'model', 'icon', 'mount_path', 'mount_volume_uuid', 'mount_disk_uuid', 'mount_device_identifier', 'export_folder', 'path_prefix', 'storage_type', 'music_root', 'path_template', 'peq_folder'):
         if k in data:
             if k == 'export_folder':
                 dap[k] = _normalize_export_folder(data[k])
@@ -2332,10 +2606,14 @@ def update_dap(did):
             elif k == 'storage_type':
                 v = str(data[k] or '').strip().lower()
                 dap[k] = v if v in ('sd', 'internal') else 'sd'
+            elif k in _mount_identity_fields():
+                dap[k] = _normalize_mount_id(data[k])
             else:
                 dap[k] = data[k]
     save_daps(daps)
-    dap['mounted'] = Path(dap.get('mount_path', '')).exists()
+    resolved_mount, _ = _resolve_dap_mount(dap)
+    dap['mounted'] = bool(resolved_mount and resolved_mount.exists())
+    dap['active_mount_path'] = str(resolved_mount) if resolved_mount else ''
     return jsonify(dap)
 
 
@@ -2383,9 +2661,9 @@ def dap_export_playlist(did, pid):
     if not dap:
         return jsonify({'error': 'DAP not found'}), 404
 
-    device_root = Path(dap['mount_path'])
-    if not device_root.exists():
-        return jsonify({'error': f"Device not mounted at {dap['mount_path']}"}), 404
+    device_root, _ = _resolve_dap_mount(dap)
+    if not device_root or not device_root.exists():
+        return jsonify({'error': f"Device not mounted. Last configured path: {dap.get('mount_path', 'not set')}"}), 404
 
     playlists = load_playlists()
     playlist = playlists.get(pid)
@@ -3121,9 +3399,9 @@ def copy_peq_to_dap(iid, peq_id):
     if not dap:
         return jsonify({'error': 'DAP not found'}), 404
 
-    device_root = Path(dap['mount_path'])
-    if not device_root.exists():
-        return jsonify({'error': f"Device not mounted at {dap['mount_path']}"}), 404
+    device_root, _ = _resolve_dap_mount(dap)
+    if not device_root or not device_root.exists():
+        return jsonify({'error': f"Device not mounted. Last configured path: {dap.get('mount_path', 'not set')}"}), 404
 
     peq_dir = device_root / dap.get('peq_folder', 'PEQ')
     peq_dir.mkdir(exist_ok=True)
@@ -3387,6 +3665,77 @@ def browse_folder():
         return jsonify({'error': 'Browse not available in dev mode — type path manually'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+def _discover_mount_points():
+    mounts = []
+    seen = set()
+    roots = []
+
+    def _mac_mount_identity(path_str):
+        info = {
+            'volume_uuid': '',
+            'disk_uuid': '',
+            'device_identifier': '',
+        }
+        try:
+            proc = subprocess.run(
+                ['diskutil', 'info', '-plist', path_str],
+                capture_output=True,
+                check=False,
+            )
+            if proc.returncode != 0 or not proc.stdout:
+                return info
+            data = plistlib.loads(proc.stdout)
+            info['volume_uuid'] = _normalize_mount_id(data.get('VolumeUUID'))
+            info['disk_uuid'] = _normalize_mount_id(data.get('DiskUUID'))
+            info['device_identifier'] = _normalize_mount_id(data.get('DeviceIdentifier'))
+        except Exception:
+            pass
+        return info
+
+    def _mount_entry(path_str, label):
+        rec = {'path': path_str, 'label': label}
+        if sys.platform == 'darwin':
+            rec.update(_mac_mount_identity(path_str))
+        else:
+            rec.update({'volume_uuid': '', 'disk_uuid': '', 'device_identifier': ''})
+        return rec
+
+    if sys.platform == 'darwin':
+        roots = [Path('/Volumes')]
+    elif os.name == 'nt':
+        roots = [Path(f'{chr(code)}:\\') for code in range(ord('A'), ord('Z') + 1)]
+    else:
+        roots = [Path('/media'), Path('/mnt'), Path('/run/media')]
+
+    for root in roots:
+        try:
+            if os.name == 'nt':
+                if root.exists():
+                    p = str(root)
+                    if p not in seen:
+                        mounts.append(_mount_entry(p, f'{p} (External Drive)'))
+                        seen.add(p)
+                continue
+            if not root.exists() or not root.is_dir():
+                continue
+            for child in sorted(root.iterdir(), key=lambda p: p.name.lower()):
+                if not child.is_dir():
+                    continue
+                p = str(child)
+                if p in seen:
+                    continue
+                mounts.append(_mount_entry(p, f'{child.name} (External Drive)'))
+                seen.add(p)
+        except Exception:
+            continue
+    return mounts
+
+
+@app.route('/api/system/mounts', methods=['GET'])
+def get_system_mounts():
+    return jsonify({'mounts': _discover_mount_points()})
 
 
 

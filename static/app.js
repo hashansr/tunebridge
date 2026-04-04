@@ -2438,6 +2438,22 @@ function _updateMappingCount() {
 
 /* ── Sync ────────────────────────────────────────────────────────────── */
 let _syncPollTimer = null;
+let _syncLastStatus = null;
+
+function _fmtBytes(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n < 0) return '—';
+  if (n === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let v = n;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i += 1;
+  }
+  const decimals = v >= 100 || i === 0 ? 0 : (v >= 10 ? 1 : 2);
+  return `${v.toFixed(decimals)} ${units[i]}`;
+}
 
 function _formatSyncPhaseMessage(raw, phase) {
   const msg = String(raw || '').trim();
@@ -2476,6 +2492,7 @@ function _syncPhase(name) {
 
 async function showSync() {
   await api('/sync/reset', { method: 'POST' }).catch(() => {});
+  _syncLastStatus = null;
   _syncPhase('pick');
   const errWrap = document.getElementById('sync-errors-wrap');
   if (errWrap) errWrap.style.display = 'none';
@@ -2554,7 +2571,7 @@ function _syncFileRows(paths, side) {
     const filename = parts[parts.length - 1];
     const folder = parts.slice(0, -1).join('/');
     return `<label class="sync-file-row">
-      <input type="checkbox" class="sync-chk sync-chk-${side}" data-path="${esc(p)}" checked />
+      <input type="checkbox" class="sync-chk sync-chk-${side}" data-path="${esc(p)}" checked onchange="App.syncSelectionChanged()" />
       <div class="sync-file-path-wrap"><span class="sync-file-folder">${esc(folder)}/</span><span class="sync-file-name">${esc(filename)}</span></div>
     </label>`;
   }).join('');
@@ -2566,6 +2583,7 @@ function _syncWarningRows(items) {
 }
 
 function renderSyncPreview(status) {
+  _syncLastStatus = status || null;
   document.getElementById('sync-local-count').textContent = status.local_only.length;
   document.getElementById('sync-device-count').textContent = status.device_only.length;
   document.getElementById('sync-list-local').innerHTML = _syncFileRows(status.local_only, 'local');
@@ -2589,12 +2607,53 @@ function renderSyncPreview(status) {
   const allDevice = document.getElementById('chk-all-device');
   if (allLocal) allLocal.checked = true;
   if (allDevice) allDevice.checked = true;
+  syncSelectionChanged();
 
   _syncPhase('preview');
 }
 
 function syncToggleAll(side, checked) {
   document.querySelectorAll(`.sync-chk-${side}`).forEach(cb => cb.checked = checked);
+  syncSelectionChanged();
+}
+
+function syncSelectionChanged() {
+  const panel = document.getElementById('sync-space-summary');
+  const status = _syncLastStatus;
+  if (!panel || !status) return;
+  const selectedLocal = [...document.querySelectorAll('.sync-chk-local:checked')].map(cb => cb.dataset.path);
+  const localSizes = status.local_only_sizes || {};
+  const required = selectedLocal.reduce((sum, rel) => sum + Number(localSizes[rel] || 0), 0);
+  const available = (status.space_available_bytes === null || status.space_available_bytes === undefined)
+    ? null
+    : Number(status.space_available_bytes);
+  const shortfall = (available !== null && required > available) ? (required - available) : 0;
+  const executeBtn = document.getElementById('sync-execute-btn');
+
+  const addCount = selectedLocal.length;
+  const removeCount = [...document.querySelectorAll('.sync-chk-device:checked')].length;
+  const tracksLine = `Music files selected: ${addCount} add • ${removeCount} remove`;
+  let spaceLine = '';
+  let className = 'sync-space-summary';
+
+  if (available === null) {
+    spaceLine = `Space check unavailable • Required for add: ${_fmtBytes(required)}`;
+  } else if (shortfall > 0) {
+    spaceLine = `Not enough space • Need ${_fmtBytes(required)}, available ${_fmtBytes(available)} (short by ${_fmtBytes(shortfall)})`;
+    className += ' sync-space-summary--danger';
+  } else {
+    const remaining = Math.max(0, available - required);
+    spaceLine = `Available ${_fmtBytes(available)} • Required ${_fmtBytes(required)} • After sync ${_fmtBytes(remaining)} free`;
+    if (remaining < (0.1 * (Number(status.space_total_bytes || 0)))) className += ' sync-space-summary--warn';
+    else className += ' sync-space-summary--ok';
+  }
+
+  panel.className = className;
+  panel.innerHTML = `<div>${esc(tracksLine)}</div><div>${esc(spaceLine)}</div>`;
+  if (executeBtn) {
+    const noSelection = addCount === 0 && removeCount === 0;
+    executeBtn.disabled = noSelection || shortfall > 0;
+  }
 }
 
 async function executeSync() {
@@ -2611,7 +2670,21 @@ async function executeSync() {
   document.getElementById('sync-copy-bar').style.width = '0%';
   document.getElementById('sync-copying-current').textContent = '';
 
-  await api('/sync/execute', { method: 'POST', body: { local_paths, device_paths } });
+  const execRes = await fetch('/api/sync/execute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ local_paths, device_paths }),
+  });
+  if (!execRes.ok) {
+    const err = await execRes.json().catch(() => ({}));
+    if (err.space_required_bytes !== undefined) {
+      toast(`Not enough device space: need ${_fmtBytes(err.space_required_bytes)}, available ${_fmtBytes(err.space_available_bytes)}.`);
+    } else {
+      toast(err.error || 'Sync failed to start.');
+    }
+    _syncPhase('preview');
+    return;
+  }
 
   clearInterval(_syncPollTimer);
   _syncPollTimer = setInterval(async () => {
@@ -2671,22 +2744,34 @@ async function loadDapsView() {
   if (!daps.length) { grid.innerHTML = ''; empty.style.display = 'flex'; return; }
   empty.style.display = 'none';
   grid.innerHTML = daps.map(d => {
-    const syncRow = (d.stale_count > 0 || d.never_exported > 0) ? `
-      <div class="gear-card-row">
-        ${d.stale_count  > 0 ? `<span class="gear-sync-badge gear-sync-stale">⚠ ${d.stale_count} outdated</span>` : ''}
-        ${d.never_exported > 0 ? `<span class="gear-sync-badge gear-sync-never">${d.never_exported} unsynced</span>` : ''}
-      </div>` : '';
+    const summary = d.sync_summary || {};
+    const musicAdd = Number(summary.music_to_add_count || 0);
+    const musicRemove = Number(summary.music_to_remove_count || 0);
+    const musicOut = Number(summary.music_out_of_sync_count || (musicAdd + musicRemove));
+    const spaceShort = Number(summary.space_shortfall_bytes || 0);
+    const playlistOut = Number(summary.playlist_out_of_sync_count || (Number(d.stale_count || 0) + Number(d.never_exported || 0)));
+    const statusClass = d.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected';
+    const statusText = d.mounted ? 'Connected' : 'Not connected';
+    const musicClass = musicOut > 0 ? 'gear-sync-stale' : 'gear-sync-ok';
+    const playlistClass = playlistOut > 0 ? 'gear-sync-stale' : 'gear-sync-ok';
+    const detailParts = [];
+    if (musicAdd || musicRemove) detailParts.push(`${musicAdd} add • ${musicRemove} remove`);
+    if (spaceShort > 0) detailParts.push(`Short ${_fmtBytes(spaceShort)}`);
+    const details = detailParts.length ? `<span class="gear-card-meta-text">${detailParts.join(' · ')}</span>` : '';
     return `
-    <div class="gear-card" onclick="App.showDapDetail('${d.id}')">
-      <div class="gear-card-icon">${_DAP_SVG}</div>
-      <div class="gear-card-body">
-        <div class="gear-card-name">${esc(d.name)}</div>
-        <div class="gear-card-row">
-          <span class="gear-badge ${d.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected'}">
-            ${d.mounted ? '● Connected' : '○ Not connected'}
-          </span>
+    <div class="gear-card gear-card-dap" onclick="App.showDapDetail('${d.id}')">
+      <div class="gear-card-icon gear-card-dap-icon">${_DAP_SVG}</div>
+      <div class="gear-card-body gear-card-dap-body">
+        <div class="gear-card-dap-top">
+          <span class="gear-badge gear-badge-dap">DAP</span>
+          <div class="gear-card-name">${esc(d.name)}</div>
+          <span class="gear-badge ${statusClass}">${statusText}</span>
         </div>
-        ${syncRow}
+        <div class="gear-card-dap-bottom">
+          <span class="gear-sync-badge ${musicClass}">Music ${musicOut}</span>
+          <span class="gear-sync-badge ${playlistClass}">Playlists ${playlistOut}</span>
+          ${details}
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -2923,6 +3008,7 @@ async function showDapDetail(id) {
   `;
 
   const exports = dap.playlist_exports || {};
+  const summary = dap.sync_summary || {};
   const sortedPl = [...playlists].sort((a, b) => a.name.localeCompare(b.name));
 
   const plRows = sortedPl.map(pl => {
@@ -2976,6 +3062,10 @@ async function showDapDetail(id) {
       <div class="dap-config-field"><label>Sync template</label><span><code>${esc(dap.path_template || DAP_TEMPLATE_PRESETS.artist_album_track)}</code></span></div>
       <div class="dap-config-field"><label>Path prefix</label><span>${esc(dap.path_prefix || '(none)')}</span></div>
       <div class="dap-config-field"><label>Model</label><span>${esc(dap.model || 'generic')}</span></div>
+      <div class="dap-config-field"><label>Playlists out of sync</label><span>${Number(summary.playlist_out_of_sync_count || (dap.stale_count || 0) + (dap.never_exported || 0))}</span></div>
+      <div class="dap-config-field"><label>Music files out of sync</label><span>${Number(summary.music_out_of_sync_count || 0)} <span class="gear-card-meta-text">(${Number(summary.music_to_add_count || 0)} add • ${Number(summary.music_to_remove_count || 0)} remove)</span></span></div>
+      <div class="dap-config-field"><label>Device space</label><span>${summary.space_available_bytes === null || summary.space_available_bytes === undefined ? 'Unavailable' : _fmtBytes(summary.space_available_bytes)}</span></div>
+      <div class="dap-config-field"><label>Required for add</label><span>${_fmtBytes(Number(summary.space_required_bytes || 0))}${Number(summary.space_shortfall_bytes || 0) > 0 ? ` <span class="gear-sync-badge gear-sync-stale">Short ${_fmtBytes(Number(summary.space_shortfall_bytes || 0))}</span>` : ''}</span></div>
     </div>
     <div class="dap-section-title">Playlist Sync Status</div>
     <div class="dap-table-shell">
@@ -3013,11 +3103,16 @@ function showAddDapModal() {
   _ensureGearProfileSelects();
   const firstModel = Object.keys(DAP_MODEL_PRESETS)[0] || 'other';
   const firstPreset = DAP_MODEL_PRESETS[firstModel] || { folder: 'Playlists', prefix: '' };
-  document.getElementById('dap-modal-title').textContent = 'Add DAP';
+  document.getElementById('dap-modal-title').textContent = 'Add Device';
   document.getElementById('dap-modal-id').value = '';
+  document.getElementById('dap-mount-volume-uuid').value = '';
+  document.getElementById('dap-mount-disk-uuid').value = '';
+  document.getElementById('dap-mount-device-identifier').value = '';
   document.getElementById('dap-name').value = '';
   document.getElementById('dap-model').value = firstModel;
   document.getElementById('dap-mount').value = '';
+  document.getElementById('dap-mount-manual-toggle').checked = false;
+  document.getElementById('dap-mount-manual-wrap').style.display = 'none';
   document.getElementById('dap-music-root').value = 'Music';
   document.getElementById('dap-template-preset').value = 'artist_album_track';
   document.getElementById('dap-path-template').value = DAP_TEMPLATE_PRESETS.artist_album_track;
@@ -3026,13 +3121,15 @@ function showAddDapModal() {
   dapModelPreset(firstModel);
   dapTemplateChanged();
   _closeDapHelpPanels();
+  refreshDapMounts('', true, null);
+  validateDapForm(false);
   document.getElementById('dap-modal').style.display = 'flex';
 }
 
 async function showEditDapModal(id) {
   _ensureGearProfileSelects();
   const dap = await api(`/daps/${id}`);
-  document.getElementById('dap-modal-title').textContent = 'Edit DAP';
+  document.getElementById('dap-modal-title').textContent = 'Edit Device';
   document.getElementById('dap-modal-id').value = id;
   document.getElementById('dap-name').value = dap.name || '';
   const modelSel = document.getElementById('dap-model');
@@ -3044,6 +3141,9 @@ async function showEditDapModal(id) {
   }
   document.getElementById('dap-model').value = dap.model || (Object.keys(DAP_MODEL_PRESETS)[0] || 'other');
   document.getElementById('dap-mount').value = dap.mount_path || '';
+  document.getElementById('dap-mount-volume-uuid').value = dap.mount_volume_uuid || '';
+  document.getElementById('dap-mount-disk-uuid').value = dap.mount_disk_uuid || '';
+  document.getElementById('dap-mount-device-identifier').value = dap.mount_device_identifier || '';
   document.getElementById('dap-music-root').value = dap.music_root || 'Music';
   document.getElementById('dap-path-template').value = dap.path_template || DAP_TEMPLATE_PRESETS.artist_album_track;
   document.getElementById('dap-template-preset').value = _suggestTemplatePreset(document.getElementById('dap-path-template').value);
@@ -3052,6 +3152,12 @@ async function showEditDapModal(id) {
   _updateDapFolderHint(dap.model || (Object.keys(DAP_MODEL_PRESETS)[0] || 'other'));
   dapTemplateChanged();
   _closeDapHelpPanels();
+  refreshDapMounts(dap.mount_path || '', false, {
+    volume_uuid: dap.mount_volume_uuid || '',
+    disk_uuid: dap.mount_disk_uuid || '',
+    device_identifier: dap.mount_device_identifier || '',
+  });
+  validateDapForm(false);
   document.getElementById('dap-modal').style.display = 'flex';
 }
 
@@ -3070,6 +3176,7 @@ const _mountPrefix = (() => {
 let DAP_MODEL_PRESETS = {};
 let _gearIemTypes = ['IEM', 'Headphone'];
 let _gearProfilesLoaded = false;
+let _detectedDapMounts = [];
 const DAP_TEMPLATE_PRESETS = {
   artist_album_track: '%artist%/%album%/%track% - %title%',
   artist_track: '%artist%/%track% - %title%',
@@ -3147,7 +3254,8 @@ function _renderDapTemplatePreview() {
   if (!/\.[a-z0-9]{2,5}$/i.test(rendered)) rendered += '.flac';
   const root = ((document.getElementById('dap-music-root')?.value || 'Music').trim().replace(/\\/g, '/')).replace(/^\/+|\/+$/g, '');
   const full = [root, rendered].filter(Boolean).join('/');
-  preview.innerHTML = `<span class="dap-template-preview-label">📁 Preview:</span> <code class="dap-template-preview-path">${esc(full)}</code>`;
+  const breadcrumb = full.split('/').filter(Boolean).join(' › ');
+  preview.innerHTML = `<span class="dap-template-preview-label">📁 Preview file path:</span> <code class="dap-template-preview-path">${esc(breadcrumb)}</code>`;
 }
 
 function _validateDapTemplate(showToast = false) {
@@ -3209,6 +3317,7 @@ function dapTemplateChanged() {
   _setTemplateChipStateFromTemplate(input?.value || '');
   _validateDapTemplate(false);
   _renderDapTemplatePreview();
+  validateDapForm(false);
 }
 
 function insertDapToken(token) {
@@ -3223,6 +3332,133 @@ function insertDapToken(token) {
   });
   input.value = _buildTemplateFromSelectedTokens(selected);
   dapTemplateChanged();
+}
+
+function _renderDapMountSelect(preferredPath = '') {
+  const sel = document.getElementById('dap-device-select');
+  if (!sel) return;
+  const mounts = Array.isArray(_detectedDapMounts) ? _detectedDapMounts : [];
+  if (!mounts.length) {
+    sel.innerHTML = '<option value="">No external devices detected</option>';
+    sel.value = '';
+    return;
+  }
+  sel.innerHTML = mounts.map(m => `<option value="${esc(m.path)}">${esc(m.label || m.path)}</option>`).join('');
+  const prefVolume = (document.getElementById('dap-mount-volume-uuid')?.value || '').trim().toLowerCase();
+  const prefDisk = (document.getElementById('dap-mount-disk-uuid')?.value || '').trim().toLowerCase();
+  const prefDevice = (document.getElementById('dap-mount-device-identifier')?.value || '').trim().toLowerCase();
+  const byIdentity = mounts.find(m =>
+    (prefVolume && String(m.volume_uuid || '').trim().toLowerCase() === prefVolume) ||
+    (prefDisk && String(m.disk_uuid || '').trim().toLowerCase() === prefDisk) ||
+    (prefDevice && String(m.device_identifier || '').trim().toLowerCase() === prefDevice)
+  );
+  const chosen = (byIdentity && byIdentity.path) || mounts.find(m => m.path === preferredPath)?.path || mounts[0].path;
+  sel.value = chosen;
+}
+
+function _setDapMountIdentityFields(mountObj) {
+  const vol = document.getElementById('dap-mount-volume-uuid');
+  const disk = document.getElementById('dap-mount-disk-uuid');
+  const dev = document.getElementById('dap-mount-device-identifier');
+  if (vol) vol.value = (mountObj && mountObj.volume_uuid) ? String(mountObj.volume_uuid).trim() : '';
+  if (disk) disk.value = (mountObj && mountObj.disk_uuid) ? String(mountObj.disk_uuid).trim() : '';
+  if (dev) dev.value = (mountObj && mountObj.device_identifier) ? String(mountObj.device_identifier).trim() : '';
+}
+
+function _matchMountByIdentity(mounts, identity) {
+  if (!identity || !Array.isArray(mounts)) return null;
+  const prefVolume = String(identity.volume_uuid || '').trim().toLowerCase();
+  const prefDisk = String(identity.disk_uuid || '').trim().toLowerCase();
+  const prefDevice = String(identity.device_identifier || '').trim().toLowerCase();
+  return mounts.find(m =>
+    (prefVolume && String(m.volume_uuid || '').trim().toLowerCase() === prefVolume) ||
+    (prefDisk && String(m.disk_uuid || '').trim().toLowerCase() === prefDisk) ||
+    (prefDevice && String(m.device_identifier || '').trim().toLowerCase() === prefDevice)
+  ) || null;
+}
+
+async function refreshDapMounts(preferredPath = '', forceManualOff = false, preferredIdentity = null) {
+  const currentPath = (preferredPath || document.getElementById('dap-mount')?.value || '').trim();
+  const currentIdentity = preferredIdentity || {
+    volume_uuid: document.getElementById('dap-mount-volume-uuid')?.value || '',
+    disk_uuid: document.getElementById('dap-mount-disk-uuid')?.value || '',
+    device_identifier: document.getElementById('dap-mount-device-identifier')?.value || '',
+  };
+  try {
+    const data = await api('/system/mounts');
+    _detectedDapMounts = Array.isArray(data.mounts) ? data.mounts : [];
+  } catch (_) {
+    _detectedDapMounts = [];
+  }
+  const matchedByIdentity = _matchMountByIdentity(_detectedDapMounts, currentIdentity);
+  const hasCurrent = !!matchedByIdentity || _detectedDapMounts.some(m => m.path === currentPath);
+  const manualToggle = document.getElementById('dap-mount-manual-toggle');
+  const shouldManual = forceManualOff ? false : (!!manualToggle?.checked || (!!currentPath && !hasCurrent));
+  _renderDapMountSelect(currentPath);
+  if (manualToggle) manualToggle.checked = shouldManual;
+  toggleDapManualMount(shouldManual);
+  if (!shouldManual) {
+    const selPath = (matchedByIdentity && matchedByIdentity.path) || document.getElementById('dap-device-select')?.value || '';
+    if (document.getElementById('dap-device-select') && selPath) {
+      document.getElementById('dap-device-select').value = selPath;
+    }
+    document.getElementById('dap-mount').value = selPath;
+    const selectedMount = _detectedDapMounts.find(m => m.path === selPath) || matchedByIdentity || null;
+    _setDapMountIdentityFields(selectedMount);
+  }
+  validateDapForm(false);
+}
+
+function selectDapMount(path) {
+  if (document.getElementById('dap-mount-manual-toggle')?.checked) return;
+  const selectedPath = (path || '').trim();
+  document.getElementById('dap-mount').value = selectedPath;
+  const selectedMount = _detectedDapMounts.find(m => m.path === selectedPath) || null;
+  _setDapMountIdentityFields(selectedMount);
+  validateDapForm(false);
+}
+
+function toggleDapManualMount(enabled) {
+  const wrap = document.getElementById('dap-mount-manual-wrap');
+  if (wrap) wrap.style.display = enabled ? 'flex' : 'none';
+  if (enabled) _setDapMountIdentityFields(null);
+  if (!enabled) {
+    const selPath = document.getElementById('dap-device-select')?.value || '';
+    document.getElementById('dap-mount').value = selPath;
+    const selectedMount = _detectedDapMounts.find(m => m.path === selPath) || null;
+    _setDapMountIdentityFields(selectedMount);
+  }
+  validateDapForm(false);
+}
+
+function validateDapForm(showToast = false) {
+  const name = (document.getElementById('dap-name')?.value || '').trim();
+  const mountPath = (document.getElementById('dap-mount')?.value || '').trim();
+  const manual = !!document.getElementById('dap-mount-manual-toggle')?.checked;
+  const mountMsg = document.getElementById('dap-mount-validation');
+  const saveBtn = document.getElementById('dap-save-btn');
+  let mountError = '';
+
+  if (!mountPath) {
+    mountError = manual ? 'Device location path is required.' : 'Select a connected device location.';
+  } else if (!manual && _detectedDapMounts.length && !_detectedDapMounts.some(m => m.path === mountPath)) {
+    mountError = 'Selected device is no longer connected. Refresh or switch to manual mode.';
+  }
+
+  if (mountMsg) {
+    mountMsg.textContent = mountError;
+    mountMsg.style.display = mountError ? 'block' : 'none';
+  }
+
+  const templateOk = _validateDapTemplate(false);
+  const ok = !!name && !mountError && templateOk;
+  if (saveBtn) saveBtn.disabled = !ok;
+
+  if (!ok && showToast) {
+    if (!name) toast('Device name is required.');
+    else if (mountError) toast(mountError);
+  }
+  return ok;
 }
 
 function toggleDapTemplateHelp() {
@@ -3287,9 +3523,17 @@ function dapModelPreset(model) {
   if (!mountInput.value || Object.values(DAP_MODEL_PRESETS).some(p => mountInput.value === p.mount)) {
     mountInput.value = preset.mount;
   }
+  if (!document.getElementById('dap-mount-manual-toggle')?.checked) {
+    _renderDapMountSelect(mountInput.value);
+    const selected = document.getElementById('dap-device-select')?.value || mountInput.value;
+    mountInput.value = selected;
+    const selectedMount = _detectedDapMounts.find(m => m.path === selected) || null;
+    _setDapMountIdentityFields(selectedMount);
+  }
   document.getElementById('dap-export-folder').value = preset.folder;
   document.getElementById('dap-prefix').value = preset.prefix;
   _updateDapFolderHint(model);
+  validateDapForm(false);
 }
 
 function _updateDapFolderHint(model) {
@@ -3302,12 +3546,15 @@ function _updateDapFolderHint(model) {
 }
 
 async function saveDap() {
-  if (!_validateDapTemplate(true)) return;
+  if (!validateDapForm(true)) return;
   const id = document.getElementById('dap-modal-id').value;
   const body = {
     name: document.getElementById('dap-name').value.trim() || 'My DAP',
     model: document.getElementById('dap-model').value,
     mount_path: document.getElementById('dap-mount').value.trim(),
+    mount_volume_uuid: document.getElementById('dap-mount-volume-uuid').value.trim(),
+    mount_disk_uuid: document.getElementById('dap-mount-disk-uuid').value.trim(),
+    mount_device_identifier: document.getElementById('dap-mount-device-identifier').value.trim(),
     music_root: document.getElementById('dap-music-root').value.trim() || 'Music',
     path_template: document.getElementById('dap-path-template').value.trim() || DAP_TEMPLATE_PRESETS.artist_album_track,
     export_folder: document.getElementById('dap-export-folder').value.trim() || 'Playlists',
@@ -3760,9 +4007,10 @@ function showAddIemModal() {
   const typeSel = document.getElementById('iem-type');
   if (typeSel && typeSel.options.length > 0) typeSel.value = typeSel.options[0].value;
   _setIemModalSources([]);
+  _closeIemHelpPanels();
   document.getElementById('iem-modal-error').style.display = 'none';
   document.getElementById('iem-save-btn').disabled = false;
-  document.getElementById('iem-save-btn').textContent = 'Save';
+  document.getElementById('iem-save-btn').textContent = 'Save IEM';
   document.getElementById('iem-modal').style.display = 'flex';
 }
 
@@ -3783,14 +4031,28 @@ async function showEditIemModal(id) {
   const srcs = (iem.squig_sources || []).slice(0, 3).map(s => ({ label: s.label || '', url: s.url || '' }));
   if (!srcs.length && iem.squig_url) srcs.push({ label: 'Primary', url: iem.squig_url });
   _setIemModalSources(srcs);
+  _closeIemHelpPanels();
   document.getElementById('iem-modal-error').style.display = 'none';
   document.getElementById('iem-save-btn').disabled = false;
-  document.getElementById('iem-save-btn').textContent = 'Save';
+  document.getElementById('iem-save-btn').textContent = 'Save IEM';
   document.getElementById('iem-modal').style.display = 'flex';
 }
 
 function closeIemModal() {
+  _closeIemHelpPanels();
   document.getElementById('iem-modal').style.display = 'none';
+}
+
+function toggleIemHelp(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function _closeIemHelpPanels() {
+  document.querySelectorAll('#iem-modal .dap-inline-help').forEach(el => {
+    el.style.display = 'none';
+  });
 }
 
 async function saveIem() {
@@ -3823,7 +4085,7 @@ async function saveIem() {
     errEl.textContent = e.message;
     errEl.style.display = 'block';
     btn.disabled = false;
-    btn.textContent = 'Save';
+    btn.textContent = 'Save IEM';
   }
 }
 
@@ -4513,6 +4775,7 @@ const App = {
   closeSyncModal,
   startSyncScan,
   syncToggleAll,
+  syncSelectionChanged,
   executeSync,
   syncScanAgain,
   // Songs
@@ -4541,6 +4804,10 @@ const App = {
   showEditDapModal,
   closeDapModal,
   dapModelPreset,
+  refreshDapMounts,
+  selectDapMount,
+  toggleDapManualMount,
+  validateDapForm,
   dapTemplatePreset,
   dapTemplateChanged,
   insertDapToken,
@@ -4553,6 +4820,7 @@ const App = {
   showIemDetail,
   showAddIemModal,
   showEditIemModal,
+  toggleIemHelp,
   closeIemModal,
   saveIem,
   deleteIem,
