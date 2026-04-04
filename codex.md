@@ -2425,3 +2425,32 @@ Observed working tree at time of writing (not touched by this codex update):
 
 - Validation:
   - `node --check static/app.js` passed.
+
+### 2026-04-05 (Gear DAP cards + detail status language refinement)
+- User-requested UX updates:
+  - Removed redundant `DAP` label chip from Gear DAP cards.
+  - Updated music/playlist sync messaging to plain-language states.
+  - Removed device-type/model chip from DAP detail hero.
+  - Added connection + music + playlist sync pills to DAP detail hero (aligned with card semantics).
+
+- Status language now:
+  - Music:
+    - `Music: Synced`
+    - or `Music: X new / Y removed`
+  - Playlists:
+    - `Playlists: Synced`
+    - or `Playlists: Out of sync` + detail (`N new · M out of sync`)
+
+- Implementation details:
+  - Added shared formatters in `static/app.js`:
+    - `_dapMusicStatus(summary)`
+    - `_dapPlaylistStatus(dap, summary)`
+  - Reused formatters in both:
+    - `loadDapsView()` card rendering
+    - `showDapDetail()` hero rendering
+
+- Files updated:
+  - `static/app.js`
+
+- Validation:
+  - `node --check static/app.js` passed.

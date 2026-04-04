@@ -2736,6 +2736,37 @@ async function syncScanAgain() {
 const _DAP_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg>`;
 const _IEM_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`;
 
+function _dapMusicStatus(summary = {}) {
+  const add = Number(summary.music_to_add_count || 0);
+  const remove = Number(summary.music_to_remove_count || 0);
+  const out = Number(summary.music_out_of_sync_count || (add + remove));
+  if (out <= 0) {
+    return { className: 'gear-sync-ok', text: 'Music: Synced', detail: '' };
+  }
+  return {
+    className: 'gear-sync-stale',
+    text: `Music: ${add} new / ${remove} removed`,
+    detail: '',
+  };
+}
+
+function _dapPlaylistStatus(dap, summary = {}) {
+  const stale = Number(dap.stale_count || 0);
+  const never = Number(dap.never_exported || 0);
+  const out = Number(summary.playlist_out_of_sync_count || (stale + never));
+  if (out <= 0) {
+    return { className: 'gear-sync-ok', text: 'Playlists: Synced', detail: '' };
+  }
+  const detailParts = [];
+  if (never > 0) detailParts.push(`${never} new`);
+  if (stale > 0) detailParts.push(`${stale} out of sync`);
+  return {
+    className: 'gear-sync-stale',
+    text: 'Playlists: Out of sync',
+    detail: detailParts.join(' · '),
+  };
+}
+
 async function loadDapsView() {
   document.getElementById('daps-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
   const daps = await api('/daps').catch(() => []);
@@ -2745,17 +2776,15 @@ async function loadDapsView() {
   empty.style.display = 'none';
   grid.innerHTML = daps.map(d => {
     const summary = d.sync_summary || {};
-    const musicAdd = Number(summary.music_to_add_count || 0);
-    const musicRemove = Number(summary.music_to_remove_count || 0);
-    const musicOut = Number(summary.music_out_of_sync_count || (musicAdd + musicRemove));
     const spaceShort = Number(summary.space_shortfall_bytes || 0);
-    const playlistOut = Number(summary.playlist_out_of_sync_count || (Number(d.stale_count || 0) + Number(d.never_exported || 0)));
+    const musicStatus = _dapMusicStatus(summary);
+    const playlistStatus = _dapPlaylistStatus(d, summary);
     const statusClass = d.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected';
     const statusText = d.mounted ? 'Connected' : 'Not connected';
-    const musicClass = musicOut > 0 ? 'gear-sync-stale' : 'gear-sync-ok';
-    const playlistClass = playlistOut > 0 ? 'gear-sync-stale' : 'gear-sync-ok';
+    const playlistPillText = playlistStatus.detail
+      ? `${playlistStatus.text} (${playlistStatus.detail})`
+      : playlistStatus.text;
     const detailParts = [];
-    if (musicAdd || musicRemove) detailParts.push(`${musicAdd} add • ${musicRemove} remove`);
     if (spaceShort > 0) detailParts.push(`Short ${_fmtBytes(spaceShort)}`);
     const details = detailParts.length ? `<span class="gear-card-meta-text">${detailParts.join(' · ')}</span>` : '';
     return `
@@ -2763,13 +2792,12 @@ async function loadDapsView() {
       <div class="gear-card-icon gear-card-dap-icon">${_DAP_SVG}</div>
       <div class="gear-card-body gear-card-dap-body">
         <div class="gear-card-dap-top">
-          <span class="gear-badge gear-badge-dap">DAP</span>
           <div class="gear-card-name">${esc(d.name)}</div>
           <span class="gear-badge ${statusClass}">${statusText}</span>
         </div>
         <div class="gear-card-dap-bottom">
-          <span class="gear-sync-badge ${musicClass}">Music ${musicOut}</span>
-          <span class="gear-sync-badge ${playlistClass}">Playlists ${playlistOut}</span>
+          <span class="gear-sync-badge ${musicStatus.className}">${esc(musicStatus.text)}</span>
+          <span class="gear-sync-badge ${playlistStatus.className}">${esc(playlistPillText)}</span>
           ${details}
         </div>
       </div>
@@ -3009,6 +3037,8 @@ async function showDapDetail(id) {
 
   const exports = dap.playlist_exports || {};
   const summary = dap.sync_summary || {};
+  const musicStatus = _dapMusicStatus(summary);
+  const playlistStatus = _dapPlaylistStatus(dap, summary);
   const sortedPl = [...playlists].sort((a, b) => a.name.localeCompare(b.name));
 
   const plRows = sortedPl.map(pl => {
@@ -3046,7 +3076,8 @@ async function showDapDetail(id) {
           <span class="gear-badge ${dap.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected'}">
             ${dap.mounted ? '● Connected' : '○ Not connected'}
           </span>
-          <span class="gear-badge gear-badge-dap">${esc(dap.model || 'generic')}</span>
+          <span class="gear-sync-badge ${musicStatus.className}">${esc(musicStatus.text)}</span>
+          <span class="gear-sync-badge ${playlistStatus.className}">${esc(playlistStatus.text)}${playlistStatus.detail ? ` · ${esc(playlistStatus.detail)}` : ''}</span>
         </div>
         <div class="gear-edit-actions">
           <button class="btn-secondary" onclick="App.showEditDapModal('${dap.id}')">Edit</button>
