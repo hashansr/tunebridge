@@ -203,6 +203,9 @@
       <!-- Playlist view -->
       <div id="view-playlist" class="view" style="display:none">
         <div class="playlist-header">
+          <button class="pl-header-delete-btn" onclick="App.deleteCurrentPlaylist()" title="Delete playlist" aria-label="Delete playlist">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
           <div class="playlist-cover-wrap" onclick="App.triggerArtworkUpload()" title="Click to set cover art">
             <div class="playlist-cover" id="pl-cover"></div>
             <div class="cover-upload-overlay">
@@ -216,19 +219,9 @@
             <div class="playlist-label">PLAYLIST</div>
             <h1 id="pl-name" contenteditable="true" spellcheck="false" onblur="App.renamePlaylist(this.textContent)"></h1>
             <div class="playlist-stats" id="pl-stats"></div>
-            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-              <button class="btn-secondary" id="pl-ml-generate-btn" onclick="App.openMlPlaylistGenerator('playlist')">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/><path d="M7 7h.01M17 7h.01M7 17h.01M17 17h.01"/></svg>
-                Smart Playlist
-              </button>
-            </div>
             <div class="playlist-actions" id="dap-export-pills">
               <!-- Populated dynamically from DAP list in openPlaylist() -->
             </div>
-            <button class="pl-header-delete-btn" onclick="App.deleteCurrentPlaylist()" title="Delete playlist">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-              Delete Playlist
-            </button>
           </div>
         </div>
 
@@ -948,6 +941,17 @@
           <div class="sync-list" id="sync-list-device"></div>
         </div>
 
+        <div id="sync-warnings-wrap" class="sync-section" style="display:none">
+          <div class="sync-section-hdr">
+            <div class="sync-section-hdr-left">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round"><path d="M12 3l9 16H3l9-16z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <span class="sync-section-title">Needs review</span>
+              <span class="sync-count-pill" id="sync-warning-count">0</span>
+            </div>
+          </div>
+          <div class="sync-list" id="sync-list-warnings"></div>
+        </div>
+
         <div class="modal-actions">
           <button class="btn-secondary" onclick="App.closeSyncModal()">Cancel</button>
           <button class="btn-primary" id="sync-execute-btn" onclick="App.executeSync()">Start Sync</button>
@@ -1021,7 +1025,56 @@
           <button class="btn-browse" onclick="App.browseFolder('dap-mount')">Browse…</button>
         </div>
       </div>
-      <p class="settings-hint" style="margin-bottom:10px">Connect your DAP via USB, then Browse to its root folder (e.g. <code>/Volumes/FIIO M21</code>). You can also point directly to the Music folder on its SD card.</p>
+      <p class="settings-hint settings-hint-inline">Connect your DAP via USB, then browse to its mount root (e.g. <code>/Volumes/FIIO M21</code>). TuneBridge supports one active storage location per DAP profile.</p>
+      <div class="settings-row">
+        <label>Storage location</label>
+        <select id="dap-storage">
+          <option value="sd">SD card</option>
+          <option value="internal">Internal storage</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <label>Music folder on DAP</label>
+        <div class="input-browse-group">
+          <input id="dap-music-root" type="text" placeholder="Music" />
+          <button class="btn-browse" onclick="App.browseFolder('dap-music-root')">Browse…</button>
+        </div>
+      </div>
+      <p class="settings-hint settings-hint-inline">Sync scans and copies files under this folder only (relative to mount path). Example: <code>Music</code> or <code>SDCard/Music</code>.</p>
+      <div class="settings-row">
+        <label>Folder structure</label>
+        <select id="dap-template-preset" onchange="App.dapTemplatePreset(this.value)">
+          <option value="artist_album_track">Artist / Album / Track - Title</option>
+          <option value="artist_track">Artist / Track - Title</option>
+          <option value="albumartist_album_track">Album Artist / Album / Track - Title</option>
+          <option value="flat_track">Flat / Track - Title</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="settings-row" style="align-items:flex-start">
+        <label class="dap-label-help" style="padding-top:8px">
+          <span>Path template</span>
+          <button class="settings-help-btn" type="button" onclick="App.toggleDapTemplateHelp()" title="Template help">?</button>
+        </label>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <input id="dap-path-template" type="text" oninput="App.dapTemplateChanged()" placeholder="%artist%/%album%/%track% - %title%" />
+          <div class="token-chip-row">
+            <button class="token-chip" onclick="App.insertDapToken('%artist%')" type="button">Artist</button>
+            <button class="token-chip" onclick="App.insertDapToken('%albumartist%')" type="button">Album Artist</button>
+            <button class="token-chip" onclick="App.insertDapToken('%album%')" type="button">Album</button>
+            <button class="token-chip" onclick="App.insertDapToken('%track%')" type="button">Track #</button>
+            <button class="token-chip" onclick="App.insertDapToken('%title%')" type="button">Title</button>
+            <button class="token-chip" onclick="App.insertDapToken('%year%')" type="button">Year</button>
+            <button class="token-chip" onclick="App.insertDapToken('%genre%')" type="button">Genre</button>
+          </div>
+          <div id="dap-template-status" class="dap-template-status"></div>
+          <span id="dap-template-validation" style="display:none;font-size:11px;line-height:1.4;color:#fbbf24"></span>
+          <div id="dap-template-preview" class="dap-template-preview"></div>
+          <p id="dap-template-help" class="settings-hint dap-template-help" style="display:none">
+            Sync uses this folder + template to detect differences and copy files. Keep <code>Title</code> as the final token. Changing the template later remaps by copying into the new structure without deleting old files.
+          </p>
+        </div>
+      </div>
       <div class="settings-row" style="align-items:flex-start">
         <label style="padding-top:8px">Playlist export folder</label>
         <div style="flex:1;display:flex;flex-direction:column;gap:4px">

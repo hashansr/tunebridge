@@ -635,13 +635,25 @@ const Player = (function () {
   }
 
   function clearQueue() {
-    ps.queue        = [];
-    ps.queueIdx     = -1;
-    ps.shuffleOrder = [];
-    _audio.src      = '';
-    ps.isPlaying    = false;
-    _updateTrackUI(null);
-    _updatePlayBtn();
+    const keep = currentTrack();
+    if (!keep) {
+      ps.queue        = [];
+      ps.queueIdx     = -1;
+      ps.shuffleOrder = [];
+      _audio.src      = '';
+      ps.isPlaying    = false;
+      _updateTrackUI(null);
+      _updatePlayBtn();
+      _highlightActiveRow();
+      _renderQueue();
+      _saveState();
+      return;
+    }
+
+    // Preserve currently loaded/playing track and clear only upcoming/history items.
+    ps.queue = [keep];
+    ps.queueIdx = 0;
+    ps.shuffleOrder = ps.shuffle ? [0] : [];
     _highlightActiveRow();
     _renderQueue();
     _saveState();

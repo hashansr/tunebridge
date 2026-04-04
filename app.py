@@ -235,8 +235,10 @@ sync_state = {
     'total': 0,
     'local_only': [],
     'device_only': [],
+    'warnings': [],
     'errors': [],
     'current': '',
+    'local_copy_map': {},
 }
 
 library = []
@@ -1787,12 +1789,89 @@ def export_to_device():
 
 SYNC_EXTENSIONS = {'.flac', '.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus', '.wv'}
 
+def _normalize_rel(path):
+    return str(path or '').replace('\\', '/').strip('/')
+
+
+def _safe_segment(value):
+    seg = str(value or '').strip()
+    seg = _INVALID_FS_CHARS_RE.sub('_', seg)
+    seg = re.sub(r'\s+', ' ', seg).strip().rstrip('. ')
+    if not seg:
+        return ''
+    if len(seg) > _MAX_SEGMENT_LEN:
+        seg = seg[:_MAX_SEGMENT_LEN].rstrip('. ')
+    return seg
+
+
+def _track_tokens(track):
+    raw_track = str(track.get('track_number') or '').strip()
+    raw_disc = str(track.get('disc_number') or '').strip()
+    try:
+        track_num = str(int(raw_track.split('/')[0])) if raw_track else ''
+    except Exception:
+        track_num = ''
+    try:
+        disc_num = str(int(raw_disc.split('/')[0])) if raw_disc else ''
+    except Exception:
+        disc_num = ''
+    title = str(track.get('title') or Path(track.get('path') or '').stem or '').strip()
+    album_artist = str(track.get('album_artist') or '').strip()
+    artist = str(track.get('artist') or '').strip()
+    return {
+        'artist': artist or 'Unknown Artist',
+        'albumartist': album_artist or artist or 'Unknown Artist',
+        'album': str(track.get('album') or '').strip() or 'Unknown Album',
+        'title': title or 'Unknown Title',
+        'track': track_num.zfill(2) if track_num else '',
+        'discnumber': disc_num.zfill(2) if disc_num else '',
+        'year': str(track.get('year') or '').strip(),
+        'genre': str(track.get('genre') or '').strip() or 'Unknown Genre',
+    }
+
+
+def _render_device_relpath(track, template):
+    warnings = []
+    tpl = _normalize_path_template(template)
+    tokens = _track_tokens(track)
+    rendered = tpl
+    missing = []
+    for k, v in tokens.items():
+        marker = f'%{k}%'
+        if marker in rendered:
+            safe = _safe_segment(v)
+            if not safe:
+                missing.append(k)
+                safe = _safe_segment(f'Unknown {k}')
+            rendered = rendered.replace(marker, safe)
+    if missing:
+        warnings.append(f"{track.get('path', '')}: missing metadata for {', '.join(sorted(set(missing)))}")
+    rendered = _normalize_rel(rendered)
+    parts = [p for p in rendered.split('/') if p]
+    if not parts:
+        parts = [_safe_segment(Path(track.get('path') or '').name) or 'Unknown.flac']
+    filename = parts[-1]
+    ext = Path(track.get('path') or '').suffix.lower()
+    if not Path(filename).suffix and ext:
+        filename = f'{filename}{ext}'
+    filename = _safe_segment(filename)
+    if ext and not Path(filename).suffix:
+        filename = f'{filename}{ext}'
+    parts[-1] = filename or ('track' + (ext or '.flac'))
+    rel = '/'.join([p for p in parts if p])
+    if rel != rendered:
+        warnings.append(f"{track.get('path', '')}: invalid characters sanitized for device filesystem")
+    return rel, warnings
+
+
 def get_dap_music_path(dap_id):
-    """Return Path to Music folder on the DAP identified by dap_id."""
+    """Return configured music root folder on the DAP identified by dap_id."""
     dap = next((d for d in load_daps() if d['id'] == dap_id), None)
     if not dap:
         return None
-    return Path(dap['mount_path']) / 'Music'
+    mount = Path(dap.get('mount_path') or '')
+    root = _normalize_music_root(dap.get('music_root') or DEFAULT_DAP_MUSIC_ROOT)
+    return mount / root
 
 def walk_music_files(root):
     """Return sorted list of relative path strings for all music files under root."""
@@ -1825,7 +1904,7 @@ def sync_scan():
 
     device_path = get_dap_music_path(dap_id)
     if not device_path or not device_path.exists():
-        return jsonify({'error': 'Device not mounted or Music folder not found'}), 400
+        return jsonify({'error': 'Device not mounted or configured music folder not found'}), 400
 
     sync_state = {
         'status': 'scanning',
@@ -1835,25 +1914,65 @@ def sync_scan():
         'total': 0,
         'local_only': [],
         'device_only': [],
+        'warnings': [],
         'errors': [],
         'current': '',
+        'local_copy_map': {},
     }
 
     def do_scan():
         global sync_state
         try:
-            sync_state['current'] = 'Scanning local library…'
-            local_files = set(walk_music_files(get_music_base()))
-            sync_state['current'] = 'Scanning device…'
-            device_files = set(walk_music_files(device_path))
+            sync_state['current'] = 'Mapping local library structure…'
+            with library_lock:
+                tracks = list(library)
+            daps = load_daps()
+            dap = next((d for d in daps if d.get('id') == dap_id), None)
+            if not dap:
+                raise RuntimeError('DAP not found')
+            template = dap.get('path_template') or DEFAULT_DAP_PATH_TEMPLATE
+            expected_map = {}
+            warnings = []
+            case_collision = set()
+            for t in tracks:
+                local_rel = _normalize_rel(t.get('path'))
+                if not local_rel:
+                    continue
+                rel, warns = _render_device_relpath(t, template)
+                warnings.extend(warns)
+                norm_key = rel.casefold()
+                if norm_key in expected_map and expected_map[norm_key] != local_rel:
+                    case_collision.add(rel)
+                expected_map[norm_key] = local_rel
 
-            local_only = sorted(local_files - device_files)
-            device_only = sorted(device_files - local_files)
+            sync_state['current'] = 'Scanning device…'
+            device_files = sorted(walk_music_files(device_path))
+            device_map = {_normalize_rel(p).casefold(): _normalize_rel(p) for p in device_files}
+
+            expected_keys = set(expected_map.keys())
+            device_keys = set(device_map.keys())
+            rendered_by_key = {}
+            for t in tracks:
+                local_rel = _normalize_rel(t.get('path'))
+                if not local_rel:
+                    continue
+                rel, _ = _render_device_relpath(t, template)
+                rendered_by_key[rel.casefold()] = rel
+
+            local_only = sorted([rendered_by_key[k] for k in (expected_keys - device_keys) if k in rendered_by_key])
+            device_only = sorted([device_map[k] for k in (device_keys - expected_keys)])
+            local_copy_map = {rendered_by_key[k]: expected_map[k] for k in rendered_by_key.keys() if k in expected_map}
+
+            for c in sorted(case_collision):
+                warnings.append(f'Case/filename collision detected for "{c}" — review before syncing.')
+            warnings = sorted(set(warnings))
 
             sync_state.update({
                 'status': 'ready',
                 'local_only': local_only,
                 'device_only': device_only,
+                'warnings': warnings,
+                'local_copy_map': local_copy_map,
                 'total': len(local_only) + len(device_only),
                 'current': '',
                 'message': (
@@ -1881,7 +2000,7 @@ def sync_execute():
         return jsonify({'error': 'Run scan first'}), 400
 
     data = request.json or {}
-    local_paths = data.get('local_paths', [])   # copy local → device
+    local_paths = data.get('local_paths', [])   # copy local → device (device-relative path keys)
     device_paths = data.get('device_paths', []) # copy device → local
     dap_id = sync_state['dap_id']
     device_path = get_dap_music_path(dap_id)
@@ -1906,16 +2025,24 @@ def sync_execute():
         global sync_state
         errors = []
         progress = 0
+        local_copy_map = sync_state.get('local_copy_map') or {}
 
-        for rel in local_paths:
-            src = get_music_base() / rel
-            dst = device_path / rel
-            sync_state['current'] = f'→ Device: {rel}'
+        for device_rel in local_paths:
+            local_rel = local_copy_map.get(device_rel)
+            if not local_rel:
+                errors.append(f'{device_rel}: no local source mapping found')
+                progress += 1
+                sync_state['progress'] = progress
+                sync_state['message'] = f'Copying {progress} / {total} files…'
+                continue
+            src = get_music_base() / local_rel
+            dst = device_path / device_rel
+            sync_state['current'] = f'→ Device: {device_rel}'
             try:
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
             except Exception as e:
-                errors.append(f'{rel}: {e}')
+                errors.append(f'{device_rel}: {e}')
             progress += 1
             sync_state['progress'] = progress
             sync_state['message'] = f'Copying {progress} / {total} files…'
@@ -1954,7 +2081,7 @@ def sync_reset():
     sync_state = {
         'status': 'idle', 'device': None, 'message': '',
         'progress': 0, 'total': 0, 'local_only': [], 'device_only': [],
-        'errors': [], 'current': '',
+        'warnings': [], 'errors': [], 'current': '', 'local_copy_map': {},
     }
     return jsonify({'ok': True})
 
@@ -1964,6 +2091,23 @@ def sync_reset():
 def _slugify_model_id(name):
     s = re.sub(r'[^a-z0-9]+', '_', (name or '').lower()).strip('_')
     return s or 'other'
+
+
+DEFAULT_DAP_MUSIC_ROOT = 'Music'
+DEFAULT_DAP_PATH_TEMPLATE = '%artist%/%album%/%track% - %title%'
+_INVALID_FS_CHARS_RE = re.compile(r'[<>:"/\\\\|?*\\x00-\\x1f]')
+_MAX_SEGMENT_LEN = 120
+
+
+def _normalize_music_root(path):
+    root = str(path or DEFAULT_DAP_MUSIC_ROOT).strip().replace('\\', '/')
+    root = root.strip('/')
+    return root or DEFAULT_DAP_MUSIC_ROOT
+
+
+def _normalize_path_template(tpl):
+    s = str(tpl or DEFAULT_DAP_PATH_TEMPLATE).strip()
+    return s or DEFAULT_DAP_PATH_TEMPLATE
 
 
 def _normalize_export_folder(path):
@@ -2078,7 +2222,31 @@ def get_gear_profiles():
 def load_daps():
     if DAP_FILE.exists():
         try:
-            return json.load(open(DAP_FILE))
+            daps = json.load(open(DAP_FILE))
+            changed = False
+            for d in daps:
+                if 'storage_type' not in d:
+                    d['storage_type'] = 'sd'
+                    changed = True
+                if 'music_root' not in d:
+                    d['music_root'] = DEFAULT_DAP_MUSIC_ROOT
+                    changed = True
+                else:
+                    norm_root = _normalize_music_root(d.get('music_root'))
+                    if norm_root != d.get('music_root'):
+                        d['music_root'] = norm_root
+                        changed = True
+                if 'path_template' not in d:
+                    d['path_template'] = DEFAULT_DAP_PATH_TEMPLATE
+                    changed = True
+                else:
+                    norm_tpl = _normalize_path_template(d.get('path_template'))
+                    if norm_tpl != d.get('path_template'):
+                        d['path_template'] = norm_tpl
+                        changed = True
+            if changed:
+                save_daps(daps)
+            return daps
         except Exception:
             pass
     return []
@@ -2113,6 +2281,9 @@ def create_dap():
     model = data.get('model', 'generic')
     profile_map = {p['model']: p for p in load_gear_profiles().get('dap_profiles', [])}
     defaults = profile_map.get(model, {'export_folder': 'Playlists', 'path_prefix': ''})
+    storage_type = str(data.get('storage_type') or 'sd').strip().lower()
+    if storage_type not in ('sd', 'internal'):
+        storage_type = 'sd'
     dap = {
         'id': str(uuid.uuid4()),
         'name': data.get('name', 'New DAP'),
@@ -2121,6 +2292,9 @@ def create_dap():
         'mount_path': data.get('mount_path', ''),
         'export_folder': _normalize_export_folder(data.get('export_folder') or defaults.get('export_folder')),
         'path_prefix': data.get('path_prefix', defaults.get('path_prefix', '')),
+        'storage_type': storage_type,
+        'music_root': _normalize_music_root(data.get('music_root')),
+        'path_template': _normalize_path_template(data.get('path_template')),
         'peq_folder': data.get('peq_folder', 'PEQ'),
         'playlist_exports': {},
     }
@@ -2147,10 +2321,17 @@ def update_dap(did):
     dap = next((d for d in daps if d['id'] == did), None)
     if not dap:
         return jsonify({'error': 'Not found'}), 404
-    for k in ('name', 'model', 'icon', 'mount_path', 'export_folder', 'path_prefix', 'peq_folder'):
+    for k in ('name', 'model', 'icon', 'mount_path', 'export_folder', 'path_prefix', 'storage_type', 'music_root', 'path_template', 'peq_folder'):
         if k in data:
             if k == 'export_folder':
                 dap[k] = _normalize_export_folder(data[k])
+            elif k == 'music_root':
+                dap[k] = _normalize_music_root(data[k])
+            elif k == 'path_template':
+                dap[k] = _normalize_path_template(data[k])
+            elif k == 'storage_type':
+                v = str(data[k] or '').strip().lower()
+                dap[k] = v if v in ('sd', 'internal') else 'sd'
             else:
                 dap[k] = data[k]
     save_daps(daps)

@@ -676,27 +676,32 @@ async function renderDapExportPills(pid) {
 
   const daps = await api('/daps').catch(() => []);
   const connected = daps.filter(d => d.mounted);
-  if (!connected.length) {
-    container.innerHTML = `<span style="color:var(--text-muted);font-size:var(--text-xs)">No connected DAPs detected</span>`;
-    return;
-  }
+  const hasConnected = connected.length > 0;
+  const triggerLabel = hasConnected ? `Connected DAPs (${connected.length})` : 'No DAP Connected';
 
   const svgDevice = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>`;
   const chevron = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>`;
-  container.innerHTML = `
-    <div id="pl-dap-export-dd" class="pl-dap-dd" onclick="event.stopPropagation()">
-      <button class="btn-export btn-export-device pl-dap-dd-trigger" onclick="App.togglePlaylistDapMenu()">
-        ${svgDevice}
-        Connected DAPs (${connected.length})
-        ${chevron}
-      </button>
-      <div id="pl-dap-export-menu" class="pl-dap-dd-menu" style="display:none">
-        ${connected.map(dap => `
+  const menuItems = hasConnected
+    ? connected.map(dap => `
           <button class="pl-dap-dd-item" onclick="App.pickConnectedDapExport('${dap.id}')">
             <span class="pl-dap-dd-item-name">${esc(dap.name)}</span>
             <span class="pl-dap-dd-item-meta">Copy playlist</span>
           </button>
-        `).join('')}
+        `).join('')
+    : `<button class="pl-dap-dd-item is-disabled" disabled>
+         <span class="pl-dap-dd-item-name">No DAP connected</span>
+         <span class="pl-dap-dd-item-meta">Connect a DAP to export this playlist</span>
+       </button>`;
+
+  container.innerHTML = `
+    <div id="pl-dap-export-dd" class="pl-dap-dd" onclick="event.stopPropagation()">
+      <button class="btn-export btn-export-device pl-dap-dd-trigger" onclick="App.togglePlaylistDapMenu()">
+        ${svgDevice}
+        ${triggerLabel}
+        ${chevron}
+      </button>
+      <div id="pl-dap-export-menu" class="pl-dap-dd-menu" style="display:none">
+        ${menuItems}
       </div>
     </div>`;
 }
@@ -2555,11 +2560,20 @@ function _syncFileRows(paths, side) {
   }).join('');
 }
 
+function _syncWarningRows(items) {
+  if (!items || !items.length) return `<div class="sync-empty">No issues detected.</div>`;
+  return items.map(msg => `<div class="sync-file-row" style="grid-template-columns:1fr;color:var(--text-muted)">${esc(msg)}</div>`).join('');
+}
+
 function renderSyncPreview(status) {
   document.getElementById('sync-local-count').textContent = status.local_only.length;
   document.getElementById('sync-device-count').textContent = status.device_only.length;
   document.getElementById('sync-list-local').innerHTML = _syncFileRows(status.local_only, 'local');
   document.getElementById('sync-list-device').innerHTML = _syncFileRows(status.device_only, 'device');
+  const warnings = Array.isArray(status.warnings) ? status.warnings : [];
+  document.getElementById('sync-warning-count').textContent = warnings.length;
+  document.getElementById('sync-list-warnings').innerHTML = _syncWarningRows(warnings);
+  document.getElementById('sync-warnings-wrap').style.display = warnings.length ? 'block' : 'none';
 
   // Hide "copy to device" section if nothing to copy
   document.getElementById('sync-section-local').style.display =
@@ -2956,7 +2970,10 @@ async function showDapDetail(id) {
     </div>
     <div class="dap-config-block">
       <div class="dap-config-field"><label>Mount path</label><span>${esc(dap.mount_path || '—')}</span></div>
+      <div class="dap-config-field"><label>Storage</label><span>${esc(dap.storage_type === 'internal' ? 'Internal' : 'SD card')}</span></div>
+      <div class="dap-config-field"><label>Music folder</label><span>${esc(dap.music_root || 'Music')}</span></div>
       <div class="dap-config-field"><label>Export folder</label><span>${esc(dap.export_folder || 'Playlists')}</span></div>
+      <div class="dap-config-field"><label>Sync template</label><span><code>${esc(dap.path_template || DAP_TEMPLATE_PRESETS.artist_album_track)}</code></span></div>
       <div class="dap-config-field"><label>Path prefix</label><span>${esc(dap.path_prefix || '(none)')}</span></div>
       <div class="dap-config-field"><label>Model</label><span>${esc(dap.model || 'generic')}</span></div>
     </div>
@@ -3001,9 +3018,16 @@ function showAddDapModal() {
   document.getElementById('dap-name').value = '';
   document.getElementById('dap-model').value = firstModel;
   document.getElementById('dap-mount').value = '';
+  document.getElementById('dap-storage').value = 'sd';
+  document.getElementById('dap-music-root').value = 'Music';
+  document.getElementById('dap-template-preset').value = 'artist_album_track';
+  document.getElementById('dap-path-template').value = DAP_TEMPLATE_PRESETS.artist_album_track;
   document.getElementById('dap-export-folder').value = firstPreset.folder || 'Playlists';
   document.getElementById('dap-prefix').value = firstPreset.prefix || '';
   dapModelPreset(firstModel);
+  dapTemplateChanged();
+  const help = document.getElementById('dap-template-help');
+  if (help) help.style.display = 'none';
   document.getElementById('dap-modal').style.display = 'flex';
 }
 
@@ -3022,9 +3046,16 @@ async function showEditDapModal(id) {
   }
   document.getElementById('dap-model').value = dap.model || (Object.keys(DAP_MODEL_PRESETS)[0] || 'other');
   document.getElementById('dap-mount').value = dap.mount_path || '';
+  document.getElementById('dap-storage').value = dap.storage_type || 'sd';
+  document.getElementById('dap-music-root').value = dap.music_root || 'Music';
+  document.getElementById('dap-path-template').value = dap.path_template || DAP_TEMPLATE_PRESETS.artist_album_track;
+  document.getElementById('dap-template-preset').value = _suggestTemplatePreset(document.getElementById('dap-path-template').value);
   document.getElementById('dap-export-folder').value = dap.export_folder || 'Playlists';
   document.getElementById('dap-prefix').value = dap.path_prefix || '';
   _updateDapFolderHint(dap.model || (Object.keys(DAP_MODEL_PRESETS)[0] || 'other'));
+  dapTemplateChanged();
+  const help = document.getElementById('dap-template-help');
+  if (help) help.style.display = 'none';
   document.getElementById('dap-modal').style.display = 'flex';
 }
 
@@ -3042,6 +3073,13 @@ const _mountPrefix = (() => {
 let DAP_MODEL_PRESETS = {};
 let _gearIemTypes = ['IEM', 'Headphone'];
 let _gearProfilesLoaded = false;
+const DAP_TEMPLATE_PRESETS = {
+  artist_album_track: '%artist%/%album%/%track% - %title%',
+  artist_track: '%artist%/%track% - %title%',
+  albumartist_album_track: '%albumartist%/%album%/%track% - %title%',
+  flat_track: '%track% - %title%',
+  custom: '',
+};
 
 function _normalizeDapPreset(profile) {
   const mountName = (profile.mount_name || 'MyDAP').replace(/[\\/]/g, '').trim() || 'MyDAP';
@@ -3063,6 +3101,163 @@ function _populateDapModelSelect() {
     sel.innerHTML = '<option value="other">Other</option>';
     DAP_MODEL_PRESETS = { other: { label: 'Other', mount: _mountPrefix.base + 'MyDAP', folder: 'Playlists', prefix: '', hint: '' } };
   }
+}
+
+function _suggestTemplatePreset(template) {
+  const t = (template || '').trim();
+  for (const [k, v] of Object.entries(DAP_TEMPLATE_PRESETS)) {
+    if (k === 'custom') continue;
+    if (v === t) return k;
+  }
+  return 'custom';
+}
+
+function _renderDapTemplatePreview() {
+  const preview = document.getElementById('dap-template-preview');
+  const input = document.getElementById('dap-path-template');
+  if (!preview || !input) return;
+  const tpl = (input.value || '').trim() || DAP_TEMPLATE_PRESETS.artist_album_track;
+  const sample = {
+    artist: 'Linkin Park',
+    albumartist: 'Linkin Park',
+    album: 'Meteora',
+    track: '03',
+    title: 'Numb',
+    year: '2003',
+    genre: 'Alternative Rock',
+  };
+  let rendered = tpl;
+  Object.entries(sample).forEach(([k, v]) => {
+    rendered = rendered.split(`%${k}%`).join(v);
+  });
+  if (!/\.[a-z0-9]{2,5}$/i.test(rendered)) rendered += '.flac';
+  preview.innerHTML = `<span style="opacity:.9">🎯 Preview path</span><br><code>${esc(rendered)}</code>`;
+}
+
+function _updateDapTemplateStatus() {
+  const input = document.getElementById('dap-path-template');
+  const el = document.getElementById('dap-template-status');
+  if (!input || !el) return;
+  const tpl = input.value || '';
+  const hasTitle = tpl.includes('%title%');
+  if (hasTitle) {
+    el.className = 'dap-template-status is-ready';
+    el.textContent = 'You already selected Title. Structure tokens are now locked because Title should be your final selection.';
+  } else {
+    el.className = 'dap-template-status is-warning';
+    el.textContent = 'Select Title as your last token to complete the path template.';
+  }
+}
+
+function _validateDapTemplate(showToast = false) {
+  const input = document.getElementById('dap-path-template');
+  const msgEl = document.getElementById('dap-template-validation');
+  if (!input || !msgEl) return true;
+  const tpl = (input.value || '').trim();
+  let error = '';
+
+  if (!tpl) {
+    error = 'Path template is required.';
+  } else if (!tpl.includes('%title%')) {
+    error = 'Please add Title as the final token in your path template.';
+  } else if (tpl.includes('\\')) {
+    error = 'Use "/" for path separators.';
+  } else if (tpl.includes('//')) {
+    error = 'Template cannot include empty path segments ("//").';
+  } else if (/[<>:"|?*\x00-\x1f]/.test(tpl)) {
+    error = 'Template contains filesystem-invalid characters.';
+  } else {
+    const titlePos = tpl.indexOf('%title%');
+    const trailing = tpl.slice(titlePos + '%title%'.length);
+    if (/%(artist|albumartist|album|track|year|genre)%/.test(trailing)) {
+      error = 'Title is currently in the middle. Move Title to the end and keep all other structure tokens before it.';
+    }
+  }
+
+  if (error) {
+    msgEl.textContent = error;
+    msgEl.style.display = 'block';
+    if (showToast) toast(error);
+    return false;
+  }
+  msgEl.textContent = '';
+  msgEl.style.display = 'none';
+  return true;
+}
+
+function _updateDapTokenState() {
+  const input = document.getElementById('dap-path-template');
+  const hasTitle = (input?.value || '').includes('%title%');
+  document.querySelectorAll('.token-chip-row .token-chip').forEach(btn => {
+    const disable = hasTitle;
+    btn.classList.toggle('is-disabled', disable);
+    btn.disabled = disable;
+  });
+}
+
+function dapTemplatePreset(preset) {
+  const input = document.getElementById('dap-path-template');
+  if (!input) return;
+  if (preset === 'custom') {
+    input.value = '';
+    input.placeholder = '';
+  } else {
+    input.placeholder = '%artist%/%album%/%track% - %title%';
+  }
+  if (preset && preset !== 'custom' && DAP_TEMPLATE_PRESETS[preset]) {
+    input.value = DAP_TEMPLATE_PRESETS[preset];
+  }
+  _updateDapTokenState();
+  _updateDapTemplateStatus();
+  _validateDapTemplate(false);
+  _renderDapTemplatePreview();
+}
+
+function dapTemplateChanged() {
+  const sel = document.getElementById('dap-template-preset');
+  const input = document.getElementById('dap-path-template');
+  if (sel && input) sel.value = _suggestTemplatePreset(input.value);
+  if (input) input.placeholder = sel?.value === 'custom' ? '' : '%artist%/%album%/%track% - %title%';
+  _updateDapTokenState();
+  _updateDapTemplateStatus();
+  _validateDapTemplate(false);
+  _renderDapTemplatePreview();
+}
+
+function insertDapToken(token) {
+  const input = document.getElementById('dap-path-template');
+  if (!input) return;
+  const current = input.value || '';
+  if (current.includes('%title%')) {
+    toast('You already selected Title. Title is the last token in the structure, so other options are disabled. Remove Title first if you want to add more folders.');
+    return;
+  }
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  const before = input.value.slice(0, start);
+  const after = input.value.slice(end);
+  const folderToken = token !== '%title%';
+  let insert = token;
+
+  // For hierarchical parts, auto-add "/" so users build folder paths quickly.
+  if (folderToken) {
+    const hasTrailingSlashInAfter = after.startsWith('/') || after.startsWith('\\');
+    if (!hasTrailingSlashInAfter && !token.endsWith('/')) {
+      insert = `${token}/`;
+    }
+  }
+
+  input.value = before + insert + after;
+  const next = start + insert.length;
+  input.focus();
+  input.setSelectionRange(next, next);
+  dapTemplateChanged();
+}
+
+function toggleDapTemplateHelp() {
+  const el = document.getElementById('dap-template-help');
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
 function _populateIemTypeSelect() {
@@ -3124,11 +3319,15 @@ function _updateDapFolderHint(model) {
 }
 
 async function saveDap() {
+  if (!_validateDapTemplate(true)) return;
   const id = document.getElementById('dap-modal-id').value;
   const body = {
     name: document.getElementById('dap-name').value.trim() || 'My DAP',
     model: document.getElementById('dap-model').value,
     mount_path: document.getElementById('dap-mount').value.trim(),
+    storage_type: document.getElementById('dap-storage').value || 'sd',
+    music_root: document.getElementById('dap-music-root').value.trim() || 'Music',
+    path_template: document.getElementById('dap-path-template').value.trim() || DAP_TEMPLATE_PRESETS.artist_album_track,
     export_folder: document.getElementById('dap-export-folder').value.trim() || 'Playlists',
     path_prefix: document.getElementById('dap-prefix').value.trim(),
   };
@@ -3885,7 +4084,19 @@ async function browseFolder(inputId) {
   if (res.error) { toast(res.error); return; }
   if (res.path) {
     const el = document.getElementById(inputId);
-    if (el) { el.value = res.path; el.focus(); }
+    if (el) {
+      let value = res.path;
+      if (inputId === 'dap-music-root') {
+        const mount = (document.getElementById('dap-mount')?.value || '').trim().replace(/\\/g, '/').replace(/\/+$/, '');
+        const chosen = value.replace(/\\/g, '/');
+        if (mount && chosen.toLowerCase().startsWith(mount.toLowerCase() + '/')) {
+          value = chosen.slice(mount.length + 1);
+        }
+      }
+      el.value = value;
+      el.focus();
+      if (inputId === 'dap-path-template') dapTemplateChanged();
+    }
   }
   // res.path === null means user cancelled — do nothing
 }
@@ -4348,6 +4559,10 @@ const App = {
   showEditDapModal,
   closeDapModal,
   dapModelPreset,
+  dapTemplatePreset,
+  dapTemplateChanged,
+  insertDapToken,
+  toggleDapTemplateHelp,
   saveDap,
   deleteDap,
   dapExportPlaylist,

@@ -1990,3 +1990,173 @@ Observed working tree at time of writing (not touched by this codex update):
 
 - Validation:
   - `node --check static/app.js` passed.
+
+### 2026-04-03 (Playlist detail hero compact pass + DAP dropdown persistence)
+- User request:
+  - Tighten Playlist Detail hero vertical footprint.
+  - Keep DAP export dropdown visible even with no connected DAPs.
+  - Remove Smart Playlist CTA from hero.
+  - Make Delete Playlist action compact (pill style), not full-width.
+
+- Implementation:
+  - Removed hero-level Smart Playlist button from playlist detail header.
+  - Updated DAP export render logic:
+    - Dropdown always renders.
+    - Trigger now shows:
+      - `Connected DAPs (N)` when mounted devices exist.
+      - `No DAP Connected` when none are mounted.
+    - Empty-state menu item is shown disabled with guidance copy.
+  - Compact hero layout refinements:
+    - Reduced header padding, margins, and inter-element gaps.
+    - Reduced playlist cover dimensions across desktop/tablet/mobile breakpoints.
+    - Reduced title/stat spacing and play button bottom margin.
+    - Increased action spacing consistency between hero controls.
+  - Delete Playlist CTA styling updated to match compact pill treatment:
+    - `align-self: flex-start`
+    - rounded pill radius + compact padding
+    - subtle elevated background/border consistent with app action pills.
+
+- Files updated:
+  - `static/index.html`
+  - `static/app.js`
+  - `static/style.css`
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-03 (Playlist hero balance + queue clear safety)
+- User request:
+  - Playlist hero: move delete action to right side as icon-only, improve visual balance, and make cover ratio more prominent.
+  - Player queue: `Clear` should preserve currently playing track to avoid playback errors.
+
+- Implementation:
+  - Playlist hero:
+    - Moved delete control to top-right in hero container.
+    - Converted delete CTA to icon-only bin button with tooltip + aria label.
+    - Adjusted hero spacing/padding to remain compact while preserving button separation.
+    - Updated cover dimensions to a portrait ratio for stronger visual prominence next to title/meta.
+  - Queue clear behavior:
+    - `Player.clearQueue()` now keeps current track when one is active.
+    - Clears only history/upcoming items; queue resets to `[currentTrack]` and keeps playback stable.
+    - Falls back to full clear only when no current track exists.
+
+- Files updated:
+  - `static/index.html`
+  - `static/style.css`
+  - `static/player.js`
+
+- Validation:
+  - `node --check static/app.js` passed.
+  - `node --check static/player.js` passed.
+
+### 2026-04-03 (Playlist hero cover ratio correction)
+- User request:
+  - Keep Playlist Detail hero cover strictly 1:1.
+
+- Implementation:
+  - Updated `#view-playlist .playlist-cover-wrap` dimensions to square across breakpoints:
+    - desktop: `122x122`
+    - <=1200px: `112x112`
+    - <=860px: `104x104`
+
+- Files updated:
+  - `static/style.css`
+
+### 2026-04-04 (Add DAP modal + template-driven sync roots)
+- Goal:
+  - Improve Add DAP UX to support configurable DAP music location and folder-structure templates.
+  - Ensure sync scan/copy logic uses this configuration bidirectionally.
+  - Keep migration behavior copy-only (do not delete old DAP files).
+
+- Add DAP modal updates:
+  - Added `Storage location` selector (`SD card` / `Internal storage`).
+  - Added `Music folder on DAP` input + browse (relative to mount root expected).
+  - Added `Folder structure` preset selector and custom token template builder.
+  - Added token chips (`%artist%`, `%albumartist%`, `%album%`, `%track%`, `%title%`, `%year%`, `%genre%`).
+  - Added live template preview line.
+  - Added help/disclaimer copy:
+    - one active storage location per DAP profile
+    - sync uses configured folder + template
+    - remap is copy-only when template changes.
+
+- DAP data model changes:
+  - New fields persisted per DAP:
+    - `storage_type` (`sd`/`internal`)
+    - `music_root` (relative folder under mount path; default `Music`)
+    - `path_template` (default `%artist%/%album%/%track% - %title%`)
+  - Added load-time normalization/migration for existing `daps.json` records.
+
+- Sync engine changes:
+  - Device scan root now uses DAP-configured `mount_path + music_root` instead of hardcoded `mount/Music`.
+  - Local-to-device diff now uses template-rendered expected paths from library metadata.
+  - Added case-insensitive path matching for diffing (reduces case-sensitivity false positives across filesystems).
+  - Added sanitization for invalid FAT/exFAT path characters and problematic segments.
+  - Added pre-sync warnings list (missing metadata, sanitized paths, potential case collisions).
+  - Added `local_copy_map` so selected device-target paths map back to local source paths during copy.
+
+- Sync preview UI updates:
+  - Added `Needs review` section with warning count and detailed issues before execution.
+
+- Migration behavior:
+  - Template changes produce new `Copy to device` candidates (copy-only remap behavior).
+  - Existing old-layout device files are not auto-deleted.
+
+- Files updated:
+  - `static/index.html`
+  - `static/app.js`
+  - `static/style.css`
+  - `app.py`
+
+- Validation:
+  - `node --check static/app.js` passed.
+  - Python syntax validated via AST parse: `python3 -c "import ast, pathlib; ast.parse(pathlib.Path('app.py').read_text())"`.
+
+### 2026-04-04 (Add DAP template UX polish)
+- User-requested UX refinements:
+  - Moved long path-template help copy behind a compact `?` help button.
+  - Made token chips human-readable (hide `%...%` in labels).
+  - Enforced terminal `Title` behavior in token builder:
+    - once `Title` token is present, token chips are disabled.
+  - For `Folder structure = Custom`, template input placeholder is cleared (no guide text in textbox).
+  - Added live path-template validation with inline warnings + save-time guard.
+
+- Validation rules added (path template field):
+  - must not be empty
+  - must include `Title` token
+  - must use `/` separators (not `\\`)
+  - must not contain `//`
+  - must not include invalid filesystem characters
+  - `Title` token must be terminal (no folder tokens after it)
+
+- Files updated:
+  - `static/index.html`
+  - `static/app.js`
+  - `static/style.css`
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-04 (Add DAP template UX refinements v2)
+- User-requested updates:
+  - Clear path template when `Folder structure` is switched to `Custom`.
+  - Provide more explicit guidance around `Title` terminal behavior.
+  - Improve alignment of helper text with form fields.
+  - Make preview visually distinct from help text.
+
+- Implemented:
+  - `Custom` preset now clears `Path template` value and removes placeholder guidance text.
+  - Added template status banner under token chips:
+    - warning state: asks user to select `Title` last.
+    - ready state: explains `Title` is already selected and token chips are locked.
+  - Updated blocked-token toast with verbose explanation about why tokens are disabled after `Title`.
+  - Converted top helper paragraphs to aligned inline hints (`settings-hint-inline`) so they line up with input column.
+  - Upgraded preview UI to a dedicated preview card with icon/title + code styling.
+  - Help note styling refined with left accent border for separation from preview.
+
+- Files updated:
+  - `static/index.html`
+  - `static/app.js`
+  - `static/style.css`
+
+- Validation:
+  - `node --check static/app.js` passed.
