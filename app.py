@@ -250,6 +250,8 @@ sync_state = {
     'space_shortfall_bytes': 0,
     'space_ok': True,
 }
+sync_check_lock = threading.Lock()
+sync_check_inflight = set()
 
 library = []
 library_lock = threading.Lock()
@@ -1918,6 +1920,219 @@ def walk_music_files(root):
                 files.append(rel)
     return sorted(files)
 
+
+def _build_sync_track_entries(template):
+    """
+    Build sync candidates from LIVE local filesystem paths.
+    If metadata for a path exists in cached library, use it to render template path;
+    otherwise fall back to local relative path so newly-added files are still detected.
+    """
+    with library_lock:
+        tracks = list(library)
+
+    lib_by_rel = {}
+    for t in tracks:
+        rel = _normalize_rel(t.get('path'))
+        if rel and _is_music_file_path(rel):
+            lib_by_rel[rel.casefold()] = t
+
+    local_files = walk_music_files(get_music_base())
+    entries = []
+    for rel in local_files:
+        local_rel = _normalize_rel(rel)
+        if not local_rel:
+            continue
+        t = lib_by_rel.get(local_rel.casefold())
+        rendered_rel = ''
+        warns = []
+        if t:
+            rendered_rel, warns = _render_device_relpath(t, template)
+            rendered_rel = _normalize_rel(rendered_rel)
+        target_rel = rendered_rel or local_rel
+        entries.append({
+            'local_rel': local_rel,
+            'rendered_rel': rendered_rel,
+            'target_rel': target_rel,
+            'warnings': warns,
+        })
+    return entries
+
+
+def _compute_sync_diff_for_dap(dap):
+    """Compute music sync diff for a DAP profile and return summary payload."""
+    if not dap:
+        raise RuntimeError('DAP not found')
+    dap_id = dap.get('id')
+    if not dap_id:
+        raise RuntimeError('DAP id missing')
+    device_path = get_dap_music_path(dap_id)
+    if not device_path or not device_path.exists():
+        raise RuntimeError('Device not mounted or configured music folder not found')
+
+    template = dap.get('path_template') or DEFAULT_DAP_PATH_TEMPLATE
+    track_entries = _build_sync_track_entries(template)
+
+    device_files = sorted(walk_music_files(device_path))
+    device_map = {_normalize_rel(p).casefold(): _normalize_rel(p) for p in device_files}
+
+    device_keys = set(device_map.keys())
+    expected_keys = set()
+    local_only = []
+    local_copy_map = {}
+    warnings = []
+    target_collisions = set()
+
+    for e in track_entries:
+        local_key = e['local_rel'].casefold()
+        rendered_key = e['rendered_rel'].casefold() if e['rendered_rel'] else ''
+        variants = {local_key}
+        if rendered_key:
+            variants.add(rendered_key)
+        expected_keys.update(variants)
+
+        if variants.isdisjoint(device_keys):
+            target_rel = e['target_rel']
+            if target_rel in local_copy_map and local_copy_map[target_rel] != e['local_rel']:
+                target_collisions.add(target_rel)
+                continue
+            local_copy_map[target_rel] = e['local_rel']
+            local_only.append(target_rel)
+            warnings.extend(e.get('warnings') or [])
+
+    local_only = sorted(set(local_only))
+    device_only = sorted([device_map[k] for k in (device_keys - expected_keys)])
+
+    local_only_sizes = {}
+    required_bytes = 0
+    music_base = get_music_base()
+    for device_rel in local_only:
+        local_rel = local_copy_map.get(device_rel)
+        if not local_rel:
+            continue
+        src = music_base / local_rel
+        size = 0
+        try:
+            if src.exists():
+                size = int(src.stat().st_size)
+        except Exception:
+            size = 0
+        local_only_sizes[device_rel] = size
+        required_bytes += size
+
+    mount_root, _ = _resolve_dap_mount(dap)
+    usage_path = mount_root if (mount_root and mount_root.exists()) else device_path
+    available_bytes = None
+    total_bytes = None
+    try:
+        if usage_path.exists():
+            usage = shutil.disk_usage(usage_path)
+            available_bytes = int(usage.free)
+            total_bytes = int(usage.total)
+    except Exception:
+        available_bytes = None
+        total_bytes = None
+
+    space_ok = (available_bytes is None) or (required_bytes <= available_bytes)
+    shortfall_bytes = 0
+    if available_bytes is not None and required_bytes > available_bytes:
+        shortfall_bytes = required_bytes - available_bytes
+        warnings.append(
+            f'Insufficient device space: need {required_bytes} bytes, available {available_bytes} bytes.'
+        )
+
+    for c in sorted(target_collisions):
+        warnings.append(f'Path collision for "{c}" — multiple local tracks map to the same destination.')
+    warnings = sorted(set(warnings))
+    if len(warnings) > 250:
+        extra = len(warnings) - 250
+        warnings = warnings[:250] + [f'...and {extra} more issue(s).']
+
+    return {
+        'local_only': local_only,
+        'device_only': device_only,
+        'warnings': warnings,
+        'local_copy_map': local_copy_map,
+        'local_only_sizes': local_only_sizes,
+        'total': len(local_only) + len(device_only),
+        'music_out_of_sync_count': len(local_only) + len(device_only),
+        'music_to_add_count': len(local_only),
+        'music_to_remove_count': len(device_only),
+        'space_available_bytes': available_bytes,
+        'space_total_bytes': total_bytes,
+        'space_required_bytes': required_bytes,
+        'space_shortfall_bytes': shortfall_bytes,
+        'space_ok': space_ok,
+        'message': (
+            f'{len(local_only)} file(s) to copy to device, '
+            f'{len(device_only)} file(s) to copy to local'
+        ),
+    }
+
+
+def _playlist_sync_counts_for_dap(dap):
+    playlists = load_playlists()
+    exports = (dap or {}).get('playlist_exports', {}) or {}
+    stale_count = sum(
+        1 for pl in playlists.values()
+        if pl.get('id') in exports and pl.get('updated_at', 0) > exports[pl.get('id')]
+    )
+    never_exported = sum(1 for pl in playlists.values() if pl.get('id') not in exports)
+    return stale_count, never_exported
+
+
+def _start_dap_sync_status_check(dap_id):
+    if not dap_id:
+        return False, 'missing_dap_id'
+    with sync_check_lock:
+        if dap_id in sync_check_inflight:
+            return False, 'already_checking'
+        sync_check_inflight.add(dap_id)
+
+    _update_dap_sync_summary(dap_id, {
+        'sync_status_state': 'checking',
+        'sync_status_message': 'Checking live sync status…',
+    })
+
+    def _job():
+        try:
+            daps = load_daps()
+            dap = next((d for d in daps if d.get('id') == dap_id), None)
+            if not dap:
+                raise RuntimeError('DAP not found')
+            resolved_mount, _ = _resolve_dap_mount(dap)
+            if not resolved_mount or not resolved_mount.exists():
+                raise RuntimeError('Device not mounted')
+
+            diff = _compute_sync_diff_for_dap(dap)
+            stale_count, never_exported = _playlist_sync_counts_for_dap(dap)
+            now_ts = int(time.time())
+            _update_dap_sync_summary(dap_id, {
+                'playlist_out_of_sync_count': int(stale_count) + int(never_exported),
+                'music_out_of_sync_count': diff['music_out_of_sync_count'],
+                'music_to_add_count': diff['music_to_add_count'],
+                'music_to_remove_count': diff['music_to_remove_count'],
+                'space_available_bytes': diff['space_available_bytes'],
+                'space_total_bytes': diff['space_total_bytes'],
+                'space_required_bytes': diff['space_required_bytes'],
+                'space_shortfall_bytes': diff['space_shortfall_bytes'],
+                'space_ok': diff['space_ok'],
+                'last_scan_at': now_ts,
+                'last_verified_at': now_ts,
+                'sync_status_state': 'verified',
+                'sync_status_message': 'Live check complete',
+            })
+        except Exception as e:
+            _update_dap_sync_summary(dap_id, {
+                'sync_status_state': 'error',
+                'sync_status_message': str(e),
+            })
+        finally:
+            with sync_check_lock:
+                sync_check_inflight.discard(dap_id)
+
+    threading.Thread(target=_job, daemon=True).start()
+    return True, 'started'
+
 @app.route('/api/sync/scan', methods=['POST'])
 def sync_scan():
     global sync_state
@@ -1960,135 +2175,45 @@ def sync_scan():
         global sync_state
         try:
             sync_state['current'] = 'Mapping local library structure…'
-            with library_lock:
-                tracks = list(library)
             daps = load_daps()
             dap = next((d for d in daps if d.get('id') == dap_id), None)
             if not dap:
                 raise RuntimeError('DAP not found')
-            template = dap.get('path_template') or DEFAULT_DAP_PATH_TEMPLATE
-            track_entries = []
-            warnings = []
-            target_collisions = set()
-            for t in tracks:
-                local_rel = _normalize_rel(t.get('path'))
-                if not local_rel or not _is_music_file_path(local_rel):
-                    continue
-                rel, warns = _render_device_relpath(t, template)
-                rendered_rel = _normalize_rel(rel)
-                local_rel_norm = _normalize_rel(local_rel)
-                target_rel = rendered_rel or local_rel_norm
-                track_entries.append({
-                    'local_rel': local_rel_norm,
-                    'rendered_rel': rendered_rel,
-                    'target_rel': target_rel,
-                    'warnings': warns,
-                })
-
             sync_state['current'] = 'Scanning device…'
-            device_files = sorted(walk_music_files(device_path))
-            device_map = {_normalize_rel(p).casefold(): _normalize_rel(p) for p in device_files}
-
-            device_keys = set(device_map.keys())
-            expected_keys = set()
-            local_only = []
-            local_copy_map = {}
-            for e in track_entries:
-                local_key = e['local_rel'].casefold()
-                rendered_key = e['rendered_rel'].casefold() if e['rendered_rel'] else ''
-                variants = {local_key}
-                if rendered_key:
-                    variants.add(rendered_key)
-                expected_keys.update(variants)
-
-                if variants.isdisjoint(device_keys):
-                    target_rel = e['target_rel']
-                    if target_rel in local_copy_map and local_copy_map[target_rel] != e['local_rel']:
-                        target_collisions.add(target_rel)
-                        continue
-                    local_copy_map[target_rel] = e['local_rel']
-                    local_only.append(target_rel)
-                    warnings.extend(e.get('warnings') or [])
-
-            local_only = sorted(set(local_only))
-            device_only = sorted([device_map[k] for k in (device_keys - expected_keys)])
-            local_only_sizes = {}
-            required_bytes = 0
-            music_base = get_music_base()
-            for device_rel in local_only:
-                local_rel = local_copy_map.get(device_rel)
-                if not local_rel:
-                    continue
-                src = music_base / local_rel
-                size = 0
-                try:
-                    if src.exists():
-                        size = int(src.stat().st_size)
-                except Exception:
-                    size = 0
-                local_only_sizes[device_rel] = size
-                required_bytes += size
-
-            mount_root, _ = _resolve_dap_mount(dap)
-            usage_path = mount_root if (mount_root and mount_root.exists()) else device_path
-            available_bytes = None
-            total_bytes = None
-            try:
-                if usage_path.exists():
-                    usage = shutil.disk_usage(usage_path)
-                    available_bytes = int(usage.free)
-                    total_bytes = int(usage.total)
-            except Exception:
-                available_bytes = None
-                total_bytes = None
-
-            space_ok = (available_bytes is None) or (required_bytes <= available_bytes)
-            shortfall_bytes = 0
-            if available_bytes is not None and required_bytes > available_bytes:
-                shortfall_bytes = required_bytes - available_bytes
-                warnings.append(
-                    f'Insufficient device space: need {required_bytes} bytes, available {available_bytes} bytes.'
-                )
-
-            for c in sorted(target_collisions):
-                warnings.append(f'Path collision for "{c}" — multiple local tracks map to the same destination.')
-            warnings = sorted(set(warnings))
-            if len(warnings) > 250:
-                extra = len(warnings) - 250
-                warnings = warnings[:250] + [f'...and {extra} more issue(s).']
+            diff = _compute_sync_diff_for_dap(dap)
 
             sync_state.update({
                 'status': 'ready',
-                'local_only': local_only,
-                'device_only': device_only,
-                'warnings': warnings,
-                'local_copy_map': local_copy_map,
-                'local_only_sizes': local_only_sizes,
-                'total': len(local_only) + len(device_only),
+                'local_only': diff['local_only'],
+                'device_only': diff['device_only'],
+                'warnings': diff['warnings'],
+                'local_copy_map': diff['local_copy_map'],
+                'local_only_sizes': diff['local_only_sizes'],
+                'total': diff['total'],
                 'current': '',
-                'music_out_of_sync_count': len(local_only) + len(device_only),
-                'music_to_add_count': len(local_only),
-                'music_to_remove_count': len(device_only),
-                'space_available_bytes': available_bytes,
-                'space_total_bytes': total_bytes,
-                'space_required_bytes': required_bytes,
-                'space_shortfall_bytes': shortfall_bytes,
-                'space_ok': space_ok,
-                'message': (
-                    f'{len(local_only)} file(s) to copy to device, '
-                    f'{len(device_only)} file(s) to copy to local'
-                ),
+                'music_out_of_sync_count': diff['music_out_of_sync_count'],
+                'music_to_add_count': diff['music_to_add_count'],
+                'music_to_remove_count': diff['music_to_remove_count'],
+                'space_available_bytes': diff['space_available_bytes'],
+                'space_total_bytes': diff['space_total_bytes'],
+                'space_required_bytes': diff['space_required_bytes'],
+                'space_shortfall_bytes': diff['space_shortfall_bytes'],
+                'space_ok': diff['space_ok'],
+                'message': diff['message'],
             })
             _update_dap_sync_summary(dap_id, {
-                'music_out_of_sync_count': len(local_only) + len(device_only),
-                'music_to_add_count': len(local_only),
-                'music_to_remove_count': len(device_only),
-                'space_available_bytes': available_bytes,
-                'space_total_bytes': total_bytes,
-                'space_required_bytes': required_bytes,
-                'space_shortfall_bytes': shortfall_bytes,
-                'space_ok': space_ok,
+                'music_out_of_sync_count': diff['music_out_of_sync_count'],
+                'music_to_add_count': diff['music_to_add_count'],
+                'music_to_remove_count': diff['music_to_remove_count'],
+                'space_available_bytes': diff['space_available_bytes'],
+                'space_total_bytes': diff['space_total_bytes'],
+                'space_required_bytes': diff['space_required_bytes'],
+                'space_shortfall_bytes': diff['space_shortfall_bytes'],
+                'space_ok': diff['space_ok'],
                 'last_scan_at': int(time.time()),
+                'last_verified_at': int(time.time()),
+                'sync_status_state': 'verified',
+                'sync_status_message': 'Live check complete',
             })
         except Exception as e:
             sync_state['status'] = 'error'
@@ -2250,6 +2375,9 @@ def _default_sync_summary():
         'space_shortfall_bytes': 0,
         'space_ok': True,
         'last_scan_at': 0,
+        'last_verified_at': 0,
+        'sync_status_state': 'estimated',  # estimated | checking | verified | error
+        'sync_status_message': '',
     }
 
 
@@ -2266,6 +2394,7 @@ def _normalize_sync_summary(summary):
         'space_required_bytes',
         'space_shortfall_bytes',
         'last_scan_at',
+        'last_verified_at',
     ):
         try:
             base[k] = int(base.get(k) or 0)
@@ -2280,6 +2409,11 @@ def _normalize_sync_summary(summary):
         except Exception:
             base[k] = None
     base['space_ok'] = bool(base.get('space_ok', True))
+    state = str(base.get('sync_status_state') or 'estimated').strip().lower()
+    if state not in ('estimated', 'checking', 'verified', 'error'):
+        state = 'estimated'
+    base['sync_status_state'] = state
+    base['sync_status_message'] = str(base.get('sync_status_message') or '')
     return base
 
 
@@ -2553,6 +2687,48 @@ def get_daps():
         summary['playlist_out_of_sync_count'] = int(d['stale_count']) + int(d['never_exported'])
         d['sync_summary'] = summary
     return jsonify(daps)
+
+
+@app.route('/api/daps/sync-status/check', methods=['POST'])
+def check_daps_sync_status():
+    daps = load_daps()
+    mounts = _discover_mount_points()
+    started = []
+    skipped = []
+    for d in daps:
+        resolved_mount, _ = _resolve_dap_mount(d, mounts)
+        if not resolved_mount or not resolved_mount.exists():
+            skipped.append({'id': d.get('id'), 'reason': 'not_mounted'})
+            _update_dap_sync_summary(d.get('id'), {
+                'sync_status_state': 'error',
+                'sync_status_message': 'Device not mounted',
+            })
+            continue
+        ok, reason = _start_dap_sync_status_check(d.get('id'))
+        if ok:
+            started.append(d.get('id'))
+        else:
+            skipped.append({'id': d.get('id'), 'reason': reason})
+    return jsonify({'ok': True, 'started': started, 'skipped': skipped})
+
+
+@app.route('/api/daps/<did>/sync-status/check', methods=['POST'])
+def check_single_dap_sync_status(did):
+    daps = load_daps()
+    dap = next((d for d in daps if d.get('id') == did), None)
+    if not dap:
+        return jsonify({'error': 'Not found'}), 404
+    resolved_mount, _ = _resolve_dap_mount(dap)
+    if not resolved_mount or not resolved_mount.exists():
+        _update_dap_sync_summary(did, {
+            'sync_status_state': 'error',
+            'sync_status_message': 'Device not mounted',
+        })
+        return jsonify({'error': 'Device not mounted'}), 400
+    ok, reason = _start_dap_sync_status_check(did)
+    if not ok and reason != 'already_checking':
+        return jsonify({'error': f'Could not start sync check ({reason})'}), 400
+    return jsonify({'ok': True, 'status': reason})
 
 
 @app.route('/api/daps', methods=['POST'])

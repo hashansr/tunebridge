@@ -2077,6 +2077,11 @@ tr.track-selected .track-check-indicator {
   font-size: var(--text-xs);
   color: rgba(229, 226, 225, 0.62);
 }
+.gear-card-dap-checkline {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .gear-card-meta {
   font-size: var(--text-sm);
   color: var(--text-muted);

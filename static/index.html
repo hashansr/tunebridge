@@ -269,7 +269,10 @@
             <div class="gear-section-overline">Export &amp; Sync</div>
             <h2>Digital Audio Players</h2>
           </div>
-          <button class="btn-primary" onclick="App.showAddDapModal()">+ Add Device</button>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="gear-check-sync-btn" class="btn-secondary" onclick="App.checkAllDapSyncStatus()">Check Sync Status</button>
+            <button class="btn-primary" onclick="App.showAddDapModal()">+ Add Device</button>
+          </div>
         </div>
         <div id="gear-daps-panel">
           <div id="daps-grid" class="gear-grid"></div>

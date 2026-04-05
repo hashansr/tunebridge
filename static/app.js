@@ -2849,6 +2849,19 @@ function _dapPlaylistStatus(dap, summary = {}) {
   };
 }
 
+function _formatSyncCheckedAt(ts) {
+  const n = Number(ts || 0);
+  if (!n) return 'Not checked yet';
+  const secs = Math.max(0, Math.floor(Date.now() / 1000) - n);
+  if (secs < 60) return 'Checked just now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `Checked ${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `Checked ${hrs} hr ago`;
+  const days = Math.floor(hrs / 24);
+  return `Checked ${days} day${days === 1 ? '' : 's'} ago`;
+}
+
 function _gearStatusPillHtml(iconSvg, className, text) {
   return `<span class="gear-sync-badge ${className}"><span class="gear-pill-icon">${iconSvg}</span><span>${esc(text)}</span></span>`;
 }
@@ -2866,6 +2879,14 @@ async function loadDapsView() {
     const playlistStatus = _dapPlaylistStatus(d, summary);
     const statusClass = d.mounted ? 'gear-dap-conn--on' : 'gear-dap-conn--off';
     const statusText = d.mounted ? 'Connected' : 'Not connected';
+    const syncState = String(summary.sync_status_state || 'estimated');
+    const syncStateText = syncState === 'checking'
+      ? 'Checking live sync status…'
+      : syncState === 'verified'
+        ? _formatSyncCheckedAt(summary.last_verified_at)
+        : syncState === 'error'
+          ? (summary.sync_status_message || 'Sync check unavailable')
+          : `Estimated • ${_formatSyncCheckedAt(summary.last_scan_at)}`;
     const musicTone = musicStatus.className === 'gear-sync-ok' ? 'gear-dap-value--ok' : 'gear-dap-value--warn';
     const playlistTone = playlistStatus.className === 'gear-sync-ok' ? 'gear-dap-value--ok' : 'gear-dap-value--warn';
     const musicValue = musicStatus.className === 'gear-sync-ok' ? 'Synced' : 'Out of sync';
@@ -2880,6 +2901,7 @@ async function loadDapsView() {
           <div class="gear-card-dap-miniicon">${_DAP_SVG}</div>
         </div>
         <div class="gear-card-subline gear-card-dap-connection ${statusClass}">${statusText.toUpperCase()}</div>
+        <div class="gear-card-meta-text gear-card-dap-checkline">${esc(syncStateText)}</div>
         <div class="gear-card-dap-rule"></div>
         <div class="gear-card-dap-status">
           <span class="gear-dap-label">Music</span>
@@ -3110,6 +3132,92 @@ async function loadGearView() {
   await Promise.all([loadDapsView(), loadIemsView()]);
 }
 
+async function _pollSyncCheckCompletion(targetIds, onDone) {
+  const watchIds = new Set((targetIds || []).filter(Boolean));
+  return new Promise((resolve) => {
+    if (!watchIds.size) {
+      Promise.resolve(typeof onDone === 'function' ? onDone() : null).finally(resolve);
+      return;
+    }
+    const startedAt = Date.now();
+    const timeoutMs = 120000;
+    const tick = async () => {
+      if (Date.now() - startedAt > timeoutMs) {
+        toast('Sync status check timed out. Try again.');
+        await Promise.resolve(typeof onDone === 'function' ? onDone() : null);
+        resolve();
+        return;
+      }
+      const daps = await api('/daps').catch(() => []);
+      let pending = 0;
+      daps.forEach(d => {
+        if (!watchIds.has(d.id)) return;
+        const state = String((d.sync_summary || {}).sync_status_state || 'estimated');
+        if (state === 'checking') pending += 1;
+      });
+      if (pending === 0) {
+        await Promise.resolve(typeof onDone === 'function' ? onDone() : null);
+        resolve();
+        return;
+      }
+      setTimeout(tick, 900);
+    };
+    tick();
+  });
+}
+
+async function checkAllDapSyncStatus() {
+  const btn = document.getElementById('gear-check-sync-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+  }
+  try {
+    const res = await api('/daps/sync-status/check', { method: 'POST' });
+    const started = Array.isArray(res.started) ? res.started : [];
+    if (!started.length) {
+      toast('No mounted DAPs available for live sync check.');
+      await loadDapsView();
+      return;
+    }
+    toast(`Checking sync status for ${started.length} device${started.length === 1 ? '' : 's'}…`);
+    await _pollSyncCheckCompletion(started, async () => {
+      await loadDapsView();
+      toast('Sync status check complete.');
+    });
+  } catch (e) {
+    toast('Sync status check failed: ' + e.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Check Sync Status';
+    }
+  }
+}
+
+async function checkDapSyncStatus(did) {
+  const btn = document.getElementById('dap-check-sync-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+  }
+  try {
+    await api(`/daps/${did}/sync-status/check`, { method: 'POST' });
+    toast('Checking sync status…');
+    await _pollSyncCheckCompletion([did], async () => {
+      await showDapDetail(did);
+      await loadDapsView();
+      toast('Sync status updated.');
+    });
+  } catch (e) {
+    toast('Sync status check failed: ' + e.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Check Sync Status';
+    }
+  }
+}
+
 async function showDapDetail(id) {
   const [dap, playlists] = await Promise.all([
     api(`/daps/${id}`),
@@ -3128,6 +3236,14 @@ async function showDapDetail(id) {
 
   const exports = dap.playlist_exports || {};
   const summary = dap.sync_summary || {};
+  const syncState = String(summary.sync_status_state || 'estimated');
+  const syncStateText = syncState === 'checking'
+    ? 'Checking live sync status…'
+    : syncState === 'verified'
+      ? _formatSyncCheckedAt(summary.last_verified_at)
+      : syncState === 'error'
+        ? (summary.sync_status_message || 'Sync check unavailable')
+        : `Estimated • ${_formatSyncCheckedAt(summary.last_scan_at)}`;
   const musicStatus = _dapMusicStatus(summary);
   const playlistStatus = _dapPlaylistStatus(dap, summary);
   const sortedPl = [...playlists].sort((a, b) => a.name.localeCompare(b.name));
@@ -3173,7 +3289,11 @@ async function showDapDetail(id) {
         ${(musicStatus.detail || playlistStatus.detail)
           ? `<div class="gear-card-meta-text" style="margin-top:6px">${esc([musicStatus.detail, playlistStatus.detail].filter(Boolean).join(' · '))}</div>`
           : ''}
+        <div class="gear-card-meta-text" style="margin-top:4px">${esc(syncStateText)}</div>
         <div class="gear-edit-actions">
+          <button id="dap-check-sync-btn" class="btn-secondary" onclick="App.checkDapSyncStatus('${dap.id}')" ${syncState === 'checking' ? 'disabled' : ''}>
+            ${syncState === 'checking' ? 'Checking…' : 'Check Sync Status'}
+          </button>
           <button class="btn-secondary" onclick="App.showEditDapModal('${dap.id}')">Edit</button>
           <button class="btn-danger-sm" onclick="App.deleteDap('${dap.id}')">Delete</button>
         </div>
@@ -4924,6 +5044,8 @@ const App = {
   toggleBaselineColorPicker,
   selectBaselineColor,
   // DAP
+  checkAllDapSyncStatus,
+  checkDapSyncStatus,
   showDapDetail,
   showAddDapModal,
   showEditDapModal,

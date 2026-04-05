@@ -2608,3 +2608,23 @@ Observed working tree at time of writing (not touched by this codex update):
     - `sync_scan` result: `0` files to copy to device, `0` files to copy to local.
     - Warnings: `0`.
     - Device free space read successfully.
+
+### 2026-04-05 (Manual "Check Sync Status" + live local-files sync reliability)
+- Implemented manual sync verification actions:
+  - Gear Home (`Digital Audio Players`): new `Check Sync Status` action.
+  - DAP Detail: per-device `Check Sync Status` action.
+  - New backend routes:
+    - `POST /api/daps/sync-status/check`
+    - `POST /api/daps/<did>/sync-status/check`
+- Added sync summary confidence/state model:
+  - `sync_status_state`: `estimated | checking | verified | error`
+  - `sync_status_message`
+  - `last_verified_at`
+- Reliability fix for song diff checks:
+  - Root cause: previous sync diff relied on cached/in-memory `library` rows only, so newly-added filesystem files not yet in cache were invisible to sync checks.
+  - Fix: sync diff now builds candidates from live local filesystem (`walk_music_files(get_music_base())`) and augments with cached metadata only when available.
+  - Result: newly-added tracks are detected without requiring a full library rescan first.
+- Verified with real user-reported case:
+  - Local: `/Volumes/Storage/Music/FLAC/Dire Straits/Dire Straits`
+  - Device: `/Volumes/AP80/Music/Dire Straits/Dire Straits`
+  - New diff correctly reports 7 missing `.flac` files to copy to AP80.
