@@ -2454,3 +2454,50 @@ Observed working tree at time of writing (not touched by this codex update):
 
 - Validation:
   - `node --check static/app.js` passed.
+
+### 2026-04-05 (Gear screen card scalability + signal density pass)
+- Design alignment pass for Gear list views (`DAP` + `IEM`) based on Luminous Depth:
+  - improved at-a-glance relevance while keeping cards compact.
+  - added scalable grid behavior for larger device libraries.
+
+- DAP cards:
+  - Added identity subline under title:
+    - `<model> • <active mount label/path>`
+  - Keeps card useful when many similarly named devices are added.
+  - Sync pills remain prominent, with playlist breakdown included in pill text.
+
+- IEM cards:
+  - Expanded quick status row to include:
+    - gear type pill (`IEM` / `Headphone`)
+    - FR readiness (`FR Ready` / `No FR`)
+    - source count (`Sources N`)
+    - PEQ count (`PEQ N`)
+  - Ensures users can compare readiness and configuration coverage without opening each detail page.
+
+- Layout/scalability:
+  - Gear grid changed from fixed 2-column to responsive auto-fit:
+    - `repeat(auto-fit, minmax(360px, 1fr))`
+    - falls back to single-column on narrower widths.
+
+- Files updated:
+  - `static/app.js`
+  - `static/style.css`
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-05 (Gear card pill hierarchy tuning)
+- Follow-up visual hierarchy refinement to improve scanability:
+  - Critical state pills (`synced` / `out of sync`) now have stronger contrast and subtle glow outlines.
+  - Neutral metadata pills (`Sources`, `PEQ`) are intentionally quieter via new `gear-sync-neutral` style.
+
+- Rationale:
+  - First glance should prioritize actionable status (connection/sync).
+  - Secondary metadata remains visible but no longer competes with critical status color channels.
+
+- Files updated:
+  - `static/style.css`
+  - `static/app.js`
+
+- Validation:
+  - `node --check static/app.js` passed.

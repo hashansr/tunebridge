@@ -1,0 +1,52 @@
+TuneBridge
+End-User Install Guide (macOS)
+
+What you need
+- A Mac (Apple Silicon)
+- The file: TuneBridge.dmg
+
+Install TuneBridge
+1. Double-click TuneBridge.dmg.
+2. In the window that opens, drag TuneBridge.app into Applications.
+3. Open Applications and launch TuneBridge.
+
+Important
+- Always run TuneBridge from Applications.
+- Do not run it directly from the DMG window.
+
+If macOS shows a security warning on first launch
+You may see a message that TuneBridge cannot be verified. This is expected for the current build.
+
+Use this once:
+1. Go to Applications.
+2. Right-click TuneBridge.app.
+3. Click Open.
+4. In the popup, click Open again.
+
+If it is still blocked
+1. Open System Settings.
+2. Go to Privacy & Security.
+3. Find the TuneBridge blocked-app message.
+4. Click Open Anyway.
+5. Launch TuneBridge again from Applications.
+
+First run setup
+When TuneBridge opens for the first time:
+1. Choose your music library folder.
+2. Confirm your folder/file preferences.
+3. Continue into the app.
+
+Where TuneBridge saves your data
+TuneBridge stores your library/playlists/settings here:
+~/Library/Application Support/TuneBridge
+
+Updating to a newer TuneBridge build
+1. Download the new TuneBridge.dmg.
+2. Drag the new TuneBridge.app to Applications.
+3. Replace the old app when macOS asks.
+4. Open TuneBridge.
+
+Your app data remains in Application Support and is kept between updates.
+
+Need help?
+If TuneBridge does not open, restart your Mac and try the first-launch steps again.

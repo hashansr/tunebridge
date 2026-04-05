@@ -1,0 +1,156 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 1347 >>
+stream
+BT
+/F1 12 Tf
+17 TL
+1 0 0 1 54 728 Tm
+(TuneBridge) Tj
+T*
+(End-User Install Guide \(macOS\)) Tj
+T*
+() Tj
+T*
+(What you need) Tj
+T*
+(- A Mac \(Apple Silicon\)) Tj
+T*
+(- The file: TuneBridge.dmg) Tj
+T*
+() Tj
+T*
+(Install TuneBridge) Tj
+T*
+(1. Double-click TuneBridge.dmg.) Tj
+T*
+(2. In the window that opens, drag TuneBridge.app into Applications.) Tj
+T*
+(3. Open Applications and launch TuneBridge.) Tj
+T*
+() Tj
+T*
+(Important) Tj
+T*
+(- Always run TuneBridge from Applications.) Tj
+T*
+(- Do not run it directly from the DMG window.) Tj
+T*
+() Tj
+T*
+(If macOS shows a security warning on first launch) Tj
+T*
+(You may see a message that TuneBridge cannot be verified. This is expected for the current) Tj
+T*
+(build.) Tj
+T*
+() Tj
+T*
+(Use this once:) Tj
+T*
+(1. Go to Applications.) Tj
+T*
+(2. Right-click TuneBridge.app.) Tj
+T*
+(3. Click Open.) Tj
+T*
+(4. In the popup, click Open again.) Tj
+T*
+() Tj
+T*
+(If it is still blocked) Tj
+T*
+(1. Open System Settings.) Tj
+T*
+(2. Go to Privacy & Security.) Tj
+T*
+(3. Find the TuneBridge blocked-app message.) Tj
+T*
+(4. Click Open Anyway.) Tj
+T*
+(5. Launch TuneBridge again from Applications.) Tj
+T*
+() Tj
+T*
+(First run setup) Tj
+T*
+(When TuneBridge opens for the first time:) Tj
+T*
+(1. Choose your music library folder.) Tj
+T*
+(2. Confirm your folder/file preferences.) Tj
+T*
+(3. Continue into the app.) Tj
+T*
+() Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Length 631 >>
+stream
+BT
+/F1 12 Tf
+17 TL
+1 0 0 1 54 728 Tm
+(Where TuneBridge saves your data) Tj
+T*
+(TuneBridge stores your library/playlists/settings here:) Tj
+T*
+(~/Library/Application Support/TuneBridge) Tj
+T*
+() Tj
+T*
+(Updating to a newer TuneBridge build) Tj
+T*
+(1. Download the new TuneBridge.dmg.) Tj
+T*
+(2. Drag the new TuneBridge.app to Applications.) Tj
+T*
+(3. Replace the old app when macOS asks.) Tj
+T*
+(4. Open TuneBridge.) Tj
+T*
+() Tj
+T*
+(Your app data remains in Application Support and is kept between updates.) Tj
+T*
+() Tj
+T*
+(Need help?) Tj
+T*
+(If TuneBridge does not open, restart your Mac and try the first-launch steps again.) Tj
+ET
+endstream
+endobj
+4 0 obj
+<< /Type /Page /Parent 4 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 4 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 3 0 R >>
+endobj
+6 0 obj
+<< /Type /Pages /Count 2 /Kids [4 0 R 5 0 R] >>
+endobj
+7 0 obj
+<< /Type /Catalog /Pages 6 0 R >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000085 00000 n 
+0000001484 00000 n 
+0000002166 00000 n 
+0000002292 00000 n 
+0000002418 00000 n 
+0000002481 00000 n 
+trailer
+<< /Size 8 /Root 7 0 R >>
+startxref
+2530
+%%EOF
