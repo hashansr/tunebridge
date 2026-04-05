@@ -2784,7 +2784,7 @@ async function syncScanAgain() {
 
 // SVG icon used for all DAP cards/headers
 const _DAP_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg>`;
-const _IEM_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8.6 6.8c-1.9 0-3.6 1.6-3.6 3.6v1.8c0 1.5 1.2 2.8 2.8 2.8h1.1V9.6c0-1 .8-1.8 1.8-1.8h1.1V6.8H8.6z"/><path d="M15.4 6.8c1.9 0 3.6 1.6 3.6 3.6v1.8c0 1.5-1.2 2.8-2.8 2.8h-1.1V9.6c0-1-.8-1.8-1.8-1.8h-1.1V6.8h3.2z"/></svg>`;
+const _IEM_ICON_HTML = `<img src="icons/iem-earphones.png" alt="" class="gear-iem-icon-image" loading="lazy" decoding="async" />`;
 const _HEADPHONE_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`;
 const _GEAR_DOTS = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`;
 const _GEAR_ICON_MUSIC = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>`;
@@ -2815,10 +2815,20 @@ function _dapIdentityLine(dap) {
   return `${model} • ${shortMount}`;
 }
 
-function _dapMusicStatus(summary = {}) {
+function _dapMusicStatus(summary = {}, isMounted = false) {
   const add = Number(summary.music_to_add_count || 0);
   const remove = Number(summary.music_to_remove_count || 0);
   const out = Number(summary.music_out_of_sync_count || (add + remove));
+  const syncState = String(summary.sync_status_state || 'estimated');
+  const verifiedAt = Number(summary.last_verified_at || 0);
+  const hasVerified = verifiedAt > 0;
+  const ageSec = hasVerified ? Math.max(0, Math.floor(Date.now() / 1000) - verifiedAt) : Number.POSITIVE_INFINITY;
+  const staleWindowSec = 24 * 60 * 60;
+  const canTrust = isMounted && syncState === 'verified' && hasVerified && ageSec <= staleWindowSec;
+
+  if (!canTrust) {
+    return { className: 'gear-sync-neutral', text: 'Check status', detail: '' };
+  }
   if (out <= 0) {
     return { className: 'gear-sync-ok', text: 'Library in sync', detail: '' };
   }
@@ -2875,7 +2885,7 @@ async function loadDapsView() {
   empty.style.display = 'none';
   grid.innerHTML = daps.map(d => {
     const summary = d.sync_summary || {};
-    const musicStatus = _dapMusicStatus(summary);
+    const musicStatus = _dapMusicStatus(summary, !!d.mounted);
     const playlistStatus = _dapPlaylistStatus(d, summary);
     const statusClass = d.mounted ? 'gear-dap-conn--on' : 'gear-dap-conn--off';
     const statusText = d.mounted ? 'Connected' : 'Not connected';
@@ -2887,9 +2897,13 @@ async function loadDapsView() {
         : syncState === 'error'
           ? (summary.sync_status_message || 'Sync check unavailable')
           : `Estimated • ${_formatSyncCheckedAt(summary.last_scan_at)}`;
-    const musicTone = musicStatus.className === 'gear-sync-ok' ? 'gear-dap-value--ok' : 'gear-dap-value--warn';
+    const musicTone = musicStatus.className === 'gear-sync-ok'
+      ? 'gear-dap-value--ok'
+      : (musicStatus.className === 'gear-sync-neutral' ? 'gear-dap-value--neutral' : 'gear-dap-value--warn');
     const playlistTone = playlistStatus.className === 'gear-sync-ok' ? 'gear-dap-value--ok' : 'gear-dap-value--warn';
-    const musicValue = musicStatus.className === 'gear-sync-ok' ? 'Synced' : 'Out of sync';
+    const musicValue = musicStatus.className === 'gear-sync-ok'
+      ? 'Synced'
+      : (musicStatus.className === 'gear-sync-neutral' ? 'Check status' : 'Out of sync');
     const playlistValue = playlistStatus.className === 'gear-sync-ok' ? 'Synced' : 'Out of sync';
     const musicTitle = musicStatus.detail ? ` title="${esc(musicStatus.detail)}"` : '';
     const playlistTitle = playlistStatus.detail ? ` title="${esc(playlistStatus.detail)}"` : '';
@@ -2952,7 +2966,7 @@ function _renderIemCards(iems) {
       : `App.showIemDetail('${i.id}')`;
     return `
     <div class="gear-card gear-card-iem${isSelected ? ' gear-card--selected' : ''}" id="gear-iem-card-${i.id}" onclick="${clickAction}">
-      <div class="gear-card-icon">${isHeadphone ? _HEADPHONE_SVG : _IEM_SVG}</div>
+      <div class="gear-card-icon">${isHeadphone ? _HEADPHONE_SVG : _IEM_ICON_HTML}</div>
       <div class="gear-card-body gear-card-iem-body">
         <div class="gear-card-name">${esc(i.name)}</div>
         <div class="gear-card-row">
@@ -3132,6 +3146,18 @@ async function loadGearView() {
   await Promise.all([loadDapsView(), loadIemsView()]);
 }
 
+let _gearPlaylistsCache = { ts: 0, data: null };
+async function _getPlaylistsForGear(force = false) {
+  const ttlMs = 15000;
+  const now = Date.now();
+  if (!force && _gearPlaylistsCache.data && (now - _gearPlaylistsCache.ts) < ttlMs) {
+    return _gearPlaylistsCache.data;
+  }
+  const data = await api('/playlists');
+  _gearPlaylistsCache = { ts: now, data };
+  return data;
+}
+
 async function _pollSyncCheckCompletion(targetIds, onDone) {
   const watchIds = new Set((targetIds || []).filter(Boolean));
   return new Promise((resolve) => {
@@ -3219,15 +3245,26 @@ async function checkDapSyncStatus(did) {
 }
 
 async function showDapDetail(id) {
-  const [dap, playlists] = await Promise.all([
-    api(`/daps/${id}`),
-    api('/playlists'),
-  ]);
   state.view = 'dap-detail';
   clearSelection();
   setActiveNav('gear');
   showViewEl('dap-detail');
 
+  document.getElementById('dap-detail-breadcrumb').innerHTML = `
+    <span class="crumb" onclick="App.backToGear()">Gear</span>
+    <span class="crumb-sep">›</span>
+    <span class="crumb-current">Loading…</span>
+  `;
+  document.getElementById('dap-detail-content').innerHTML = `
+    <div class="spinner-wrap" style="padding:24px 0">
+      <div class="spinner"></div>
+    </div>
+  `;
+
+  const [dap, playlists] = await Promise.all([
+    api(`/daps/${id}`),
+    _getPlaylistsForGear(),
+  ]);
   document.getElementById('dap-detail-breadcrumb').innerHTML = `
     <span class="crumb" onclick="App.backToGear()">Gear</span>
     <span class="crumb-sep">›</span>
@@ -3244,7 +3281,7 @@ async function showDapDetail(id) {
       : syncState === 'error'
         ? (summary.sync_status_message || 'Sync check unavailable')
         : `Estimated • ${_formatSyncCheckedAt(summary.last_scan_at)}`;
-  const musicStatus = _dapMusicStatus(summary);
+  const musicStatus = _dapMusicStatus(summary, !!dap.mounted);
   const playlistStatus = _dapPlaylistStatus(dap, summary);
   const sortedPl = [...playlists].sort((a, b) => a.name.localeCompare(b.name));
 

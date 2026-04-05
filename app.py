@@ -2667,7 +2667,9 @@ def save_daps(daps):
 def get_daps():
     daps = load_daps()
     playlists = load_playlists()
-    mounts = _discover_mount_points()
+    # Fast path for Gear home: avoid expensive per-volume diskutil identity calls.
+    # Deep identity checks run only during explicit sync-status verification flows.
+    mounts = _discover_mount_points(include_identity=False)
     for d in daps:
         resolved_mount, matched_mount = _resolve_dap_mount(d, mounts)
         d['mounted'] = bool(resolved_mount and resolved_mount.exists())
@@ -2772,7 +2774,8 @@ def get_dap(did):
     dap = next((d for d in load_daps() if d['id'] == did), None)
     if not dap:
         return jsonify({'error': 'Not found'}), 404
-    resolved_mount, matched_mount = _resolve_dap_mount(dap)
+    mounts = _discover_mount_points(include_identity=False)
+    resolved_mount, matched_mount = _resolve_dap_mount(dap, mounts)
     dap['mounted'] = bool(resolved_mount and resolved_mount.exists())
     dap['active_mount_path'] = str(resolved_mount) if resolved_mount else ''
     if matched_mount:
@@ -3873,7 +3876,7 @@ def browse_folder():
         return jsonify({'error': str(e)}), 500
 
 
-def _discover_mount_points():
+def _discover_mount_points(include_identity=True):
     mounts = []
     seen = set()
     roots = []
@@ -3902,7 +3905,7 @@ def _discover_mount_points():
 
     def _mount_entry(path_str, label):
         rec = {'path': path_str, 'label': label}
-        if sys.platform == 'darwin':
+        if sys.platform == 'darwin' and include_identity:
             rec.update(_mac_mount_identity(path_str))
         else:
             rec.update({'volume_uuid': '', 'disk_uuid': '', 'device_identifier': ''})

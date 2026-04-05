@@ -2628,3 +2628,48 @@ Observed working tree at time of writing (not touched by this codex update):
   - Local: `/Volumes/Storage/Music/FLAC/Dire Straits/Dire Straits`
   - Device: `/Volumes/AP80/Music/Dire Straits/Dire Straits`
   - New diff correctly reports 7 missing `.flac` files to copy to AP80.
+
+### 2026-04-05 (Gear first-load performance: no deep sync/mount probing)
+- Clarified and enforced behavior:
+  - Gear home does **not** run deep sync-status checks on first load.
+  - Live/deep checks are initiated only by explicit user action (`Check Sync Status`).
+- Performance tweak:
+  - `_discover_mount_points()` now supports `include_identity` flag.
+  - `/api/daps` uses `include_identity=False` fast path to avoid expensive per-volume `diskutil info -plist` calls during initial card rendering.
+  - Identity-aware/deep checks remain in explicit sync verification paths.
+
+### 2026-04-05 (DAP detail open performance + trusted sync labels)
+- DAP detail open performance:
+  - Updated `GET /api/daps/<did>` mount discovery to use fast mount listing (`include_identity=False`) during detail open.
+  - This removes slow deep identity probing from the detail-page critical path and improves open responsiveness.
+
+- Sync status trust model on Gear/DAP detail:
+  - Prevented misleading `Synced` badges when devices are not mounted or not recently verified.
+  - Music sync status now shows neutral `Check status` unless all trust conditions pass:
+    - device is mounted
+    - `sync_status_state = verified`
+    - `last_verified_at` is present
+    - verification is within a 24-hour freshness window
+  - Only trusted, mounted, recently verified state can render `Synced`.
+  - Out-of-sync verified states still show actionable warning copy (`Library update needed`).
+
+- UI support:
+  - Added neutral tone class for DAP music value text (`gear-dap-value--neutral`) to visually separate unknown/unverified state from true warning/error.
+
+- Files updated:
+  - `app.py`
+  - `static/app.js`
+  - `static/style.css`
+
+- Validation:
+  - `node --check static/app.js` passed.
+  - Python AST parse for `app.py` passed.
+
+### 2026-04-05 (IEM icon refresh)
+- Replaced the IEM icon asset with the latest user-provided version:
+  - Source: `earphones_transparent-2.ico`
+  - Output: `static/icons/iem-earphones.png`
+  - Render target remains unchanged in card UI (`gear-iem-icon-image`).
+
+- Files updated:
+  - `static/icons/iem-earphones.png`

@@ -192,7 +192,10 @@
       "Bash(ls /Users/hashan/Documents/Claude/Projects/Playlist Creator/*.sh)",
       "Bash(git -C '/Users/hashan/Documents/Claude/Projects/Playlist Creator' status --short)",
       "Bash(git -C \"/Users/hashan/Documents/Claude/Projects/Playlist Creator\" log --oneline -5)",
-      "Bash(grep -n \"send_file.*index\\\\|def index\\\\|@app.route.*/$\\\\|@app.route.*''/''\\)\" \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/app.py\")"
+      "Bash(grep -n \"send_file.*index\\\\|def index\\\\|@app.route.*/$\\\\|@app.route.*''/''\\)\" \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/app.py\")",
+      "Bash(chmod +x \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/tunebridge.sh\")",
+      "Bash(ls -la \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/\"*.sh \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/ios/setup.sh\")",
+      "Bash(bash tunebridge.sh help)"
     ]
   }
 }

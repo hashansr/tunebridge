@@ -8,7 +8,28 @@
     "path_prefix": "",
     "peq_folder": "PEQ",
     "playlist_exports": {},
-    "icon": "\ud83c\udfb5"
+    "icon": "\ud83c\udfb5",
+    "storage_type": "sd",
+    "music_root": "Music",
+    "path_template": "%artist%/%album%/%track% - %title%",
+    "sync_summary": {
+      "playlist_out_of_sync_count": 0,
+      "music_out_of_sync_count": 0,
+      "music_to_add_count": 0,
+      "music_to_remove_count": 0,
+      "space_available_bytes": null,
+      "space_total_bytes": null,
+      "space_required_bytes": 0,
+      "space_shortfall_bytes": 0,
+      "space_ok": true,
+      "last_scan_at": 0,
+      "last_verified_at": 0,
+      "sync_status_state": "estimated",
+      "sync_status_message": ""
+    },
+    "mount_volume_uuid": "",
+    "mount_disk_uuid": "",
+    "mount_device_identifier": ""
   },
   {
     "id": "11bcd6d8-7c7c-428e-b95f-72398db5c048",
@@ -36,6 +57,27 @@
       "81d4c02c-910c-4aee-80c6-1349a1bc691e": 1774510564,
       "75e4edba-c410-430a-85cd-425edd4e9245": 1774510565
     },
-    "icon": "\u26a1"
+    "icon": "\u26a1",
+    "storage_type": "sd",
+    "music_root": "Music",
+    "path_template": "%artist%/%album%/%track% - %title%",
+    "sync_summary": {
+      "playlist_out_of_sync_count": 0,
+      "music_out_of_sync_count": 0,
+      "music_to_add_count": 0,
+      "music_to_remove_count": 0,
+      "space_available_bytes": 12001476608,
+      "space_total_bytes": 255803523072,
+      "space_required_bytes": 0,
+      "space_shortfall_bytes": 0,
+      "space_ok": true,
+      "last_scan_at": 1775370964,
+      "last_verified_at": 0,
+      "sync_status_state": "estimated",
+      "sync_status_message": ""
+    },
+    "mount_volume_uuid": "",
+    "mount_disk_uuid": "",
+    "mount_device_identifier": ""
   }
 ]
