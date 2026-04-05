@@ -2501,3 +2501,53 @@ Observed working tree at time of writing (not touched by this codex update):
 
 - Validation:
   - `node --check static/app.js` passed.
+
+### 2026-04-05 (IEM comparison modal FR chart aspect-ratio rebalance)
+- UX issue addressed:
+  - FR comparison chart appeared too horizontally stretched, reducing readability.
+
+- Changes:
+  - Narrowed comparison modal max width:
+    - from `min(1040px, 96vw)` to `min(940px, 92vw)`
+  - Reworked chart container sizing:
+    - removed overly wide/flexible behavior
+    - set explicit responsive height with clamp:
+      - desktop: `clamp(340px, 48vh, 520px)`
+      - small screens: `clamp(300px, 44vh, 420px)`
+  - Forced canvas to fully fill chart container (`width/height: 100%`) for predictable rendering.
+
+- File updated:
+  - `static/style.css`
+
+### 2026-04-05 (Settings screen refinement + FR Baseline alignment fix)
+- Scope:
+  - UI cleanup and scalability pass for Settings view to better match Luminous Depth guidelines.
+  - Fixed Frequency Response Baselines add-row alignment and list readability.
+
+- Settings screen improvements:
+  - Added dedicated Settings view atmospheric background (`#view-settings`) to match app-wide visual language.
+  - Increased section-card depth using tonal gradients + soft ambient shadow.
+  - Tightened section overline typography (`Label-Sm` style treatment).
+  - Replaced several inline layout styles with reusable classes:
+    - `settings-inline-actions`
+    - `settings-inline-actions-wrap`
+    - `settings-hint-inline-start`
+    - `settings-hint-block-gap`
+
+- Frequency Response Baselines UI cleanup:
+  - Intro and example text moved to dedicated classes for consistent spacing.
+  - Baseline list rows now use a stable grid:
+    - color dot | name | URL | Remove action
+  - Baseline remove action switched to compact pill button (`baseline-remove-btn`) for cleaner alignment.
+  - Add row redesigned as responsive grid:
+    - Label input | URL input | color picker | Add button
+  - Enforced consistent control heights across row elements.
+  - Added responsive breakpoints for tablet/mobile wrapping without misalignment.
+
+- Files updated:
+  - `static/index.html`
+  - `static/style.css`
+  - `static/app.js`
+
+- Validation:
+  - `node --check static/app.js` passed.

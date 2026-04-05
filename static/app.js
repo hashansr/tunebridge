@@ -4664,7 +4664,7 @@ function _renderBaselines() {
   const el = document.getElementById('baselines-list');
   if (!el) return;
   if (!_baselines.length) {
-    el.innerHTML = '<p style="font-size:var(--text-sm);color:var(--text-muted);margin:0 0 4px">No baselines added yet.</p>';
+    el.innerHTML = '<p class="settings-baseline-empty">No baselines added yet.</p>';
     return;
   }
   el.innerHTML = _baselines.map(b => `
@@ -4672,7 +4672,7 @@ function _renderBaselines() {
       <span class="baseline-dot" style="background:${b.color}"></span>
       <span class="baseline-item-name">${esc(b.name)}</span>
       <span class="baseline-item-url" title="${esc(b.url)}">${esc(b.url)}</span>
-      <button class="btn-ghost-sm" onclick="App.deleteBaseline('${b.id}')">Remove</button>
+      <button class="baseline-remove-btn" onclick="App.deleteBaseline('${b.id}')">Remove</button>
     </div>`).join('');
 }
 

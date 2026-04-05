@@ -266,7 +266,7 @@
         <!-- DAPs section -->
         <div class="gear-section-header">
           <div>
-            <div class="gear-section-overline">Transport</div>
+            <div class="gear-section-overline">Export &amp; Sync</div>
             <h2>Digital Audio Players</h2>
           </div>
           <button class="btn-primary" onclick="App.showAddDapModal()">+ Add</button>
@@ -284,7 +284,7 @@
         <!-- IEMs section -->
         <div class="gear-section-header" style="margin-top:32px">
           <div>
-            <div class="gear-section-overline">Monitoring</div>
+            <div class="gear-section-overline">Listening Gear</div>
             <h2>IEMs &amp; Headphones</h2>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
@@ -405,7 +405,7 @@
               </div>
             </div>
             <p class="settings-hint">The folder containing your music files. Structure: <code>Artist/Album/Track.flac</code></p>
-            <div style="margin-top:16px;display:flex;gap:8px">
+            <div class="settings-inline-actions">
               <button class="btn-primary" onclick="App.saveLibraryPath()">Save</button>
               <button class="btn-secondary" onclick="App.rescan()">Rescan Library</button>
             </div>
@@ -415,11 +415,11 @@
           <div class="settings-section">
             <h3 class="settings-section-title">Data &amp; Backup</h3>
             <p class="settings-data-dir-label">Data location: <code id="settings-data-dir">~/Library/Application Support/TuneBridge</code></p>
-            <p class="settings-hint" style="padding-left:0;margin-bottom:16px">
+            <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
               Your playlists, DAPs, IEMs and settings are preserved here across app updates.
               Export a backup before reinstalling or switching machines.
             </p>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <div class="settings-inline-actions settings-inline-actions-wrap">
               <button class="btn-secondary" onclick="App.exportBackup()">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 Export Backup
@@ -435,7 +435,7 @@
           <!-- Frequency Response Baselines section -->
           <div class="settings-section">
             <h3 class="settings-section-title">Frequency Response Baselines</h3>
-            <p style="font-size:var(--text-sm);color:var(--text-muted);margin:0 0 16px;line-height:1.5">
+            <p class="settings-baseline-intro">
               Add tuning targets from <a href="https://squig.link" target="_blank" style="color:var(--accent)">squig.link</a>. They appear as reference lines on all IEM &amp; headphone frequency response graphs.
             </p>
             <div id="baselines-list"></div>
@@ -452,7 +452,7 @@
               </div>
               <button class="btn-primary" id="baseline-add-btn" onclick="App.addBaseline()">Add</button>
             </div>
-            <p style="font-size:var(--text-sm);color:var(--text-muted);margin-top:8px">
+            <p class="settings-baseline-example">
               e.g. <code>https://ducbloke.squig.link/?share=Harman_Target</code>
             </p>
           </div>
