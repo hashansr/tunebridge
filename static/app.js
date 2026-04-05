@@ -2478,6 +2478,28 @@ function _formatSyncPhaseMessage(raw, phase) {
   return msg;
 }
 
+function _syncDeviceStatusPills(dap) {
+  const summary = dap?.sync_summary || {};
+  const add = Number(summary.music_to_add_count || 0);
+  const remove = Number(summary.music_to_remove_count || 0);
+  const musicOut = Number(summary.music_out_of_sync_count || (add + remove));
+  const playlistOut = Number(summary.playlist_out_of_sync_count || (Number(dap?.stale_count || 0) + Number(dap?.never_exported || 0)));
+
+  const musicLabel = musicOut <= 0
+    ? 'Music synced'
+    : `Music ${add} add · ${remove} remove`;
+  const playlistLabel = playlistOut <= 0
+    ? 'Playlists synced'
+    : `Playlists ${playlistOut} out of sync`;
+
+  return `
+    <div class="sync-device-card-statuses">
+      ${_gearStatusPillHtml(_GEAR_ICON_MUSIC, musicOut <= 0 ? 'gear-sync-ok' : 'gear-sync-stale', musicLabel)}
+      ${_gearStatusPillHtml(_GEAR_ICON_PLAYLIST, playlistOut <= 0 ? 'gear-sync-ok' : 'gear-sync-stale', playlistLabel)}
+    </div>
+  `;
+}
+
 function _syncPhase(name) {
   const modal = document.getElementById('sync-modal');
   if (modal) modal.setAttribute('data-phase', name);
@@ -2491,6 +2513,19 @@ function _syncPhase(name) {
 }
 
 async function showSync() {
+  const modal = document.getElementById('sync-modal');
+  if (modal) modal.style.display = 'flex';
+
+  const container = document.getElementById('sync-device-list');
+  if (container) {
+    container.innerHTML = `
+      <div class="sync-device-loading">
+        <div class="sync-device-loading-spinner" aria-hidden="true"></div>
+        <span>Loading your DAPs and sync status…</span>
+      </div>
+    `;
+  }
+
   await api('/sync/reset', { method: 'POST' }).catch(() => {});
   _syncLastStatus = null;
   _syncPhase('pick');
@@ -2500,7 +2535,6 @@ async function showSync() {
   if (doneMsg) doneMsg.textContent = '';
 
   const daps = await api('/daps').catch(() => []);
-  const container = document.getElementById('sync-device-list');
   if (!container) { document.getElementById('sync-modal').style.display = 'flex'; return; }
 
   const svgDevice = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>`;
@@ -2510,6 +2544,7 @@ async function showSync() {
   } else {
     container.innerHTML = daps.map(dap => {
       const connected = dap.mounted;
+      const statusPills = _syncDeviceStatusPills(dap);
       return `
         <button class="sync-device-card${connected ? ' sync-device-card--online' : ''}"
           ${connected ? '' : 'disabled'}
@@ -2521,6 +2556,7 @@ async function showSync() {
               <span class="sync-device-status-dot"></span>
               ${connected ? 'Connected' : 'Not connected'}
             </span>
+            ${statusPills}
           </div>
         </button>`;
     }).join('');
@@ -2632,7 +2668,10 @@ function syncSelectionChanged() {
 
   const addCount = selectedLocal.length;
   const removeCount = [...document.querySelectorAll('.sync-chk-device:checked')].length;
-  const tracksLine = `Music files selected: ${addCount} add • ${removeCount} remove`;
+  const noSelection = addCount === 0 && removeCount === 0;
+  const tracksLine = noSelection
+    ? 'All synced and sounding great. Nothing to copy right now.'
+    : `Music files selected: ${addCount} add • ${removeCount} remove`;
   let spaceLine = '';
   let className = 'sync-space-summary';
 
@@ -2641,6 +2680,10 @@ function syncSelectionChanged() {
   } else if (shortfall > 0) {
     spaceLine = `Not enough space • Need ${_fmtBytes(required)}, available ${_fmtBytes(available)} (short by ${_fmtBytes(shortfall)})`;
     className += ' sync-space-summary--danger';
+  } else if (noSelection) {
+    const remaining = Math.max(0, available - required);
+    spaceLine = `Available ${_fmtBytes(available)} • Required ${_fmtBytes(required)} • After sync ${_fmtBytes(remaining)} free`;
+    className += ' sync-space-summary--ok';
   } else {
     const remaining = Math.max(0, available - required);
     spaceLine = `Available ${_fmtBytes(available)} • Required ${_fmtBytes(required)} • After sync ${_fmtBytes(remaining)} free`;
@@ -2651,8 +2694,15 @@ function syncSelectionChanged() {
   panel.className = className;
   panel.innerHTML = `<div>${esc(tracksLine)}</div><div>${esc(spaceLine)}</div>`;
   if (executeBtn) {
-    const noSelection = addCount === 0 && removeCount === 0;
-    executeBtn.disabled = noSelection || shortfall > 0;
+    if (noSelection) {
+      executeBtn.disabled = false;
+      executeBtn.textContent = 'Done';
+      executeBtn.onclick = () => App.closeSyncModal();
+    } else {
+      executeBtn.disabled = shortfall > 0;
+      executeBtn.textContent = 'Start Sync';
+      executeBtn.onclick = () => App.executeSync();
+    }
   }
 }
 
@@ -2734,7 +2784,9 @@ async function syncScanAgain() {
 
 // SVG icon used for all DAP cards/headers
 const _DAP_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg>`;
-const _IEM_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`;
+const _IEM_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8.6 6.8c-1.9 0-3.6 1.6-3.6 3.6v1.8c0 1.5 1.2 2.8 2.8 2.8h1.1V9.6c0-1 .8-1.8 1.8-1.8h1.1V6.8H8.6z"/><path d="M15.4 6.8c1.9 0 3.6 1.6 3.6 3.6v1.8c0 1.5-1.2 2.8-2.8 2.8h-1.1V9.6c0-1-.8-1.8-1.8-1.8h-1.1V6.8h3.2z"/></svg>`;
+const _HEADPHONE_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`;
+const _GEAR_DOTS = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`;
 const _GEAR_ICON_MUSIC = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>`;
 const _GEAR_ICON_PLAYLIST = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`;
 
@@ -2810,29 +2862,30 @@ async function loadDapsView() {
   empty.style.display = 'none';
   grid.innerHTML = daps.map(d => {
     const summary = d.sync_summary || {};
-    const spaceShort = Number(summary.space_shortfall_bytes || 0);
     const musicStatus = _dapMusicStatus(summary);
     const playlistStatus = _dapPlaylistStatus(d, summary);
-    const statusClass = d.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected';
+    const statusClass = d.mounted ? 'gear-dap-conn--on' : 'gear-dap-conn--off';
     const statusText = d.mounted ? 'Connected' : 'Not connected';
-    const detailParts = [];
-    if (musicStatus.detail) detailParts.push(musicStatus.detail);
-    if (playlistStatus.detail) detailParts.push(playlistStatus.detail);
-    if (spaceShort > 0) detailParts.push(`Short ${_fmtBytes(spaceShort)}`);
-    const details = detailParts.length ? `<span class="gear-card-meta-text">${detailParts.join(' · ')}</span>` : '';
+    const musicTone = musicStatus.className === 'gear-sync-ok' ? 'gear-dap-value--ok' : 'gear-dap-value--warn';
+    const playlistTone = playlistStatus.className === 'gear-sync-ok' ? 'gear-dap-value--ok' : 'gear-dap-value--warn';
+    const musicValue = musicStatus.className === 'gear-sync-ok' ? 'Synced' : 'Out of sync';
+    const playlistValue = playlistStatus.className === 'gear-sync-ok' ? 'Synced' : 'Out of sync';
+    const musicTitle = musicStatus.detail ? ` title="${esc(musicStatus.detail)}"` : '';
+    const playlistTitle = playlistStatus.detail ? ` title="${esc(playlistStatus.detail)}"` : '';
     return `
     <div class="gear-card gear-card-dap" onclick="App.showDapDetail('${d.id}')">
-      <div class="gear-card-icon gear-card-dap-icon">${_DAP_SVG}</div>
       <div class="gear-card-body gear-card-dap-body">
-        <div class="gear-card-dap-top">
+        <div class="gear-card-dap-head">
           <div class="gear-card-name">${esc(d.name)}</div>
-          <span class="gear-badge ${statusClass}">${statusText}</span>
+          <div class="gear-card-dap-miniicon">${_DAP_SVG}</div>
         </div>
-        <div class="gear-card-subline">${esc(_dapIdentityLine(d))}</div>
-        <div class="gear-card-dap-bottom">
-          ${_gearStatusPillHtml(_GEAR_ICON_MUSIC, musicStatus.className, musicStatus.text)}
-          ${_gearStatusPillHtml(_GEAR_ICON_PLAYLIST, playlistStatus.className, playlistStatus.text)}
-          ${details}
+        <div class="gear-card-subline gear-card-dap-connection ${statusClass}">${statusText.toUpperCase()}</div>
+        <div class="gear-card-dap-rule"></div>
+        <div class="gear-card-dap-status">
+          <span class="gear-dap-label">Music</span>
+          <span class="gear-dap-value ${musicTone}"${musicTitle}>${musicValue}</span>
+          <span class="gear-dap-label">Playlists</span>
+          <span class="gear-dap-value ${playlistTone}"${playlistTitle}>${playlistValue}</span>
         </div>
       </div>
     </div>`;
@@ -2866,7 +2919,9 @@ function _renderIemCards(iems) {
   const grid = document.getElementById('iems-grid');
   if (!grid) return;
   grid.innerHTML = iems.map(i => {
-    const badgeClass  = i.type === 'Headphone' ? 'gear-badge-hp' : 'gear-badge-iem';
+    const typeLabel = String(i.type || 'IEM');
+    const isHeadphone = /headphone|over-?ear|on-?ear/i.test(typeLabel);
+    const badgeClass  = isHeadphone ? 'gear-badge-hp' : 'gear-badge-iem';
     const peqCount    = i.peq_profiles?.length || 0;
     const peqStr      = peqCount > 0 ? `PEQ ${peqCount}` : '';
     const isSelected  = _iemCompareSelected.has(i.id);
@@ -2874,16 +2929,18 @@ function _renderIemCards(iems) {
       ? `App.toggleIemCompareSelect('${i.id}', event)`
       : `App.showIemDetail('${i.id}')`;
     return `
-    <div class="gear-card${isSelected ? ' gear-card--selected' : ''}" id="gear-iem-card-${i.id}" onclick="${clickAction}">
-      <div class="gear-card-icon">${_IEM_SVG}</div>
-      <div class="gear-card-body">
+    <div class="gear-card gear-card-iem${isSelected ? ' gear-card--selected' : ''}" id="gear-iem-card-${i.id}" onclick="${clickAction}">
+      <div class="gear-card-icon">${isHeadphone ? _HEADPHONE_SVG : _IEM_SVG}</div>
+      <div class="gear-card-body gear-card-iem-body">
         <div class="gear-card-name">${esc(i.name)}</div>
         <div class="gear-card-row">
           <span class="gear-badge ${badgeClass}">${esc(i.type || 'IEM')}</span>
           ${peqStr ? `<span class="gear-sync-badge gear-sync-neutral">${peqStr}</span>` : ''}
         </div>
       </div>
-      ${_iemCompareMode ? `<div class="gear-compare-check${isSelected ? ' checked' : ''}"></div>` : ''}
+      ${_iemCompareMode
+        ? `<div class="gear-compare-check${isSelected ? ' checked' : ''}"></div>`
+        : `<div class="gear-card-kebab">${_GEAR_DOTS}</div>`}
     </div>`;
   }).join('');
 }

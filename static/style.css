@@ -1735,6 +1735,25 @@ tr.track-selected .track-check-indicator {
   flex-direction: column;
   gap: 9px;
 }
+.sync-device-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.sync-device-loading-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(173, 198, 255, 0.22);
+  border-top-color: var(--accent);
+  animation: sync-device-spin 0.8s linear infinite;
+}
+@keyframes sync-device-spin {
+  to { transform: rotate(360deg); }
+}
 .sync-device-card {
   display: flex;
   align-items: center;
@@ -1778,7 +1797,7 @@ tr.track-selected .track-check-indicator {
 .sync-device-card-info {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
   min-width: 0;
 }
 .sync-device-card-name {
@@ -1802,6 +1821,15 @@ tr.track-selected .track-check-indicator {
 }
 .sync-device-status--on { color: var(--accent-success); }
 .sync-device-card--online { box-shadow: inset 0 0 0 1px rgba(173,198,255,0.08); }
+.sync-device-card-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sync-device-card-statuses .gear-sync-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+}
 
 /* Progress phases */
 .sync-progress-phase {
@@ -1994,95 +2022,61 @@ tr.track-selected .track-check-indicator {
 /* ── Gear (DAP / IEM) views ────────────────────────────────────────── */
 .gear-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-  gap: 12px;
-  padding: 6px 0 28px;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 10px;
+  padding: 6px 0 24px;
 }
 
-/* Horizontal compact card */
 .gear-card {
-  background:
-    linear-gradient(180deg, rgba(42, 42, 42, 0.68), rgba(28, 27, 27, 0.78));
-  border: 1px solid rgba(173, 198, 255, 0.14);
-  border-radius: 1.15rem;
-  padding: 12px 14px;
+  background: rgba(28, 27, 27, 0.76);
+  border: 1px solid rgba(173, 198, 255, 0.12);
+  border-radius: 2rem;
   cursor: pointer;
-  transition: background .15s, transform .15s, border-color .15s;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 12px;
-  position: relative;
+  transition: transform .16s ease, border-color .16s ease, background .16s ease;
   backdrop-filter: blur(20px);
-  box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: 0 28px 56px rgba(8, 10, 16, 0.28);
 }
 .gear-card:hover {
-  transform: translateY(-1px);
-  border-color: rgba(173, 198, 255, 0.28);
-  background:
-    linear-gradient(180deg, rgba(53, 53, 52, 0.76), rgba(42, 42, 42, 0.78));
+  transform: translateY(-2px);
+  border-color: rgba(173, 198, 255, 0.22);
+  background: rgba(42, 42, 42, 0.72);
 }
 .gear-card--selected {
-  border-color: rgba(173, 198, 255, 0.44);
-  background:
-    linear-gradient(180deg, rgba(173, 198, 255, 0.2), rgba(43, 50, 68, 0.36));
-}
-
-.gear-card-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 9999px;
-  background:
-    radial-gradient(120% 120% at 30% 20%, rgba(173, 198, 255, 0.2), rgba(173, 198, 255, 0.04) 58%),
-    rgba(53, 53, 52, 0.72);
-  border: 1px solid rgba(173, 198, 255, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(229, 226, 225, 0.8);
-  flex-shrink: 0;
+  border-color: rgba(173, 198, 255, 0.4);
+  background: linear-gradient(180deg, rgba(48, 53, 68, 0.74), rgba(33, 35, 44, 0.7));
 }
 
 .gear-card-body {
-  flex: 1;
   min-width: 0;
+  width: 100%;
 }
 .gear-card-subline {
-  font-size: 11px;
-  color: rgba(229, 226, 225, 0.56);
+  font-size: var(--text-xs);
+  color: rgba(229, 226, 225, 0.52);
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  letter-spacing: 0.06em;
 }
-
 .gear-card-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  line-height: 1.3;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #e5e2e1;
+  line-height: 1.2;
+  letter-spacing: 0;
 }
-
-/* Replaces .gear-card-meta — used for each info row */
 .gear-card-row {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   flex-wrap: wrap;
-  margin-top: 3px;
+  margin-top: 2px;
 }
 .gear-card-meta-text {
   font-size: var(--text-xs);
   color: rgba(229, 226, 225, 0.62);
 }
-
-/* Legacy .gear-card-meta kept for other uses */
 .gear-card-meta {
   font-size: var(--text-sm);
   color: var(--text-muted);
@@ -2124,15 +2118,17 @@ tr.track-selected .track-check-indicator {
 .gear-compare-toggle {
   padding: 5px 12px;
   font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
   font-weight: 500;
   color: var(--text-secondary);
-  background: var(--surface-2);
-  border: none;
-  border-radius: 8px;
+  background: rgba(42, 42, 42, 0.6);
+  border: 1px solid rgba(173, 198, 255, 0.12);
+  border-radius: 9999px;
   cursor: pointer;
   transition: background .15s, color .15s;
 }
-.gear-compare-toggle:hover { background: var(--surface-3); color: var(--text-primary); }
+.gear-compare-toggle:hover { background: rgba(53, 53, 52, 0.82); color: var(--text-primary); }
 .gear-compare-toggle.active {
   background: rgba(173,198,255,.15);
   color: var(--accent);
@@ -2221,76 +2217,149 @@ tr.track-selected .track-check-indicator {
   box-shadow: inset 0 0 0 1px rgba(173,198,255,.1);
 }
 
-/* Compact DAP cards */
+/* DAP cards */
 .gear-card-dap {
-  align-items: stretch;
-  min-height: 84px;
-  padding: 10px 12px;
-}
-.gear-card-dap-icon {
-  width: 36px;
-  height: 36px;
-  margin-top: 1px;
+  min-height: 174px;
+  padding: 12px 12px 11px;
 }
 .gear-card-dap-body {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  height: 100%;
   gap: 6px;
 }
-.gear-card-dap-top,
-.gear-card-dap-bottom {
+.gear-card-dap-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
+  justify-content: space-between;
+  gap: 10px;
 }
-.gear-card-dap-top .gear-card-name {
+.gear-card-dap-head .gear-card-name {
+  font-size: 1.05rem;
+  letter-spacing: 0;
+}
+.gear-card-dap-miniicon {
+  width: 22px;
+  height: 22px;
+  border-radius: 0.6rem;
+  background: rgba(53, 53, 52, 0.62);
+  color: rgba(229, 226, 225, 0.56);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.gear-card-dap-miniicon svg {
+  width: 12px;
+  height: 12px;
+}
+.gear-card-dap-connection {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+.gear-dap-conn--on { color: #8ef0a1; }
+.gear-dap-conn--off { color: rgba(229, 226, 225, 0.52); }
+.gear-card-dap-rule {
+  height: 1px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, rgba(173, 198, 255, 0.12), rgba(173, 198, 255, 0.03));
+  margin: 4px 0 2px;
+}
+.gear-card-dap-status {
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 12px;
+  row-gap: 4px;
+  align-items: center;
+}
+.gear-dap-label {
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(229, 226, 225, 0.52);
+}
+.gear-dap-value {
+  font-size: var(--text-base);
+  font-weight: 600;
+  text-align: right;
+}
+.gear-dap-value--ok { color: #53e16f; }
+.gear-dap-value--warn { color: #f6c54b; }
+
+/* IEM cards */
+.gear-card-iem {
+  min-height: 82px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.gear-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: rgba(53, 53, 52, 0.7);
+  color: rgba(173, 198, 255, 0.9);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.gear-card-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.gear-card-iem-body {
   flex: 1;
   min-width: 0;
-  margin-right: auto;
 }
-.gear-card-dap-bottom .gear-sync-badge {
-  min-width: 0;
-  max-width: 100%;
+.gear-card-iem .gear-card-name {
+  font-size: 0.97rem;
+  line-height: 1.25;
+  letter-spacing: 0;
 }
-.gear-card-dap-bottom {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+.gear-card-kebab {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
   align-items: center;
-  column-gap: 8px;
-  row-gap: 6px;
+  justify-content: center;
+  color: rgba(229, 226, 225, 0.36);
+  flex-shrink: 0;
 }
-.gear-card-dap-bottom .gear-sync-badge span:last-child {
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.gear-card-dap-bottom .gear-card-meta-text {
-  grid-column: 1 / -1;
-  margin-left: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.2;
+.gear-card-kebab svg {
+  width: 14px;
+  height: 14px;
 }
 
+@media (max-width: 1400px) {
+  .gear-card-dap-head .gear-card-name,
+  .gear-card-iem .gear-card-name {
+    font-size: 0.94rem;
+  }
+  .gear-dap-label,
+  .gear-dap-value {
+    font-size: 0.82rem;
+  }
+}
 @media (max-width: 1100px) {
-  .gear-card-dap-top,
-  .gear-card-dap-bottom {
-    flex-wrap: wrap;
+  .gear-card-dap {
+    min-height: 164px;
   }
-  .gear-card-dap-bottom {
-    grid-template-columns: 1fr;
-  }
-  .gear-card-dap-bottom .gear-card-meta-text {
-    width: 100%;
+  .gear-card-dap-head .gear-card-name,
+  .gear-card-iem .gear-card-name {
+    font-size: 0.9rem;
   }
 }
 @media (max-width: 820px) {
-  .gear-grid {
-    grid-template-columns: 1fr;
+  .gear-grid { grid-template-columns: 1fr; }
+  .gear-card-dap { min-height: 156px; }
+  .gear-dap-label,
+  .gear-dap-value {
+    font-size: 0.78rem;
   }
 }
 
@@ -2750,12 +2819,12 @@ tr.track-selected .track-check-indicator {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .gear-section-header h2 {
   font-size: 1.375rem;
   font-weight: 700;
-  color: var(--text-primary);
+  color: #e5e2e1;
   letter-spacing: 0.05em;
 }
 .gear-section-overline {
@@ -2765,6 +2834,14 @@ tr.track-selected .track-check-indicator {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   margin-bottom: 4px;
+}
+.gear-section-header .btn-primary {
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: var(--text-sm);
+  text-transform: none;
+  letter-spacing: 0;
+  border-radius: 9999px;
 }
 
 /* ── Gear tabs (kept for potential future use) ────────────────────────── */
