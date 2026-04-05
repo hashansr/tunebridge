@@ -1,15 +1,20 @@
 #!/bin/bash
-# Creates "TuneBridge.app" in /Applications using a tiny C launcher binary.
+# 🎵 TuneBridge — Build Mac App (dev, /Applications)
 #
-# The C binary (compiled from launcher.c) is a proper Mach-O — macOS fires
-# the TCC Documents prompt on first launch, then remembers the permission.
-# The binary execs into CLT Python, which opens tunebridge_gui.py (in
-# ~/Documents). Unlike PyInstaller, there's no complex bundle structure to
-# confuse codesign.
+# Creates TuneBridge.app using a tiny C launcher binary.
+# The C binary execs into CLT Python → tunebridge_gui.py.
+# macOS fires the TCC Documents prompt on first launch.
 #
 # Run once after install: bash create_app.sh
 
 set -e
+
+BOLD='\033[1m'
+DIM='\033[2m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
 
 APP_NAME="TuneBridge"
 APP_PATH="/Applications/${APP_NAME}.app"
@@ -17,63 +22,92 @@ PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV_PYTHON="${PROJECT_DIR}/venv/bin/python"
 CUSTOM_ICON="${PROJECT_DIR}/static/TuneBridge.icns"
 
+# ── Spinner ───────────────────────────────────────────────────────────────────
+_SP=""
+_spin_start() {
+  local m="$1"
+  (while :; do
+    for c in ⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏; do printf "\r  %s  %s " "$c" "$m"; sleep 0.08; done
+  done) &
+  _SP=$!; disown 2>/dev/null || true
+}
+_spin_stop() {
+  [ -n "$_SP" ] && { kill "$_SP" 2>/dev/null; wait "$_SP" 2>/dev/null || true; _SP=""; printf "\r\033[K"; }
+}
+trap '_spin_stop' EXIT INT TERM
+
+echo ""
+echo -e "${BOLD}🏗️   TuneBridge — Build Mac App${NC}"
+echo -e "${DIM}────────────────────────────────────────${NC}"
+echo ""
+
 # ── Find CLT Python ───────────────────────────────────────────────────────────
+printf "  🔍  Finding CLT Python... "
 CLT_PYTHON=""
 for candidate in \
     "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3" \
     "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.11/bin/python3" \
     "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.12/bin/python3"; do
-    if [ -x "$candidate" ]; then
-        CLT_PYTHON="$candidate"
-        break
-    fi
+  if [ -x "$candidate" ]; then
+    CLT_PYTHON="$candidate"
+    break
+  fi
 done
 
 if [ -z "$CLT_PYTHON" ]; then
-    echo "ERROR: CLT Python not found. Install Xcode Command Line Tools:"
-    echo "  xcode-select --install"
-    exit 1
+  echo -e "${RED}not found ❌${NC}"
+  echo ""
+  echo "  Install Xcode Command Line Tools:"
+  echo "  ${BOLD}xcode-select --install${NC}"
+  exit 1
 fi
 CLT_PYVER="$("$CLT_PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+echo -e "${GREEN}Python ${CLT_PYVER} ✅${NC}"
+echo -e "  ${DIM}${CLT_PYTHON}${NC}"
+
+# ── Check venv site-packages ──────────────────────────────────────────────────
 PYPATH="${PROJECT_DIR}/venv/lib/python${CLT_PYVER}/site-packages"
-
+printf "  🔍  Checking venv site-packages... "
 if [ ! -d "$PYPATH" ]; then
-    echo "ERROR: venv site-packages not found at: $PYPATH"
-    echo "  Run install.sh first, or ensure your venv uses Python ${CLT_PYVER}."
-    exit 1
+  echo -e "${RED}not found ❌${NC}"
+  echo ""
+  echo "  Expected: ${DIM}${PYPATH}${NC}"
+  echo "  Run ${BOLD}bash install.sh${NC} first, or ensure your venv uses Python ${CLT_PYVER}."
+  exit 1
 fi
-
-echo "Building ${APP_NAME}.app (C launcher + pywebview / WKWebView)..."
-echo "  CLT Python: $CLT_PYTHON ($CLT_PYVER)"
-echo "  PYTHONPATH: $PYPATH"
-echo "  PROJECT_DIR: $PROJECT_DIR"
+echo -e "${GREEN}found ✅${NC}"
+echo ""
 
 # ── Remove stale versions ─────────────────────────────────────────────────────
 for OLD in "/Applications/Music Manager.app" "/Applications/TuneBridge.app"; do
-    [ -d "$OLD" ] && { echo "  Removing ${OLD}..."; rm -rf "$OLD"; }
+  if [ -d "$OLD" ]; then
+    printf "  🗑️   Removing %s... " "$(basename "$OLD")"
+    rm -rf "$OLD"
+    echo -e "${GREEN}done ✅${NC}"
+  fi
 done
 
-# ── Ensure pywebview is installed in venv ────────────────────────────────────
+# ── Ensure pywebview is installed ─────────────────────────────────────────────
 if ! "$VENV_PYTHON" -c "import webview" 2>/dev/null; then
-    echo "  Installing pywebview..."
-    "${PROJECT_DIR}/venv/bin/pip" install pywebview --quiet
+  _spin_start "Installing pywebview..."
+  "${PROJECT_DIR}/venv/bin/pip" install pywebview --quiet
+  _spin_stop
+  echo -e "  📦  pywebview... ${GREEN}installed ✅${NC}"
 fi
 
-# ── Generate and compile C launcher ──────────────────────────────────────────
-# Use Python to write the .c file so paths with spaces are handled safely.
+# ── Generate C launcher source ────────────────────────────────────────────────
 LAUNCHER_C="/tmp/tunebridge_launcher.c"
-"$VENV_PYTHON" - "$LAUNCHER_C" "$PROJECT_DIR" "$CLT_PYTHON" "$PYPATH" <<'PYEOF'
+"$VENV_PYTHON" - "$LAUNCHER_C" "$PROJECT_DIR" "$CLT_PYTHON" "$PYPATH" > /dev/null <<'PYEOF'
 import sys
 out, project, python, pypath = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 
-# Escape backslashes and double-quotes for C string literals
 def esc(s):
     return s.replace('\\', '\\\\').replace('"', '\\"')
 
 src = f'''\
 /*
  * TuneBridge launcher — auto-generated by create_app.sh
- * Sets up Python environment and hands off to tunebridge_gui.py.
+ * Sets up Python environment and execs into tunebridge_gui.py.
  */
 #include <stdlib.h>
 #include <unistd.h>
@@ -93,33 +127,43 @@ int main(void) {{
 '''
 with open(out, 'w') as f:
     f.write(src)
-print(f"  Generated {out}")
 PYEOF
 
+# ── Compile C launcher ────────────────────────────────────────────────────────
 LAUNCHER_BIN="/tmp/TuneBridgeLauncher"
-clang -o "$LAUNCHER_BIN" "$LAUNCHER_C" && echo "  Compiled launcher binary (Mach-O)"
+printf "  🏗️   Compiling C launcher... "
+COMPILE_LOG=$(mktemp)
+set +e
+clang -o "$LAUNCHER_BIN" "$LAUNCHER_C" 2>"$COMPILE_LOG"
+COMPILE_EXIT=$?
+set -e
+if [ "$COMPILE_EXIT" -ne 0 ]; then
+  echo -e "${RED}failed ❌${NC}"
+  echo ""
+  cat "$COMPILE_LOG"
+  rm -f "$COMPILE_LOG" "$LAUNCHER_C"
+  exit 1
+fi
+rm -f "$COMPILE_LOG"
+echo -e "${GREEN}done ✅${NC}"
 
-# ── Build .app bundle ─────────────────────────────────────────────────────────
+# ── Assemble .app bundle ──────────────────────────────────────────────────────
+printf "  📦  Assembling .app bundle... "
 CONTENTS="${APP_PATH}/Contents"
 MACOS="${CONTENTS}/MacOS"
 RESOURCES="${CONTENTS}/Resources"
-
 mkdir -p "$MACOS" "$RESOURCES"
 
-# Executable
 cp "$LAUNCHER_BIN" "${MACOS}/${APP_NAME}"
 chmod +x "${MACOS}/${APP_NAME}"
 
-# Icon
+ICON_KEY=""
 if [ -f "$CUSTOM_ICON" ]; then
-    cp "$CUSTOM_ICON" "${RESOURCES}/TuneBridge.icns"
-    ICON_KEY="<key>CFBundleIconFile</key><string>TuneBridge</string>"
-else
-    ICON_KEY=""
+  cp "$CUSTOM_ICON" "${RESOURCES}/TuneBridge.icns"
+  ICON_KEY="set"
 fi
 
-# Info.plist — written via Python for correct escaping
-"$VENV_PYTHON" - "$CONTENTS/Info.plist" "$PROJECT_DIR" "$ICON_KEY" <<'PYEOF'
+"$VENV_PYTHON" - "$CONTENTS/Info.plist" "$PROJECT_DIR" "$ICON_KEY" > /dev/null <<'PYEOF'
 import plistlib, sys
 plist_path, project_dir, icon_key = sys.argv[1], sys.argv[2], sys.argv[3]
 
@@ -135,7 +179,6 @@ plist = {
     'NSHighResolutionCapable': True,
     'LSMinimumSystemVersion': '12.0',
     'NSAppTransportSecurity': {'NSAllowsLocalNetworking': True},
-    # Request Documents access — required for TCC prompt to fire on first launch
     'NSDocumentsFolderUsageDescription':
         'TuneBridge needs access to your Documents folder to reach your music library and playlists.',
     'LSEnvironment': {
@@ -147,32 +190,31 @@ if icon_key:
 
 with open(plist_path, 'wb') as f:
     plistlib.dump(plist, f)
-print(f"  Wrote Info.plist (NSDocumentsFolderUsageDescription included)")
 PYEOF
+echo -e "${GREEN}done ✅${NC}"
 
-# ── Ad-hoc sign ──────────────────────────────────────────────────────────────
-# Single binary + Info.plist only — no complex bundle structure to confuse codesign.
-codesign --force --sign - "$APP_PATH" 2>/dev/null && echo "  Ad-hoc signed" || \
-    echo "  WARNING: codesign failed — app may not launch. Run: codesign --force --sign - \"$APP_PATH\""
+# ── Ad-hoc sign ───────────────────────────────────────────────────────────────
+printf "  🔏  Signing (ad-hoc)... "
+if codesign --force --sign - "$APP_PATH" 2>/dev/null; then
+  echo -e "${GREEN}signed ✅${NC}"
+else
+  echo -e "${YELLOW}codesign failed ⚠️${NC}"
+  echo "  Run manually: codesign --force --sign - \"$APP_PATH\""
+fi
 
 # ── Clear quarantine ──────────────────────────────────────────────────────────
 xattr -cr "$APP_PATH" 2>/dev/null || true
+echo -e "  🧹  Quarantine cleared ✅"
 
-# ── Clean up ──────────────────────────────────────────────────────────────────
+# ── Clean up temp files ───────────────────────────────────────────────────────
 rm -f "$LAUNCHER_C" "$LAUNCHER_BIN"
 
 echo ""
-echo "  ✓ ${APP_NAME}.app installed to /Applications"
+echo -e "${GREEN}${BOLD}✅  TuneBridge.app installed to /Applications${NC}"
 echo ""
-echo "  FIRST LAUNCH: macOS will ask for access to ~/Documents."
-echo "  Click 'Allow' — this is needed to reach your music library."
-echo "  (This prompt only appears once.)"
+echo -e "  ${BOLD}ℹ️   First launch:${NC} macOS will ask for access to ~/Documents."
+echo -e "  Click ${BOLD}Allow${NC} — this prompt only appears once."
 echo ""
-echo "  How it works:"
-echo "    • Native WKWebView window — no Safari"
-echo "    • Cmd+Tab shows 'TuneBridge'"
-echo "    • Closing the window stops the server"
-echo ""
-echo "  To run from Terminal instead:"
-echo "    cd \"${PROJECT_DIR}\" && source venv/bin/activate && python tunebridge_gui.py"
+echo -e "  ${DIM}To run from Terminal instead:${NC}"
+echo -e "  ${DIM}cd \"${PROJECT_DIR}\" && source venv/bin/activate && python tunebridge_gui.py${NC}"
 echo ""

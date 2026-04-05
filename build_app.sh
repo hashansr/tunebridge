@@ -1,5 +1,5 @@
 #!/bin/bash
-# build_app.sh — Build a self-contained TuneBridge.app (and optionally a DMG).
+# 🎵 TuneBridge — Build Distributable App + DMG
 #
 # Usage:
 #   bash build_app.sh          # builds dist/TuneBridge.app
@@ -8,7 +8,7 @@
 # Distribution target:
 #   - Apple Silicon macOS only (arm64)
 #   - No Python required on end-user machines
-#   - User can drag TuneBridge.app to /Applications and run
+#   - Drag TuneBridge.app to /Applications and launch
 
 set -euo pipefail
 
@@ -26,36 +26,68 @@ for arg in "$@"; do
   [ "$arg" = "--dmg" ] && BUILD_DMG=1
 done
 
-hr()        { printf '%s\n' "------------------------------------------------------------"; }
-phase()     { printf '\n[PHASE] %s\n' "$1"; }
-step()      { printf '[STEP ] %s\n' "$1"; }
-ok()        { printf '[OK   ] %s\n' "$1"; }
-warn()      { printf '[WARN ] %s\n' "$1"; }
-err()       { printf '[ERROR] %s\n' "$1"; }
-kv()        { printf '        %-10s %s\n' "$1" "$2"; }
+# ── Colours ───────────────────────────────────────────────────────────────────
+BOLD='\033[1m'
+DIM='\033[2m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+NC='\033[0m'
 
-printf '=== TuneBridge build_app.sh v%s ===\n' "${APP_VERSION}"
-kv "Project:" "${PROJECT_DIR}"
-kv "Output:" "${APP_PATH}"
-kv "Distro dir:" "${DISTRO_DIR}"
-kv "Mode:" "$( [ "$BUILD_DMG" = "1" ] && echo "App + DMG" || echo "App only" )"
-hr
+# ── Spinner ───────────────────────────────────────────────────────────────────
+_SP=""
+_spin_start() {
+  [ -n "$_SP" ] && _spin_stop
+  local m="$1"
+  (while :; do
+    for c in ⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏; do printf "\r  %s  %s " "$c" "$m"; sleep 0.08; done
+  done) &
+  _SP=$!; disown 2>/dev/null || true
+}
+_spin_stop() {
+  [ -n "$_SP" ] && { kill "$_SP" 2>/dev/null; wait "$_SP" 2>/dev/null || true; _SP=""; printf "\r\033[K"; }
+}
+trap '_spin_stop' EXIT INT TERM
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+_phase() { echo ""; echo -e "${BOLD}${CYAN}$1${NC}"; echo -e "${DIM}────────────────────────────────────────${NC}"; echo ""; }
+_ok()    { echo -e "  ✅  $1"; }
+_warn()  { echo -e "  ⚠️   ${YELLOW}$1${NC}"; }
+_err()   { echo -e "  ❌  ${RED}$1${NC}"; }
+_info()  { echo -e "  ${DIM}$1${NC}"; }
+_kv()    { printf "  %-16s %s\n" "$1" "$2"; }
+
+_elapsed() {
+  local t=$(( $(date +%s) - $1 ))
+  if [ "$t" -ge 60 ]; then printf "%dm %ds" $((t/60)) $((t%60))
+  else printf "%ds" "$t"; fi
+}
+
+# ── Header ────────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${BOLD}🏗️   TuneBridge — Build Distributable v${APP_VERSION}${NC}"
+echo -e "${DIM}════════════════════════════════════════════${NC}"
+echo ""
+_kv "📁 Project:" "${PROJECT_DIR}"
+_kv "📤 Output:"  "${APP_PATH}"
+_kv "🏷️  Mode:"    "$( [ "$BUILD_DMG" = "1" ] && echo "App + DMG" || echo "App only" )"
 
 if [ "$(uname -s)" != "Darwin" ]; then
-  err "build_app.sh supports macOS only."
+  _err "This script supports macOS only."
   exit 1
 fi
-
 if [ "$(uname -m)" != "arm64" ]; then
-  err "Apple Silicon build only (arm64)."
-  kv "Current arch:" "$(uname -m)"
+  _err "Apple Silicon (arm64) required."
+  _info "Current arch: $(uname -m)"
   exit 1
 fi
 
-# ── Select build Python (3.10+) ─────────────────────────────────────────────
-phase "Environment checks"
+# ── Find Python 3.10+ ─────────────────────────────────────────────────────────
+_phase "🔍 Environment"
+
+printf "  🔍  Finding Python 3.10+... "
 BUILD_PYTHON=""
-FOUND_PYTHONS=""
 for candidate in \
   "$(command -v python3 2>/dev/null || true)" \
   "$(command -v python3.13 2>/dev/null || true)" \
@@ -80,50 +112,52 @@ for candidate in \
   [ -x "$candidate" ] || continue
   _maj=$($candidate -c 'import sys; print(sys.version_info.major)' 2>/dev/null || echo 0)
   _min=$($candidate -c 'import sys; print(sys.version_info.minor)' 2>/dev/null || echo 0)
-  if [ "${_maj}" = "3" ]; then
-    FOUND_PYTHONS="${FOUND_PYTHONS}\n  - ${candidate} (${_maj}.${_min})"
-  fi
   if [ "${_maj}" = "3" ] && [ "${_min}" -ge 10 ] 2>/dev/null; then
     BUILD_PYTHON="$candidate"
+    echo -e "${GREEN}Python ${_maj}.${_min} ✅${NC}"
+    _info "${candidate}"
     break
   fi
 done
 
 if [ -z "$BUILD_PYTHON" ]; then
-  err "Python 3.10+ not found."
-  printf '        Detected interpreters:%s\n' "${FOUND_PYTHONS:- none}"
-  printf '        Install one of:\n'
-  printf '          brew install python@3.12\n'
-  printf '          or download from https://www.python.org/downloads/macos/\n'
-  printf '        Then rerun: bash build_app.sh --dmg\n'
+  echo -e "${RED}not found ❌${NC}"
+  echo ""
+  _err "Python 3.10+ is required."
+  echo "  Install:  ${BOLD}brew install python@3.12${NC}"
+  echo "  Or from:  https://www.python.org/downloads/macos/"
   exit 1
 fi
 
-kv "Python:" "$BUILD_PYTHON"
-ok "Host checks passed"
+# ── Build venv + dependencies ─────────────────────────────────────────────────
+_phase "📦 Build Environment"
 
-# ── Prepare clean build venv ────────────────────────────────────────────────
-phase "Build environment"
-if [ -d "$BUILD_VENV" ]; then
-  step "Removing stale build venv"
-  rm -rf "$BUILD_VENV"
-fi
-
-step "Creating isolated build virtualenv"
-"$BUILD_PYTHON" -m venv "$BUILD_VENV"
+T0=$(date +%s)
+_spin_start "Creating isolated build environment..."
+[ -d "$BUILD_VENV" ] && rm -rf "$BUILD_VENV"
+"$BUILD_PYTHON" -m venv "$BUILD_VENV" 2>/dev/null
 source "$BUILD_VENV/bin/activate"
+_spin_stop
+_ok "Build venv created"
 
-step "Installing build dependencies"
-python -m pip install --upgrade pip wheel setuptools --quiet
-python -m pip install -r "${PROJECT_DIR}/requirements.txt" --quiet
-python -m pip install pyinstaller --quiet
-ok "Build environment ready"
+_spin_start "Installing build dependencies (pip, wheel, requirements, pyinstaller)..."
+pip install --upgrade pip wheel setuptools --quiet 2>/dev/null
+pip install -r "${PROJECT_DIR}/requirements.txt" --quiet 2>/dev/null
+pip install pyinstaller --quiet 2>/dev/null
+_spin_stop
+DEP_ELAPSED=$(_elapsed "$T0")
+_ok "Dependencies installed  (${DEP_ELAPSED})"
 
-# ── Clean prior outputs ─────────────────────────────────────────────────────
-phase "Bundle assembly"
-step "Cleaning previous outputs"
-rm -rf "${PROJECT_DIR}/build" "${PROJECT_DIR}/dist/${APP_NAME}.app" "${PROJECT_DIR}/dist/${APP_NAME}.dmg" "${PROJECT_DIR}/dist/${APP_NAME}_tmp.dmg"
+# ── Clean + prepare ───────────────────────────────────────────────────────────
+_phase "🏗️  Bundle Assembly"
+
+printf "  🗑️   Cleaning previous outputs... "
+rm -rf "${PROJECT_DIR}/build" \
+       "${PROJECT_DIR}/dist/${APP_NAME}.app" \
+       "${PROJECT_DIR}/dist/${APP_NAME}.dmg" \
+       "${PROJECT_DIR}/dist/${APP_NAME}_tmp.dmg"
 mkdir -p "$DIST_DIR"
+echo -e "${GREEN}done ✅${NC}"
 
 ICON_PATH="${PROJECT_DIR}/static/TuneBridge.icns"
 PYI_ARGS=(
@@ -143,29 +177,92 @@ PYI_ARGS=(
   --collect-submodules soundfile
   --add-data "${PROJECT_DIR}/static:static"
 )
-
-if [ -f "$ICON_PATH" ]; then
-  PYI_ARGS+=(--icon "$ICON_PATH")
-fi
-
+[ -f "$ICON_PATH" ] && PYI_ARGS+=(--icon "$ICON_PATH")
 if [ -d "${PROJECT_DIR}/data/features" ]; then
   PYI_ARGS+=(--add-data "${PROJECT_DIR}/data/features:data/features")
-  step "Bundling data/features/ for first-run migration"
+  _info "Bundling data/features/ for first-run migration"
 fi
 
-step "Running PyInstaller (this can take a few minutes)"
-python -m PyInstaller "${PYI_ARGS[@]}" "${PROJECT_DIR}/tunebridge_gui.py"
+# ── Run PyInstaller ───────────────────────────────────────────────────────────
+PYI_LOG=$(mktemp)
+PYI_T0=$(date +%s)
+_spin_start "Running PyInstaller — this takes a few minutes, grab a coffee ☕"
+set +e
+python -m PyInstaller "${PYI_ARGS[@]}" "${PROJECT_DIR}/tunebridge_gui.py" > "$PYI_LOG" 2>&1
+PYI_EXIT=$?
+set -e
+_spin_stop
+PYI_ELAPSED=$(_elapsed "$PYI_T0")
 
-if [ ! -d "$APP_PATH" ]; then
-  err "Expected app bundle not found at $APP_PATH"
+if [ "$PYI_EXIT" -ne 0 ]; then
+  _err "PyInstaller failed after ${PYI_ELAPSED}"
+  echo ""
+  echo -e "  ${BOLD}Last 30 lines of output:${NC}"
+  echo -e "  ${DIM}────────────────────────────────${NC}"
+  tail -30 "$PYI_LOG" | sed 's/^/  /'
+  rm -f "$PYI_LOG"
   exit 1
 fi
-ok "App bundle created"
 
-# ── Patch Info.plist with app metadata/permissions ──────────────────────────
-step "Patching Info.plist metadata"
+# ── Analyse PyInstaller warnings ──────────────────────────────────────────────
+# Warnings come from cross-platform modules that don't apply to macOS arm64.
+# We categorise them so you only see ones worth investigating.
+ALL_WARNS=""
+ALL_WARNS=$(grep "^WARNING:" "$PYI_LOG" 2>/dev/null || true)
+
+WARN_COUNT=0
+[ -n "$ALL_WARNS" ] && WARN_COUNT=$(echo "$ALL_WARNS" | wc -l | tr -d ' ')
+
+# Known-harmless: Windows/Linux-only modules, Python 2 compat shims, internal tools
+HARMLESS_RE="webview\.platforms\.(gtk|mshtml|winforms|edgechromium)"
+HARMLESS_RE="${HARMLESS_RE}|pkg_resources\.py2_compat"
+HARMLESS_RE="${HARMLESS_RE}|charset_normalizer\.legacy"
+HARMLESS_RE="${HARMLESS_RE}|_distutils_hack"
+HARMLESS_RE="${HARMLESS_RE}|distutils\.command\."
+HARMLESS_RE="${HARMLESS_RE}|setuptools\._vendor"
+HARMLESS_RE="${HARMLESS_RE}|importlib\.metadata\._meta"
+
+REAL_WARNS=""
+HARMLESS_COUNT=0
+REAL_WARN_COUNT=0
+if [ -n "$ALL_WARNS" ]; then
+  REAL_WARNS=$(echo "$ALL_WARNS" | grep -vE "$HARMLESS_RE" || true)
+  [ -n "$REAL_WARNS" ] && REAL_WARN_COUNT=$(echo "$REAL_WARNS" | wc -l | tr -d ' ')
+  HARMLESS_COUNT=$(( WARN_COUNT - REAL_WARN_COUNT ))
+fi
+
+if [ "$WARN_COUNT" -eq 0 ]; then
+  _ok "PyInstaller complete (${PYI_ELAPSED}) — no warnings 🎉"
+else
+  _ok "PyInstaller complete (${PYI_ELAPSED})"
+  if [ "$HARMLESS_COUNT" -gt 0 ]; then
+    _info "${HARMLESS_COUNT} platform-compatibility notice(s) — safe to ignore (Windows/Linux modules)"
+  fi
+  if [ "$REAL_WARN_COUNT" -gt 0 ]; then
+    echo ""
+    _warn "${REAL_WARN_COUNT} warning(s) worth a look:"
+    echo "$REAL_WARNS" | head -20 | while IFS= read -r line; do
+      echo -e "     ${YELLOW}${line}${NC}"
+    done
+    if [ "$REAL_WARN_COUNT" -gt 20 ]; then
+      _info "  … and $(( REAL_WARN_COUNT - 20 )) more. Full log: ${PYI_LOG}"
+    fi
+    echo ""
+  fi
+fi
+rm -f "$PYI_LOG"
+
+if [ ! -d "$APP_PATH" ]; then
+  _err "Expected app bundle not found at: ${APP_PATH}"
+  exit 1
+fi
+
+# ── Patch Info.plist ──────────────────────────────────────────────────────────
+_phase "📝 Post-processing"
+
+printf "  📝  Patching Info.plist... "
 PLIST_PATH="${APP_PATH}/Contents/Info.plist"
-python - "$PLIST_PATH" "$APP_VERSION" <<'PYEOF'
+python - "$PLIST_PATH" "$APP_VERSION" > /dev/null 2>&1 <<'PYEOF'
 import plistlib, sys
 plist_path = sys.argv[1]
 version = sys.argv[2]
@@ -173,53 +270,59 @@ version = sys.argv[2]
 with open(plist_path, 'rb') as f:
     p = plistlib.load(f)
 
-p['CFBundleName'] = 'TuneBridge'
-p['CFBundleDisplayName'] = 'TuneBridge'
-p['CFBundleIdentifier'] = 'com.tunebridge.app'
-p['CFBundleVersion'] = version
-p['CFBundleShortVersionString'] = version
-p['LSMinimumSystemVersion'] = '12.0'
-p['NSHighResolutionCapable'] = True
-p['NSAppTransportSecurity'] = {'NSAllowsLocalNetworking': True}
-p['NSDocumentsFolderUsageDescription'] = (
-    'TuneBridge needs access to your Documents folder to reach your music library and playlists.'
-)
-p['NSMusicFolderUsageDescription'] = (
-    'TuneBridge needs access to your Music folder for your music library.'
-)
+p.update({
+    'CFBundleName': 'TuneBridge',
+    'CFBundleDisplayName': 'TuneBridge',
+    'CFBundleIdentifier': 'com.tunebridge.app',
+    'CFBundleVersion': version,
+    'CFBundleShortVersionString': version,
+    'LSMinimumSystemVersion': '12.0',
+    'NSHighResolutionCapable': True,
+    'NSAppTransportSecurity': {'NSAllowsLocalNetworking': True},
+    'NSDocumentsFolderUsageDescription':
+        'TuneBridge needs access to your Documents folder to reach your music library and playlists.',
+    'NSMusicFolderUsageDescription':
+        'TuneBridge needs access to your Music folder for your music library.',
+})
 
 with open(plist_path, 'wb') as f:
     plistlib.dump(p, f)
-print('[OK   ] Info.plist updated')
 PYEOF
+echo -e "${GREEN}done ✅${NC}"
 
-# ── Ad-hoc signing + quarantine clear ───────────────────────────────────────
-step "Signing bundle (ad-hoc)"
-codesign --force --deep --sign - "$APP_PATH" 2>/dev/null && \
-  ok "Ad-hoc signed" || \
-  warn "codesign failed - app may need manual signing"
+printf "  🔏  Signing (ad-hoc)... "
+if codesign --force --deep --sign - "$APP_PATH" 2>/dev/null; then
+  echo -e "${GREEN}signed ✅${NC}"
+else
+  echo -e "${YELLOW}codesign failed ⚠️${NC}"
+  _warn "Run manually: codesign --force --deep --sign - \"$APP_PATH\""
+fi
 
+printf "  🧹  Clearing quarantine... "
 xattr -cr "$APP_PATH" 2>/dev/null || true
-step "Clearing quarantine xattrs"
+echo -e "${GREEN}done ✅${NC}"
 
 BUNDLE_SIZE="$(du -sh "$APP_PATH" | awk '{print $1}')"
-ok "Bundle ready"
-kv "Bundle size:" "${BUNDLE_SIZE}"
-kv "App path:" "${APP_PATH}"
+echo ""
+_ok "App bundle ready — ${BUNDLE_SIZE}"
+_info "${APP_PATH}"
 
-# ── Optional DMG creation (drag-and-drop install UX) ───────────────────────
+# ── DMG packaging ─────────────────────────────────────────────────────────────
 if [ "$BUILD_DMG" = "1" ]; then
-  phase "DMG packaging"
-  step "Creating temporary DMG"
+  _phase "💿 DMG Packaging"
+
   DMG_PATH="${DIST_DIR}/${APP_NAME}.dmg"
   TMP_DMG="${DIST_DIR}/${APP_NAME}_tmp.dmg"
   mkdir -p "$DISTRO_DIR"
-
   [ -f "$DMG_PATH" ] && rm -f "$DMG_PATH"
-  [ -f "$TMP_DMG" ] && rm -f "$TMP_DMG"
+  [ -f "$TMP_DMG" ]  && rm -f "$TMP_DMG"
 
+  _spin_start "Creating DMG volume..."
   hdiutil create -size 500m -fs HFS+ -volname "$APP_NAME" "$TMP_DMG" -quiet
+  _spin_stop
+  _ok "Temporary DMG volume created"
 
+  printf "  📦  Mounting and staging app... "
   ATTACH_PLIST="$(hdiutil attach "$TMP_DMG" -noautoopen -nobrowse -plist 2>/dev/null)"
   MOUNT_POINT="$(echo "$ATTACH_PLIST" | python -c '
 import sys, plistlib
@@ -229,56 +332,62 @@ print(mp)
 ')"
 
   if [ -z "$MOUNT_POINT" ]; then
-    err "Could not determine DMG mount point."
+    echo -e "${RED}failed ❌${NC}"
+    _err "Could not determine DMG mount point."
     rm -f "$TMP_DMG"
     exit 1
   fi
 
-  step "Staging app + Applications link"
   cp -R "$APP_PATH" "$MOUNT_POINT/"
   ln -s /Applications "$MOUNT_POINT/Applications"
+  echo -e "${GREEN}done ✅${NC}"
 
-  step "Finalizing compressed DMG"
+  _spin_start "Compressing DMG (UDZO)..."
   hdiutil detach "$MOUNT_POINT" -quiet
   hdiutil convert "$TMP_DMG" -format UDZO -o "$DMG_PATH" -quiet
   rm -f "$TMP_DMG"
+  _spin_stop
 
   DMG_SIZE="$(du -sh "$DMG_PATH" | awk '{print $1}')"
-  ok "DMG ready"
-  kv "DMG size:" "${DMG_SIZE}"
-  kv "DMG path:" "${DMG_PATH}"
+  _ok "DMG compressed — ${DMG_SIZE}"
+  _info "${DMG_PATH}"
 
-  step "Publishing DMG to distro/ folder"
+  printf "  📤  Publishing to distro/... "
   BUILD_STAMP="$(date +%Y%m%d-%H%M%S)"
   DISTRO_LATEST="${DISTRO_DIR}/${APP_NAME}-latest.dmg"
   DISTRO_VERSIONED="${DISTRO_DIR}/${APP_NAME}-v${APP_VERSION}-${BUILD_STAMP}.dmg"
   cp -f "$DMG_PATH" "$DISTRO_LATEST"
   cp -f "$DMG_PATH" "$DISTRO_VERSIONED"
-  ok "DMG published for distribution"
-  kv "Latest DMG:" "${DISTRO_LATEST}"
-  kv "Archive DMG:" "${DISTRO_VERSIONED}"
+  echo -e "${GREEN}done ✅${NC}"
+  _info "distro/${APP_NAME}-latest.dmg  (stable latest)"
+  _info "distro/${APP_NAME}-v${APP_VERSION}-${BUILD_STAMP}.dmg  (archived)"
 fi
 
 deactivate || true
 
-hr
-printf '=== Build complete ===\n'
+# ── Summary ───────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${DIM}════════════════════════════════════════════${NC}"
+TOTAL_ELAPSED=$(_elapsed "$T0")
+echo -e "${GREEN}${BOLD}🎉  Build complete!  (total: ${TOTAL_ELAPSED})${NC}"
+echo ""
+
 if [ "$BUILD_DMG" = "1" ]; then
-  printf '\nInstall (distribution):\n'
-  printf '  1) Share from distro/: %s-latest.dmg\n' "${APP_NAME}"
-  printf '  2) Open TuneBridge.dmg\n'
-  printf '  3) Drag TuneBridge.app to Applications\n'
-  printf '  4) Launch TuneBridge\n'
-  printf '\nDistribution artifacts:\n'
-  printf '  - dist/TuneBridge.dmg (build output)\n'
-  printf '  - distro/TuneBridge-latest.dmg (stable latest)\n'
-  printf '  - distro/TuneBridge-v%s-<timestamp>.dmg (archived)\n' "${APP_VERSION}"
+  echo -e "  ${BOLD}To distribute:${NC}"
+  echo "    Share:  distro/${APP_NAME}-latest.dmg"
+  echo ""
+  echo -e "  ${BOLD}To install:${NC}"
+  echo "    1.  Open  dist/${APP_NAME}.dmg"
+  echo "    2.  Drag  TuneBridge.app  →  Applications"
+  echo "    3.  Launch TuneBridge"
 else
-  printf '\nInstall (local app):\n'
-  printf '  1) Open dist/TuneBridge.app\n'
-  printf '  2) Drag to Applications (optional)\n'
-  printf '  3) Launch TuneBridge\n'
+  echo -e "  ${BOLD}To install:${NC}"
+  echo "    1.  Open  dist/${APP_NAME}.app"
+  echo "    2.  Drag to Applications (optional)"
+  echo "    3.  Launch TuneBridge"
 fi
-printf '\nFirst launch:\n'
-printf '  - App bootstrap runs automatically\n'
-printf '  - User data is created at: ~/Library/Application Support/TuneBridge\n\n'
+
+echo ""
+echo -e "  ${DIM}First launch: user data created at${NC}"
+echo -e "  ${DIM}~/Library/Application Support/TuneBridge${NC}"
+echo ""

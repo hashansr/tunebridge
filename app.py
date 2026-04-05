@@ -1799,10 +1799,15 @@ def export_to_device():
 
 # ── Music Sync ────────────────────────────────────────────────────────────────
 
-SYNC_EXTENSIONS = {'.flac', '.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus', '.wv'}
+SYNC_EXTENSIONS = {'.flac', '.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus', '.wv', '.aiff', '.aif', '.ape', '.wma', '.alac'}
 
 def _normalize_rel(path):
     return str(path or '').replace('\\', '/').strip('/')
+
+
+def _is_music_file_path(path):
+    ext = Path(str(path or '')).suffix.lower()
+    return ext in SYNC_EXTENSIONS
 
 
 def _safe_segment(value):
@@ -1847,17 +1852,23 @@ def _render_device_relpath(track, template):
     tpl = _normalize_path_template(template)
     tokens = _track_tokens(track)
     rendered = tpl
+    invalid_char_hit = False
     missing = []
     for k, v in tokens.items():
         marker = f'%{k}%'
         if marker in rendered:
+            raw_v = str(v or '').strip()
+            if _INVALID_FS_CHARS_RE.search(raw_v):
+                invalid_char_hit = True
             safe = _safe_segment(v)
             if not safe:
                 missing.append(k)
                 safe = _safe_segment(f'Unknown {k}')
             rendered = rendered.replace(marker, safe)
     if missing:
-        warnings.append(f"{track.get('path', '')}: missing metadata for {', '.join(sorted(set(missing)))}")
+        warn_tokens = [m for m in sorted(set(missing)) if m not in {'track', 'discnumber', 'year', 'genre', 'albumartist'}]
+        if warn_tokens:
+            warnings.append(f"{track.get('path', '')}: missing metadata for {', '.join(warn_tokens)}")
     rendered = _normalize_rel(rendered)
     parts = [p for p in rendered.split('/') if p]
     if not parts:
@@ -1866,12 +1877,14 @@ def _render_device_relpath(track, template):
     ext = Path(track.get('path') or '').suffix.lower()
     if not Path(filename).suffix and ext:
         filename = f'{filename}{ext}'
+    if _INVALID_FS_CHARS_RE.search(filename):
+        invalid_char_hit = True
     filename = _safe_segment(filename)
     if ext and not Path(filename).suffix:
         filename = f'{filename}{ext}'
     parts[-1] = filename or ('track' + (ext or '.flac'))
     rel = '/'.join([p for p in parts if p])
-    if rel != rendered:
+    if invalid_char_hit:
         warnings.append(f"{track.get('path', '')}: invalid characters sanitized for device filesystem")
     return rel, warnings
 
@@ -1954,37 +1967,51 @@ def sync_scan():
             if not dap:
                 raise RuntimeError('DAP not found')
             template = dap.get('path_template') or DEFAULT_DAP_PATH_TEMPLATE
-            expected_map = {}
+            track_entries = []
             warnings = []
-            case_collision = set()
+            target_collisions = set()
             for t in tracks:
                 local_rel = _normalize_rel(t.get('path'))
-                if not local_rel:
+                if not local_rel or not _is_music_file_path(local_rel):
                     continue
                 rel, warns = _render_device_relpath(t, template)
-                warnings.extend(warns)
-                norm_key = rel.casefold()
-                if norm_key in expected_map and expected_map[norm_key] != local_rel:
-                    case_collision.add(rel)
-                expected_map[norm_key] = local_rel
+                rendered_rel = _normalize_rel(rel)
+                local_rel_norm = _normalize_rel(local_rel)
+                target_rel = rendered_rel or local_rel_norm
+                track_entries.append({
+                    'local_rel': local_rel_norm,
+                    'rendered_rel': rendered_rel,
+                    'target_rel': target_rel,
+                    'warnings': warns,
+                })
 
             sync_state['current'] = 'Scanning device…'
             device_files = sorted(walk_music_files(device_path))
             device_map = {_normalize_rel(p).casefold(): _normalize_rel(p) for p in device_files}
 
-            expected_keys = set(expected_map.keys())
             device_keys = set(device_map.keys())
-            rendered_by_key = {}
-            for t in tracks:
-                local_rel = _normalize_rel(t.get('path'))
-                if not local_rel:
-                    continue
-                rel, _ = _render_device_relpath(t, template)
-                rendered_by_key[rel.casefold()] = rel
+            expected_keys = set()
+            local_only = []
+            local_copy_map = {}
+            for e in track_entries:
+                local_key = e['local_rel'].casefold()
+                rendered_key = e['rendered_rel'].casefold() if e['rendered_rel'] else ''
+                variants = {local_key}
+                if rendered_key:
+                    variants.add(rendered_key)
+                expected_keys.update(variants)
 
-            local_only = sorted([rendered_by_key[k] for k in (expected_keys - device_keys) if k in rendered_by_key])
+                if variants.isdisjoint(device_keys):
+                    target_rel = e['target_rel']
+                    if target_rel in local_copy_map and local_copy_map[target_rel] != e['local_rel']:
+                        target_collisions.add(target_rel)
+                        continue
+                    local_copy_map[target_rel] = e['local_rel']
+                    local_only.append(target_rel)
+                    warnings.extend(e.get('warnings') or [])
+
+            local_only = sorted(set(local_only))
             device_only = sorted([device_map[k] for k in (device_keys - expected_keys)])
-            local_copy_map = {rendered_by_key[k]: expected_map[k] for k in rendered_by_key.keys() if k in expected_map}
             local_only_sizes = {}
             required_bytes = 0
             music_base = get_music_base()
@@ -2023,9 +2050,12 @@ def sync_scan():
                     f'Insufficient device space: need {required_bytes} bytes, available {available_bytes} bytes.'
                 )
 
-            for c in sorted(case_collision):
-                warnings.append(f'Case/filename collision detected for "{c}" — review before syncing.')
+            for c in sorted(target_collisions):
+                warnings.append(f'Path collision for "{c}" — multiple local tracks map to the same destination.')
             warnings = sorted(set(warnings))
+            if len(warnings) > 250:
+                extra = len(warnings) - 250
+                warnings = warnings[:250] + [f'...and {extra} more issue(s).']
 
             sync_state.update({
                 'status': 'ready',
@@ -2275,7 +2305,7 @@ def _update_dap_sync_summary(dap_id, summary_patch):
 
 DEFAULT_DAP_MUSIC_ROOT = 'Music'
 DEFAULT_DAP_PATH_TEMPLATE = '%artist%/%album%/%track% - %title%'
-_INVALID_FS_CHARS_RE = re.compile(r'[<>:"/\\\\|?*\\x00-\\x1f]')
+_INVALID_FS_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _MAX_SEGMENT_LEN = 120
 
 

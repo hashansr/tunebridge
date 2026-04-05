@@ -1858,6 +1858,7 @@ tr.track-selected .track-check-indicator {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
 }
 .sync-section-hdr-left {
@@ -1888,6 +1889,8 @@ tr.track-selected .track-check-indicator {
   font-size: 11px;
   color: var(--text-muted);
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .sync-check-all input[type="checkbox"] {
   accent-color: var(--accent);
@@ -2049,9 +2052,11 @@ tr.track-selected .track-check-indicator {
 .gear-card-subline {
   font-size: 11px;
   color: rgba(229, 226, 225, 0.56);
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .gear-card-name {
@@ -2175,12 +2180,25 @@ tr.track-selected .track-check-indicator {
 .gear-sync-badge {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 5px;
   font-size: var(--text-xs);
   padding: 2px 8px;
   border-radius: 9999px;
   letter-spacing: 0.02em;
   font-weight: 600;
+}
+.gear-pill-icon {
+  width: 11px;
+  height: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.9;
+}
+.gear-pill-icon svg {
+  width: 11px;
+  height: 11px;
+  display: block;
 }
 .gear-sync-ok    {
   background: rgba(83,225,111,.14);
@@ -2233,17 +2251,29 @@ tr.track-selected .track-check-indicator {
   margin-right: auto;
 }
 .gear-card-dap-bottom .gear-sync-badge {
-  flex-shrink: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
   max-width: 100%;
 }
-.gear-card-dap-bottom .gear-card-meta-text {
-  margin-left: auto;
+.gear-card-dap-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 6px;
+}
+.gear-card-dap-bottom .gear-sync-badge span:last-child {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.gear-card-dap-bottom .gear-card-meta-text {
+  grid-column: 1 / -1;
+  margin-left: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
 }
 
 @media (max-width: 1100px) {
@@ -2251,8 +2281,10 @@ tr.track-selected .track-check-indicator {
   .gear-card-dap-bottom {
     flex-wrap: wrap;
   }
+  .gear-card-dap-bottom {
+    grid-template-columns: 1fr;
+  }
   .gear-card-dap-bottom .gear-card-meta-text {
-    margin-left: 0;
     width: 100%;
   }
 }

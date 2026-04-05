@@ -2551,3 +2551,60 @@ Observed working tree at time of writing (not touched by this codex update):
 
 - Validation:
   - `node --check static/app.js` passed.
+
+### 2026-04-05 (Gear card responsive alignment + copy simplification)
+- DAP cards:
+  - Reworked status-pill layout for responsive stability:
+    - desktop: 2-column grid (`music` + `playlist`)
+    - compact widths: single-column stack
+  - Prevented long label overflow by truncating text inside each pill and moving details to a dedicated secondary line.
+  - Removed verbose label prefixes and switched to icon-led status pills for space efficiency.
+  - Simplified status copy:
+    - `Library in sync` / `Library update needed`
+    - `Playlists up to date` / `Playlists need sync`
+    - details shown separately as `+X to copy`, `Y extra on device`, `N new`, `M changed`.
+
+- IEM/Headphone cards:
+  - Removed zero-value PEQ pill.
+  - `PEQ N` now renders only when `N > 0`.
+
+- Files updated:
+  - `static/app.js`
+  - `static/style.css`
+
+- Validation:
+  - `node --check static/app.js` passed.
+
+### 2026-04-05 (Sync regression fix: false mismatches + noisy review cleanup)
+- Issue investigated:
+  - Sync review showed massive false diffs (thousands in both directions) even when local and device libraries were effectively in sync.
+  - Filenames in preview appeared corrupted/underscored.
+  - Warning list flooded with low-signal entries.
+
+- Root cause:
+  - Filesystem sanitization regex had a malformed character-class escape, causing normal filename characters to be replaced with `_`.
+  - This broke expected path generation, so almost every file looked mismatched.
+
+- Backend fixes (`app.py`):
+  - Corrected invalid-filesystem-char regex:
+    - `_INVALID_FS_CHARS_RE = re.compile(r'[<>:"/\\|?*\\x00-\\x1f]')` (effective pattern now matches only real invalid chars and control range).
+  - Added stricter local track filtering by extension during sync mapping (`_is_music_file_path`) so only music files are considered.
+  - Expanded supported sync extension set for parity with broader library formats.
+  - Added dual-path matching guardrail per track:
+    - considers both rendered template path and original local relative path as valid expected matches.
+    - prevents false diffs when device already has local-structured files but template mapping differs.
+  - Added destination collision detection for rendered paths and emits explicit collision warnings.
+  - Reduced warning noise:
+    - suppresses low-signal “missing metadata” warnings for optional tokens (`track`, `discnumber`, `year`, `genre`, `albumartist`).
+    - caps warning list to 250 entries with overflow summary.
+
+- Sync review UX fix (`static/style.css`):
+  - `Select all` control in sync review header now uses no-wrap and no-shrink behavior for stable alignment.
+
+- Validation:
+  - `python3` AST parse of `app.py` passed.
+  - `node --check static/app.js` passed.
+  - Live AP80 verification (mounted `/Volumes/AP80`, cache from `/Volumes/Storage/Music/FLAC`):
+    - `sync_scan` result: `0` files to copy to device, `0` files to copy to local.
+    - Warnings: `0`.
+    - Device free space read successfully.

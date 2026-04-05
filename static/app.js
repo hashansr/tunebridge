@@ -2735,6 +2735,8 @@ async function syncScanAgain() {
 // SVG icon used for all DAP cards/headers
 const _DAP_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg>`;
 const _IEM_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`;
+const _GEAR_ICON_MUSIC = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>`;
+const _GEAR_ICON_PLAYLIST = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`;
 
 function _prettyModelLabel(model) {
   const raw = String(model || 'generic').trim();
@@ -2748,9 +2750,16 @@ function _prettyModelLabel(model) {
 
 function _dapIdentityLine(dap) {
   const model = _prettyModelLabel(dap.model);
-  const mountLabel = (dap.active_mount_label || dap.active_mount_path || dap.mount_path || '').trim();
+  const rawMount = (dap.active_mount_label || dap.active_mount_path || dap.mount_path || '').trim();
+  const mountLabel = rawMount.replace(/\s*\(External Drive\)\s*$/i, '');
   if (!mountLabel) return model;
-  const shortMount = mountLabel.replace(/\s*\(External Drive\)\s*$/i, '');
+  let shortMount = mountLabel;
+  const volMatch = mountLabel.match(/\/Volumes\/([^/]+)/i);
+  if (volMatch && volMatch[1]) {
+    shortMount = volMatch[1];
+  } else if (mountLabel.includes('/') || mountLabel.includes('\\')) {
+    shortMount = mountLabel.split(/[\\/]/).filter(Boolean).pop() || mountLabel;
+  }
   return `${model} • ${shortMount}`;
 }
 
@@ -2759,12 +2768,15 @@ function _dapMusicStatus(summary = {}) {
   const remove = Number(summary.music_to_remove_count || 0);
   const out = Number(summary.music_out_of_sync_count || (add + remove));
   if (out <= 0) {
-    return { className: 'gear-sync-ok', text: 'Music: Synced', detail: '' };
+    return { className: 'gear-sync-ok', text: 'Library in sync', detail: '' };
   }
+  const parts = [];
+  if (add > 0) parts.push(`+${add} to copy`);
+  if (remove > 0) parts.push(`${remove} extra on device`);
   return {
     className: 'gear-sync-stale',
-    text: `Music: ${add} new / ${remove} removed`,
-    detail: '',
+    text: 'Library update needed',
+    detail: parts.join(' · '),
   };
 }
 
@@ -2773,16 +2785,20 @@ function _dapPlaylistStatus(dap, summary = {}) {
   const never = Number(dap.never_exported || 0);
   const out = Number(summary.playlist_out_of_sync_count || (stale + never));
   if (out <= 0) {
-    return { className: 'gear-sync-ok', text: 'Playlists: Synced', detail: '' };
+    return { className: 'gear-sync-ok', text: 'Playlists up to date', detail: '' };
   }
   const detailParts = [];
   if (never > 0) detailParts.push(`${never} new`);
-  if (stale > 0) detailParts.push(`${stale} out of sync`);
+  if (stale > 0) detailParts.push(`${stale} changed`);
   return {
     className: 'gear-sync-stale',
-    text: 'Playlists: Out of sync',
+    text: 'Playlists need sync',
     detail: detailParts.join(' · '),
   };
+}
+
+function _gearStatusPillHtml(iconSvg, className, text) {
+  return `<span class="gear-sync-badge ${className}"><span class="gear-pill-icon">${iconSvg}</span><span>${esc(text)}</span></span>`;
 }
 
 async function loadDapsView() {
@@ -2799,10 +2815,9 @@ async function loadDapsView() {
     const playlistStatus = _dapPlaylistStatus(d, summary);
     const statusClass = d.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected';
     const statusText = d.mounted ? 'Connected' : 'Not connected';
-    const playlistPillText = playlistStatus.detail
-      ? `${playlistStatus.text} (${playlistStatus.detail})`
-      : playlistStatus.text;
     const detailParts = [];
+    if (musicStatus.detail) detailParts.push(musicStatus.detail);
+    if (playlistStatus.detail) detailParts.push(playlistStatus.detail);
     if (spaceShort > 0) detailParts.push(`Short ${_fmtBytes(spaceShort)}`);
     const details = detailParts.length ? `<span class="gear-card-meta-text">${detailParts.join(' · ')}</span>` : '';
     return `
@@ -2813,10 +2828,10 @@ async function loadDapsView() {
           <div class="gear-card-name">${esc(d.name)}</div>
           <span class="gear-badge ${statusClass}">${statusText}</span>
         </div>
-        <div class="gear-card-subline" title="${esc(_dapIdentityLine(d))}">${esc(_dapIdentityLine(d))}</div>
+        <div class="gear-card-subline">${esc(_dapIdentityLine(d))}</div>
         <div class="gear-card-dap-bottom">
-          <span class="gear-sync-badge ${musicStatus.className}">${esc(musicStatus.text)}</span>
-          <span class="gear-sync-badge ${playlistStatus.className}">${esc(playlistPillText)}</span>
+          ${_gearStatusPillHtml(_GEAR_ICON_MUSIC, musicStatus.className, musicStatus.text)}
+          ${_gearStatusPillHtml(_GEAR_ICON_PLAYLIST, playlistStatus.className, playlistStatus.text)}
           ${details}
         </div>
       </div>
@@ -2853,12 +2868,7 @@ function _renderIemCards(iems) {
   grid.innerHTML = iems.map(i => {
     const badgeClass  = i.type === 'Headphone' ? 'gear-badge-hp' : 'gear-badge-iem';
     const peqCount    = i.peq_profiles?.length || 0;
-    const sourceCount = (i.squig_sources?.length || (i.squig_url ? 1 : 0)) || 0;
-    const hasFr = !!(i.has_measurement || sourceCount > 0 || i.squig_url);
-    const peqStr      = peqCount ? `PEQ ${peqCount}` : 'PEQ 0';
-    const sourceStr   = `Sources ${sourceCount}`;
-    const frClass     = hasFr ? 'gear-sync-ok' : 'gear-sync-never';
-    const frText      = hasFr ? 'FR Ready' : 'No FR';
+    const peqStr      = peqCount > 0 ? `PEQ ${peqCount}` : '';
     const isSelected  = _iemCompareSelected.has(i.id);
     const clickAction = _iemCompareMode
       ? `App.toggleIemCompareSelect('${i.id}', event)`
@@ -2870,9 +2880,7 @@ function _renderIemCards(iems) {
         <div class="gear-card-name">${esc(i.name)}</div>
         <div class="gear-card-row">
           <span class="gear-badge ${badgeClass}">${esc(i.type || 'IEM')}</span>
-          <span class="gear-sync-badge ${frClass}">${frText}</span>
-          <span class="gear-sync-badge gear-sync-neutral">${sourceStr}</span>
-          <span class="gear-sync-badge gear-sync-neutral">${peqStr}</span>
+          ${peqStr ? `<span class="gear-sync-badge gear-sync-neutral">${peqStr}</span>` : ''}
         </div>
       </div>
       ${_iemCompareMode ? `<div class="gear-compare-check${isSelected ? ' checked' : ''}"></div>` : ''}
@@ -3102,9 +3110,12 @@ async function showDapDetail(id) {
           <span class="gear-badge ${dap.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected'}">
             ${dap.mounted ? '● Connected' : '○ Not connected'}
           </span>
-          <span class="gear-sync-badge ${musicStatus.className}">${esc(musicStatus.text)}</span>
-          <span class="gear-sync-badge ${playlistStatus.className}">${esc(playlistStatus.text)}${playlistStatus.detail ? ` · ${esc(playlistStatus.detail)}` : ''}</span>
+          ${_gearStatusPillHtml(_GEAR_ICON_MUSIC, musicStatus.className, musicStatus.text)}
+          ${_gearStatusPillHtml(_GEAR_ICON_PLAYLIST, playlistStatus.className, playlistStatus.text)}
         </div>
+        ${(musicStatus.detail || playlistStatus.detail)
+          ? `<div class="gear-card-meta-text" style="margin-top:6px">${esc([musicStatus.detail, playlistStatus.detail].filter(Boolean).join(' · '))}</div>`
+          : ''}
         <div class="gear-edit-actions">
           <button class="btn-secondary" onclick="App.showEditDapModal('${dap.id}')">Edit</button>
           <button class="btn-danger-sm" onclick="App.deleteDap('${dap.id}')">Delete</button>
