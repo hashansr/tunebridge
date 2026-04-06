@@ -4867,18 +4867,6 @@ tbody tr:hover {
   color: var(--text-muted);
 }
 
-/* Apply Profile button */
-.peq-apply-btn {
-  width: 100%;
-  display: block;
-  text-align: center;
-  padding: 10px;
-  margin-top: 14px;
-  font-size: 13px;
-  font-weight: 600;
-  border-radius: 9999px;
-}
-
 /* Volume slider */
 .player-vol-slider {
   -webkit-appearance: none;
@@ -5087,7 +5075,7 @@ tbody tr:hover {
 .peq-editor-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
   margin-bottom: 12px;
 }
@@ -5123,6 +5111,12 @@ tbody tr:hover {
   padding: 8px 0 12px;
   border-bottom: 1px solid rgba(173,198,255,0.10);
   margin-bottom: 10px;
+}
+
+.peq-preamp-input {
+  width: 220px;
+  max-width: 100%;
+  text-align: left;
 }
 
 .peq-editor-band-header,
@@ -5211,10 +5205,30 @@ tbody tr:hover {
 
 .peq-editor-footer {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
+  align-items: center;
   padding-top: 16px;
   border-top: 1px solid rgba(173,198,255,0.10);
   margin-top: 12px;
+}
+
+.peq-editor-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.peq-copy-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.peq-copy-dap-select {
+  width: 180px;
+  min-width: 180px;
 }
 
 .queue-list {
@@ -5280,6 +5294,17 @@ tbody tr:hover {
   }
   .peq-save-profile-grid {
     grid-template-columns: 1fr;
+  }
+  .peq-editor-footer-actions {
+    justify-content: stretch;
+  }
+  .peq-editor-footer-actions > button,
+  .peq-copy-wrap {
+    width: 100%;
+  }
+  .peq-copy-dap-select {
+    width: 100%;
+    min-width: 0;
   }
 }
 @media (max-width: 620px) {

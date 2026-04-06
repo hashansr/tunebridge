@@ -99,6 +99,8 @@ const _STAR_OUTLINE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="non
 const _STAR_FILLED = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1"><polygon points="12 2.8 15.1 9 22 9.9 17 14.6 18.2 21.2 12 18 5.8 21.2 7 14.6 2 9.9 8.9 9"/></svg>`;
 const _FAV_PLAYLIST_COVER = 'images/favourite-playlist-cover.png';
 const _CUSTOM_PEQ_KEY = 'tb_custom_peq';
+const _CREATE_PEQ_ID = '__create__';
+const _WORKSPACE_NEW_PEQ_ID = '__new_peq__';
 const _CUSTOM_NO_GAIN_TYPES = new Set(['LPQ', 'HPQ', 'NO', 'AP']);
 let _customPeqEditorState = null;
 let _peqWorkspaceOpen = false;
@@ -109,6 +111,12 @@ let _peqWorkspaceGraphTimer = null;
 let _peqWorkspaceGraphReqId = 0;
 let _peqWorkspaceSelectedIemId = '';
 let _peqWorkspaceSelectedTargetId = '';
+let _peqWorkspaceSelectedPeqId = _WORKSPACE_NEW_PEQ_ID;
+let _peqWorkspaceCurveVisibility = {};
+let _peqWorkspaceConnectedDaps = [];
+let _peqWorkspaceCopyDapId = '';
+let _peqWorkspaceEditContext = null;
+let _peqWorkspaceIemCache = [];
 
 function _isFavourite(type, id) {
   if (!state.favourites[type]) return false;
@@ -5199,6 +5207,51 @@ function _destroyPeqWorkspaceChart() {
     _peqWorkspaceChart.destroy();
     _peqWorkspaceChart = null;
   }
+  const el = document.getElementById('peq-editor-curve-legend');
+  if (el) el.innerHTML = '';
+}
+
+function _renderPeqWorkspaceLegend(datasets) {
+  const el = document.getElementById('peq-editor-curve-legend');
+  if (!el) return;
+  el.innerHTML = datasets.map((ds, i) => {
+    const dash = (ds.borderDash && ds.borderDash.length) ? 'stroke-dasharray="5 4"' : '';
+    const isHidden = ds.hidden === true;
+    return `
+      <div class="curve-legend-item" id="peq-legend-item-${i}">
+        <button class="eye-toggle${isHidden ? ' hidden' : ''}" onclick="App.togglePeqWorkspaceCurve(${i})" title="${isHidden ? 'Show curve' : 'Hide curve'}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+        <svg width="28" height="10" viewBox="0 0 28 10" style="flex-shrink:0;opacity:${isHidden ? '0.35' : '1'}">
+          <line x1="0" y1="5" x2="28" y2="5" stroke="${ds.borderColor}"
+            stroke-width="${ds.borderWidth || 1.5}" ${dash}/>
+        </svg>
+        <span style="opacity:${isHidden ? '0.45' : '1'}">${esc(ds.label)}</span>
+      </div>`;
+  }).join('');
+}
+
+function togglePeqWorkspaceCurve(idx) {
+  if (!_peqWorkspaceChart) return;
+  const nowVisible = !_peqWorkspaceChart.isDatasetVisible(idx);
+  _peqWorkspaceChart.setDatasetVisibility(idx, nowVisible);
+  const ds = _peqWorkspaceChart.data.datasets[idx];
+  if (ds && ds._curveId) _peqWorkspaceCurveVisibility[ds._curveId] = nowVisible;
+  _peqWorkspaceChart.update();
+  const item = document.getElementById(`peq-legend-item-${idx}`);
+  if (!item) return;
+  const btn = item.querySelector('.eye-toggle');
+  if (btn) {
+    btn.classList.toggle('hidden', !nowVisible);
+    btn.title = nowVisible ? 'Hide curve' : 'Show curve';
+  }
+  const svg = item.querySelector('svg:not(.eye-toggle svg)');
+  if (svg) svg.style.opacity = nowVisible ? '1' : '0.35';
+  const label = item.querySelector('span');
+  if (label) label.style.opacity = nowVisible ? '1' : '0.45';
 }
 
 function _schedulePeqWorkspaceGraphRefresh() {
@@ -5215,10 +5268,6 @@ async function _refreshPeqWorkspaceGraph() {
   const canvas = document.getElementById('peq-editor-canvas');
   if (!canvas) return;
   const iemId = _peqWorkspaceSelectedIemId || document.getElementById('peq-workspace-iem-select')?.value || '';
-  if (!iemId) {
-    _destroyPeqWorkspaceChart();
-    return;
-  }
   const reqId = ++_peqWorkspaceGraphReqId;
   const body = {
     custom_peq: _sanitizeCustomPeqState(_customPeqEditorState || _defaultCustomPeqState()),
@@ -5227,9 +5276,11 @@ async function _refreshPeqWorkspaceGraph() {
   if (targetId) body.baseline_ids = [targetId];
   let data;
   try {
-    data = await api(`/iems/${encodeURIComponent(iemId)}/graph/custom`, { method: 'POST', body });
+    data = iemId
+      ? await api(`/iems/${encodeURIComponent(iemId)}/graph/custom`, { method: 'POST', body })
+      : await api('/peq/graph/custom', { method: 'POST', body });
   } catch (e) {
-    if (reqId === _peqWorkspaceGraphReqId) toast('Failed to load Custom EQ graph: ' + e.message);
+    if (reqId === _peqWorkspaceGraphReqId) toast('Failed to load Custom PEQ graph: ' + e.message);
     return;
   }
   if (reqId !== _peqWorkspaceGraphReqId) return;
@@ -5244,13 +5295,13 @@ async function _refreshPeqWorkspaceGraph() {
     beforeDatasetsDraw(chart) {
       const { ctx, chartArea: { left, right, top, bottom }, scales: { x } } = chart;
       const regions = [
-        { f1: 20,   f2: 80,    color: 'rgba(173,198,255,.04)' },
-        { f1: 80,   f2: 300,   color: 'rgba(173,198,255,.025)' },
-        { f1: 300,  f2: 1000,  color: 'rgba(173,198,255,.015)' },
-        { f1: 1000, f2: 4000,  color: 'rgba(173,198,255,.025)' },
-        { f1: 4000, f2: 6000,  color: 'rgba(173,198,255,.04)' },
-        { f1: 6000, f2: 10000, color: 'rgba(173,198,255,.025)' },
-        { f1: 10000,f2: 20000, color: 'rgba(173,198,255,.04)' },
+        { f1: 20,   f2: 80,    color: 'rgba(173,198,255,.04)', label: 'Sub bass' },
+        { f1: 80,   f2: 300,   color: 'rgba(173,198,255,.025)', label: 'Mid bass' },
+        { f1: 300,  f2: 1000,  color: 'rgba(173,198,255,.015)', label: 'Lower midrange' },
+        { f1: 1000, f2: 4000,  color: 'rgba(173,198,255,.025)', label: 'Upper midrange' },
+        { f1: 4000, f2: 6000,  color: 'rgba(173,198,255,.04)', label: 'Presence region' },
+        { f1: 6000, f2: 10000, color: 'rgba(173,198,255,.025)', label: 'Mid treble' },
+        { f1: 10000,f2: 20000, color: 'rgba(173,198,255,.04)', label: 'Air' },
       ];
       regions.forEach(r => {
         const x1 = Math.max(x.getPixelForValue(r.f1), left);
@@ -5258,6 +5309,18 @@ async function _refreshPeqWorkspaceGraph() {
         ctx.fillStyle = r.color;
         ctx.fillRect(x1, top, x2 - x1, bottom - top);
       });
+      ctx.save();
+      ctx.font = '9px Inter, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      regions.forEach(r => {
+        const x1 = Math.max(x.getPixelForValue(r.f1), left);
+        const x2 = Math.min(x.getPixelForValue(r.f2), right);
+        const cx = (x1 + x2) / 2;
+        if (x2 - x1 > 30) ctx.fillText(r.label, cx, bottom - 2);
+      });
+      ctx.restore();
     },
   };
   function _workspaceCurveColor(id, backendColor) {
@@ -5268,12 +5331,14 @@ async function _refreshPeqWorkspaceGraph() {
   }
   const datasets = curves.map(c => ({
     label: c.label,
+    _curveId: c.id,
     data: c.data.map(([f, spl]) => ({ x: f, y: spl })),
     borderColor: _workspaceCurveColor(c.id, c.color),
     borderWidth: c.id.startsWith('baseline-') ? 1.35 : c.dash ? 1.25 : 1.85,
     borderDash: c.dash ? [6, 4] : undefined,
     pointRadius: 0,
     tension: 0.28,
+    hidden: _peqWorkspaceCurveVisibility[c.id] === false,
   }));
   _peqWorkspaceChart = new Chart(canvas, {
     type: 'line',
@@ -5338,31 +5403,40 @@ async function _refreshPeqWorkspaceGraph() {
       },
     },
   });
+  _renderPeqWorkspaceLegend(datasets);
 }
 
 async function _loadPeqWorkspaceContext() {
   const iemSel = document.getElementById('peq-workspace-iem-select');
+  const peqSel = document.getElementById('peq-workspace-peq-select');
   const targetSel = document.getElementById('peq-workspace-target-select');
   if (iemSel) {
-    iemSel.innerHTML = '<option value="">Select IEM for profile save/copy</option>';
+    iemSel.innerHTML = '<option value="">No IEM / Headphone selected</option>';
+  }
+  if (peqSel) {
+    peqSel.innerHTML = `<option value="${_WORKSPACE_NEW_PEQ_ID}">New PEQ</option>`;
   }
   if (targetSel) {
     targetSel.innerHTML = '<option value="">No target selected</option>';
   }
   try {
-    const [iems, baselines] = await Promise.all([
+    const [iems, baselines, daps] = await Promise.all([
       api('/iems').catch(() => []),
       api('/baselines').catch(() => []),
+      api('/daps').catch(() => []),
     ]);
     if (iemSel) {
-      iemSel.innerHTML += (iems || []).map(i => `<option value="${esc(i.id)}">${esc(i.name)}</option>`).join('');
+      _peqWorkspaceIemCache = (iems || []).slice();
+      const measured = _peqWorkspaceIemCache.filter(i => i.has_measurement);
+      iemSel.innerHTML += measured.map(i => `<option value="${esc(i.id)}">${esc(i.name)}</option>`).join('');
       const saveSel = document.getElementById('peq-save-iem-select');
-      const candidate = _peqWorkspaceSelectedIemId || (saveSel && saveSel.value) || _currentIemId || '';
-      const hasCandidate = candidate && (iems || []).some(i => i.id === candidate);
+      const candidate = _peqWorkspaceSelectedIemId || (saveSel && saveSel.value) || '';
+      const hasCandidate = candidate && measured.some(i => i.id === candidate);
       if (hasCandidate) iemSel.value = candidate;
-      else if ((iems || []).length) iemSel.value = iems[0].id;
+      else iemSel.value = '';
       _peqWorkspaceSelectedIemId = iemSel.value || '';
     }
+    _refreshPeqWorkspacePeqOptions();
     if (targetSel) {
       targetSel.innerHTML += (baselines || []).map(b => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
       if (_peqWorkspaceSelectedTargetId && (baselines || []).some(b => b.id === _peqWorkspaceSelectedTargetId)) {
@@ -5370,7 +5444,54 @@ async function _loadPeqWorkspaceContext() {
       }
       _peqWorkspaceSelectedTargetId = targetSel.value || '';
     }
+    _refreshPeqWorkspaceCopyTargets(daps || []);
   } catch (_) {}
+}
+
+function _refreshPeqWorkspacePeqOptions() {
+  const peqSel = document.getElementById('peq-workspace-peq-select');
+  if (!peqSel) return;
+  const iemId = _peqWorkspaceSelectedIemId || document.getElementById('peq-workspace-iem-select')?.value || '';
+  const iem = (_peqWorkspaceIemCache || []).find(i => i.id === iemId);
+  const profiles = Array.isArray(iem?.peq_profiles) ? iem.peq_profiles : [];
+  peqSel.innerHTML = `<option value="${_WORKSPACE_NEW_PEQ_ID}">New PEQ</option>` +
+    profiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+  if (_peqWorkspaceSelectedPeqId && profiles.some(p => p.id === _peqWorkspaceSelectedPeqId)) {
+    peqSel.value = _peqWorkspaceSelectedPeqId;
+  } else {
+    _peqWorkspaceSelectedPeqId = _WORKSPACE_NEW_PEQ_ID;
+    peqSel.value = _WORKSPACE_NEW_PEQ_ID;
+  }
+}
+
+function _refreshPeqWorkspaceCopyTargets(allDaps) {
+  const wrap = document.getElementById('peq-copy-wrap');
+  const sel = document.getElementById('peq-copy-dap-select');
+  const btn = document.getElementById('peq-copy-btn');
+  if (!wrap || !sel || !btn) return;
+  const connected = (allDaps || []).filter(d => d.mounted);
+  _peqWorkspaceConnectedDaps = connected;
+  if (!connected.length) {
+    wrap.style.display = 'none';
+    _peqWorkspaceCopyDapId = '';
+    return;
+  }
+  wrap.style.display = '';
+  if (connected.length === 1) {
+    _peqWorkspaceCopyDapId = connected[0].id;
+    sel.style.display = 'none';
+    btn.textContent = `Copy to ${connected[0].name}`;
+    return;
+  }
+  btn.textContent = 'Copy to Selected DAP';
+  sel.style.display = '';
+  sel.innerHTML = connected.map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
+  if (_peqWorkspaceCopyDapId && connected.some(d => d.id === _peqWorkspaceCopyDapId)) {
+    sel.value = _peqWorkspaceCopyDapId;
+  } else {
+    _peqWorkspaceCopyDapId = connected[0].id;
+    sel.value = _peqWorkspaceCopyDapId;
+  }
 }
 
 function _hidePeqWorkspace(opts = {}) {
@@ -5382,8 +5503,9 @@ function _hidePeqWorkspace(opts = {}) {
     clearTimeout(_peqWorkspaceGraphTimer);
     _peqWorkspaceGraphTimer = null;
   }
-  if (_peqWorkspaceOpen && opts.toast !== false) toast('Custom EQ workspace closed.');
+  if (_peqWorkspaceOpen && opts.toast !== false) toast('Custom PEQ workspace closed.');
   _peqWorkspaceOpen = false;
+  _peqWorkspaceEditContext = null;
 }
 
 function isPeqWorkspaceOpen() {
@@ -5393,7 +5515,7 @@ function isPeqWorkspaceOpen() {
 function _guardPeqEditorNavigation() {
   if (!_peqWorkspaceOpen) return true;
   if (_peqWorkspaceDirty) {
-    const shouldSave = window.confirm('Save Custom EQ changes before leaving? Click OK to save, or Cancel to discard.');
+    const shouldSave = window.confirm('Save Custom PEQ changes before leaving? Click OK to save, or Cancel to discard.');
     if (shouldSave) {
       const st = _saveCustomPeqState();
       st.enabled = true;
@@ -5442,6 +5564,45 @@ function _apoFromCustomState(state) {
   return lines.join('\n') + '\n';
 }
 
+function _customStateFromProfile(profile) {
+  const st = _defaultCustomPeqState();
+  if (!profile || typeof profile !== 'object') return st;
+  st.enabled = true;
+  st.preamp_db = Math.max(-30, Math.min(30, Number(profile.preamp_db) || 0));
+  const filters = Array.isArray(profile.filters) ? profile.filters : [];
+  for (let i = 0; i < Math.min(10, filters.length); i++) {
+    const f = filters[i] || {};
+    const t = String(f.type || 'PK').toUpperCase();
+    st.bands[i] = {
+      enabled: f.enabled !== false,
+      type: ['PK', 'LSC', 'HSC', 'LPQ', 'HPQ', 'NO', 'AP'].includes(t) ? t : 'PK',
+      fc: Math.max(20, Math.min(20000, Number(f.fc) || 1000)),
+      gain: Math.max(-30, Math.min(30, Number(f.gain) || 0)),
+      q: Math.max(0.1, Math.min(10, Number(f.q) || 1.0)),
+    };
+  }
+  return st;
+}
+
+async function _saveCustomProfileToIem(iemId, name, overwritePeqId = '') {
+  const st = _loadCustomPeqState();
+  const content = _apoFromCustomState(st);
+  const fileName = `${name.replace(/[^\w\- ]+/g, '').trim() || 'Custom EQ'}.txt`;
+  const formData = new FormData();
+  formData.append('file', new Blob([content], { type: 'text/plain' }), fileName);
+  formData.append('name', name);
+  const url = overwritePeqId
+    ? `/api/iems/${encodeURIComponent(iemId)}/peq/${encodeURIComponent(overwritePeqId)}`
+    : `/api/iems/${encodeURIComponent(iemId)}/peq`;
+  const method = overwritePeqId ? 'PUT' : 'POST';
+  const res = await fetch(url, { method, body: formData });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Could not save profile' }));
+    throw new Error(err.error || 'Could not save profile');
+  }
+  return res.json();
+}
+
 function renderPeqEditorBands() {
   const wrap = document.getElementById('peq-editor-bands');
   if (!wrap) return;
@@ -5476,15 +5637,54 @@ function renderPeqEditorBands() {
   }).join('');
 }
 
-async function openPeqEditor() {
+async function openPeqEditor(opts = {}) {
   if (_peqWorkspaceOpen) return;
   const panel = document.getElementById('peq-workspace');
   if (!panel) return;
-  _customPeqEditorState = _loadCustomPeqState();
-  _customPeqEditorState.enabled = true;
-  _saveCustomPeqState();
+  _peqWorkspaceEditContext = null;
+  if (opts.mode === 'edit_profile' && opts.iemId && opts.peqId) {
+    try {
+      const iem = await api(`/iems/${encodeURIComponent(opts.iemId)}`);
+      const profile = (iem.peq_profiles || []).find(p => p.id === opts.peqId);
+      if (profile) {
+        _customPeqEditorState = _customStateFromProfile(profile);
+        _saveCustomPeqState();
+        _peqWorkspaceEditContext = { iemId: opts.iemId, peqId: opts.peqId, peqName: profile.name || 'PEQ Profile' };
+        _peqWorkspaceSelectedIemId = opts.iemId;
+        _peqWorkspaceSelectedPeqId = opts.peqId;
+        if ((profile.filters || []).length > 10) {
+          toast('Only the first 10 filters are editable in Custom PEQ workspace.');
+        }
+      } else {
+        _customPeqEditorState = _loadCustomPeqState();
+      }
+    } catch (_) {
+      _customPeqEditorState = _loadCustomPeqState();
+      toast('Could not load selected PEQ. Opening Custom PEQ workspace with current state.');
+    }
+  } else if (opts.mode === 'create') {
+    _customPeqEditorState = _defaultCustomPeqState();
+    _customPeqEditorState.enabled = true;
+    _saveCustomPeqState();
+    _peqWorkspaceSelectedIemId = opts.iemId || '';
+    _peqWorkspaceSelectedPeqId = _WORKSPACE_NEW_PEQ_ID;
+  } else {
+    _customPeqEditorState = _loadCustomPeqState();
+    _customPeqEditorState.enabled = true;
+    _saveCustomPeqState();
+  }
   if (Player?.setCustomPeqEnabled) Player.setCustomPeqEnabled(true);
   await _loadPeqWorkspaceContext();
+  _refreshPeqWorkspacePeqOptions();
+  const peqSel = document.getElementById('peq-workspace-peq-select');
+  if (peqSel) {
+    if (_peqWorkspaceSelectedPeqId && Array.from(peqSel.options).some(o => o.value === _peqWorkspaceSelectedPeqId)) {
+      peqSel.value = _peqWorkspaceSelectedPeqId;
+    } else {
+      _peqWorkspaceSelectedPeqId = _WORKSPACE_NEW_PEQ_ID;
+      peqSel.value = _WORKSPACE_NEW_PEQ_ID;
+    }
+  }
   const preampInput = document.getElementById('peq-preamp');
   if (preampInput) preampInput.value = _customPeqEditorState.preamp_db.toFixed(1);
   renderPeqEditorBands();
@@ -5493,26 +5693,60 @@ async function openPeqEditor() {
   _peqWorkspaceOpen = true;
   _snapshotPeqWorkspace();
   _schedulePeqWorkspaceGraphRefresh();
-  toast('Custom EQ workspace opened.');
+  toast('Custom PEQ workspace opened.');
 }
 
 function closePeqEditor() {
   _guardPeqEditorNavigation();
 }
 
-function applyAndClosePeqEditor() {
+async function applyAndClosePeqEditor() {
+  if (_peqWorkspaceEditContext?.iemId && _peqWorkspaceEditContext?.peqId) {
+    const overwrite = await _showConfirm({
+      title: 'Save PEQ Changes',
+      message: `Overwrite "${_peqWorkspaceEditContext.peqName}"? Choose Overwrite to replace it, or Cancel to save as a new profile.`,
+      okText: 'Overwrite',
+      danger: false,
+    });
+    if (overwrite) {
+      try {
+        await _saveCustomProfileToIem(
+          _peqWorkspaceEditContext.iemId,
+          _peqWorkspaceEditContext.peqName,
+          _peqWorkspaceEditContext.peqId
+        );
+        if (Player?.onPeqIemChange && Player?.onPeqProfileChange) {
+          await Player.onPeqIemChange(_peqWorkspaceEditContext.iemId);
+          await Player.onPeqProfileChange(_peqWorkspaceEditContext.peqId);
+        }
+        toast(`Updated "${_peqWorkspaceEditContext.peqName}".`);
+        _snapshotPeqWorkspace();
+        _hidePeqWorkspace({ toast: false });
+        return;
+      } catch (e) {
+        toast('Could not overwrite profile: ' + e.message);
+        return;
+      }
+    } else {
+      await saveCustomPeqAsProfile({
+        iemId: _peqWorkspaceEditContext.iemId,
+        name: `${_peqWorkspaceEditContext.peqName} Copy`,
+      });
+      return;
+    }
+  }
   const st = _saveCustomPeqState();
   st.enabled = true;
   _saveCustomPeqState();
   Player?.applyCustomPeq?.(st);
   _snapshotPeqWorkspace();
-  toast('Custom EQ saved.');
+  toast('Custom PEQ saved.');
   _hidePeqWorkspace({ toast: false });
 }
 
 async function resetCustomPeq() {
   const ok = await _showConfirm({
-    title: 'Reset Custom EQ',
+    title: 'Reset Custom PEQ',
     message: 'Reset all 10 bands and preamp to defaults?',
     okText: 'Reset',
     danger: false,
@@ -5609,6 +5843,38 @@ function onPeqWorkspaceIemChange(iemId) {
   _peqWorkspaceSelectedIemId = iemId || '';
   const saveSel = document.getElementById('peq-save-iem-select');
   if (saveSel && _peqWorkspaceSelectedIemId) saveSel.value = _peqWorkspaceSelectedIemId;
+  _peqWorkspaceSelectedPeqId = _WORKSPACE_NEW_PEQ_ID;
+  _refreshPeqWorkspacePeqOptions();
+  _schedulePeqWorkspaceGraphRefresh();
+}
+
+function onPeqWorkspacePeqChange(peqId) {
+  _peqWorkspaceSelectedPeqId = peqId || _WORKSPACE_NEW_PEQ_ID;
+  if (_peqWorkspaceSelectedPeqId === _WORKSPACE_NEW_PEQ_ID) {
+    _peqWorkspaceEditContext = null;
+    _customPeqEditorState = _defaultCustomPeqState();
+    _customPeqEditorState.enabled = true;
+    _saveCustomPeqState();
+    const preampInput = document.getElementById('peq-preamp');
+    if (preampInput) preampInput.value = _customPeqEditorState.preamp_db.toFixed(1);
+    renderPeqEditorBands();
+    Player?.applyCustomPeq?.(_customPeqEditorState);
+    _refreshPeqWorkspaceDirty();
+    _schedulePeqWorkspaceGraphRefresh();
+    return;
+  }
+  const iemId = _peqWorkspaceSelectedIemId || document.getElementById('peq-workspace-iem-select')?.value || '';
+  const iem = (_peqWorkspaceIemCache || []).find(i => i.id === iemId);
+  const profile = (iem?.peq_profiles || []).find(p => p.id === _peqWorkspaceSelectedPeqId);
+  if (!profile) return;
+  _customPeqEditorState = _customStateFromProfile(profile);
+  _saveCustomPeqState();
+  _peqWorkspaceEditContext = { iemId, peqId: profile.id, peqName: profile.name || 'PEQ Profile' };
+  const preampInput = document.getElementById('peq-preamp');
+  if (preampInput) preampInput.value = _customPeqEditorState.preamp_db.toFixed(1);
+  renderPeqEditorBands();
+  Player?.applyCustomPeq?.(_customPeqEditorState);
+  _refreshPeqWorkspaceDirty();
   _schedulePeqWorkspaceGraphRefresh();
 }
 
@@ -5617,7 +5883,7 @@ function onPeqWorkspaceTargetChange(targetId) {
   _schedulePeqWorkspaceGraphRefresh();
 }
 
-async function saveCustomPeqAsProfile() {
+async function saveCustomPeqAsProfile(prefill = {}) {
   const panel = document.getElementById('peq-save-profile-panel');
   if (!panel) return;
   const isOpen = panel.style.display === 'block';
@@ -5627,6 +5893,10 @@ async function saveCustomPeqAsProfile() {
   }
   _renderCustomPeqSavePanel(true);
   await _loadPeqSaveIems();
+  const iemSel = document.getElementById('peq-save-iem-select');
+  const nameEl = document.getElementById('peq-save-name');
+  if (iemSel && prefill.iemId) iemSel.value = prefill.iemId;
+  if (nameEl && prefill.name) nameEl.value = prefill.name;
 }
 
 function cancelCustomPeqSaveProfile() {
@@ -5653,17 +5923,12 @@ async function confirmCustomPeqSaveProfile() {
     errEl.style.display = 'block';
     return;
   }
-  const content = _apoFromCustomState(st);
-  const fileName = `${name.replace(/[^\w\- ]+/g, '').trim() || 'Custom EQ'}.txt`;
-  const formData = new FormData();
-  formData.append('file', new Blob([content], { type: 'text/plain' }), fileName);
-  formData.append('name', name);
   try {
-    const res = await fetch(`/api/iems/${encodeURIComponent(iemId)}/peq`, { method: 'POST', body: formData });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Could not save profile' }));
-      throw new Error(err.error || 'Could not save profile');
-    }
+    const created = await _saveCustomProfileToIem(iemId, name);
+    _peqWorkspaceSelectedIemId = iemId;
+    _peqWorkspaceSelectedPeqId = created?.id || _WORKSPACE_NEW_PEQ_ID;
+    await _loadPeqWorkspaceContext();
+    _refreshPeqWorkspacePeqOptions();
     toast(`Saved "${name}" to selected IEM.`);
     nameEl.value = '';
     _snapshotPeqWorkspace();
@@ -5681,42 +5946,36 @@ function downloadCustomPeqTxt() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'Custom EQ.txt';
+  a.download = 'Custom PEQ.txt';
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  toast('Custom EQ .txt downloaded.');
+  toast('Custom PEQ .txt downloaded.');
 }
 
 async function copyCustomPeqToConnectedDap() {
   const iemSel = document.getElementById('peq-workspace-iem-select');
+  const dapSel = document.getElementById('peq-copy-dap-select');
   const iemId = iemSel ? iemSel.value : '';
   if (!iemId) {
     toast('Select an IEM first.');
     return;
   }
-  const daps = await api('/daps').catch(() => []);
-  const connected = (daps || []).find(d => d.mounted);
-  if (!connected) {
+  if (!_peqWorkspaceConnectedDaps.length) {
     toast('No connected DAP found.');
     return;
   }
-  const profileName = `Custom EQ ${new Date().toISOString().slice(0, 19).replace('T', ' ')}`;
-  const st = _loadCustomPeqState();
-  const txt = _apoFromCustomState(st);
-  const formData = new FormData();
-  formData.append('file', new Blob([txt], { type: 'text/plain' }), `${profileName}.txt`);
-  formData.append('name', profileName);
+  let connected = _peqWorkspaceConnectedDaps[0];
+  if (_peqWorkspaceConnectedDaps.length > 1) {
+    const selectedId = (dapSel && dapSel.value) || _peqWorkspaceCopyDapId || '';
+    const picked = _peqWorkspaceConnectedDaps.find(d => d.id === selectedId);
+    if (picked) connected = picked;
+    _peqWorkspaceCopyDapId = connected.id;
+  }
+  const profileName = `Custom PEQ ${new Date().toISOString().slice(0, 19).replace('T', ' ')}`;
   try {
-    const created = await fetch(`/api/iems/${encodeURIComponent(iemId)}/peq`, { method: 'POST', body: formData })
-      .then(async r => {
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({ error: 'Could not save profile' }));
-          throw new Error(err.error || 'Could not save profile');
-        }
-        return r.json();
-      });
+    const created = await _saveCustomProfileToIem(iemId, profileName);
     await api(`/iems/${iemId}/peq/${created.id}/copy`, { method: 'POST', body: { dap_id: connected.id } });
     _snapshotPeqWorkspace();
     toast(`Copied "${profileName}" to ${connected.name}.`);
@@ -6590,12 +6849,14 @@ const App = {
   onPeqBandQChange,
   onPeqPreampChange,
   onPeqWorkspaceIemChange,
+  onPeqWorkspacePeqChange,
   onPeqWorkspaceTargetChange,
   saveCustomPeqAsProfile,
   cancelCustomPeqSaveProfile,
   confirmCustomPeqSaveProfile,
   downloadCustomPeqTxt,
   copyCustomPeqToConnectedDap,
+  togglePeqWorkspaceCurve,
   isPeqWorkspaceOpen,
   toggleIemCurve,
   runHealthCheck,

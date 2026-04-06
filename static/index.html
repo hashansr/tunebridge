@@ -1391,22 +1391,22 @@
           </div>
           <!-- IEM selector -->
           <div class="peq-section">
-            <div class="peq-section-label">Preset Target</div>
+            <div class="peq-section-label">IEM/Headphone</div>
             <select id="peq-iem-select" class="peq-select" onchange="Player.onPeqIemChange(this.value)">
-              <option value="__custom__">Custom EQ</option>
-              <option value="">— Off —</option>
+              <option value="">— None —</option>
             </select>
           </div>
           <!-- Profile selector -->
-          <div class="peq-section" id="peq-profile-row" style="display:none">
+          <div class="peq-section" id="peq-profile-row">
             <div class="peq-section-label">PEQ Profile</div>
             <select id="peq-profile-select" class="peq-select" onchange="Player.onPeqProfileChange(this.value)">
-              <option value="">— Off —</option>
+              <option value="">— None —</option>
+              <option value="__create__">Create PEQ</option>
             </select>
           </div>
           <div class="peq-section peq-workspace-entry">
-            <button class="btn-secondary peq-open-workspace-btn" onclick="Player.openCustomEqWorkspace()">
-              Open Custom EQ Workspace
+            <button id="peq-workspace-cta" class="btn-secondary peq-open-workspace-btn" onclick="Player.openPeqWorkspaceFromPopover()">
+              Create PEQ
             </button>
           </div>
           <!-- Crossfade -->
@@ -1424,8 +1424,6 @@
               <span>Off</span><span>12s</span>
             </div>
           </div>
-          <!-- Apply -->
-          <button class="btn-primary peq-apply-btn" onclick="Player.applyPeqProfile()">Apply Profile</button>
         </div>
       </div>
       <button class="player-btn player-btn-sm" id="player-queue-btn" onclick="Player.toggleQueue()" title="Queue">
@@ -1464,24 +1462,19 @@
       <div class="peq-workspace-header">
         <div>
           <div class="peq-workspace-overline">Player · Parametric EQ</div>
-          <h2>Custom EQ Workspace</h2>
+          <h2>Custom PEQ Workspace</h2>
           <div class="peq-workspace-subtitle">Tune your EQ live while playback controls stay available.</div>
-        </div>
-        <div class="peq-editor-header-actions">
-          <button class="btn-secondary" onclick="App.resetCustomPeq()">Reset</button>
-          <button class="btn-secondary" onclick="App.downloadCustomPeqTxt()">Download .txt</button>
-          <button class="btn-secondary" onclick="App.copyCustomPeqToConnectedDap()">Copy to Connected DAP</button>
-          <button class="btn-primary" onclick="App.applyAndClosePeqEditor()">Save</button>
-          <button class="modal-close-btn" onclick="App.closePeqEditor()" title="Close">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
         </div>
       </div>
 
       <div class="peq-workspace-context">
         <div class="peq-workspace-field">
-          <label class="peq-editor-col-label">Tune for IEM</label>
+          <label class="peq-editor-col-label">Tune for IEM/Headphone</label>
           <select id="peq-workspace-iem-select" class="peq-select" onchange="App.onPeqWorkspaceIemChange(this.value)"></select>
+        </div>
+        <div class="peq-workspace-field">
+          <label class="peq-editor-col-label">Select PEQ</label>
+          <select id="peq-workspace-peq-select" class="peq-select" onchange="App.onPeqWorkspacePeqChange(this.value)"></select>
         </div>
         <div class="peq-workspace-field">
           <label class="peq-editor-col-label">Reference Target (Optional)</label>
@@ -1504,17 +1497,17 @@
       </div>
 
       <div class="peq-editor-toolbar">
-        <button class="btn-secondary" onclick="App.saveCustomPeqAsProfile()">Save as Profile</button>
         <span id="peq-workspace-dirty" class="peq-workspace-dirty" style="display:none">Unsaved changes</span>
       </div>
 
       <div class="peq-editor-curve-wrap">
         <canvas id="peq-editor-canvas" width="660" height="260"></canvas>
       </div>
+      <div id="peq-editor-curve-legend" class="curve-legend"></div>
 
       <div class="peq-editor-preamp-row">
         <span class="peq-editor-col-label">Preamp</span>
-        <input type="number" id="peq-preamp" class="peq-editor-num-input"
+        <input type="number" id="peq-preamp" class="peq-editor-num-input peq-preamp-input"
                min="-30" max="30" step="0.1" value="0"
                oninput="App.onPeqPreampChange(this.value)" />
         <span class="peq-editor-unit">dB</span>
@@ -1529,6 +1522,20 @@
         <span class="peq-editor-col-label">Q</span>
       </div>
       <div id="peq-editor-bands"></div>
+
+      <div class="peq-editor-footer">
+        <div class="peq-editor-footer-actions">
+          <button class="btn-secondary" onclick="App.resetCustomPeq()">Reset</button>
+          <button class="btn-secondary" onclick="App.downloadCustomPeqTxt()">Download .txt</button>
+          <div id="peq-copy-wrap" class="peq-copy-wrap" style="display:none">
+            <select id="peq-copy-dap-select" class="peq-select peq-copy-dap-select" style="display:none"></select>
+            <button id="peq-copy-btn" class="btn-secondary" onclick="App.copyCustomPeqToConnectedDap()">Copy to Connected DAP</button>
+          </div>
+          <button class="btn-primary" onclick="App.applyAndClosePeqEditor()">Save</button>
+          <button class="btn-secondary" onclick="App.saveCustomPeqAsProfile()">Save As</button>
+          <button class="btn-secondary" onclick="App.closePeqEditor()">Close</button>
+        </div>
+      </div>
     </div>
   </section>
 

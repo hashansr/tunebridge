@@ -80,6 +80,7 @@ const Player = (function () {
 
   const _CUSTOM_PEQ_KEY = 'tb_custom_peq';
   const _CUSTOM_EQ_ID = '__custom__';
+  const _CREATE_PEQ_ID = '__create__';
   const _NO_GAIN_TYPES = new Set(['LPQ', 'HPQ', 'NO', 'AP']);
 
   function _defaultCustomPeqState() {
@@ -1010,6 +1011,14 @@ const Player = (function () {
     btn.classList.toggle('active', !!ps.activePeqProfileId || customActive);
   }
 
+  function _updatePeqWorkspaceCta() {
+    const btn = document.getElementById('peq-workspace-cta');
+    const profileSel = document.getElementById('peq-profile-select');
+    if (!btn || !profileSel) return;
+    const v = profileSel.value || '';
+    btn.textContent = (v && v !== _CREATE_PEQ_ID) ? 'Edit PEQ' : 'Create PEQ';
+  }
+
   function _setPeqPopoverOpen(open) {
     const pop = document.getElementById('peq-popover');
     if (!pop) return;
@@ -1049,40 +1058,26 @@ const Player = (function () {
     if (!sel) return;
     try {
       const iems = await fetch('/api/iems').then(r => r.json());
-      sel.innerHTML = `<option value="${_CUSTOM_EQ_ID}"${ps.activePeqIemId === _CUSTOM_EQ_ID ? ' selected' : ''}>Custom EQ</option>` +
-        `<option value=""${!ps.activePeqIemId ? ' selected' : ''}>— Off —</option>` +
+      const activeIemId = ps.activePeqIemId === _CUSTOM_EQ_ID ? '' : (ps.activePeqIemId || '');
+      sel.innerHTML = `<option value=""${!activeIemId ? ' selected' : ''}>— None —</option>` +
         iems.map(iem =>
-          `<option value="${iem.id}"${iem.id === ps.activePeqIemId ? ' selected' : ''}>${_esc(iem.name)}</option>`
+          `<option value="${iem.id}"${iem.id === activeIemId ? ' selected' : ''}>${_esc(iem.name)}</option>`
         ).join('');
-      await _updatePeqProfileList(ps.activePeqIemId, ps.activePeqProfileId);
+      await _updatePeqProfileList(activeIemId, ps.activePeqProfileId);
+      _updatePeqWorkspaceCta();
     } catch (e) {
       console.warn('Player: IEM fetch failed', e);
     }
   }
 
   async function onPeqIemChange(iemId) {
-    if (iemId === _CUSTOM_EQ_ID) {
-      ps.activePeqIemId = _CUSTOM_EQ_ID;
-      ps.activePeqProfileId = _CUSTOM_EQ_ID;
-      const custom = _loadCustomPeqState();
-      custom.enabled = true;
-      _saveCustomPeqState(custom);
-      if (_ctx) _applyCustomPeq(custom);
-      _updatePeqBtn();
-      _saveState();
-      ps.peqOpen = false;
-      _setPeqPopoverOpen(false);
-      if (typeof App !== 'undefined' && typeof App.openPeqEditor === 'function') {
-        App.openPeqEditor();
-      }
-      return;
-    }
     if (_loadCustomPeqState().enabled) _setCustomPeqEnabled(false);
     ps.activePeqIemId     = iemId || null;
     ps.activePeqProfileId = null;
     await _updatePeqProfileList(iemId, null);
     _buildPeqChain(null);  // clear PEQ until a profile is chosen
     _updatePeqBtn();
+    _updatePeqWorkspaceCta();
     _saveState();
   }
 
@@ -1090,30 +1085,44 @@ const Player = (function () {
     const row = document.getElementById('peq-profile-row');
     const sel = document.getElementById('peq-profile-select');
     if (!row || !sel) return;
-    if (iemId === _CUSTOM_EQ_ID) { row.style.display = 'none'; return; }
-    if (!iemId) { row.style.display = 'none'; return; }
+    const base = `<option value="">— None —</option><option value="${_CREATE_PEQ_ID}">Create PEQ</option>`;
+    row.style.display = '';
+    if (!iemId) {
+      sel.innerHTML = base;
+      _updatePeqWorkspaceCta();
+      return;
+    }
     try {
       const iem      = await fetch(`/api/iems/${iemId}`).then(r => r.json());
       const profiles = iem.peq_profiles || [];
-      if (profiles.length === 0) { row.style.display = 'none'; return; }
-      row.style.display = '';
-      sel.innerHTML = '<option value="">— Off —</option>' +
+      sel.innerHTML = base +
         profiles.map(p =>
           `<option value="${p.id}"${p.id === activeProfileId ? ' selected' : ''}>${_esc(p.name)}</option>`
         ).join('');
+      if (activeProfileId === _CREATE_PEQ_ID) sel.value = _CREATE_PEQ_ID;
     } catch (e) {
-      row.style.display = 'none';
+      sel.innerHTML = base;
     }
+    _updatePeqWorkspaceCta();
   }
 
   async function onPeqProfileChange(profileId) {
-    if (ps.activePeqIemId === _CUSTOM_EQ_ID) return;
+    if (profileId === _CREATE_PEQ_ID) {
+      if (_loadCustomPeqState().enabled) _setCustomPeqEnabled(false);
+      ps.activePeqProfileId = null;
+      _buildPeqChain(null);
+      _updatePeqBtn();
+      _updatePeqWorkspaceCta();
+      _saveState();
+      return;
+    }
     if (_loadCustomPeqState().enabled) _setCustomPeqEnabled(false);
     ps.activePeqProfileId = profileId || null;
     if (_ctx) {
       await _loadAndApplyPeq(ps.activePeqIemId, ps.activePeqProfileId);
     }
     _updatePeqBtn();
+    _updatePeqWorkspaceCta();
     _saveState();
   }
 
@@ -1124,6 +1133,30 @@ const Player = (function () {
       await onPeqProfileChange(profileSel.value);
     }
     // Close popover
+    ps.peqOpen = false;
+    _setPeqPopoverOpen(false);
+  }
+
+  function openPeqWorkspaceFromPopover() {
+    const iemSel = document.getElementById('peq-iem-select');
+    const profileSel = document.getElementById('peq-profile-select');
+    const iemId = iemSel ? (iemSel.value || '') : '';
+    const profileId = profileSel ? (profileSel.value || '') : '';
+    if (typeof App !== 'undefined' && typeof App.openPeqEditor === 'function') {
+      ps.activePeqIemId = _CUSTOM_EQ_ID;
+      ps.activePeqProfileId = _CUSTOM_EQ_ID;
+      const custom = _loadCustomPeqState();
+      custom.enabled = true;
+      _saveCustomPeqState(custom);
+      if (_ctx) _applyCustomPeq(custom);
+      _updatePeqBtn();
+      _saveState();
+      if (iemId && profileId && profileId !== _CREATE_PEQ_ID) {
+        App.openPeqEditor({ mode: 'edit_profile', iemId, peqId: profileId });
+      } else {
+        App.openPeqEditor({ mode: 'create', iemId });
+      }
+    }
     ps.peqOpen = false;
     _setPeqPopoverOpen(false);
   }
@@ -1793,8 +1826,19 @@ const Player = (function () {
     onPeqIemChange,
     onPeqProfileChange,
     applyPeqProfile,
+    openPeqWorkspaceFromPopover,
     openCustomEqWorkspace: () => {
-      if (typeof App !== 'undefined' && typeof App.openPeqEditor === 'function') App.openPeqEditor();
+      if (typeof App !== 'undefined' && typeof App.openPeqEditor === 'function') {
+        ps.activePeqIemId = _CUSTOM_EQ_ID;
+        ps.activePeqProfileId = _CUSTOM_EQ_ID;
+        const custom = _loadCustomPeqState();
+        custom.enabled = true;
+        _saveCustomPeqState(custom);
+        if (_ctx) _applyCustomPeq(custom);
+        _updatePeqBtn();
+        _saveState();
+        App.openPeqEditor({ mode: 'create' });
+      }
     },
     applyCustomPeq: (state) => _applyCustomPeq(state),
     updateBandParam: _updateBandParam,
