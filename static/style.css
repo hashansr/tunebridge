@@ -5108,15 +5108,19 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 0 12px;
-  border-bottom: 1px solid rgba(173,198,255,0.10);
+  padding: 10px 0 12px;
   margin-bottom: 10px;
 }
 
 .peq-preamp-input {
-  width: 220px;
+  width: 80px;
   max-width: 100%;
   text-align: left;
+}
+
+.peq-editor-divider {
+  border-top: 1px solid rgba(173,198,255,0.10);
+  margin: 8px 0 0;
 }
 
 .peq-editor-band-header,

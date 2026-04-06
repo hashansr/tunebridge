@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=28" />
+  <link rel="stylesheet" href="/style.css?v=31" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -602,6 +602,16 @@
             <div class="health-run-row">
               <button class="btn-secondary" id="health-check-btn" onclick="App.runHealthCheck()">Run Health Check</button>
               <span class="health-last-run" id="health-last-run"></span>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h3 class="settings-section-title">Parametric EQ</h3>
+            <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
+              Open Custom PEQ workspace to tune EQ while keeping player controls available.
+            </p>
+            <div class="settings-inline-actions">
+              <button class="btn-secondary" onclick="App.openPeqEditor()">Open Custom PEQ Workspace</button>
             </div>
           </div>
 
@@ -1462,7 +1472,7 @@
       <div class="peq-workspace-header">
         <div>
           <div class="peq-workspace-overline">Player · Parametric EQ</div>
-          <h2>Custom PEQ Workspace</h2>
+          <h2>Custom PEQ</h2>
           <div class="peq-workspace-subtitle">Tune your EQ live while playback controls stay available.</div>
         </div>
       </div>
@@ -1504,6 +1514,7 @@
         <canvas id="peq-editor-canvas" width="660" height="260"></canvas>
       </div>
       <div id="peq-editor-curve-legend" class="curve-legend"></div>
+      <div class="peq-editor-divider"></div>
 
       <div class="peq-editor-preamp-row">
         <span class="peq-editor-col-label">Preamp</span>
@@ -1823,7 +1834,7 @@
     </div>
   </div>
 
-  <script src="/player.js?v=28"></script>
-  <script src="/app.js?v=28"></script>
+  <script src="/player.js?v=31"></script>
+  <script src="/app.js?v=31"></script>
 </body>
 </html>

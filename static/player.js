@@ -1003,12 +1003,29 @@ const Player = (function () {
   });
 
   /* ── PEQ UI ─────────────────────────────────────────────────────────── */
+  function _hasMeaningfulCustomPeq(state) {
+    const st = state || _loadCustomPeqState();
+    if (!st || !st.enabled) return false;
+    if (Math.abs(Number(st.preamp_db) || 0) > 0.0001) return true;
+    const bands = Array.isArray(st.bands) ? st.bands : [];
+    return bands.some(b => b && b.enabled && (
+      Math.abs(Number(b.gain) || 0) > 0.0001 ||
+      Math.abs((Number(b.fc) || 1000) - 1000) > 0.0001 ||
+      Math.abs((Number(b.q) || 1) - 1) > 0.0001 ||
+      String(b.type || 'PK').toUpperCase() !== 'PK'
+    ));
+  }
+
   function _updatePeqBtn() {
     const btn = document.getElementById('player-peq-btn');
     if (!btn) return;
     // 'active' = EQ profile is selected (persistent indicator, independent of popover state)
-    const customActive = ps.activePeqIemId === _CUSTOM_EQ_ID && !!_loadCustomPeqState().enabled;
-    btn.classList.toggle('active', !!ps.activePeqProfileId || customActive);
+    const profileActive = !!ps.activePeqProfileId && ps.activePeqProfileId !== _CUSTOM_EQ_ID;
+    const customActive =
+      ps.activePeqIemId === _CUSTOM_EQ_ID &&
+      ps.activePeqProfileId === _CUSTOM_EQ_ID &&
+      _hasMeaningfulCustomPeq();
+    btn.classList.toggle('active', profileActive || customActive);
   }
 
   function _updatePeqWorkspaceCta() {
@@ -1042,7 +1059,6 @@ const Player = (function () {
     if (typeof App !== 'undefined'
         && typeof App.isPeqWorkspaceOpen === 'function'
         && App.isPeqWorkspaceOpen()) {
-      if (typeof App.closePeqEditor === 'function') App.closePeqEditor();
       return;
     }
     ps.peqOpen = !ps.peqOpen;
@@ -1143,14 +1159,6 @@ const Player = (function () {
     const iemId = iemSel ? (iemSel.value || '') : '';
     const profileId = profileSel ? (profileSel.value || '') : '';
     if (typeof App !== 'undefined' && typeof App.openPeqEditor === 'function') {
-      ps.activePeqIemId = _CUSTOM_EQ_ID;
-      ps.activePeqProfileId = _CUSTOM_EQ_ID;
-      const custom = _loadCustomPeqState();
-      custom.enabled = true;
-      _saveCustomPeqState(custom);
-      if (_ctx) _applyCustomPeq(custom);
-      _updatePeqBtn();
-      _saveState();
       if (iemId && profileId && profileId !== _CREATE_PEQ_ID) {
         App.openPeqEditor({ mode: 'edit_profile', iemId, peqId: profileId });
       } else {
@@ -1829,14 +1837,6 @@ const Player = (function () {
     openPeqWorkspaceFromPopover,
     openCustomEqWorkspace: () => {
       if (typeof App !== 'undefined' && typeof App.openPeqEditor === 'function') {
-        ps.activePeqIemId = _CUSTOM_EQ_ID;
-        ps.activePeqProfileId = _CUSTOM_EQ_ID;
-        const custom = _loadCustomPeqState();
-        custom.enabled = true;
-        _saveCustomPeqState(custom);
-        if (_ctx) _applyCustomPeq(custom);
-        _updatePeqBtn();
-        _saveState();
         App.openPeqEditor({ mode: 'create' });
       }
     },

@@ -5503,7 +5503,6 @@ function _hidePeqWorkspace(opts = {}) {
     clearTimeout(_peqWorkspaceGraphTimer);
     _peqWorkspaceGraphTimer = null;
   }
-  if (_peqWorkspaceOpen && opts.toast !== false) toast('Custom PEQ workspace closed.');
   _peqWorkspaceOpen = false;
   _peqWorkspaceEditContext = null;
 }
@@ -5693,7 +5692,6 @@ async function openPeqEditor(opts = {}) {
   _peqWorkspaceOpen = true;
   _snapshotPeqWorkspace();
   _schedulePeqWorkspaceGraphRefresh();
-  toast('Custom PEQ workspace opened.');
 }
 
 function closePeqEditor() {
@@ -5845,6 +5843,7 @@ function onPeqWorkspaceIemChange(iemId) {
   if (saveSel && _peqWorkspaceSelectedIemId) saveSel.value = _peqWorkspaceSelectedIemId;
   _peqWorkspaceSelectedPeqId = _WORKSPACE_NEW_PEQ_ID;
   _refreshPeqWorkspacePeqOptions();
+  onPeqWorkspacePeqChange(_peqWorkspaceSelectedPeqId);
   _schedulePeqWorkspaceGraphRefresh();
 }
 
@@ -5859,7 +5858,7 @@ function onPeqWorkspacePeqChange(peqId) {
     if (preampInput) preampInput.value = _customPeqEditorState.preamp_db.toFixed(1);
     renderPeqEditorBands();
     Player?.applyCustomPeq?.(_customPeqEditorState);
-    _refreshPeqWorkspaceDirty();
+    _snapshotPeqWorkspace();
     _schedulePeqWorkspaceGraphRefresh();
     return;
   }
@@ -5874,7 +5873,7 @@ function onPeqWorkspacePeqChange(peqId) {
   if (preampInput) preampInput.value = _customPeqEditorState.preamp_db.toFixed(1);
   renderPeqEditorBands();
   Player?.applyCustomPeq?.(_customPeqEditorState);
-  _refreshPeqWorkspaceDirty();
+  _snapshotPeqWorkspace();
   _schedulePeqWorkspaceGraphRefresh();
 }
 

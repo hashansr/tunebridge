@@ -3880,21 +3880,22 @@ def iem_graph_custom(iid):
                            'color': '#53e16f', 'dash': False,
                            'data': _apply_peq(mR, custom_profile)})
 
-    for bl in load_baselines():
-        if baseline_ids and bl.get('id') not in baseline_ids:
-            continue
-        m = bl.get('measurement')
-        if not m:
-            continue
-        ref_spl = _spl_at_1khz(m)
-        offset = (NORM_REF_DB - ref_spl) if ref_spl is not None else 0.0
-        curves.append({
-            'id': f"baseline-{bl['id']}",
-            'label': bl['name'],
-            'color': bl.get('color', '#f0b429'),
-            'dash': True,
-            'data': _shift(m, offset),
-        })
+    if baseline_ids:
+        for bl in load_baselines():
+            if bl.get('id') not in baseline_ids:
+                continue
+            m = bl.get('measurement')
+            if not m:
+                continue
+            ref_spl = _spl_at_1khz(m)
+            offset = (NORM_REF_DB - ref_spl) if ref_spl is not None else 0.0
+            curves.append({
+                'id': f"baseline-{bl['id']}",
+                'label': bl['name'],
+                'color': bl.get('color', '#f0b429'),
+                'dash': True,
+                'data': _shift(m, offset),
+            })
 
     available_sources = [
         {'id': s.get('id'), 'label': s.get('label'), 'url': s.get('url', '')}
@@ -3962,21 +3963,22 @@ def peq_graph_custom_without_iem():
         'dash': False,
         'data': custom_curve,
     }]
-    for bl in load_baselines():
-        if baseline_ids and bl.get('id') not in baseline_ids:
-            continue
-        m = bl.get('measurement')
-        if not m:
-            continue
-        ref_spl = _spl_at_1khz(m)
-        offset = (NORM_REF_DB - ref_spl) if ref_spl is not None else 0.0
-        curves.append({
-            'id': f"baseline-{bl['id']}",
-            'label': bl['name'],
-            'color': bl.get('color', '#f0b429'),
-            'dash': True,
-            'data': _shift(m, offset),
-        })
+    if baseline_ids:
+        for bl in load_baselines():
+            if bl.get('id') not in baseline_ids:
+                continue
+            m = bl.get('measurement')
+            if not m:
+                continue
+            ref_spl = _spl_at_1khz(m)
+            offset = (NORM_REF_DB - ref_spl) if ref_spl is not None else 0.0
+            curves.append({
+                'id': f"baseline-{bl['id']}",
+                'label': bl['name'],
+                'color': bl.get('color', '#f0b429'),
+                'dash': True,
+                'data': _shift(m, offset),
+            })
     return jsonify({'curves': curves})
 
 
