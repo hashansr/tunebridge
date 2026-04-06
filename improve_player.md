@@ -1,417 +1,730 @@
-# TuneBridge Player — Review, Issues & Improvement Plan
+# TuneBridge Player — Implementation Spec
 
-## Overview
+## Scope
 
-`player.js` (~1,570 lines) is a self-contained IIFE module that manages a dual-element A/B audio engine
-with crossfade, a Web Audio PEQ chain, queue management, and state persistence.
-The architecture is generally solid; the issues below are targeted rather than structural.
+This document is a spec for an implementing agent. It covers three categories of work:
 
----
+1. **Bug fixes** — correctness issues in `static/player.js`
+2. **Design alignment** — CSS fixes in `static/style.css` to match `master-design.md`
+3. **New feature** — Custom 10-band PEQ editor (frontend only, no backend changes)
 
-## Bug Report: Seek Position Desync on App Close
+Files touched: `static/player.js`, `static/style.css`, `static/index.html`
 
-**Symptom (user-reported):** After closing and reopening the app near the end of a song, the progress
-indicator shows the saved position, but the audio plays from an earlier (sometimes much earlier) point.
-This can result in the indicator showing the song has ended while audio continues playing.
-
-### Root Cause 1 — State save lag (5–30 seconds)
-
-State is written to disk in two ways:
-
-| Mechanism | Granularity | Path |
-|---|---|---|
-| `localStorage` throttle (`_saveSeekThrottle`) | 5-second buckets | Local only |
-| Server remote throttle (`_remoteSeekThrottle`) | 30-second buckets | `player_state.json` |
-| `beforeunload` synchronous XHR | Exact position | `player_state.json` |
-
-The `beforeunload` XHR should capture the exact position at close, but in the WKWebView app
-`os._exit(0)` races against the XHR completing. The Python background thread (which calls
-`evaluate_js` every 5 s) is the actual authoritative save mechanism in the app context — meaning
-up to **5 seconds of seek position can be lost** between the last thread tick and the moment the
-user closes the window.
-
-**Fix direction:** Reduce `_saveSeekThrottle` bucket to 1 s and `_remoteSeekThrottle` bucket to 5 s.
-Both are pure throttle constants — changing them has no side effects beyond slightly more
-localStorage/server writes.
-
-### Root Cause 2 — FLAC seek inaccuracy in WKWebView (primary "plays from earlier" cause)
-
-On `init()`, the seek restoration sequence is:
-
-```
-_audio.src = /api/stream/TRACK_ID   → browser requests full file (no Range header → HTTP 200)
-_audio.load()                       → resets element, starts buffering from byte 0
-loadedmetadata fires → _applySeek:
-  _audio.currentTime = seekTime     → browser issues NEW Range request for byte offset
-  UI updated immediately to seekTime
-```
-
-The server correctly returns HTTP 206 for Range requests. However, **FLAC is a block-framed format**:
-WebKit must find a valid FLAC sync word (`0xFFF8xx`) to start decoding. The byte offset that
-corresponds to `seekTime` seconds may not fall on a FLAC frame boundary. If it doesn't, the browser
-silently backs up to the nearest valid frame, which can be **several seconds before** the requested
-position.
-
-Meanwhile the UI was already set to `seekTime` in `_applySeek`. When `timeupdate` fires (4×/second),
-the seek bar jumps to the actual audio position, which is earlier. The user sees the correct position
-for a fraction of a second, then it snaps back.
-
-There is currently **no `seeked` event handler** to detect when the browser's seek actually completes
-or fails. Adding one would allow the UI to confirm (or correct) the real position after the seek settles.
-
-**Fix direction:** Listen for the `seeked` event on the audio element. In `_applySeek`, set a flag to
-suppress `_onTimeUpdate` UI updates until `seeked` fires. On `seeked`, reconcile the UI with
-`_audio.currentTime` (which is authoritative post-seek) and clear the flag.
-
-### Root Cause 3 — Crossfade ghost audio (the "song plays in background" scenario)
-
-If crossfade is enabled and `seekTime` falls within the crossfade window (last N seconds of the song),
-the crossfade fires on the very **first** `timeupdate` after the user presses Play:
-
-```
-seekTime = 4:57, duration = 5:00, crossfadeDuration = 5s
-→ remaining = 3s < 5s  →  _startCrossfade() triggers immediately
-→ audioB starts loading + playing next track silently
-→ 5 seconds later, _completeCrossfade runs
-→ BUT audioA "ended" after only 3 more real seconds
-→ _onEnded guard (if (_xfadeTriggered) return) correctly prevents double-advance
-→ All good IF seek worked correctly
-```
-
-If the FLAC seek (Root Cause 2) **failed** and audio is actually at time 0:
-- audioA is playing from 0 while the UI was momentarily set to 4:57
-- `timeupdate` updates UI to ~0, user sees progress bar reset
-- Song plays ~5 minutes from beginning
-- Near the end (4:55), crossfade triggers properly, loads next track on audioB
-- audioA ends → `_onEnded` → crossfade guard prevents advance → `_completeCrossfade` swaps to B
-
-In this path there is **no ghost audio** — `_audio.load()` on the next track clears audioA.
-However, a subtle concurrency window exists: if crossfade fires (audioB starts playing at low gain),
-and the seek bar catches up to the actual audio end before `_completeCrossfade` completes its
-`setTimeout`, the user may briefly hear both tracks simultaneously before the swap completes.
-This is the most likely source of the "playing in background" perception.
-
-**Fix direction:** After `_applySeek` confirms seek (via `seeked` event), check if the remaining
-time is less than `crossfadeDuration`. If so, either reduce crossfade duration for this play-through
-or skip crossfade entirely for the restoration.
+Everything else (gapless playback, ReplayGain, MediaSession, PEQ chain rebuild optimisation,
+keyboard shortcut expansion, `ps.queueIdx` refactor) is **out of scope** and should not be
+implemented.
 
 ---
 
-## Other Bugs & Edge Cases
+## 1. Bug Fixes
 
-### `removeFromQueue` shuffle mode — `queueIdx` not adjusted
+### 1.1 Seek position desync on app close (user-reported)
+
+**Files:** `static/player.js`
+
+**Problem:** After closing and reopening the app near the end of a song, the progress indicator
+shows the restored position but audio plays from an earlier point. Two independent fixes needed.
+
+**Fix A — Reduce save throttle granularity**
+
+The seek position is saved to localStorage in 5-second buckets and to the server in 30-second
+buckets. This means up to 5 seconds of position can be lost at close time.
+
+In `player.js`, find `_saveSeekThrottle` and `_remoteSeekThrottle` and change the bucket sizes:
 
 ```js
-// Current code — only adjusts for non-shuffle mode:
+// In _onTimeUpdate():
+
+// BEFORE:
+const bucket = Math.floor(_audio.currentTime / 5);
+if (bucket !== _saveSeekThrottle) {
+  _saveSeekThrottle = bucket;
+  try { localStorage.setItem(_LS.seekTime, _audio.currentTime); } catch (_) {}
+  const remoteBucket = Math.floor(_audio.currentTime / 30);
+  if (remoteBucket !== _remoteSeekThrottle) {
+
+// AFTER:
+const bucket = Math.floor(_audio.currentTime / 1);   // was 5
+if (bucket !== _saveSeekThrottle) {
+  _saveSeekThrottle = bucket;
+  try { localStorage.setItem(_LS.seekTime, _audio.currentTime); } catch (_) {}
+  const remoteBucket = Math.floor(_audio.currentTime / 5);   // was 30
+  if (remoteBucket !== _remoteSeekThrottle) {
+```
+
+**Fix B — Suppress UI flicker during seek with `seeking` / `seeked` guards**
+
+When `_audio.currentTime = seekTime` is set (during init restore or manual seek), the browser
+fires `seeking` and then `seeked`. Between those events `timeupdate` fires with intermediate
+positions, causing the seek bar to flicker to earlier positions before settling.
+
+Add a `_seeking` flag (analogous to the existing `_seekDragging` flag) that suppresses
+`_onTimeUpdate` UI updates while a seek is in progress.
+
+```js
+// Add near other state flags at the top of the IIFE (~line 71):
+let _seeking = false;
+
+// In _onTimeUpdate(), add guard after the existing _seekDragging guard:
+if (_seeking) return;
+
+// Add event listeners alongside the other audio element listeners (~line 798):
+[_audioA, _audioB].forEach(el => {
+  // existing listeners...
+  el.addEventListener('seeking',  function() { if (this === _audio) _seeking = true;  });
+  el.addEventListener('seeked',   function() { if (this === _audio) _seeking = false; });
+});
+```
+
+Also add `_seeking = false` at the start of `_cancelCrossfade()` to ensure it is cleared on
+track load.
+
+### 1.2 Crossfade fires immediately on restored seek near end of song
+
+**File:** `static/player.js`
+
+**Problem:** If the restored `seekTime` falls within the crossfade window (e.g., seekTime=4:57,
+duration=5:00, crossfadeDuration=5s), crossfade triggers on the very first `timeupdate` after
+play. If the FLAC seek was imprecise and audio is actually playing from an earlier position, this
+causes audio from both tracks to be heard simultaneously.
+
+**Fix:** Add a guard to `_startCrossfade()` that prevents crossfade from firing within the first
+2 seconds of playback after a seek restoration. Track this with a `_seekRestored` flag.
+
+```js
+// Add near other state flags:
+let _seekRestored = false;   // true for 2s after a seek-restore, suppresses crossfade
+
+// In _startCrossfade(), add at the top:
+if (_seekRestored) return;
+
+// In _applySeek (inside init()), after setting _audio.currentTime:
+_seekRestored = true;
+setTimeout(() => { _seekRestored = false; }, 2000);
+
+// Also clear it in _cancelCrossfade() and _loadTrack() alongside other flag resets:
+_seekRestored = false;
+```
+
+### 1.3 Crossfade triggers at start of very short tracks
+
+**File:** `static/player.js`
+
+**Problem:** If `crossfadeDuration = 12` and a track is 10 seconds long, the crossfade trigger
+fires at `currentTime = 0.5` — effectively at the start of the track.
+
+**Fix:** Add a guard so crossfade only triggers if the track duration is at least
+`crossfadeDuration + 2` seconds.
+
+```js
+// In _onTimeUpdate(), inside the crossfade trigger block:
+// BEFORE:
+if (!_xfadeTriggered && ps.crossfadeDuration > 0) {
+  const remaining = dur - _audio.currentTime;
+  if (remaining > 0.1 && remaining <= ps.crossfadeDuration && _audio.currentTime > 0.5) {
+
+// AFTER:
+if (!_xfadeTriggered && ps.crossfadeDuration > 0) {
+  const remaining = dur - _audio.currentTime;
+  if (remaining > 0.1 && remaining <= ps.crossfadeDuration
+      && _audio.currentTime > 0.5
+      && dur > ps.crossfadeDuration + 2) {   // ← added guard
+```
+
+### 1.4 `removeFromQueue` doesn't adjust `queueIdx` in shuffle mode
+
+**File:** `static/player.js`
+
+**Problem:** In shuffle mode, `ps.queueIdx` is a position in `ps.shuffleOrder`. When a history
+track is removed and its entry is filtered from `shuffleOrder`, if the removed entry was before
+the current shuffle position, `ps.queueIdx` should decrement to keep pointing at the same track.
+The current code only adjusts `queueIdx` for non-shuffle mode.
+
+**Fix:**
+
+```js
+// In removeFromQueue(), replace:
 if (!ps.shuffle && idx < ps.queueIdx) ps.queueIdx--;
+
+// With:
+if (ps.shuffle) {
+  // Find where this queue index appeared in shuffleOrder before filtering
+  const shufflePos = ps.shuffleOrder.indexOf(idx);
+  if (shufflePos !== -1 && shufflePos < ps.queueIdx) ps.queueIdx--;
+} else {
+  if (idx < ps.queueIdx) ps.queueIdx--;
+}
 ```
 
-In shuffle mode, `ps.queueIdx` is a position in `ps.shuffleOrder`, not a direct queue index.
-When an item is removed and its entry is filtered from `shuffleOrder`, if the removed item was
-**before** the current shuffle position (i.e., `shuffleOrder.indexOf(idx) < ps.queueIdx`),
-`ps.queueIdx` should decrement to keep pointing at the same track. This is missing.
+Note: this adjustment must happen **before** the `ps.shuffleOrder` filter/map that removes the
+entry, so `indexOf(idx)` still finds it.
 
-**Impact:** In shuffle mode, removing a track that was already played (in history) shifts all
-subsequent tracks up by one in shuffleOrder, making `ps.queueIdx` point to the wrong track.
+### 1.5 `next()` / `prev()` modulus should use `shuffleOrder.length` in shuffle mode
 
-### `next()` / `prev()` modulus uses `ps.queue.length`, not `ps.shuffleOrder.length`
+**File:** `static/player.js`
+
+**Problem:** Both `next()` and `prev()` use `ps.queue.length` as the modulus/bound. In shuffle
+mode, `ps.queueIdx` is a shuffleOrder position and `ps.shuffleOrder.length` is the correct bound.
+These are normally equal but diverge if bug 1.4 above causes them to get out of sync.
+
+**Fix:**
 
 ```js
+// In next():
+// BEFORE:
 ps.queueIdx = (ps.queueIdx + 1) % ps.queue.length;
+// AFTER:
+const len = ps.shuffle ? ps.shuffleOrder.length : ps.queue.length;
+ps.queueIdx = (ps.queueIdx + 1) % Math.max(1, len);
+
+// In prev():
+// BEFORE:
+ps.queueIdx = ps.queueIdx > 0 ? ps.queueIdx - 1 : ps.queue.length - 1;
+// AFTER:
+const len = ps.shuffle ? ps.shuffleOrder.length : ps.queue.length;
+ps.queueIdx = ps.queueIdx > 0 ? ps.queueIdx - 1 : Math.max(0, len - 1);
 ```
-
-In shuffle mode `ps.queueIdx` is a shuffleOrder position. `ps.queue.length` and
-`ps.shuffleOrder.length` should always be equal, but if they ever diverge (e.g., after the
-removeFromQueue shuffle bug above), this can produce an out-of-bounds shuffleOrder access.
-Using `Math.max(1, ps.shuffleOrder.length || ps.queue.length)` as the modulus would be safer.
-
-### Crossfade: no upper-bound guard on `remaining <= crossfadeDuration`
-
-```js
-if (remaining > 0.1 && remaining <= ps.crossfadeDuration && _audio.currentTime > 0.5) {
-```
-
-If `ps.crossfadeDuration = 12` and a track is less than 12 seconds long, crossfade fires at
-second 0.5 of the track (the very start). A guard of `remaining < duration - 1` (don't start
-crossfade if the whole track is shorter than the fade) would prevent this degenerate case.
-
-### Missing `seeking` / `seeked` event handlers
-
-The player has no handlers for `seeking` or `seeked` events. During a seek:
-- `seeking` fires when `currentTime` assignment is requested
-- `seeked` fires when the browser has decoded to the requested position
-- Between them, `currentTime` may return intermediate values
-
-Without a `seeked` handler, the UI may flicker between the requested position (set in `_applySeek`)
-and intermediate `timeupdate` positions during the seek. Adding a `_seeking` flag (true between
-`seeking` and `seeked`) would suppress `_onTimeUpdate` UI updates during this window, similar
-to how `_seekDragging` works for manual scrubbing.
 
 ---
 
-## Feature Request: Custom 10-Band PEQ Editor
+## 2. Design Alignment Fixes
 
-### Goal
+Reference: `master-design.md`. All three player surfaces have CSS deviations.
+Tokens in use: `--radius: 12px`, `--radius-lg: 24px`, `--accent: #adc6ff`,
+`--bg-elevated: #1c1b1b`, `--border-focus: rgba(173,198,255,0.4)`.
 
-Give users a full parametric EQ editor they can configure from scratch while music plays — no
-preset frequencies, no locked Q values, no assumed filter types. Each of the 10 bands is fully
-user-controlled: enabled/disabled toggle, filter type, centre frequency, gain, and Q. Equivalent
-to creating an APO filter file in the UI, live.
+### 2.1 PEQ Popover — opacity (user-confirmed readability bug)
 
-Example of the target input format (APO notation, shown for reference):
+**File:** `static/style.css`
 
+The base layer `rgba(28, 27, 27, 0.78)` is too transparent. With backdrop-filter active,
+background content bleeds through and makes popover text hard to read.
+
+```css
+/* In .peq-popover — BEFORE: */
+background:
+  radial-gradient(360px 160px at 12% -40%, rgba(173,198,255,0.19), transparent 65%),
+  rgba(28, 27, 27, 0.78);
+
+/* AFTER: */
+background:
+  radial-gradient(360px 160px at 12% -40%, rgba(173,198,255,0.19), transparent 65%),
+  rgba(28, 27, 27, 0.96);
 ```
-Preamp: -0.0 dB
-Filter 1:  ON  PK  Fc    23 Hz  Gain  1.6 dB  Q 1.300
-Filter 2:  ON  PK  Fc    63 Hz  Gain -0.8 dB  Q 1.200
-Filter 3:  ON  PK  Fc    66 Hz  Gain  3.0 dB  Q 0.500
-Filter 4:  ON  PK  Fc   150 Hz  Gain  1.5 dB  Q 2.000
-Filter 5:  ON  PK  Fc   350 Hz  Gain -1.5 dB  Q 1.500
-Filter 6:  ON  PK  Fc  1300 Hz  Gain -0.4 dB  Q 2.000
-Filter 7:  ON  PK  Fc  3200 Hz  Gain -1.8 dB  Q 2.000
-Filter 8:  ON  PK  Fc  6200 Hz  Gain  2.0 dB  Q 1.600
-Filter 9:  ON  PK  Fc 11000 Hz  Gain -6.3 dB  Q 2.000
-Filter 10: ON  PK  Fc 15000 Hz  Gain  5.5 dB  Q 0.600
+
+### 2.2 PEQ Popover — border radius, shadow, and select focus
+
+**File:** `static/style.css`
+
+```css
+/* border-radius: off-token 20px → canonical --radius-lg */
+/* In .peq-popover: */
+border-radius: 24px;   /* was 20px */
+
+/* box-shadow: add accent tint to the dark shadow */
+box-shadow: 0 24px 56px rgba(4, 8, 24, 0.55);   /* was rgba(8,10,18,0.55) */
+
+/* select focus: browser default outline → design-system glow */
+/* Add new rule: */
+.peq-select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(173,198,255,0.35);
+}
 ```
 
-### Current Architecture
+### 2.3 Queue Drawer — shadow and border radius
 
-PEQ profiles are stored on IEM objects (`data/iems.json`), uploaded as APO/AutoEQ `.txt` files,
-and applied as `BiquadFilterNode` chains via `_buildPeqChain(peqProfile)`.
+**File:** `static/style.css`
 
-Web Audio `BiquadFilterNode.frequency.value`, `.gain.value`, and `.Q.value` are `AudioParam`
-objects — they support **real-time changes** without rebuilding the chain. The custom editor can
-write directly to these `AudioParam` values and the change is heard on the next rendered buffer
-(sub-millisecond latency).
+```css
+/* In .queue-drawer: */
 
-### Architecture
+/* border-radius: off-token 20px → canonical --radius-lg (top corners only, drawer slides up) */
+border-radius: 24px 24px 0 0;   /* was 20px 20px 0 0 */
 
-**Storage: `localStorage`-backed, independent of IEM objects**
-
-The custom EQ is a standalone entity — not tied to any IEM. This avoids polluting the IEM list
-with editor artefacts and requires no backend changes.
-
+/* box-shadow: pure black → accent-tinted */
+box-shadow: 0 -4px 48px rgba(4, 8, 24, 0.52);   /* was rgba(0,0,0,0.5) */
 ```
-localStorage key: 'tb_custom_peq'
-Value: {
-  enabled: bool,
-  preamp_db: number,          // e.g. -0.0
+
+### 2.4 Player Bar — border radius
+
+**File:** `static/style.css`
+
+```css
+/* In #player-bar: */
+border-radius: 24px 24px 0 0;   /* was 20px 20px 0 0 */
+```
+
+---
+
+## 3. Feature: Custom 10-Band PEQ Editor
+
+### Overview
+
+A full parametric EQ editor the user configures from scratch. No preset values. Each band is
+independently configured: ON/OFF, filter type, Fc, Gain, Q — matching APO filter file format.
+Edits apply to live audio in real-time. Stored in `localStorage`, independent of any IEM object.
+No backend changes required.
+
+### Entry Point
+
+In the existing PEQ popover (`#peq-popover`), add a "Custom EQ" option to the IEM select
+dropdown. Place it at the top, above "— Off —":
+
+```html
+<select id="peq-iem-select" ...>
+  <option value="__custom__">Custom EQ</option>
+  <option value="">— Off —</option>
+  <!-- IEMs populated dynamically -->
+</select>
+```
+
+When `__custom__` is selected, `onPeqIemChange` detects this value and opens `#peq-editor-modal`
+instead of populating the profile dropdown. The popover closes when the modal opens.
+
+### State Schema
+
+```js
+// localStorage key: 'tb_custom_peq'
+// Default (first open — all bands blank, nothing pre-filled):
+{
+  enabled: false,
+  preamp_db: 0,
   bands: [
-    { enabled: true, type: 'PK', fc: 23, gain: 1.6, q: 1.300 },
-    { enabled: true, type: 'PK', fc: 63, gain: -0.8, q: 1.200 },
-    // ... 10 bands total, all user-defined
+    { enabled: false, type: 'PK', fc: 1000, gain: 0, q: 1.0 },
+    // × 10 bands, identical default
   ]
 }
 ```
 
-All 10 bands start blank on first open: `enabled: false, type: 'PK', fc: 1000, gain: 0, q: 1.0`.
-No values are pre-filled — the user defines everything from scratch, the same way they would
-configure APO or a hardware EQ.
+`enabled` at the top level tracks whether the custom EQ is currently active (i.e., the user
+selected it and applied it). The individual band `enabled` fields control whether each band
+contributes to the chain.
 
-Applying the custom EQ reuses `_buildPeqChain(peqProfile)` unchanged — the stored object already
-matches the `{preamp_db, filters}` shape that `_buildPeqChain` expects (filtering out
-`enabled: false` bands).
+### Applying the Custom EQ
 
-**Persistence to IEM profile (optional, later)**
-
-A "Save as IEM Profile" button POSTs the current band state as a synthetic APO `.txt` string to
-`POST /api/iems/{id}/peq`, creating a named profile on any chosen IEM. This is additive and
-deferred — the core editor works entirely from `localStorage`.
-
-### UI Placement
-
-The PEQ popover is already at its practical size limit. The custom editor needs its own space.
-
-**Recommendation:** Add a "Custom EQ" option at the top of the IEM selector dropdown in the
-existing popover (above "— Off —"). Selecting it opens a dedicated modal overlay
-(`#peq-editor-modal`) — similar in structure to the sync modal. The popover closes when the
-modal opens. While the modal is open, the custom EQ is active and edits are heard live.
-
-### Per-Band Controls
-
-Each of the 10 filter rows has exactly the same controls, matching the APO format:
-
-| Control | Input type | Range | Notes |
-|---|---|---|---|
-| ON/OFF toggle | Checkbox / pill | — | Disables band without deleting settings |
-| Type | Dropdown | PK, LSC, HSC, LPQ, HPQ, NO, AP | Maps directly to `_FILTER_TYPE` in `_buildPeqChain` |
-| Fc | Number input | 20 – 20000 Hz | Integer; validated on blur |
-| Gain | Number input | −30 to +30 dB | One decimal place; hidden when type is LP/HP/notch/allpass |
-| Q | Number input | 0.100 – 10.000 | Three decimal places |
-
-Gain input should be hidden (greyed, not shown) for filter types where gain has no effect
-(LPQ, HPQ, NO, AP) — matching how APO/AutoEQ files omit the gain field for those types.
-
-**Real-time application:** Every `input` event on any field immediately calls a targeted update
-function that sets the corresponding `BiquadFilterNode` parameter via `AudioParam.setValueAtTime(value, audioContext.currentTime)` — no chain rebuild needed. Only toggling a band ON/OFF (changing
-the number of active nodes) requires a full `_buildPeqChain` rebuild.
-
-### Global Preamp Row
-
-A single preamp row sits above the 10 bands:
-
-```
-Preamp   [ -0.0 ] dB
-```
-
-Number input, −30 to +30 dB, one decimal place. Changes update `_preampNode.gain.value` directly
-(no rebuild needed).
-
-### Frequency Response Curve
-
-A real-time FR curve is essential — without it, editing PEQ blind is guesswork.
-
-**Implementation:** `BiquadFilterNode.getFrequencyResponse(frequencyArray, magResponse, phaseResponse)`
-queries the exact nodes in the active playback chain. Call it on all enabled nodes, multiply the
-magnitude responses together, and draw the combined curve on a `<canvas>` element with a log-scale
-X-axis (20 Hz – 20 kHz) and a fixed dB Y-axis (±20 dB relative to 0).
+The existing `_buildPeqChain(peqProfile)` function accepts `{preamp_db, filters}`. Reuse it
+unchanged — map the custom EQ state to this shape by filtering out disabled bands:
 
 ```js
-// Pseudo-code — called after any parameter change
-function _redrawEqCurve() {
-  const freqs = new Float32Array(512);  // log-spaced 20Hz–20kHz
-  const combined = new Float32Array(512).fill(1);  // start at 1.0 (0 dB)
-  for (const node of _peqNodes) {
-    const mag = new Float32Array(512);
-    const phase = new Float32Array(512);
-    node.getFrequencyResponse(freqs, mag, phase);
-    for (let i = 0; i < 512; i++) combined[i] *= mag[i];
-  }
-  // Draw combined[] on canvas, converting to dB: 20*log10(value)
+function _applyCustomPeq(state) {
+  const profile = {
+    preamp_db: state.preamp_db,
+    filters: state.bands
+      .filter(b => b.enabled)
+      .map(b => ({ type: b.type, fc: b.fc, gain: b.gain, q: b.q })),
+  };
+  _buildPeqChain(profile.filters.length > 0 ? profile : null);
 }
 ```
 
-The canvas renders at the top of the modal, above the band rows. Update it on every `input` event
-(debounce to one `requestAnimationFrame` per frame to avoid redundant draws).
+### Real-Time Editing
 
-### Modal Layout Sketch
+When the user edits a parameter in the modal:
 
+- **Gain / Fc / Q change on an enabled band:** Update the corresponding live `BiquadFilterNode`
+  parameter directly — **no chain rebuild**:
+  ```js
+  const node = _peqNodes[enabledBandIndex];
+  if (node) {
+    node.frequency.setValueAtTime(newFc, _ctx.currentTime);
+    node.gain.setValueAtTime(newGain, _ctx.currentTime);
+    node.Q.setValueAtTime(newQ, _ctx.currentTime);
+  }
+  ```
+  `_peqNodes` is the array of live `BiquadFilterNode` objects built by `_buildPeqChain`.
+  The `enabledBandIndex` is the index of this band within enabled bands only.
+
+- **Toggling a band ON/OFF or changing filter type:** These change the number or types of nodes
+  in the chain — call `_applyCustomPeq(state)` (full rebuild via `_buildPeqChain`).
+
+- **Preamp change:** Update `_preampNode.gain.value` directly — no rebuild:
+  ```js
+  if (_preampNode) _preampNode.gain.value = _dBToLinear(newPreampDb);
+  ```
+
+- **Redraw the FR curve** on every parameter change (see section below).
+
+### Modal HTML (`#peq-editor-modal`)
+
+Add to `static/index.html` alongside the other modals:
+
+```html
+<div id="peq-editor-modal" class="modal-overlay" style="display:none" onclick="App.closePeqEditor(event)">
+  <div class="modal peq-editor-modal-inner" onclick="event.stopPropagation()">
+    <!-- Header -->
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Custom EQ</div>
+        <div class="modal-subtitle">All changes apply live while music plays</div>
+      </div>
+      <div class="peq-editor-header-actions">
+        <button class="btn-secondary" onclick="App.resetCustomPeq()">Reset</button>
+        <button class="btn-secondary" onclick="App.saveCustomPeqAsProfile()">Save as Profile</button>
+        <button class="modal-close-btn" onclick="App.closePeqEditor()">
+          <!-- SVG × icon -->
+        </button>
+      </div>
+    </div>
+
+    <!-- FR Curve Canvas -->
+    <div class="peq-editor-curve-wrap">
+      <canvas id="peq-editor-canvas" width="660" height="160"></canvas>
+    </div>
+
+    <!-- Preamp -->
+    <div class="peq-editor-preamp-row">
+      <span class="peq-editor-col-label">PREAMP</span>
+      <input type="number" id="peq-preamp" class="peq-editor-num-input"
+             min="-30" max="30" step="0.1" value="0"
+             oninput="App.onPeqPreampChange(this.value)" />
+      <span class="peq-editor-unit">dB</span>
+    </div>
+
+    <!-- Band Table Header -->
+    <div class="peq-editor-band-header">
+      <span class="peq-editor-col-label">#</span>
+      <span class="peq-editor-col-label">ON</span>
+      <span class="peq-editor-col-label">TYPE</span>
+      <span class="peq-editor-col-label">Fc (Hz)</span>
+      <span class="peq-editor-col-label">GAIN (dB)</span>
+      <span class="peq-editor-col-label">Q</span>
+    </div>
+
+    <!-- Band Rows — rendered dynamically by App.renderPeqEditorBands() -->
+    <div id="peq-editor-bands"></div>
+
+    <!-- Footer -->
+    <div class="peq-editor-footer">
+      <button class="btn-primary" onclick="App.applyAndClosePeqEditor()">Apply & Close</button>
+    </div>
+  </div>
+</div>
 ```
-┌─ Custom EQ ──────────────────────────────────── [Reset] [Save as Profile] [✕] ─┐
-│  [FR curve canvas — 400×150px, log-scale, ±20 dB grid]                          │
-│                                                                                   │
-│  Preamp  [ -0.0 ] dB                                                             │
-│  ───────────────────────────────────────────────────────────────────────────     │
-│  #   On   Type      Fc (Hz)   Gain (dB)   Q                                      │
-│  1   ☑    [PK ▾]   [  23  ]  [  1.6  ]   [ 1.300 ]                             │
-│  2   ☑    [PK ▾]   [  63  ]  [ -0.8  ]   [ 1.200 ]                             │
-│  ...                                                                              │
-│  10  ☑    [PK ▾]   [15000 ]  [  5.5  ]   [ 0.600 ]                             │
-│                                                                                   │
-│                              [Apply & Close]                                      │
-└───────────────────────────────────────────────────────────────────────────────────┘
+
+### Per-Band Row HTML
+
+Each band row is rendered dynamically. Band index `i` runs 0–9:
+
+```html
+<div class="peq-editor-band-row" data-band="${i}">
+  <span class="peq-editor-band-num">${i + 1}</span>
+
+  <!-- ON/OFF toggle: small pill button, green when on -->
+  <button class="peq-band-toggle ${band.enabled ? 'active' : ''}"
+          onclick="App.togglePeqBand(${i})">
+    ${band.enabled ? 'ON' : 'OFF'}
+  </button>
+
+  <!-- Filter type -->
+  <select class="peq-band-type" onchange="App.onPeqBandTypeChange(${i}, this.value)">
+    <option value="PK"  ${band.type==='PK'  ? 'selected':''}>PK</option>
+    <option value="LSC" ${band.type==='LSC' ? 'selected':''}>LSC</option>
+    <option value="HSC" ${band.type==='HSC' ? 'selected':''}>HSC</option>
+    <option value="LPQ" ${band.type==='LPQ' ? 'selected':''}>LPQ</option>
+    <option value="HPQ" ${band.type==='HPQ' ? 'selected':''}>HPQ</option>
+    <option value="NO"  ${band.type==='NO'  ? 'selected':''}>NO</option>
+    <option value="AP"  ${band.type==='AP'  ? 'selected':''}>AP</option>
+  </select>
+
+  <!-- Fc -->
+  <input type="number" class="peq-editor-num-input" value="${band.fc}"
+         min="20" max="20000" step="1"
+         oninput="App.onPeqBandFcChange(${i}, this.value)" />
+
+  <!-- Gain — hidden for types where gain has no effect -->
+  <input type="number" class="peq-editor-num-input ${gainHidden ? 'peq-input-hidden' : ''}"
+         value="${band.gain.toFixed(1)}" min="-30" max="30" step="0.1"
+         oninput="App.onPeqBandGainChange(${i}, this.value)" />
+
+  <!-- Q -->
+  <input type="number" class="peq-editor-num-input" value="${band.q.toFixed(3)}"
+         min="0.1" max="10" step="0.001"
+         oninput="App.onPeqBandQChange(${i}, this.value)" />
+</div>
 ```
 
-**Reset:** Clears all 10 bands to `enabled: false, gain: 0` and sets preamp to 0. Confirms via
-the existing `_showConfirm` modal before clearing.
+Gain input is hidden (`visibility: hidden` — keep the column width, just hide the field) when
+`type` is one of: `LPQ`, `HPQ`, `NO`, `AP`.
 
-**Apply & Close:** Saves state to `localStorage`, closes modal. The EQ remains active (indicated
-by the "EQ" button in the player bar staying lit).
+### FR Curve Canvas
 
-**"Save as Profile":** Opens a small sub-modal asking the user to pick an existing IEM and supply
-a profile name, then POSTs to `/api/iems/{id}/peq`. The band data is serialised to APO `.txt`
-format on the client side before sending — the same format the backend already parses.
-
----
-
-## Gaps & Improvement Opportunities
-
-### Playback Quality
-
-**Gapless playback:** There is no true gapless mode. Even with crossfade at 0s, there is a brief
-silence between tracks (the time between `ended` firing and `_audio.play()` completing on the next
-load). True gapless requires pre-buffering the next track before the current one ends and scheduling
-playback via `AudioBufferSourceNode` at a precise time. This is a significant rebuild but worth noting
-for future work.
-
-**ReplayGain / loudness normalization:** No gain normalisation between tracks. Tracks at different
-recording levels create jarring volume jumps. The FLAC metadata already contains `REPLAYGAIN_TRACK_GAIN`
-tags that `mutagen` can read. A simple pre-gain step in `_loadTrack` (adjusting `_preampNode.gain.value`
-based on the tag value) would flatten this.
-
-### State & Persistence
-
-**Seek save resolution:** As noted in the bug section, the 5-second localStorage throttle and
-30-second remote throttle cause position loss on sudden close. Reducing both would be a safe change.
-
-**`seekTime` source of truth:** `getStateJSON()` uses `_audio.currentTime || 0`. If called during
-a crossfade (where `_audio` is the outgoing element), `currentTime` may be near the end but not
-representative of the user's "last known position." Saving the incoming element's position
-during crossfade would be more useful for resume.
-
-### UX
-
-**Loading / buffering indicator:** There is no visual feedback while a FLAC track is initially
-buffering or seeking. The seek bar could show a "loading" state (e.g., pulsing fill) between the
-`seeking` event and the `seeked` event.
-
-**MediaSession API integration:** No integration with macOS media key controls, lock screen Now
-Playing widget, or notification center. Adding `navigator.mediaSession.metadata` and action
-handlers (`play`, `pause`, `previoustrack`, `nexttrack`) would allow hardware media keys to work
-from the WKWebView window without keyboard focus.
+**Implementation:** Use `BiquadFilterNode.getFrequencyResponse()` on the live `_peqNodes` array.
+This queries the actual nodes in the audio chain, so the curve always reflects what is heard.
 
 ```js
-navigator.mediaSession.metadata = new MediaMetadata({
-  title: track.title,
-  artist: track.artist,
-  album: track.album,
-  artwork: track.artwork_key ? [{ src: `/api/artwork/${track.artwork_key}` }] : [],
-});
-navigator.mediaSession.setActionHandler('nexttrack', () => Player.next());
-// etc.
+function _redrawPeqEditorCurve() {
+  const canvas = document.getElementById('peq-editor-canvas');
+  if (!canvas || !_ctx) return;
+  const ctx2d = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  // Build log-spaced frequency array 20Hz–20kHz
+  const N = 512;
+  const freqs = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    freqs[i] = 20 * Math.pow(1000, i / (N - 1));
+  }
+
+  // Multiply magnitude responses across all enabled peqNodes
+  const combined = new Float32Array(N).fill(1);
+  for (const node of _peqNodes) {
+    const mag = new Float32Array(N);
+    node.getFrequencyResponse(freqs, mag, new Float32Array(N));
+    for (let i = 0; i < N; i++) combined[i] *= mag[i];
+  }
+
+  // Convert to dB
+  const dbRange = 20;   // ±20 dB
+  const toDB = v => 20 * Math.log10(Math.max(v, 1e-6));
+
+  ctx2d.clearRect(0, 0, W, H);
+
+  // Draw 0 dB line
+  const zeroY = H / 2;
+  ctx2d.strokeStyle = 'rgba(107,107,123,0.4)';
+  ctx2d.lineWidth = 1;
+  ctx2d.beginPath();
+  ctx2d.moveTo(0, zeroY);
+  ctx2d.lineTo(W, zeroY);
+  ctx2d.stroke();
+
+  // Draw EQ curve
+  ctx2d.strokeStyle = '#adc6ff';   // --accent
+  ctx2d.lineWidth = 2;
+  ctx2d.beginPath();
+  for (let i = 0; i < N; i++) {
+    const x = (i / (N - 1)) * W;
+    const db = Math.max(-dbRange, Math.min(dbRange, toDB(combined[i])));
+    const y = zeroY - (db / dbRange) * (H / 2);
+    i === 0 ? ctx2d.moveTo(x, y) : ctx2d.lineTo(x, y);
+  }
+  ctx2d.stroke();
+}
 ```
 
-**Keyboard shortcuts:** Current shortcuts are Space (play/pause), Alt+←/→ (prev/next), M (mute).
-Missing: bare ← / → for seeking ±10 seconds (common music player convention), and ↑/↓ for volume.
+Call `_redrawPeqEditorCurve()` on every band parameter change, debounced to one
+`requestAnimationFrame` per frame.
 
-**Queue: no "play from here" action:** Double-clicking a history item replays from that track but
-does not remove subsequent items. A "Play from here" context menu item (re-queue from this track)
-would make history more useful.
+Expose `_redrawPeqEditorCurve` via the `Player` public API so `App` can call it:
+`redrawEqCurve: _redrawPeqEditorCurve`
 
-**Error recovery:** After 3 consecutive errors, playback stops with a toast. There is no visible
-error state in the player bar and no retry button. Adding an error icon and a retry action on the
-play button (`data-error="true"`) would make failure states more actionable.
+### `app.js` Functions Required
 
-### Audio Graph
+Add these functions to `app.js` and expose them on the `App` object:
 
-**Overload / clipping protection:** `_preampNode.gain` is set to the profile's `preamp_db` value
-without clamping. A very high preamp (e.g., APO file with +12 dB preamp) combined with positive
-band gains can clip the output. A `DynamicsCompressorNode` at the end of the chain (set to soft
-limiting rather than compression) would prevent this without audibly degrading the signal.
+| Function | Action |
+|---|---|
+| `openPeqEditor()` | Show `#peq-editor-modal`, load state from `localStorage`, call `renderPeqEditorBands()`, trigger `Player.redrawEqCurve()` |
+| `closePeqEditor(event)` | Hide modal (if `event`, only close on overlay click) |
+| `applyAndClosePeqEditor()` | Save state to `localStorage`, call `_applyCustomPeq(state)` via Player, close modal |
+| `resetCustomPeq()` | Show confirm modal, on confirm reset all bands to defaults, re-render, redraw curve |
+| `renderPeqEditorBands()` | Rebuild the `#peq-editor-bands` innerHTML from current state |
+| `togglePeqBand(i)` | Toggle `bands[i].enabled`, rebuild chain, redraw curve |
+| `onPeqBandTypeChange(i, val)` | Update `bands[i].type`, toggle gain input visibility, rebuild chain, redraw curve |
+| `onPeqBandFcChange(i, val)` | Update `bands[i].fc`, update live node, redraw curve |
+| `onPeqBandGainChange(i, val)` | Update `bands[i].gain`, update live node, redraw curve |
+| `onPeqBandQChange(i, val)` | Update `bands[i].q`, update live node, redraw curve |
+| `onPeqPreampChange(val)` | Update `preamp_db`, update `_preampNode.gain` directly, redraw curve |
+| `saveCustomPeqAsProfile()` | Serialise bands to APO `.txt`, POST to `/api/iems/{id}/peq` after user picks an IEM |
 
-**PEQ chain rebuild on every profile change:** `_buildPeqChain` tears down and rebuilds the entire
-`BiquadFilterNode` chain each time a profile is applied. This causes a brief audio click because
-all nodes are disconnected and reconnected mid-playback. Nodes should be reused where possible
-(same count, same types) and only gain/frequency/Q values updated via `AudioParam.setValueAtTime`.
+The "update live node" operations (Fc, Gain, Q, Preamp) must check that `Player._ctx` is
+initialised and that the target `_peqNode` index exists before attempting the `AudioParam` update.
+Expose a `updateBandParam(enabledIndex, fc, gain, q)` function on the `Player` public API for
+`app.js` to call.
 
-### Code Clarity
+Also expose `applyCustomPeq(state)` on `Player` so `app.js` can trigger a full chain rebuild:
+```js
+applyCustomPeq: (state) => _applyCustomPeq(state),
+```
 
-**`playbackContextTracks` vs. `queue` duality:** The distinction between the playback context
-(the full artist/album/playlist the user is browsing) and the actual queue (what will play) adds
-complexity to `toggleShuffle` (context promotion) and `playTrackById` (context-first routing).
-This is architecturally intentional but worth documenting inline more thoroughly — it is easy to
-introduce bugs by conflating the two.
+### Persistence
 
-**`ps.queueIdx` semantics shift in shuffle mode:** In non-shuffle mode `ps.queueIdx` is a direct
-`ps.queue` array index. In shuffle mode it is a position in `ps.shuffleOrder`. This dual meaning
-makes every function that reads or writes `ps.queueIdx` a potential source of off-by-one bugs
-(and already caused the `removeFromQueue` bug above). A future refactor could use a dedicated
-`ps.shufflePos` for the shuffle-order position and keep `ps.queueIdx` always as the real queue
-index, deriving the shuffle position separately.
+- Load from `localStorage` key `'tb_custom_peq'` on `openPeqEditor()`.
+- Save to `localStorage` on every band change and on `applyAndClosePeqEditor()`.
+- On `Player.init()`, check if `'tb_custom_peq'` exists and `enabled === true`; if so, call
+  `_applyCustomPeq(state)` to restore the EQ automatically on app startup.
+- The "EQ" button in the player bar (`#player-peq-btn`) should remain `.active` when custom EQ
+  is enabled, consistent with how it shows active for IEM profiles.
+
+### "Save as Profile" Flow
+
+1. User clicks "Save as Profile"
+2. A small inline sub-panel (or the existing `_showConfirm` approach) asks: IEM name (dropdown
+   from `/api/iems`) and profile name (text input)
+3. On confirm: serialise bands to APO `.txt` format:
+   ```
+   Preamp: -0.0 dB
+   Filter 1: ON PK Fc 1000 Hz Gain 0.0 dB Q 1.000
+   ...
+   ```
+   (omit disabled bands; omit Gain field for LPQ/HPQ/NO/AP types)
+4. POST as multipart to `POST /api/iems/{iemId}/peq` with the `.txt` file content — the existing
+   backend endpoint already parses this format.
+
+### Modal CSS
+
+The modal follows `master-design.md` §6.7 and the design tokens. Add to `static/style.css`:
+
+```css
+/* PEQ Editor Modal */
+.peq-editor-modal-inner {
+  width: 720px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background:
+    radial-gradient(480px 200px at 10% -30%, rgba(173,198,255,0.13), transparent 60%),
+    rgba(20, 20, 24, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(173,198,255,0.18);
+  border-radius: 24px;   /* --radius-lg */
+  padding: 24px;
+  box-shadow: 0 32px 80px rgba(4, 8, 24, 0.55);
+}
+
+.peq-editor-curve-wrap {
+  background: rgba(255,255,255,0.025);
+  border-radius: 12px;
+  padding: 8px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(173,198,255,0.08);
+}
+
+#peq-editor-canvas {
+  display: block;
+  width: 100%;
+  height: 160px;
+  border-radius: 8px;
+}
+
+.peq-editor-preamp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid rgba(173,198,255,0.10);
+  margin-bottom: 10px;
+}
+
+.peq-editor-band-header,
+.peq-editor-band-row {
+  display: grid;
+  grid-template-columns: 24px 52px 72px 90px 90px 80px;
+  gap: 8px;
+  align-items: center;
+}
+
+.peq-editor-band-header {
+  padding: 4px 0 6px;
+}
+
+.peq-editor-band-row {
+  padding: 4px 0;
+}
+
+.peq-editor-col-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.peq-editor-band-num {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.peq-band-toggle {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  border: 1px solid rgba(107,107,123,0.4);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.peq-band-toggle.active {
+  background: rgba(83,225,111,0.18);
+  color: var(--accent-success);
+  border-color: rgba(83,225,111,0.4);
+}
+
+.peq-band-type {
+  /* same treatment as .peq-select */
+  background: var(--bg-active);
+  color: var(--text);
+  border: 1px solid rgba(173,198,255,0.12);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 12px;
+  width: 100%;
+}
+
+.peq-editor-num-input {
+  background: var(--bg-active);
+  color: var(--text);
+  border: 1px solid rgba(173,198,255,0.12);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  text-align: right;
+  width: 100%;
+}
+.peq-editor-num-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(173,198,255,0.35);
+}
+
+.peq-input-hidden {
+  visibility: hidden;
+}
+
+.peq-editor-unit {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.peq-editor-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: 16px;
+  border-top: 1px solid rgba(173,198,255,0.10);
+  margin-top: 12px;
+}
+```
 
 ---
 
-## Priority Summary
+## 4. Out of Scope
 
-| Item | Type | Effort |
-|---|---|---|
-| Reduce seek save throttle (1s local / 5s remote) | Bug fix | Trivial |
-| Add `seeking` / `seeked` event handlers to suppress UI flicker | Bug fix | Small |
-| Guard crossfade trigger when `seekTime` is near end of song | Bug fix | Small |
-| Fix `removeFromQueue` `queueIdx` adjustment in shuffle mode | Bug fix | Small |
-| Custom 10-band PEQ editor (localStorage-backed, no server changes) | Feature | Medium |
-| FR curve visualisation in PEQ editor using `getFrequencyResponse` | Feature | Medium |
-| MediaSession API integration | Enhancement | Small |
-| ReplayGain normalisation | Enhancement | Small |
-| Seek bar buffering/loading indicator | Enhancement | Small |
-| True gapless playback | Enhancement | Large |
+Do not implement the following. They are noted for future work only:
+
+- Gapless playback (requires `AudioBufferSourceNode` rebuild)
+- ReplayGain normalisation
+- MediaSession API integration
+- Keyboard shortcut expansion (← / → seek ±10s, ↑/↓ volume)
+- Queue "Play from here" context menu action
+- Error recovery UI (error state on play button)
+- PEQ chain rebuild optimisation (click on profile switch)
+- `ps.queueIdx` / `ps.shufflePos` refactor
+- Seek bar buffering/loading indicator
+
+---
+
+## 5. Implementation Order
+
+Work through tasks in this order to avoid conflicts between CSS and JS changes:
+
+1. CSS-only fixes (§2.1–2.4) — no JS or HTML changes, safe to do first
+2. Bug fix 1.1 (seek throttle) — two constant changes in `player.js`
+3. Bug fix 1.2 (`seeking`/`seeked` flags) — small additions to `player.js`
+4. Bug fix 1.3 (crossfade short-track guard) — one condition change in `player.js`
+5. Bug fix 1.4 (`removeFromQueue` shuffle) — logic change in `player.js`
+6. Bug fix 1.5 (`next`/`prev` modulus) — two small changes in `player.js`
+7. Custom PEQ editor — HTML (modal), CSS (styles), `player.js` (new public API), `app.js` (editor logic)

@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=24" />
+  <link rel="stylesheet" href="/style.css?v=28" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -1393,6 +1393,7 @@
           <div class="peq-section">
             <div class="peq-section-label">Preset Target</div>
             <select id="peq-iem-select" class="peq-select" onchange="Player.onPeqIemChange(this.value)">
+              <option value="__custom__">Custom EQ</option>
               <option value="">— Off —</option>
             </select>
           </div>
@@ -1402,6 +1403,11 @@
             <select id="peq-profile-select" class="peq-select" onchange="Player.onPeqProfileChange(this.value)">
               <option value="">— Off —</option>
             </select>
+          </div>
+          <div class="peq-section peq-workspace-entry">
+            <button class="btn-secondary peq-open-workspace-btn" onclick="Player.openCustomEqWorkspace()">
+              Open Custom EQ Workspace
+            </button>
           </div>
           <!-- Crossfade -->
           <div class="peq-divider"></div>
@@ -1452,6 +1458,79 @@
     </div>
     <div id="queue-list" class="queue-list"></div>
   </div>
+
+  <section id="peq-workspace" class="peq-workspace" style="display:none">
+    <div class="peq-workspace-shell">
+      <div class="peq-workspace-header">
+        <div>
+          <div class="peq-workspace-overline">Player · Parametric EQ</div>
+          <h2>Custom EQ Workspace</h2>
+          <div class="peq-workspace-subtitle">Tune your EQ live while playback controls stay available.</div>
+        </div>
+        <div class="peq-editor-header-actions">
+          <button class="btn-secondary" onclick="App.resetCustomPeq()">Reset</button>
+          <button class="btn-secondary" onclick="App.downloadCustomPeqTxt()">Download .txt</button>
+          <button class="btn-secondary" onclick="App.copyCustomPeqToConnectedDap()">Copy to Connected DAP</button>
+          <button class="btn-primary" onclick="App.applyAndClosePeqEditor()">Save</button>
+          <button class="modal-close-btn" onclick="App.closePeqEditor()" title="Close">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="peq-workspace-context">
+        <div class="peq-workspace-field">
+          <label class="peq-editor-col-label">Tune for IEM</label>
+          <select id="peq-workspace-iem-select" class="peq-select" onchange="App.onPeqWorkspaceIemChange(this.value)"></select>
+        </div>
+        <div class="peq-workspace-field">
+          <label class="peq-editor-col-label">Reference Target (Optional)</label>
+          <select id="peq-workspace-target-select" class="peq-select" onchange="App.onPeqWorkspaceTargetChange(this.value)"></select>
+        </div>
+      </div>
+
+      <div id="peq-save-profile-panel" class="peq-save-profile-panel" style="display:none">
+        <div class="peq-save-profile-grid">
+          <select id="peq-save-iem-select" class="peq-select">
+            <option value="">Select IEM</option>
+          </select>
+          <input id="peq-save-name" type="text" class="peq-editor-num-input peq-save-name-input" placeholder="Profile name" />
+          <div class="peq-save-profile-actions">
+            <button class="btn-secondary" onclick="App.cancelCustomPeqSaveProfile()">Cancel</button>
+            <button class="btn-primary" onclick="App.confirmCustomPeqSaveProfile()">Save as Profile</button>
+          </div>
+        </div>
+        <div id="peq-save-profile-error" class="peq-save-profile-error" style="display:none"></div>
+      </div>
+
+      <div class="peq-editor-toolbar">
+        <button class="btn-secondary" onclick="App.saveCustomPeqAsProfile()">Save as Profile</button>
+        <span id="peq-workspace-dirty" class="peq-workspace-dirty" style="display:none">Unsaved changes</span>
+      </div>
+
+      <div class="peq-editor-curve-wrap">
+        <canvas id="peq-editor-canvas" width="660" height="260"></canvas>
+      </div>
+
+      <div class="peq-editor-preamp-row">
+        <span class="peq-editor-col-label">Preamp</span>
+        <input type="number" id="peq-preamp" class="peq-editor-num-input"
+               min="-30" max="30" step="0.1" value="0"
+               oninput="App.onPeqPreampChange(this.value)" />
+        <span class="peq-editor-unit">dB</span>
+      </div>
+
+      <div class="peq-editor-band-header">
+        <span class="peq-editor-col-label">#</span>
+        <span class="peq-editor-col-label">On</span>
+        <span class="peq-editor-col-label">Type</span>
+        <span class="peq-editor-col-label">Fc (Hz)</span>
+        <span class="peq-editor-col-label">Gain (dB)</span>
+        <span class="peq-editor-col-label">Q</span>
+      </div>
+      <div id="peq-editor-bands"></div>
+    </div>
+  </section>
 
   <!-- Generic confirm modal -->
   <div id="confirm-modal" class="modal-overlay" style="display:none">
@@ -1737,7 +1816,7 @@
     </div>
   </div>
 
-  <script src="/player.js?v=24"></script>
-  <script src="/app.js?v=24"></script>
+  <script src="/player.js?v=28"></script>
+  <script src="/app.js?v=28"></script>
 </body>
 </html>

@@ -94,6 +94,20 @@ Typography source of truth:
 - Between major sections on same page: `32px`
 - Card grid gaps: `16px` to `18px`
 
+### 4.5 Glassmorphism & Surface Tint
+- Floating surfaces (modals, dropdowns, elevated cards) should use glass treatment.
+- Standard backdrop blur: `20px`.
+- Hero/spotlight blur: up to `40px` where hierarchy needs stronger depth.
+- Surface tint should use semi-transparent high-surface overlays so background tones subtly bleed through.
+
+### 4.6 Elevation & Shadow Ranges
+- Ambient shadow should be soft and “felt,” not sharp.
+- Recommended range:
+  - Blur: `40px` to `80px` for major floating surfaces.
+  - Opacity: `4%` to `8%`.
+- Prefer tinted shadows (accent-influenced) over pure black where possible.
+- Inner shadows are discouraged in primary UI surfaces.
+
 ## 5. Layout Rules
 
 ### 5.1 Page Frame
@@ -121,6 +135,11 @@ For Artist and Album card families (including Favourites inline panels):
 - Secondary CTA: dark pill with ghost border or tonal surface.
 - Danger CTA: pink/red tonal variant; reserve for destructive actions.
 - "Play All": use icon + clear emphasis where it is the dominant action.
+- Pill button shape: `9999px` radius.
+- Pill button spacing guidance:
+  - Vertical: equivalent of `spacing-2.5`.
+  - Horizontal: equivalent of `spacing-6`.
+- Hover treatment should increase visual lift/brightness subtly without introducing noisy color shifts.
 
 ### 6.2 Cards
 Card construction:
@@ -135,12 +154,27 @@ Card construction:
 - Neutral/not checked: muted neutral tone.
 - Use concise labels with optional icon glyph.
 
-### 6.4 Tables
+### 6.4 Data Visualization & Progress Bars
+- Progress/bar tracks should sit on high-surface tonal bases.
+- Indicator colors should follow semantic mapping:
+  - Success/healthy: green.
+  - Warning/risk: amber.
+  - Error/critical: pink/red.
+- Avoid fully rounded “capsule” bar caps for analytical charts unless explicitly required by chart intent.
+- Prefer sharp or subtle radii for instrument-like readability.
+
+### 6.5 Tables
 - Keep row heights consistent regardless of item count.
 - Header should not overlap filter/sort controls.
 - Actions and favorite controls should have explicit columns where needed.
 
-### 6.5 Modals
+### 6.6 Input Fields
+- Input backgrounds should use low/elevated tonal surfaces.
+- Avoid heavy full-border treatments as a default.
+- Focus state should prioritize glow/contrast change over hard outline blocks.
+- Bottom-edge glow accent is preferred where context supports it.
+
+### 6.7 Modals
 - Glassmorphism shell, layered dark surface.
 - Clear header with title/subtitle.
 - Vertical rhythm should prioritize scanability.
@@ -193,6 +227,18 @@ Card construction:
 - Maintain color + text cues for statuses (not color-only).
 - Ensure interactive targets remain usable at compact density.
 
+## 10.1 Do / Don’t Rules
+### Do
+- Use asymmetry intentionally where it improves hierarchy (for example, left-weighted title blocks with right-side utility controls).
+- Let negative space carry hierarchy; avoid over-framing every block.
+- Keep semantic color usage consistent across screens.
+
+### Don’t
+- Don’t use `#FFFFFF` as default body text on dark surfaces.
+- Don’t introduce arbitrary radius values outside the established radius scale.
+- Don’t rely on inner shadows for depth.
+- Don’t add new component variants without documenting them in this file.
+
 ## 11. Governance (How We Keep This Accurate)
 For every UI change PR:
 1. Validate against this file.
@@ -241,3 +287,9 @@ Living context and decision log:
   - Locked ghost-border fallback policy.
   - Locked artist/album grid breakpoint ladder.
   - Added governance tie-in to `README.md` UI checklist.
+- 2026-04-06: v1.1 patch.
+  - Added explicit glass/surface tint guidance.
+  - Added elevation/shadow numeric ranges.
+  - Added data-viz/progress-bar styling rules.
+  - Added input behavior rules.
+  - Added stronger Do/Don’t guidance.

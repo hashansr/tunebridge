@@ -4408,7 +4408,7 @@ tbody tr:hover {
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
   border-top: 1px solid rgba(173,198,255,0.17);
-  border-radius: 20px 20px 0 0;
+  border-radius: 24px 24px 0 0;
   /* 3-column grid guarantees the centre section is truly centred */
   display: grid;
   grid-template-columns: 300px 1fr 300px;
@@ -4417,7 +4417,7 @@ tbody tr:hover {
   padding: 0 22px;
   z-index: 400;
   user-select: none;
-  box-shadow: 0 -16px 46px rgba(8, 10, 18, 0.52);
+  box-shadow: 0 -16px 46px rgba(4, 8, 24, 0.52);
   animation: player-bar-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1);
 }
 #player-bar::before {
@@ -4703,13 +4703,13 @@ tbody tr:hover {
   width: 264px;
   background:
     radial-gradient(360px 160px at 12% -40%, rgba(173,198,255,0.19), transparent 65%),
-    rgba(28, 27, 27, 0.78);
+    rgba(28, 27, 27, 0.96);
   backdrop-filter: blur(34px);
   -webkit-backdrop-filter: blur(34px);
   border: 1px solid rgba(173,198,255,0.2);
-  border-radius: 20px;
+  border-radius: 24px;
   padding: 14px;
-  box-shadow: 0px 26px 58px rgba(8, 10, 18, 0.55);
+  box-shadow: 0px 24px 56px rgba(4, 8, 24, 0.55);
   z-index: 410;
   opacity: 0;
   transform: translateY(8px) scale(0.985);
@@ -4756,6 +4756,15 @@ tbody tr:hover {
 /* Sections */
 .peq-section { margin-bottom: 10px; }
 .peq-section:last-of-type { margin-bottom: 0; }
+.peq-workspace-entry { margin-top: 4px; }
+
+.peq-open-workspace-btn {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+}
 
 .peq-section-label {
   font-size: 11px;
@@ -4782,7 +4791,11 @@ tbody tr:hover {
   box-sizing: border-box;
   transition: background-color 0.15s;
 }
-.peq-select:focus { background-color: rgba(60, 59, 58, 1); }
+.peq-select:focus {
+  outline: none;
+  background-color: rgba(60, 59, 58, 1);
+  box-shadow: 0 0 0 2px rgba(173,198,255,0.35);
+}
 
 /* Divider between EQ and crossfade */
 .peq-divider {
@@ -4911,7 +4924,7 @@ tbody tr:hover {
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
   border: 1px solid rgba(173,198,255,0.18);
-  border-radius: 20px 20px 0 0;
+  border-radius: 24px 24px 0 0;
   display: flex;
   flex-direction: column;
   transform: translateY(100%) scale(0.985);
@@ -4919,7 +4932,7 @@ tbody tr:hover {
   opacity: 0;
   transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.24s ease;
   z-index: 395;
-  box-shadow: 0 -4px 32px rgba(0,0,0,0.5);
+  box-shadow: 0 -4px 48px rgba(4, 8, 24, 0.52);
 }
 .queue-drawer.open {
   transform: translateY(0) scale(1);
@@ -4947,6 +4960,261 @@ tbody tr:hover {
   background: var(--bg-active);
   border-radius: 10px;
   padding: 1px 7px;
+}
+
+/* Custom PEQ workspace */
+.peq-workspace {
+  position: fixed;
+  left: var(--sidebar-w);
+  right: 0;
+  top: 0;
+  bottom: 86px;
+  z-index: 360;
+  background:
+    radial-gradient(620px 260px at 8% -12%, rgba(173,198,255,0.14), transparent 62%),
+    radial-gradient(680px 260px at 95% -20%, rgba(83,225,111,0.08), transparent 66%),
+    rgba(19, 19, 19, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  overflow: auto;
+}
+
+.peq-workspace-shell {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 28px 32px 24px;
+  min-height: 100%;
+}
+
+.peq-workspace-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.peq-workspace-overline {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.peq-workspace-header h2 {
+  font-size: 24px;
+  letter-spacing: -0.02em;
+}
+
+.peq-workspace-subtitle {
+  margin-top: 4px;
+  color: var(--text-sub);
+  font-size: var(--text-md);
+}
+
+.peq-workspace-context {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.peq-workspace-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.peq-editor-modal-inner {
+  width: min(720px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background:
+    radial-gradient(480px 200px at 10% -30%, rgba(173,198,255,0.13), transparent 60%),
+    rgba(20, 20, 24, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(173,198,255,0.18);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 32px 80px rgba(4, 8, 24, 0.55);
+}
+
+.peq-editor-header {
+  margin-bottom: 14px;
+}
+
+.peq-editor-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.peq-save-profile-panel {
+  border: 1px solid rgba(173,198,255,0.12);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  padding: 10px;
+  margin-bottom: 12px;
+}
+
+.peq-save-profile-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.peq-save-name-input {
+  text-align: left;
+}
+
+.peq-save-profile-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.peq-save-profile-error {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #ffb3b5;
+}
+
+.peq-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.peq-workspace-dirty {
+  font-size: 12px;
+  color: #f0b429;
+  border: 1px solid rgba(240,180,41,0.35);
+  background: rgba(240,180,41,0.12);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.peq-editor-curve-wrap {
+  background: rgba(255,255,255,0.025);
+  border-radius: 12px;
+  padding: 8px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(173,198,255,0.08);
+}
+
+#peq-editor-canvas {
+  display: block;
+  width: 100%;
+  height: 260px;
+  border-radius: 8px;
+}
+
+.peq-editor-preamp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid rgba(173,198,255,0.10);
+  margin-bottom: 10px;
+}
+
+.peq-editor-band-header,
+.peq-editor-band-row {
+  display: grid;
+  grid-template-columns: 24px 52px 72px 90px 90px 80px;
+  gap: 8px;
+  align-items: center;
+}
+
+.peq-editor-band-header {
+  padding: 4px 0 6px;
+}
+
+.peq-editor-band-row {
+  padding: 4px 0;
+}
+
+.peq-editor-col-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.peq-editor-band-num {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.peq-band-toggle {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  border: 1px solid rgba(107,107,123,0.4);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.peq-band-toggle.active {
+  background: rgba(83,225,111,0.18);
+  color: var(--accent-success);
+  border-color: rgba(83,225,111,0.4);
+}
+
+.peq-band-type {
+  background: var(--bg-active);
+  color: var(--text);
+  border: 1px solid rgba(173,198,255,0.12);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 12px;
+  width: 100%;
+}
+
+.peq-editor-num-input {
+  background: var(--bg-active);
+  color: var(--text);
+  border: 1px solid rgba(173,198,255,0.12);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  text-align: right;
+  width: 100%;
+}
+
+.peq-editor-num-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(173,198,255,0.35);
+}
+
+.peq-input-hidden {
+  visibility: hidden;
+}
+
+.peq-editor-unit {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.peq-editor-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: 16px;
+  border-top: 1px solid rgba(173,198,255,0.10);
+  margin-top: 12px;
 }
 
 .queue-list {
@@ -5000,6 +5268,19 @@ tbody tr:hover {
   .queue-drawer {
     bottom: 124px;
   }
+  .peq-workspace {
+    left: 0;
+    bottom: 124px;
+  }
+  .peq-workspace-shell {
+    padding: 18px 16px 18px;
+  }
+  .peq-workspace-context {
+    grid-template-columns: 1fr;
+  }
+  .peq-save-profile-grid {
+    grid-template-columns: 1fr;
+  }
 }
 @media (max-width: 620px) {
   #main,
@@ -5024,6 +5305,9 @@ tbody tr:hover {
     right: 0;
     border-radius: 16px 16px 0 0;
     transform-origin: bottom center;
+    bottom: 134px;
+  }
+  .peq-workspace {
     bottom: 134px;
   }
 }
