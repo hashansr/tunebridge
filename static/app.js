@@ -20,6 +20,22 @@ const state = {
   plSortMode: 'original',
   plSortDir: 'asc',
   plFilter: '',
+  favourites: {
+    songs: new Set(),
+    albums: new Set(),
+    artists: new Set(),
+  },
+  favouritesMeta: {
+    songs: [],
+    albums: [],
+    artists: [],
+    dap_exports: {},
+  },
+  favSongsData: [],
+  favSongsSort: 'my',
+  favArtistsSort: 'recent',
+  favAlbumsSort: 'recent',
+  favPanel: 'songs',
 };
 
 let _currentGearTab = 'daps';
@@ -69,6 +85,121 @@ function musicNote(size = 38) {
 
 function esc(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _normArtistId(name) {
+  return String(name || '').trim().toLowerCase();
+}
+
+function _nameSortKey(name) {
+  return String(name || '').replace(/^(the|a|an)\s+/i, '').toLowerCase();
+}
+
+const _STAR_OUTLINE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><polygon points="12 2.8 15.1 9 22 9.9 17 14.6 18.2 21.2 12 18 5.8 21.2 7 14.6 2 9.9 8.9 9"/></svg>`;
+const _STAR_FILLED = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1"><polygon points="12 2.8 15.1 9 22 9.9 17 14.6 18.2 21.2 12 18 5.8 21.2 7 14.6 2 9.9 8.9 9"/></svg>`;
+const _FAV_PLAYLIST_COVER = 'images/favourite-playlist-cover.png';
+
+function _isFavourite(type, id) {
+  if (!state.favourites[type]) return false;
+  return state.favourites[type].has(String(id || ''));
+}
+
+function _favToggleBtn(type, id, extraClass = '') {
+  const itemId = String(id || '');
+  if (!itemId) return '';
+  const isFav = _isFavourite(type, itemId);
+  const label = isFav ? 'Remove from favourites' : 'Add to favourites';
+  return `<button class="fav-toggle ${extraClass} ${isFav ? 'is-fav' : ''}" data-type="${type}" data-id="${esc(itemId)}" onclick="event.stopPropagation();App.toggleFavourite('${type}','${encodeURIComponent(itemId)}')" title="${label}" aria-label="${label}">${isFav ? _STAR_FILLED : _STAR_OUTLINE}</button>`;
+}
+
+function _applyFavouriteDomState(type, id, isFav) {
+  const itemId = String(id || '');
+  document.querySelectorAll('.fav-toggle').forEach(btn => {
+    if (btn.dataset.type !== type || btn.dataset.id !== itemId) return;
+    btn.classList.toggle('is-fav', isFav);
+    const label = isFav ? 'Remove from favourites' : 'Add to favourites';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    btn.innerHTML = isFav ? _STAR_FILLED : _STAR_OUTLINE;
+  });
+}
+
+function _setFavouritesState(payload = {}) {
+  const songs = Array.isArray(payload.songs) ? payload.songs : [];
+  const albums = Array.isArray(payload.albums) ? payload.albums : [];
+  const artists = Array.isArray(payload.artists) ? payload.artists : [];
+  const dapExports = (payload.dap_exports && typeof payload.dap_exports === 'object') ? payload.dap_exports : {};
+  state.favouritesMeta = { songs, albums, artists, dap_exports: dapExports };
+  state.favourites.songs = new Set(songs.map(r => String(r.id || '')).filter(Boolean));
+  state.favourites.albums = new Set(albums.map(r => String(r.id || '')).filter(Boolean));
+  state.favourites.artists = new Set(artists.map(r => String(r.id || '')).filter(Boolean));
+}
+
+async function loadFavourites() {
+  try {
+    const payload = await api('/favourites');
+    _setFavouritesState(payload || {});
+    refreshPlayerFavouriteButton();
+  } catch (_) {
+    _setFavouritesState({});
+  }
+}
+
+function _replaceFavouriteCategory(type, rows) {
+  const payload = { ...state.favouritesMeta };
+  payload[type] = Array.isArray(rows) ? rows : [];
+  _setFavouritesState(payload);
+  refreshPlayerFavouriteButton();
+}
+
+async function toggleFavourite(type, encodedId) {
+  const id = decodeURIComponent(String(encodedId || ''));
+  if (!id || !['songs', 'albums', 'artists'].includes(type)) return;
+  const had = _isFavourite(type, id);
+  _applyFavouriteDomState(type, id, !had);
+  if (had) state.favourites[type].delete(id);
+  else state.favourites[type].add(id);
+  refreshPlayerFavouriteButton();
+  try {
+    const method = had ? 'DELETE' : 'POST';
+    const rows = await api(`/favourites/${type}/${encodeURIComponent(id)}`, { method });
+    _replaceFavouriteCategory(type, rows);
+    _refreshFavouritesViewsAfterToggle(type);
+  } catch (e) {
+    if (had) state.favourites[type].add(id);
+    else state.favourites[type].delete(id);
+    _applyFavouriteDomState(type, id, had);
+    refreshPlayerFavouriteButton();
+    toast('Could not update favourites: ' + e.message);
+  }
+}
+
+function refreshPlayerFavouriteButton() {
+  const btn = document.getElementById('player-fav-btn');
+  if (!btn) return;
+  const track = Player?.currentTrack;
+  const tid = track?.id ? String(track.id) : '';
+  const isFav = tid ? _isFavourite('songs', tid) : false;
+  btn.classList.toggle('is-fav', isFav);
+  btn.disabled = !tid;
+  const label = isFav ? 'Remove from favourites' : 'Add to favourites';
+  btn.title = tid ? label : 'No track selected';
+  btn.setAttribute('aria-label', tid ? label : 'No track selected');
+  btn.innerHTML = isFav ? _STAR_FILLED : _STAR_OUTLINE;
+}
+
+async function toggleCurrentTrackFavourite() {
+  const track = Player?.currentTrack;
+  if (!track?.id) return;
+  await toggleFavourite('songs', encodeURIComponent(track.id));
+}
+
+function _refreshFavouritesViewsAfterToggle(type) {
+  if (state.view === 'favourites') loadFavouritesSummary();
+  if (state.view === 'favourites' && state.favPanel === 'songs' && type === 'songs') loadFavSongs();
+  if (state.view === 'favourites' && state.favPanel === 'artists' && type === 'artists') loadFavArtists();
+  if (state.view === 'favourites' && state.favPanel === 'albums' && type === 'albums') loadFavAlbums();
+  if (state.view === 'playlists') loadPlaylistsView();
 }
 
 /* ── Scan status ────────────────────────────────────────────────────── */
@@ -122,6 +253,7 @@ async function refreshCurrentLibraryView() {
 
 /* ── Context menu state ─────────────────────────────────────────────── */
 let _ctxTracks = [];
+let _ctxFavTarget = null;
 
 /* ── Create playlist modal state ────────────────────────────────────── */
 let _createPlPendingIds = [];
@@ -234,6 +366,9 @@ async function loadPlaylistsView() {
   const grid = document.getElementById('playlists-view-grid');
   const empty = document.getElementById('playlists-view-empty');
   if (!grid) return;
+  const favTracksRes = await api('/favourites/songs/tracks').catch(() => ({ tracks: [] }));
+  const favTracks = Array.isArray(favTracksRes?.tracks) ? favTracksRes.tracks : [];
+  const favCount = favTracks.length;
 
   // Sort playlists
   const pls = [...state.playlists];
@@ -245,14 +380,14 @@ async function loadPlaylistsView() {
     pls.sort((a, b) => (b.updated_at || b.created_at || 0) - (a.updated_at || a.created_at || 0));
   }
 
-  if (!pls.length) {
+  if (!pls.length && favCount === 0) {
     grid.innerHTML = '';
     if (empty) empty.style.display = 'flex';
     return;
   }
   if (empty) empty.style.display = 'none';
 
-  grid.innerHTML = pls.map(pl => {
+  const playlistCards = pls.map(pl => {
     // Build cover art HTML
     let coverHtml;
     if (pl.has_artwork) {
@@ -283,6 +418,23 @@ async function loadPlaylistsView() {
       </div>
     `;
   }).join('');
+
+  let favCard = '';
+  if (favCount > 0) {
+    const coverHtml = `<img src="${_FAV_PLAYLIST_COVER}" style="width:100%;height:100%;object-fit:cover" loading="lazy" />`;
+    favCard = `
+      <div class="pl-view-card pl-view-card-fav" onclick="App.showView('fav-songs')">
+        <div class="pl-view-cover playlist-cover-single">${coverHtml}</div>
+        <div class="pl-view-info">
+          <div class="pl-view-info-text">
+            <div class="pl-view-name" title="Favourite Songs">Favourite Songs <span class="fav-badge-inline">★</span></div>
+            <div class="pl-view-meta">${favCount} track${favCount !== 1 ? 's' : ''}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  grid.innerHTML = favCard + playlistCards;
 }
 
 /* ── Artists view ───────────────────────────────────────────────────── */
@@ -342,6 +494,7 @@ async function loadArtists() {
         <div class="artist-name" title="${esc(a.name)}">${esc(a.name)}</div>
         <div class="artist-meta">${a.album_count} album${a.album_count !== 1 ? 's' : ''} · ${a.track_count} songs</div>
         <div class="artist-card-overlay">
+          ${_favToggleBtn('artists', _normArtistId(a.name), 'card-fav-btn')}
           <button class="card-add-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.addAllArtistSongs(this.dataset.artist,event)" title="Add all songs to playlist">+</button>
         </div>
       </div>
@@ -416,6 +569,20 @@ async function loadAlbums(artistFilter = null) {
       `${albums.length} album${albums.length !== 1 ? 's' : ''} · ${totalSongs} songs`;
     document.getElementById('artist-hero-add').onclick = () => App.addAllArtistSongs(artistFilter);
     document.getElementById('artist-hero-browse').onclick = () => App.showArtistTracks(artistFilter);
+    const artistFavBtn = document.getElementById('artist-hero-fav');
+    if (artistFavBtn) {
+      const artistId = _normArtistId(artistFilter);
+      const isFav = _isFavourite('artists', artistId);
+      artistFavBtn.classList.toggle('is-fav', isFav);
+      artistFavBtn.textContent = isFav ? '★ Favourited' : '☆ Favourite';
+      artistFavBtn.onclick = async (e) => {
+        e.stopPropagation();
+        await toggleFavourite('artists', encodeURIComponent(artistId));
+        const nowFav = _isFavourite('artists', artistId);
+        artistFavBtn.classList.toggle('is-fav', nowFav);
+        artistFavBtn.textContent = nowFav ? '★ Favourited' : '☆ Favourite';
+      };
+    }
     const artistPlayBtn = document.getElementById('artist-hero-play');
     if (artistPlayBtn) {
       artistPlayBtn.style.display = '';
@@ -469,6 +636,7 @@ async function loadAlbums(artistFilter = null) {
           <div class="album-thumb">
             ${thumbImg(al.artwork_key, 160, '6px')}
             <div class="album-thumb-overlay">
+              ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn')}
               <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>
               </button>
@@ -488,6 +656,7 @@ async function loadAlbums(artistFilter = null) {
         <div class="album-thumb">
           ${thumbImg(al.artwork_key, 160, '6px')}
           <div class="album-thumb-overlay">
+            ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn')}
             <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>
             </button>
@@ -541,6 +710,22 @@ async function loadTracks(artist = null, album = null) {
       totalSecs ? fmtDuration(totalSecs) : null,
     ].filter(Boolean).join(' · ');
     document.getElementById('album-hero-meta').textContent = meta;
+    const albumFavBtn = document.getElementById('album-hero-fav');
+    if (albumFavBtn) {
+      const albumId = String(tracks[0].artwork_key || '');
+      const isFav = albumId ? _isFavourite('albums', albumId) : false;
+      albumFavBtn.style.display = albumId ? '' : 'none';
+      albumFavBtn.classList.toggle('is-fav', isFav);
+      albumFavBtn.textContent = isFav ? '★ Favourited' : '☆ Favourite';
+      albumFavBtn.onclick = async (e) => {
+        e.stopPropagation();
+        if (!albumId) return;
+        await toggleFavourite('albums', encodeURIComponent(albumId));
+        const nowFav = _isFavourite('albums', albumId);
+        albumFavBtn.classList.toggle('is-fav', nowFav);
+        albumFavBtn.textContent = nowFav ? '★ Favourited' : '☆ Favourite';
+      };
+    }
     heroLabel.textContent = 'Album';
     albumHero.style.display = 'flex';
   } else if (!album && artist && tracks.length) {
@@ -553,6 +738,8 @@ async function loadTracks(artist = null, album = null) {
     const totalSecs = tracks.reduce((s, t) => s + (t.duration || 0), 0);
     document.getElementById('album-hero-meta').textContent =
       `${tracks.length} songs${totalSecs ? ' · ' + fmtDuration(totalSecs) : ''}`;
+    const albumFavBtn = document.getElementById('album-hero-fav');
+    if (albumFavBtn) albumFavBtn.style.display = 'none';
     heroLabel.textContent = 'Artist';
     albumHero.style.display = 'flex';
   } else {
@@ -589,8 +776,9 @@ function fmtDuration(totalSecs) {
 
 /* ── Track row (library) ────────────────────────────────────────────── */
 function trackRow(t, num, inPlaylist) {
+  const isFavVirtualPlaylist = !!(inPlaylist && state.playlist?.is_favourites);
   const add = inPlaylist
-    ? `<button class="remove-btn" onclick="App.removeFromPlaylist('${t.id}')" title="Remove">
+    ? `<button class="remove-btn" onclick="${isFavVirtualPlaylist ? `App.removeSongFromFavourites('${t.id}')` : `App.removeFromPlaylist('${t.id}')`}" title="${isFavVirtualPlaylist ? 'Remove from favourites' : 'Remove'}">
          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
        </button>`
     : `<button class="add-btn" onclick="App.showAddDropdown(event, '${t.id}')" title="Add to playlist">
@@ -632,8 +820,27 @@ function trackRow(t, num, inPlaylist) {
       <td class="col-dur">${esc(t.duration_fmt || '')}</td>
       ${inPlaylist ? `<td class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.genre || '')}</td>` : ''}
       ${inPlaylist ? `<td class="col-year" style="color:var(--text-muted);font-size:var(--text-sm)">${t.year || ''}</td>` : ''}
+      <td class="col-fav-cell">${_favToggleBtn('songs', t.id, `track-fav-btn${inPlaylist ? '' : ''}`)}</td>
       <td><div class="col-act-inner">${add}</div></td>
     </tr>`;
+}
+
+function _renderPlaylistBreadcrumb() {
+  const crumb = document.getElementById('playlist-breadcrumb');
+  if (!crumb) return;
+  if (state.playlist?.is_favourites) {
+    crumb.innerHTML = `
+      <span class="crumb" onclick="App.showView('favourites')">Favourites</span>
+      <span class="crumb-sep">›</span>
+      <span class="crumb-current">${esc(state.playlist?.name || 'Favourite Songs')}</span>
+    `;
+    return;
+  }
+  crumb.innerHTML = `
+    <span class="crumb" onclick="App.showView('playlists')">Playlists</span>
+    <span class="crumb-sep">›</span>
+    <span class="crumb-current">${esc(state.playlist?.name || 'Playlist')}</span>
+  `;
 }
 
 /* ── Playlist view ──────────────────────────────────────────────────── */
@@ -646,8 +853,10 @@ async function openPlaylist(pid) {
   setActiveNav('playlist');
   renderSidebarPlaylists();
   showViewEl('playlist');
+  _renderPlaylistBreadcrumb();
 
   document.getElementById('pl-name').textContent = pl.name;
+  _applyPlaylistDetailMode(false);
 
   renderPlaylistTracks(pl.tracks);
   updatePlaylistCover(pl.tracks);
@@ -670,40 +879,97 @@ async function openPlaylist(pid) {
   playAllBtn.style.display = pl.tracks.length ? '' : 'none';
 }
 
+function _applyPlaylistDetailMode(isFavouriteVirtual) {
+  const delBtn = document.querySelector('.pl-header-delete-btn');
+  const coverWrap = document.querySelector('.playlist-cover-wrap');
+  const removeBtn = document.getElementById('pl-cover-remove');
+  const fileInput = document.getElementById('artwork-file-input');
+  const nameEl = document.getElementById('pl-name');
+  if (delBtn) delBtn.style.display = isFavouriteVirtual ? 'none' : '';
+  if (removeBtn) removeBtn.style.display = isFavouriteVirtual ? 'none' : removeBtn.style.display;
+  if (fileInput) fileInput.disabled = !!isFavouriteVirtual;
+  if (coverWrap) {
+    coverWrap.style.pointerEvents = isFavouriteVirtual ? 'none' : '';
+    coverWrap.title = isFavouriteVirtual ? 'Favourite Songs cover' : 'Click to set cover art';
+  }
+  if (nameEl) {
+    nameEl.contentEditable = isFavouriteVirtual ? 'false' : 'true';
+  }
+}
+
+async function openFavouriteSongsPlaylist() {
+  if (!_guardMlGeneratorNavigation()) return;
+  const res = await api('/favourites/songs/tracks').catch(() => ({ tracks: [] }));
+  const tracks = Array.isArray(res?.tracks) ? res.tracks : [];
+  const pl = {
+    id: '__favourite_songs__',
+    name: 'Favourite Songs',
+    tracks,
+    is_favourites: true,
+    created_at: 0,
+    updated_at: Math.max(0, ...((state.favouritesMeta.songs || []).map(r => Number(r.added_at || 0)))),
+  };
+  state.playlist = pl;
+  state.view = 'playlist';
+  clearSelection();
+  setActiveNav('favourites');
+  renderSidebarPlaylists();
+  showViewEl('playlist');
+  _renderPlaylistBreadcrumb();
+
+  document.getElementById('pl-name').textContent = pl.name;
+  _applyPlaylistDetailMode(true);
+  renderPlaylistTracks(pl.tracks);
+  const cover = document.getElementById('pl-cover');
+  if (cover) {
+    cover.className = 'playlist-cover playlist-cover-single';
+    cover.innerHTML = `<img src="${_FAV_PLAYLIST_COVER}" style="width:100%;height:100%;object-fit:cover;border-radius:8px" />`;
+  }
+  updatePlaylistStats(pl.tracks);
+  renderDapExportPills(pl.id);
+
+  Player.registerTracks(pl.tracks);
+  Player.setPlaybackContext(pl.tracks, 'Playlist · Favourite Songs');
+  let playAllBtn = document.getElementById('pl-play-all-btn');
+  if (!playAllBtn) {
+    playAllBtn = document.createElement('button');
+    playAllBtn.id = 'pl-play-all-btn';
+    playAllBtn.className = 'btn-play-all';
+    playAllBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play`;
+    const stats = document.getElementById('pl-stats');
+    if (stats) stats.insertAdjacentElement('afterend', playAllBtn);
+  }
+  playAllBtn.onclick = () => Player.playAll(pl.tracks);
+  playAllBtn.style.display = pl.tracks.length ? '' : 'none';
+}
+
 async function renderDapExportPills(pid) {
   const container = document.getElementById('dap-export-pills');
   if (!container) return;
+  const isFavVirtual = state.playlist?.is_favourites || pid === '__favourite_songs__';
 
   const daps = await api('/daps').catch(() => []);
   const connected = daps.filter(d => d.mounted);
-  const hasConnected = connected.length > 0;
-  const triggerLabel = hasConnected ? `Connected DAPs (${connected.length})` : 'No DAP Connected';
+  if (!connected.length) {
+    container.innerHTML = '';
+    return;
+  }
 
   const svgDevice = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>`;
-  const chevron = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>`;
-  const menuItems = hasConnected
-    ? connected.map(dap => `
-          <button class="pl-dap-dd-item" onclick="App.pickConnectedDapExport('${dap.id}')">
-            <span class="pl-dap-dd-item-name">${esc(dap.name)}</span>
-            <span class="pl-dap-dd-item-meta">Copy playlist</span>
-          </button>
-        `).join('')
-    : `<button class="pl-dap-dd-item is-disabled" disabled>
-         <span class="pl-dap-dd-item-name">No DAP connected</span>
-         <span class="pl-dap-dd-item-meta">Connect a DAP to export this playlist</span>
-       </button>`;
-
-  container.innerHTML = `
-    <div id="pl-dap-export-dd" class="pl-dap-dd" onclick="event.stopPropagation()">
-      <button class="btn-export btn-export-device pl-dap-dd-trigger" onclick="App.togglePlaylistDapMenu()">
+  const latestFavAt = Math.max(0, ...((state.favouritesMeta.songs || []).map(r => Number(r.added_at || 0))));
+  const favExports = state.favouritesMeta.dap_exports || {};
+  container.innerHTML = connected.map(dap => {
+    const isFavUpToDate = Number(favExports[dap.id] || 0) >= latestFavAt && latestFavAt > 0;
+    const label = isFavVirtual
+      ? (isFavUpToDate ? `Copy to ${dap.name} (up to date)` : `Copy to ${dap.name}`)
+      : `Copy to ${dap.name}`;
+    return `
+      <button class="btn-export btn-export-device" onclick="${isFavVirtual ? `App.copyFavSongsToDap('${dap.id}')` : `App.pickConnectedDapExport('${dap.id}')`}">
         ${svgDevice}
-        ${triggerLabel}
-        ${chevron}
+        ${esc(label)}
       </button>
-      <div id="pl-dap-export-menu" class="pl-dap-dd-menu" style="display:none">
-        ${menuItems}
-      </div>
-    </div>`;
+    `;
+  }).join('');
 }
 
 function togglePlaylistDapMenu() {
@@ -765,6 +1031,27 @@ function renderPlaylistTracks(tracks) {
   const isFiltered = state.plFilter.trim().length > 0;
   const isSorted = state.plSortMode !== 'original';
   const isDragEnabled = !isFiltered && !isSorted;
+  const totalTracks = (state.playlist?.tracks || []).length;
+  const emptyTitleEl = empty ? empty.querySelector('p') : null;
+  const emptySubEl = empty ? empty.querySelector('p.muted') : null;
+
+  if (emptyTitleEl && emptySubEl) {
+    if (state.playlist?.is_favourites) {
+      if (isFiltered && totalTracks > 0) {
+        emptyTitleEl.textContent = 'No songs match this filter.';
+        emptySubEl.textContent = 'Try a different search or clear the filter.';
+      } else {
+        emptyTitleEl.textContent = 'No favourite songs yet.';
+        emptySubEl.textContent = 'Add songs to Favourites and they will show up here.';
+      }
+    } else if (isFiltered && totalTracks > 0) {
+      emptyTitleEl.textContent = 'No songs match this filter.';
+      emptySubEl.textContent = 'Try a different search or clear the filter.';
+    } else {
+      emptyTitleEl.textContent = 'This playlist is empty.';
+      emptySubEl.innerHTML = 'Browse the library and click <strong>+</strong> to add songs.';
+    }
+  }
 
   // Update filter count in stats if filtering
   if (isFiltered) {
@@ -880,10 +1167,14 @@ function updateSelectionUI() {
   const countEl = document.getElementById('bulk-count');
   const removeBtn = document.getElementById('bulk-remove-btn');
   const addBtn = document.getElementById('bulk-add-btn');
+  const favBtn = document.getElementById('bulk-fav-btn');
+  const unfavBtn = document.getElementById('bulk-unfav-btn');
 
   countEl.textContent = `${count} song${count !== 1 ? 's' : ''} selected`;
   bar.classList.toggle('visible', count > 0);
   if (removeBtn) removeBtn.style.display = state.view === 'playlist' && count > 0 ? 'inline-flex' : 'none';
+  if (favBtn) favBtn.style.display = count > 0 ? 'inline-flex' : 'none';
+  if (unfavBtn) unfavBtn.style.display = count > 0 ? 'inline-flex' : 'none';
 
   // Wire add button each time (event could differ)
   if (addBtn) {
@@ -1112,16 +1403,29 @@ function showAddDropdown(event, trackId) {
 }
 
 /* ── Right-click context menu ───────────────────────────────────────── */
-function _showCtxMenu(x, y, tracks, label) {
+function _showCtxMenu(x, y, tracks, label, favTarget = null) {
   _ctxTracks = tracks;
+  _ctxFavTarget = favTarget;
   const menu = document.getElementById('ctx-menu');
   const labelEl = document.getElementById('ctx-label');
   const smartLabel = document.getElementById('ctx-smart-playlist-label');
+  const favItem = document.getElementById('ctx-favourite-item');
+  const favLabel = document.getElementById('ctx-favourite-label');
   if (labelEl) labelEl.textContent = label || (tracks.length === 1 ? tracks[0].title : `${tracks.length} songs`);
   if (smartLabel) {
     smartLabel.textContent = tracks.length === 1
       ? 'Create Smart Playlist from This Song'
       : `Create Smart Playlist from ${tracks.length} Songs`;
+  }
+  if (favItem && favLabel) {
+    if (!favTarget?.id || !favTarget?.type) {
+      favItem.style.display = 'none';
+    } else {
+      favItem.style.display = '';
+      favLabel.textContent = _isFavourite(favTarget.type, favTarget.id)
+        ? 'Remove from Favourites'
+        : 'Add to Favourites';
+    }
   }
   menu.style.display = 'block';
   menu.style.left = '-9999px';
@@ -1146,6 +1450,7 @@ function hideCtxMenu() {
   closeCtxSubmenu();
   clearTimeout(_ctxSubmenuTimer);
   _ctxTracks = [];
+  _ctxFavTarget = null;
 }
 
 function showTrackCtxMenu(e, trackId) {
@@ -1154,7 +1459,7 @@ function showTrackCtxMenu(e, trackId) {
   hideDropdown();
   const track = Player.getTrack(trackId);
   if (!track) return;
-  _showCtxMenu(e.clientX, e.clientY, [track], track.title);
+  _showCtxMenu(e.clientX, e.clientY, [track], track.title, { type: 'songs', id: String(trackId) });
 }
 
 async function showArtistCtxMenu(e, artistName) {
@@ -1164,7 +1469,8 @@ async function showArtistCtxMenu(e, artistName) {
   try {
     const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artistName)}`);
     _showCtxMenu(e.clientX, e.clientY, tracks,
-      `${artistName} · ${tracks.length} song${tracks.length !== 1 ? 's' : ''}`);
+      `${artistName} · ${tracks.length} song${tracks.length !== 1 ? 's' : ''}`,
+      { type: 'artists', id: _normArtistId(artistName) });
   } catch (_) {}
 }
 
@@ -1174,8 +1480,10 @@ async function showAlbumCtxMenu(e, artist, album) {
   hideDropdown();
   try {
     const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`);
+    const artworkKey = tracks[0]?.artwork_key || '';
     _showCtxMenu(e.clientX, e.clientY, tracks,
-      `${album} · ${tracks.length} song${tracks.length !== 1 ? 's' : ''}`);
+      `${album} · ${tracks.length} song${tracks.length !== 1 ? 's' : ''}`,
+      artworkKey ? { type: 'albums', id: artworkKey } : null);
   } catch (_) {}
 }
 
@@ -1198,6 +1506,13 @@ function ctxCreateSmartPlaylist() {
   hideCtxMenu();
   if (!refs.length) return;
   openMlPlaylistGenerator('global', { referenceTrackIds: refs, preferredMode: 'seed' });
+}
+
+async function ctxToggleFavourite() {
+  const target = _ctxFavTarget;
+  hideCtxMenu();
+  if (!target?.type || !target?.id) return;
+  await toggleFavourite(target.type, encodeURIComponent(target.id));
 }
 
 function ctxAddToPlaylist(e) {
@@ -1989,24 +2304,44 @@ async function deletePlaylist(pid) {
 
 async function deleteCurrentPlaylist() {
   if (!state.playlist) return;
+  if (state.playlist.is_favourites) return;
   await deletePlaylist(state.playlist.id);
 }
 
 let renameTarget = null;
 function renamePlaylist(newName) {
   if (!state.playlist || !newName.trim()) return;
+  if (state.playlist.is_favourites) return;
   if (newName.trim() === state.playlist.name) return;
   api(`/playlists/${state.playlist.id}`, { method: 'PUT', body: { name: newName.trim() } })
     .then(() => {
       state.playlist.name = newName.trim();
+      _renderPlaylistBreadcrumb();
       loadPlaylists();
       toast('Playlist renamed');
     });
 }
 
+async function removeSongFromFavourites(trackId) {
+  if (!trackId) return;
+  await toggleFavourite('songs', encodeURIComponent(trackId));
+  if (state.playlist?.is_favourites) {
+    await openFavouriteSongsPlaylist();
+  }
+}
+
 /* ── Export ─────────────────────────────────────────────────────────── */
 async function exportPlaylistDap(did) {
   if (!state.playlist) return;
+  if (state.playlist.is_favourites) {
+    const aFav = document.createElement('a');
+    aFav.href = '/api/favourites/songs/export/poweramp';
+    document.body.appendChild(aFav);
+    aFav.click();
+    document.body.removeChild(aFav);
+    toast('Downloading Favourite Songs M3U…');
+    return;
+  }
   const url = `/api/daps/${did}/export/${state.playlist.id}/download`;
   const a = document.createElement('a');
   a.href = url;
@@ -2021,6 +2356,13 @@ async function exportPlaylistDap(did) {
 async function exportToDeviceDap(did) {
   if (!state.playlist) return;
   try {
+    if (state.playlist.is_favourites) {
+      await api(`/daps/${did}/export/favourites`, { method: 'POST' });
+      toast('Favourite Songs copied to device ✓');
+      await loadFavourites();
+      renderDapExportPills(state.playlist.id);
+      return;
+    }
     const res = await api(`/daps/${did}/export/${state.playlist.id}`, { method: 'POST' });
     toast(`Exported to device ✓`);
     // Refresh pills so sync status updates
@@ -2030,9 +2372,466 @@ async function exportToDeviceDap(did) {
   }
 }
 
+/* ── Favourites views ───────────────────────────────────────────────── */
+function _favAddedAtMap(type) {
+  const rows = state.favouritesMeta[type] || [];
+  const map = new Map();
+  rows.forEach(r => map.set(String(r.id || ''), Number(r.added_at || 0)));
+  return map;
+}
+
+function _favOrderIds(type) {
+  return (state.favouritesMeta[type] || []).map(r => String(r.id || '')).filter(Boolean);
+}
+
+function _favSummaryCard(title, count, panel) {
+  return `
+    <button class="favourites-summary-card" data-fav-panel="${esc(panel)}" onclick="App.selectFavouritesPanel('${esc(panel)}')">
+      <div class="favourites-summary-title">${esc(title)}</div>
+      <div class="favourites-summary-count">${count}</div>
+    </button>
+  `;
+}
+
+function _applyFavouritesPanelState() {
+  document.querySelectorAll('.favourites-summary-card[data-fav-panel]').forEach(btn => {
+    btn.classList.toggle('is-active', btn.dataset.favPanel === state.favPanel);
+  });
+}
+
+async function selectFavouritesPanel(panel) {
+  const normalized = (panel === 'artists' || panel === 'albums' || panel === 'songs') ? panel : 'songs';
+  state.favPanel = normalized;
+  _applyFavouritesPanelState();
+
+  const host = document.getElementById('favourites-inline-panels');
+  if (!host) return;
+  host.style.display = '';
+  const panels = {
+    artists: document.getElementById('favourites-panel-artists'),
+    albums: document.getElementById('favourites-panel-albums'),
+    songs: document.getElementById('favourites-panel-songs'),
+  };
+  Object.entries(panels).forEach(([key, el]) => {
+    if (!el) return;
+    const isActive = key === normalized;
+    el.classList.toggle('is-active', isActive);
+    el.style.display = '';
+    el.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+  });
+
+  if (normalized === 'artists') await loadFavArtists();
+  else if (normalized === 'albums') await loadFavAlbums();
+  else {
+    await _renderFavSongsActionCtas();
+    await loadFavSongs();
+  }
+}
+
+async function _renderFavSongsActionCtas() {
+  const copyBtn = document.getElementById('fav-songs-copy-btn');
+  const downloadBtn = document.getElementById('fav-songs-download-btn');
+  if (!copyBtn || !downloadBtn) return;
+  downloadBtn.textContent = 'Download M3U';
+  const daps = await api('/daps').catch(() => []);
+  const connected = Array.isArray(daps) ? daps.filter(d => d.mounted) : [];
+  if (!connected.length) {
+    copyBtn.style.display = 'none';
+    return;
+  }
+  copyBtn.style.display = '';
+  copyBtn.textContent = connected.length === 1
+    ? `Copy to ${connected[0].name}`
+    : `Copy to Connected DAPs (${connected.length})`;
+}
+
+async function loadFavouritesSummary() {
+  const grid = document.getElementById('favourites-summary-grid');
+  const empty = document.getElementById('favourites-empty');
+  if (!grid || !empty) return;
+  if (!state.artists.length) {
+    state.artists = await api('/library/artists').catch(() => []);
+  }
+  if (!state.albums.length) {
+    state.albums = await api('/library/albums').catch(() => []);
+  }
+
+  const favSongsRes = await api('/favourites/songs/tracks').catch(() => ({ tracks: [] }));
+  const favSongs = Array.isArray(favSongsRes?.tracks) ? favSongsRes.tracks : [];
+
+  const favArtistRows = state.artists.filter(a => state.favourites.artists.has(_normArtistId(a.name)));
+  const favAlbumRows = state.albums.filter(a => state.favourites.albums.has(String(a.artwork_key || '')));
+
+  const total = favArtistRows.length + favAlbumRows.length + favSongs.length;
+  empty.style.display = total === 0 ? 'flex' : 'none';
+  grid.style.display = total === 0 ? 'none' : 'grid';
+  const inlinePanels = document.getElementById('favourites-inline-panels');
+  if (inlinePanels) inlinePanels.style.display = total === 0 ? 'none' : '';
+  grid.innerHTML = [
+    _favSummaryCard('Artists', favArtistRows.length, 'artists'),
+    _favSummaryCard('Albums', favAlbumRows.length, 'albums'),
+    _favSummaryCard('Songs', favSongs.length, 'songs'),
+  ].join('');
+  if (total > 0) {
+    await selectFavouritesPanel(state.favPanel || 'songs');
+  }
+}
+
+function _renderFavArtistCards(rows) {
+  const grid = document.getElementById('fav-artists-grid');
+  if (!grid) return;
+  if (!rows.length) {
+    grid.innerHTML = `
+      <div class="empty-state favourites-grid-empty">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="3.2"/><path d="M5 19c0-3.1 2.6-5.4 7-5.4s7 2.3 7 5.4"/></svg>
+        <p>No favourite artists yet.</p>
+        <p class="muted">Tap ★ on artists to build your quick-access artist list.</p>
+        <button class="btn-secondary" onclick="App.showView('artists')">Browse Artists</button>
+      </div>
+    `;
+    return;
+  }
+  grid.innerHTML = rows.map(a => `
+    <div class="artist-card" data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
+      <div class="artist-thumb">${thumbImg(a.artwork_key, 120, '6px')}</div>
+      <div class="artist-name" title="${esc(a.name)}">${esc(a.name)}</div>
+      <div class="artist-meta">${a.album_count} album${a.album_count !== 1 ? 's' : ''} · ${a.track_count} songs</div>
+      <div class="artist-card-overlay">
+        ${_favToggleBtn('artists', _normArtistId(a.name), 'card-fav-btn is-fav')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function _getFavArtistsRowsSorted() {
+  let rows = state.artists.filter(a => state.favourites.artists.has(_normArtistId(a.name)));
+  if (state.favArtistsSort === 'az') {
+    rows = [...rows].sort((a, b) => _nameSortKey(a.name).localeCompare(_nameSortKey(b.name)));
+  } else {
+    const order = _favOrderIds('artists');
+    const idx = new Map(order.map((id, i) => [id, i]));
+    rows = [...rows].sort((a, b) => (idx.get(_normArtistId(a.name)) ?? 1e9) - (idx.get(_normArtistId(b.name)) ?? 1e9));
+  }
+  return rows;
+}
+
+async function loadFavArtists() {
+  if (!state.artists.length) {
+    state.artists = await api('/library/artists').catch(() => []);
+  }
+  const rows = _getFavArtistsRowsSorted();
+  _renderFavArtistCards(rows);
+}
+
+function setFavArtistsSort(mode) {
+  state.favArtistsSort = mode;
+  document.querySelectorAll('[data-fav-artist-sort]').forEach(b => b.classList.toggle('active', b.dataset.favArtistSort === mode));
+  loadFavArtists();
+}
+
+function _renderFavAlbumCards(rows) {
+  const grid = document.getElementById('fav-albums-grid');
+  if (!grid) return;
+  if (!rows.length) {
+    grid.innerHTML = `
+      <div class="empty-state favourites-grid-empty">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4.5" y="4.5" width="15" height="15" rx="2.2"/><circle cx="12" cy="12" r="3.2"/></svg>
+        <p>No favourite albums yet.</p>
+        <p class="muted">Tap ★ on albums to keep your must-listen records here.</p>
+        <button class="btn-secondary" onclick="App.showView('albums')">Browse Albums</button>
+      </div>
+    `;
+    return;
+  }
+  grid.innerHTML = rows.map(al => `
+    <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
+      <div class="album-thumb">
+        ${thumbImg(al.artwork_key, 160, '6px')}
+        <div class="album-thumb-overlay">
+          ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn is-fav')}
+          <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>
+          </button>
+          <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
+        </div>
+      </div>
+      <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
+      <div class="album-artist">${esc(al.artist)}</div>
+      ${al.year ? `<div class="album-year">${esc(al.year)}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function _getFavAlbumsRowsSorted() {
+  let rows = state.albums.filter(a => state.favourites.albums.has(String(a.artwork_key || '')));
+  if (state.favAlbumsSort === 'az') {
+    rows = [...rows].sort((a, b) => _nameSortKey(a.name).localeCompare(_nameSortKey(b.name)));
+  } else {
+    const order = _favOrderIds('albums');
+    const idx = new Map(order.map((id, i) => [id, i]));
+    rows = [...rows].sort((a, b) => (idx.get(String(a.artwork_key || '')) ?? 1e9) - (idx.get(String(b.artwork_key || '')) ?? 1e9));
+  }
+  return rows;
+}
+
+async function loadFavAlbums() {
+  if (!state.albums.length) {
+    state.albums = await api('/library/albums').catch(() => []);
+  }
+  const rows = _getFavAlbumsRowsSorted();
+  _renderFavAlbumCards(rows);
+}
+
+function setFavAlbumsSort(mode) {
+  state.favAlbumsSort = mode;
+  document.querySelectorAll('[data-fav-album-sort]').forEach(b => b.classList.toggle('active', b.dataset.favAlbumSort === mode));
+  loadFavAlbums();
+}
+
+function _favSongRow(t, idx) {
+  const playIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`;
+  return `
+    <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
+      <td class="col-num">
+        <div class="num-cell">
+          <div class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="9" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg>
+          </div>
+          <span class="track-num">${idx + 1}</span>
+        </div>
+      </td>
+      <td>
+        <div class="title-cell">
+          <div class="thumb-wrap">
+            <div class="thumb">${thumbImg(t.artwork_key, 38, '4px')}</div>
+            <button class="thumb-play-btn" onclick="event.stopPropagation();Player.playTrackById('${t.id}')" title="Play">${playIcon}</button>
+          </div>
+          <div class="track-info">
+            <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
+            <div class="track-artist" title="${esc(t.artist)}">${esc(t.artist)}</div>
+          </div>
+        </div>
+      </td>
+      <td class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
+      <td class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
+      <td class="col-dur">${esc(t.duration_fmt || '')}</td>
+      <td class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn is-fav')}</td>
+      <td><div class="col-act-inner">
+        <button class="add-btn" onclick="App.showAddDropdown(event, '${t.id}')" title="Add to playlist">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div></td>
+    </tr>
+  `;
+}
+
+async function favSongsReorder(orderIds) {
+  const rows = await api('/favourites/songs/reorder', { method: 'PUT', body: { order: orderIds } });
+  _replaceFavouriteCategory('songs', rows);
+}
+
+async function favArtistsReorder(orderIds) {
+  const rows = await api('/favourites/artists/reorder', { method: 'PUT', body: { order: orderIds } });
+  _replaceFavouriteCategory('artists', rows);
+}
+
+async function favAlbumsReorder(orderIds) {
+  const rows = await api('/favourites/albums/reorder', { method: 'PUT', body: { order: orderIds } });
+  _replaceFavouriteCategory('albums', rows);
+}
+
+async function loadFavSongs() {
+  await _renderFavSongsActionCtas();
+  const table = document.getElementById('fav-songs-table');
+  const tbody = document.getElementById('fav-songs-tbody');
+  const empty = document.getElementById('fav-songs-empty');
+  const orphan = document.getElementById('fav-songs-orphans');
+  if (!table || !tbody || !empty || !orphan) return;
+
+  const res = await api('/favourites/songs/tracks').catch(() => ({ tracks: [], orphaned_count: 0 }));
+  const tracks = Array.isArray(res?.tracks) ? res.tracks : [];
+  const orphanedCount = Number(res?.orphaned_count || 0);
+  state.favSongsData = tracks;
+
+  if (orphanedCount > 0) {
+    orphan.style.display = 'block';
+    orphan.textContent = `${orphanedCount} favourited song${orphanedCount === 1 ? '' : 's'} are no longer in your library.`;
+  } else {
+    orphan.style.display = 'none';
+  }
+
+  if (!tracks.length) {
+    table.style.display = 'none';
+    empty.style.display = 'flex';
+    tbody.innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+  table.style.display = 'table';
+
+  const addedAt = _favAddedAtMap('songs');
+  let rows = [...tracks];
+  if (state.favSongsSort === 'my') {
+    const order = _favOrderIds('songs');
+    const idx = new Map(order.map((id, i) => [id, i]));
+    rows.sort((a, b) => (idx.get(a.id) ?? 1e9) - (idx.get(b.id) ?? 1e9));
+  } else if (state.favSongsSort === 'recent') {
+    rows.sort((a, b) => (addedAt.get(b.id) || 0) - (addedAt.get(a.id) || 0));
+  } else if (state.favSongsSort === 'az') {
+    rows.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  } else if (state.favSongsSort === 'album') {
+    rows.sort((a, b) => (a.album || '').localeCompare(b.album || ''));
+  }
+
+  Player.registerTracks(rows);
+  Player.setPlaybackContext(rows, 'Favourite Songs');
+  tbody.innerHTML = rows.map((t, i) => _favSongRow(t, i)).join('');
+
+  if (state.sortable) state.sortable.destroy();
+  if (state.favSongsSort === 'my') {
+    state.sortable = new Sortable(tbody, {
+      animation: 150,
+      handle: '.drag-handle',
+      onEnd: async () => {
+        const ids = Array.from(tbody.querySelectorAll('tr[data-id]')).map(r => r.dataset.id);
+        await favSongsReorder(ids);
+      },
+    });
+  } else {
+    state.sortable = null;
+  }
+}
+
+function _uniqueTracksById(tracks) {
+  const byId = new Map();
+  (tracks || []).forEach(t => {
+    if (t && t.id && !byId.has(t.id)) byId.set(t.id, t);
+  });
+  return [...byId.values()];
+}
+
+async function playAllFavouriteArtists() {
+  if (!state.artists.length) state.artists = await api('/library/artists').catch(() => []);
+  const favArtists = _getFavArtistsRowsSorted();
+  if (!favArtists.length) {
+    toast('No favourite artists to play yet.');
+    return;
+  }
+  const chunks = await Promise.all(
+    favArtists.map(a => api(`/library/tracks?artist=${encodeURIComponent(a.name)}`).catch(() => []))
+  );
+  const tracks = _uniqueTracksById(chunks.flat());
+  if (!tracks.length) {
+    toast('No tracks found for favourite artists.');
+    return;
+  }
+  Player.registerTracks(tracks);
+  Player.setPlaybackContext(tracks, 'Favourites · Artists');
+  Player.playAll(tracks, 0, 'Favourites · Artists');
+}
+
+async function playAllFavouriteAlbums() {
+  if (!state.albums.length) state.albums = await api('/library/albums').catch(() => []);
+  const favAlbums = _getFavAlbumsRowsSorted();
+  if (!favAlbums.length) {
+    toast('No favourite albums to play yet.');
+    return;
+  }
+  const chunks = await Promise.all(
+    favAlbums.map(al => api(`/library/tracks?artist=${encodeURIComponent(al.artist)}&album=${encodeURIComponent(al.name)}`).catch(() => []))
+  );
+  const tracks = _uniqueTracksById(chunks.flat());
+  if (!tracks.length) {
+    toast('No tracks found for favourite albums.');
+    return;
+  }
+  Player.registerTracks(tracks);
+  Player.setPlaybackContext(tracks, 'Favourites · Albums');
+  Player.playAll(tracks, 0, 'Favourites · Albums');
+}
+
+async function playAllFavouriteSongs() {
+  let tracks = Array.isArray(state.favSongsData) ? state.favSongsData : [];
+  if (!tracks.length) {
+    const res = await api('/favourites/songs/tracks').catch(() => ({ tracks: [] }));
+    tracks = Array.isArray(res?.tracks) ? res.tracks : [];
+  }
+  tracks = _uniqueTracksById(tracks);
+  if (!tracks.length) {
+    toast('No favourite songs to play yet.');
+    return;
+  }
+  Player.registerTracks(tracks);
+  Player.setPlaybackContext(tracks, 'Favourites · Songs');
+  Player.playAll(tracks, 0, 'Favourites · Songs');
+}
+
+function setFavSongsSort(mode) {
+  state.favSongsSort = mode;
+  document.querySelectorAll('[data-fav-song-sort]').forEach(b => b.classList.toggle('active', b.dataset.favSongSort === mode));
+  loadFavSongs();
+}
+
+function exportFavSongs(fmt) {
+  const a = document.createElement('a');
+  a.href = `/api/favourites/songs/export/${fmt}`;
+  a.click();
+}
+
+async function copyFavSongsToConnectedDap() {
+  const daps = await api('/daps').catch(() => []);
+  const connected = daps.find(d => d.mounted);
+  if (!connected) {
+    toast('No DAP connected.');
+    return;
+  }
+  await copyFavSongsToDap(connected.id);
+}
+
+async function copyFavSongsToDap(did) {
+  try {
+    await api(`/daps/${did}/export/favourites`, { method: 'POST' });
+    toast('Favourite Songs copied to DAP.');
+    await loadFavourites();
+    if (state.playlist?.is_favourites) {
+      renderDapExportPills(state.playlist.id);
+    }
+  } catch (e) {
+    toast('Export failed: ' + e.message);
+  }
+}
+
+async function bulkFavouriteSelected() {
+  const ids = [...state.selectedTrackIds];
+  for (const id of ids) {
+    if (!_isFavourite('songs', id)) {
+      await toggleFavourite('songs', encodeURIComponent(id));
+    }
+  }
+  toast(`Favourited ${ids.length} song${ids.length === 1 ? '' : 's'}.`);
+}
+
+async function bulkUnfavouriteSelected() {
+  const ids = [...state.selectedTrackIds];
+  for (const id of ids) {
+    if (_isFavourite('songs', id)) {
+      await toggleFavourite('songs', encodeURIComponent(id));
+    }
+  }
+  toast(`Unfavourited ${ids.length} song${ids.length === 1 ? '' : 's'}.`);
+}
+
 /* ── View navigation ────────────────────────────────────────────────── */
 function showView(viewName) {
   if (!_guardMlGeneratorNavigation()) return;
+  if (viewName === 'fav-artists') {
+    state.favPanel = 'artists';
+    viewName = 'favourites';
+  }
+  if (viewName === 'fav-albums') {
+    state.favPanel = 'albums';
+    viewName = 'favourites';
+  }
   state.view = viewName;
   state.playlist = null;
   clearSelection();
@@ -2044,6 +2843,8 @@ function showView(viewName) {
   if (viewName === 'artists') { state._artistsScrollTop = 0; loadArtists(); }
   else if (viewName === 'albums') { state.artist = null; loadAlbums(); }
   else if (viewName === 'songs') loadSongsView();
+  else if (viewName === 'favourites') loadFavouritesSummary();
+  else if (viewName === 'fav-songs') openFavouriteSongsPlaylist();
   else if (viewName === 'gear') loadGearView();
   else if (viewName === 'playlists') loadPlaylistsView();
   else if (viewName === 'settings') loadSettings();
@@ -2051,7 +2852,7 @@ function showView(viewName) {
 }
 
 function showViewEl(name) {
-  const views = ['artists', 'albums', 'tracks', 'songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights'];
+  const views = ['artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.style.display = v === name ? (v === 'playlist' ? 'flex' : 'block') : 'none';
@@ -2064,6 +2865,9 @@ function setActiveNav(view) {
     'dap-detail': 'gear',
     'iem-detail': 'gear',
     'playlist': 'playlists',
+    'fav-artists': 'favourites',
+    'fav-albums': 'favourites',
+    'fav-songs': 'favourites',
   };
   const navView = NAV_MAP[view] || view;
   document.querySelectorAll('.nav-item').forEach(el => {
@@ -4549,6 +5353,7 @@ function renderSongsTable() {
       <td class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
       <td class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
       <td class="col-dur">${esc(t.duration_fmt || '')}</td>
+      <td class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn')}</td>
       <td style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
       <td style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.year || '')}</td>
       <td style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.album_artist || '')}">${esc(t.album_artist || '')}</td>
@@ -4954,6 +5759,27 @@ const App = {
   backToArtists,
   showArtist,
   showAlbum,
+  toggleFavourite,
+  toggleCurrentTrackFavourite,
+  loadFavourites,
+  loadFavArtists,
+  loadFavAlbums,
+  loadFavSongs,
+  playAllFavouriteArtists,
+  playAllFavouriteAlbums,
+  playAllFavouriteSongs,
+  selectFavouritesPanel,
+  setFavArtistsSort,
+  setFavAlbumsSort,
+  setFavSongsSort,
+  favSongsReorder,
+  favArtistsReorder,
+  favAlbumsReorder,
+  exportFavSongs,
+  copyFavSongsToDap,
+  copyFavSongsToConnectedDap,
+  bulkFavouriteSelected,
+  bulkUnfavouriteSelected,
   openPlaylist,
   createPlaylist,
   createPlaylistAndAdd,
@@ -4979,6 +5805,7 @@ const App = {
   deletePlaylist,
   deleteCurrentPlaylist,
   renamePlaylist,
+  removeSongFromFavourites,
   showAddDropdown,
   showTrackCtxMenu,
   showArtistCtxMenu,
@@ -4987,6 +5814,7 @@ const App = {
   ctxPlayNext,
   ctxAddToQueue,
   ctxCreateSmartPlaylist,
+  ctxToggleFavourite,
   ctxAddToPlaylist,
   openCtxSubmenu,
   closeCtxSubmenu,
@@ -6874,14 +7702,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   }, true);
 
   Player.init();
+  window.addEventListener('tb-track-change', () => refreshPlayerFavouriteButton());
   await loadGearProfiles();
   // Enter submits create playlist modal
   const cpInput = document.getElementById('create-playlist-input');
   if (cpInput) cpInput.addEventListener('keydown', e => { if (e.key === 'Enter') App.submitCreatePlaylist(); });
   const settings = await loadSettings();
+  await loadFavourites();
   await loadPlaylists();
   pollScanStatus();
   loadArtists();
+  refreshPlayerFavouriteButton();
 
   // Show first-run onboarding only when settings file does not exist yet.
   if (!settings._settings_exists && !settings.onboarding_completed) {

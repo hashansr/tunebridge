@@ -55,6 +55,7 @@ DATA_DIR = (
     Path(__file__).parent / 'data'
 )
 PLAYLIST_FILE = DATA_DIR / 'playlists.json'
+FAVOURITES_FILE = DATA_DIR / 'favourites.json'
 LIBRARY_CACHE = DATA_DIR / 'library.json'
 ARTWORK_DIR = DATA_DIR / 'artwork'
 PLAYLIST_ARTWORK_DIR = DATA_DIR / 'playlist_artwork'
@@ -131,6 +132,13 @@ _DEFAULT_PLAYLIST_GEN_CONFIG = {
         'year': 0.15,
         'genre': 0.2,
     },
+}
+
+_DEFAULT_FAVOURITES = {
+    'songs': [],
+    'albums': [],
+    'artists': [],
+    'dap_exports': {},
 }
 
 
@@ -566,6 +574,90 @@ def save_playlists(playlists):
     os.replace(tmp, PLAYLIST_FILE)
 
 
+def _normalize_favourite_rows(rows):
+    out = []
+    seen = set()
+    for row in rows if isinstance(rows, list) else []:
+        if isinstance(row, dict):
+            rid = str(row.get('id') or '').strip()
+            added_at = int(row.get('added_at') or 0)
+        else:
+            rid = str(row or '').strip()
+            added_at = 0
+        if not rid or rid in seen:
+            continue
+        seen.add(rid)
+        out.append({
+            'id': rid,
+            'added_at': added_at if added_at > 0 else int(time.time()),
+        })
+    return out
+
+
+def _normalize_favourites_payload(payload):
+    base = dict(_DEFAULT_FAVOURITES)
+    src = payload if isinstance(payload, dict) else {}
+    base['songs'] = _normalize_favourite_rows(src.get('songs'))
+    base['albums'] = _normalize_favourite_rows(src.get('albums'))
+    base['artists'] = _normalize_favourite_rows(src.get('artists'))
+
+    exports = {}
+    raw_exports = src.get('dap_exports') if isinstance(src.get('dap_exports'), dict) else {}
+    for k, v in raw_exports.items():
+        key = str(k or '').strip()
+        if not key:
+            continue
+        try:
+            ts = int(v or 0)
+        except Exception:
+            ts = 0
+        if ts > 0:
+            exports[key] = ts
+    base['dap_exports'] = exports
+    return base
+
+
+def load_favourites():
+    if not FAVOURITES_FILE.exists():
+        return dict(_DEFAULT_FAVOURITES)
+    try:
+        with open(FAVOURITES_FILE) as f:
+            payload = json.load(f)
+        return _normalize_favourites_payload(payload)
+    except Exception:
+        return dict(_DEFAULT_FAVOURITES)
+
+
+def save_favourites(favourites):
+    tmp = FAVOURITES_FILE.with_suffix('.tmp.json')
+    with open(tmp, 'w') as f:
+        json.dump(_normalize_favourites_payload(favourites), f, indent=2)
+    os.replace(tmp, FAVOURITES_FILE)
+
+
+def _favourites_latest_song_ts(favourites):
+    rows = favourites.get('songs') or []
+    if not rows:
+        return 0
+    return max(int(r.get('added_at') or 0) for r in rows)
+
+
+def _resolve_favourite_tracks(rows):
+    with library_lock:
+        lib_map = {t.get('id'): t for t in library if t.get('id')}
+
+    out = []
+    orphaned = 0
+    for row in rows:
+        tid = row.get('id')
+        track = lib_map.get(tid)
+        if track:
+            out.append(track)
+        else:
+            orphaned += 1
+    return out, orphaned
+
+
 # ── Routes ──────────────────────────────────────────────────────────────────
 
 @app.route('/')
@@ -717,6 +809,138 @@ def library_songs():
     tracks.sort(key=key_fn, reverse=(order == 'desc'))
 
     return jsonify(tracks)
+
+
+# ── Favourites ───────────────────────────────────────────────────────────────
+
+def _fav_category_rows(favourites, category):
+    if category not in ('songs', 'albums', 'artists'):
+        return None
+    return favourites.get(category, [])
+
+
+def _add_favourite(category, item_id):
+    favourites = load_favourites()
+    rows = _fav_category_rows(favourites, category)
+    if rows is None:
+        return jsonify({'error': 'Unknown category'}), 400
+    item = str(item_id or '').strip()
+    if not item:
+        return jsonify({'error': 'Missing id'}), 400
+    if not any(r.get('id') == item for r in rows):
+        rows.insert(0, {'id': item, 'added_at': int(time.time())})
+        save_favourites(favourites)
+    return jsonify(rows)
+
+
+def _remove_favourite(category, item_id):
+    favourites = load_favourites()
+    rows = _fav_category_rows(favourites, category)
+    if rows is None:
+        return jsonify({'error': 'Unknown category'}), 400
+    item = str(item_id or '').strip()
+    if not item:
+        return jsonify({'error': 'Missing id'}), 400
+    favourites[category] = [r for r in rows if r.get('id') != item]
+    save_favourites(favourites)
+    return jsonify(favourites[category])
+
+
+@app.route('/api/favourites', methods=['GET'])
+def get_favourites():
+    return jsonify(load_favourites())
+
+
+@app.route('/api/favourites/songs/<track_id>', methods=['POST'])
+def add_favourite_song(track_id):
+    return _add_favourite('songs', track_id)
+
+
+@app.route('/api/favourites/songs/<track_id>', methods=['DELETE'])
+def remove_favourite_song(track_id):
+    return _remove_favourite('songs', track_id)
+
+
+@app.route('/api/favourites/albums/<album_id>', methods=['POST'])
+def add_favourite_album(album_id):
+    return _add_favourite('albums', album_id)
+
+
+@app.route('/api/favourites/albums/<album_id>', methods=['DELETE'])
+def remove_favourite_album(album_id):
+    return _remove_favourite('albums', album_id)
+
+
+@app.route('/api/favourites/artists/<artist_id>', methods=['POST'])
+def add_favourite_artist(artist_id):
+    return _add_favourite('artists', artist_id)
+
+
+@app.route('/api/favourites/artists/<artist_id>', methods=['DELETE'])
+def remove_favourite_artist(artist_id):
+    return _remove_favourite('artists', artist_id)
+
+
+@app.route('/api/favourites/<category>/reorder', methods=['PUT'])
+def reorder_favourites(category):
+    if category not in ('songs', 'albums', 'artists'):
+        return jsonify({'error': 'Unknown category'}), 400
+    payload = request.json or {}
+    order = [str(x).strip() for x in (payload.get('order') or []) if str(x).strip()]
+
+    favourites = load_favourites()
+    current = favourites.get(category, [])
+    current_map = {r.get('id'): r for r in current if r.get('id')}
+    kept = []
+    seen = set()
+
+    for item_id in order:
+        row = current_map.get(item_id)
+        if row and item_id not in seen:
+            kept.append(row)
+            seen.add(item_id)
+    for row in current:
+        rid = row.get('id')
+        if rid and rid not in seen:
+            kept.append(row)
+            seen.add(rid)
+
+    favourites[category] = kept
+    save_favourites(favourites)
+    return jsonify(kept)
+
+
+@app.route('/api/favourites/songs/tracks', methods=['GET'])
+def get_favourite_song_tracks():
+    favourites = load_favourites()
+    tracks, orphaned = _resolve_favourite_tracks(favourites.get('songs') or [])
+    return jsonify({
+        'tracks': tracks,
+        'orphaned_count': orphaned,
+    })
+
+
+@app.route('/api/favourites/songs/export/<fmt>', methods=['GET'])
+def export_favourite_songs(fmt):
+    favourites = load_favourites()
+    tracks, _ = _resolve_favourite_tracks(favourites.get('songs') or [])
+
+    settings = load_settings()
+    if fmt == 'poweramp':
+        filename = 'Favourite Songs.m3u'
+        prefix = settings.get('poweramp_prefix', '')
+    elif fmt == 'ap80':
+        filename = 'Favourite Songs.m3u'
+        prefix = '..'
+    else:
+        return jsonify({'error': 'Unknown format'}), 400
+
+    content = generate_m3u(tracks, 'Favourite Songs', path_prefix=prefix)
+    return Response(
+        content,
+        mimetype='audio/x-mpegurl',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+    )
 
 
 @app.route('/api/artwork/<key>')
@@ -2863,6 +3087,37 @@ def dap_download_playlist(did, pid):
     )
 
 
+@app.route('/api/daps/<did>/export/favourites', methods=['POST'])
+def dap_export_favourites(did):
+    daps = load_daps()
+    dap = next((d for d in daps if d['id'] == did), None)
+    if not dap:
+        return jsonify({'error': 'DAP not found'}), 404
+
+    device_root, _ = _resolve_dap_mount(dap)
+    if not device_root or not device_root.exists():
+        return jsonify({'error': f"Device not mounted. Last configured path: {dap.get('mount_path', 'not set')}"}), 404
+
+    favourites = load_favourites()
+    tracks, _ = _resolve_favourite_tracks(favourites.get('songs') or [])
+    prefix = dap.get('path_prefix', '')
+    out_dir = device_root / dap.get('export_folder', 'Playlists')
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        content = generate_m3u(tracks, 'Favourite Songs', path_prefix=prefix)
+        with open(out_dir / "Favourite Songs.m3u", 'w', encoding='utf-8') as f:
+            f.write(content)
+    except OSError as e:
+        import errno as _errno
+        if e.errno == _errno.EROFS:
+            return jsonify({'error': f"Device is mounted read-only. Eject and reconnect {dap['name']}, then try again."}), 409
+        return jsonify({'error': f"Could not write to device: {e.strerror}"}), 409
+
+    favourites['dap_exports'][did] = int(time.time())
+    save_favourites(favourites)
+    return jsonify({'exported_at': favourites['dap_exports'][did]})
+
+
 @app.route('/api/daps/<did>/export/<pid>', methods=['POST'])
 def dap_export_playlist(did, pid):
     daps = load_daps()
@@ -3790,7 +4045,7 @@ def export_backup():
     timestamp = time.strftime('%Y%m%d_%H%M%S')
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
         for fname in [
-            'playlists.json', 'settings.json', 'daps.json',
+            'playlists.json', 'favourites.json', 'settings.json', 'daps.json',
             'iems.json', 'baselines.json', 'match-matrix.json',
             'insights_config.json', 'genre_families.json',
             'playlist_gen_config.json',
@@ -3822,7 +4077,7 @@ def import_backup():
         with zipfile.ZipFile(io.BytesIO(raw)) as zf:
             names = zf.namelist()
             for fname in [
-                'playlists.json', 'settings.json', 'daps.json',
+                'playlists.json', 'favourites.json', 'settings.json', 'daps.json',
                 'iems.json', 'baselines.json', 'match-matrix.json',
                 'insights_config.json', 'genre_families.json',
                 'playlist_gen_config.json',

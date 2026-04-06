@@ -249,3 +249,21 @@ DAP export behavior is profile-driven and not hardcoded in UI logic.
   - path prefix
   - suggested mount name
 - Add/edit DAP modal and export logic consume this profile registry at runtime.
+
+---
+
+## UI Change Checklist (Required)
+
+For any UI/UX change, validate against:
+- [`master-design.md`](master-design.md) (single source of truth)
+- `static/style.css` token usage and spacing rhythm
+
+Before merging UI work:
+1. Confirm typography uses canonical system font stack and approved scale.
+2. Confirm color usage follows semantic rules (primary, success, warning, danger).
+3. Confirm runtime UI iconography uses SVG/curated assets only (no emoji).
+4. Confirm spacing rhythm matches surrounding views (header, controls, content, cards).
+5. Confirm interaction states exist and are coherent (hover/focus/active/disabled).
+6. Confirm empty/loading/error states are handled.
+7. Confirm behavior contracts still hold (for example shuffle-aware Play/Play All).
+8. Add a short design-impact note to `codex.md`.

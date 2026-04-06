@@ -32,6 +32,7 @@ const Player = (function () {
     historyExpanded: false,
     playbackContextTracks: [],
     playbackContextLabel: '',
+    lastShuffleFirstIdx: -1,
   };
 
   /* ── Track registry (populated by app.js via Player.registerTracks) ── */
@@ -507,7 +508,7 @@ const Player = (function () {
     // collection (playlist/artist/album/songs), not a single-track queue.
     const ctxIdx = ps.playbackContextTracks.findIndex(t => t.id === id);
     if (ctxIdx >= 0) {
-      playAll(ps.playbackContextTracks, ctxIdx, ps.playbackContextLabel);
+      playAll(ps.playbackContextTracks, ctxIdx, ps.playbackContextLabel, { preserveStartOnShuffle: true });
       return;
     }
 
@@ -519,7 +520,7 @@ const Player = (function () {
   }
 
   /** Replace the entire queue with tracks[], start at startIdx */
-  function playAll(tracks, startIdx = 0, contextLabel = '') {
+  function playAll(tracks, startIdx = 0, contextLabel = '', options = {}) {
     if (!tracks || tracks.length === 0) return;
     tracks.forEach(t => _registry.set(t.id, t));
     ps.queue    = [...tracks];
@@ -527,8 +528,18 @@ const Player = (function () {
     if (contextLabel) ps.playbackContextLabel = contextLabel;
     ps.shuffleOrder = [];
     if (ps.shuffle) {
-      const rest = ps.queue.map((_, i) => i).filter(i => i !== ps.queueIdx);
-      ps.shuffleOrder = [ps.queueIdx, ..._fisherYates(rest)];
+      // For "Play / Play All" actions, reshuffle and randomize the first track each run.
+      // Explicit starts (e.g. clicking a specific row) can opt out and preserve startIdx.
+      const preserveStart = options && options.preserveStartOnShuffle === true;
+      let firstRealIdx = preserveStart
+        ? ps.queueIdx
+        : Math.floor(Math.random() * ps.queue.length);
+      if (!preserveStart && ps.queue.length > 1 && firstRealIdx === ps.lastShuffleFirstIdx) {
+        firstRealIdx = (firstRealIdx + 1 + Math.floor(Math.random() * (ps.queue.length - 1))) % ps.queue.length;
+      }
+      const rest = ps.queue.map((_, i) => i).filter(i => i !== firstRealIdx);
+      ps.shuffleOrder = [firstRealIdx, ..._fisherYates(rest)];
+      ps.lastShuffleFirstIdx = firstRealIdx;
       ps.queueIdx = 0;
     }
     _loadTrack(currentTrack());
@@ -1109,6 +1120,7 @@ const Player = (function () {
       if (fillEl)    fillEl.style.width   = '0%';
       if (qualityEl) qualityEl.textContent = '';
       document.title = 'TuneBridge';
+      window.dispatchEvent(new CustomEvent('tb-track-change', { detail: { trackId: null } }));
       return;
     }
 
@@ -1146,6 +1158,7 @@ const Player = (function () {
     if (curEl)     curEl.textContent  = '0:00';
     if (qualityEl) qualityEl.textContent = _formatQuality(track);
     document.title = `${track.title} — TuneBridge`;
+    window.dispatchEvent(new CustomEvent('tb-track-change', { detail: { trackId: track.id } }));
   }
 
   /* ── Crossfade control ──────────────────────────────────────────────── */

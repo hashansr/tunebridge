@@ -2673,3 +2673,72 @@ Observed working tree at time of writing (not touched by this codex update):
 
 - Files updated:
   - `static/icons/iem-earphones.png`
+
+### 2026-04-05 (Favourites feature — foundational implementation)
+- Added backend favourites persistence and APIs (`data/favourites.json`):
+  - `GET /api/favourites`
+  - `POST/DELETE /api/favourites/songs/<id>`
+  - `POST/DELETE /api/favourites/albums/<id>`
+  - `POST/DELETE /api/favourites/artists/<id>`
+  - `PUT /api/favourites/<category>/reorder`
+  - `GET /api/favourites/songs/tracks` (resolved tracks + orphan count)
+  - `GET /api/favourites/songs/export/<fmt>` (`poweramp` / `ap80`)
+  - `POST /api/daps/<did>/export/favourites`
+- Added backup integration for favourites:
+  - `favourites.json` is now included in backup export/import.
+
+- Added UI scaffolding and interactions:
+  - New sidebar nav item: `Favourites`
+  - New views:
+    - `view-favourites` (summary landing)
+    - `view-fav-artists`
+    - `view-fav-albums`
+    - `view-fav-songs`
+  - Star toggle UI added to:
+    - Artist cards
+    - Album cards
+    - Track rows (tracks/songs/playlist tables)
+    - Player bar (current track)
+    - Context menu (track/artist/album-aware label)
+  - Playlists home now shows a pinned `Favourite Songs` virtual card when favourites exist.
+  - Bulk actions include:
+    - `★ Favourite`
+    - `☆ Unfavourite`
+
+- Added app state + lifecycle support:
+  - Global favourites state (`sets + ordered meta`) loaded on startup.
+  - Track-change event bridge from `player.js` to refresh player favourite button state.
+  - Favourites-aware view refresh paths after toggles.
+
+- Files updated:
+  - `app.py`
+  - `static/index.html`
+  - `static/app.js`
+  - `static/style.css`
+  - `static/player.js`
+
+### 2026-04-06 (Design governance lock: master design + checklist + Gear CSS consolidation)
+- Created a canonical design source-of-truth document:
+  - `master-design.md` added at repo root.
+  - Captures: design north star, principles, tokens, typography, spacing rhythm, component rules, iconography, interaction contracts, governance, and DoD.
+
+- Locked product/design decisions in `master-design.md`:
+  - Typography source of truth: keep system font stack canonical.
+  - Icon policy: runtime UI emoji prohibited (hard rule); use SVG/curated assets.
+  - Border policy: ghost-border fallback is standard when containment affordance is needed.
+  - Grid policy: artist/album-family cards use canonical 6→5→4→3→2→1 responsive ladder.
+
+- Added governance scaffolding:
+  - New section in `README.md`: `UI Change Checklist (Required)`.
+  - Checklist enforces validation against `master-design.md`, token/rhythm consistency, state coverage, and behavior contracts.
+
+- Refactored Gear stylesheet duplication:
+  - Removed redundant late-stage Gear override block in `static/style.css` (old compact/tight variant) to avoid competing declarations.
+  - Kept one canonical `#view-gear` facelift block for final visual output.
+  - Removed conflicting early `#view-gear` padding declaration so spacing is controlled by the canonical block.
+
+- Files updated:
+  - `master-design.md` (new)
+  - `README.md`
+  - `static/style.css`
+  - `codex.md`
