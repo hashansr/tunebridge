@@ -2742,3 +2742,46 @@ Observed working tree at time of writing (not touched by this codex update):
   - `README.md`
   - `static/style.css`
   - `codex.md`
+
+### 2026-04-06 (Player Improvements v1 finalization on `feature/player-improvements-v1`)
+- Finalized Custom PEQ workspace, PEQ graph behavior, and player EQ interactions for production readiness.
+
+- Custom PEQ workspace implementation and UX decisions:
+  - Workspace title standardized to **Custom PEQ**.
+  - Added a new entry point in **Settings → Parametric EQ** (`Open Custom PEQ Workspace`).
+  - Removed noisy workspace open/close toasts.
+  - Workspace graph uses IEM-detail graph conventions (L/R base curves + Custom PEQ overlay + optional baseline targets).
+  - Baselines are only rendered when explicitly selected; **No target selected** shows no target overlays.
+  - Added divider + tightened layout around graph/preamp/table.
+  - Preamp input width aligned to PEQ table numeric-field density (same compact width intent as Q field).
+
+- Dirty-state (`Unsaved changes`) behavior fixes:
+  - Loading an existing PEQ no longer triggers dirty state.
+  - Loading a new PEQ template no longer triggers dirty state.
+  - Dirty pill appears only on actual value edits.
+  - Resolved stale-baseline issue by snapshotting right after profile/new-state hydration.
+
+- EQ button behavior and active-state fixes:
+  - EQ button no longer closes Custom PEQ workspace when workspace is already open (no-op while open).
+  - Removed forced “Custom PEQ selected” side effects when merely opening workspace.
+  - Active state now reflects true PEQ selection intent:
+    - active for selected non-custom profile, or
+    - active for meaningful custom PEQ configuration only.
+
+- Backend/API additions for Custom PEQ graphing:
+  - Added `POST /api/iems/<iid>/graph/custom` for workspace graph payloads.
+  - Added `POST /api/peq/graph/custom` support path for custom graph rendering without selected IEM fallback usage.
+  - Baseline inclusion logic is selection-driven (`baseline_ids`) to avoid unintended overlays.
+
+- Validation performed:
+  - `node --check static/app.js` passed.
+  - `node --check static/player.js` passed.
+  - Python compile parse for `app.py` passed.
+
+- Branch commits (key):
+  - `df10daf` — Fix Custom EQ workspace UX and functional FR graph rendering
+  - `278fbb4` — Update bundled TuneBridge latest DMG
+  - `839cb4a` — Fix Custom PEQ dirty-state, EQ button behavior, and workspace UI alignment
+
+- Packaging/distribution note:
+  - Latest local `distro/TuneBridge-latest.dmg` included in branch updates.

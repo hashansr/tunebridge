@@ -3805,6 +3805,183 @@ def iem_graph(iid):
     })
 
 
+@app.route('/api/iems/<iid>/graph/custom', methods=['POST'])
+def iem_graph_custom(iid):
+    iems = load_iems()
+    iem = next((i for i in iems if i['id'] == iid), None)
+    if not iem:
+        return jsonify({'error': 'Not found'}), 404
+
+    body = request.get_json(silent=True) or {}
+    source_id = body.get('source_id', '')
+    baseline_ids = set(body.get('baseline_ids') or [])
+    custom = body.get('custom_peq') or {}
+
+    source = _resolve_iem_source(iem, source_id)
+    source_label = source.get('label') if source else None
+    name = iem['name']
+    if source_label and len(iem.get('squig_sources') or []) > 1:
+        name = f"{name} [{source_label}]"
+    mL = (source or {}).get('measurement_L') or iem.get('measurement_L')
+    mR = (source or {}).get('measurement_R') or iem.get('measurement_R')
+
+    curves = []
+    ref_spl = _spl_at_1khz(mL or mR)
+    offset = (NORM_REF_DB - ref_spl) if ref_spl is not None else 0.0
+
+    if mL:
+        curves.append({'id': f"{iem['id']}-L", 'label': f"{name} (L)",
+                       'color': '#5b8dee', 'dash': False, 'data': _shift(mL, offset)})
+    if mR:
+        curves.append({'id': f"{iem['id']}-R", 'label': f"{name} (R)",
+                       'color': '#e05c5c', 'dash': False, 'data': _shift(mR, offset)})
+
+    try:
+        preamp_db = float(custom.get('preamp_db', 0.0))
+    except Exception:
+        preamp_db = 0.0
+    bands = custom.get('bands') if isinstance(custom.get('bands'), list) else []
+    filters = []
+    for b in bands:
+        if not isinstance(b, dict):
+            continue
+        if not b.get('enabled', False):
+            continue
+        ftype = str(b.get('type', 'PK')).upper()
+        try:
+            fc = float(b.get('fc', 1000))
+        except Exception:
+            fc = 1000.0
+        try:
+            gain = float(b.get('gain', 0.0))
+        except Exception:
+            gain = 0.0
+        try:
+            q = float(b.get('q', 1.0))
+        except Exception:
+            q = 1.0
+        filters.append({
+            'enabled': True,
+            'type': ftype,
+            'fc': max(20.0, min(20000.0, fc)),
+            'gain': max(-30.0, min(30.0, gain)),
+            'q': max(0.1, min(10.0, q)),
+        })
+    custom_profile = {'name': 'Custom EQ', 'preamp_db': preamp_db, 'filters': filters}
+    if filters:
+        if mL:
+            curves.append({'id': f"{iem['id']}-custom-L",
+                           'label': f"{name} + Custom EQ (L)",
+                           'color': '#53e16f', 'dash': False,
+                           'data': _apply_peq(mL, custom_profile)})
+        if mR:
+            curves.append({'id': f"{iem['id']}-custom-R",
+                           'label': f"{name} + Custom EQ (R)",
+                           'color': '#53e16f', 'dash': False,
+                           'data': _apply_peq(mR, custom_profile)})
+
+    if baseline_ids:
+        for bl in load_baselines():
+            if bl.get('id') not in baseline_ids:
+                continue
+            m = bl.get('measurement')
+            if not m:
+                continue
+            ref_spl = _spl_at_1khz(m)
+            offset = (NORM_REF_DB - ref_spl) if ref_spl is not None else 0.0
+            curves.append({
+                'id': f"baseline-{bl['id']}",
+                'label': bl['name'],
+                'color': bl.get('color', '#f0b429'),
+                'dash': True,
+                'data': _shift(m, offset),
+            })
+
+    available_sources = [
+        {'id': s.get('id'), 'label': s.get('label'), 'url': s.get('url', '')}
+        for s in (iem.get('squig_sources') or [])
+    ]
+    active_source = _resolve_iem_source(iem, source_id)
+    return jsonify({
+        'curves': curves,
+        'iem_name': iem['name'],
+        'available_sources': available_sources,
+        'selected_source_id': (active_source or {}).get('id'),
+    })
+
+
+@app.route('/api/peq/graph/custom', methods=['POST'])
+def peq_graph_custom_without_iem():
+    body = request.get_json(silent=True) or {}
+    baseline_ids = set(body.get('baseline_ids') or [])
+    custom = body.get('custom_peq') or {}
+
+    try:
+        preamp_db = float(custom.get('preamp_db', 0.0))
+    except Exception:
+        preamp_db = 0.0
+    bands = custom.get('bands') if isinstance(custom.get('bands'), list) else []
+    filters = []
+    for b in bands:
+        if not isinstance(b, dict):
+            continue
+        if not b.get('enabled', False):
+            continue
+        ftype = str(b.get('type', 'PK')).upper()
+        try:
+            fc = float(b.get('fc', 1000))
+        except Exception:
+            fc = 1000.0
+        try:
+            gain = float(b.get('gain', 0.0))
+        except Exception:
+            gain = 0.0
+        try:
+            q = float(b.get('q', 1.0))
+        except Exception:
+            q = 1.0
+        filters.append({
+            'enabled': True,
+            'type': ftype,
+            'fc': max(20.0, min(20000.0, fc)),
+            'gain': max(-30.0, min(30.0, gain)),
+            'q': max(0.1, min(10.0, q)),
+        })
+
+    points = []
+    n = 300
+    for i in range(n):
+        f = 20.0 * ((20000.0 / 20.0) ** (i / (n - 1)))
+        points.append([round(f, 2), NORM_REF_DB])
+    custom_profile = {'name': 'Custom PEQ', 'preamp_db': preamp_db, 'filters': filters}
+    custom_curve = _apply_peq(points, custom_profile) if filters else points
+
+    curves = [{
+        'id': 'custom-peq-neutral',
+        'label': 'Custom PEQ (No IEM selected)',
+        'color': '#53e16f',
+        'dash': False,
+        'data': custom_curve,
+    }]
+    if baseline_ids:
+        for bl in load_baselines():
+            if bl.get('id') not in baseline_ids:
+                continue
+            m = bl.get('measurement')
+            if not m:
+                continue
+            ref_spl = _spl_at_1khz(m)
+            offset = (NORM_REF_DB - ref_spl) if ref_spl is not None else 0.0
+            curves.append({
+                'id': f"baseline-{bl['id']}",
+                'label': bl['name'],
+                'color': bl.get('color', '#f0b429'),
+                'dash': True,
+                'data': _shift(m, offset),
+            })
+    return jsonify({'curves': curves})
+
+
 @app.route('/api/iems/<iid>/peq', methods=['POST'])
 def add_peq_profile(iid):
     iems = load_iems()
@@ -3835,6 +4012,38 @@ def add_peq_profile(iid):
     iem.setdefault('peq_profiles', []).append(profile)
     save_iems(iems)
     return jsonify({k: v for k, v in profile.items() if k != 'raw_txt'}), 201
+
+
+@app.route('/api/iems/<iid>/peq/<peq_id>', methods=['PUT'])
+def update_peq_profile(iid, peq_id):
+    iems = load_iems()
+    iem = next((i for i in iems if i['id'] == iid), None)
+    if not iem:
+        return jsonify({'error': 'Not found'}), 404
+
+    existing = next((p for p in iem.get('peq_profiles', []) if p.get('id') == peq_id), None)
+    if not existing:
+        return jsonify({'error': 'PEQ profile not found'}), 404
+
+    if 'file' in request.files:
+        f = request.files['file']
+        text = f.read().decode('utf-8', errors='replace')
+        name = request.form.get('name') or Path(f.filename).stem
+    else:
+        body = request.json or {}
+        text = body.get('content', '')
+        name = body.get('name', existing.get('name', 'PEQ Profile'))
+
+    if not text.strip():
+        return jsonify({'error': 'No content'}), 400
+
+    parsed = parse_peq_txt(text)
+    existing['name'] = name
+    existing['preamp_db'] = parsed['preamp_db']
+    existing['filters'] = parsed['filters']
+    existing['raw_txt'] = text
+    save_iems(iems)
+    return jsonify({k: v for k, v in existing.items() if k != 'raw_txt'})
 
 
 @app.route('/api/iems/<iid>/peq/<peq_id>', methods=['DELETE'])

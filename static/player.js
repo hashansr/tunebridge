@@ -69,10 +69,71 @@ const Player = (function () {
 
   let _queueSortable        = null;
   let _seekDragging         = false;
-  let _saveSeekThrottle     = -1;  // last 5-second bucket saved (throttles timeupdate writes)
+  let _seeking              = false;
+  let _seekRestored         = false;
+  let _saveSeekThrottle     = -1;  // last 1-second bucket saved (throttles timeupdate writes)
   let _remoteSaveTimer      = null; // debounce handle for server-side state saves
-  let _remoteSeekThrottle   = -1;  // last 30-second bucket that triggered a remote save
+  let _remoteSeekThrottle   = -1;  // last 5-second bucket that triggered a remote save
   let _peqCloseTimer        = null; // delayed hide timer for animated popover close
+  let _peqCurveRaf          = null;
+  let _customPeqState       = null;
+
+  const _CUSTOM_PEQ_KEY = 'tb_custom_peq';
+  const _CUSTOM_EQ_ID = '__custom__';
+  const _CREATE_PEQ_ID = '__create__';
+  const _NO_GAIN_TYPES = new Set(['LPQ', 'HPQ', 'NO', 'AP']);
+
+  function _defaultCustomPeqState() {
+    return {
+      enabled: false,
+      preamp_db: 0,
+      bands: Array.from({ length: 10 }, () => ({
+        enabled: false,
+        type: 'PK',
+        fc: 1000,
+        gain: 0,
+        q: 1.0,
+      })),
+    };
+  }
+
+  function _sanitizeCustomPeqState(raw) {
+    const base = _defaultCustomPeqState();
+    if (!raw || typeof raw !== 'object') return base;
+    const bands = Array.isArray(raw.bands) ? raw.bands : [];
+    base.enabled = !!raw.enabled;
+    base.preamp_db = Math.max(-30, Math.min(30, Number(raw.preamp_db) || 0));
+    for (let i = 0; i < 10; i++) {
+      const b = bands[i] || {};
+      const t = String(b.type || 'PK').toUpperCase();
+      const type = _FILTER_TYPE[t] ? t : 'PK';
+      base.bands[i] = {
+        enabled: !!b.enabled,
+        type,
+        fc: Math.max(20, Math.min(20000, Number(b.fc) || 1000)),
+        gain: Math.max(-30, Math.min(30, Number(b.gain) || 0)),
+        q: Math.max(0.1, Math.min(10, Number(b.q) || 1.0)),
+      };
+    }
+    return base;
+  }
+
+  function _loadCustomPeqState() {
+    if (_customPeqState) return _customPeqState;
+    try {
+      const raw = localStorage.getItem(_CUSTOM_PEQ_KEY);
+      _customPeqState = _sanitizeCustomPeqState(raw ? JSON.parse(raw) : null);
+    } catch (_) {
+      _customPeqState = _defaultCustomPeqState();
+    }
+    return _customPeqState;
+  }
+
+  function _saveCustomPeqState(state) {
+    _customPeqState = _sanitizeCustomPeqState(state);
+    try { localStorage.setItem(_CUSTOM_PEQ_KEY, JSON.stringify(_customPeqState)); } catch (_) {}
+    return _customPeqState;
+  }
 
   /* ── Web Audio graph init ───────────────────────────────────────────── */
   function _initAudioContext() {
@@ -98,7 +159,10 @@ const Player = (function () {
       _preampNode.connect(_volNode);
       _volNode.connect(_ctx.destination);
       // Re-apply any stored PEQ
-      if (ps.activePeqIemId && ps.activePeqProfileId) {
+      if (ps.activePeqIemId === _CUSTOM_EQ_ID) {
+        const custom = _loadCustomPeqState();
+        if (custom.enabled) _applyCustomPeq(custom);
+      } else if (ps.activePeqIemId && ps.activePeqProfileId) {
         _loadAndApplyPeq(ps.activePeqIemId, ps.activePeqProfileId);
       }
     } catch (e) {
@@ -117,6 +181,8 @@ const Player = (function () {
   function _cancelCrossfade() {
     if (_xfadeTimeout) { clearTimeout(_xfadeTimeout); _xfadeTimeout = null; }
     _xfadeTriggered = false;
+    _seeking = false;
+    _seekRestored = false;
     if (!_ctx) return;
     const now = _ctx.currentTime;
     // Abort any scheduled ramps and hard-reset gains
@@ -134,6 +200,7 @@ const Player = (function () {
   function _startCrossfade() {
     if (_xfadeTriggered || !_ctx || ps.crossfadeDuration <= 0) return;
     if (!ps.isPlaying) return;
+    if (_seekRestored) return;
 
     // Determine next queue position
     let nextQueueIdx;
@@ -272,6 +339,123 @@ const Player = (function () {
     }
   }
 
+  function _applyCustomPeq(state) {
+    const st = _saveCustomPeqState(state);
+    if (!st.enabled) {
+      _buildPeqChain(null);
+      _scheduleEqCurveRedraw();
+      _updatePeqBtn();
+      return;
+    }
+    const filters = st.bands
+      .filter(b => b.enabled)
+      .map(b => ({
+        type: b.type,
+        fc: b.fc,
+        gain: _NO_GAIN_TYPES.has(String(b.type || '').toUpperCase()) ? 0 : b.gain,
+        q: b.q,
+      }));
+    const profile = { preamp_db: st.preamp_db, filters };
+    _buildPeqChain(profile.filters.length > 0 ? profile : null);
+    _scheduleEqCurveRedraw();
+    _updatePeqBtn();
+  }
+
+  function _setCustomPeqEnabled(enabled) {
+    const st = _loadCustomPeqState();
+    st.enabled = !!enabled;
+    _saveCustomPeqState(st);
+    if (st.enabled) _applyCustomPeq(st);
+    else {
+      _buildPeqChain(null);
+      _scheduleEqCurveRedraw();
+      _updatePeqBtn();
+    }
+  }
+
+  function _updateBandParam(enabledBandIndex, fc, gain, q) {
+    if (!_ctx || !Array.isArray(_peqNodes)) return false;
+    const idx = Number(enabledBandIndex);
+    if (!Number.isFinite(idx) || idx < 0 || idx >= _peqNodes.length) return false;
+    const node = _peqNodes[idx];
+    if (!node) return false;
+    const now = _ctx.currentTime;
+    if (Number.isFinite(fc)) node.frequency.setValueAtTime(Math.max(20, Math.min(20000, fc)), now);
+    if (Number.isFinite(gain)) node.gain.setValueAtTime(Math.max(-30, Math.min(30, gain)), now);
+    if (Number.isFinite(q)) node.Q.setValueAtTime(Math.max(0.1, Math.min(10, q)), now);
+    return true;
+  }
+
+  function _updatePreamp(preampDb) {
+    const db = Math.max(-30, Math.min(30, Number(preampDb) || 0));
+    if (_preampNode) _preampNode.gain.value = _dBToLinear(db);
+  }
+
+  function _redrawPeqEditorCurve() {
+    if (typeof App !== 'undefined'
+        && typeof App.isPeqWorkspaceOpen === 'function'
+        && App.isPeqWorkspaceOpen()) {
+      return;
+    }
+    const canvas = document.getElementById('peq-editor-canvas');
+    if (!canvas) return;
+    const ctx2d = canvas.getContext('2d');
+    if (!ctx2d) return;
+    const W = canvas.width;
+    const H = canvas.height;
+    const N = 512;
+    const freqs = new Float32Array(N);
+    for (let i = 0; i < N; i++) freqs[i] = 20 * Math.pow(1000, i / (N - 1));
+    const combined = new Float32Array(N).fill(1);
+    const hasCtx = !!_ctx;
+    const hasNodes = Array.isArray(_peqNodes) && _peqNodes.length > 0;
+    if (hasCtx && hasNodes) {
+      for (const node of _peqNodes) {
+        const mag = new Float32Array(N);
+        node.getFrequencyResponse(freqs, mag, new Float32Array(N));
+        for (let i = 0; i < N; i++) combined[i] *= mag[i];
+      }
+    }
+    const dbRange = 20;
+    const toDB = v => 20 * Math.log10(Math.max(v, 1e-6));
+    ctx2d.clearRect(0, 0, W, H);
+    const zeroY = H / 2;
+    ctx2d.strokeStyle = 'rgba(107,107,123,0.4)';
+    ctx2d.lineWidth = 1;
+    ctx2d.beginPath();
+    ctx2d.moveTo(0, zeroY);
+    ctx2d.lineTo(W, zeroY);
+    ctx2d.stroke();
+    ctx2d.strokeStyle = '#adc6ff';
+    ctx2d.lineWidth = 2;
+    ctx2d.beginPath();
+    for (let i = 0; i < N; i++) {
+      const x = (i / (N - 1)) * W;
+      const db = Math.max(-dbRange, Math.min(dbRange, toDB(combined[i])));
+      const y = zeroY - (db / dbRange) * (H / 2);
+      if (i === 0) ctx2d.moveTo(x, y);
+      else ctx2d.lineTo(x, y);
+    }
+    ctx2d.stroke();
+    if (!hasCtx) {
+      ctx2d.fillStyle = 'rgba(193,198,215,0.72)';
+      ctx2d.font = '12px -apple-system,BlinkMacSystemFont,Helvetica Neue,Arial,sans-serif';
+      ctx2d.fillText('Start playback to preview live EQ response.', 12, H - 12);
+    } else if (!hasNodes) {
+      ctx2d.fillStyle = 'rgba(193,198,215,0.72)';
+      ctx2d.font = '12px -apple-system,BlinkMacSystemFont,Helvetica Neue,Arial,sans-serif';
+      ctx2d.fillText('Enable one or more bands to draw EQ response.', 12, H - 12);
+    }
+  }
+
+  function _scheduleEqCurveRedraw() {
+    if (_peqCurveRaf) return;
+    _peqCurveRaf = requestAnimationFrame(() => {
+      _peqCurveRaf = null;
+      _redrawPeqEditorCurve();
+    });
+  }
+
   async function _loadAndApplyPeq(iemId, profileId) {
     if (!iemId || !profileId) {
       _buildPeqChain(null);
@@ -310,6 +494,7 @@ const Player = (function () {
   /* ── Playback core ──────────────────────────────────────────────────── */
   function _loadTrack(track) {
     if (!track) return;
+    _seekRestored = false;
     _cancelCrossfade();
     _audio.src = `/api/stream/${track.id}`;
     _audio.load();
@@ -360,7 +545,8 @@ const Player = (function () {
     // Capture BEFORE _loadTrack — _audio.load() fires 'pause' synchronously,
     // which sets ps.isPlaying = false before we can check it.
     const wasPlaying = ps.isPlaying;
-    ps.queueIdx = ps.queueIdx > 0 ? ps.queueIdx - 1 : ps.queue.length - 1;
+    const len = ps.shuffle ? ps.shuffleOrder.length : ps.queue.length;
+    ps.queueIdx = ps.queueIdx > 0 ? ps.queueIdx - 1 : Math.max(0, len - 1);
     _loadTrack(currentTrack());
     if (wasPlaying) _startPlay();
     if (ps.queueOpen) _renderQueue();
@@ -371,7 +557,8 @@ const Player = (function () {
     // Capture BEFORE _loadTrack — _audio.load() fires 'pause' synchronously,
     // which sets ps.isPlaying = false before we can check it.
     const wasPlaying = ps.isPlaying;
-    ps.queueIdx = (ps.queueIdx + 1) % ps.queue.length;
+    const len = ps.shuffle ? ps.shuffleOrder.length : ps.queue.length;
+    ps.queueIdx = (ps.queueIdx + 1) % Math.max(1, len);
     _loadTrack(currentTrack());
     if (wasPlaying) _startPlay();
     if (ps.queueOpen) _renderQueue();
@@ -619,6 +806,11 @@ const Player = (function () {
 
     ps.queue.splice(idx, 1);
 
+    // Adjust queueIdx before shuffleOrder rewrite while old index still exists.
+    if (ps.shuffle) {
+      const shufflePos = ps.shuffleOrder.indexOf(idx);
+      if (shufflePos !== -1 && shufflePos < ps.queueIdx) ps.queueIdx--;
+    }
     // Patch shuffleOrder: remove the entry for idx, decrement higher refs
     if (ps.shuffle) {
       ps.shuffleOrder = ps.shuffleOrder
@@ -711,6 +903,7 @@ const Player = (function () {
   function _onTimeUpdate() {
     if (this !== _audio) return;   // ignore events from the standby element
     if (_seekDragging) return;
+    if (_seeking) return;
     const dur = _audio.duration;
     if (!isFinite(dur) || dur === 0) return;
     const pct = _audio.currentTime / dur;
@@ -724,12 +917,12 @@ const Player = (function () {
     if (fillEl) fillEl.style.width = (clampedPct * 100) + '%';
     if (curEl)  curEl.textContent  = _fmtTime(_audio.currentTime);
 
-    // Throttled seek-position save: write at most once per 5-second bucket
-    const bucket = Math.floor(_audio.currentTime / 5);
+    // Throttled seek-position save: write at most once per 1-second bucket
+    const bucket = Math.floor(_audio.currentTime / 1);
     if (bucket !== _saveSeekThrottle) {
       _saveSeekThrottle = bucket;
       try { localStorage.setItem(_LS.seekTime, _audio.currentTime); } catch (_) {}
-      const remoteBucket = Math.floor(_audio.currentTime / 30);
+      const remoteBucket = Math.floor(_audio.currentTime / 5);
       if (remoteBucket !== _remoteSeekThrottle) {
         _remoteSeekThrottle = remoteBucket;
         _scheduleRemoteSave();
@@ -739,7 +932,10 @@ const Player = (function () {
     // Crossfade trigger: start when `crossfadeDuration` seconds remain
     if (!_xfadeTriggered && ps.crossfadeDuration > 0) {
       const remaining = dur - _audio.currentTime;
-      if (remaining > 0.1 && remaining <= ps.crossfadeDuration && _audio.currentTime > 0.5) {
+      if (remaining > 0.1
+          && remaining <= ps.crossfadeDuration
+          && _audio.currentTime > 0.5
+          && dur > ps.crossfadeDuration + 2) {
         _startCrossfade();
       }
     }
@@ -802,14 +998,42 @@ const Player = (function () {
     el.addEventListener('error',         _onError);
     el.addEventListener('play',          _onPlay);
     el.addEventListener('pause',         _onPause);
+    el.addEventListener('seeking',       function () { if (this === _audio) _seeking = true; });
+    el.addEventListener('seeked',        function () { if (this === _audio) _seeking = false; });
   });
 
   /* ── PEQ UI ─────────────────────────────────────────────────────────── */
+  function _hasMeaningfulCustomPeq(state) {
+    const st = state || _loadCustomPeqState();
+    if (!st || !st.enabled) return false;
+    if (Math.abs(Number(st.preamp_db) || 0) > 0.0001) return true;
+    const bands = Array.isArray(st.bands) ? st.bands : [];
+    return bands.some(b => b && b.enabled && (
+      Math.abs(Number(b.gain) || 0) > 0.0001 ||
+      Math.abs((Number(b.fc) || 1000) - 1000) > 0.0001 ||
+      Math.abs((Number(b.q) || 1) - 1) > 0.0001 ||
+      String(b.type || 'PK').toUpperCase() !== 'PK'
+    ));
+  }
+
   function _updatePeqBtn() {
     const btn = document.getElementById('player-peq-btn');
     if (!btn) return;
     // 'active' = EQ profile is selected (persistent indicator, independent of popover state)
-    btn.classList.toggle('active', !!ps.activePeqProfileId);
+    const profileActive = !!ps.activePeqProfileId && ps.activePeqProfileId !== _CUSTOM_EQ_ID;
+    const customActive =
+      ps.activePeqIemId === _CUSTOM_EQ_ID &&
+      ps.activePeqProfileId === _CUSTOM_EQ_ID &&
+      _hasMeaningfulCustomPeq();
+    btn.classList.toggle('active', profileActive || customActive);
+  }
+
+  function _updatePeqWorkspaceCta() {
+    const btn = document.getElementById('peq-workspace-cta');
+    const profileSel = document.getElementById('peq-profile-select');
+    if (!btn || !profileSel) return;
+    const v = profileSel.value || '';
+    btn.textContent = (v && v !== _CREATE_PEQ_ID) ? 'Edit PEQ' : 'Create PEQ';
   }
 
   function _setPeqPopoverOpen(open) {
@@ -832,6 +1056,11 @@ const Player = (function () {
   }
 
   async function togglePeqPopover() {
+    if (typeof App !== 'undefined'
+        && typeof App.isPeqWorkspaceOpen === 'function'
+        && App.isPeqWorkspaceOpen()) {
+      return;
+    }
     ps.peqOpen = !ps.peqOpen;
     _setPeqPopoverOpen(ps.peqOpen);
     if (ps.peqOpen) {
@@ -845,22 +1074,26 @@ const Player = (function () {
     if (!sel) return;
     try {
       const iems = await fetch('/api/iems').then(r => r.json());
-      sel.innerHTML = '<option value="">— Off —</option>' +
+      const activeIemId = ps.activePeqIemId === _CUSTOM_EQ_ID ? '' : (ps.activePeqIemId || '');
+      sel.innerHTML = `<option value=""${!activeIemId ? ' selected' : ''}>— None —</option>` +
         iems.map(iem =>
-          `<option value="${iem.id}"${iem.id === ps.activePeqIemId ? ' selected' : ''}>${_esc(iem.name)}</option>`
+          `<option value="${iem.id}"${iem.id === activeIemId ? ' selected' : ''}>${_esc(iem.name)}</option>`
         ).join('');
-      await _updatePeqProfileList(ps.activePeqIemId, ps.activePeqProfileId);
+      await _updatePeqProfileList(activeIemId, ps.activePeqProfileId);
+      _updatePeqWorkspaceCta();
     } catch (e) {
       console.warn('Player: IEM fetch failed', e);
     }
   }
 
   async function onPeqIemChange(iemId) {
+    if (_loadCustomPeqState().enabled) _setCustomPeqEnabled(false);
     ps.activePeqIemId     = iemId || null;
     ps.activePeqProfileId = null;
     await _updatePeqProfileList(iemId, null);
     _buildPeqChain(null);  // clear PEQ until a profile is chosen
     _updatePeqBtn();
+    _updatePeqWorkspaceCta();
     _saveState();
   }
 
@@ -868,27 +1101,44 @@ const Player = (function () {
     const row = document.getElementById('peq-profile-row');
     const sel = document.getElementById('peq-profile-select');
     if (!row || !sel) return;
-    if (!iemId) { row.style.display = 'none'; return; }
+    const base = `<option value="">— None —</option><option value="${_CREATE_PEQ_ID}">Create PEQ</option>`;
+    row.style.display = '';
+    if (!iemId) {
+      sel.innerHTML = base;
+      _updatePeqWorkspaceCta();
+      return;
+    }
     try {
       const iem      = await fetch(`/api/iems/${iemId}`).then(r => r.json());
       const profiles = iem.peq_profiles || [];
-      if (profiles.length === 0) { row.style.display = 'none'; return; }
-      row.style.display = '';
-      sel.innerHTML = '<option value="">— Off —</option>' +
+      sel.innerHTML = base +
         profiles.map(p =>
           `<option value="${p.id}"${p.id === activeProfileId ? ' selected' : ''}>${_esc(p.name)}</option>`
         ).join('');
+      if (activeProfileId === _CREATE_PEQ_ID) sel.value = _CREATE_PEQ_ID;
     } catch (e) {
-      row.style.display = 'none';
+      sel.innerHTML = base;
     }
+    _updatePeqWorkspaceCta();
   }
 
   async function onPeqProfileChange(profileId) {
+    if (profileId === _CREATE_PEQ_ID) {
+      if (_loadCustomPeqState().enabled) _setCustomPeqEnabled(false);
+      ps.activePeqProfileId = null;
+      _buildPeqChain(null);
+      _updatePeqBtn();
+      _updatePeqWorkspaceCta();
+      _saveState();
+      return;
+    }
+    if (_loadCustomPeqState().enabled) _setCustomPeqEnabled(false);
     ps.activePeqProfileId = profileId || null;
     if (_ctx) {
       await _loadAndApplyPeq(ps.activePeqIemId, ps.activePeqProfileId);
     }
     _updatePeqBtn();
+    _updatePeqWorkspaceCta();
     _saveState();
   }
 
@@ -899,6 +1149,22 @@ const Player = (function () {
       await onPeqProfileChange(profileSel.value);
     }
     // Close popover
+    ps.peqOpen = false;
+    _setPeqPopoverOpen(false);
+  }
+
+  function openPeqWorkspaceFromPopover() {
+    const iemSel = document.getElementById('peq-iem-select');
+    const profileSel = document.getElementById('peq-profile-select');
+    const iemId = iemSel ? (iemSel.value || '') : '';
+    const profileId = profileSel ? (profileSel.value || '') : '';
+    if (typeof App !== 'undefined' && typeof App.openPeqEditor === 'function') {
+      if (iemId && profileId && profileId !== _CREATE_PEQ_ID) {
+        App.openPeqEditor({ mode: 'edit_profile', iemId, peqId: profileId });
+      } else {
+        App.openPeqEditor({ mode: 'create', iemId });
+      }
+    }
     ps.peqOpen = false;
     _setPeqPopoverOpen(false);
   }
@@ -1381,6 +1647,13 @@ const Player = (function () {
       }
     } catch (_) {}
 
+    // Custom EQ restore is local-only by design.
+    const restoredCustom = _loadCustomPeqState();
+    if (restoredCustom.enabled) {
+      ps.activePeqIemId = _CUSTOM_EQ_ID;
+      ps.activePeqProfileId = _CUSTOM_EQ_ID;
+    }
+
     // 3. Apply volume before audio context (HTMLAudioElement fallback)
     _audioA.volume = ps.muted ? 0 : ps.volume;
     _audioB.volume = 0;
@@ -1402,6 +1675,8 @@ const Player = (function () {
       if (seekTime > 0) {
         const _applySeek = () => {
           if (isFinite(_audio.duration) && seekTime < _audio.duration) {
+            _seekRestored = true;
+            setTimeout(() => { _seekRestored = false; }, 2000);
             _audio.currentTime = seekTime;
             const pct    = seekTime / _audio.duration;
             const fillEl = document.getElementById('player-progress-fill');
@@ -1417,6 +1692,10 @@ const Player = (function () {
       }
     } else {
       _updateTrackUI(null);
+    }
+
+    if (restoredCustom.enabled && _ctx) {
+      _applyCustomPeq(restoredCustom);
     }
 
     // 6. Popover / queue outside-click handler
@@ -1555,6 +1834,18 @@ const Player = (function () {
     onPeqIemChange,
     onPeqProfileChange,
     applyPeqProfile,
+    openPeqWorkspaceFromPopover,
+    openCustomEqWorkspace: () => {
+      if (typeof App !== 'undefined' && typeof App.openPeqEditor === 'function') {
+        App.openPeqEditor({ mode: 'create' });
+      }
+    },
+    applyCustomPeq: (state) => _applyCustomPeq(state),
+    updateBandParam: _updateBandParam,
+    updatePreamp: _updatePreamp,
+    redrawEqCurve: _scheduleEqCurveRedraw,
+    getCustomPeqState: () => _loadCustomPeqState(),
+    setCustomPeqEnabled: _setCustomPeqEnabled,
     // Crossfade
     setXfade,
     // State snapshot (called by tunebridge_gui.py via evaluate_js on window close)

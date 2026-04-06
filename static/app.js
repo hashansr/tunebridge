@@ -98,6 +98,25 @@ function _nameSortKey(name) {
 const _STAR_OUTLINE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><polygon points="12 2.8 15.1 9 22 9.9 17 14.6 18.2 21.2 12 18 5.8 21.2 7 14.6 2 9.9 8.9 9"/></svg>`;
 const _STAR_FILLED = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1"><polygon points="12 2.8 15.1 9 22 9.9 17 14.6 18.2 21.2 12 18 5.8 21.2 7 14.6 2 9.9 8.9 9"/></svg>`;
 const _FAV_PLAYLIST_COVER = 'images/favourite-playlist-cover.png';
+const _CUSTOM_PEQ_KEY = 'tb_custom_peq';
+const _CREATE_PEQ_ID = '__create__';
+const _WORKSPACE_NEW_PEQ_ID = '__new_peq__';
+const _CUSTOM_NO_GAIN_TYPES = new Set(['LPQ', 'HPQ', 'NO', 'AP']);
+let _customPeqEditorState = null;
+let _peqWorkspaceOpen = false;
+let _peqWorkspaceInitialJson = '';
+let _peqWorkspaceDirty = false;
+let _peqWorkspaceChart = null;
+let _peqWorkspaceGraphTimer = null;
+let _peqWorkspaceGraphReqId = 0;
+let _peqWorkspaceSelectedIemId = '';
+let _peqWorkspaceSelectedTargetId = '';
+let _peqWorkspaceSelectedPeqId = _WORKSPACE_NEW_PEQ_ID;
+let _peqWorkspaceCurveVisibility = {};
+let _peqWorkspaceConnectedDaps = [];
+let _peqWorkspaceCopyDapId = '';
+let _peqWorkspaceEditContext = null;
+let _peqWorkspaceIemCache = [];
 
 function _isFavourite(type, id) {
   if (!state.favourites[type]) return false;
@@ -2824,6 +2843,7 @@ async function bulkUnfavouriteSelected() {
 /* ── View navigation ────────────────────────────────────────────────── */
 function showView(viewName) {
   if (!_guardMlGeneratorNavigation()) return;
+  if (!_guardPeqEditorNavigation()) return;
   if (viewName === 'fav-artists') {
     state.favPanel = 'artists';
     viewName = 'favourites';
@@ -2877,6 +2897,7 @@ function setActiveNav(view) {
 
 function backToArtists() {
   if (!_guardMlGeneratorNavigation()) return;
+  if (!_guardPeqEditorNavigation()) return;
   state.view = 'artists';
   clearSelection();
   setActiveNav('artists');
@@ -2887,6 +2908,7 @@ function backToArtists() {
 
 function backToGear() {
   if (!_guardMlGeneratorNavigation()) return;
+  if (!_guardPeqEditorNavigation()) return;
   state.view = 'gear';
   clearSelection();
   setActiveNav('gear');
@@ -2896,6 +2918,7 @@ function backToGear() {
 
 async function showArtist(artist) {
   if (!_guardMlGeneratorNavigation()) return;
+  if (!_guardPeqEditorNavigation()) return;
   const main = document.getElementById('main');
   state._artistsScrollTop = main ? main.scrollTop : 0;
   state.artist = artist;
@@ -2909,6 +2932,7 @@ async function showArtist(artist) {
 
 async function showAlbum(artist, album) {
   if (!_guardMlGeneratorNavigation()) return;
+  if (!_guardPeqEditorNavigation()) return;
   state.artist = artist;
   state.album = album;
   state.view = 'tracks';
@@ -2921,6 +2945,7 @@ async function showAlbum(artist, album) {
 
 async function showArtistTracks(artist) {
   if (!_guardMlGeneratorNavigation()) return;
+  if (!_guardPeqEditorNavigation()) return;
   state.artist = artist;
   state.album = null;
   state.view = 'tracks';
@@ -5085,6 +5110,879 @@ async function applyIemSourceToGraph(sourceId) {
   if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId, _activeIemSourceId);
 }
 
+function _defaultCustomPeqState() {
+  return {
+    enabled: false,
+    preamp_db: 0,
+    bands: Array.from({ length: 10 }, () => ({
+      enabled: false,
+      type: 'PK',
+      fc: 1000,
+      gain: 0,
+      q: 1.0,
+    })),
+  };
+}
+
+function _sanitizeCustomPeqState(raw) {
+  const base = _defaultCustomPeqState();
+  if (!raw || typeof raw !== 'object') return base;
+  const bands = Array.isArray(raw.bands) ? raw.bands : [];
+  base.enabled = !!raw.enabled;
+  base.preamp_db = Math.max(-30, Math.min(30, Number(raw.preamp_db) || 0));
+  for (let i = 0; i < 10; i++) {
+    const src = bands[i] || {};
+    const type = String(src.type || 'PK').toUpperCase();
+    base.bands[i] = {
+      enabled: !!src.enabled,
+      type: ['PK', 'LSC', 'HSC', 'LPQ', 'HPQ', 'NO', 'AP'].includes(type) ? type : 'PK',
+      fc: Math.max(20, Math.min(20000, Number(src.fc) || 1000)),
+      gain: Math.max(-30, Math.min(30, Number(src.gain) || 0)),
+      q: Math.max(0.1, Math.min(10, Number(src.q) || 1.0)),
+    };
+  }
+  return base;
+}
+
+function _loadCustomPeqState() {
+  if (_customPeqEditorState) return _customPeqEditorState;
+  try {
+    const raw = localStorage.getItem(_CUSTOM_PEQ_KEY);
+    _customPeqEditorState = _sanitizeCustomPeqState(raw ? JSON.parse(raw) : null);
+  } catch (_) {
+    _customPeqEditorState = _defaultCustomPeqState();
+  }
+  return _customPeqEditorState;
+}
+
+function _saveCustomPeqState() {
+  if (!_customPeqEditorState) _customPeqEditorState = _defaultCustomPeqState();
+  const safe = _sanitizeCustomPeqState(_customPeqEditorState);
+  _customPeqEditorState = safe;
+  try { localStorage.setItem(_CUSTOM_PEQ_KEY, JSON.stringify(safe)); } catch (_) {}
+  return safe;
+}
+
+function _enabledBandIndex(bandIndex) {
+  if (!_customPeqEditorState?.bands?.[bandIndex]?.enabled) return -1;
+  let enabled = 0;
+  for (let i = 0; i < bandIndex; i++) if (_customPeqEditorState.bands[i].enabled) enabled++;
+  return enabled;
+}
+
+function _parseNum(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function _renderCustomPeqSavePanel(open) {
+  const panel = document.getElementById('peq-save-profile-panel');
+  if (!panel) return;
+  panel.style.display = open ? 'block' : 'none';
+  if (!open) {
+    const err = document.getElementById('peq-save-profile-error');
+    if (err) err.style.display = 'none';
+  }
+}
+
+function _setPeqWorkspaceDirty(isDirty) {
+  _peqWorkspaceDirty = !!isDirty;
+  const chip = document.getElementById('peq-workspace-dirty');
+  if (chip) chip.style.display = _peqWorkspaceDirty ? '' : 'none';
+}
+
+function _refreshPeqWorkspaceDirty() {
+  if (!_peqWorkspaceOpen) return;
+  const current = JSON.stringify(_sanitizeCustomPeqState(_customPeqEditorState));
+  _setPeqWorkspaceDirty(current !== _peqWorkspaceInitialJson);
+}
+
+function _snapshotPeqWorkspace() {
+  _peqWorkspaceInitialJson = JSON.stringify(_sanitizeCustomPeqState(_customPeqEditorState));
+  _setPeqWorkspaceDirty(false);
+}
+
+function _destroyPeqWorkspaceChart() {
+  if (_peqWorkspaceChart) {
+    _peqWorkspaceChart.destroy();
+    _peqWorkspaceChart = null;
+  }
+  const el = document.getElementById('peq-editor-curve-legend');
+  if (el) el.innerHTML = '';
+}
+
+function _renderPeqWorkspaceLegend(datasets) {
+  const el = document.getElementById('peq-editor-curve-legend');
+  if (!el) return;
+  el.innerHTML = datasets.map((ds, i) => {
+    const dash = (ds.borderDash && ds.borderDash.length) ? 'stroke-dasharray="5 4"' : '';
+    const isHidden = ds.hidden === true;
+    return `
+      <div class="curve-legend-item" id="peq-legend-item-${i}">
+        <button class="eye-toggle${isHidden ? ' hidden' : ''}" onclick="App.togglePeqWorkspaceCurve(${i})" title="${isHidden ? 'Show curve' : 'Hide curve'}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+        <svg width="28" height="10" viewBox="0 0 28 10" style="flex-shrink:0;opacity:${isHidden ? '0.35' : '1'}">
+          <line x1="0" y1="5" x2="28" y2="5" stroke="${ds.borderColor}"
+            stroke-width="${ds.borderWidth || 1.5}" ${dash}/>
+        </svg>
+        <span style="opacity:${isHidden ? '0.45' : '1'}">${esc(ds.label)}</span>
+      </div>`;
+  }).join('');
+}
+
+function togglePeqWorkspaceCurve(idx) {
+  if (!_peqWorkspaceChart) return;
+  const nowVisible = !_peqWorkspaceChart.isDatasetVisible(idx);
+  _peqWorkspaceChart.setDatasetVisibility(idx, nowVisible);
+  const ds = _peqWorkspaceChart.data.datasets[idx];
+  if (ds && ds._curveId) _peqWorkspaceCurveVisibility[ds._curveId] = nowVisible;
+  _peqWorkspaceChart.update();
+  const item = document.getElementById(`peq-legend-item-${idx}`);
+  if (!item) return;
+  const btn = item.querySelector('.eye-toggle');
+  if (btn) {
+    btn.classList.toggle('hidden', !nowVisible);
+    btn.title = nowVisible ? 'Hide curve' : 'Show curve';
+  }
+  const svg = item.querySelector('svg:not(.eye-toggle svg)');
+  if (svg) svg.style.opacity = nowVisible ? '1' : '0.35';
+  const label = item.querySelector('span');
+  if (label) label.style.opacity = nowVisible ? '1' : '0.45';
+}
+
+function _schedulePeqWorkspaceGraphRefresh() {
+  if (!_peqWorkspaceOpen) return;
+  if (_peqWorkspaceGraphTimer) clearTimeout(_peqWorkspaceGraphTimer);
+  _peqWorkspaceGraphTimer = setTimeout(() => {
+    _peqWorkspaceGraphTimer = null;
+    _refreshPeqWorkspaceGraph();
+  }, 70);
+}
+
+async function _refreshPeqWorkspaceGraph() {
+  if (!_peqWorkspaceOpen) return;
+  const canvas = document.getElementById('peq-editor-canvas');
+  if (!canvas) return;
+  const iemId = _peqWorkspaceSelectedIemId || document.getElementById('peq-workspace-iem-select')?.value || '';
+  const reqId = ++_peqWorkspaceGraphReqId;
+  const body = {
+    custom_peq: _sanitizeCustomPeqState(_customPeqEditorState || _defaultCustomPeqState()),
+  };
+  const targetId = _peqWorkspaceSelectedTargetId || document.getElementById('peq-workspace-target-select')?.value || '';
+  if (targetId) body.baseline_ids = [targetId];
+  let data;
+  try {
+    data = iemId
+      ? await api(`/iems/${encodeURIComponent(iemId)}/graph/custom`, { method: 'POST', body })
+      : await api('/peq/graph/custom', { method: 'POST', body });
+  } catch (e) {
+    if (reqId === _peqWorkspaceGraphReqId) toast('Failed to load Custom PEQ graph: ' + e.message);
+    return;
+  }
+  if (reqId !== _peqWorkspaceGraphReqId) return;
+  const curves = Array.isArray(data?.curves) ? data.curves : [];
+  if (!curves.length) {
+    _destroyPeqWorkspaceChart();
+    return;
+  }
+  if (_peqWorkspaceChart) _destroyPeqWorkspaceChart();
+  const regionPlugin = {
+    id: 'peqWorkspaceFreqRegions',
+    beforeDatasetsDraw(chart) {
+      const { ctx, chartArea: { left, right, top, bottom }, scales: { x } } = chart;
+      const regions = [
+        { f1: 20,   f2: 80,    color: 'rgba(173,198,255,.04)', label: 'Sub bass' },
+        { f1: 80,   f2: 300,   color: 'rgba(173,198,255,.025)', label: 'Mid bass' },
+        { f1: 300,  f2: 1000,  color: 'rgba(173,198,255,.015)', label: 'Lower midrange' },
+        { f1: 1000, f2: 4000,  color: 'rgba(173,198,255,.025)', label: 'Upper midrange' },
+        { f1: 4000, f2: 6000,  color: 'rgba(173,198,255,.04)', label: 'Presence region' },
+        { f1: 6000, f2: 10000, color: 'rgba(173,198,255,.025)', label: 'Mid treble' },
+        { f1: 10000,f2: 20000, color: 'rgba(173,198,255,.04)', label: 'Air' },
+      ];
+      regions.forEach(r => {
+        const x1 = Math.max(x.getPixelForValue(r.f1), left);
+        const x2 = Math.min(x.getPixelForValue(r.f2), right);
+        ctx.fillStyle = r.color;
+        ctx.fillRect(x1, top, x2 - x1, bottom - top);
+      });
+      ctx.save();
+      ctx.font = '9px Inter, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      regions.forEach(r => {
+        const x1 = Math.max(x.getPixelForValue(r.f1), left);
+        const x2 = Math.min(x.getPixelForValue(r.f2), right);
+        const cx = (x1 + x2) / 2;
+        if (x2 - x1 > 30) ctx.fillText(r.label, cx, bottom - 2);
+      });
+      ctx.restore();
+    },
+  };
+  function _workspaceCurveColor(id, backendColor) {
+    if (id.startsWith('baseline-')) return backendColor || '#f0b429';
+    if (id.includes('-custom-')) return '#53e16f';
+    if (id.endsWith('-R')) return '#e05c5c';
+    return '#5b8dee';
+  }
+  const datasets = curves.map(c => ({
+    label: c.label,
+    _curveId: c.id,
+    data: c.data.map(([f, spl]) => ({ x: f, y: spl })),
+    borderColor: _workspaceCurveColor(c.id, c.color),
+    borderWidth: c.id.startsWith('baseline-') ? 1.35 : c.dash ? 1.25 : 1.85,
+    borderDash: c.dash ? [6, 4] : undefined,
+    pointRadius: 0,
+    tension: 0.28,
+    hidden: _peqWorkspaceCurveVisibility[c.id] === false,
+  }));
+  _peqWorkspaceChart = new Chart(canvas, {
+    type: 'line',
+    plugins: [regionPlugin],
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 120 },
+      scales: {
+        x: {
+          type: 'logarithmic',
+          min: 20,
+          max: 20000,
+          title: { display: true, text: 'Frequency (Hz)', color: '#6b6b7b', font: { size: 11, family: 'Inter, sans-serif' } },
+          ticks: {
+            color: '#6b6b7b',
+            font: { size: 10, family: 'Inter, sans-serif' },
+            callback: function(v) {
+              const labeled = [20,50,100,200,500,1000,2000,5000,10000,20000];
+              if (!labeled.includes(v)) return '';
+              return v >= 1000 ? `${v / 1000}k` : v;
+            },
+            autoSkip: false,
+            maxRotation: 0,
+          },
+          grid: {
+            color: function(ctx) {
+              const v = ctx.tick && ctx.tick.value;
+              const major = [100, 1000, 10000];
+              return major.includes(v) ? 'rgba(173,198,255,.12)' : 'rgba(173,198,255,.04)';
+            },
+          },
+          afterBuildTicks(axis) {
+            axis.ticks = [20,30,40,50,60,80,100,150,200,300,400,500,600,800,1000,1500,2000,3000,4000,5000,6000,8000,10000,15000,20000].map(v => ({ value: v }));
+          },
+        },
+        y: {
+          min: 50,
+          max: 110,
+          title: { display: true, text: 'dB', color: '#6b6b7b', font: { size: 11, family: 'Inter, sans-serif' } },
+          ticks: { color: '#6b6b7b', font: { size: 10, family: 'Inter, sans-serif' }, stepSize: 10 },
+          grid: { color: 'rgba(173,198,255,.06)' },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(53,53,52,0.95)',
+          titleColor: '#e5e2e1',
+          bodyColor: '#c1c6d7',
+          borderColor: 'rgba(65,71,85,0.3)',
+          borderWidth: 1,
+          callbacks: {
+            title: items => {
+              const f = items[0].parsed.x;
+              return f >= 1000 ? `${(f / 1000).toFixed(1)} kHz` : `${Math.round(f)} Hz`;
+            },
+            label: item => ` ${item.dataset.label}: ${item.parsed.y.toFixed(1)} dB`,
+          },
+        },
+      },
+    },
+  });
+  _renderPeqWorkspaceLegend(datasets);
+}
+
+async function _loadPeqWorkspaceContext() {
+  const iemSel = document.getElementById('peq-workspace-iem-select');
+  const peqSel = document.getElementById('peq-workspace-peq-select');
+  const targetSel = document.getElementById('peq-workspace-target-select');
+  if (iemSel) {
+    iemSel.innerHTML = '<option value="">No IEM / Headphone selected</option>';
+  }
+  if (peqSel) {
+    peqSel.innerHTML = `<option value="${_WORKSPACE_NEW_PEQ_ID}">New PEQ</option>`;
+  }
+  if (targetSel) {
+    targetSel.innerHTML = '<option value="">No target selected</option>';
+  }
+  try {
+    const [iems, baselines, daps] = await Promise.all([
+      api('/iems').catch(() => []),
+      api('/baselines').catch(() => []),
+      api('/daps').catch(() => []),
+    ]);
+    if (iemSel) {
+      _peqWorkspaceIemCache = (iems || []).slice();
+      const measured = _peqWorkspaceIemCache.filter(i => i.has_measurement);
+      iemSel.innerHTML += measured.map(i => `<option value="${esc(i.id)}">${esc(i.name)}</option>`).join('');
+      const saveSel = document.getElementById('peq-save-iem-select');
+      const candidate = _peqWorkspaceSelectedIemId || (saveSel && saveSel.value) || '';
+      const hasCandidate = candidate && measured.some(i => i.id === candidate);
+      if (hasCandidate) iemSel.value = candidate;
+      else iemSel.value = '';
+      _peqWorkspaceSelectedIemId = iemSel.value || '';
+    }
+    _refreshPeqWorkspacePeqOptions();
+    if (targetSel) {
+      targetSel.innerHTML += (baselines || []).map(b => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
+      if (_peqWorkspaceSelectedTargetId && (baselines || []).some(b => b.id === _peqWorkspaceSelectedTargetId)) {
+        targetSel.value = _peqWorkspaceSelectedTargetId;
+      }
+      _peqWorkspaceSelectedTargetId = targetSel.value || '';
+    }
+    _refreshPeqWorkspaceCopyTargets(daps || []);
+  } catch (_) {}
+}
+
+function _refreshPeqWorkspacePeqOptions() {
+  const peqSel = document.getElementById('peq-workspace-peq-select');
+  if (!peqSel) return;
+  const iemId = _peqWorkspaceSelectedIemId || document.getElementById('peq-workspace-iem-select')?.value || '';
+  const iem = (_peqWorkspaceIemCache || []).find(i => i.id === iemId);
+  const profiles = Array.isArray(iem?.peq_profiles) ? iem.peq_profiles : [];
+  peqSel.innerHTML = `<option value="${_WORKSPACE_NEW_PEQ_ID}">New PEQ</option>` +
+    profiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+  if (_peqWorkspaceSelectedPeqId && profiles.some(p => p.id === _peqWorkspaceSelectedPeqId)) {
+    peqSel.value = _peqWorkspaceSelectedPeqId;
+  } else {
+    _peqWorkspaceSelectedPeqId = _WORKSPACE_NEW_PEQ_ID;
+    peqSel.value = _WORKSPACE_NEW_PEQ_ID;
+  }
+}
+
+function _refreshPeqWorkspaceCopyTargets(allDaps) {
+  const wrap = document.getElementById('peq-copy-wrap');
+  const sel = document.getElementById('peq-copy-dap-select');
+  const btn = document.getElementById('peq-copy-btn');
+  if (!wrap || !sel || !btn) return;
+  const connected = (allDaps || []).filter(d => d.mounted);
+  _peqWorkspaceConnectedDaps = connected;
+  if (!connected.length) {
+    wrap.style.display = 'none';
+    _peqWorkspaceCopyDapId = '';
+    return;
+  }
+  wrap.style.display = '';
+  if (connected.length === 1) {
+    _peqWorkspaceCopyDapId = connected[0].id;
+    sel.style.display = 'none';
+    btn.textContent = `Copy to ${connected[0].name}`;
+    return;
+  }
+  btn.textContent = 'Copy to Selected DAP';
+  sel.style.display = '';
+  sel.innerHTML = connected.map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
+  if (_peqWorkspaceCopyDapId && connected.some(d => d.id === _peqWorkspaceCopyDapId)) {
+    sel.value = _peqWorkspaceCopyDapId;
+  } else {
+    _peqWorkspaceCopyDapId = connected[0].id;
+    sel.value = _peqWorkspaceCopyDapId;
+  }
+}
+
+function _hidePeqWorkspace(opts = {}) {
+  const panel = document.getElementById('peq-workspace');
+  if (panel) panel.style.display = 'none';
+  _renderCustomPeqSavePanel(false);
+  _destroyPeqWorkspaceChart();
+  if (_peqWorkspaceGraphTimer) {
+    clearTimeout(_peqWorkspaceGraphTimer);
+    _peqWorkspaceGraphTimer = null;
+  }
+  _peqWorkspaceOpen = false;
+  _peqWorkspaceEditContext = null;
+}
+
+function isPeqWorkspaceOpen() {
+  return !!_peqWorkspaceOpen;
+}
+
+function _guardPeqEditorNavigation() {
+  if (!_peqWorkspaceOpen) return true;
+  if (_peqWorkspaceDirty) {
+    const shouldSave = window.confirm('Save Custom PEQ changes before leaving? Click OK to save, or Cancel to discard.');
+    if (shouldSave) {
+      const st = _saveCustomPeqState();
+      st.enabled = true;
+      _saveCustomPeqState();
+      Player?.applyCustomPeq?.(st);
+      _snapshotPeqWorkspace();
+    } else {
+      try {
+        _customPeqEditorState = _sanitizeCustomPeqState(JSON.parse(_peqWorkspaceInitialJson || '{}'));
+      } catch (_) {
+        _customPeqEditorState = _defaultCustomPeqState();
+      }
+      _customPeqEditorState.enabled = true;
+      const restored = _saveCustomPeqState();
+      Player?.applyCustomPeq?.(restored);
+      _setPeqWorkspaceDirty(false);
+    }
+  }
+  _hidePeqWorkspace();
+  return true;
+}
+
+async function _loadPeqSaveIems() {
+  const sel = document.getElementById('peq-save-iem-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Select IEM</option>';
+  try {
+    const iems = await api('/iems');
+    sel.innerHTML += (iems || []).map(iem => `<option value="${esc(iem.id)}">${esc(iem.name)}</option>`).join('');
+  } catch (_) {}
+}
+
+function _apoFromCustomState(state) {
+  const st = _sanitizeCustomPeqState(state);
+  const lines = [`Preamp: ${st.preamp_db.toFixed(1)} dB`];
+  let idx = 1;
+  st.bands.forEach(b => {
+    if (!b.enabled) return;
+    const noGain = _CUSTOM_NO_GAIN_TYPES.has(String(b.type || '').toUpperCase());
+    const parts = [`Filter ${idx}: ON ${b.type} Fc ${Math.round(b.fc)} Hz`];
+    if (!noGain) parts.push(`Gain ${b.gain.toFixed(1)} dB`);
+    parts.push(`Q ${b.q.toFixed(3)}`);
+    lines.push(parts.join(' '));
+    idx++;
+  });
+  return lines.join('\n') + '\n';
+}
+
+function _customStateFromProfile(profile) {
+  const st = _defaultCustomPeqState();
+  if (!profile || typeof profile !== 'object') return st;
+  st.enabled = true;
+  st.preamp_db = Math.max(-30, Math.min(30, Number(profile.preamp_db) || 0));
+  const filters = Array.isArray(profile.filters) ? profile.filters : [];
+  for (let i = 0; i < Math.min(10, filters.length); i++) {
+    const f = filters[i] || {};
+    const t = String(f.type || 'PK').toUpperCase();
+    st.bands[i] = {
+      enabled: f.enabled !== false,
+      type: ['PK', 'LSC', 'HSC', 'LPQ', 'HPQ', 'NO', 'AP'].includes(t) ? t : 'PK',
+      fc: Math.max(20, Math.min(20000, Number(f.fc) || 1000)),
+      gain: Math.max(-30, Math.min(30, Number(f.gain) || 0)),
+      q: Math.max(0.1, Math.min(10, Number(f.q) || 1.0)),
+    };
+  }
+  return st;
+}
+
+async function _saveCustomProfileToIem(iemId, name, overwritePeqId = '') {
+  const st = _loadCustomPeqState();
+  const content = _apoFromCustomState(st);
+  const fileName = `${name.replace(/[^\w\- ]+/g, '').trim() || 'Custom EQ'}.txt`;
+  const formData = new FormData();
+  formData.append('file', new Blob([content], { type: 'text/plain' }), fileName);
+  formData.append('name', name);
+  const url = overwritePeqId
+    ? `/api/iems/${encodeURIComponent(iemId)}/peq/${encodeURIComponent(overwritePeqId)}`
+    : `/api/iems/${encodeURIComponent(iemId)}/peq`;
+  const method = overwritePeqId ? 'PUT' : 'POST';
+  const res = await fetch(url, { method, body: formData });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Could not save profile' }));
+    throw new Error(err.error || 'Could not save profile');
+  }
+  return res.json();
+}
+
+function renderPeqEditorBands() {
+  const wrap = document.getElementById('peq-editor-bands');
+  if (!wrap) return;
+  const st = _loadCustomPeqState();
+  wrap.innerHTML = st.bands.map((band, i) => {
+    const gainHidden = _CUSTOM_NO_GAIN_TYPES.has(String(band.type || '').toUpperCase());
+    return `
+      <div class="peq-editor-band-row" data-band="${i}">
+        <span class="peq-editor-band-num">${i + 1}</span>
+        <button class="peq-band-toggle ${band.enabled ? 'active' : ''}" onclick="App.togglePeqBand(${i})">
+          ${band.enabled ? 'ON' : 'OFF'}
+        </button>
+        <select class="peq-band-type" onchange="App.onPeqBandTypeChange(${i}, this.value)">
+          <option value="PK" ${band.type === 'PK' ? 'selected' : ''}>PK</option>
+          <option value="LSC" ${band.type === 'LSC' ? 'selected' : ''}>LSC</option>
+          <option value="HSC" ${band.type === 'HSC' ? 'selected' : ''}>HSC</option>
+          <option value="LPQ" ${band.type === 'LPQ' ? 'selected' : ''}>LPQ</option>
+          <option value="HPQ" ${band.type === 'HPQ' ? 'selected' : ''}>HPQ</option>
+          <option value="NO" ${band.type === 'NO' ? 'selected' : ''}>NO</option>
+          <option value="AP" ${band.type === 'AP' ? 'selected' : ''}>AP</option>
+        </select>
+        <input type="number" class="peq-editor-num-input" value="${Math.round(band.fc)}"
+               min="20" max="20000" step="1"
+               oninput="App.onPeqBandFcChange(${i}, this.value)" />
+        <input type="number" class="peq-editor-num-input ${gainHidden ? 'peq-input-hidden' : ''}"
+               value="${band.gain.toFixed(1)}" min="-30" max="30" step="0.1"
+               oninput="App.onPeqBandGainChange(${i}, this.value)" />
+        <input type="number" class="peq-editor-num-input" value="${band.q.toFixed(3)}"
+               min="0.1" max="10" step="0.001"
+               oninput="App.onPeqBandQChange(${i}, this.value)" />
+      </div>`;
+  }).join('');
+}
+
+async function openPeqEditor(opts = {}) {
+  if (_peqWorkspaceOpen) return;
+  const panel = document.getElementById('peq-workspace');
+  if (!panel) return;
+  _peqWorkspaceEditContext = null;
+  if (opts.mode === 'edit_profile' && opts.iemId && opts.peqId) {
+    try {
+      const iem = await api(`/iems/${encodeURIComponent(opts.iemId)}`);
+      const profile = (iem.peq_profiles || []).find(p => p.id === opts.peqId);
+      if (profile) {
+        _customPeqEditorState = _customStateFromProfile(profile);
+        _saveCustomPeqState();
+        _peqWorkspaceEditContext = { iemId: opts.iemId, peqId: opts.peqId, peqName: profile.name || 'PEQ Profile' };
+        _peqWorkspaceSelectedIemId = opts.iemId;
+        _peqWorkspaceSelectedPeqId = opts.peqId;
+        if ((profile.filters || []).length > 10) {
+          toast('Only the first 10 filters are editable in Custom PEQ workspace.');
+        }
+      } else {
+        _customPeqEditorState = _loadCustomPeqState();
+      }
+    } catch (_) {
+      _customPeqEditorState = _loadCustomPeqState();
+      toast('Could not load selected PEQ. Opening Custom PEQ workspace with current state.');
+    }
+  } else if (opts.mode === 'create') {
+    _customPeqEditorState = _defaultCustomPeqState();
+    _customPeqEditorState.enabled = true;
+    _saveCustomPeqState();
+    _peqWorkspaceSelectedIemId = opts.iemId || '';
+    _peqWorkspaceSelectedPeqId = _WORKSPACE_NEW_PEQ_ID;
+  } else {
+    _customPeqEditorState = _loadCustomPeqState();
+    _customPeqEditorState.enabled = true;
+    _saveCustomPeqState();
+  }
+  if (Player?.setCustomPeqEnabled) Player.setCustomPeqEnabled(true);
+  await _loadPeqWorkspaceContext();
+  _refreshPeqWorkspacePeqOptions();
+  const peqSel = document.getElementById('peq-workspace-peq-select');
+  if (peqSel) {
+    if (_peqWorkspaceSelectedPeqId && Array.from(peqSel.options).some(o => o.value === _peqWorkspaceSelectedPeqId)) {
+      peqSel.value = _peqWorkspaceSelectedPeqId;
+    } else {
+      _peqWorkspaceSelectedPeqId = _WORKSPACE_NEW_PEQ_ID;
+      peqSel.value = _WORKSPACE_NEW_PEQ_ID;
+    }
+  }
+  const preampInput = document.getElementById('peq-preamp');
+  if (preampInput) preampInput.value = _customPeqEditorState.preamp_db.toFixed(1);
+  renderPeqEditorBands();
+  _renderCustomPeqSavePanel(false);
+  panel.style.display = 'block';
+  _peqWorkspaceOpen = true;
+  _snapshotPeqWorkspace();
+  _schedulePeqWorkspaceGraphRefresh();
+}
+
+function closePeqEditor() {
+  _guardPeqEditorNavigation();
+}
+
+async function applyAndClosePeqEditor() {
+  if (_peqWorkspaceEditContext?.iemId && _peqWorkspaceEditContext?.peqId) {
+    const overwrite = await _showConfirm({
+      title: 'Save PEQ Changes',
+      message: `Overwrite "${_peqWorkspaceEditContext.peqName}"? Choose Overwrite to replace it, or Cancel to save as a new profile.`,
+      okText: 'Overwrite',
+      danger: false,
+    });
+    if (overwrite) {
+      try {
+        await _saveCustomProfileToIem(
+          _peqWorkspaceEditContext.iemId,
+          _peqWorkspaceEditContext.peqName,
+          _peqWorkspaceEditContext.peqId
+        );
+        if (Player?.onPeqIemChange && Player?.onPeqProfileChange) {
+          await Player.onPeqIemChange(_peqWorkspaceEditContext.iemId);
+          await Player.onPeqProfileChange(_peqWorkspaceEditContext.peqId);
+        }
+        toast(`Updated "${_peqWorkspaceEditContext.peqName}".`);
+        _snapshotPeqWorkspace();
+        _hidePeqWorkspace({ toast: false });
+        return;
+      } catch (e) {
+        toast('Could not overwrite profile: ' + e.message);
+        return;
+      }
+    } else {
+      await saveCustomPeqAsProfile({
+        iemId: _peqWorkspaceEditContext.iemId,
+        name: `${_peqWorkspaceEditContext.peqName} Copy`,
+      });
+      return;
+    }
+  }
+  const st = _saveCustomPeqState();
+  st.enabled = true;
+  _saveCustomPeqState();
+  Player?.applyCustomPeq?.(st);
+  _snapshotPeqWorkspace();
+  toast('Custom PEQ saved.');
+  _hidePeqWorkspace({ toast: false });
+}
+
+async function resetCustomPeq() {
+  const ok = await _showConfirm({
+    title: 'Reset Custom PEQ',
+    message: 'Reset all 10 bands and preamp to defaults?',
+    okText: 'Reset',
+    danger: false,
+  });
+  if (!ok) return;
+  _customPeqEditorState = _defaultCustomPeqState();
+  _customPeqEditorState.enabled = true;
+  const st = _saveCustomPeqState();
+  const preampInput = document.getElementById('peq-preamp');
+  if (preampInput) preampInput.value = st.preamp_db.toFixed(1);
+  renderPeqEditorBands();
+  Player?.applyCustomPeq?.(st);
+  _schedulePeqWorkspaceGraphRefresh();
+  _refreshPeqWorkspaceDirty();
+}
+
+function togglePeqBand(i) {
+  const st = _loadCustomPeqState();
+  if (!st.bands[i]) return;
+  st.bands[i].enabled = !st.bands[i].enabled;
+  st.enabled = true;
+  _saveCustomPeqState();
+  renderPeqEditorBands();
+  Player?.applyCustomPeq?.(st);
+  _schedulePeqWorkspaceGraphRefresh();
+  _refreshPeqWorkspaceDirty();
+}
+
+function onPeqBandTypeChange(i, val) {
+  const st = _loadCustomPeqState();
+  const band = st.bands[i];
+  if (!band) return;
+  band.type = String(val || 'PK').toUpperCase();
+  st.enabled = true;
+  _saveCustomPeqState();
+  renderPeqEditorBands();
+  Player?.applyCustomPeq?.(st);
+  _schedulePeqWorkspaceGraphRefresh();
+  _refreshPeqWorkspaceDirty();
+}
+
+function onPeqBandFcChange(i, val) {
+  const st = _loadCustomPeqState();
+  const band = st.bands[i];
+  if (!band) return;
+  band.fc = Math.max(20, Math.min(20000, Math.round(_parseNum(val, band.fc))));
+  st.enabled = true;
+  _saveCustomPeqState();
+  const enabledIdx = _enabledBandIndex(i);
+  if (enabledIdx >= 0) Player?.updateBandParam?.(enabledIdx, band.fc, band.gain, band.q);
+  _schedulePeqWorkspaceGraphRefresh();
+  _refreshPeqWorkspaceDirty();
+}
+
+function onPeqBandGainChange(i, val) {
+  const st = _loadCustomPeqState();
+  const band = st.bands[i];
+  if (!band) return;
+  band.gain = Math.max(-30, Math.min(30, _parseNum(val, band.gain)));
+  st.enabled = true;
+  _saveCustomPeqState();
+  const enabledIdx = _enabledBandIndex(i);
+  if (enabledIdx >= 0 && !_CUSTOM_NO_GAIN_TYPES.has(String(band.type || '').toUpperCase())) {
+    Player?.updateBandParam?.(enabledIdx, band.fc, band.gain, band.q);
+  }
+  _schedulePeqWorkspaceGraphRefresh();
+  _refreshPeqWorkspaceDirty();
+}
+
+function onPeqBandQChange(i, val) {
+  const st = _loadCustomPeqState();
+  const band = st.bands[i];
+  if (!band) return;
+  band.q = Math.max(0.1, Math.min(10, _parseNum(val, band.q)));
+  st.enabled = true;
+  _saveCustomPeqState();
+  const enabledIdx = _enabledBandIndex(i);
+  if (enabledIdx >= 0) Player?.updateBandParam?.(enabledIdx, band.fc, band.gain, band.q);
+  _schedulePeqWorkspaceGraphRefresh();
+  _refreshPeqWorkspaceDirty();
+}
+
+function onPeqPreampChange(val) {
+  const st = _loadCustomPeqState();
+  st.preamp_db = Math.max(-30, Math.min(30, _parseNum(val, st.preamp_db)));
+  st.enabled = true;
+  _saveCustomPeqState();
+  Player?.updatePreamp?.(st.preamp_db);
+  _schedulePeqWorkspaceGraphRefresh();
+  _refreshPeqWorkspaceDirty();
+}
+
+function onPeqWorkspaceIemChange(iemId) {
+  _peqWorkspaceSelectedIemId = iemId || '';
+  const saveSel = document.getElementById('peq-save-iem-select');
+  if (saveSel && _peqWorkspaceSelectedIemId) saveSel.value = _peqWorkspaceSelectedIemId;
+  _peqWorkspaceSelectedPeqId = _WORKSPACE_NEW_PEQ_ID;
+  _refreshPeqWorkspacePeqOptions();
+  onPeqWorkspacePeqChange(_peqWorkspaceSelectedPeqId);
+  _schedulePeqWorkspaceGraphRefresh();
+}
+
+function onPeqWorkspacePeqChange(peqId) {
+  _peqWorkspaceSelectedPeqId = peqId || _WORKSPACE_NEW_PEQ_ID;
+  if (_peqWorkspaceSelectedPeqId === _WORKSPACE_NEW_PEQ_ID) {
+    _peqWorkspaceEditContext = null;
+    _customPeqEditorState = _defaultCustomPeqState();
+    _customPeqEditorState.enabled = true;
+    _saveCustomPeqState();
+    const preampInput = document.getElementById('peq-preamp');
+    if (preampInput) preampInput.value = _customPeqEditorState.preamp_db.toFixed(1);
+    renderPeqEditorBands();
+    Player?.applyCustomPeq?.(_customPeqEditorState);
+    _snapshotPeqWorkspace();
+    _schedulePeqWorkspaceGraphRefresh();
+    return;
+  }
+  const iemId = _peqWorkspaceSelectedIemId || document.getElementById('peq-workspace-iem-select')?.value || '';
+  const iem = (_peqWorkspaceIemCache || []).find(i => i.id === iemId);
+  const profile = (iem?.peq_profiles || []).find(p => p.id === _peqWorkspaceSelectedPeqId);
+  if (!profile) return;
+  _customPeqEditorState = _customStateFromProfile(profile);
+  _saveCustomPeqState();
+  _peqWorkspaceEditContext = { iemId, peqId: profile.id, peqName: profile.name || 'PEQ Profile' };
+  const preampInput = document.getElementById('peq-preamp');
+  if (preampInput) preampInput.value = _customPeqEditorState.preamp_db.toFixed(1);
+  renderPeqEditorBands();
+  Player?.applyCustomPeq?.(_customPeqEditorState);
+  _snapshotPeqWorkspace();
+  _schedulePeqWorkspaceGraphRefresh();
+}
+
+function onPeqWorkspaceTargetChange(targetId) {
+  _peqWorkspaceSelectedTargetId = targetId || '';
+  _schedulePeqWorkspaceGraphRefresh();
+}
+
+async function saveCustomPeqAsProfile(prefill = {}) {
+  const panel = document.getElementById('peq-save-profile-panel');
+  if (!panel) return;
+  const isOpen = panel.style.display === 'block';
+  if (isOpen) {
+    _renderCustomPeqSavePanel(false);
+    return;
+  }
+  _renderCustomPeqSavePanel(true);
+  await _loadPeqSaveIems();
+  const iemSel = document.getElementById('peq-save-iem-select');
+  const nameEl = document.getElementById('peq-save-name');
+  if (iemSel && prefill.iemId) iemSel.value = prefill.iemId;
+  if (nameEl && prefill.name) nameEl.value = prefill.name;
+}
+
+function cancelCustomPeqSaveProfile() {
+  _renderCustomPeqSavePanel(false);
+}
+
+async function confirmCustomPeqSaveProfile() {
+  const iemSel = document.getElementById('peq-save-iem-select');
+  const nameEl = document.getElementById('peq-save-name');
+  const errEl = document.getElementById('peq-save-profile-error');
+  if (!iemSel || !nameEl || !errEl) return;
+  errEl.style.display = 'none';
+  const iemId = iemSel.value;
+  const name = nameEl.value.trim();
+  if (!iemId || !name) {
+    errEl.textContent = 'Pick an IEM and profile name.';
+    errEl.style.display = 'block';
+    return;
+  }
+  const st = _loadCustomPeqState();
+  const enabledBands = st.bands.filter(b => b.enabled);
+  if (!enabledBands.length) {
+    errEl.textContent = 'Enable at least one band before saving.';
+    errEl.style.display = 'block';
+    return;
+  }
+  try {
+    const created = await _saveCustomProfileToIem(iemId, name);
+    _peqWorkspaceSelectedIemId = iemId;
+    _peqWorkspaceSelectedPeqId = created?.id || _WORKSPACE_NEW_PEQ_ID;
+    await _loadPeqWorkspaceContext();
+    _refreshPeqWorkspacePeqOptions();
+    toast(`Saved "${name}" to selected IEM.`);
+    nameEl.value = '';
+    _snapshotPeqWorkspace();
+    _renderCustomPeqSavePanel(false);
+  } catch (e) {
+    errEl.textContent = e.message || 'Could not save profile';
+    errEl.style.display = 'block';
+  }
+}
+
+function downloadCustomPeqTxt() {
+  const st = _loadCustomPeqState();
+  const txt = _apoFromCustomState(st);
+  const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'Custom PEQ.txt';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast('Custom PEQ .txt downloaded.');
+}
+
+async function copyCustomPeqToConnectedDap() {
+  const iemSel = document.getElementById('peq-workspace-iem-select');
+  const dapSel = document.getElementById('peq-copy-dap-select');
+  const iemId = iemSel ? iemSel.value : '';
+  if (!iemId) {
+    toast('Select an IEM first.');
+    return;
+  }
+  if (!_peqWorkspaceConnectedDaps.length) {
+    toast('No connected DAP found.');
+    return;
+  }
+  let connected = _peqWorkspaceConnectedDaps[0];
+  if (_peqWorkspaceConnectedDaps.length > 1) {
+    const selectedId = (dapSel && dapSel.value) || _peqWorkspaceCopyDapId || '';
+    const picked = _peqWorkspaceConnectedDaps.find(d => d.id === selectedId);
+    if (picked) connected = picked;
+    _peqWorkspaceCopyDapId = connected.id;
+  }
+  const profileName = `Custom PEQ ${new Date().toISOString().slice(0, 19).replace('T', ' ')}`;
+  try {
+    const created = await _saveCustomProfileToIem(iemId, profileName);
+    await api(`/iems/${iemId}/peq/${created.id}/copy`, { method: 'POST', body: { dap_id: connected.id } });
+    _snapshotPeqWorkspace();
+    toast(`Copied "${profileName}" to ${connected.name}.`);
+  } catch (e) {
+    toast('Copy failed: ' + e.message);
+  }
+}
+
 function showAddIemModal() {
   _ensureGearProfileSelects();
   document.getElementById('iem-modal-title').textContent = 'Add IEM / Headphone';
@@ -5938,6 +6836,27 @@ const App = {
   deleteIem,
   applyPeqToGraph,
   applyIemSourceToGraph,
+  openPeqEditor,
+  closePeqEditor,
+  applyAndClosePeqEditor,
+  resetCustomPeq,
+  renderPeqEditorBands,
+  togglePeqBand,
+  onPeqBandTypeChange,
+  onPeqBandFcChange,
+  onPeqBandGainChange,
+  onPeqBandQChange,
+  onPeqPreampChange,
+  onPeqWorkspaceIemChange,
+  onPeqWorkspacePeqChange,
+  onPeqWorkspaceTargetChange,
+  saveCustomPeqAsProfile,
+  cancelCustomPeqSaveProfile,
+  confirmCustomPeqSaveProfile,
+  downloadCustomPeqTxt,
+  copyCustomPeqToConnectedDap,
+  togglePeqWorkspaceCurve,
+  isPeqWorkspaceOpen,
   toggleIemCurve,
   runHealthCheck,
   togglePeqAccordion,
