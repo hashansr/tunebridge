@@ -20,7 +20,7 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 | Frontend | Vanilla JS (no framework) |
 | Charts | Chart.js 4.4.0 (FR graphs + Insights charts) |
 | Drag & drop | SortableJS |
-| Audio playback | Web Audio API + HTMLAudioElement |
+| Audio playback | Web Audio API + HTMLAudioElement (+ optional mpv/libmpv bit-perfect mode) |
 | Desktop wrapper | pywebview (WKWebView on macOS) |
 | App launcher | Frozen Python runtime (PyInstaller, arm64) |
 | App entrypoint | `tunebridge_gui.py` |
@@ -113,6 +113,7 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 
 ### Developer Requirements
 - Python 3.10+
+- Homebrew (optional, required only for mpv bit-perfect output): `brew install mpv`
 
 ---
 
@@ -179,12 +180,14 @@ Notes:
 ### First Run Behavior
 - Automatically creates app data at:
   `~/Library/Application Support/TuneBridge/`
+- Packaged app already includes Python dependencies (no first-run `pip install`).
 - Shows onboarding for fresh installs to capture:
   - default library folder
   - folder structure preference
   - primary file format preference
 - Migrates bundled defaults and feature cache where applicable.
 - Starts the embedded local server and opens native UI.
+- If mpv bit-perfect mode is needed, install it from `Settings → Playback → Install mpv`.
 
 ---
 

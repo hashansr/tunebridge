@@ -3614,12 +3614,12 @@ async function syncScanAgain() {
 /* ── DAP management ─────────────────────────────────────────────────── */
 
 // SVG icon used for all DAP cards/headers
-const _DAP_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg>`;
-const _IEM_ICON_HTML = `<img src="icons/iem-earphones.png" alt="" class="gear-iem-icon-image" loading="lazy" decoding="async" />`;
+const _DAP_SVG = `<span class="gear-mask-icon gear-mask-icon-player-fill" aria-hidden="true"></span>`;
+const _IEM_ICON_HTML = `<img src="icons/earphone-1-svgrepo-com.svg" alt="" class="gear-iem-icon-image" loading="lazy" decoding="async" />`;
 const _HEADPHONE_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`;
 const _GEAR_DOTS = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`;
-const _GEAR_ICON_MUSIC = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>`;
-const _GEAR_ICON_PLAYLIST = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`;
+const _GEAR_ICON_MUSIC = `<span class="gear-mask-icon gear-mask-icon-player" aria-hidden="true"></span>`;
+const _GEAR_ICON_PLAYLIST = `<span class="gear-mask-icon gear-mask-icon-playlist" aria-hidden="true"></span>`;
 
 function _prettyModelLabel(model) {
   const raw = String(model || 'generic').trim();
@@ -4747,7 +4747,9 @@ async function showIemDetail(id) {
     <span class="crumb-current">${esc(iem.name)}</span>
   `;
 
-  const typeBadge = iem.type === 'Headphone' ? 'gear-badge-hp' : 'gear-badge-iem';
+  const isHeadphone = iem.type === 'Headphone';
+  const typeBadge = isHeadphone ? 'gear-badge-hp' : 'gear-badge-iem';
+  const detailIcon = isHeadphone ? _HEADPHONE_SVG : _IEM_ICON_HTML;
   const hasMeasurement = !!iem.has_measurement;
   const sourceOptions = (iem.squig_sources || []).map(s =>
     `<option value="${esc(s.id || '')}" ${s.id === _activeIemSourceId ? 'selected' : ''}>${esc(s.label || 'Source')}</option>`
@@ -4760,7 +4762,7 @@ async function showIemDetail(id) {
   document.getElementById('iem-detail-content').innerHTML = `
     <div class="iem-detail-header">
       <div class="iem-detail-icon">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+        ${detailIcon}
       </div>
       <div>
         <div class="iem-detail-title">${esc(iem.name)}</div>
@@ -6387,6 +6389,9 @@ async function loadSettings() {
     fetch('/api/player/capabilities').then(r => r.json()).catch(() => ({})),
     loadBaselines(),
   ]);
+  if (typeof Player !== 'undefined' && Player.updateCapabilities) {
+    Player.updateCapabilities(cap || {});
+  }
   const inp = document.getElementById('lib-path-input');
   if (inp) inp.value = settings.library_path || '/Volumes/Storage/Music/FLAC';
   const dirEl = document.getElementById('settings-data-dir');
@@ -6397,9 +6402,6 @@ async function loadSettings() {
   if (deviceSelect) {
     const mpvOk = !!(cap && cap.mpv_available);
     deviceSelect.disabled = !mpvOk;
-    // Show/hide player bar output button based on mpv availability
-    const outputWrap = document.getElementById('player-output-wrap');
-    if (outputWrap) outputWrap.style.display = mpvOk ? '' : 'none';
     if (mpvOk) {
       try {
         const { devices } = await fetch('/api/player/audio_devices').then(r => r.json());
@@ -6423,6 +6425,8 @@ async function loadSettings() {
   const toggle  = document.getElementById('exclusive-mode-toggle');
   const badge   = document.getElementById('exclusive-backend-badge');
   const bpPill  = document.getElementById('exclusive-bp-pill');
+  const installActions = document.getElementById('mpv-install-actions');
+  const installBtn = document.getElementById('mpv-install-btn');
   if (toggle) {
     const mpvOk      = !!(cap && cap.mpv_available);
     const activeMode = mpvOk && !!(cap && cap.exclusive_mode);
@@ -6430,10 +6434,20 @@ async function loadSettings() {
     toggle.checked  = !!(cap && cap.exclusive_mode);
     if (badge) {
       badge.style.display = '';
-      badge.textContent   = mpvOk ? `mpv ${cap.mpv_version || ''}`.trim() : 'mpv not installed';
+      const mpvErr = String((cap && cap.mpv_error) || '');
+      const missingPyMpv = /No module named ['"]mpv['"]/.test(mpvErr);
+      badge.textContent   = mpvOk
+        ? `mpv ${cap.mpv_version || ''}`.trim()
+        : (missingPyMpv ? 'python-mpv missing' : 'mpv backend unavailable');
       badge.className     = `settings-badge ${mpvOk ? 'settings-badge--ok' : 'settings-badge--warn'}`;
+      badge.title = cap && cap.mpv_error ? cap.mpv_error : '';
     }
     if (bpPill) bpPill.style.display = activeMode ? '' : 'none';
+    if (installActions) installActions.style.display = mpvOk ? 'none' : '';
+    if (installBtn) {
+      installBtn.disabled = false;
+      installBtn.textContent = 'Install mpv';
+    }
   }
 
   return settings;
@@ -6449,10 +6463,10 @@ async function setExclusiveMode(enabled) {
 
     // Sync player bar badge and Settings BP pill immediately
     if (typeof Player !== 'undefined' && Player.updateExclusiveMode) {
-      Player.updateExclusiveMode(enabled);
+      Player.updateExclusiveMode(!!data.exclusive_mode);
     }
     const bpPill = document.getElementById('exclusive-bp-pill');
-    if (bpPill) bpPill.style.display = enabled ? '' : 'none';
+    if (bpPill) bpPill.style.display = data.exclusive_mode ? '' : 'none';
 
     // Resume same track at same position on the new mpv instance
     if (data.resume_track_id && typeof Player !== 'undefined') {
@@ -6463,7 +6477,7 @@ async function setExclusiveMode(enabled) {
       );
     }
 
-    toast(enabled ? 'Exclusive mode on — bit-perfect output active' : 'Exclusive mode off');
+    toast(data.exclusive_mode ? 'Exclusive mode on — bit-perfect output active' : 'Exclusive mode off');
   } catch (e) {
     toast('Error toggling exclusive mode: ' + e.message);
   }
@@ -6501,6 +6515,63 @@ async function setAudioDevice(device) {
     }
   } catch (e) {
     toast('Error switching audio device: ' + e.message);
+  }
+}
+
+async function installMpv() {
+  const btn = document.getElementById('mpv-install-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Installing...';
+  }
+  try {
+    const res = await fetch('/api/player/install_mpv', { method: 'POST' });
+    const data = await res.json();
+    if (!data.ok) {
+      const err = new Error(data.error || 'Install failed');
+      err.status = data.status || null;
+      throw err;
+    }
+    await loadSettings();
+    toast('mpv runtime ready. Bit-perfect output is now available.');
+  } catch (e) {
+    let msg = e.message;
+    try {
+      const status = (typeof e === 'object' && e && e.status) ? e.status : null;
+      if (status && status.python_mpv_ok && !status.libmpv_path) {
+        msg = `${msg} (python-mpv is installed, but libmpv is still missing)`;
+      }
+    } catch (_) {}
+    toast('mpv install failed: ' + msg);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Install mpv';
+    }
+  }
+}
+
+async function retryMpvDetection() {
+  const btn = document.getElementById('mpv-retry-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Checking...';
+  }
+  try {
+    const cap = await fetch('/api/player/capabilities').then(r => r.json());
+    await loadSettings();
+    if (cap && cap.mpv_available) {
+      toast(`mpv detected${cap.mpv_version ? ' (' + cap.mpv_version + ')' : ''}.`);
+    } else {
+      toast('mpv still unavailable. Use Install mpv or restart app after installation.');
+    }
+  } catch (e) {
+    toast('mpv detection failed: ' + e.message);
+  } finally {
+    const retryBtn = document.getElementById('mpv-retry-btn');
+    if (retryBtn) {
+      retryBtn.disabled = false;
+      retryBtn.textContent = 'Retry detection';
+    }
   }
 }
 
@@ -6937,6 +7008,8 @@ const App = {
   restartApp,
   setExclusiveMode,
   setAudioDevice,
+  retryMpvDetection,
+  installMpv,
   browseFolder,
   exportBackup,
   importBackup,

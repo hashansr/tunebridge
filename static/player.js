@@ -89,6 +89,8 @@ const Player = (function () {
   const _CUSTOM_EQ_ID = '__custom__';
   const _CREATE_PEQ_ID = '__create__';
   const _NO_GAIN_TYPES = new Set(['LPQ', 'HPQ', 'NO', 'AP']);
+  const _LOSSLESS_FORMATS = new Set(['FLAC', 'ALAC', 'WAV', 'AIFF', 'AIF', 'APE', 'WV', 'DSF', 'DFF']);
+  const _LOSSY_FORMATS = new Set(['MP3', 'AAC', 'M4A', 'MP4', 'OGG', 'OPUS', 'WMA']);
 
   function _defaultCustomPeqState() {
     return {
@@ -840,6 +842,7 @@ const Player = (function () {
     ps.volume = Math.max(0, Math.min(1, parseFloat(value) / 100));
     _applyVolume();
     _updateVolumeUI();
+    _updateBitPerfectBadge();
     _saveState();
   }
 
@@ -847,6 +850,7 @@ const Player = (function () {
     ps.muted = !ps.muted;
     _applyVolume();
     _updateVolumeUI();
+    _updateBitPerfectBadge();
     _saveState();
   }
 
@@ -1270,16 +1274,21 @@ const Player = (function () {
     ));
   }
 
-  function _updatePeqBtn() {
-    const btn = document.getElementById('player-peq-btn');
-    if (!btn) return;
-    // 'active' = EQ profile is selected (persistent indicator, independent of popover state)
+  function _isEqActive() {
     const profileActive = !!ps.activePeqProfileId && ps.activePeqProfileId !== _CUSTOM_EQ_ID;
     const customActive =
       ps.activePeqIemId === _CUSTOM_EQ_ID &&
       ps.activePeqProfileId === _CUSTOM_EQ_ID &&
       _hasMeaningfulCustomPeq();
-    btn.classList.toggle('active', profileActive || customActive);
+    return profileActive || customActive;
+  }
+
+  function _updatePeqBtn() {
+    const btn = document.getElementById('player-peq-btn');
+    if (!btn) return;
+    // 'active' = EQ profile is selected (persistent indicator, independent of popover state)
+    btn.classList.toggle('active', _isEqActive());
+    _updateBitPerfectBadge();
   }
 
   function _updatePeqWorkspaceCta() {
@@ -1704,6 +1713,15 @@ const Player = (function () {
     return fmt;
   }
 
+  function _isLosslessSource(track) {
+    if (!track) return false;
+    const fmt = String(track.format || '').toUpperCase();
+    if (_LOSSLESS_FORMATS.has(fmt)) return true;
+    if (_LOSSY_FORMATS.has(fmt)) return false;
+    // Fallback: if bit-depth + sample-rate are present, likely a lossless source.
+    return !!(track.bits_per_sample && track.sample_rate);
+  }
+
   /* ── UI update helpers ──────────────────────────────────────────────── */
   function _updateTrackUI(track) {
     const titleEl   = document.getElementById('player-title');
@@ -1725,7 +1743,9 @@ const Player = (function () {
       if (fillEl)    fillEl.style.width   = '0%';
       if (qualityEl) qualityEl.textContent = '';
       const _bpb = document.getElementById('player-bitperfect');
+      const _llb = document.getElementById('player-lossless');
       if (_bpb) _bpb.style.display = 'none';
+      if (_llb) _llb.style.display = 'none';
       document.title = 'TuneBridge';
       window.dispatchEvent(new CustomEvent('tb-track-change', { detail: { trackId: null } }));
       return;
@@ -1770,10 +1790,39 @@ const Player = (function () {
   }
 
   function _updateBitPerfectBadge() {
-    const badge = document.getElementById('player-bitperfect');
-    if (!badge) return;
-    const show = _mpvAvailable && _exclusiveMode && !!currentTrack();
-    badge.style.display = show ? '' : 'none';
+    const bpBadge = document.getElementById('player-bitperfect');
+    const llBadge = document.getElementById('player-lossless');
+    if (!bpBadge && !llBadge) return;
+    const track = currentTrack();
+    if (!track) {
+      if (bpBadge) bpBadge.style.display = 'none';
+      if (llBadge) llBadge.style.display = 'none';
+      return;
+    }
+    const lossless = _isLosslessSource(track);
+    const bitPerfect = (
+      _mpvAvailable &&
+      _exclusiveMode &&
+      lossless &&
+      !_isEqActive() &&
+      !ps.muted &&
+      Math.abs((ps.volume ?? 1) - 1) < 0.0001
+    );
+    const bpReasons = [];
+    if (!_mpvAvailable) bpReasons.push('mpv backend unavailable');
+    if (!_exclusiveMode) bpReasons.push('exclusive mode off');
+    if (_isEqActive()) bpReasons.push('EQ/DSP active');
+    if (ps.muted || Math.abs((ps.volume ?? 1) - 1) >= 0.0001) bpReasons.push('volume not 100%');
+    if (bpBadge) {
+      bpBadge.style.display = bitPerfect ? '' : 'none';
+      bpBadge.title = 'Bit-perfect: exclusive mode on, no EQ/DSP, volume 100%.';
+    }
+    if (llBadge) {
+      llBadge.style.display = (!bitPerfect && lossless) ? '' : 'none';
+      llBadge.title = bpReasons.length
+        ? `Lossless source. Not bit-perfect: ${bpReasons.join(', ')}.`
+        : 'Lossless source. Output path is not bit-perfect.';
+    }
   }
 
   /* ── Crossfade control (Web Audio mode only; mpv uses gapless) ─────── */
@@ -1803,11 +1852,10 @@ const Player = (function () {
     const btn = document.getElementById('player-play-btn');
     if (!btn) return;
     if (ps.isPlaying) {
-      btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+      btn.innerHTML = `<span class="tb-icon tb-icon-pause-lg" aria-hidden="true"></span>`;
       btn.title = 'Pause';
     } else {
-      // translate(1.5,0) optically centres the right-pointing triangle in the circle
-      btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>`;
+      btn.innerHTML = `<span class="tb-icon tb-icon-play-lg" aria-hidden="true"></span>`;
       btn.title = 'Play';
     }
   }
@@ -1824,8 +1872,9 @@ const Player = (function () {
     btn.classList.toggle('repeat-one', ps.repeatMode === 'one');
     const titles = { off: 'Repeat: off', all: 'Repeat: all', one: 'Repeat: one' };
     btn.title = titles[ps.repeatMode] || 'Repeat';
-    // Same SVG for all modes — the 'repeat-one' CSS class adds a "1" badge via ::after
-    btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`;
+    btn.innerHTML = ps.repeatMode === 'one'
+      ? `<span class="tb-icon tb-icon-repeat-song" aria-hidden="true"></span>`
+      : `<span class="tb-icon tb-icon-repeat-list" aria-hidden="true"></span>`;
   }
 
   function _updateVolumeUI() {
@@ -1834,13 +1883,14 @@ const Player = (function () {
     if (slider) slider.value = Math.round(ps.volume * 100);
     if (btn) {
       if (ps.muted || ps.volume === 0) {
-        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
+        btn.innerHTML = `<span class="tb-icon tb-icon-speaker-x" aria-hidden="true"></span>`;
       } else if (ps.volume < 0.4) {
-        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
+        btn.innerHTML = `<span class="tb-icon tb-icon-speaker-1" aria-hidden="true"></span>`;
       } else {
-        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
+        btn.innerHTML = `<span class="tb-icon tb-icon-speaker-2" aria-hidden="true"></span>`;
       }
     }
+    _updateBitPerfectBadge();
   }
 
   function _highlightActiveRow() {
@@ -2247,6 +2297,11 @@ const Player = (function () {
     // Bit-perfect badge sync (called by app.js when Settings toggle changes)
     updateExclusiveMode(enabled) {
       _exclusiveMode = !!enabled;
+      _updateBitPerfectBadge();
+    },
+    updateCapabilities(cap) {
+      _mpvAvailable = !!(cap && cap.mpv_available);
+      _exclusiveMode = !!(cap && cap.exclusive_mode);
       _updateBitPerfectBadge();
     },
     // Resume a specific track at a position on the new mpv instance after

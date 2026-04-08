@@ -11,6 +11,7 @@ APP = ['tunebridge_gui.py']
 OPTIONS = {
     'packages': [
         'webview', 'flask', 'waitress', 'mutagen',
+        'mpv',
         'bottle', 'proxy_tools', 'jinja2', 'markupsafe',
         'werkzeug', 'click', 'itsdangerous',
     ],

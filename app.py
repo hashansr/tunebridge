@@ -12,35 +12,6 @@ try:
 except ImportError:
     HAS_WAITRESS = False
 
-try:
-    # ctypes.util.find_library('mpv') returns None on macOS when Homebrew's
-    # /opt/homebrew/lib is not in the default dyld search path (common on
-    # Apple Silicon).  Patch find_library before importing python-mpv so it
-    # falls back to the known Homebrew / MacPorts locations.
-    import ctypes.util as _ctypes_util
-    _orig_find_library = _ctypes_util.find_library
-    def _patched_find_library(name):
-        result = _orig_find_library(name)
-        if result is None and name == 'mpv':
-            import os as _os
-            for _p in ('/opt/homebrew/lib/libmpv.dylib',
-                       '/usr/local/lib/libmpv.dylib'):
-                if _os.path.isfile(_p):
-                    return _p
-        return result
-    _ctypes_util.find_library = _patched_find_library
-    import mpv as _mpv_lib
-    MPV_AVAILABLE = True
-except (ImportError, OSError):
-    # ImportError: python-mpv package not installed
-    # OSError: libmpv dylib not found (mpv not installed via brew)
-    MPV_AVAILABLE = False
-finally:
-    # Restore original find_library regardless of outcome
-    try:
-        _ctypes_util.find_library = _orig_find_library
-    except NameError:
-        pass
 import uuid
 import threading
 import time
@@ -57,6 +28,164 @@ from mutagen.mp4 import MP4
 import hashlib
 import re
 from PIL import Image
+
+_mpv_lib = None
+MPV_AVAILABLE = False
+_mpv_import_error = None
+_mpv_import_lock = threading.Lock()
+
+
+def _runtime_env():
+    """Build a process env with common Homebrew locations available in PATH.
+
+    GUI-launched macOS apps often have a minimal PATH that does not include
+    /opt/homebrew/bin or /usr/local/bin, which breaks command discovery.
+    """
+    env = os.environ.copy()
+    path_entries = [p for p in str(env.get('PATH', '')).split(':') if p]
+    preferred = [
+        '/opt/homebrew/bin',
+        '/usr/local/bin',
+        '/opt/homebrew/sbin',
+        '/usr/local/sbin',
+    ]
+    for p in preferred:
+        if p not in path_entries:
+            path_entries.append(p)
+    env['PATH'] = ':'.join(path_entries)
+    return env
+
+
+def _find_executable(name):
+    """Resolve executable path, tolerant of GUI PATH limitations."""
+    env = _runtime_env()
+    found = shutil.which(name, path=env.get('PATH'))
+    if found:
+        return found
+    fallbacks = {
+        'brew': ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'],
+        'mpv': ['/opt/homebrew/bin/mpv', '/usr/local/bin/mpv'],
+    }
+    for p in fallbacks.get(name, []):
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    return None
+
+
+def _find_libmpv_path():
+    """Best-effort discovery for libmpv.dylib across common Homebrew layouts."""
+    candidates = [
+        '/opt/homebrew/lib/libmpv.dylib',
+        '/usr/local/lib/libmpv.dylib',
+        '/opt/homebrew/opt/mpv/lib/libmpv.dylib',
+        '/usr/local/opt/mpv/lib/libmpv.dylib',
+    ]
+    for p in candidates:
+        if os.path.isfile(p):
+            return p
+    for root in ('/opt/homebrew/Cellar/mpv', '/usr/local/Cellar/mpv'):
+        if not os.path.isdir(root):
+            continue
+        try:
+            versions = sorted(os.listdir(root), reverse=True)
+        except Exception:
+            versions = []
+        for v in versions:
+            p = os.path.join(root, v, 'lib', 'libmpv.dylib')
+            if os.path.isfile(p):
+                return p
+    return None
+
+
+def _ensure_python_mpv_installed():
+    """Ensure python-mpv is importable in the current interpreter.
+
+    Returns (ok: bool, error_message: Optional[str]).
+    """
+    try:
+        import importlib
+        importlib.import_module('mpv')
+        return True, None
+    except Exception:
+        pass
+    try:
+        proc = subprocess.run(
+            [sys.executable, '-m', 'pip', 'install', 'python-mpv'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=600,
+            env=_runtime_env(),
+        )
+    except subprocess.TimeoutExpired:
+        return False, 'python-mpv install timed out'
+    except Exception as e:
+        return False, f'python-mpv install failed: {e}'
+    if proc.returncode != 0:
+        msg = (proc.stderr or proc.stdout or 'pip install python-mpv failed').strip()
+        return False, msg[-1200:]
+    return True, None
+
+
+def _refresh_mpv_backend(force=False):
+    """Try to (re)load python-mpv + libmpv at runtime."""
+    global _mpv_lib, MPV_AVAILABLE, _mpv_import_error
+    if MPV_AVAILABLE and not force:
+        return True
+    with _mpv_import_lock:
+        if MPV_AVAILABLE and not force:
+            return True
+        try:
+            import importlib
+            import ctypes.util as _ctypes_util
+            _orig_find_library = _ctypes_util.find_library
+
+            def _patched_find_library(name):
+                result = _orig_find_library(name)
+                if result is None and name == 'mpv':
+                    _p = _find_libmpv_path()
+                    if _p:
+                        return _p
+                return result
+
+            _ctypes_util.find_library = _patched_find_library
+            _mpv_lib = importlib.import_module('mpv')
+            MPV_AVAILABLE = True
+            _mpv_import_error = None
+        except (ImportError, OSError) as e:
+            MPV_AVAILABLE = False
+            _mpv_import_error = str(e)
+        finally:
+            try:
+                _ctypes_util.find_library = _orig_find_library
+            except Exception:
+                pass
+    return MPV_AVAILABLE
+
+
+def _mpv_runtime_status():
+    """Snapshot mpv runtime readiness components for UI diagnostics."""
+    py_ok = True
+    py_err = None
+    try:
+        import importlib
+        importlib.import_module('mpv')
+    except Exception as e:
+        py_ok = False
+        py_err = str(e)
+    lib_path = _find_libmpv_path()
+    brew_path = _find_executable('brew')
+    mpv_bin = _find_executable('mpv')
+    return {
+        'python_mpv_ok': py_ok,
+        'python_mpv_error': py_err,
+        'libmpv_path': lib_path,
+        'brew_path': brew_path,
+        'mpv_binary_path': mpv_bin,
+    }
+
+
+_refresh_mpv_backend(force=True)
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
@@ -107,7 +236,7 @@ DEFAULT_SETTINGS = {
     'ap80_mount':       '/Volumes/AP80',
     'poweramp_prefix':  '',   # internal device path, e.g. /storage/sdcard0
     'ap80_prefix':      '',   # internal device path, e.g. /mnt/sdcard
-    'exclusive_mode':   True,   # CoreAudio exclusive (bit-perfect, requires mpv)
+    'exclusive_mode':   False,  # CoreAudio exclusive (bit-perfect, requires mpv); off by default for first-time users
     'audio_device':     'auto', # mpv audio device name; 'auto' = system default
 }
 
@@ -903,12 +1032,12 @@ def remove_favourite_album(album_id):
     return _remove_favourite('albums', album_id)
 
 
-@app.route('/api/favourites/artists/<artist_id>', methods=['POST'])
+@app.route('/api/favourites/artists/<path:artist_id>', methods=['POST'])
 def add_favourite_artist(artist_id):
     return _add_favourite('artists', artist_id)
 
 
-@app.route('/api/favourites/artists/<artist_id>', methods=['DELETE'])
+@app.route('/api/favourites/artists/<path:artist_id>', methods=['DELETE'])
 def remove_favourite_artist(artist_id):
     return _remove_favourite('artists', artist_id)
 
@@ -1912,6 +2041,7 @@ _mpv_last_af          = ''     # last applied lavfi chain (PEQ) persisted across
 def _get_mpv():
     """Return the mpv.MPV singleton, creating it lazily (thread-safe)."""
     global _mpv_instance
+    _refresh_mpv_backend()
     if not MPV_AVAILABLE:
         return None
     if _mpv_instance is None:
@@ -2046,6 +2176,7 @@ def _build_lavfi_peq(preamp_db, filters):
 @app.route('/api/player/capabilities')
 def player_capabilities():
     """Report whether the mpv backend is available and current exclusive-mode setting."""
+    _refresh_mpv_backend()
     settings = load_settings()
     version = None
     effective_audio_device = settings.get('audio_device', 'auto')
@@ -2057,17 +2188,93 @@ def player_capabilities():
                 effective_audio_device = p.audio_device or effective_audio_device
         except Exception:
             pass
+    status = _mpv_runtime_status()
     return jsonify({
         'mpv_available':  MPV_AVAILABLE,
         'mpv_version':    version,
+        'mpv_error':      _mpv_import_error,
         'exclusive_mode': settings.get('exclusive_mode', False),
         'audio_device':   effective_audio_device,
+        'mpv_runtime':    status,
     })
+
+
+@app.route('/api/player/install_mpv', methods=['POST'])
+def player_install_mpv():
+    """Install mpv via Homebrew and refresh runtime detection."""
+    py_ok, py_err = _ensure_python_mpv_installed()
+    if not py_ok:
+        status = _mpv_runtime_status()
+        return jsonify({
+            'ok': False,
+            'error': f'python-mpv unavailable: {py_err}',
+            'status': status,
+        }), 500
+    brew = _find_executable('brew')
+    if not brew:
+        # If libmpv is already present, skip brew and just refresh detection.
+        if _find_libmpv_path():
+            _refresh_mpv_backend(force=True)
+            version = None
+            if MPV_AVAILABLE:
+                try:
+                    p = _get_mpv()
+                    version = p.mpv_version if p else None
+                except Exception:
+                    pass
+            status = _mpv_runtime_status()
+            return jsonify({
+                'ok': MPV_AVAILABLE,
+                'mpv_available': MPV_AVAILABLE,
+                'mpv_version': version,
+                'error': None if MPV_AVAILABLE else (_mpv_import_error or 'libmpv found but backend still unavailable'),
+                'status': status,
+            }), (200 if MPV_AVAILABLE else 500)
+        status = _mpv_runtime_status()
+        return jsonify({
+            'ok': False,
+            'error': 'Homebrew not found in app PATH. Ensure Homebrew is installed at /opt/homebrew or /usr/local, then retry.',
+            'status': status,
+        }), 400
+    try:
+        # Installing mpv via Homebrew pulls all formula dependencies needed for libmpv.
+        proc = subprocess.run(
+            [brew, 'install', 'mpv', '--quiet'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=1800,
+            env=_runtime_env(),
+        )
+    except subprocess.TimeoutExpired:
+        return jsonify({'ok': False, 'error': 'mpv install timed out'}), 500
+    if proc.returncode != 0:
+        msg = (proc.stderr or proc.stdout or 'brew install mpv failed').strip()
+        return jsonify({'ok': False, 'error': msg[-1200:]}), 500
+    # Force re-detection; if the app started before mpv was installed,
+    # this allows Settings to reflect availability immediately.
+    _refresh_mpv_backend(force=True)
+    version = None
+    if MPV_AVAILABLE:
+        try:
+            p = _get_mpv()
+            version = p.mpv_version if p else None
+        except Exception:
+            pass
+    status = _mpv_runtime_status()
+    return jsonify({
+        'ok': MPV_AVAILABLE,
+        'mpv_available': MPV_AVAILABLE,
+        'mpv_version': version,
+        'error': None if MPV_AVAILABLE else (_mpv_import_error or 'mpv install completed but backend still unavailable'),
+        'status': status,
+    }), (200 if MPV_AVAILABLE else 500)
 
 
 @app.route('/api/player/audio_devices')
 def player_audio_devices():
     """Return the list of audio output devices mpv can see."""
+    _refresh_mpv_backend()
     if not MPV_AVAILABLE:
         return jsonify({'devices': [{'name': 'auto', 'description': 'Autoselect device'}]})
     try:
@@ -2086,6 +2293,7 @@ def player_audio_devices():
 @app.route('/api/player/audio_device', methods=['POST'])
 def player_set_audio_device():
     """Set the audio output device. Reinitialises the mpv instance to apply."""
+    _refresh_mpv_backend()
     data   = request.get_json(force=True) or {}
     requested_device = data.get('device', 'auto') or 'auto'
     device = requested_device
@@ -2137,6 +2345,7 @@ def player_set_audio_device():
 def player_play():
     """Start playback of a track by ID. Optional: position (seconds) to start from."""
     global _mpv_current_track_id, _mpv_track_ended, _mpv_load_time
+    _refresh_mpv_backend()
     if not MPV_AVAILABLE:
         return jsonify({'error': 'mpv not available — run: brew install mpv'}), 503
     data     = request.get_json(force=True) or {}
@@ -2183,6 +2392,7 @@ def player_play():
 @app.route('/api/player/pause', methods=['POST'])
 def player_pause():
     """Toggle pause, or set pause state explicitly via {paused: true/false}."""
+    _refresh_mpv_backend()
     if not MPV_AVAILABLE:
         return jsonify({'error': 'mpv not available'}), 503
     data = request.get_json(force=True) or {}
@@ -2197,6 +2407,7 @@ def player_pause():
 @app.route('/api/player/seek', methods=['POST'])
 def player_seek():
     """Seek to an absolute position in seconds."""
+    _refresh_mpv_backend()
     if not MPV_AVAILABLE:
         return jsonify({'error': 'mpv not available'}), 503
     data     = request.get_json(force=True) or {}
@@ -2213,6 +2424,7 @@ def player_seek():
 def player_volume():
     """Set playback volume. {volume: 0.0–1.0}"""
     global _mpv_last_volume
+    _refresh_mpv_backend()
     if not MPV_AVAILABLE:
         return jsonify({'error': 'mpv not available'}), 503
     data   = request.get_json(force=True) or {}
@@ -2227,6 +2439,7 @@ def player_volume():
 def player_stop():
     """Stop playback."""
     global _mpv_current_track_id
+    _refresh_mpv_backend()
     if not MPV_AVAILABLE:
         return jsonify({'error': 'mpv not available'}), 503
     _mpv_current_track_id = None
@@ -2238,6 +2451,7 @@ def player_stop():
 def player_peq():
     """Apply a PEQ profile to mpv. {preamp_db: float, filters: [...]}"""
     global _mpv_last_af
+    _refresh_mpv_backend()
     if not MPV_AVAILABLE:
         return jsonify({'error': 'mpv not available'}), 503
     data      = request.get_json(force=True) or {}
@@ -2257,6 +2471,7 @@ def player_peq():
 def player_mpv_state():
     """Live playback state: position, duration, playing, track_ended flag."""
     global _mpv_track_ended
+    _refresh_mpv_backend()
     if not MPV_AVAILABLE:
         return jsonify({'available': False})
     p = _get_mpv()
@@ -2296,6 +2511,7 @@ def player_mpv_state():
 def player_exclusive():
     """Toggle CoreAudio exclusive mode. Restarts mpv instance to apply."""
     global _mpv_instance
+    _refresh_mpv_backend()
     data    = request.get_json(force=True) or {}
     enabled = bool(data.get('enabled', False))
     settings = load_settings()

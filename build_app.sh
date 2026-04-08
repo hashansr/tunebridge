@@ -175,6 +175,7 @@ PYI_ARGS=(
   --collect-submodules webview
   --collect-submodules sklearn
   --collect-submodules soundfile
+  --collect-submodules mpv
   --add-data "${PROJECT_DIR}/static:static"
 )
 [ -f "$ICON_PATH" ] && PYI_ARGS+=(--icon "$ICON_PATH")
