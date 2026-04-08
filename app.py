@@ -29,6 +29,11 @@ import hashlib
 import re
 from PIL import Image
 
+import db as _db
+import migrate as _migrate
+
+USE_SQLITE = os.environ.get('TUNEBRIDGE_USE_SQLITE', '1') == '1'
+
 _mpv_lib = None
 MPV_AVAILABLE = False
 _mpv_import_error = None
@@ -655,8 +660,11 @@ def do_scan():
         library = tracks
 
     try:
-        with open(LIBRARY_CACHE, 'w') as f:
-            json.dump(tracks, f)
+        if USE_SQLITE:
+            _db.db_save_library(tracks)
+        else:
+            with open(LIBRARY_CACHE, 'w') as f:
+                json.dump(tracks, f)
     except Exception as e:
         print(f"Error saving library cache: {e}")
 
@@ -667,6 +675,18 @@ def do_scan():
 
 def load_library():
     global library
+    # Try SQLite first, then JSON cache, then full scan
+    if USE_SQLITE:
+        try:
+            data = _db.db_load_library()
+            if data:
+                with library_lock:
+                    library = data
+                scan_state.update({'status': 'done', 'message': f'Library ready — {len(data)} tracks', 'total': len(data), 'progress': len(data), 'new_tracks': 0, 'total_tracks': len(data)})
+                print(f"Loaded {len(data)} tracks from SQLite")
+                return
+        except Exception as e:
+            print(f"Error loading library from SQLite: {e}")
     if LIBRARY_CACHE.exists():
         try:
             with open(LIBRARY_CACHE) as f:
@@ -683,6 +703,8 @@ def load_library():
 
 
 def load_settings():
+    if USE_SQLITE:
+        return _db.db_load_settings(DEFAULT_SETTINGS)
     if SETTINGS_FILE.exists():
         try:
             with open(SETTINGS_FILE) as f:
@@ -693,6 +715,9 @@ def load_settings():
 
 
 def save_settings(s):
+    if USE_SQLITE:
+        _db.db_save_settings(s)
+        return
     with open(SETTINGS_FILE, 'w') as f:
         json.dump(s, f, indent=2)
 
@@ -701,6 +726,8 @@ PLAYLIST_BACKUP_FILE = DATA_DIR / 'playlists.bak.json'
 
 
 def load_playlists():
+    if USE_SQLITE:
+        return _db.db_load_playlists()
     for candidate in (PLAYLIST_FILE, PLAYLIST_BACKUP_FILE):
         if candidate.exists():
             try:
@@ -725,6 +752,9 @@ def load_playlists():
 
 
 def save_playlists(playlists):
+    if USE_SQLITE:
+        _db.db_save_playlists(playlists)
+        return
     # Write atomically: temp file → rename so a crash never corrupts the file
     tmp = PLAYLIST_FILE.with_suffix('.tmp.json')
     with open(tmp, 'w') as f:
@@ -779,6 +809,8 @@ def _normalize_favourites_payload(payload):
 
 
 def load_favourites():
+    if USE_SQLITE:
+        return _db.db_load_favourites()
     if not FAVOURITES_FILE.exists():
         return dict(_DEFAULT_FAVOURITES)
     try:
@@ -790,6 +822,10 @@ def load_favourites():
 
 
 def save_favourites(favourites):
+    if USE_SQLITE:
+        normalized = _normalize_favourites_payload(favourites)
+        _db.db_save_favourites(normalized)
+        return
     tmp = FAVOURITES_FILE.with_suffix('.tmp.json')
     with open(tmp, 'w') as f:
         json.dump(_normalize_favourites_payload(favourites), f, indent=2)
@@ -1354,6 +1390,8 @@ def _safe_float(v, fallback=None):
 
 
 def _load_track_feature_map():
+    if USE_SQLITE:
+        return _db.db_load_feature_map()
     feat_path = _features_file()
     if not feat_path.exists():
         return {}
@@ -2547,6 +2585,8 @@ def player_exclusive():
 
 @app.route('/api/player/state', methods=['GET'])
 def get_player_state():
+    if USE_SQLITE:
+        return jsonify(_db.db_get_player_state())
     if PLAYER_STATE_FILE.exists():
         try:
             with open(PLAYER_STATE_FILE) as f:
@@ -2558,6 +2598,12 @@ def get_player_state():
 @app.route('/api/player/state', methods=['POST'])
 def save_player_state():
     data = request.get_json(force=True) or {}
+    if USE_SQLITE:
+        try:
+            _db.db_save_player_state(data)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+        return jsonify({'ok': True})
     tmp = str(PLAYER_STATE_FILE) + '.tmp'
     try:
         with open(tmp, 'w') as f:
@@ -3427,6 +3473,11 @@ def _load_json_with_fallback(primary: Path, bundled_name: str, default_obj):
 
 
 def load_genre_families():
+    if USE_SQLITE:
+        raw = _db.db_load_genre_families()
+        if raw:
+            return raw
+        return dict(_DEFAULT_GENRE_FAMILIES)
     raw = _load_json_with_fallback(GENRE_FAMILIES_FILE, 'genre_families.json', _DEFAULT_GENRE_FAMILIES)
     out = {}
     if not isinstance(raw, dict):
@@ -3447,6 +3498,19 @@ def load_genre_families():
 
 
 def load_playlist_gen_config():
+    if USE_SQLITE:
+        stored = _db.db_load_playlist_gen_config()
+        if stored:
+            cfg = dict(_DEFAULT_PLAYLIST_GEN_CONFIG)
+            # Reconstruct nested dicts from flattened keys
+            for k, v in stored.items():
+                parts = k.split('.')
+                if len(parts) == 1:
+                    cfg[k] = v
+                elif len(parts) == 2 and parts[0] in cfg and isinstance(cfg[parts[0]], dict):
+                    cfg[parts[0]][parts[1]] = v
+            return cfg
+        return dict(_DEFAULT_PLAYLIST_GEN_CONFIG)
     raw = _load_json_with_fallback(PLAYLIST_GEN_CONFIG_FILE, 'playlist_gen_config.json', _DEFAULT_PLAYLIST_GEN_CONFIG)
     cfg = dict(_DEFAULT_PLAYLIST_GEN_CONFIG)
     if isinstance(raw, dict):
@@ -3519,6 +3583,41 @@ def _resolve_dap_mount(dap, mounts=None):
 
 
 def load_daps():
+    if USE_SQLITE:
+        daps = _db.db_load_daps()
+        changed = False
+        for d in daps:
+            if not d.get('storage_type'):
+                d['storage_type'] = 'sd'
+                changed = True
+            if not d.get('music_root'):
+                d['music_root'] = DEFAULT_DAP_MUSIC_ROOT
+                changed = True
+            else:
+                norm_root = _normalize_music_root(d.get('music_root'))
+                if norm_root != d.get('music_root'):
+                    d['music_root'] = norm_root
+                    changed = True
+            if not d.get('path_template'):
+                d['path_template'] = DEFAULT_DAP_PATH_TEMPLATE
+                changed = True
+            else:
+                norm_tpl = _normalize_path_template(d.get('path_template'))
+                if norm_tpl != d.get('path_template'):
+                    d['path_template'] = norm_tpl
+                    changed = True
+            norm_summary = _normalize_sync_summary(d.get('sync_summary'))
+            if d.get('sync_summary') != norm_summary:
+                d['sync_summary'] = norm_summary
+                changed = True
+            for field in _mount_identity_fields():
+                norm_id = _normalize_mount_id(d.get(field))
+                if d.get(field) != norm_id:
+                    d[field] = norm_id
+                    changed = True
+        if changed:
+            save_daps(daps)
+        return daps
     if DAP_FILE.exists():
         try:
             daps = json.load(open(DAP_FILE))
@@ -3561,6 +3660,9 @@ def load_daps():
 
 
 def save_daps(daps):
+    if USE_SQLITE:
+        _db.db_save_daps(daps)
+        return
     with open(DAP_FILE, 'w') as f:
         json.dump(daps, f, indent=2)
 
@@ -3967,6 +4069,14 @@ def _public_iem(iem):
     return out
 
 def load_iems():
+    if USE_SQLITE:
+        iems = _db.db_load_iems()
+        dirty = False
+        for iem in iems:
+            dirty = _normalize_iem_record(iem) or dirty
+        if dirty:
+            save_iems(iems)
+        return iems
     if IEM_FILE.exists():
         try:
             iems = json.load(open(IEM_FILE))
@@ -3984,11 +4094,16 @@ def load_iems():
 
 
 def save_iems(iems):
+    if USE_SQLITE:
+        _db.db_save_iems(iems)
+        return
     with open(IEM_FILE, 'w') as f:
         json.dump(iems, f, indent=2)
 
 
 def load_baselines():
+    if USE_SQLITE:
+        return _db.db_load_baselines()
     if BASELINES_FILE.exists():
         try:
             return json.load(open(BASELINES_FILE))
@@ -3998,6 +4113,9 @@ def load_baselines():
 
 
 def save_baselines(baselines):
+    if USE_SQLITE:
+        _db.db_save_baselines(baselines)
+        return
     with open(BASELINES_FILE, 'w') as f:
         json.dump(baselines, f, indent=2)
 
@@ -4931,18 +5049,36 @@ def export_backup():
     buf = io.BytesIO()
     timestamp = time.strftime('%Y%m%d_%H%M%S')
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for fname in [
-            'playlists.json', 'favourites.json', 'settings.json', 'daps.json',
-            'iems.json', 'baselines.json', 'match-matrix.json',
-            'insights_config.json', 'genre_families.json',
-            'playlist_gen_config.json',
-        ]:
-            p = DATA_DIR / fname
-            if p.exists():
-                zf.write(p, fname)
-        feat = _features_file()
-        if feat.exists():
-            zf.write(feat, 'features/track_features.json')
+        if USE_SQLITE:
+            # Reconstruct JSON from SQLite for portable backups
+            _backup_table_as_json(zf, 'playlists.json', load_playlists())
+            _backup_table_as_json(zf, 'favourites.json', load_favourites())
+            _backup_table_as_json(zf, 'settings.json', load_settings())
+            _backup_table_as_json(zf, 'daps.json', load_daps())
+            _backup_table_as_json(zf, 'iems.json', load_iems())
+            _backup_table_as_json(zf, 'baselines.json', load_baselines())
+            match_data = _load_match_data()
+            if match_data:
+                _backup_table_as_json(zf, 'match-matrix.json', match_data)
+            _backup_table_as_json(zf, 'insights_config.json', load_insights_config())
+            _backup_table_as_json(zf, 'genre_families.json', load_genre_families())
+            _backup_table_as_json(zf, 'playlist_gen_config.json', load_playlist_gen_config())
+            features = _load_feature_entries()
+            if features:
+                _backup_table_as_json(zf, 'features/track_features.json', features)
+        else:
+            for fname in [
+                'playlists.json', 'favourites.json', 'settings.json', 'daps.json',
+                'iems.json', 'baselines.json', 'match-matrix.json',
+                'insights_config.json', 'genre_families.json',
+                'playlist_gen_config.json',
+            ]:
+                p = DATA_DIR / fname
+                if p.exists():
+                    zf.write(p, fname)
+            feat = _features_file()
+            if feat.exists():
+                zf.write(feat, 'features/track_features.json')
         art = DATA_DIR / 'playlist_artwork'
         if art.is_dir():
             for item in art.iterdir():
@@ -4954,6 +5090,11 @@ def export_backup():
                      download_name=f'tunebridge_backup_{timestamp}.zip')
 
 
+def _backup_table_as_json(zf, filename, data):
+    """Write data as JSON into a ZipFile entry."""
+    zf.writestr(filename, json.dumps(data, indent=2))
+
+
 @app.route('/api/backup/import', methods=['POST'])
 def import_backup():
     f = request.files.get('file')
@@ -4963,29 +5104,35 @@ def import_backup():
         raw = f.read()
         with zipfile.ZipFile(io.BytesIO(raw)) as zf:
             names = zf.namelist()
-            for fname in [
-                'playlists.json', 'favourites.json', 'settings.json', 'daps.json',
-                'iems.json', 'baselines.json', 'match-matrix.json',
-                'insights_config.json', 'genre_families.json',
-                'playlist_gen_config.json',
-            ]:
-                if fname in names:
-                    content = json.loads(zf.read(fname))   # validate JSON
-                    dest = DATA_DIR / fname
+
+            if USE_SQLITE:
+                # Import directly into SQLite tables
+                _import_json_to_sqlite(zf, names)
+            else:
+                for fname in [
+                    'playlists.json', 'favourites.json', 'settings.json', 'daps.json',
+                    'iems.json', 'baselines.json', 'match-matrix.json',
+                    'insights_config.json', 'genre_families.json',
+                    'playlist_gen_config.json',
+                ]:
+                    if fname in names:
+                        content = json.loads(zf.read(fname))   # validate JSON
+                        dest = DATA_DIR / fname
+                        tmp = str(dest) + '.import.tmp'
+                        with open(tmp, 'w') as out:
+                            json.dump(content, out, indent=2)
+                        Path(tmp).replace(dest)
+                feature_name = 'features/track_features.json' if 'features/track_features.json' in names else (
+                    'track_features.json' if 'track_features.json' in names else None
+                )
+                if feature_name:
+                    features = json.loads(zf.read(feature_name))
+                    dest = _features_file()
                     tmp = str(dest) + '.import.tmp'
                     with open(tmp, 'w') as out:
-                        json.dump(content, out, indent=2)
+                        json.dump(features, out, indent=2)
                     Path(tmp).replace(dest)
-            feature_name = 'features/track_features.json' if 'features/track_features.json' in names else (
-                'track_features.json' if 'track_features.json' in names else None
-            )
-            if feature_name:
-                features = json.loads(zf.read(feature_name))
-                dest = _features_file()
-                tmp = str(dest) + '.import.tmp'
-                with open(tmp, 'w') as out:
-                    json.dump(features, out, indent=2)
-                Path(tmp).replace(dest)
+
             art_dir = DATA_DIR / 'playlist_artwork'
             art_dir.mkdir(exist_ok=True)
             for name in names:
@@ -4999,6 +5146,57 @@ def import_backup():
         return jsonify({'error': f'Corrupt JSON in backup: {e}'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+def _import_json_to_sqlite(zf, names):
+    """Import backup ZIP contents into SQLite tables."""
+    if 'playlists.json' in names:
+        data = json.loads(zf.read('playlists.json'))
+        if isinstance(data, dict):
+            _db.db_save_playlists(data)
+    if 'favourites.json' in names:
+        data = json.loads(zf.read('favourites.json'))
+        if isinstance(data, dict):
+            _db.db_save_favourites(_normalize_favourites_payload(data))
+    if 'settings.json' in names:
+        data = json.loads(zf.read('settings.json'))
+        if isinstance(data, dict):
+            _db.db_save_settings(data)
+    if 'daps.json' in names:
+        data = json.loads(zf.read('daps.json'))
+        if isinstance(data, list):
+            _db.db_save_daps(data)
+    if 'iems.json' in names:
+        data = json.loads(zf.read('iems.json'))
+        if isinstance(data, list):
+            _db.db_save_iems(data)
+    if 'baselines.json' in names:
+        data = json.loads(zf.read('baselines.json'))
+        if isinstance(data, list):
+            _db.db_save_baselines(data)
+    if 'match-matrix.json' in names:
+        data = json.loads(zf.read('match-matrix.json'))
+        if isinstance(data, dict):
+            _db.db_save_match_data(data)
+    if 'insights_config.json' in names:
+        data = json.loads(zf.read('insights_config.json'))
+        if isinstance(data, dict):
+            _db.db_save_insights_config(data)
+    if 'genre_families.json' in names:
+        data = json.loads(zf.read('genre_families.json'))
+        if isinstance(data, dict):
+            _db.db_save_genre_families(data)
+    if 'playlist_gen_config.json' in names:
+        data = json.loads(zf.read('playlist_gen_config.json'))
+        if isinstance(data, dict):
+            _db.db_save_playlist_gen_config(data)
+    feature_name = 'features/track_features.json' if 'features/track_features.json' in names else (
+        'track_features.json' if 'track_features.json' in names else None
+    )
+    if feature_name:
+        data = json.loads(zf.read(feature_name))
+        if isinstance(data, list):
+            _db.db_save_feature_entries(data)
 
 
 @app.route('/api/browse/folder', methods=['POST'])
@@ -5262,6 +5460,8 @@ def _features_file():
 
 
 def _load_feature_entries():
+    if USE_SQLITE:
+        return _db.db_load_feature_entries()
     fp = _features_file()
     if not fp.exists():
         return []
@@ -5312,7 +5512,10 @@ def _backfill_feature_source_signatures(tracks):
 
     if updated:
         try:
-            _features_file().write_text(json.dumps(entries))
+            if USE_SQLITE:
+                _db.db_save_feature_entries(entries)
+            else:
+                _features_file().write_text(json.dumps(entries))
         except Exception:
             pass
     return entries
@@ -5459,16 +5662,21 @@ def _run_analysis():
         # Flush to disk every 200 tracks so progress survives a crash
         if i > 0 and i % 200 == 0:
             try:
-                feat_path.write_text(json.dumps([
-                    results_map[t['id']] for t in tracks if t['id'] in results_map
-                ]))
+                flush_rows = [results_map[t['id']] for t in tracks if t['id'] in results_map]
+                if USE_SQLITE:
+                    _db.db_save_feature_entries(flush_rows)
+                else:
+                    feat_path.write_text(json.dumps(flush_rows))
             except Exception:
                 pass
 
     if analysis_state['status'] == 'running':
         # Normal completion
         final_rows = [results_map[t['id']] for t in tracks if t['id'] in results_map]
-        feat_path.write_text(json.dumps(final_rows))
+        if USE_SQLITE:
+            _db.db_save_feature_entries(final_rows)
+        else:
+            feat_path.write_text(json.dumps(final_rows))
         analysis_state.update({
             'status':       'done',
             'done':         len(pending_tracks),
@@ -5478,7 +5686,10 @@ def _run_analysis():
         # Cancelled — save partial results so incremental re-run can resume.
         final_rows = [results_map[t['id']] for t in tracks if t['id'] in results_map]
         if final_rows:
-            feat_path.write_text(json.dumps(final_rows))
+            if USE_SQLITE:
+                _db.db_save_feature_entries(final_rows)
+            else:
+                feat_path.write_text(json.dumps(final_rows))
         analysis_state.update({'status': 'idle', 'done': 0, 'total': 0, 'error': None})
 
 
@@ -5578,6 +5789,8 @@ _ALL_DIM_KEYS = [b[0] for b in _PERC_BANDS] + _DERIVED_DIMS
 
 
 def _load_features():
+    if USE_SQLITE:
+        return _db.db_load_feature_entries()
     p = _features_file()
     if not p.exists():
         return []
@@ -6021,6 +6234,8 @@ def _match_matrix_path():
 
 
 def _load_match_data():
+    if USE_SQLITE:
+        return _db.db_load_match_data()
     p = _match_matrix_path()
     if not p.exists():
         return None
@@ -6102,8 +6317,7 @@ def insights_matching_analyse():
         else:
             target_id = 'flat'
 
-    iems_path = DATA_DIR / 'iems.json'
-    iems = json.loads(iems_path.read_text()) if iems_path.exists() else []
+    iems = load_iems()
 
     iem_profiles = []
     for iem in iems:
@@ -6130,7 +6344,10 @@ def insights_matching_analyse():
         'matrix_data':  matrix_data,
     }
     try:
-        _match_matrix_path().write_text(json.dumps(out))
+        if USE_SQLITE:
+            _db.db_save_match_data(out)
+        else:
+            _match_matrix_path().write_text(json.dumps(out))
     except Exception:
         pass
 
@@ -6273,6 +6490,8 @@ def insights_matching_targets():
 INSIGHTS_CONFIG_PATH = DATA_DIR / 'insights_config.json'
 
 def load_insights_config():
+    if USE_SQLITE:
+        return _db.db_load_insights_config()
     try:
         if INSIGHTS_CONFIG_PATH.exists():
             with open(INSIGHTS_CONFIG_PATH) as f:
@@ -6282,6 +6501,9 @@ def load_insights_config():
     return {}
 
 def save_insights_config(cfg):
+    if USE_SQLITE:
+        _db.db_save_insights_config(cfg)
+        return
     try:
         with open(INSIGHTS_CONFIG_PATH, 'w') as f:
             json.dump(cfg, f, indent=2)
@@ -6305,6 +6527,13 @@ def set_heatmap_genres():
     save_insights_config(cfg)
     return jsonify({'extra_genres': genres})
 
+
+# ── SQLite initialization ─────────────────────────────────────────────────────
+if USE_SQLITE:
+    _db.init_db(DATA_DIR)
+    if not _migrate.ensure_db(DATA_DIR):
+        print("WARNING: SQLite migration failed, falling back to JSON files")
+        USE_SQLITE = False
 
 load_library()
 
