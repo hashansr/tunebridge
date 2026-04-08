@@ -329,7 +329,7 @@ def _migrate_legacy_data():
     """
     if not _BUNDLED:
         return
-    if PLAYLIST_FILE.exists():
+    if PLAYLIST_FILE.exists() or (USE_SQLITE and _db.DB_PATH and _db.DB_PATH.exists()):
         return  # already migrated or started fresh — nothing to do
 
     legacy_dir = Path(__file__).parent / 'data'
@@ -881,6 +881,8 @@ def trigger_scan():
         try:
             if LIBRARY_CACHE.exists():
                 LIBRARY_CACHE.unlink()
+            if USE_SQLITE:
+                _db.db_save_library([])
             with library_lock:
                 global library
                 library = []
@@ -2037,7 +2039,7 @@ def export_playlist(pid, fmt):
 def get_settings():
     s = load_settings()
     s['_data_dir'] = str(DATA_DIR)
-    s['_settings_exists'] = SETTINGS_FILE.exists()
+    s['_settings_exists'] = USE_SQLITE or SETTINGS_FILE.exists()
     return jsonify(s)
 
 
@@ -2136,8 +2138,11 @@ def _create_mpv_instance():
 
 def _resolve_track_path_mpv(track_id):
     """Return the absolute filesystem path for a track_id, or None if not found."""
-    with library_lock:
-        track = next((t for t in library if t['id'] == track_id), None)
+    if USE_SQLITE:
+        track = _db.db_get_track(track_id)
+    else:
+        with library_lock:
+            track = next((t for t in library if t['id'] == track_id), None)
     if not track:
         return None
     return str(get_music_base() / track['path'])
@@ -2145,8 +2150,11 @@ def _resolve_track_path_mpv(track_id):
 
 def _get_track_sample_rate(track_id):
     """Return the sample rate (Hz) for a track_id, or 0 if unknown."""
-    with library_lock:
-        track = next((t for t in library if t['id'] == track_id), None)
+    if USE_SQLITE:
+        track = _db.db_get_track(track_id)
+    else:
+        with library_lock:
+            track = next((t for t in library if t['id'] == track_id), None)
     return int(track.get('sample_rate') or 0) if track else 0
 
 
@@ -4990,7 +4998,9 @@ def delete_baseline(bid):
 
 
 def _get_track_by_id(tid):
-    """Look up a track in the in-memory library by its ID."""
+    """Look up a track by its ID."""
+    if USE_SQLITE:
+        return _db.db_get_track(tid)
     with library_lock:
         for t in library:
             if t.get('id') == tid:

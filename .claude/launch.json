@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "playlist-creator",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["/Users/hashan/playlist_proxy.py"],
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "lsof -ti:5002 | xargs kill -9 2>/dev/null; sleep 0.5; python3 /Users/hashan/playlist_proxy.py"],
       "port": 5002
     }
   ]
