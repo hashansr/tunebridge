@@ -301,14 +301,16 @@ const _ML_MOOD_PRESETS = {
 /* ── Generic confirm modal ──────────────────────────────────────────── */
 let _confirmResolve = null;
 
-function _showConfirm({ title = '', message = '', okText = 'Delete', danger = true, icon = null } = {}) {
+function _showConfirm({ title = '', message = '', okText = 'Delete', cancelText = 'Cancel', danger = true, icon = null } = {}) {
   return new Promise(resolve => {
     _confirmResolve = resolve;
     document.getElementById('confirm-modal-title').textContent = title;
     document.getElementById('confirm-modal-msg').textContent   = message;
     const okBtn = document.getElementById('confirm-modal-ok');
+    const cancelBtn = document.getElementById('confirm-modal-cancel');
     okBtn.textContent  = okText;
     okBtn.className    = danger ? 'btn-danger-pill' : 'btn-danger-pill btn-danger-pill--neutral';
+    if (cancelBtn) cancelBtn.textContent = cancelText;
     const iconEl = document.getElementById('confirm-modal-icon');
     if (icon) {
       iconEl.innerHTML  = icon;
@@ -5695,7 +5697,31 @@ async function openPeqEditor(opts = {}) {
 }
 
 function closePeqEditor() {
-  _guardPeqEditorNavigation();
+  if (!_peqWorkspaceOpen) return;
+  if (!_peqWorkspaceDirty) {
+    _hidePeqWorkspace();
+    return;
+  }
+  _showConfirm({
+    title: 'Discard unsaved PEQ edits?',
+    message: 'You have unsaved changes in Custom PEQ. Choose "Discard & Close" to exit without saving, or "Keep Editing" to continue.',
+    okText: 'Discard & Close',
+    cancelText: 'Keep Editing',
+    danger: true,
+    icon: `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>`,
+  }).then(discard => {
+    if (!discard) return;
+    try {
+      _customPeqEditorState = _sanitizeCustomPeqState(JSON.parse(_peqWorkspaceInitialJson || '{}'));
+    } catch (_) {
+      _customPeqEditorState = _defaultCustomPeqState();
+    }
+    _customPeqEditorState.enabled = true;
+    const restored = _saveCustomPeqState();
+    Player?.applyCustomPeq?.(restored);
+    _setPeqWorkspaceDirty(false);
+    _hidePeqWorkspace();
+  });
 }
 
 async function applyAndClosePeqEditor() {
@@ -6356,15 +6382,126 @@ async function importBackup(input) {
 
 /* ── Settings ──────────────────────────────────────────────────────── */
 async function loadSettings() {
-  const [settings] = await Promise.all([
+  const [settings, cap] = await Promise.all([
     api('/settings').catch(() => ({})),
+    fetch('/api/player/capabilities').then(r => r.json()).catch(() => ({})),
     loadBaselines(),
   ]);
   const inp = document.getElementById('lib-path-input');
   if (inp) inp.value = settings.library_path || '/Volumes/Storage/Music/FLAC';
   const dirEl = document.getElementById('settings-data-dir');
   if (dirEl && settings._data_dir) dirEl.textContent = settings._data_dir;
+
+  // Populate audio device picker
+  const deviceSelect = document.getElementById('audio-device-select');
+  if (deviceSelect) {
+    const mpvOk = !!(cap && cap.mpv_available);
+    deviceSelect.disabled = !mpvOk;
+    // Show/hide player bar output button based on mpv availability
+    const outputWrap = document.getElementById('player-output-wrap');
+    if (outputWrap) outputWrap.style.display = mpvOk ? '' : 'none';
+    if (mpvOk) {
+      try {
+        const { devices } = await fetch('/api/player/audio_devices').then(r => r.json());
+        deviceSelect.innerHTML = '';
+        (devices || []).forEach(d => {
+          const opt = document.createElement('option');
+          opt.value       = d.name;
+          opt.textContent = d.description || d.name;
+          if (d.name === (cap.audio_device || 'auto')) opt.selected = true;
+          deviceSelect.appendChild(opt);
+        });
+        // Keep player's output popover in sync
+        if (typeof Player !== 'undefined' && Player.updateOutputDevice) {
+          Player.updateOutputDevice(cap.audio_device || 'auto');
+        }
+      } catch (_) {}
+    }
+  }
+
+  // Populate exclusive mode toggle
+  const toggle  = document.getElementById('exclusive-mode-toggle');
+  const badge   = document.getElementById('exclusive-backend-badge');
+  const bpPill  = document.getElementById('exclusive-bp-pill');
+  if (toggle) {
+    const mpvOk      = !!(cap && cap.mpv_available);
+    const activeMode = mpvOk && !!(cap && cap.exclusive_mode);
+    toggle.disabled = !mpvOk;
+    toggle.checked  = !!(cap && cap.exclusive_mode);
+    if (badge) {
+      badge.style.display = '';
+      badge.textContent   = mpvOk ? `mpv ${cap.mpv_version || ''}`.trim() : 'mpv not installed';
+      badge.className     = `settings-badge ${mpvOk ? 'settings-badge--ok' : 'settings-badge--warn'}`;
+    }
+    if (bpPill) bpPill.style.display = activeMode ? '' : 'none';
+  }
+
   return settings;
+}
+
+async function setExclusiveMode(enabled) {
+  try {
+    const data = await fetch('/api/player/exclusive', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ enabled }),
+    }).then(r => r.json());
+
+    // Sync player bar badge and Settings BP pill immediately
+    if (typeof Player !== 'undefined' && Player.updateExclusiveMode) {
+      Player.updateExclusiveMode(enabled);
+    }
+    const bpPill = document.getElementById('exclusive-bp-pill');
+    if (bpPill) bpPill.style.display = enabled ? '' : 'none';
+
+    // Resume same track at same position on the new mpv instance
+    if (data.resume_track_id && typeof Player !== 'undefined') {
+      await Player.resumeAt(
+        data.resume_track_id,
+        data.resume_position || 0,
+        !!data.was_playing
+      );
+    }
+
+    toast(enabled ? 'Exclusive mode on — bit-perfect output active' : 'Exclusive mode off');
+  } catch (e) {
+    toast('Error toggling exclusive mode: ' + e.message);
+  }
+}
+
+async function setAudioDevice(device) {
+  try {
+    const data = await fetch('/api/player/audio_device', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ device }),
+    }).then(r => r.json());
+    const appliedDevice = data.audio_device || device;
+    if (data.resume_track_id && typeof Player !== 'undefined') {
+      await Player.resumeAt(
+        data.resume_track_id,
+        data.resume_position || 0,
+        !!data.was_playing
+      );
+    }
+    // Sync player output popover selection
+    if (typeof Player !== 'undefined' && Player.updateOutputDevice) {
+      Player.updateOutputDevice(appliedDevice);
+    }
+    // Sync settings select
+    const sel = document.getElementById('audio-device-select');
+    if (sel) sel.value = appliedDevice;
+    const label = sel
+      ? Array.from(sel.options).find(opt => opt.value === appliedDevice)
+      : null;
+    if (data.requested_device && data.requested_device !== appliedDevice) {
+      toast('Requested output unavailable. Using: ' + (label ? label.textContent : appliedDevice));
+    } else {
+      toast('Audio output: ' + (label ? label.textContent : appliedDevice));
+    }
+  } catch (e) {
+    toast('Error switching audio device: ' + e.message);
+  }
 }
 
 async function saveLibraryPath() {
@@ -6798,6 +6935,8 @@ const App = {
   closeOnboarding,
   completeOnboarding,
   restartApp,
+  setExclusiveMode,
+  setAudioDevice,
   browseFolder,
   exportBackup,
   importBackup,

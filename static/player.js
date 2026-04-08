@@ -26,7 +26,7 @@ const Player = (function () {
     isPlaying:    false,
     activePeqIemId:     null,
     activePeqProfileId: null,
-    crossfadeDuration:  0,    // seconds; 0 = disabled
+    crossfadeDuration:  0,    // seconds; 0 = disabled (Web Audio mode only)
     queueOpen:       false,
     peqOpen:         false,
     historyExpanded: false,
@@ -34,6 +34,13 @@ const Player = (function () {
     playbackContextLabel: '',
     lastShuffleFirstIdx: -1,
   };
+
+  /* ── mpv backend state ──────────────────────────────────────────────── */
+  let _mpvAvailable  = false;  // set by init() after /api/player/capabilities
+  let _exclusiveMode = false;  // CoreAudio exclusive (bit-perfect); mirrors settings
+  let _pollTimer     = null;   // setInterval handle for mpv state polling
+  let _mpvPosition   = 0;      // last known position from mpv (seconds)
+  let _mpvDuration   = 0;      // last known duration from mpv (seconds)
 
   /* ── Track registry (populated by app.js via Player.registerTracks) ── */
   const _registry = new Map();   // id → track object
@@ -135,9 +142,9 @@ const Player = (function () {
     return _customPeqState;
   }
 
-  /* ── Web Audio graph init ───────────────────────────────────────────── */
+  /* ── Web Audio graph init (fallback mode only) ─────────────────────── */
   function _initAudioContext() {
-    if (_ctx) return;
+    if (_ctx || _mpvAvailable) return;
     try {
       _ctx        = new (window.AudioContext || window.webkitAudioContext)();
       // One MediaElementSource per audio element (can only be created once per element)
@@ -167,6 +174,92 @@ const Player = (function () {
       }
     } catch (e) {
       console.warn('Player: Web Audio API init failed', e);
+    }
+  }
+
+  /* ── mpv helpers ────────────────────────────────────────────────────── */
+  function _mpvCmd(route, body) {
+    return fetch(`/api/player/${route}`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body || {}),
+    }).catch(e => console.warn(`Player: mpv ${route} failed`, e));
+  }
+
+  /* ── mpv state polling ──────────────────────────────────────────────── */
+  function _startPolling() {
+    if (_pollTimer) return;
+    _pollTimer = setInterval(_pollMpvState, 250);
+  }
+
+  function _stopPolling() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  }
+
+  async function _pollMpvState() {
+    let state;
+    try {
+      const r = await fetch('/api/player/mpv_state');
+      if (!r.ok) return;
+      state = await r.json();
+    } catch (_) { return; }
+
+    if (!state || !state.available) return;
+
+    _mpvPosition = state.position || 0;
+    _mpvDuration = state.duration || 0;
+
+    // Sync play/pause indicator (only when not seek-dragging)
+    if (!_seekDragging && !_seeking) {
+      const wasPlaying = ps.isPlaying;
+      ps.isPlaying = !!state.playing;
+      if (wasPlaying !== ps.isPlaying) _updatePlayBtn();
+
+      // Update seek bar + time display
+      if (_mpvDuration > 0) {
+        const pct     = _mpvPosition / _mpvDuration;
+        const seekEl  = document.getElementById('player-seek');
+        const fillEl  = document.getElementById('player-progress-fill');
+        const curEl   = document.getElementById('player-current-time');
+        const durEl   = document.getElementById('player-duration');
+        if (seekEl) seekEl.value = Math.min(1, pct) * 1000;
+        if (fillEl) fillEl.style.width = (Math.min(1, pct) * 100) + '%';
+        if (curEl)  curEl.textContent  = _fmtTime(_mpvPosition);
+        if (durEl)  durEl.textContent  = _fmtTime(_mpvDuration);
+      }
+    }
+
+    // Track ended — advance queue
+    if (state.track_ended) {
+      _onMpvTrackEnded();
+    }
+  }
+
+  function _onMpvTrackEnded() {
+    if (ps.repeatMode === 'one') {
+      // Re-play current track from start
+      const t = currentTrack();
+      if (t) _mpvCmd('play', { track_id: t.id, position: 0 });
+    } else if (ps.repeatMode === 'all' || ps.queueIdx < ps.queue.length - 1) {
+      const len = ps.shuffle ? ps.shuffleOrder.length : ps.queue.length;
+      ps.queueIdx = (ps.queueIdx + 1) % Math.max(1, len);
+      const t = currentTrack();
+      if (t) {
+        _updateTrackUI(t);
+        _highlightActiveRow();
+        _mpvCmd('play', { track_id: t.id }).then(() => {
+          ps.isPlaying = true;
+          _updatePlayBtn();
+        });
+        if (ps.queueOpen) _renderQueue();
+        _saveState();
+      }
+    } else {
+      // End of queue, no repeat
+      ps.isPlaying = false;
+      _updatePlayBtn();
+      _highlightActiveRow();
+      if (ps.queueOpen) _renderQueue();
     }
   }
 
@@ -303,9 +396,27 @@ const Player = (function () {
   function _dBToLinear(db) { return Math.pow(10, db / 20); }
 
   function _buildPeqChain(peqProfile) {
+    if (_mpvAvailable) {
+      // mpv mode: send profile to backend as a lavfi audio filter
+      if (!peqProfile) {
+        _mpvCmd('peq', { preamp_db: 0, filters: [] });
+      } else {
+        const filters = (peqProfile.filters || []).map(f => ({
+          enabled: f.enabled !== false,
+          type:    f.type  || 'PK',
+          fc:      f.fc    || 1000,
+          gain:    f.gain  || 0,
+          q:       f.q     || 1.0,
+        }));
+        _mpvCmd('peq', { preamp_db: peqProfile.preamp_db || 0, filters });
+      }
+      _scheduleEqCurveRedraw();
+      return;
+    }
+
+    // Web Audio fallback
     if (!_ctx || !_preampNode || !_volNode) return;
 
-    // Tear down existing chain
     try { _preampNode.disconnect(); } catch (_) {}
     _peqNodes.forEach(n => { try { n.disconnect(); } catch (_) {} });
     _peqNodes = [];
@@ -316,11 +427,9 @@ const Player = (function () {
       return;
     }
 
-    // Preamp
     const preampDb = typeof peqProfile.preamp_db === 'number' ? peqProfile.preamp_db : 0;
     _preampNode.gain.value = _dBToLinear(preampDb);
 
-    // Build filter nodes for enabled filters only
     const active = (peqProfile.filters || []).filter(f => f.enabled !== false);
     _peqNodes = active.map(f => {
       const node = _ctx.createBiquadFilter();
@@ -332,7 +441,6 @@ const Player = (function () {
       return node;
     });
 
-    // Chain: preamp → f[0] → f[1] → ... → volNode
     const chain = [_preampNode, ..._peqNodes, _volNode];
     for (let i = 0; i < chain.length - 1; i++) {
       chain[i].connect(chain[i + 1]);
@@ -374,6 +482,12 @@ const Player = (function () {
   }
 
   function _updateBandParam(enabledBandIndex, fc, gain, q) {
+    if (_mpvAvailable) {
+      // In mpv mode, re-send the entire custom PEQ state so all bands are in sync
+      const st = _loadCustomPeqState();
+      _applyCustomPeq(st);
+      return true;
+    }
     if (!_ctx || !Array.isArray(_peqNodes)) return false;
     const idx = Number(enabledBandIndex);
     if (!Number.isFinite(idx) || idx < 0 || idx >= _peqNodes.length) return false;
@@ -387,8 +501,88 @@ const Player = (function () {
   }
 
   function _updatePreamp(preampDb) {
+    if (_mpvAvailable) {
+      const st = _loadCustomPeqState();
+      _applyCustomPeq(st);
+      return;
+    }
     const db = Math.max(-30, Math.min(30, Number(preampDb) || 0));
     if (_preampNode) _preampNode.gain.value = _dBToLinear(db);
+  }
+
+  /* ── Analytical biquad frequency response (used for PEQ canvas in mpv mode) ── */
+  // Reference sample rate for display computation — high enough to be accurate across 20-20kHz
+  const _BIQUAD_FS = 96000;
+
+  function _biquadCoeffs(type, fc, gainDb, q) {
+    const A   = Math.pow(10, gainDb / 40);
+    const w0  = 2 * Math.PI * fc / _BIQUAD_FS;
+    const cw  = Math.cos(w0);
+    const sw  = Math.sin(w0);
+    const alp = sw / (2 * Math.max(0.001, q));
+    let b0, b1, b2, a0, a1, a2;
+    switch (type) {
+      case 'peaking':
+        b0 = 1 + alp * A;  b1 = -2 * cw;  b2 = 1 - alp * A;
+        a0 = 1 + alp / A;  a1 = -2 * cw;  a2 = 1 - alp / A;
+        break;
+      case 'lowshelf':
+        b0 =     A * ((A + 1) - (A - 1) * cw + 2 * Math.sqrt(A) * alp);
+        b1 = 2 * A * ((A - 1) - (A + 1) * cw);
+        b2 =     A * ((A + 1) - (A - 1) * cw - 2 * Math.sqrt(A) * alp);
+        a0 =         (A + 1) + (A - 1) * cw + 2 * Math.sqrt(A) * alp;
+        a1 =    -2 * ((A - 1) + (A + 1) * cw);
+        a2 =         (A + 1) + (A - 1) * cw - 2 * Math.sqrt(A) * alp;
+        break;
+      case 'highshelf':
+        b0 =      A * ((A + 1) + (A - 1) * cw + 2 * Math.sqrt(A) * alp);
+        b1 = -2 * A * ((A - 1) + (A + 1) * cw);
+        b2 =      A * ((A + 1) + (A - 1) * cw - 2 * Math.sqrt(A) * alp);
+        a0 =          (A + 1) - (A - 1) * cw + 2 * Math.sqrt(A) * alp;
+        a1 =      2 * ((A - 1) - (A + 1) * cw);
+        a2 =          (A + 1) - (A - 1) * cw - 2 * Math.sqrt(A) * alp;
+        break;
+      case 'lowpass':
+        b0 = (1 - cw) / 2;  b1 = 1 - cw;  b2 = (1 - cw) / 2;
+        a0 = 1 + alp;       a1 = -2 * cw;  a2 = 1 - alp;
+        break;
+      case 'highpass':
+        b0 = (1 + cw) / 2;  b1 = -(1 + cw);  b2 = (1 + cw) / 2;
+        a0 = 1 + alp;       a1 = -2 * cw;     a2 = 1 - alp;
+        break;
+      case 'notch':
+        b0 = 1;  b1 = -2 * cw;  b2 = 1;
+        a0 = 1 + alp;  a1 = -2 * cw;  a2 = 1 - alp;
+        break;
+      default: // allpass / passthrough
+        b0 = 1; b1 = 0; b2 = 0; a0 = 1; a1 = 0; a2 = 0;
+    }
+    return { b0, b1, b2, a0, a1, a2 };
+  }
+
+  function _biquadMagAt(c, f) {
+    const w   = 2 * Math.PI * f / _BIQUAD_FS;
+    const cw  = Math.cos(w);
+    const sw  = Math.sin(w);
+    const cw2 = 2 * cw * cw - 1;   // cos(2w)
+    const sw2 = 2 * sw * cw;        // sin(2w)
+    const nR  = c.b0 + c.b1 * cw + c.b2 * cw2;
+    const nI  = -c.b1 * sw - c.b2 * sw2;
+    const dR  = c.a0 + c.a1 * cw + c.a2 * cw2;
+    const dI  = -c.a1 * sw - c.a2 * sw2;
+    return Math.sqrt((nR * nR + nI * nI) / (dR * dR + dI * dI));
+  }
+
+  function _computeCombinedResponse(activeFilters, freqs) {
+    // activeFilters: array of {type (BiquadFilterNode.type string), fc, gain, q}
+    const combined = new Float32Array(freqs.length).fill(1);
+    for (const f of activeFilters) {
+      const c = _biquadCoeffs(f.type, f.fc, f.gain, f.q);
+      for (let i = 0; i < freqs.length; i++) {
+        combined[i] *= _biquadMagAt(c, freqs[i]);
+      }
+    }
+    return combined;
   }
 
   function _redrawPeqEditorCurve() {
@@ -406,16 +600,40 @@ const Player = (function () {
     const N = 512;
     const freqs = new Float32Array(N);
     for (let i = 0; i < N; i++) freqs[i] = 20 * Math.pow(1000, i / (N - 1));
-    const combined = new Float32Array(N).fill(1);
-    const hasCtx = !!_ctx;
-    const hasNodes = Array.isArray(_peqNodes) && _peqNodes.length > 0;
-    if (hasCtx && hasNodes) {
-      for (const node of _peqNodes) {
-        const mag = new Float32Array(N);
-        node.getFrequencyResponse(freqs, mag, new Float32Array(N));
-        for (let i = 0; i < N; i++) combined[i] *= mag[i];
+
+    let combined = new Float32Array(N).fill(1);
+    let hasFilters = false;
+
+    if (_mpvAvailable) {
+      // Analytical computation from current custom PEQ state
+      const st = _loadCustomPeqState();
+      if (st && st.enabled) {
+        const activeFilters = (st.bands || [])
+          .filter(b => b && b.enabled)
+          .map(b => ({
+            type:  _FILTER_TYPE[(b.type || 'PK').toUpperCase()] || 'peaking',
+            fc:    Math.max(20, Math.min(20000, b.fc   || 1000)),
+            gain:  _NO_GAIN_TYPES.has(String(b.type || '').toUpperCase()) ? 0 : (b.gain || 0),
+            q:     Math.max(0.1, b.q || 1.0),
+          }));
+        if (activeFilters.length > 0) {
+          hasFilters = true;
+          combined = _computeCombinedResponse(activeFilters, freqs);
+        }
+      }
+    } else {
+      // Web Audio: use getFrequencyResponse() from live BiquadFilterNodes
+      const hasCtxNodes = !!_ctx && Array.isArray(_peqNodes) && _peqNodes.length > 0;
+      if (hasCtxNodes) {
+        hasFilters = true;
+        for (const node of _peqNodes) {
+          const mag = new Float32Array(N);
+          node.getFrequencyResponse(freqs, mag, new Float32Array(N));
+          for (let i = 0; i < N; i++) combined[i] *= mag[i];
+        }
       }
     }
+
     const dbRange = 20;
     const toDB = v => 20 * Math.log10(Math.max(v, 1e-6));
     ctx2d.clearRect(0, 0, W, H);
@@ -437,14 +655,15 @@ const Player = (function () {
       else ctx2d.lineTo(x, y);
     }
     ctx2d.stroke();
-    if (!hasCtx) {
+    if (!hasFilters) {
       ctx2d.fillStyle = 'rgba(193,198,215,0.72)';
       ctx2d.font = '12px -apple-system,BlinkMacSystemFont,Helvetica Neue,Arial,sans-serif';
-      ctx2d.fillText('Start playback to preview live EQ response.', 12, H - 12);
-    } else if (!hasNodes) {
-      ctx2d.fillStyle = 'rgba(193,198,215,0.72)';
-      ctx2d.font = '12px -apple-system,BlinkMacSystemFont,Helvetica Neue,Arial,sans-serif';
-      ctx2d.fillText('Enable one or more bands to draw EQ response.', 12, H - 12);
+      const msg = _mpvAvailable
+        ? 'Enable one or more bands to draw EQ response.'
+        : (!_ctx
+          ? 'Start playback to preview live EQ response.'
+          : 'Enable one or more bands to draw EQ response.');
+      ctx2d.fillText(msg, 12, H - 12);
     }
   }
 
@@ -495,15 +714,34 @@ const Player = (function () {
   function _loadTrack(track) {
     if (!track) return;
     _seekRestored = false;
-    _cancelCrossfade();
-    _audio.src = `/api/stream/${track.id}`;
-    _audio.load();
+    if (_mpvAvailable) {
+      _mpvCmd('play', { track_id: track.id });
+      ps.isPlaying = true;
+      _updatePlayBtn();
+    } else {
+      _cancelCrossfade();
+      _audio.src = `/api/stream/${track.id}`;
+      _audio.load();
+    }
     _updateTrackUI(track);
     _highlightActiveRow();
     _saveState();
   }
 
   function _startPlay() {
+    if (_mpvAvailable) {
+      // If mpv has no file loaded yet (e.g. first play after app restore),
+      // _mpvDuration will be 0. Send a full loadfile instead of just unpause.
+      if (_mpvDuration === 0) {
+        const t = currentTrack();
+        if (t) _loadTrack(t);
+        return;
+      }
+      _mpvCmd('pause', { paused: false });
+      ps.isPlaying = true;
+      _updatePlayBtn();
+      return;
+    }
     _initAudioContext();
     if (_ctx && _ctx.state === 'suspended') _ctx.resume();
     const promise = _audio.play();
@@ -513,7 +751,11 @@ const Player = (function () {
   }
 
   function _pauseAudio() {
-    _audio.pause();
+    if (_mpvAvailable) {
+      _mpvCmd('pause', { paused: true });
+    } else {
+      _audio.pause();
+    }
     ps.isPlaying = false;
     _updatePlayBtn();
   }
@@ -538,8 +780,10 @@ const Player = (function () {
   function prev() {
     if (ps.queue.length === 0) return;
     // Restart current track if more than 3 s in
-    if (_audio.currentTime > 3) {
-      _audio.currentTime = 0;
+    const curPos = _mpvAvailable ? _mpvPosition : _audio.currentTime;
+    if (curPos > 3) {
+      if (_mpvAvailable) { _mpvCmd('seek', { position: 0 }); }
+      else { _audio.currentTime = 0; }
       return;
     }
     // Capture BEFORE _loadTrack — _audio.load() fires 'pause' synchronously,
@@ -566,25 +810,29 @@ const Player = (function () {
 
   function seekInput(value) {
     // Guard: no-op if nothing is loaded
-    if (!currentTrack() || !isFinite(_audio.duration) || _audio.duration === 0) return;
+    const dur = _mpvAvailable ? _mpvDuration : _audio.duration;
+    if (!currentTrack() || !isFinite(dur) || dur === 0) return;
     // Called on input (dragging) — update visuals only, not audio
     _seekDragging = true;
     const pct = parseFloat(value) / 1000;
     const fillEl = document.getElementById('player-progress-fill');
     const curEl  = document.getElementById('player-current-time');
     if (fillEl) fillEl.style.width = (pct * 100) + '%';
-    if (curEl) curEl.textContent = _fmtTime(pct * _audio.duration);
+    if (curEl) curEl.textContent = _fmtTime(pct * dur);
   }
 
   function seek(value) {
-    // Guard: no-op if nothing is loaded
-    if (!currentTrack() || !isFinite(_audio.duration) || _audio.duration === 0) {
+    const dur = _mpvAvailable ? _mpvDuration : _audio.duration;
+    if (!currentTrack() || !isFinite(dur) || dur === 0) {
       _seekDragging = false;
       return;
     }
-    // Called on change (release) — commit seek to audio element
-    // Use timeout to ensure _seekDragging is cleared even if oninput fires late
-    _audio.currentTime = (parseFloat(value) / 1000) * _audio.duration;
+    const position = (parseFloat(value) / 1000) * dur;
+    if (_mpvAvailable) {
+      _mpvCmd('seek', { position });
+    } else {
+      _audio.currentTime = position;
+    }
     setTimeout(() => { _seekDragging = false; }, 50);
   }
 
@@ -604,12 +852,13 @@ const Player = (function () {
 
   function _applyVolume() {
     const v = ps.muted ? 0 : ps.volume;
-    if (_volNode) {
+    if (_mpvAvailable) {
+      _mpvCmd('volume', { volume: v });
+    } else if (_volNode) {
       _volNode.gain.value = v;
     } else {
-      // Fallback when Web Audio isn't initialised
       _audioA.volume = v;
-      _audioB.volume = 0;   // B is always silent when not in a crossfade without Web Audio
+      _audioB.volume = 0;
     }
   }
 
@@ -824,7 +1073,7 @@ const Player = (function () {
     if (ps.queue.length === 0) {
       ps.queueIdx = -1;
       ps.shuffleOrder = [];
-      _audio.src = '';
+      if (_mpvAvailable) { _mpvCmd('stop', {}); } else { _audio.src = ''; }
       ps.isPlaying = false;
       _updateTrackUI(null);
       _updatePlayBtn();
@@ -843,7 +1092,11 @@ const Player = (function () {
       ps.queue        = [];
       ps.queueIdx     = -1;
       ps.shuffleOrder = [];
-      _audio.src      = '';
+      if (_mpvAvailable) {
+        _mpvCmd('stop', {});
+      } else {
+        _audio.src = '';
+      }
       ps.isPlaying    = false;
       _updateTrackUI(null);
       _updatePlayBtn();
@@ -899,8 +1152,9 @@ const Player = (function () {
     ps.playbackContextTracks.forEach(t => _registry.set(t.id, t));
   }
 
-  /* ── Audio element events (attached to both A and B; guard ignores inactive) ── */
+  /* ── Audio element events (attached to both A and B; Web Audio mode only) ── */
   function _onTimeUpdate() {
+    if (_mpvAvailable) return;     // mpv mode: polling handles seeks
     if (this !== _audio) return;   // ignore events from the standby element
     if (_seekDragging) return;
     if (_seeking) return;
@@ -1134,7 +1388,7 @@ const Player = (function () {
     }
     if (_loadCustomPeqState().enabled) _setCustomPeqEnabled(false);
     ps.activePeqProfileId = profileId || null;
-    if (_ctx) {
+    if (_mpvAvailable || _ctx) {
       await _loadAndApplyPeq(ps.activePeqIemId, ps.activePeqProfileId);
     }
     _updatePeqBtn();
@@ -1167,6 +1421,85 @@ const Player = (function () {
     }
     ps.peqOpen = false;
     _setPeqPopoverOpen(false);
+  }
+
+  /* ── Output device popover ─────────────────────────────────────────── */
+  let _outputDevices = [];
+  let _currentOutputDevice = 'auto';
+  let _outputPopoverOpen = false;
+
+  async function toggleOutputPopover() {
+    const popover = document.getElementById('output-popover');
+    if (!popover) return;
+    _outputPopoverOpen = !_outputPopoverOpen;
+    if (_outputPopoverOpen) {
+      // Show but keep hidden until populated to avoid flicker
+      popover.style.display = 'block';
+      await _populateOutputDevices();
+      // trigger open animation after a tick
+      requestAnimationFrame(() => popover.classList.add('open'));
+    } else {
+      _closeOutputPopover();
+    }
+    const btn = document.getElementById('player-output-btn');
+    if (btn) btn.classList.toggle('active', _outputPopoverOpen);
+  }
+
+  function _closeOutputPopover() {
+    const popover = document.getElementById('output-popover');
+    if (!popover) return;
+    _outputPopoverOpen = false;
+    popover.classList.remove('open');
+    const btn = document.getElementById('player-output-btn');
+    if (btn) btn.classList.remove('active');
+    setTimeout(() => { if (!_outputPopoverOpen) popover.style.display = 'none'; }, 220);
+  }
+
+  async function _populateOutputDevices() {
+    const list = document.getElementById('output-device-list');
+    if (!list) return;
+    try {
+      const data = await fetch('/api/player/audio_devices').then(r => r.json());
+      _outputDevices = data.devices || [];
+      const cap = await fetch('/api/player/capabilities').then(r => r.json());
+      _currentOutputDevice = cap.audio_device || 'auto';
+    } catch (e) {
+      console.warn('Player: audio device fetch failed', e);
+    }
+    list.innerHTML = _outputDevices.map(d => {
+      const isActive = d.name === _currentOutputDevice ||
+                       (d.name === 'auto' && (!_currentOutputDevice || _currentOutputDevice === 'auto'));
+      return `<button class="output-device-item${isActive ? ' active' : ''}"
+                data-device="${_esc(d.name)}"
+                onclick="Player.selectOutputDevice(this.dataset.device)">
+        <span class="output-device-dot"></span>
+        <span>${_esc(d.description || d.name)}</span>
+      </button>`;
+    }).join('');
+  }
+
+  async function selectOutputDevice(deviceName) {
+    _currentOutputDevice = deviceName;
+    // Update dots immediately for snappy feedback
+    document.querySelectorAll('.output-device-item').forEach(el => {
+      const isActive = (el.dataset.device || '') === deviceName;
+      el.classList.toggle('active', isActive);
+      el.querySelector('.output-device-dot').style.background =
+        isActive ? '#53e16f' : '';
+    });
+    _closeOutputPopover();
+    // Delegate to App.setAudioDevice for the actual save + reinit
+    if (typeof App !== 'undefined' && typeof App.setAudioDevice === 'function') {
+      await App.setAudioDevice(deviceName);
+    }
+    // Sync the Settings select too
+    const settingsSel = document.getElementById('audio-device-select');
+    if (settingsSel) settingsSel.value = deviceName;
+  }
+
+  // Called by app.js when settings load or device changes — keeps player in sync
+  function updateOutputDevice(deviceName) {
+    _currentOutputDevice = deviceName || 'auto';
   }
 
   /* ── Queue drawer UI ────────────────────────────────────────────────── */
@@ -1291,11 +1624,17 @@ const Player = (function () {
       </div>`;
     }
 
-    // Upcoming tracks (draggable in non-shuffle mode)
+    // Upcoming tracks (draggable in non-shuffle mode) — capped at 200 for perf
+    const QUEUE_CAP = 200;
+    const visibleUpcoming = upcomingItems.slice(0, QUEUE_CAP);
+    const hiddenCount     = upcomingItems.length - visibleUpcoming.length;
     html += `<div id="queue-upcoming-list">`;
-    upcomingItems.forEach(({ t, realIdx }) => {
+    visibleUpcoming.forEach(({ t, realIdx }) => {
       html += _queueItemHtml(t, realIdx, true, false);
     });
+    if (hiddenCount > 0) {
+      html += `<div class="queue-overflow-note">+ ${hiddenCount} more track${hiddenCount !== 1 ? 's' : ''}</div>`;
+    }
     html += `</div></div>`;  // close upcoming list + section
 
     list.innerHTML = html;
@@ -1385,6 +1724,8 @@ const Player = (function () {
       if (seekEl)    { seekEl.value = 0; seekEl.disabled = true; }
       if (fillEl)    fillEl.style.width   = '0%';
       if (qualityEl) qualityEl.textContent = '';
+      const _bpb = document.getElementById('player-bitperfect');
+      if (_bpb) _bpb.style.display = 'none';
       document.title = 'TuneBridge';
       window.dispatchEvent(new CustomEvent('tb-track-change', { detail: { trackId: null } }));
       return;
@@ -1423,12 +1764,21 @@ const Player = (function () {
     if (fillEl)    fillEl.style.width = '0%';
     if (curEl)     curEl.textContent  = '0:00';
     if (qualityEl) qualityEl.textContent = _formatQuality(track);
+    _updateBitPerfectBadge();
     document.title = `${track.title} — TuneBridge`;
     window.dispatchEvent(new CustomEvent('tb-track-change', { detail: { trackId: track.id } }));
   }
 
-  /* ── Crossfade control ──────────────────────────────────────────────── */
+  function _updateBitPerfectBadge() {
+    const badge = document.getElementById('player-bitperfect');
+    if (!badge) return;
+    const show = _mpvAvailable && _exclusiveMode && !!currentTrack();
+    badge.style.display = show ? '' : 'none';
+  }
+
+  /* ── Crossfade control (Web Audio mode only; mpv uses gapless) ─────── */
   function setXfade(value) {
+    if (_mpvAvailable) return;  // mpv: gapless, no crossfade slider
     ps.crossfadeDuration = Math.max(0, Math.min(12, parseInt(value, 10)));
     try { localStorage.setItem('tb_xfade', ps.crossfadeDuration); } catch (_) {}
     _updateXfadeUI();
@@ -1437,8 +1787,16 @@ const Player = (function () {
   function _updateXfadeUI() {
     const valEl    = document.getElementById('xfade-val');
     const sliderEl = document.getElementById('xfade-slider');
-    if (valEl)    valEl.textContent = ps.crossfadeDuration === 0 ? 'Off' : `${ps.crossfadeDuration}s`;
-    if (sliderEl) sliderEl.value   = ps.crossfadeDuration;
+    const rowEl    = document.getElementById('xfade-row');
+    if (_mpvAvailable) {
+      // Hide crossfade row; mpv handles gapless natively
+      if (rowEl)    rowEl.style.display = 'none';
+      if (valEl)    valEl.textContent   = 'Gapless';
+      return;
+    }
+    if (rowEl)    rowEl.style.display = '';
+    if (valEl)    valEl.textContent   = ps.crossfadeDuration === 0 ? 'Off' : `${ps.crossfadeDuration}s`;
+    if (sliderEl) sliderEl.value      = ps.crossfadeDuration;
   }
 
   function _updatePlayBtn() {
@@ -1525,6 +1883,7 @@ const Player = (function () {
   }
 
   function getStateJSON() {
+    const seekTime = _mpvAvailable ? _mpvPosition : (_audio.currentTime || 0);
     return JSON.stringify({
       queue:        ps.queue,
       queueIdx:     ps.queueIdx,
@@ -1535,7 +1894,7 @@ const Player = (function () {
       muted:        ps.muted,
       peqIem:       ps.activePeqIemId     || '',
       peqProfile:   ps.activePeqProfileId || '',
-      seekTime:     _audio.currentTime    || 0,
+      seekTime,
     });
   }
 
@@ -1574,7 +1933,7 @@ const Player = (function () {
       localStorage.setItem(_LS.muted,      ps.muted);
       localStorage.setItem(_LS.peqIem,     ps.activePeqIemId     || '');
       localStorage.setItem(_LS.peqProfile, ps.activePeqProfileId || '');
-      localStorage.setItem(_LS.seekTime,   _audio.currentTime    || 0);
+      localStorage.setItem(_LS.seekTime,   _mpvAvailable ? _mpvPosition : (_audio.currentTime || 0));
     } catch (_) { /* quota exceeded — ignore */ }
     _scheduleRemoteSave();
   }
@@ -1631,16 +1990,22 @@ const Player = (function () {
   }
 
   async function init() {
-    // 1. Fast path — try localStorage (synchronous)
+    // 1. Detect mpv backend availability + exclusive mode setting
+    try {
+      const cap = await fetch('/api/player/capabilities').then(r => r.json());
+      _mpvAvailable  = !!(cap && cap.mpv_available);
+      _exclusiveMode = !!(cap && cap.exclusive_mode);
+    } catch (_) { _mpvAvailable = false; _exclusiveMode = false; }
+
+    // 2. Fast path — try localStorage (synchronous)
     _restoreState();
     let seekTime = parseFloat(localStorage.getItem(_LS.seekTime) || '0');
 
-    // 2. Fetch server state (authoritative — survives WKWebView ephemeral localStorage)
+    // 3. Fetch server state (authoritative — survives WKWebView ephemeral localStorage)
     try {
       const res = await fetch('/api/player/state');
       if (res.ok) {
         const sv = await res.json();
-        // Server wins when it has a queue (localStorage may be empty in WKWebView)
         if (sv && Array.isArray(sv.queue) && sv.queue.length > 0) {
           seekTime = _applyRestoredState(sv);
         }
@@ -1654,48 +2019,68 @@ const Player = (function () {
       ps.activePeqProfileId = _CUSTOM_EQ_ID;
     }
 
-    // 3. Apply volume before audio context (HTMLAudioElement fallback)
-    _audioA.volume = ps.muted ? 0 : ps.volume;
-    _audioB.volume = 0;
+    // 4. Apply volume
+    if (_mpvAvailable) {
+      _mpvCmd('volume', { volume: ps.muted ? 0 : ps.volume });
+    } else {
+      _audioA.volume = ps.muted ? 0 : ps.volume;
+      _audioB.volume = 0;
+    }
 
-    // 4. Sync UI to restored state
+    // 5. Sync UI to restored state
     _updateVolumeUI();
     _updateShuffleBtn();
     _updateRepeatBtn();
     _updatePlayBtn();
     _updatePeqBtn();
 
-    // 5. Restore track display (no autoplay)
+    // 6. Restore track display (no autoplay)
     const track = currentTrack();
     if (track) {
       _updateTrackUI(track);
-      _audio.src = `/api/stream/${track.id}`;
-      _audio.load();
+      if (!_mpvAvailable) {
+        // Web Audio fallback: pre-load into HTMLAudioElement (no play)
+        _audio.src = `/api/stream/${track.id}`;
+        _audio.load();
 
-      if (seekTime > 0) {
-        const _applySeek = () => {
-          if (isFinite(_audio.duration) && seekTime < _audio.duration) {
-            _seekRestored = true;
-            setTimeout(() => { _seekRestored = false; }, 2000);
-            _audio.currentTime = seekTime;
-            const pct    = seekTime / _audio.duration;
-            const fillEl = document.getElementById('player-progress-fill');
-            const curEl  = document.getElementById('player-current-time');
-            const seekEl = document.getElementById('player-seek');
-            if (fillEl) fillEl.style.width  = (pct * 100) + '%';
-            if (curEl)  curEl.textContent   = _fmtTime(seekTime);
-            if (seekEl) seekEl.value        = pct * 1000;
-          }
-        };
-        if (_audio.readyState >= 1) _applySeek();
-        else _audio.addEventListener('loadedmetadata', _applySeek, { once: true });
+        if (seekTime > 0) {
+          const _applySeek = () => {
+            if (isFinite(_audio.duration) && seekTime < _audio.duration) {
+              _seekRestored = true;
+              setTimeout(() => { _seekRestored = false; }, 2000);
+              _audio.currentTime = seekTime;
+              const pct    = seekTime / _audio.duration;
+              const fillEl = document.getElementById('player-progress-fill');
+              const curEl  = document.getElementById('player-current-time');
+              const seekEl = document.getElementById('player-seek');
+              if (fillEl) fillEl.style.width  = (pct * 100) + '%';
+              if (curEl)  curEl.textContent   = _fmtTime(seekTime);
+              if (seekEl) seekEl.value        = pct * 1000;
+            }
+          };
+          if (_audio.readyState >= 1) _applySeek();
+          else _audio.addEventListener('loadedmetadata', _applySeek, { once: true });
+        }
+      } else if (seekTime > 0) {
+        // mpv mode: show saved seek position in the UI (no autoplay)
+        const curEl  = document.getElementById('player-current-time');
+        if (curEl) curEl.textContent = _fmtTime(seekTime);
       }
     } else {
       _updateTrackUI(null);
     }
 
-    if (restoredCustom.enabled && _ctx) {
-      _applyCustomPeq(restoredCustom);
+    if (restoredCustom.enabled) {
+      if (_mpvAvailable) {
+        _applyCustomPeq(restoredCustom);
+      } else if (_ctx) {
+        _applyCustomPeq(restoredCustom);
+      }
+    }
+
+    // 7. Start mpv polling loop
+    if (_mpvAvailable) {
+      _startPolling();
     }
 
     // 6. Popover / queue outside-click handler
@@ -1706,6 +2091,12 @@ const Player = (function () {
           && !e.target.closest('#player-peq-btn')) {
         ps.peqOpen = false;
         _setPeqPopoverOpen(false);
+      }
+      // Close output device popover
+      if (_outputPopoverOpen
+          && !e.target.closest('#output-popover')
+          && !e.target.closest('#player-output-btn')) {
+        _closeOutputPopover();
       }
       // Close queue drawer — IMPORTANT: skip if target is no longer in the DOM
       // (happens when _renderQueue() re-builds innerHTML while the click is propagating)
@@ -1742,9 +2133,10 @@ const Player = (function () {
     // 9. Periodic server save — every 10 s while app is open (belt-and-suspenders)
     setInterval(_saveStateToServer, 10000);
 
-    // 10. Final save on page close
+    // Final save on page close
     window.addEventListener('beforeunload', () => {
-      try { localStorage.setItem(_LS.seekTime, _audio.currentTime || 0); } catch (_) {}
+      const seekPos = _mpvAvailable ? _mpvPosition : (_audio.currentTime || 0);
+      try { localStorage.setItem(_LS.seekTime, seekPos); } catch (_) {}
       // Synchronous XHR blocks until Flask responds — more reliable than sendBeacon
       // in WKWebView where the server and page die simultaneously on os._exit(0).
       // (Python's closing handler writes the file directly via evaluate_js, so this
@@ -1848,6 +2240,41 @@ const Player = (function () {
     setCustomPeqEnabled: _setCustomPeqEnabled,
     // Crossfade
     setXfade,
+    // Output device popover
+    toggleOutputPopover,
+    selectOutputDevice,
+    updateOutputDevice,
+    // Bit-perfect badge sync (called by app.js when Settings toggle changes)
+    updateExclusiveMode(enabled) {
+      _exclusiveMode = !!enabled;
+      _updateBitPerfectBadge();
+    },
+    // Resume a specific track at a position on the new mpv instance after
+    // exclusive mode toggle (old instance was torn down, new one is lazy-created)
+    async resumeAt(trackId, position, shouldPlay = true) {
+      if (!_mpvAvailable) return;
+      if (!trackId) return;
+      if (!shouldPlay) {
+        // Keep UI anchored to the resumed track/position without unpausing playback.
+        const t = getTrack(trackId);
+        if (t) {
+          const idx = ps.queue.findIndex(x => x && x.id === trackId);
+          if (idx >= 0) ps.queueIdx = idx;
+          _updateTrackUI(t);
+          _highlightActiveRow();
+        }
+        ps.isPlaying = false;
+        _updatePlayBtn();
+        const pos = Math.max(0, Number(position) || 0);
+        _mpvPosition = pos;
+        const curEl = document.getElementById('player-current-time');
+        if (curEl) curEl.textContent = _fmtTime(pos);
+        return;
+      }
+      // Give mpv a moment to fully terminate before sending loadfile
+      await new Promise(r => setTimeout(r, 300));
+      await _mpvCmd('play', { track_id: trackId, position: position || 0 });
+    },
     // State snapshot (called by tunebridge_gui.py via evaluate_js on window close)
     getStateJSON,
     // Read-only getters

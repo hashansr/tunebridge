@@ -195,7 +195,29 @@
       "Bash(grep -n \"send_file.*index\\\\|def index\\\\|@app.route.*/$\\\\|@app.route.*''/''\\)\" \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/app.py\")",
       "Bash(chmod +x \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/tunebridge.sh\")",
       "Bash(ls -la \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/\"*.sh \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/ios/setup.sh\")",
-      "Bash(bash tunebridge.sh help)"
+      "Bash(bash tunebridge.sh help)",
+      "Bash(grep -E \"\\\\.py$|\\\\.js$|\\\\.css$|\\\\.html$|\\\\.c$|\\\\.sh$|\\\\.txt$\")",
+      "Bash(mpv --version)",
+      "Read(//opt/homebrew/lib/**)",
+      "Bash(ls /usr/local/lib/libmpv*)",
+      "Bash(curl -s http://localhost:5001/api/player/capabilities)",
+      "Bash(curl -s http://localhost:5002/api/player/capabilities)",
+      "Bash(curl -s \"http://localhost:5002/api/player/mpv_state\")",
+      "Bash(curl -s http://localhost:5002/)",
+      "Bash(curl -s http://localhost:5002/static/player.js)",
+      "Bash(pip list:*)",
+      "Bash(find \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/venv\" -name \"mpv.py\" -exec head -80 {})",
+      "Bash(find '/Users/hashan/Documents/Claude/Projects/Playlist Creator/venv' -name mpv*.py -o -name mpv*.so)",
+      "Bash(rm -rf \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/.build-venv\")",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(ffprobe \"/Volumes/Storage/Music/FLAC/Trivium/In The Court Of The Dragon/05. A Crisis Of Revelation.flac\")",
+      "Bash(mpv --no-video --audio-exclusive=yes --log-level=info \"/Volumes/Storage/Music/FLAC/Trivium/In The Court Of The Dragon/05. A Crisis Of Revelation.flac\")",
+      "Bash(find .build-venv -name \".DS_Store\" -delete)",
+      "Bash(rm -rf .build-venv)",
+      "Bash(find .build-venv -name .DS_Store -delete)",
+      "Bash(curl -sv http://localhost:5001/api/player/audio_devices)",
+      "Bash(pkill -f 'python app.py')",
+      "Bash(kill 61372)"
     ]
   }
 }

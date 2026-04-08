@@ -11,6 +11,36 @@ try:
     HAS_WAITRESS = True
 except ImportError:
     HAS_WAITRESS = False
+
+try:
+    # ctypes.util.find_library('mpv') returns None on macOS when Homebrew's
+    # /opt/homebrew/lib is not in the default dyld search path (common on
+    # Apple Silicon).  Patch find_library before importing python-mpv so it
+    # falls back to the known Homebrew / MacPorts locations.
+    import ctypes.util as _ctypes_util
+    _orig_find_library = _ctypes_util.find_library
+    def _patched_find_library(name):
+        result = _orig_find_library(name)
+        if result is None and name == 'mpv':
+            import os as _os
+            for _p in ('/opt/homebrew/lib/libmpv.dylib',
+                       '/usr/local/lib/libmpv.dylib'):
+                if _os.path.isfile(_p):
+                    return _p
+        return result
+    _ctypes_util.find_library = _patched_find_library
+    import mpv as _mpv_lib
+    MPV_AVAILABLE = True
+except (ImportError, OSError):
+    # ImportError: python-mpv package not installed
+    # OSError: libmpv dylib not found (mpv not installed via brew)
+    MPV_AVAILABLE = False
+finally:
+    # Restore original find_library regardless of outcome
+    try:
+        _ctypes_util.find_library = _orig_find_library
+    except NameError:
+        pass
 import uuid
 import threading
 import time
@@ -77,6 +107,8 @@ DEFAULT_SETTINGS = {
     'ap80_mount':       '/Volumes/AP80',
     'poweramp_prefix':  '',   # internal device path, e.g. /storage/sdcard0
     'ap80_prefix':      '',   # internal device path, e.g. /mnt/sdcard
+    'exclusive_mode':   True,   # CoreAudio exclusive (bit-perfect, requires mpv)
+    'audio_device':     'auto', # mpv audio device name; 'auto' = system default
 }
 
 _DEFAULT_GEAR_PROFILES = {
@@ -1861,6 +1893,436 @@ def health():
         # started by the current process (not a stale older process on the port).
         'instance_token': os.environ.get('TUNEBRIDGE_INSTANCE_TOKEN'),
         'pid': os.getpid(),
+    })
+
+
+# ── mpv audio engine ──────────────────────────────────────────────────────
+# Provides bit-perfect CoreAudio output via libmpv.
+# Requires: brew install mpv  (installs libmpv.dylib)
+
+_mpv_instance         = None   # mpv.MPV singleton
+_mpv_lock             = threading.Lock()
+_mpv_track_ended      = False  # set by end-file(eof) event, consumed by /mpv_state
+_mpv_current_track_id = None
+_mpv_load_time        = 0.0    # epoch timestamp of last player_play() call (grace period)
+_mpv_last_volume      = 1.0    # logical 0.0–1.0 volume persisted across reinit
+_mpv_last_af          = ''     # last applied lavfi chain (PEQ) persisted across reinit
+
+
+def _get_mpv():
+    """Return the mpv.MPV singleton, creating it lazily (thread-safe)."""
+    global _mpv_instance
+    if not MPV_AVAILABLE:
+        return None
+    if _mpv_instance is None:
+        with _mpv_lock:
+            if _mpv_instance is None:
+                _create_mpv_instance()
+    return _mpv_instance
+
+
+def _create_mpv_instance():
+    """Create a new mpv.MPV instance with current settings. Must be called inside _mpv_lock."""
+    global _mpv_instance, _mpv_track_ended, _mpv_last_volume, _mpv_last_af
+    settings = load_settings()
+    exclusive = settings.get('exclusive_mode', False)
+    audio_device = settings.get('audio_device', 'auto') or 'auto'
+    player = _mpv_lib.MPV(
+        audio_exclusive='yes' if exclusive else 'no',
+        audio_device=audio_device,
+        video='no',
+        # Log output silenced — uncomment for debugging:
+        # log_handler=print,
+        # loglevel='info',
+    )
+
+    # Use the end-file EVENT to detect natural track endings.
+    # event.as_dict() returns e.g. {'reason': b'eof', 'playlist_entry_id': 1}
+    # Reason values (bytes):
+    #   b'eof'  — file played to completion naturally  → advance queue ✓
+    #   b'stop' — stopped by loadfile/replace or stop() → do NOT advance ✗
+    #   b'quit' / b'error' / b'redirect' / b'unknown'  → do NOT advance ✗
+    # Note: MpvEvent has no .get() or .reason — must use event.as_dict().
+    @player.event_callback('end-file')
+    def _on_end_file(event):
+        global _mpv_track_ended
+        try:
+            reason = event.as_dict().get('reason')
+            # python-mpv returns bytes (b'eof', b'stop', …)
+            if reason in (b'eof', 'eof'):
+                _mpv_track_ended = True
+        except Exception:
+            pass
+
+    _mpv_instance = player
+    # Reapply runtime state after any reinit so audio behavior is consistent.
+    try:
+        player.volume = max(0.0, min(1.0, float(_mpv_last_volume))) * 100.0
+    except Exception:
+        pass
+    try:
+        player.af = _mpv_last_af or ''
+    except Exception:
+        pass
+
+
+def _resolve_track_path_mpv(track_id):
+    """Return the absolute filesystem path for a track_id, or None if not found."""
+    with library_lock:
+        track = next((t for t in library if t['id'] == track_id), None)
+    if not track:
+        return None
+    return str(get_music_base() / track['path'])
+
+
+def _get_track_sample_rate(track_id):
+    """Return the sample rate (Hz) for a track_id, or 0 if unknown."""
+    with library_lock:
+        track = next((t for t in library if t['id'] == track_id), None)
+    return int(track.get('sample_rate') or 0) if track else 0
+
+
+def _mpv_safe_reinit():
+    """Destroy and recreate the mpv singleton — safe for cross-thread use.
+
+    Used when CoreAudio exclusive mode must fully release then reacquire
+    the hardware lock (e.g. sample-rate change between tracks).
+
+    Safety strategy:
+      1. Under _mpv_lock: set _mpv_instance = None, then create new instance.
+         After the lock is released every new _get_mpv() call sees the fresh
+         instance — no caller can accidentally use the old one.
+      2. Terminate the old instance AFTER releasing the lock so mpv's own
+         event thread can exit without deadlocking on the lock.
+      3. player_mpv_state() wraps all property reads in try/except, so any
+         thread that already held a local reference to the old instance will
+         just get a safe idle response rather than crashing.
+    """
+    global _mpv_instance
+    old_instance = None
+    with _mpv_lock:
+        old_instance = _mpv_instance
+        _mpv_instance = None          # null first — callers now wait on lock
+        _create_mpv_instance()        # sets _mpv_instance = fresh player
+    # Terminate old outside the lock so mpv's event thread can exit cleanly
+    if old_instance is not None:
+        try:
+            old_instance.terminate()
+        except Exception:
+            pass
+
+
+def _build_lavfi_peq(preamp_db, filters):
+    """Translate an APO/AutoEQ PEQ profile into an mpv lavfi audio filter string."""
+    parts = []
+    preamp = float(preamp_db or 0)
+    if abs(preamp) > 0.01:
+        parts.append(f'volume={preamp}dB')
+    for f in (filters or []):
+        if not f.get('enabled', True):
+            continue
+        t   = str(f.get('type', 'PK')).upper()
+        fc  = max(20.0, min(20000.0, float(f.get('fc',   1000))))
+        g   = float(f.get('gain', 0))
+        q   = max(0.1,  min(30.0,  float(f.get('q',     1.0))))
+        if t in ('PK', 'PEQ'):
+            parts.append(f'equalizer=f={fc}:width_type=q:width={q}:g={g}')
+        elif t in ('LSC', 'LS', 'LSQ'):
+            parts.append(f'lowshelf=f={fc}:width_type=s:width=1:g={g}')
+        elif t in ('HSC', 'HS', 'HSQ'):
+            parts.append(f'highshelf=f={fc}:width_type=s:width=1:g={g}')
+        elif t in ('LPQ', 'LP'):
+            parts.append(f'lowpass=f={fc}:poles=2')
+        elif t in ('HPQ', 'HP'):
+            parts.append(f'highpass=f={fc}:poles=2')
+        elif t in ('NO', 'NOTCH'):
+            parts.append(f'bandreject=f={fc}:width_type=q:width={q}')
+        # AP (allpass) — no magnitude effect, skip
+    if not parts:
+        return ''
+    return 'lavfi=[' + ','.join(parts) + ']'
+
+
+@app.route('/api/player/capabilities')
+def player_capabilities():
+    """Report whether the mpv backend is available and current exclusive-mode setting."""
+    settings = load_settings()
+    version = None
+    effective_audio_device = settings.get('audio_device', 'auto')
+    if MPV_AVAILABLE:
+        try:
+            p = _get_mpv()
+            version = p.mpv_version if p else None
+            if p is not None:
+                effective_audio_device = p.audio_device or effective_audio_device
+        except Exception:
+            pass
+    return jsonify({
+        'mpv_available':  MPV_AVAILABLE,
+        'mpv_version':    version,
+        'exclusive_mode': settings.get('exclusive_mode', False),
+        'audio_device':   effective_audio_device,
+    })
+
+
+@app.route('/api/player/audio_devices')
+def player_audio_devices():
+    """Return the list of audio output devices mpv can see."""
+    if not MPV_AVAILABLE:
+        return jsonify({'devices': [{'name': 'auto', 'description': 'Autoselect device'}]})
+    try:
+        p = _get_mpv()
+        devices = list(p.audio_device_list or [])
+        # Keep only coreaudio/* and auto; skip avfoundation duplicates
+        filtered = [d for d in devices
+                    if d.get('name') == 'auto' or
+                       str(d.get('name', '')).startswith('coreaudio/')]
+        return jsonify({'devices': filtered if filtered else devices})
+    except Exception as e:
+        return jsonify({'devices': [{'name': 'auto', 'description': 'Autoselect device'}],
+                        'error': str(e)})
+
+
+@app.route('/api/player/audio_device', methods=['POST'])
+def player_set_audio_device():
+    """Set the audio output device. Reinitialises the mpv instance to apply."""
+    data   = request.get_json(force=True) or {}
+    requested_device = data.get('device', 'auto') or 'auto'
+    device = requested_device
+    if MPV_AVAILABLE:
+        # Validate against current visible device names; if stale/missing fallback to auto.
+        try:
+            p = _get_mpv()
+            names = {str(d.get('name', '')) for d in (p.audio_device_list or [])}
+            names.add('auto')
+            if device not in names:
+                device = 'auto'
+        except Exception:
+            pass
+    settings = load_settings()
+    settings['audio_device'] = device
+    save_settings(settings)
+    # Capture position so frontend can resume
+    resume_track_id = _mpv_current_track_id
+    resume_position = 0.0
+    was_playing     = False
+    if MPV_AVAILABLE:
+        try:
+            p = _get_mpv()
+            pos = p.time_pos
+            if pos is not None:
+                resume_position = float(pos)
+            was_playing = (not bool(p.pause)) and (not bool(p.idle_active)) and (pos is not None)
+        except Exception:
+            pass
+        _mpv_safe_reinit()
+    effective_device = device
+    if MPV_AVAILABLE:
+        try:
+            p2 = _get_mpv()
+            effective_device = p2.audio_device or device
+        except Exception:
+            pass
+    return jsonify({
+        'ok':              True,
+        'requested_device': requested_device,
+        'audio_device':    effective_device,
+        'resume_track_id': resume_track_id,
+        'resume_position': resume_position,
+        'was_playing':     was_playing,
+    })
+
+
+@app.route('/api/player/play', methods=['POST'])
+def player_play():
+    """Start playback of a track by ID. Optional: position (seconds) to start from."""
+    global _mpv_current_track_id, _mpv_track_ended, _mpv_load_time
+    if not MPV_AVAILABLE:
+        return jsonify({'error': 'mpv not available — run: brew install mpv'}), 503
+    data     = request.get_json(force=True) or {}
+    track_id = data.get('track_id')
+    if not track_id:
+        return jsonify({'error': 'track_id required'}), 400
+    path = _resolve_track_path_mpv(track_id)
+    if not path:
+        return jsonify({'error': 'track not found'}), 404
+    position = float(data.get('position') or 0)
+
+    _mpv_track_ended = False        # clear before loading new file
+    _mpv_load_time   = time.time()  # start grace period (suppresses false end-file)
+
+    # CoreAudio exclusive mode holds a hardware lock at the current sample rate.
+    # Neither loadfile-replace nor stop-then-loadfile fully releases that lock
+    # before reopening — the device hasn't settled and the reinit silently fails.
+    # Only a full destroy+recreate of the mpv instance guarantees the lock is
+    # released before we open at the new rate.  _mpv_safe_reinit() does this
+    # without the crash risk: it nulls _mpv_instance under the lock (so new
+    # callers get the fresh instance), creates the new one, then terminates the
+    # old one after releasing the lock.  player_mpv_state() has try/except so
+    # any thread still holding the old reference gets a safe idle response.
+    # NOTE: read old track id BEFORE overwriting _mpv_current_track_id.
+    settings = load_settings()
+    if settings.get('exclusive_mode') and _mpv_current_track_id:
+        new_sr = _get_track_sample_rate(track_id)
+        old_sr = _get_track_sample_rate(_mpv_current_track_id)  # still the OLD id here
+        if new_sr and old_sr and new_sr != old_sr:
+            _mpv_safe_reinit()
+
+    _mpv_current_track_id = track_id  # update AFTER sample-rate check
+
+    # Fetch p AFTER potential reinit so we always talk to the live instance
+    p = _get_mpv()
+    if position > 0:
+        p.command('loadfile', path, 'replace', f'start={position}')
+    else:
+        p.command('loadfile', path, 'replace')
+    p.pause = False
+    return jsonify({'ok': True})
+
+
+@app.route('/api/player/pause', methods=['POST'])
+def player_pause():
+    """Toggle pause, or set pause state explicitly via {paused: true/false}."""
+    if not MPV_AVAILABLE:
+        return jsonify({'error': 'mpv not available'}), 503
+    data = request.get_json(force=True) or {}
+    p = _get_mpv()
+    if 'paused' in data:
+        p.pause = bool(data['paused'])
+    else:
+        p.pause = not p.pause
+    return jsonify({'ok': True, 'paused': p.pause})
+
+
+@app.route('/api/player/seek', methods=['POST'])
+def player_seek():
+    """Seek to an absolute position in seconds."""
+    if not MPV_AVAILABLE:
+        return jsonify({'error': 'mpv not available'}), 503
+    data     = request.get_json(force=True) or {}
+    position = float(data.get('position', 0))
+    p = _get_mpv()
+    try:
+        p.seek(position, 'absolute')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    return jsonify({'ok': True})
+
+
+@app.route('/api/player/volume', methods=['POST'])
+def player_volume():
+    """Set playback volume. {volume: 0.0–1.0}"""
+    global _mpv_last_volume
+    if not MPV_AVAILABLE:
+        return jsonify({'error': 'mpv not available'}), 503
+    data   = request.get_json(force=True) or {}
+    volume = max(0.0, min(1.0, float(data.get('volume', 1.0))))
+    _mpv_last_volume = volume
+    p = _get_mpv()
+    p.volume = volume * 100   # mpv uses 0–100 scale
+    return jsonify({'ok': True})
+
+
+@app.route('/api/player/stop', methods=['POST'])
+def player_stop():
+    """Stop playback."""
+    global _mpv_current_track_id
+    if not MPV_AVAILABLE:
+        return jsonify({'error': 'mpv not available'}), 503
+    _mpv_current_track_id = None
+    _get_mpv().stop()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/player/peq', methods=['POST'])
+def player_peq():
+    """Apply a PEQ profile to mpv. {preamp_db: float, filters: [...]}"""
+    global _mpv_last_af
+    if not MPV_AVAILABLE:
+        return jsonify({'error': 'mpv not available'}), 503
+    data      = request.get_json(force=True) or {}
+    preamp_db = data.get('preamp_db', 0)
+    filters   = data.get('filters', [])
+    p  = _get_mpv()
+    af = _build_lavfi_peq(preamp_db, filters)
+    _mpv_last_af = af if af else ''
+    try:
+        p.af = af if af else ''
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    return jsonify({'ok': True, 'af': af})
+
+
+@app.route('/api/player/mpv_state')
+def player_mpv_state():
+    """Live playback state: position, duration, playing, track_ended flag."""
+    global _mpv_track_ended
+    if not MPV_AVAILABLE:
+        return jsonify({'available': False})
+    p = _get_mpv()
+    try:
+        position = p.playback_time   # None when idle
+        duration = p.duration        # None when idle
+        paused   = p.pause
+        idle     = p.idle_active
+    except Exception:
+        # mpv handle may be briefly invalid during instance recreation
+        return jsonify({'available': True, 'position': 0.0, 'duration': 0.0,
+                        'playing': False, 'paused': True, 'idle': True,
+                        'track_ended': False, 'track_id': _mpv_current_track_id})
+    ended    = _mpv_track_ended
+    if ended:
+        # Grace period: discard any end-file event that fires within 750 ms of
+        # player_play() — these are false positives from loadfile-replace stopping
+        # the previous track, not genuine natural track endings.
+        if (time.time() - _mpv_load_time) < 0.75:
+            ended = False
+            _mpv_track_ended = False  # discard
+        else:
+            _mpv_track_ended = False  # consume the one-shot flag
+    return jsonify({
+        'available':   True,
+        'position':    position if position is not None else 0.0,
+        'duration':    duration if duration is not None else 0.0,
+        'playing':     (not paused) and (not idle) and (position is not None),
+        'paused':      paused,
+        'idle':        idle,
+        'track_ended': ended,
+        'track_id':    _mpv_current_track_id,
+    })
+
+
+@app.route('/api/player/exclusive', methods=['POST'])
+def player_exclusive():
+    """Toggle CoreAudio exclusive mode. Restarts mpv instance to apply."""
+    global _mpv_instance
+    data    = request.get_json(force=True) or {}
+    enabled = bool(data.get('enabled', False))
+    settings = load_settings()
+    settings['exclusive_mode'] = enabled
+    save_settings(settings)
+    # Capture playback state before tearing down so the frontend can resume.
+    # terminate() does not set eof-reached, so no track-end signal is emitted.
+    resume_track_id = _mpv_current_track_id
+    resume_position = 0.0
+    was_playing     = False
+    with _mpv_lock:
+        if _mpv_instance is not None:
+            try:
+                pos = _mpv_instance.time_pos
+                if pos is not None:
+                    resume_position = float(pos)
+                was_playing = (not bool(_mpv_instance.pause)) and (not bool(_mpv_instance.idle_active)) and (pos is not None)
+                _mpv_instance.terminate()
+            except Exception:
+                pass
+            _mpv_instance = None
+    return jsonify({
+        'ok':              True,
+        'exclusive_mode':  enabled,
+        'resume_track_id': resume_track_id,
+        'resume_position': resume_position,
+        'was_playing':     was_playing,
     })
 
 

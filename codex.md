@@ -2785,3 +2785,47 @@ Observed working tree at time of writing (not touched by this codex update):
 
 - Packaging/distribution note:
   - Latest local `distro/TuneBridge-latest.dmg` included in branch updates.
+
+### 2026-04-08 (mpv output-device reliability, playback-state preservation, and Settings playback UX refinements)
+- Stabilized mpv reinitialization behavior:
+  - Persist and reapply runtime mpv state across reinit paths:
+    - volume (`_mpv_last_volume`)
+    - active PEQ/lavfi chain (`_mpv_last_af`)
+  - Prevents audible regressions when reinitializing for sample-rate changes, exclusive-mode toggles, and output-device switches.
+
+- Preserved play/pause intent across device/exclusive changes:
+  - Backend now returns `was_playing` with:
+    - `POST /api/player/audio_device`
+    - `POST /api/player/exclusive`
+  - Frontend resume logic now respects this flag so paused sessions remain paused after reinit.
+
+- Hardened output-device selection and effective-device reporting:
+  - Fixed player-popover device selection binding bug by switching to `data-device` + dataset-based click handling.
+  - Added backend validation of requested device names against current mpv-visible device list; falls back to `auto` when unavailable.
+  - `player_capabilities` now reports effective runtime `audio_device` from mpv (when available), not only saved settings.
+  - `player_set_audio_device` response now includes:
+    - `requested_device`
+    - effective `audio_device`
+  - Frontend now syncs popover/settings selection from effective applied device and surfaces fallback in toast.
+
+- Fixed player transport UI state while output popover is open:
+  - In mpv mode, `_loadTrack()` now updates the play/pause button immediately after setting `ps.isPlaying = true`.
+  - Resolves case where audio starts but button icon remains on play.
+
+- Playback settings UI reorganization and polish:
+  - Moved Playback controls out of nested `App` subsection into a standalone **Playback** settings section.
+  - Kept **App** section focused on restart/reload action.
+  - Refined row layout with consistent content/control alignment and responsive behavior.
+  - Improved hint text measure and spacing for readability.
+
+- Player output popover active-state visuals:
+  - Active output now indicated by a green status dot with subtle glow.
+  - Active row text color normalized for readability against the current visual theme.
+
+- Files updated:
+  - `app.py`
+  - `static/app.js`
+  - `static/index.html`
+  - `static/player.js`
+  - `static/style.css`
+  - `codex.md`
