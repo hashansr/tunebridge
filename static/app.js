@@ -511,13 +511,16 @@ async function loadArtists() {
       <div class="artist-card" ${anchor} data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
         <div class="artist-thumb">
           ${thumbImg(a.artwork_key, 120, '6px')}
+          <div class="card-thumb-overlay">
+            <button class="card-play-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.playArtistCard(this.dataset.artist)" title="Play all songs">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+            </button>
+          </div>
+          ${_favToggleBtn('artists', _normArtistId(a.name), 'card-fav-btn')}
         </div>
         <div class="artist-name" title="${esc(a.name)}">${esc(a.name)}</div>
         <div class="artist-meta">${a.album_count} album${a.album_count !== 1 ? 's' : ''} · ${a.track_count} songs</div>
-        <div class="artist-card-overlay">
-          ${_favToggleBtn('artists', _normArtistId(a.name), 'card-fav-btn')}
-          <button class="card-add-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.addAllArtistSongs(this.dataset.artist,event)" title="Add all songs to playlist">+</button>
-        </div>
+        <button class="card-more-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.showArtistCtxMenu(event,this.dataset.artist)" title="More options">⋮</button>
       </div>
     `;
   }).join('');
@@ -656,17 +659,17 @@ async function loadAlbums(artistFilter = null) {
         <div class="album-card" ${anchor} data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
           <div class="album-thumb">
             ${thumbImg(al.artwork_key, 160, '6px')}
-            <div class="album-thumb-overlay">
-              ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn')}
+            <div class="card-thumb-overlay">
               <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
               </button>
-              <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
             </div>
+            ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn')}
           </div>
           <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
           <div class="album-artist">${esc(al.artist)}</div>
           ${al.year ? `<div class="album-year">${esc(al.year)}</div>` : ''}
+          <button class="card-more-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)" title="More options">⋮</button>
         </div>
       `;
     }).join('');
@@ -676,17 +679,17 @@ async function loadAlbums(artistFilter = null) {
       <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
         <div class="album-thumb">
           ${thumbImg(al.artwork_key, 160, '6px')}
-          <div class="album-thumb-overlay">
-            ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn')}
+          <div class="card-thumb-overlay">
             <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
             </button>
-            <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
           </div>
+          ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn')}
         </div>
         <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
         ${!artistFilter ? `<div class="album-artist">${esc(al.artist)}</div>` : ''}
         ${al.year ? `<div class="album-year">${esc(al.year)}</div>` : ''}
+        <button class="card-more-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)" title="More options">⋮</button>
       </div>
     `).join('');
   }
@@ -1481,6 +1484,13 @@ function showTrackCtxMenu(e, trackId) {
   const track = Player.getTrack(trackId);
   if (!track) return;
   _showCtxMenu(e.clientX, e.clientY, [track], track.title, { type: 'songs', id: String(trackId) });
+}
+
+async function playArtistCard(artistName) {
+  try {
+    const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artistName)}`);
+    if (tracks && tracks.length) Player.playAll(tracks);
+  } catch (_) {}
 }
 
 async function showArtistCtxMenu(e, artistName) {
@@ -2514,12 +2524,18 @@ function _renderFavArtistCards(rows) {
   }
   grid.innerHTML = rows.map(a => `
     <div class="artist-card" data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
-      <div class="artist-thumb">${thumbImg(a.artwork_key, 120, '6px')}</div>
-      <div class="artist-name" title="${esc(a.name)}">${esc(a.name)}</div>
-      <div class="artist-meta">${a.album_count} album${a.album_count !== 1 ? 's' : ''} · ${a.track_count} songs</div>
-      <div class="artist-card-overlay">
+      <div class="artist-thumb">
+        ${thumbImg(a.artwork_key, 120, '6px')}
+        <div class="card-thumb-overlay">
+          <button class="card-play-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.playArtistCard(this.dataset.artist)" title="Play all songs">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+          </button>
+        </div>
         ${_favToggleBtn('artists', _normArtistId(a.name), 'card-fav-btn is-fav')}
       </div>
+      <div class="artist-name" title="${esc(a.name)}">${esc(a.name)}</div>
+      <div class="artist-meta">${a.album_count} album${a.album_count !== 1 ? 's' : ''} · ${a.track_count} songs</div>
+      <button class="card-more-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.showArtistCtxMenu(event,this.dataset.artist)" title="More options">⋮</button>
     </div>
   `).join('');
 }
@@ -2568,17 +2584,17 @@ function _renderFavAlbumCards(rows) {
     <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
       <div class="album-thumb">
         ${thumbImg(al.artwork_key, 160, '6px')}
-        <div class="album-thumb-overlay">
-          ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn is-fav')}
+        <div class="card-thumb-overlay">
           <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
           </button>
-          <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
         </div>
+        ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn is-fav')}
       </div>
       <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
       <div class="album-artist">${esc(al.artist)}</div>
       ${al.year ? `<div class="album-year">${esc(al.year)}</div>` : ''}
+      <button class="card-more-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)" title="More options">⋮</button>
     </div>
   `).join('');
 }
@@ -6935,6 +6951,7 @@ const App = {
   removeSongFromFavourites,
   showAddDropdown,
   showTrackCtxMenu,
+  playArtistCard,
   showArtistCtxMenu,
   showAlbumCtxMenu,
   hideCtxMenu,
