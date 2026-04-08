@@ -6666,9 +6666,14 @@ async function runHealthCheck() {
 
   // Library
   const lib = data.library;
-  const libDetail = lib.ok
-    ? `${lib.tracks} tracks · ${lib.cache_age_hours != null ? `cache ${lib.cache_age_hours}h old` : 'no cache'}`
-    : `Path not found`;
+  let libDetail;
+  if (!lib.ok) {
+    libDetail = 'Path not found';
+  } else if (data.database) {
+    libDetail = `${lib.tracks} tracks`;
+  } else {
+    libDetail = `${lib.tracks} tracks · ${lib.cache_age_hours != null ? `cache ${lib.cache_age_hours}h old` : 'no cache'}`;
+  }
   const libHtml = `
     <div class="health-item">
       ${dot(lib.ok)}
@@ -6704,23 +6709,39 @@ async function runHealthCheck() {
       </div>
     </div>`;
 
-  // Data files
-  const df = data.data_files;
-  const dfAll = Object.values(df).every(Boolean);
-  const dfDetail = Object.entries(df).map(([k, ok]) =>
-    `${ok ? '✓' : '✗'} ${k}.json`
-  ).join(' · ');
-  const dfHtml = `
-    <div class="health-item">
-      ${dot(dfAll)}
-      <div class="health-item-body">
-        <div class="health-item-label">Data Files</div>
-        <div class="health-item-detail">${esc(dfDetail)}</div>
-      </div>
-    </div>`;
+  // Database / Data files
+  let storageHtml;
+  if (data.database) {
+    const db = data.database;
+    const dbDetail = db.ok
+      ? `${db.engine} · ${db.size_mb} MB · ${db.tables} tables · v${db.schema_version}`
+      : 'Database not found';
+    storageHtml = `
+      <div class="health-item">
+        ${dot(db.ok)}
+        <div class="health-item-body">
+          <div class="health-item-label">Database</div>
+          <div class="health-item-detail">${esc(dbDetail)}</div>
+        </div>
+      </div>`;
+  } else {
+    const df = data.data_files || {};
+    const dfAll = Object.values(df).every(Boolean);
+    const dfDetail = Object.entries(df).map(([k, ok]) =>
+      `${ok ? '✓' : '✗'} ${k}.json`
+    ).join(' · ');
+    storageHtml = `
+      <div class="health-item">
+        ${dot(dfAll)}
+        <div class="health-item-body">
+          <div class="health-item-label">Data Files</div>
+          <div class="health-item-detail">${esc(dfDetail)}</div>
+        </div>
+      </div>`;
+  }
 
   const grid = document.getElementById('health-grid');
-  if (grid) grid.innerHTML = libHtml + sqHtml + dapHtml + dfHtml;
+  if (grid) grid.innerHTML = libHtml + sqHtml + dapHtml + storageHtml;
 
   const lastRun = document.getElementById('health-last-run');
   if (lastRun) lastRun.textContent = 'Last checked: ' + new Date().toLocaleTimeString();

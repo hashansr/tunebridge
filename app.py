@@ -2650,13 +2650,35 @@ def health_status():
         d['mounted'] = bool(resolved_mount and resolved_mount.exists())
     result['daps'] = [{'id': d['id'], 'name': d['name'], 'mounted': d['mounted']} for d in daps]
 
-    # 4. Data files
-    files = {
-        'playlists': PLAYLIST_FILE,
-        'settings': SETTINGS_FILE,
-        'iems': IEM_FILE,
-    }
-    result['data_files'] = {k: v.exists() and os.access(v, os.R_OK | os.W_OK) for k, v in files.items()}
+    # 4. Database / data storage
+    if USE_SQLITE:
+        db_path = _db.DB_PATH
+        db_ok = db_path and db_path.exists()
+        db_size = None
+        db_tables = 0
+        if db_ok:
+            db_size = round(db_path.stat().st_size / 1024 / 1024, 2)
+            try:
+                conn = _db.get_conn()
+                row = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()
+                db_tables = row[0] if row else 0
+            except Exception:
+                pass
+        result['database'] = {
+            'ok': db_ok,
+            'engine': 'SQLite (WAL)',
+            'path': str(db_path) if db_path else '',
+            'size_mb': db_size,
+            'tables': db_tables,
+            'schema_version': _db.get_schema_version() if db_ok else 0,
+        }
+    else:
+        files = {
+            'playlists': PLAYLIST_FILE,
+            'settings': SETTINGS_FILE,
+            'iems': IEM_FILE,
+        }
+        result['data_files'] = {k: v.exists() and os.access(v, os.R_OK | os.W_OK) for k, v in files.items()}
 
     return jsonify(result)
 
