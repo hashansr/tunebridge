@@ -36,7 +36,7 @@ echo ""
 BACKUP_DIR="data/backups/$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$BACKUP_DIR"
 BACKED_UP=0
-for f in data/playlists.json data/settings.json data/daps.json data/iems.json data/baselines.json; do
+for f in data/playlists.json data/settings.json data/daps.json data/iems.json data/baselines.json data/tunebridge.db; do
   if [ -f "$f" ]; then
     cp "$f" "$BACKUP_DIR/"
     BACKED_UP=$(( BACKED_UP + 1 ))

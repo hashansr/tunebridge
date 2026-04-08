@@ -329,7 +329,7 @@ def _migrate_legacy_data():
     """
     if not _BUNDLED:
         return
-    if PLAYLIST_FILE.exists() or (USE_SQLITE and _db.DB_PATH and _db.DB_PATH.exists()):
+    if PLAYLIST_FILE.exists() or (USE_SQLITE and (DATA_DIR / 'tunebridge.db').exists()):
         return  # already migrated or started fresh — nothing to do
 
     legacy_dir = Path(__file__).parent / 'data'
@@ -3650,7 +3650,8 @@ def load_daps():
         return daps
     if DAP_FILE.exists():
         try:
-            daps = json.load(open(DAP_FILE))
+            with open(DAP_FILE) as _f:
+                daps = json.load(_f)
             changed = False
             for d in daps:
                 if 'storage_type' not in d:
@@ -4109,7 +4110,8 @@ def load_iems():
         return iems
     if IEM_FILE.exists():
         try:
-            iems = json.load(open(IEM_FILE))
+            with open(IEM_FILE) as _f:
+                iems = json.load(_f)
             if not isinstance(iems, list):
                 return []
             dirty = False
@@ -4136,7 +4138,8 @@ def load_baselines():
         return _db.db_load_baselines()
     if BASELINES_FILE.exists():
         try:
-            return json.load(open(BASELINES_FILE))
+            with open(BASELINES_FILE) as _f:
+                return json.load(_f)
         except Exception:
             pass
     return []
