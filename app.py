@@ -6,6 +6,8 @@ import io
 import zipfile
 import subprocess
 import plistlib
+import sqlite3
+import tempfile
 try:
     from waitress import serve as waitress_serve
     HAS_WAITRESS = True
@@ -28,6 +30,9 @@ from mutagen.mp4 import MP4
 import hashlib
 import re
 from PIL import Image
+
+import db as _db
+import migrate as _migrate
 
 _mpv_lib = None
 MPV_AVAILABLE = False
@@ -213,19 +218,8 @@ DATA_DIR = (
     if _BUNDLED else
     Path(__file__).parent / 'data'
 )
-PLAYLIST_FILE = DATA_DIR / 'playlists.json'
-FAVOURITES_FILE = DATA_DIR / 'favourites.json'
-LIBRARY_CACHE = DATA_DIR / 'library.json'
 ARTWORK_DIR = DATA_DIR / 'artwork'
 PLAYLIST_ARTWORK_DIR = DATA_DIR / 'playlist_artwork'
-SETTINGS_FILE = DATA_DIR / 'settings.json'
-DAP_FILE = DATA_DIR / 'daps.json'
-IEM_FILE = DATA_DIR / 'iems.json'
-BASELINES_FILE = DATA_DIR / 'baselines.json'
-PLAYER_STATE_FILE = DATA_DIR / 'player_state.json'
-GEAR_PROFILES_FILE = DATA_DIR / 'gear_profiles.json'
-GENRE_FAMILIES_FILE = DATA_DIR / 'genre_families.json'
-PLAYLIST_GEN_CONFIG_FILE = DATA_DIR / 'playlist_gen_config.json'
 
 DEFAULT_SETTINGS = {
     'library_path':     str(Path.home() / 'Music'),
@@ -310,80 +304,6 @@ def get_music_base():
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 ARTWORK_DIR.mkdir(exist_ok=True)
 PLAYLIST_ARTWORK_DIR.mkdir(exist_ok=True)
-
-
-def _migrate_legacy_data():
-    """
-    One-time migration: copy user data from the old project-relative data/
-    folder into ~/Library/Application Support/TuneBridge/ the first time the
-    bundled app runs.
-
-    Triggered when: running as a bundled .app AND playlists.json is missing
-    from DATA_DIR (i.e. fresh Application Support folder) AND a legacy data/
-    folder exists next to app.py (i.e. the user previously ran from source).
-    """
-    if not _BUNDLED:
-        return
-    if PLAYLIST_FILE.exists():
-        return  # already migrated or started fresh — nothing to do
-
-    legacy_dir = Path(__file__).parent / 'data'
-    if not legacy_dir.is_dir():
-        return  # no legacy data to migrate
-
-    _DATA_FILES = [
-        'playlists.json', 'playlists.bak.json',
-        'settings.json', 'daps.json', 'iems.json', 'baselines.json',
-    ]
-    migrated = []
-    for fname in _DATA_FILES:
-        src = legacy_dir / fname
-        dst = DATA_DIR / fname
-        if src.exists() and not dst.exists():
-            shutil.copy2(src, dst)
-            migrated.append(fname)
-
-    # Migrate playlist artwork (custom covers)
-    legacy_art = legacy_dir / 'playlist_artwork'
-    if legacy_art.is_dir():
-        for item in legacy_art.iterdir():
-            dst = PLAYLIST_ARTWORK_DIR / item.name
-            if not dst.exists():
-                shutil.copy2(item, dst)
-                migrated.append(f'playlist_artwork/{item.name}')
-
-    if migrated:
-        print(f'[TuneBridge] Migrated {len(migrated)} item(s) from legacy data/ folder.')
-
-
-_migrate_legacy_data()
-
-
-def _migrate_features():
-    """
-    Migrate bundled analysis features into App Support.
-
-    Runs independently of _migrate_legacy_data() so it applies even after
-    the one-time JSON migration has already completed.  The build script
-    copies data/features/ into Contents/Resources/data/features/ at build
-    time; this function copies it into DATA_DIR on first run if missing.
-    """
-    if not _BUNDLED:
-        return
-
-    dest_dir  = DATA_DIR / 'features'
-    dest_file = dest_dir / 'track_features.json'
-    if dest_file.exists():
-        return  # already present in App Support
-
-    bundle_features = Path(__file__).parent / 'data' / 'features' / 'track_features.json'
-    if bundle_features.exists():
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(bundle_features, dest_file)
-        print('[TuneBridge] Migrated analysis features from bundle to App Support.')
-
-
-_migrate_features()
 
 DEVICE_PATHS = {
     'poweramp': Path('/Volumes/FIIO M21'),
@@ -655,8 +575,7 @@ def do_scan():
         library = tracks
 
     try:
-        with open(LIBRARY_CACHE, 'w') as f:
-            json.dump(tracks, f)
+        _db.db_save_library(tracks)
     except Exception as e:
         print(f"Error saving library cache: {e}")
 
@@ -667,72 +586,33 @@ def do_scan():
 
 def load_library():
     global library
-    if LIBRARY_CACHE.exists():
-        try:
-            with open(LIBRARY_CACHE) as f:
-                data = json.load(f)
+    try:
+        data = _db.db_load_library()
+        if data:
             with library_lock:
                 library = data
             scan_state.update({'status': 'done', 'message': f'Library ready — {len(data)} tracks', 'total': len(data), 'progress': len(data), 'new_tracks': 0, 'total_tracks': len(data)})
-            print(f"Loaded {len(data)} tracks from cache")
-        except Exception as e:
-            print(f"Error loading library cache: {e}")
-            threading.Thread(target=do_scan, daemon=True).start()
-    else:
-        threading.Thread(target=do_scan, daemon=True).start()
+            print(f"Loaded {len(data)} tracks from SQLite")
+            return
+    except Exception as e:
+        print(f"Error loading library from SQLite: {e}")
+    threading.Thread(target=do_scan, daemon=True).start()
 
 
 def load_settings():
-    if SETTINGS_FILE.exists():
-        try:
-            with open(SETTINGS_FILE) as f:
-                return {**DEFAULT_SETTINGS, **json.load(f)}
-        except Exception:
-            pass
-    return dict(DEFAULT_SETTINGS)
+    return _db.db_load_settings(DEFAULT_SETTINGS)
 
 
 def save_settings(s):
-    with open(SETTINGS_FILE, 'w') as f:
-        json.dump(s, f, indent=2)
-
-
-PLAYLIST_BACKUP_FILE = DATA_DIR / 'playlists.bak.json'
+    _db.db_save_settings(s)
 
 
 def load_playlists():
-    for candidate in (PLAYLIST_FILE, PLAYLIST_BACKUP_FILE):
-        if candidate.exists():
-            try:
-                with open(candidate) as f:
-                    data = json.load(f)
-                if not isinstance(data, dict):
-                    raise ValueError("Playlist file is not a dict")
-                # Backfill updated_at for playlists created before the field existed
-                changed = False
-                for pl in data.values():
-                    if 'updated_at' not in pl:
-                        pl['updated_at'] = pl.get('created_at', 0)
-                        changed = True
-                if changed:
-                    save_playlists(data)
-                if candidate == PLAYLIST_BACKUP_FILE:
-                    print(f"WARNING: Loaded playlists from backup file {candidate}")
-                return data
-            except Exception as e:
-                print(f"WARNING: Could not load playlists from {candidate}: {e}")
-    return {}
+    return _db.db_load_playlists()
 
 
 def save_playlists(playlists):
-    # Write atomically: temp file → rename so a crash never corrupts the file
-    tmp = PLAYLIST_FILE.with_suffix('.tmp.json')
-    with open(tmp, 'w') as f:
-        json.dump(playlists, f, indent=2)
-    # Rotate current → backup before replacing
-    if PLAYLIST_FILE.exists():
-        shutil.copy2(PLAYLIST_FILE, PLAYLIST_BACKUP_FILE)
-    os.replace(tmp, PLAYLIST_FILE)
+    _db.db_save_playlists(playlists)
 
 
 def _normalize_favourite_rows(rows):
@@ -779,21 +659,12 @@ def _normalize_favourites_payload(payload):
 
 
 def load_favourites():
-    if not FAVOURITES_FILE.exists():
-        return dict(_DEFAULT_FAVOURITES)
-    try:
-        with open(FAVOURITES_FILE) as f:
-            payload = json.load(f)
-        return _normalize_favourites_payload(payload)
-    except Exception:
-        return dict(_DEFAULT_FAVOURITES)
+    return _db.db_load_favourites()
 
 
 def save_favourites(favourites):
-    tmp = FAVOURITES_FILE.with_suffix('.tmp.json')
-    with open(tmp, 'w') as f:
-        json.dump(_normalize_favourites_payload(favourites), f, indent=2)
-    os.replace(tmp, FAVOURITES_FILE)
+    normalized = _normalize_favourites_payload(favourites)
+    _db.db_save_favourites(normalized)
 
 
 def _favourites_latest_song_ts(favourites):
@@ -843,8 +714,7 @@ def trigger_scan():
         return jsonify({'message': 'Already scanning'}), 400
     if request.args.get('clean') == 'true':
         try:
-            if LIBRARY_CACHE.exists():
-                LIBRARY_CACHE.unlink()
+            _db.db_save_library([])
             with library_lock:
                 global library
                 library = []
@@ -1354,24 +1224,7 @@ def _safe_float(v, fallback=None):
 
 
 def _load_track_feature_map():
-    feat_path = _features_file()
-    if not feat_path.exists():
-        return {}
-    try:
-        rows = json.loads(feat_path.read_text())
-    except Exception:
-        return {}
-    out = {}
-    if not isinstance(rows, list):
-        return out
-    for r in rows:
-        if not isinstance(r, dict):
-            continue
-        tid = r.get('track_id')
-        if not tid:
-            continue
-        out[tid] = r
-    return out
+    return _db.db_load_feature_map()
 
 
 def _track_numeric_features(track, feat_map):
@@ -1999,7 +1852,7 @@ def export_playlist(pid, fmt):
 def get_settings():
     s = load_settings()
     s['_data_dir'] = str(DATA_DIR)
-    s['_settings_exists'] = SETTINGS_FILE.exists()
+    s['_settings_exists'] = True
     return jsonify(s)
 
 
@@ -2098,8 +1951,7 @@ def _create_mpv_instance():
 
 def _resolve_track_path_mpv(track_id):
     """Return the absolute filesystem path for a track_id, or None if not found."""
-    with library_lock:
-        track = next((t for t in library if t['id'] == track_id), None)
+    track = _db.db_get_track(track_id)
     if not track:
         return None
     return str(get_music_base() / track['path'])
@@ -2107,8 +1959,7 @@ def _resolve_track_path_mpv(track_id):
 
 def _get_track_sample_rate(track_id):
     """Return the sample rate (Hz) for a track_id, or 0 if unknown."""
-    with library_lock:
-        track = next((t for t in library if t['id'] == track_id), None)
+    track = _db.db_get_track(track_id)
     return int(track.get('sample_rate') or 0) if track else 0
 
 
@@ -2547,22 +2398,13 @@ def player_exclusive():
 
 @app.route('/api/player/state', methods=['GET'])
 def get_player_state():
-    if PLAYER_STATE_FILE.exists():
-        try:
-            with open(PLAYER_STATE_FILE) as f:
-                return jsonify(json.load(f))
-        except Exception:
-            pass
-    return jsonify({})
+    return jsonify(_db.db_get_player_state())
 
 @app.route('/api/player/state', methods=['POST'])
 def save_player_state():
     data = request.get_json(force=True) or {}
-    tmp = str(PLAYER_STATE_FILE) + '.tmp'
     try:
-        with open(tmp, 'w') as f:
-            json.dump(data, f, separators=(',', ':'))
-        os.replace(tmp, str(PLAYER_STATE_FILE))
+        _db.db_save_player_state(data)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     return jsonify({'ok': True})
@@ -2579,8 +2421,12 @@ def health_status():
     with library_lock:
         track_count = len(library)
     cache_age = None
-    if LIBRARY_CACHE.exists():
-        cache_age = round((_time.time() - LIBRARY_CACHE.stat().st_mtime) / 3600, 1)
+    try:
+        db_path = _db.DB_PATH
+        if db_path and db_path.exists():
+            cache_age = round((_time.time() - db_path.stat().st_mtime) / 3600, 1)
+    except Exception:
+        cache_age = None
     result['library'] = {
         'ok': lib_ok,
         'path': str(music_path),
@@ -2588,11 +2434,16 @@ def health_status():
         'cache_age_hours': cache_age,
     }
 
-    # 2. squig.link connectivity
+    # 2. squig.link connectivity (host reachability, not endpoint auth/policy)
     import urllib.request as _req
+    import urllib.error as _req_err
     try:
-        r = _req.urlopen('https://squig.link', timeout=4)
-        result['squig'] = {'ok': True, 'status': r.status}
+        req = _req.Request('https://squig.link', method='HEAD')
+        r = _req.urlopen(req, timeout=4)
+        result['squig'] = {'ok': True, 'status': getattr(r, 'status', 200)}
+    except _req_err.HTTPError as e:
+        # HTTP status (including 403/404) still proves host is up/reachable.
+        result['squig'] = {'ok': True, 'status': int(getattr(e, 'code', 0) or 0)}
     except Exception as e:
         result['squig'] = {'ok': False, 'error': str(e)}
 
@@ -2600,17 +2451,72 @@ def health_status():
     daps = load_daps()
     mounts = _discover_mount_points()
     for d in daps:
-        resolved_mount, _ = _resolve_dap_mount(d, mounts)
+        resolved_mount, _, match_method = _resolve_dap_mount_with_method(d, mounts)
         d['mounted'] = bool(resolved_mount and resolved_mount.exists())
-    result['daps'] = [{'id': d['id'], 'name': d['name'], 'mounted': d['mounted']} for d in daps]
+        d['mount_match_method'] = match_method or ''
+    result['daps'] = [{
+        'id': d['id'],
+        'name': d['name'],
+        'mounted': d['mounted'],
+        'mount_match_method': d.get('mount_match_method', ''),
+    } for d in daps]
 
-    # 4. Data files
-    files = {
-        'playlists': PLAYLIST_FILE,
-        'settings': SETTINGS_FILE,
-        'iems': IEM_FILE,
+    # 4. Playback runtime
+    _refresh_mpv_backend()
+    settings = load_settings()
+    runtime = _mpv_runtime_status()
+    selected_audio_device = settings.get('audio_device', 'auto') or 'auto'
+    effective_audio_device = selected_audio_device
+    available_audio_devices = ['auto']
+    selected_audio_device_available = None
+    mpv_version = None
+    if MPV_AVAILABLE:
+        try:
+            p = _get_mpv()
+            mpv_version = p.mpv_version if p else None
+            if p is not None:
+                effective_audio_device = p.audio_device or effective_audio_device
+                available_audio_devices = [str(d.get('name', '')) for d in (p.audio_device_list or []) if d.get('name')]
+                if 'auto' not in available_audio_devices:
+                    available_audio_devices.append('auto')
+                selected_audio_device_available = effective_audio_device in set(available_audio_devices)
+        except Exception:
+            pass
+    missing_dependency = bool((not runtime.get('python_mpv_ok')) or (not runtime.get('libmpv_path')))
+    result['playback'] = {
+        'mpv_available': MPV_AVAILABLE,
+        'mpv_version': mpv_version,
+        'exclusive_mode': bool(settings.get('exclusive_mode', False)),
+        'selected_audio_device': selected_audio_device,
+        'effective_audio_device': effective_audio_device,
+        'selected_audio_device_available': selected_audio_device_available,
+        'available_audio_devices': available_audio_devices,
+        'runtime': runtime,
+        'missing_dependency': missing_dependency,
+        'fix_actions': ['install_mpv'] if missing_dependency else [],
     }
-    result['data_files'] = {k: v.exists() and os.access(v, os.R_OK | os.W_OK) for k, v in files.items()}
+
+    # 5. Database status
+    db_path = _db.DB_PATH
+    db_ok = db_path and db_path.exists()
+    db_size = None
+    db_tables = 0
+    if db_ok:
+        db_size = round(db_path.stat().st_size / 1024 / 1024, 2)
+        try:
+            conn = _db.get_conn()
+            row = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()
+            db_tables = row[0] if row else 0
+        except Exception:
+            pass
+    result['database'] = {
+        'ok': db_ok,
+        'engine': 'SQLite (WAL)',
+        'path': str(db_path) if db_path else '',
+        'size_mb': db_size,
+        'tables': db_tables,
+        'schema_version': _db.get_schema_version() if db_ok else 0,
+    }
 
     return jsonify(result)
 
@@ -3400,65 +3306,27 @@ def _normalize_gear_profiles(raw):
 
 
 def load_gear_profiles():
-    candidates = [
-        GEAR_PROFILES_FILE,
-        Path(__file__).parent / 'data' / 'gear_profiles.json',
-    ]
-    for p in candidates:
-        if not p.exists():
-            continue
-        try:
-            return _normalize_gear_profiles(json.loads(p.read_text()))
-        except Exception:
-            continue
     return _normalize_gear_profiles(_DEFAULT_GEAR_PROFILES)
 
 
-def _load_json_with_fallback(primary: Path, bundled_name: str, default_obj):
-    candidates = [primary, Path(__file__).parent / 'data' / bundled_name]
-    for p in candidates:
-        if not p.exists():
-            continue
-        try:
-            return json.loads(p.read_text())
-        except Exception:
-            continue
-    return default_obj
-
-
 def load_genre_families():
-    raw = _load_json_with_fallback(GENRE_FAMILIES_FILE, 'genre_families.json', _DEFAULT_GENRE_FAMILIES)
-    out = {}
-    if not isinstance(raw, dict):
-        return dict(_DEFAULT_GENRE_FAMILIES)
-    for base, rel in raw.items():
-        b = str(base or '').strip().lower()
-        if not b:
-            continue
-        if not isinstance(rel, list):
-            rel = []
-        vals = []
-        for g in rel:
-            s = str(g or '').strip().lower()
-            if s and s != b and s not in vals:
-                vals.append(s)
-        out[b] = vals
-    return out or dict(_DEFAULT_GENRE_FAMILIES)
+    raw = _db.db_load_genre_families()
+    return raw if raw else dict(_DEFAULT_GENRE_FAMILIES)
 
 
 def load_playlist_gen_config():
-    raw = _load_json_with_fallback(PLAYLIST_GEN_CONFIG_FILE, 'playlist_gen_config.json', _DEFAULT_PLAYLIST_GEN_CONFIG)
-    cfg = dict(_DEFAULT_PLAYLIST_GEN_CONFIG)
-    if isinstance(raw, dict):
-        for k in ['max_library_tracks', 'candidate_pool_cap', 'default_playlist_length',
-                  'min_playlist_length', 'max_playlist_length', 'deterministic_default']:
-            if k in raw:
-                cfg[k] = raw[k]
-        if isinstance(raw.get('weights'), dict):
-            cfg['weights'] = {**cfg['weights'], **raw['weights']}
-        if isinstance(raw.get('transition_weights'), dict):
-            cfg['transition_weights'] = {**cfg['transition_weights'], **raw['transition_weights']}
-    return cfg
+    stored = _db.db_load_playlist_gen_config()
+    if stored:
+        cfg = dict(_DEFAULT_PLAYLIST_GEN_CONFIG)
+        # Reconstruct nested dicts from flattened keys
+        for k, v in stored.items():
+            parts = k.split('.')
+            if len(parts) == 1:
+                cfg[k] = v
+            elif len(parts) == 2 and parts[0] in cfg and isinstance(cfg[parts[0]], dict):
+                cfg[parts[0]][parts[1]] = v
+        return cfg
+    return dict(_DEFAULT_PLAYLIST_GEN_CONFIG)
 
 
 @app.route('/api/gear/profiles', methods=['GET'])
@@ -3485,16 +3353,22 @@ def _mount_matches_dap(mount, dap):
     if not isinstance(mount, dict):
         return False
     ids = _dap_mount_identity(dap)
+    # Strong identifiers: UUIDs remain stable across reconnects and renames.
     if ids['mount_volume_uuid'] and _normalize_mount_id(mount.get('volume_uuid')).lower() == ids['mount_volume_uuid'].lower():
         return True
     if ids['mount_disk_uuid'] and _normalize_mount_id(mount.get('disk_uuid')).lower() == ids['mount_disk_uuid'].lower():
         return True
-    if ids['mount_device_identifier'] and _normalize_mount_id(mount.get('device_identifier')).lower() == ids['mount_device_identifier'].lower():
-        return True
+    # Do not trust device_identifier by itself for connected status.
+    # On macOS this can be reused and cause false positives for different media.
     return False
 
 
 def _resolve_dap_mount(dap, mounts=None):
+    resolved_mount, matched_mount, _ = _resolve_dap_mount_with_method(dap, mounts)
+    return resolved_mount, matched_mount
+
+
+def _resolve_dap_mount_with_method(dap, mounts=None):
     mounts = mounts if mounts is not None else _discover_mount_points()
     if not isinstance(mounts, list):
         mounts = []
@@ -3504,65 +3378,60 @@ def _resolve_dap_mount(dap, mounts=None):
         if _mount_matches_dap(m, dap):
             p = str(m.get('path') or '').strip()
             if p:
-                return Path(p), m
+                return Path(p), m, 'identity'
 
     # Fallback to configured path for legacy profiles/manual paths.
     mount_path = str((dap or {}).get('mount_path') or '').strip()
     if mount_path:
         for m in mounts:
             if str(m.get('path') or '').strip() == mount_path:
-                return Path(mount_path), m
+                return Path(mount_path), m, 'path'
         p = Path(mount_path)
-        if p.exists():
-            return p, None
-    return None, None
+        # Treat as mounted only if it's an actual mount point (not just an existing folder).
+        if p.exists() and os.path.ismount(str(p)):
+            return p, None, 'path'
+    return None, None, None
 
 
 def load_daps():
-    if DAP_FILE.exists():
-        try:
-            daps = json.load(open(DAP_FILE))
-            changed = False
-            for d in daps:
-                if 'storage_type' not in d:
-                    d['storage_type'] = 'sd'
-                    changed = True
-                if 'music_root' not in d:
-                    d['music_root'] = DEFAULT_DAP_MUSIC_ROOT
-                    changed = True
-                else:
-                    norm_root = _normalize_music_root(d.get('music_root'))
-                    if norm_root != d.get('music_root'):
-                        d['music_root'] = norm_root
-                        changed = True
-                if 'path_template' not in d:
-                    d['path_template'] = DEFAULT_DAP_PATH_TEMPLATE
-                    changed = True
-                else:
-                    norm_tpl = _normalize_path_template(d.get('path_template'))
-                    if norm_tpl != d.get('path_template'):
-                        d['path_template'] = norm_tpl
-                        changed = True
-                norm_summary = _normalize_sync_summary(d.get('sync_summary'))
-                if d.get('sync_summary') != norm_summary:
-                    d['sync_summary'] = norm_summary
-                    changed = True
-                for field in _mount_identity_fields():
-                    norm_id = _normalize_mount_id(d.get(field))
-                    if d.get(field) != norm_id:
-                        d[field] = norm_id
-                        changed = True
-            if changed:
-                save_daps(daps)
-            return daps
-        except Exception:
-            pass
-    return []
+    daps = _db.db_load_daps()
+    changed = False
+    for d in daps:
+        if not d.get('storage_type'):
+            d['storage_type'] = 'sd'
+            changed = True
+        if not d.get('music_root'):
+            d['music_root'] = DEFAULT_DAP_MUSIC_ROOT
+            changed = True
+        else:
+            norm_root = _normalize_music_root(d.get('music_root'))
+            if norm_root != d.get('music_root'):
+                d['music_root'] = norm_root
+                changed = True
+        if not d.get('path_template'):
+            d['path_template'] = DEFAULT_DAP_PATH_TEMPLATE
+            changed = True
+        else:
+            norm_tpl = _normalize_path_template(d.get('path_template'))
+            if norm_tpl != d.get('path_template'):
+                d['path_template'] = norm_tpl
+                changed = True
+        norm_summary = _normalize_sync_summary(d.get('sync_summary'))
+        if d.get('sync_summary') != norm_summary:
+            d['sync_summary'] = norm_summary
+            changed = True
+        for field in _mount_identity_fields():
+            norm_id = _normalize_mount_id(d.get(field))
+            if d.get(field) != norm_id:
+                d[field] = norm_id
+                changed = True
+    if changed:
+        save_daps(daps)
+    return daps
 
 
 def save_daps(daps):
-    with open(DAP_FILE, 'w') as f:
-        json.dump(daps, f, indent=2)
+    _db.db_save_daps(daps)
 
 
 @app.route('/api/daps', methods=['GET'])
@@ -3573,9 +3442,10 @@ def get_daps():
     # Deep identity checks run only during explicit sync-status verification flows.
     mounts = _discover_mount_points(include_identity=False)
     for d in daps:
-        resolved_mount, matched_mount = _resolve_dap_mount(d, mounts)
+        resolved_mount, matched_mount, match_method = _resolve_dap_mount_with_method(d, mounts)
         d['mounted'] = bool(resolved_mount and resolved_mount.exists())
         d['active_mount_path'] = str(resolved_mount) if resolved_mount else ''
+        d['mount_match_method'] = match_method or ''
         if matched_mount:
             d['active_mount_label'] = matched_mount.get('label') or str(resolved_mount)
         # Count out-of-date playlists
@@ -3967,39 +3837,25 @@ def _public_iem(iem):
     return out
 
 def load_iems():
-    if IEM_FILE.exists():
-        try:
-            iems = json.load(open(IEM_FILE))
-            if not isinstance(iems, list):
-                return []
-            dirty = False
-            for iem in iems:
-                dirty = _normalize_iem_record(iem) or dirty
-            if dirty:
-                save_iems(iems)
-            return iems
-        except Exception:
-            pass
-    return []
+    iems = _db.db_load_iems()
+    dirty = False
+    for iem in iems:
+        dirty = _normalize_iem_record(iem) or dirty
+    if dirty:
+        save_iems(iems)
+    return iems
 
 
 def save_iems(iems):
-    with open(IEM_FILE, 'w') as f:
-        json.dump(iems, f, indent=2)
+    _db.db_save_iems(iems)
 
 
 def load_baselines():
-    if BASELINES_FILE.exists():
-        try:
-            return json.load(open(BASELINES_FILE))
-        except Exception:
-            pass
-    return []
+    return _db.db_load_baselines()
 
 
 def save_baselines(baselines):
-    with open(BASELINES_FILE, 'w') as f:
-        json.dump(baselines, f, indent=2)
+    _db.db_save_baselines(baselines)
 
 
 def parse_rew_file(text):
@@ -4850,12 +4706,8 @@ def delete_baseline(bid):
 
 
 def _get_track_by_id(tid):
-    """Look up a track in the in-memory library by its ID."""
-    with library_lock:
-        for t in library:
-            if t.get('id') == tid:
-                return t
-    return None
+    """Look up a track by its ID."""
+    return _db.db_get_track(tid)
 
 
 _AUDIO_MIMES = {
@@ -4931,18 +4783,22 @@ def export_backup():
     buf = io.BytesIO()
     timestamp = time.strftime('%Y%m%d_%H%M%S')
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for fname in [
-            'playlists.json', 'favourites.json', 'settings.json', 'daps.json',
-            'iems.json', 'baselines.json', 'match-matrix.json',
-            'insights_config.json', 'genre_families.json',
-            'playlist_gen_config.json',
-        ]:
-            p = DATA_DIR / fname
-            if p.exists():
-                zf.write(p, fname)
-        feat = _features_file()
-        if feat.exists():
-            zf.write(feat, 'features/track_features.json')
+        # Export a consistent SQLite snapshot.
+        with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
+            tmp_db_path = Path(tmp.name)
+        try:
+            src = _db.get_conn()
+            dst = sqlite3.connect(str(tmp_db_path))
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
+            zf.write(tmp_db_path, 'tunebridge.db')
+        finally:
+            try:
+                tmp_db_path.unlink(missing_ok=True)
+            except Exception:
+                pass
         art = DATA_DIR / 'playlist_artwork'
         if art.is_dir():
             for item in art.iterdir():
@@ -4963,29 +4819,29 @@ def import_backup():
         raw = f.read()
         with zipfile.ZipFile(io.BytesIO(raw)) as zf:
             names = zf.namelist()
-            for fname in [
-                'playlists.json', 'favourites.json', 'settings.json', 'daps.json',
-                'iems.json', 'baselines.json', 'match-matrix.json',
-                'insights_config.json', 'genre_families.json',
-                'playlist_gen_config.json',
-            ]:
-                if fname in names:
-                    content = json.loads(zf.read(fname))   # validate JSON
-                    dest = DATA_DIR / fname
-                    tmp = str(dest) + '.import.tmp'
-                    with open(tmp, 'w') as out:
-                        json.dump(content, out, indent=2)
-                    Path(tmp).replace(dest)
-            feature_name = 'features/track_features.json' if 'features/track_features.json' in names else (
-                'track_features.json' if 'track_features.json' in names else None
-            )
-            if feature_name:
-                features = json.loads(zf.read(feature_name))
-                dest = _features_file()
-                tmp = str(dest) + '.import.tmp'
-                with open(tmp, 'w') as out:
-                    json.dump(features, out, indent=2)
-                Path(tmp).replace(dest)
+            if 'tunebridge.db' not in names:
+                return jsonify({'error': 'Invalid backup: tunebridge.db not found'}), 400
+
+            with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
+                tmp_db_path = Path(tmp.name)
+            try:
+                tmp_db_path.write_bytes(zf.read('tunebridge.db'))
+                _validate_backup_db(tmp_db_path)
+
+                live_db = DATA_DIR / 'tunebridge.db'
+                _db.close_conn()
+                try:
+                    (DATA_DIR / 'tunebridge.db-wal').unlink(missing_ok=True)
+                    (DATA_DIR / 'tunebridge.db-shm').unlink(missing_ok=True)
+                except Exception:
+                    pass
+                os.replace(str(tmp_db_path), str(live_db))
+            finally:
+                try:
+                    tmp_db_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
             art_dir = DATA_DIR / 'playlist_artwork'
             art_dir.mkdir(exist_ok=True)
             for name in names:
@@ -4995,10 +4851,22 @@ def import_backup():
         return jsonify({'ok': True})
     except zipfile.BadZipFile:
         return jsonify({'error': 'Invalid ZIP file — is this a TuneBridge backup?'}), 400
-    except json.JSONDecodeError as e:
-        return jsonify({'error': f'Corrupt JSON in backup: {e}'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+def _validate_backup_db(path: Path):
+    """Validate imported backup has the expected TuneBridge SQLite schema."""
+    conn = sqlite3.connect(str(path))
+    try:
+        rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        tables = {r[0] for r in rows}
+        required = {'schema_version', 'tracks', 'playlists', 'settings'}
+        missing = required - tables
+        if missing:
+            raise ValueError(f'Invalid backup database: missing tables: {", ".join(sorted(missing))}')
+    finally:
+        conn.close()
 
 
 @app.route('/api/browse/folder', methods=['POST'])
@@ -5073,6 +4941,8 @@ def _discover_mount_points(include_identity=True):
                 continue
             for child in sorted(root.iterdir(), key=lambda p: p.name.lower()):
                 if not child.is_dir():
+                    continue
+                if not os.path.ismount(str(child)):
                     continue
                 p = str(child)
                 if p in seen:
@@ -5252,24 +5122,8 @@ analysis_state = {
     'error':        None,
 }
 
-_FEATURES_FILE = None   # resolved lazily after DATA_DIR is set
-
-
-def _features_file():
-    p = DATA_DIR / 'features'
-    p.mkdir(parents=True, exist_ok=True)
-    return p / 'track_features.json'
-
-
 def _load_feature_entries():
-    fp = _features_file()
-    if not fp.exists():
-        return []
-    try:
-        raw = json.loads(fp.read_text())
-        return raw if isinstance(raw, list) else []
-    except Exception:
-        return []
+    return _db.db_load_feature_entries()
 
 
 def _has_valid_v3_payload(entry):
@@ -5312,7 +5166,7 @@ def _backfill_feature_source_signatures(tracks):
 
     if updated:
         try:
-            _features_file().write_text(json.dumps(entries))
+            _db.db_save_feature_entries(entries)
         except Exception:
             pass
     return entries
@@ -5368,8 +5222,6 @@ def _run_analysis():
         'started_at': int(time.time()),
         'error':      None,
     })
-
-    feat_path = _features_file()
 
     music_base = get_music_base()
     # Start with existing entries for current library tracks so cancellation keeps prior work.
@@ -5459,16 +5311,15 @@ def _run_analysis():
         # Flush to disk every 200 tracks so progress survives a crash
         if i > 0 and i % 200 == 0:
             try:
-                feat_path.write_text(json.dumps([
-                    results_map[t['id']] for t in tracks if t['id'] in results_map
-                ]))
+                flush_rows = [results_map[t['id']] for t in tracks if t['id'] in results_map]
+                _db.db_save_feature_entries(flush_rows)
             except Exception:
                 pass
 
     if analysis_state['status'] == 'running':
         # Normal completion
         final_rows = [results_map[t['id']] for t in tracks if t['id'] in results_map]
-        feat_path.write_text(json.dumps(final_rows))
+        _db.db_save_feature_entries(final_rows)
         analysis_state.update({
             'status':       'done',
             'done':         len(pending_tracks),
@@ -5478,7 +5329,7 @@ def _run_analysis():
         # Cancelled — save partial results so incremental re-run can resume.
         final_rows = [results_map[t['id']] for t in tracks if t['id'] in results_map]
         if final_rows:
-            feat_path.write_text(json.dumps(final_rows))
+            _db.db_save_feature_entries(final_rows)
         analysis_state.update({'status': 'idle', 'done': 0, 'total': 0, 'error': None})
 
 
@@ -5578,13 +5429,7 @@ _ALL_DIM_KEYS = [b[0] for b in _PERC_BANDS] + _DERIVED_DIMS
 
 
 def _load_features():
-    p = _features_file()
-    if not p.exists():
-        return []
-    try:
-        return json.loads(p.read_text())
-    except Exception:
-        return []
+    return _db.db_load_feature_entries()
 
 
 def _library_salience(features):
@@ -6016,18 +5861,8 @@ def _score_iem_peq_variants(iem, target_meas):
     return variants
 
 
-def _match_matrix_path():
-    return DATA_DIR / 'match-matrix.json'
-
-
 def _load_match_data():
-    p = _match_matrix_path()
-    if not p.exists():
-        return None
-    try:
-        return json.loads(p.read_text())
-    except Exception:
-        return None
+    return _db.db_load_match_data()
 
 
 # ── API routes ────────────────────────────────────────────────────────────────
@@ -6082,7 +5917,7 @@ def insights_sonic_profile():
 def insights_matching_analyse():
     """
     Compute genre fingerprints + IEM 17-dim scores + match matrix.
-    Fast (no audio I/O) — reads existing track_features.json + IEM FR curves.
+    Fast (no audio I/O) — reads existing analysed track features + IEM FR curves.
     """
     features = _load_features()
     valid12  = [f for f in features
@@ -6102,8 +5937,7 @@ def insights_matching_analyse():
         else:
             target_id = 'flat'
 
-    iems_path = DATA_DIR / 'iems.json'
-    iems = json.loads(iems_path.read_text()) if iems_path.exists() else []
+    iems = load_iems()
 
     iem_profiles = []
     for iem in iems:
@@ -6130,7 +5964,7 @@ def insights_matching_analyse():
         'matrix_data':  matrix_data,
     }
     try:
-        _match_matrix_path().write_text(json.dumps(out))
+        _db.db_save_match_data(out)
     except Exception:
         pass
 
@@ -6270,23 +6104,11 @@ def insights_matching_targets():
 
 # ── Insights heatmap genre config ──────────────────────────────────────────────
 
-INSIGHTS_CONFIG_PATH = DATA_DIR / 'insights_config.json'
-
 def load_insights_config():
-    try:
-        if INSIGHTS_CONFIG_PATH.exists():
-            with open(INSIGHTS_CONFIG_PATH) as f:
-                return json.load(f)
-    except Exception:
-        pass
-    return {}
+    return _db.db_load_insights_config()
 
 def save_insights_config(cfg):
-    try:
-        with open(INSIGHTS_CONFIG_PATH, 'w') as f:
-            json.dump(cfg, f, indent=2)
-    except Exception as e:
-        print(f'Could not save insights config: {e}')
+    _db.db_save_insights_config(cfg)
 
 @app.route('/api/insights/matching/heatmap-genres', methods=['GET'])
 def get_heatmap_genres():
@@ -6305,6 +6127,11 @@ def set_heatmap_genres():
     save_insights_config(cfg)
     return jsonify({'extra_genres': genres})
 
+
+# ── SQLite initialization ─────────────────────────────────────────────────────
+_db.init_db(DATA_DIR)
+if not _migrate.ensure_db(DATA_DIR):
+    raise RuntimeError('SQLite migration failed; startup aborted (JSON fallback removed).')
 
 load_library()
 

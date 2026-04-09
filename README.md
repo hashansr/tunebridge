@@ -25,7 +25,7 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 | App launcher | Frozen Python runtime (PyInstaller, arm64) |
 | App entrypoint | `tunebridge_gui.py` |
 | Packaging | `build_app.sh` → self-contained `.app` + drag-to-install `.dmg` |
-| Data storage | JSON files (no external DB) |
+| Data storage | SQLite (`tunebridge.db`) |
 | VCS | Git → GitHub (`hashansr/tunebridge`) |
 
 > **Keep this table updated** whenever a new dependency is added or removed.
@@ -73,7 +73,7 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 - Right-click Smart Playlist entry: create a Smart Playlist from selected/target tracks
 - Double-click track to play
 - Keyboard shortcuts: Space = play/pause, Alt+←/→ = prev/next, M = mute
-- Player state persisted to localStorage and server-side `player_state.json`
+- Player state persisted to localStorage and server-side SQLite state
 - Motion polish: animated queue/PEQ panel transitions, tactile hover/press feedback, `prefers-reduced-motion` support
 
 ### Gear (IEMs & DAPs)
@@ -99,7 +99,7 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 ### Settings & Tools
 - First-run onboarding modal for new installs (library path + folder/file format preferences)
 - Configurable music library path with Browse… folder picker
-- Health check panel (library, squig.link, DAPs, data files)
+- Health check panel (library, squig.link, DAPs, playback runtime, database)
 - Data backup / restore (ZIP of all user data)
 - Restart & Reload server in-app
 
@@ -125,10 +125,7 @@ git clone https://github.com/hashansr/tunebridge.git
 cd tunebridge
 bash install.sh
 
-# 2. Set your music library path in Settings (in-app) or:
-nano data/settings.json   # set "library_path" to your library path
-
-# 3. Run
+# 2. Run
 source venv/bin/activate
 python app.py
 # → Open http://localhost:5001
@@ -185,26 +182,21 @@ Notes:
   - default library folder
   - folder structure preference
   - primary file format preference
-- Migrates bundled defaults and feature cache where applicable.
+- Initializes/migrates SQLite schema where applicable.
 - Starts the embedded local server and opens native UI.
 - If mpv bit-perfect mode is needed, install it from `Settings → Playback → Install mpv`.
 
 ---
 
-## Data Files
+## Data Storage
 
-| File | Contents | Committed? |
+| Path | Contents | Committed? |
 |------|---------|---|
-| `~/Library/Application Support/TuneBridge/playlists.json` | Your playlists and track lists | User machine |
-| `~/Library/Application Support/TuneBridge/settings.json` | Library path, device config | User machine |
-| `~/Library/Application Support/TuneBridge/daps.json` | DAP devices | User machine |
-| `~/Library/Application Support/TuneBridge/iems.json` | IEM library + measurements + PEQ profiles | User machine |
-| `~/Library/Application Support/TuneBridge/baselines.json` | FR tuning targets | User machine |
+| `~/Library/Application Support/TuneBridge/tunebridge.db` | Main SQLite store (library metadata, playlists, settings, DAPs, IEMs, baselines, analysis cache, player state) | User machine |
+| `~/Library/Application Support/TuneBridge/tunebridge.db-wal` | SQLite WAL journal | User machine |
+| `~/Library/Application Support/TuneBridge/tunebridge.db-shm` | SQLite shared memory file | User machine |
 | `~/Library/Application Support/TuneBridge/playlist_artwork/` | Custom playlist cover images | User machine |
-| `~/Library/Application Support/TuneBridge/features/track_features.json` | Sonic analysis cache | User machine |
-| `~/Library/Application Support/TuneBridge/library.json` | Track metadata cache (auto-generated) | User machine |
 | `~/Library/Application Support/TuneBridge/artwork/` | Album art cache (auto-generated) | User machine |
-| `~/Library/Application Support/TuneBridge/player_state.json` | Runtime player state | User machine |
 
 ---
 
@@ -220,15 +212,9 @@ tunebridge/
 │   ├── player.js           # In-app music player
 │   └── style.css           # Dark theme (Luminous Depth design system)
 ├── data/
-│   ├── playlists.json
-│   ├── settings.json
-│   ├── daps.json
-│   ├── iems.json
-│   ├── baselines.json
-│   ├── gear_profiles.json
-│   ├── features/
-│   │   └── track_features.json
-│   └── playlist_artwork/
+│   ├── tunebridge.db            # SQLite data store (dev/source mode)
+│   ├── artwork/                 # Cached album art
+│   └── playlist_artwork/        # Custom playlist covers
 ├── create_app.sh           # Legacy dev launcher workflow
 ├── build_app.sh            # Build self-contained .app and drag-drop .dmg
 ├── install.sh              # One-time setup script
@@ -242,9 +228,7 @@ tunebridge/
 
 DAP export behavior is profile-driven and not hardcoded in UI logic.
 
-- Profile definitions are stored in:
-  - bundled defaults: `data/gear_profiles.json`
-  - user override location at runtime: `~/Library/Application Support/TuneBridge/gear_profiles.json`
+- Profile definitions are currently bundled in backend defaults (`app.py`).
 - Each profile controls fields such as:
   - model id / display name
   - playlist format (`.m3u` / `.m3u8`)

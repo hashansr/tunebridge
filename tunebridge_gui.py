@@ -149,18 +149,11 @@ def main():
     # performSelectorOnMainThread:waitUntilDone:YES internally, so calling
     # it from the main thread deadlocks the app (the "not responding" hang).
     #
-    # Instead, a background thread calls evaluate_js every 5 s and writes
-    # the state directly to player_state.json.  Background → main thread
+    # Instead, a background thread calls evaluate_js every 5 s and posts
+    # the state to /api/player/state (persisted in SQLite). Background → main thread
     # dispatch works fine; only main → main self-dispatch deadlocks.
-    _bundled = os.environ.get('TUNEBRIDGE_BUNDLED') == '1'
-    _data_dir = (
-        Path.home() / 'Library' / 'Application Support' / 'TuneBridge'
-        if _bundled else
-        Path(PROJECT_DIR) / 'data'
-    )
-    state_file = _data_dir / 'player_state.json'
-
     def _player_state_watcher():
+        import urllib.request as _urlreq
         while True:
             time.sleep(5)
             try:
@@ -169,10 +162,13 @@ def main():
                     ' ? Player.getStateJSON() : null'
                 )
                 if state_json and isinstance(state_json, str) and len(state_json) > 5:
-                    tmp = str(state_file) + '.tmp'
-                    with open(tmp, 'w') as f:
-                        f.write(state_json)
-                    Path(tmp).replace(state_file)
+                    req = _urlreq.Request(
+                        f'http://127.0.0.1:{PORT}/api/player/state',
+                        data=state_json.encode('utf-8'),
+                        headers={'Content-Type': 'application/json'},
+                        method='POST',
+                    )
+                    _urlreq.urlopen(req, timeout=2)
             except Exception:
                 break  # window closed or JS context gone — exit quietly
 

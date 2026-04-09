@@ -1,8 +1,11 @@
 # TuneBridge Codex Memory
 
-Last updated: 2026-04-03 (Australia/Sydney)
+Last updated: 2026-04-09 (Australia/Sydney)
 Maintainer: Codex agent
 Purpose: Persistent project memory for implementation context, decisions, and progress.
+
+Note (2026-04-09): TuneBridge runtime persistence is now SQLite-only (`tunebridge.db`).
+Some JSON references in historical sections below describe legacy behavior and change history.
 
 ## 1) Product Context
 TuneBridge is a local-first music management app for a personal FLAC-centric library. It runs entirely on the user's machine and combines:
@@ -27,7 +30,7 @@ Historical names: Playlist Creator -> Music Manager -> TuneBridge.
 - Desktop app shell: pywebview (WKWebView)
 - Native app launcher: C binary (`launcher.c`)
 - Packaging: `build_app.sh` (optional DMG)
-- Persistence: JSON files under `data/` (or App Support in bundled mode)
+- Persistence: SQLite (`tunebridge.db`) under `data/` (or App Support in bundled mode)
 
 ## 3) Runtime + Data Model
 ### Runtime modes
@@ -150,6 +153,19 @@ Observed working tree at time of writing (not touched by this codex update):
 - Keep entries factual and implementation-level (avoid vague summaries).
 
 ## 11) Update Log (Codex)
+
+### 2026-04-09 (Artist/Album card hover redesign)
+- Unified card overlay system: `.card-thumb-overlay` replaces separate `.artist-card-overlay` and `.album-thumb-overlay`. Overlay is a bottom-up gradient scrim (no blur on scrim itself — art stays visible). Hover triggers `opacity 0 → 1`.
+- Play button: dark frosted circle, 50px, `rgba(10,10,10,0.58)` + `backdrop-filter: blur(18px)` on the button only. White icon. Replaces previous white iOS-style button.
+- Fav button (`.card-fav-btn`): now has dark frosted pill background for visibility on any artwork. Positioned outside overlay (z-index: 3) so `is-fav` state always shows.
+- ••• button (`.card-more-btn`): moved from inside thumb overlay to bottom-right corner of card (direct child of card div, `position: absolute; bottom: 10px; right: 10px`). Tonal style, dims at rest, reveals on card hover. Triggers existing `showArtistCtxMenu` / `showAlbumCtxMenu`.
+- New `playArtistCard(artistName)` function: fetches all artist tracks and calls `Player.playAll()`.
+- All four card templates updated: `loadArtists`, `loadAlbums` (both variants), and both favorites grid renderers.
+- Files: `static/app.js`, `static/style.css`. Commit: `94107e0`.
+
+### 2026-04-09 (Upcoming: Artist/Album grid search + alpha filter)
+- **Search bar**: Add live-filter search to full artist grid and full album grid views. Scoped to current view only. Filters cards as user types.
+- **Alpha bar**: Change from scroll-to-letter to filter-by-letter. Only show letters that have at least one match. Article-stripping logic (The/A/An) applies. Active letter highlighted. Clicking `#` resets to full unfiltered view.
 ### 2026-04-02 (Bundled app startup/restart fix)
 - Investigated issue: bundled app could show legacy UI on launch and Restart & Reload could open another instance.
 - Root causes identified:

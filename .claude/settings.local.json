@@ -217,7 +217,10 @@
       "Bash(find .build-venv -name .DS_Store -delete)",
       "Bash(curl -sv http://localhost:5001/api/player/audio_devices)",
       "Bash(pkill -f 'python app.py')",
-      "Bash(kill 61372)"
+      "Bash(kill 61372)",
+      "Bash(TUNEBRIDGE_PORT=5003 timeout 8 python app.py)",
+      "Bash(curl -s http://localhost:5001/static/app.js)",
+      "Bash(curl -s \"http://localhost:5001/api/health/status\")"
     ]
   }
 }

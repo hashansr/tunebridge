@@ -36,6 +36,11 @@ const state = {
   favArtistsSort: 'recent',
   favAlbumsSort: 'recent',
   favPanel: 'songs',
+  artistSearch: '',
+  artistAlpha: '',
+  albumSearch: '',
+  albumAlpha: '',
+  _albumScope: '__all__',
 };
 
 let _currentGearTab = 'daps';
@@ -458,7 +463,137 @@ async function loadPlaylistsView() {
   grid.innerHTML = favCard + playlistCards;
 }
 
+/* ── Artists / Albums helpers ──────────────────────────────────────── */
+function _libraryLetter(name) {
+  const stripped = String(name || '').replace(/^(the|a|an)\s+/i, '').trim();
+  const first = stripped.charAt(0).toUpperCase();
+  return /[A-Z]/.test(first) ? first : '#';
+}
+
+function _librarySearchMatch(haystack, query) {
+  if (!query) return true;
+  return String(haystack || '').toLowerCase().includes(query);
+}
+
+function _scrollMainTop() {
+  const main = document.getElementById('main');
+  if (main) main.scrollTop = 0;
+}
+
+function _renderAlphaButtons({ barEl, presentLetters, activeLetter, clickFn }) {
+  if (!barEl) return;
+  const LETTERS = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const allActive = !activeLetter;
+  const allTitle = presentLetters.size ? 'Show all' : 'No entries';
+  const allDisabled = !presentLetters.size;
+  const allBtn = `<button class="alpha-btn alpha-btn-all ${allActive ? 'active' : ''}" ${allDisabled ? 'disabled' : ''} onclick="${clickFn}('')" title="${allTitle}">All</button>`;
+  const letterBtns = LETTERS.map(l => `
+    <button class="alpha-btn ${activeLetter === l ? 'active' : ''}" ${presentLetters.has(l) ? `onclick="${clickFn}('${l}')"` : 'disabled'}
+      title="${l === '#' ? 'Numbers / symbols' : l}">${l}</button>
+  `).join('');
+  barEl.innerHTML = allBtn + letterBtns;
+}
+
 /* ── Artists view ───────────────────────────────────────────────────── */
+function setArtistSearch(query) {
+  state.artistSearch = String(query || '');
+  const clearBtn = document.getElementById('artists-filter-clear');
+  if (clearBtn) clearBtn.style.display = state.artistSearch ? 'block' : 'none';
+  renderArtistsGrid();
+  _scrollMainTop();
+}
+
+function clearArtistSearch() {
+  state.artistSearch = '';
+  const inp = document.getElementById('artists-filter-input');
+  if (inp) inp.value = '';
+  const clearBtn = document.getElementById('artists-filter-clear');
+  if (clearBtn) clearBtn.style.display = 'none';
+  renderArtistsGrid();
+}
+
+function setArtistAlphaFilter(letter = '') {
+  const target = String(letter || '').toUpperCase();
+  state.artistAlpha = state.artistAlpha === target ? '' : target;
+  renderArtistsGrid();
+  _scrollMainTop();
+}
+
+function _filteredArtistsData() {
+  const q = state.artistSearch.trim().toLowerCase();
+  const base = Array.isArray(state.artists) ? state.artists : [];
+  const searched = q ? base.filter(a => _librarySearchMatch(a.name, q)) : base;
+  const presentLetters = new Set(searched.map(a => _libraryLetter(a.name)));
+  if (state.artistAlpha && !presentLetters.has(state.artistAlpha)) state.artistAlpha = '';
+  const filtered = state.artistAlpha ? searched.filter(a => _libraryLetter(a.name) === state.artistAlpha) : searched;
+  return { base, searched, filtered, presentLetters };
+}
+
+function renderArtistsGrid() {
+  const grid = document.getElementById('artists-grid');
+  const alphaBar = document.getElementById('alpha-bar');
+  const artistsEmpty = document.getElementById('artists-empty');
+  const countEl = document.getElementById('artists-count');
+  const { base, filtered, presentLetters } = _filteredArtistsData();
+  const hasFilters = !!(state.artistSearch || state.artistAlpha);
+
+  if (countEl) {
+    countEl.textContent = hasFilters
+      ? `${filtered.length} of ${base.length} artists`
+      : `${base.length} artists`;
+  }
+
+  if (!base.length) {
+    if (grid) grid.innerHTML = '';
+    if (alphaBar) alphaBar.innerHTML = '';
+    if (artistsEmpty) {
+      const [title, hint] = artistsEmpty.querySelectorAll('p');
+      if (title) title.textContent = 'No artists found.';
+      if (hint) hint.textContent = 'Rescan your library to load music.';
+      artistsEmpty.style.display = 'flex';
+    }
+    return;
+  }
+
+  _renderAlphaButtons({
+    barEl: alphaBar,
+    presentLetters,
+    activeLetter: state.artistAlpha,
+    clickFn: 'App.setArtistAlphaFilter',
+  });
+
+  if (!filtered.length) {
+    if (grid) grid.innerHTML = '';
+    if (artistsEmpty) {
+      const [title, hint] = artistsEmpty.querySelectorAll('p');
+      if (title) title.textContent = 'No artists match your filters.';
+      if (hint) hint.textContent = 'Try a different search or alphabet filter.';
+      artistsEmpty.style.display = 'flex';
+    }
+    return;
+  }
+
+  if (artistsEmpty) artistsEmpty.style.display = 'none';
+  if (grid) {
+    grid.innerHTML = filtered.map(a => `
+      <div class="artist-card" data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
+        <div class="artist-thumb">
+          ${thumbImg(a.artwork_key, 120, '6px')}
+          <div class="card-thumb-overlay">
+            <button class="card-play-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.playArtistCard(this.dataset.artist)" title="Play all songs">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+            </button>
+          </div>
+          ${_favToggleBtn('artists', _normArtistId(a.name), 'card-fav-btn')}
+        </div>
+        <div class="artist-name" title="${esc(a.name)}">${esc(a.name)}</div>
+        <div class="artist-meta">${a.album_count} album${a.album_count !== 1 ? 's' : ''} · ${a.track_count} songs</div>
+        <button class="card-more-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.showArtistCtxMenu(event,this.dataset.artist)" title="More options">⋮</button>
+      </div>
+    `).join('');
+  }
+}
+
 async function loadArtists() {
   document.getElementById('artists-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
   let artists;
@@ -471,56 +606,11 @@ async function loadArtists() {
     return;
   }
   state.artists = artists;
-
-  const grid = document.getElementById('artists-grid');
-  const alphaBar = document.getElementById('alpha-bar');
-  document.getElementById('artists-count').textContent = `${artists.length} artists`;
-
-  const artistsEmpty = document.getElementById('artists-empty');
-  if (!artists.length) {
-    grid.innerHTML = '';
-    if (artistsEmpty) artistsEmpty.style.display = 'flex';
-    alphaBar.innerHTML = '';
-    return;
-  }
-  if (artistsEmpty) artistsEmpty.style.display = 'none';
-
-  // Build A-Z bar
-  const LETTERS = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-  const presentLetters = new Set(artists.map(a => {
-    const first = a.name.replace(/^(The |A |An )/i, '').charAt(0).toUpperCase();
-    return /[A-Z]/.test(first) ? first : '#';
-  }));
-
-  alphaBar.innerHTML = LETTERS.map(l => `
-    <button class="alpha-btn" ${presentLetters.has(l) ? `onclick="scrollToLetter('${l}')"` : 'disabled'}
-      title="${l === '#' ? 'Numbers / symbols' : l}">${l}</button>
-  `).join('');
-
-  // Render cards, injecting letter anchors on first card of each letter group
-  let lastLetter = null;
-  grid.innerHTML = artists.map(a => {
-    const sortName = a.name.replace(/^(The |A |An )/i, '');
-    const letter = /[A-Z]/i.test(sortName.charAt(0)) ? sortName.charAt(0).toUpperCase() : '#';
-    let anchor = '';
-    if (letter !== lastLetter) {
-      anchor = `id="alpha-${letter}"`;
-      lastLetter = letter;
-    }
-    return `
-      <div class="artist-card" ${anchor} data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
-        <div class="artist-thumb">
-          ${thumbImg(a.artwork_key, 120, '6px')}
-        </div>
-        <div class="artist-name" title="${esc(a.name)}">${esc(a.name)}</div>
-        <div class="artist-meta">${a.album_count} album${a.album_count !== 1 ? 's' : ''} · ${a.track_count} songs</div>
-        <div class="artist-card-overlay">
-          ${_favToggleBtn('artists', _normArtistId(a.name), 'card-fav-btn')}
-          <button class="card-add-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.addAllArtistSongs(this.dataset.artist,event)" title="Add all songs to playlist">+</button>
-        </div>
-      </div>
-    `;
-  }).join('');
+  const artistFilterInput = document.getElementById('artists-filter-input');
+  if (artistFilterInput) artistFilterInput.value = state.artistSearch || '';
+  const clearBtn = document.getElementById('artists-filter-clear');
+  if (clearBtn) clearBtn.style.display = state.artistSearch ? 'block' : 'none';
+  renderArtistsGrid();
 
   // Restore saved scroll position (breadcrumb back) or reset to top (sidebar nav)
   const main = document.getElementById('main');
@@ -529,27 +619,123 @@ async function loadArtists() {
 }
 
 function scrollToLetter(letter) {
-  const el = document.getElementById(`alpha-${letter}`);
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  // Briefly highlight active letter
-  document.querySelectorAll('.alpha-btn').forEach(b => b.classList.remove('active'));
-  const btn = [...document.querySelectorAll('.alpha-btn')].find(b => b.textContent === letter);
-  if (btn) { btn.classList.add('active'); setTimeout(() => btn.classList.remove('active'), 800); }
-}
-
-function scrollToAlbumLetter(letter) {
-  const el = document.getElementById(`albums-alpha-${letter}`);
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  // Briefly highlight the clicked letter button (same UX as artist alpha bar)
-  const bar = document.getElementById('albums-alpha-bar');
-  if (bar) {
-    bar.querySelectorAll('.alpha-btn').forEach(b => b.classList.remove('active'));
-    const btn = [...bar.querySelectorAll('.alpha-btn')].find(b => b.textContent === letter);
-    if (btn) { btn.classList.add('active'); setTimeout(() => btn.classList.remove('active'), 800); }
-  }
+  setArtistAlphaFilter(letter);
 }
 
 /* ── Albums view ────────────────────────────────────────────────────── */
+function setAlbumSearch(query) {
+  state.albumSearch = String(query || '');
+  const clearBtn = document.getElementById('albums-filter-clear');
+  if (clearBtn) clearBtn.style.display = state.albumSearch ? 'block' : 'none';
+  renderAlbumsGrid();
+  _scrollMainTop();
+}
+
+function clearAlbumSearch() {
+  state.albumSearch = '';
+  const inp = document.getElementById('albums-filter-input');
+  if (inp) inp.value = '';
+  const clearBtn = document.getElementById('albums-filter-clear');
+  if (clearBtn) clearBtn.style.display = 'none';
+  renderAlbumsGrid();
+}
+
+function setAlbumAlphaFilter(letter = '') {
+  const target = String(letter || '').toUpperCase();
+  state.albumAlpha = state.albumAlpha === target ? '' : target;
+  renderAlbumsGrid();
+  _scrollMainTop();
+}
+
+function _filteredAlbumsData() {
+  const artistFilter = state.artist || null;
+  const q = state.albumSearch.trim().toLowerCase();
+  const base = Array.isArray(state.albums) ? state.albums : [];
+  const searched = q
+    ? base.filter(al => _librarySearchMatch(`${al.name} ${artistFilter ? '' : al.artist || ''}`, q))
+    : base;
+  const presentLetters = new Set(searched.map(al => _libraryLetter(al.name)));
+  if (artistFilter) state.albumAlpha = '';
+  if (state.albumAlpha && !presentLetters.has(state.albumAlpha)) state.albumAlpha = '';
+  const filtered = state.albumAlpha ? searched.filter(al => _libraryLetter(al.name) === state.albumAlpha) : searched;
+  return { artistFilter, base, filtered, presentLetters };
+}
+
+function renderAlbumsGrid() {
+  const grid = document.getElementById('albums-grid');
+  const countEl = document.getElementById('albums-count');
+  const albumsAlphaBar = document.getElementById('albums-alpha-bar');
+  const albumsEmpty = document.getElementById('albums-empty');
+  const { artistFilter, base, filtered, presentLetters } = _filteredAlbumsData();
+  const hasFilters = !!(state.albumSearch || state.albumAlpha);
+
+  if (countEl) {
+    countEl.textContent = hasFilters
+      ? `${filtered.length} of ${base.length} album${base.length !== 1 ? 's' : ''}`
+      : `${base.length} album${base.length !== 1 ? 's' : ''}`;
+  }
+
+  if (!artistFilter && albumsAlphaBar) {
+    albumsAlphaBar.style.display = 'flex';
+    _renderAlphaButtons({
+      barEl: albumsAlphaBar,
+      presentLetters,
+      activeLetter: state.albumAlpha,
+      clickFn: 'App.setAlbumAlphaFilter',
+    });
+  } else if (albumsAlphaBar) {
+    albumsAlphaBar.style.display = 'none';
+    albumsAlphaBar.innerHTML = '';
+  }
+
+  if (!base.length) {
+    if (grid) grid.innerHTML = '';
+    if (albumsEmpty) {
+      const [title, hint] = albumsEmpty.querySelectorAll('p');
+      if (title) title.textContent = 'No albums found.';
+      if (hint) hint.textContent = 'Browse by artist or rescan your library.';
+      albumsEmpty.style.display = 'flex';
+    }
+    return;
+  }
+
+  if (!filtered.length) {
+    if (grid) grid.innerHTML = '';
+    if (albumsEmpty) {
+      const [title, hint] = albumsEmpty.querySelectorAll('p');
+      if (title) title.textContent = 'No albums match your filters.';
+      if (hint) hint.textContent = 'Try a different search or alphabet filter.';
+      albumsEmpty.style.display = 'flex';
+    }
+    return;
+  }
+
+  if (albumsEmpty) albumsEmpty.style.display = 'none';
+  if (grid) {
+    grid.innerHTML = filtered.map(al => `
+      <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
+        <div class="album-thumb">
+          ${thumbImg(al.artwork_key, 160, '6px')}
+          <div class="card-thumb-overlay">
+            <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+            </button>
+          </div>
+          ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn')}
+        </div>
+        <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
+        ${!artistFilter ? `<div class="album-artist">${esc(al.artist)}</div>` : ''}
+        ${al.year ? `<div class="album-year">${esc(al.year)}</div>` : ''}
+        <button class="card-more-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)" title="More options">⋮</button>
+      </div>
+    `).join('');
+  }
+}
+
+function scrollToAlbumLetter(letter) {
+  setAlbumAlphaFilter(letter);
+}
+
 async function loadAlbums(artistFilter = null) {
   document.getElementById('albums-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
   const query = artistFilter ? `?artist=${encodeURIComponent(artistFilter)}` : '';
@@ -564,14 +750,15 @@ async function loadAlbums(artistFilter = null) {
   }
   state.albums = albums;
 
-  const grid = document.getElementById('albums-grid');
-  const countEl = document.getElementById('albums-count');
+  const scope = artistFilter ? `artist:${artistFilter}` : '__all__';
+  if (state._albumScope !== scope) {
+    state._albumScope = scope;
+    state.albumSearch = '';
+    state.albumAlpha = '';
+  }
+
   const crumb = document.getElementById('albums-breadcrumb');
   const hero = document.getElementById('artist-hero');
-  const albumsAlphaBar = document.getElementById('albums-alpha-bar');
-  const albumsEmpty = document.getElementById('albums-empty');
-
-  countEl.textContent = `${albums.length} album${albums.length !== 1 ? 's' : ''}`;
 
   if (artistFilter) {
     crumb.innerHTML = `
@@ -618,78 +805,12 @@ async function loadAlbums(artistFilter = null) {
     hero.style.display = 'none';
   }
 
-  // Empty state
-  if (!albums.length) {
-    grid.innerHTML = '';
-    if (albumsEmpty) albumsEmpty.style.display = 'flex';
-    if (albumsAlphaBar) albumsAlphaBar.style.display = 'none';
-    return;
-  }
-  if (albumsEmpty) albumsEmpty.style.display = 'none';
+  const albumFilterInput = document.getElementById('albums-filter-input');
+  if (albumFilterInput) albumFilterInput.value = state.albumSearch || '';
+  const albumClearBtn = document.getElementById('albums-filter-clear');
+  if (albumClearBtn) albumClearBtn.style.display = state.albumSearch ? 'block' : 'none';
 
-  if (!artistFilter && albumsAlphaBar) {
-    // Sort letter: strip leading articles (The/A/An) to match backend sort key
-    const _albumLetter = name => {
-      const stripped = (name || '').replace(/^(the|a|an)\s+/i, '');
-      const first = stripped.charAt(0).toUpperCase();
-      return /[A-Z]/.test(first) ? first : '#';
-    };
-    // Alpha bar for all-albums view
-    const LETTERS = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-    const presentLetters = new Set(albums.map(al => _albumLetter(al.name)));
-    albumsAlphaBar.style.display = 'flex';
-    albumsAlphaBar.innerHTML = LETTERS.map(l => `
-      <button class="alpha-btn" ${presentLetters.has(l) ? `onclick="App.scrollToAlbumLetter('${l}')"` : 'disabled'}
-        title="${l === '#' ? 'Numbers / symbols' : l}">${l}</button>
-    `).join('');
-
-    // Re-render grid with letter anchors
-    let lastLetter = null;
-    grid.innerHTML = albums.map(al => {
-      const letter = _albumLetter(al.name);
-      let anchor = '';
-      if (letter !== lastLetter) {
-        anchor = `id="albums-alpha-${letter}"`;
-        lastLetter = letter;
-      }
-      return `
-        <div class="album-card" ${anchor} data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
-          <div class="album-thumb">
-            ${thumbImg(al.artwork_key, 160, '6px')}
-            <div class="album-thumb-overlay">
-              ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn')}
-              <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>
-              </button>
-              <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
-            </div>
-          </div>
-          <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
-          <div class="album-artist">${esc(al.artist)}</div>
-          ${al.year ? `<div class="album-year">${esc(al.year)}</div>` : ''}
-        </div>
-      `;
-    }).join('');
-  } else {
-    if (albumsAlphaBar) albumsAlphaBar.style.display = 'none';
-    grid.innerHTML = albums.map(al => `
-      <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
-        <div class="album-thumb">
-          ${thumbImg(al.artwork_key, 160, '6px')}
-          <div class="album-thumb-overlay">
-            ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn')}
-            <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>
-            </button>
-            <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
-          </div>
-        </div>
-        <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
-        ${!artistFilter ? `<div class="album-artist">${esc(al.artist)}</div>` : ''}
-        ${al.year ? `<div class="album-year">${esc(al.year)}</div>` : ''}
-      </div>
-    `).join('');
-  }
+  renderAlbumsGrid();
 }
 
 /* ── Tracks view ────────────────────────────────────────────────────── */
@@ -1481,6 +1602,13 @@ function showTrackCtxMenu(e, trackId) {
   const track = Player.getTrack(trackId);
   if (!track) return;
   _showCtxMenu(e.clientX, e.clientY, [track], track.title, { type: 'songs', id: String(trackId) });
+}
+
+async function playArtistCard(artistName) {
+  try {
+    const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artistName)}`);
+    if (tracks && tracks.length) Player.playAll(tracks);
+  } catch (_) {}
 }
 
 async function showArtistCtxMenu(e, artistName) {
@@ -2514,12 +2642,18 @@ function _renderFavArtistCards(rows) {
   }
   grid.innerHTML = rows.map(a => `
     <div class="artist-card" data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
-      <div class="artist-thumb">${thumbImg(a.artwork_key, 120, '6px')}</div>
-      <div class="artist-name" title="${esc(a.name)}">${esc(a.name)}</div>
-      <div class="artist-meta">${a.album_count} album${a.album_count !== 1 ? 's' : ''} · ${a.track_count} songs</div>
-      <div class="artist-card-overlay">
+      <div class="artist-thumb">
+        ${thumbImg(a.artwork_key, 120, '6px')}
+        <div class="card-thumb-overlay">
+          <button class="card-play-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.playArtistCard(this.dataset.artist)" title="Play all songs">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+          </button>
+        </div>
         ${_favToggleBtn('artists', _normArtistId(a.name), 'card-fav-btn is-fav')}
       </div>
+      <div class="artist-name" title="${esc(a.name)}">${esc(a.name)}</div>
+      <div class="artist-meta">${a.album_count} album${a.album_count !== 1 ? 's' : ''} · ${a.track_count} songs</div>
+      <button class="card-more-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.showArtistCtxMenu(event,this.dataset.artist)" title="More options">⋮</button>
     </div>
   `).join('');
 }
@@ -2568,17 +2702,17 @@ function _renderFavAlbumCards(rows) {
     <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
       <div class="album-thumb">
         ${thumbImg(al.artwork_key, 160, '6px')}
-        <div class="album-thumb-overlay">
-          ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn is-fav')}
+        <div class="card-thumb-overlay">
           <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" transform="translate(1.5,0)"/></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
           </button>
-          <button class="card-add-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.addAlbumToPlaylist(this.dataset.artist,this.dataset.album,event)" title="Add album to playlist">+</button>
         </div>
+        ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn is-fav')}
       </div>
       <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
       <div class="album-artist">${esc(al.artist)}</div>
       ${al.year ? `<div class="album-year">${esc(al.year)}</div>` : ''}
+      <button class="card-more-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)" title="More options">⋮</button>
     </div>
   `).join('');
 }
@@ -2869,7 +3003,10 @@ function showView(viewName) {
   else if (viewName === 'fav-songs') openFavouriteSongsPlaylist();
   else if (viewName === 'gear') loadGearView();
   else if (viewName === 'playlists') loadPlaylistsView();
-  else if (viewName === 'settings') loadSettings();
+  else if (viewName === 'settings') {
+    setHealthSectionExpanded(false);
+    loadSettings();
+  }
   else if (viewName === 'insights') loadInsightsView();
 }
 
@@ -6648,7 +6785,18 @@ async function restartApp() {
   }, 800);
 }
 
+function setHealthSectionExpanded(expanded) {
+  const grid = document.getElementById('health-grid');
+  const lastRun = document.getElementById('health-last-run');
+  if (grid) grid.style.display = expanded ? 'grid' : 'none';
+  if (lastRun) {
+    lastRun.style.display = expanded ? '' : 'none';
+    if (!expanded) lastRun.textContent = '';
+  }
+}
+
 async function runHealthCheck() {
+  setHealthSectionExpanded(true);
   const btn = document.getElementById('health-check-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
 
@@ -6663,12 +6811,18 @@ async function runHealthCheck() {
 
   // Build grid HTML
   const dot = ok => `<div class="health-dot health-dot-${ok ? 'ok' : 'err'}"></div>`;
+  const dotState = state => `<div class="health-dot health-dot-${state}"></div>`;
 
   // Library
   const lib = data.library;
-  const libDetail = lib.ok
-    ? `${lib.tracks} tracks · ${lib.cache_age_hours != null ? `cache ${lib.cache_age_hours}h old` : 'no cache'}`
-    : `Path not found`;
+  let libDetail;
+  if (!lib.ok) {
+    libDetail = 'Path not found';
+  } else if (data.database) {
+    libDetail = `${lib.tracks} tracks`;
+  } else {
+    libDetail = `${lib.tracks} tracks · ${lib.cache_age_hours != null ? `cache ${lib.cache_age_hours}h old` : 'no cache'}`;
+  }
   const libHtml = `
     <div class="health-item">
       ${dot(lib.ok)}
@@ -6691,36 +6845,74 @@ async function runHealthCheck() {
 
   // DAPs
   const daps = data.daps || [];
+  const hasIdentityConnected = daps.some(d => d.mounted && d.mount_match_method === 'identity');
+  const hasPathConnected = daps.some(d => d.mounted && d.mount_match_method === 'path');
   const dapDetail = daps.length === 0
     ? 'No DAPs configured'
-    : daps.map(d => `<div class="health-dap-row">${dot(d.mounted)}<span style="font-size:var(--text-xs);color:var(--text-sub)">${esc(d.name)}: ${d.mounted ? 'Connected' : 'Not connected'}</span></div>`).join('');
-  const dapsOk = daps.length > 0 && daps.some(d => d.mounted);
+    : daps.map(d => {
+      const rowState = d.mounted
+        ? (d.mount_match_method === 'identity' ? 'ok' : 'warn')
+        : 'err';
+      const statusText = !d.mounted
+        ? 'Not connected'
+        : (d.mount_match_method === 'identity'
+          ? 'Connected'
+          : 'Connected (path-only, unverified)');
+      return `<div class="health-dap-row">${dotState(rowState)}<span style="font-size:var(--text-xs);color:var(--text-sub)">${esc(d.name)}: ${statusText}</span></div>`;
+    }).join('');
+  const dapsOk = daps.length > 0 && hasIdentityConnected;
   const dapHtml = `
     <div class="health-item">
-      <div class="health-dot health-dot-${daps.length === 0 ? 'idle' : dapsOk ? 'ok' : 'warn'}"></div>
+      <div class="health-dot health-dot-${daps.length === 0 ? 'idle' : dapsOk ? 'ok' : hasPathConnected ? 'warn' : 'warn'}"></div>
       <div class="health-item-body">
         <div class="health-item-label">DAPs</div>
         <div class="health-item-detail"><div class="health-dap-list">${dapDetail}</div></div>
       </div>
     </div>`;
 
-  // Data files
-  const df = data.data_files;
-  const dfAll = Object.values(df).every(Boolean);
-  const dfDetail = Object.entries(df).map(([k, ok]) =>
-    `${ok ? '✓' : '✗'} ${k}.json`
-  ).join(' · ');
-  const dfHtml = `
+  // Playback runtime (mpv + dependency/runtime readiness)
+  const pb = data.playback || {};
+  const rt = pb.runtime || {};
+  const pyOk = !!rt.python_mpv_ok;
+  const libmpvOk = !!rt.libmpv_path;
+  const backendOk = !!pb.mpv_available;
+  const deviceOk = pb.selected_audio_device_available;
+  const pbState = backendOk ? 'ok' : (pb.missing_dependency ? 'warn' : 'err');
+  const pbLines = [
+    `Backend: ${backendOk ? `Ready${pb.mpv_version ? ` (${pb.mpv_version})` : ''}` : 'Unavailable'}`,
+    `python-mpv: ${pyOk ? 'Installed' : 'Missing'}`,
+    `libmpv: ${libmpvOk ? 'Found' : 'Missing'}`,
+    `Device: ${esc(pb.effective_audio_device || pb.selected_audio_device || 'auto')}${deviceOk === false ? ' (unavailable)' : ''}`,
+    `Exclusive mode: ${pb.exclusive_mode ? 'On' : 'Off'}`,
+  ];
+  const pbActions = Array.isArray(pb.fix_actions) && pb.fix_actions.includes('install_mpv')
+    ? `<div class="health-actions"><button class="btn-secondary health-action-btn" onclick="App.installMpv()">Install missing playback dependencies</button></div>`
+    : '';
+  const playbackHtml = `
     <div class="health-item">
-      ${dot(dfAll)}
+      ${dotState(pbState)}
       <div class="health-item-body">
-        <div class="health-item-label">Data Files</div>
-        <div class="health-item-detail">${esc(dfDetail)}</div>
+        <div class="health-item-label">Playback Runtime</div>
+        <div class="health-item-detail">${pbLines.map(esc).join('<br>')}${pbActions}</div>
+      </div>
+    </div>`;
+
+  // Database
+  const db = data.database || {};
+  const dbDetail = db.ok
+    ? `${db.engine} · ${db.size_mb} MB · ${db.tables} tables · v${db.schema_version}`
+    : 'Database not found';
+  const storageHtml = `
+    <div class="health-item">
+      ${dot(!!db.ok)}
+      <div class="health-item-body">
+        <div class="health-item-label">Database</div>
+        <div class="health-item-detail">${esc(dbDetail)}</div>
       </div>
     </div>`;
 
   const grid = document.getElementById('health-grid');
-  if (grid) grid.innerHTML = libHtml + sqHtml + dapHtml + dfHtml;
+  if (grid) grid.innerHTML = libHtml + sqHtml + dapHtml + playbackHtml + storageHtml;
 
   const lastRun = document.getElementById('health-last-run');
   if (lastRun) lastRun.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
@@ -6914,6 +7106,7 @@ const App = {
   removeSongFromFavourites,
   showAddDropdown,
   showTrackCtxMenu,
+  playArtistCard,
   showArtistCtxMenu,
   showAlbumCtxMenu,
   hideCtxMenu,
@@ -6936,6 +7129,12 @@ const App = {
   addAlbumToPlaylist,
   playAlbum,
   _commitToPlaylist,
+  setArtistSearch,
+  clearArtistSearch,
+  setArtistAlphaFilter,
+  setAlbumSearch,
+  clearAlbumSearch,
+  setAlbumAlphaFilter,
   scrollToLetter,
   scrollToAlbumLetter,
   backToGear,

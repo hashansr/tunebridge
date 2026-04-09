@@ -36,12 +36,15 @@ echo ""
 BACKUP_DIR="data/backups/$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$BACKUP_DIR"
 BACKED_UP=0
-for f in data/playlists.json data/settings.json data/daps.json data/iems.json data/baselines.json; do
+for f in data/tunebridge.db data/tunebridge.db-wal data/tunebridge.db-shm; do
   if [ -f "$f" ]; then
     cp "$f" "$BACKUP_DIR/"
     BACKED_UP=$(( BACKED_UP + 1 ))
   fi
 done
+if [ -d "data/playlist_artwork" ]; then
+  cp -R data/playlist_artwork "$BACKUP_DIR/"
+fi
 echo -e "  💾  Data backed up... ${GREEN}${BACKED_UP} file(s) → ${BACKUP_DIR} ✅${NC}"
 
 # ── Pull latest ───────────────────────────────────────────────────────────────

@@ -1,5 +1,8 @@
 # TuneBridge — Project Memory
 
+> Current storage model (2026-04-09): TuneBridge runtime persistence is SQLite-only (`tunebridge.db`).
+> Some older notes below reference JSON files from pre-migration history.
+
 ## What This Is
 A local web-based music manager for a personal FLAC music library. Built with Flask (Python) + Vanilla JS. Lets you browse your library, build playlists with drag-and-drop, export them to portable music players, and sync music between local storage and SD cards.
 
@@ -20,7 +23,7 @@ Port 5000 is blocked on macOS (AirPlay). Always use 5001.
 ## Music Library
 - **Source**: `/Volumes/Storage/Music/FLAC/` — 398 artists, 1089 albums, 4226 FLAC tracks
 - **Structure**: `Music/%artist%/%album%/NN. %title%.flac`
-- **Cache**: `data/library.json` (fast startup), album art cached to `data/artwork/*.jpg`
+- **Storage**: metadata and cache persisted in SQLite (`tunebridge.db`), album art cached to `data/artwork/*.jpg`
 
 ## Device Export
 
