@@ -149,8 +149,8 @@ def main():
     # performSelectorOnMainThread:waitUntilDone:YES internally, so calling
     # it from the main thread deadlocks the app (the "not responding" hang).
     #
-    # Instead, a background thread calls evaluate_js every 5 s and writes
-    # the state directly to player_state.json.  Background → main thread
+    # Instead, a background thread calls evaluate_js every 5 s and posts
+    # the state to /api/player/state (persisted in SQLite). Background → main thread
     # dispatch works fine; only main → main self-dispatch deadlocks.
     def _player_state_watcher():
         import urllib.request as _urlreq

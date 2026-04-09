@@ -98,6 +98,13 @@
         <div class="view-header">
           <h2>Artists</h2>
           <div class="view-count" id="artists-count"></div>
+          <div class="library-toolbar library-toolbar-inline">
+            <div class="pl-filter-wrap library-filter-wrap">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input id="artists-filter-input" type="text" placeholder="Search artists..." oninput="App.setArtistSearch(this.value)" />
+              <button id="artists-filter-clear" class="pl-filter-clear" onclick="App.clearArtistSearch()" style="display:none" title="Clear search">&#10005;</button>
+            </div>
+          </div>
         </div>
         <div id="alpha-bar" class="alpha-bar"></div>
         <div id="artists-grid" class="artist-grid"></div>
@@ -112,6 +119,13 @@
         <div class="view-header">
           <div class="breadcrumb" id="albums-breadcrumb"></div>
           <div class="view-count" id="albums-count"></div>
+          <div class="library-toolbar library-toolbar-inline">
+            <div class="pl-filter-wrap library-filter-wrap">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input id="albums-filter-input" type="text" placeholder="Search albums..." oninput="App.setAlbumSearch(this.value)" />
+              <button id="albums-filter-clear" class="pl-filter-clear" onclick="App.clearAlbumSearch()" style="display:none" title="Clear search">&#10005;</button>
+            </div>
+          </div>
         </div>
         <div id="albums-alpha-bar" class="alpha-bar" style="display:none"></div>
         <div id="artist-hero" class="browse-hero" style="display:none">
@@ -568,7 +582,7 @@
           <!-- System Status section -->
           <div class="settings-section">
             <h3 class="settings-section-title">System Status</h3>
-            <div id="health-grid" class="health-grid">
+            <div id="health-grid" class="health-grid" style="display:none">
               <!-- populated by runHealthCheck() -->
               <div class="health-item">
                 <div class="health-dot health-dot-idle"></div>
@@ -594,14 +608,21 @@
               <div class="health-item">
                 <div class="health-dot health-dot-idle"></div>
                 <div class="health-item-body">
-                  <div class="health-item-label">Data Files</div>
+                  <div class="health-item-label">Playback Runtime</div>
+                  <div class="health-item-detail">Run check to test</div>
+                </div>
+              </div>
+              <div class="health-item">
+                <div class="health-dot health-dot-idle"></div>
+                <div class="health-item-body">
+                  <div class="health-item-label">Database</div>
                   <div class="health-item-detail">Run check to test</div>
                 </div>
               </div>
             </div>
             <div class="health-run-row">
               <button class="btn-secondary" id="health-check-btn" onclick="App.runHealthCheck()">Run Health Check</button>
-              <span class="health-last-run" id="health-last-run"></span>
+              <span class="health-last-run" id="health-last-run" style="display:none"></span>
             </div>
           </div>
 

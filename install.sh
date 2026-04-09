@@ -71,30 +71,19 @@ echo -e "  📦  Dependencies... ${GREEN}installed ✅${NC}"
 mkdir -p data/artwork data/playlist_artwork
 echo -e "  📂  Data directories... ${GREEN}ready ✅${NC}"
 
-# ── Bootstrap data files ──────────────────────────────────────────────────────
-if [ ! -f "data/playlists.json" ]; then
-  echo '{}' > data/playlists.json
-  echo -e "  📝  playlists.json... ${GREEN}created ✅${NC}"
-fi
-
-if [ ! -f "data/settings.json" ]; then
-  cat > data/settings.json <<'JSON'
-{
-  "poweramp_mount": "/Volumes/FIIO M21",
-  "ap80_mount": "/Volumes/AP80",
-  "music_base": "/Volumes/Storage/Music/FLAC"
-}
-JSON
-  echo -e "  ⚙️   settings.json... ${GREEN}created ✅${NC}"
+# ── SQLite bootstrap ──────────────────────────────────────────────────────────
+if [ ! -f "data/tunebridge.db" ]; then
+  echo -e "  🗃️   SQLite database... ${YELLOW}will be created on first app launch ⏭️${NC}"
+else
+  echo -e "  🗃️   SQLite database... ${GREEN}found ✅${NC}"
 fi
 
 echo ""
 echo -e "${GREEN}${BOLD}✅  Setup complete!${NC}"
 echo ""
 echo -e "  Next steps:"
-echo -e "  ${BOLD}1.${NC} Edit ${BOLD}data/settings.json${NC} — set your music library path:"
-echo -e "       \"music_base\": \"/path/to/your/Music\""
-echo -e "  ${BOLD}2.${NC} Start:   ${BOLD}bash run.sh${NC}  ${DIM}(or: bash tunebridge.sh run)${NC}"
-echo -e "  ${BOLD}3.${NC} Browse:  ${BOLD}http://localhost:5001${NC}"
-echo -e "  ${BOLD}4.${NC} Click ${BOLD}Rescan Library${NC} in Settings to index your music."
+echo -e "  ${BOLD}1.${NC} Start:   ${BOLD}bash run.sh${NC}  ${DIM}(or: bash tunebridge.sh run)${NC}"
+echo -e "  ${BOLD}2.${NC} Browse:  ${BOLD}http://localhost:5001${NC}"
+echo -e "  ${BOLD}3.${NC} In app Settings, set your music library path."
+echo -e "  ${BOLD}4.${NC} Click ${BOLD}Rescan Library${NC} to index your music."
 echo ""

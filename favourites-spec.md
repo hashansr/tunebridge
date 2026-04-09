@@ -32,9 +32,9 @@ Users can mark songs, albums, and artists as favourites using a star toggle. Fav
 
 ## 4. Data Model
 
-### `data/favourites.json`
+### `tunebridge.db` (`favourites` + `favourite_dap_exports` tables)
 
-Each category is an ordered array. Array position = the user's manual sort order. `added_at` is a Unix timestamp enabling "recently added" sort.
+Each category is represented by rows keyed by `(category, item_id)`. `added_at` is a Unix timestamp enabling "recently added" sort.
 
 ```json
 {
@@ -114,7 +114,7 @@ All POST/DELETE operations return the updated category array so the frontend can
 
 ### Backup
 
-`favourites.json` is included in the existing `GET /api/backup/export` ZIP and restored via `POST /api/backup/import`.
+Favourites are included in the SQLite snapshot (`tunebridge.db`) exported via `GET /api/backup/export` and restored via `POST /api/backup/import`.
 
 ---
 
