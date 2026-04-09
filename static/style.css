@@ -5408,17 +5408,14 @@ tbody tr:hover {
   top: 0;
   bottom: 86px;
   z-index: 360;
-  background:
-    radial-gradient(860px 360px at 8% -16%, rgba(173,198,255,0.12), transparent 64%),
-    radial-gradient(960px 340px at 88% -28%, rgba(83,225,111,0.07), transparent 68%),
-    rgba(19, 19, 19, 0.96);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
+  background: #131313;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   overflow: auto;
 }
 
 .peq-workspace-shell {
-  width: min(1180px, 100%);
+  width: min(1120px, 100%);
   margin: 0 auto;
   padding: 28px 32px 22px;
   min-height: 100%;
@@ -5481,65 +5478,82 @@ tbody tr:hover {
 .peq-workspace-graph-panel {
   padding: 16px 16px 14px;
   border-radius: 18px;
-  background:
-    linear-gradient(145deg, rgba(255,255,255,0.034), rgba(255,255,255,0.016)),
-    rgba(28,27,27,0.94);
-  box-shadow:
-    0 30px 72px rgba(6,8,16,0.42),
-    inset 0 1px 0 rgba(255,255,255,0.04);
-}
-
-.peq-workspace-action-rail {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 12px;
-  margin: 14px 0 12px;
-  padding: 10px 14px;
-  border-radius: 16px;
   background: rgba(28,27,27,0.9);
   border: 1px solid rgba(65,71,85,0.15);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
 }
 
-.peq-workspace-action-left,
-.peq-workspace-action-center,
-.peq-workspace-action-right {
+.peq-workspace-edit-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 176px;
+  gap: 10px;
+  align-items: start;
+}
+
+.peq-workspace-editor-main {
+  min-width: 0;
+}
+
+.peq-workspace-actions-panel {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  background: #1c1b1b;
+  border: 1px solid rgba(65,71,85,0.15);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.peq-side-btn {
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 10px;
+  justify-content: center;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  background-image: none;
+}
+
+.peq-workspace-actions-panel .btn-secondary {
+  background: rgba(42, 42, 42, 0.72);
+  border: 1px solid rgba(173, 198, 255, 0.14);
+  color: var(--text-sub);
+  background-image: none;
+}
+
+.peq-workspace-actions-panel .btn-secondary:hover {
+  background: rgba(53, 53, 52, 0.78);
+  color: var(--text);
+  background-image: none;
+}
+
+.peq-workspace-actions-panel .btn-primary {
+  background: rgba(173, 198, 255, 0.88);
+  color: #1f2f4f;
+  border: 1px solid rgba(173, 198, 255, 0.24);
+  background-image: none;
+}
+
+.peq-workspace-actions-panel .btn-primary:hover {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
+  background-image: none;
+}
+
+.peq-side-btn-primary {
+  min-height: 32px;
+}
+
+.peq-side-copy-wrap {
+  width: 100%;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
 }
 
-.peq-workspace-action-center {
-  justify-content: center;
-  justify-self: center;
-}
-
-.peq-workspace-action-right {
-  justify-content: flex-end;
-  flex-wrap: wrap;
-}
-
-.peq-rail-btn {
-  min-height: 34px;
-  padding: 7px 13px;
-  font-size: var(--text-sm);
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.peq-rail-primary {
-  min-width: 210px;
-  min-height: 42px;
-  font-size: var(--text-md);
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.peq-close-btn {
-  opacity: 0.9;
-}
+.peq-workspace-close-btn { opacity: 0.96; }
 
 .peq-editor-modal-inner {
   width: min(720px, 92vw);
@@ -5614,7 +5628,7 @@ tbody tr:hover {
 }
 
 .peq-editor-curve-wrap {
-  background: rgba(255,255,255,0.018);
+  background: rgba(24,23,23,0.88);
   border-radius: 14px;
   padding: 10px;
   margin-bottom: 10px;
@@ -5633,9 +5647,10 @@ tbody tr:hover {
   align-items: center;
   gap: 10px;
   padding: 10px 12px 12px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   border-radius: 12px;
-  background: rgba(28,27,27,0.84);
+  background: rgba(24,23,23,0.88);
+  max-width: 760px;
 }
 
 .peq-preamp-input {
@@ -5666,22 +5681,28 @@ tbody tr:hover {
 .peq-editor-band-header,
 .peq-editor-band-row {
   display: grid;
-  grid-template-columns: 24px 74px 92px 100px 100px 90px;
+  grid-template-columns: 24px 86px minmax(100px, 1.05fr) minmax(90px, 1fr) minmax(90px, 1fr) minmax(80px, 0.9fr);
   gap: 10px;
   align-items: center;
+  min-width: 640px;
 }
 
 .peq-editor-band-header {
   padding: 8px 12px 7px;
   border-radius: 10px;
-  background: rgba(28,27,27,0.86);
+  background: rgba(24,23,23,0.88);
 }
 
 .peq-editor-band-row {
   padding: 7px 12px;
   border-radius: 10px;
-  background: rgba(24,23,23,0.72);
+  background: rgba(24,23,23,0.88);
   margin-bottom: 6px;
+}
+
+.peq-editor-table-wrap {
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 
 .peq-editor-col-label {
@@ -5835,23 +5856,10 @@ tbody tr:hover {
   .peq-workspace-context {
     grid-template-columns: 1fr;
   }
-  .peq-workspace-action-rail {
-    grid-template-columns: 1fr;
-    border-radius: 16px;
-    padding: 10px;
-  }
-  .peq-workspace-action-left,
-  .peq-workspace-action-center,
-  .peq-workspace-action-right {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-  }
-  .peq-workspace-action-center .peq-rail-primary {
-    width: 100%;
-  }
   .peq-editor-preamp-row {
     grid-template-columns: 1fr;
     gap: 8px;
+    max-width: 100%;
   }
   .peq-preamp-input {
     width: 100%;
@@ -5865,6 +5873,20 @@ tbody tr:hover {
   .peq-copy-dap-select {
     width: 100%;
     min-width: 0;
+  }
+}
+
+@media (max-width: 1320px) {
+  .peq-workspace-edit-layout {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .peq-workspace-actions-panel {
+    order: 2;
+    padding: 10px;
+  }
+  .peq-side-btn {
+    width: 100%;
   }
 }
 @media (max-width: 620px) {
