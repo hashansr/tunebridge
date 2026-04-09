@@ -1545,10 +1545,10 @@
   <section id="peq-workspace" class="peq-workspace" style="display:none">
     <div class="peq-workspace-shell">
       <div class="peq-workspace-header">
-        <div>
-          <div class="peq-workspace-overline">Player · Parametric EQ</div>
+        <div class="peq-workspace-title-block">
+          <div class="peq-workspace-overline">Tune for immersion</div>
           <h2>Custom PEQ</h2>
-          <div class="peq-workspace-subtitle">Tune your EQ live while playback controls stay available.</div>
+          <div class="peq-workspace-subtitle">Sculpt your acoustic signature while playback controls stay active.</div>
         </div>
       </div>
 
@@ -1565,6 +1565,13 @@
           <label class="peq-editor-col-label">Reference Target (Optional)</label>
           <select id="peq-workspace-target-select" class="peq-select" onchange="App.onPeqWorkspaceTargetChange(this.value)"></select>
         </div>
+      </div>
+
+      <div class="peq-workspace-graph-panel">
+        <div class="peq-editor-curve-wrap">
+          <canvas id="peq-editor-canvas" width="660" height="260"></canvas>
+        </div>
+        <div id="peq-editor-curve-legend" class="curve-legend"></div>
       </div>
 
       <div id="peq-save-profile-panel" class="peq-save-profile-panel" style="display:none">
@@ -1585,42 +1592,43 @@
         <span id="peq-workspace-dirty" class="peq-workspace-dirty" style="display:none">Unsaved changes</span>
       </div>
 
-      <div class="peq-editor-curve-wrap">
-        <canvas id="peq-editor-canvas" width="660" height="260"></canvas>
-      </div>
-      <div id="peq-editor-curve-legend" class="curve-legend"></div>
-      <div class="peq-editor-divider"></div>
-
-      <div class="peq-editor-preamp-row">
-        <span class="peq-editor-col-label">Preamp</span>
-        <input type="number" id="peq-preamp" class="peq-editor-num-input peq-preamp-input"
-               min="-30" max="30" step="0.1" value="0"
-               oninput="App.onPeqPreampChange(this.value)" />
-        <span class="peq-editor-unit">dB</span>
-      </div>
-
-      <div class="peq-editor-band-header">
-        <span class="peq-editor-col-label">#</span>
-        <span class="peq-editor-col-label">On</span>
-        <span class="peq-editor-col-label">Type</span>
-        <span class="peq-editor-col-label">Fc (Hz)</span>
-        <span class="peq-editor-col-label">Gain (dB)</span>
-        <span class="peq-editor-col-label">Q</span>
-      </div>
-      <div id="peq-editor-bands"></div>
-
-      <div class="peq-editor-footer">
-        <div class="peq-editor-footer-actions">
-          <button class="btn-secondary" onclick="App.resetCustomPeq()">Reset</button>
-          <button class="btn-secondary" onclick="App.downloadCustomPeqTxt()">Download .txt</button>
-          <div id="peq-copy-wrap" class="peq-copy-wrap" style="display:none">
-            <select id="peq-copy-dap-select" class="peq-select peq-copy-dap-select" style="display:none"></select>
-            <button id="peq-copy-btn" class="btn-secondary" onclick="App.copyCustomPeqToConnectedDap()">Copy to Connected DAP</button>
+      <div class="peq-workspace-edit-layout">
+        <div class="peq-workspace-editor-main">
+          <div class="peq-editor-preamp-row">
+            <span class="peq-editor-col-label">Preamp Gain</span>
+            <input type="range" id="peq-preamp-slider" class="peq-preamp-slider"
+                  min="-30" max="30" step="0.1" value="0"
+                  oninput="App.onPeqPreampChange(this.value, 'slider')" />
+            <input type="number" id="peq-preamp" class="peq-editor-num-input peq-preamp-input"
+                  min="-30" max="30" step="0.1" value="0"
+                  oninput="App.onPeqPreampChange(this.value, 'input')" />
+            <span class="peq-editor-unit">dB</span>
           </div>
-          <button class="btn-primary" onclick="App.applyAndClosePeqEditor()">Save</button>
-          <button class="btn-secondary" onclick="App.saveCustomPeqAsProfile()">Save As</button>
-          <button class="btn-secondary" onclick="App.closePeqEditor()">Close</button>
+
+          <div class="peq-editor-table-wrap">
+            <div class="peq-editor-band-header">
+              <span class="peq-editor-col-label">#</span>
+              <span class="peq-editor-col-label">Active</span>
+              <span class="peq-editor-col-label">Filter Type</span>
+              <span class="peq-editor-col-label">Fc (Hz)</span>
+              <span class="peq-editor-col-label">Gain (dB)</span>
+              <span class="peq-editor-col-label">Q</span>
+            </div>
+            <div id="peq-editor-bands"></div>
+          </div>
         </div>
+
+        <aside class="peq-workspace-actions-panel">
+          <button id="peq-primary-action-btn" class="btn-primary peq-side-btn peq-side-btn-primary" onclick="App.onPeqPrimaryAction()">Save</button>
+          <button id="peq-secondary-action-btn" class="btn-secondary peq-side-btn" onclick="App.onPeqSecondaryAction()">Save Profile</button>
+          <button class="btn-secondary peq-side-btn" onclick="App.resetCustomPeq()">Reset</button>
+          <button class="btn-secondary peq-side-btn" onclick="App.downloadCustomPeqTxt()">Export</button>
+          <div id="peq-copy-wrap" class="peq-copy-wrap peq-side-copy-wrap" style="display:none">
+            <select id="peq-copy-dap-select" class="peq-select peq-copy-dap-select" style="display:none"></select>
+            <button id="peq-copy-btn" class="btn-secondary peq-side-btn" onclick="App.copyCustomPeqToConnectedDap()">Copy to DAP</button>
+          </div>
+          <button class="btn-secondary peq-side-btn peq-workspace-close-btn" onclick="App.closePeqEditor()">Close</button>
+        </aside>
       </div>
     </div>
   </section>
