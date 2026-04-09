@@ -5777,6 +5777,14 @@ function renderPeqEditorBands() {
   }).join('');
 }
 
+function _syncPeqPreampInputs(value, source = '') {
+  const val = Math.max(-30, Math.min(30, Number(value) || 0));
+  const numInput = document.getElementById('peq-preamp');
+  const slider = document.getElementById('peq-preamp-slider');
+  if (numInput && source !== 'input') numInput.value = val.toFixed(1);
+  if (slider) slider.value = String(val);
+}
+
 async function openPeqEditor(opts = {}) {
   if (_peqWorkspaceOpen) return;
   const panel = document.getElementById('peq-workspace');
@@ -5825,8 +5833,7 @@ async function openPeqEditor(opts = {}) {
       peqSel.value = _WORKSPACE_NEW_PEQ_ID;
     }
   }
-  const preampInput = document.getElementById('peq-preamp');
-  if (preampInput) preampInput.value = _customPeqEditorState.preamp_db.toFixed(1);
+  _syncPeqPreampInputs(_customPeqEditorState.preamp_db);
   renderPeqEditorBands();
   _renderCustomPeqSavePanel(false);
   panel.style.display = 'block';
@@ -5918,8 +5925,7 @@ async function resetCustomPeq() {
   _customPeqEditorState = _defaultCustomPeqState();
   _customPeqEditorState.enabled = true;
   const st = _saveCustomPeqState();
-  const preampInput = document.getElementById('peq-preamp');
-  if (preampInput) preampInput.value = st.preamp_db.toFixed(1);
+  _syncPeqPreampInputs(st.preamp_db);
   renderPeqEditorBands();
   Player?.applyCustomPeq?.(st);
   _schedulePeqWorkspaceGraphRefresh();
@@ -5992,11 +5998,12 @@ function onPeqBandQChange(i, val) {
   _refreshPeqWorkspaceDirty();
 }
 
-function onPeqPreampChange(val) {
+function onPeqPreampChange(val, source = '') {
   const st = _loadCustomPeqState();
   st.preamp_db = Math.max(-30, Math.min(30, _parseNum(val, st.preamp_db)));
   st.enabled = true;
   _saveCustomPeqState();
+  _syncPeqPreampInputs(st.preamp_db, source);
   Player?.updatePreamp?.(st.preamp_db);
   _schedulePeqWorkspaceGraphRefresh();
   _refreshPeqWorkspaceDirty();
@@ -6019,8 +6026,7 @@ function onPeqWorkspacePeqChange(peqId) {
     _customPeqEditorState = _defaultCustomPeqState();
     _customPeqEditorState.enabled = true;
     _saveCustomPeqState();
-    const preampInput = document.getElementById('peq-preamp');
-    if (preampInput) preampInput.value = _customPeqEditorState.preamp_db.toFixed(1);
+    _syncPeqPreampInputs(_customPeqEditorState.preamp_db);
     renderPeqEditorBands();
     Player?.applyCustomPeq?.(_customPeqEditorState);
     _snapshotPeqWorkspace();
@@ -6034,8 +6040,7 @@ function onPeqWorkspacePeqChange(peqId) {
   _customPeqEditorState = _customStateFromProfile(profile);
   _saveCustomPeqState();
   _peqWorkspaceEditContext = { iemId, peqId: profile.id, peqName: profile.name || 'PEQ Profile' };
-  const preampInput = document.getElementById('peq-preamp');
-  if (preampInput) preampInput.value = _customPeqEditorState.preamp_db.toFixed(1);
+  _syncPeqPreampInputs(_customPeqEditorState.preamp_db);
   renderPeqEditorBands();
   Player?.applyCustomPeq?.(_customPeqEditorState);
   _snapshotPeqWorkspace();

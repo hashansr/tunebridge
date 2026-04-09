@@ -5409,18 +5409,18 @@ tbody tr:hover {
   bottom: 86px;
   z-index: 360;
   background:
-    radial-gradient(620px 260px at 8% -12%, rgba(173,198,255,0.14), transparent 62%),
-    radial-gradient(680px 260px at 95% -20%, rgba(83,225,111,0.08), transparent 66%),
+    radial-gradient(860px 360px at 8% -16%, rgba(173,198,255,0.12), transparent 64%),
+    radial-gradient(960px 340px at 88% -28%, rgba(83,225,111,0.07), transparent 68%),
     rgba(19, 19, 19, 0.96);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
   overflow: auto;
 }
 
 .peq-workspace-shell {
-  width: min(1120px, 100%);
+  width: min(1180px, 100%);
   margin: 0 auto;
-  padding: 28px 32px 24px;
+  padding: 28px 32px 22px;
   min-height: 100%;
 }
 
@@ -5432,37 +5432,113 @@ tbody tr:hover {
   margin-bottom: 14px;
 }
 
+.peq-workspace-title-block {
+  max-width: 860px;
+}
+
 .peq-workspace-overline {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-bottom: 2px;
+  margin-bottom: 6px;
 }
 
 .peq-workspace-header h2 {
-  font-size: 24px;
+  font-size: 22px;
+  line-height: 1.15;
+  font-weight: 700;
   letter-spacing: -0.02em;
+  margin: 0;
 }
 
 .peq-workspace-subtitle {
-  margin-top: 4px;
+  margin-top: 6px;
   color: var(--text-sub);
-  font-size: var(--text-md);
+  font-size: var(--text-base);
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .peq-workspace-context {
   display: grid;
-  grid-template-columns: repeat(2, minmax(240px, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
 }
 
 .peq-workspace-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
+}
+
+.peq-workspace-field:last-child {
+  grid-column: 1 / -1;
+}
+
+.peq-workspace-graph-panel {
+  padding: 16px 16px 14px;
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.034), rgba(255,255,255,0.016)),
+    rgba(28,27,27,0.94);
+  box-shadow:
+    0 30px 72px rgba(6,8,16,0.42),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+.peq-workspace-action-rail {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 12px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: rgba(28,27,27,0.9);
+  border: 1px solid rgba(65,71,85,0.15);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.peq-workspace-action-left,
+.peq-workspace-action-center,
+.peq-workspace-action-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.peq-workspace-action-center {
+  justify-content: center;
+  justify-self: center;
+}
+
+.peq-workspace-action-right {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.peq-rail-btn {
+  min-height: 34px;
+  padding: 7px 13px;
+  font-size: var(--text-sm);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.peq-rail-primary {
+  min-width: 210px;
+  min-height: 42px;
+  font-size: var(--text-md);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.peq-close-btn {
+  opacity: 0.9;
 }
 
 .peq-editor-modal-inner {
@@ -5492,10 +5568,9 @@ tbody tr:hover {
 }
 
 .peq-save-profile-panel {
-  border: 1px solid rgba(173,198,255,0.12);
-  border-radius: 12px;
-  background: rgba(255,255,255,0.03);
-  padding: 10px;
+  border-radius: 14px;
+  background: rgba(28,27,27,0.92);
+  padding: 12px;
   margin-bottom: 12px;
 }
 
@@ -5527,66 +5602,86 @@ tbody tr:hover {
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .peq-workspace-dirty {
   font-size: 12px;
-  color: #f0b429;
-  border: 1px solid rgba(240,180,41,0.35);
-  background: rgba(240,180,41,0.12);
+  color: #e3c36d;
+  background: rgba(240,180,41,0.13);
   border-radius: 999px;
   padding: 4px 10px;
 }
 
 .peq-editor-curve-wrap {
-  background: rgba(255,255,255,0.025);
-  border-radius: 12px;
-  padding: 8px;
-  margin-bottom: 16px;
-  border: 1px solid rgba(173,198,255,0.08);
+  background: rgba(255,255,255,0.018);
+  border-radius: 14px;
+  padding: 10px;
+  margin-bottom: 10px;
 }
 
 #peq-editor-canvas {
   display: block;
   width: 100%;
-  height: 260px;
-  border-radius: 8px;
+  height: 290px;
+  border-radius: 10px;
 }
 
 .peq-editor-preamp-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) 88px auto;
   align-items: center;
-  gap: 8px;
-  padding: 10px 0 12px;
-  margin-bottom: 10px;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: rgba(28,27,27,0.84);
 }
 
 .peq-preamp-input {
-  width: 80px;
+  width: 88px;
   max-width: 100%;
   text-align: left;
 }
 
-.peq-editor-divider {
-  border-top: 1px solid rgba(173,198,255,0.10);
-  margin: 8px 0 0;
+.peq-preamp-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(173,198,255,0.24);
+}
+
+.peq-preamp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #c7d6ff;
+  box-shadow: 0 0 0 3px rgba(173,198,255,0.2);
+  cursor: pointer;
 }
 
 .peq-editor-band-header,
 .peq-editor-band-row {
   display: grid;
-  grid-template-columns: 24px 52px 72px 90px 90px 80px;
-  gap: 8px;
+  grid-template-columns: 24px 74px 92px 100px 100px 90px;
+  gap: 10px;
   align-items: center;
 }
 
 .peq-editor-band-header {
-  padding: 4px 0 6px;
+  padding: 8px 12px 7px;
+  border-radius: 10px;
+  background: rgba(28,27,27,0.86);
 }
 
 .peq-editor-band-row {
-  padding: 4px 0;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgba(24,23,23,0.72);
+  margin-bottom: 6px;
 }
 
 .peq-editor-col-label {
@@ -5604,21 +5699,22 @@ tbody tr:hover {
 }
 
 .peq-band-toggle {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  padding: 3px 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 5px 10px;
   border-radius: 9999px;
-  border: 1px solid rgba(107,107,123,0.4);
-  background: transparent;
+  border: 0;
+  background: rgba(53,53,52,0.8);
   color: var(--text-muted);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
 .peq-band-toggle.active {
-  background: rgba(83,225,111,0.18);
-  color: var(--accent-success);
-  border-color: rgba(83,225,111,0.4);
+  background: rgba(173,198,255,0.22);
+  color: #d5e1ff;
 }
 
 .peq-band-type {
@@ -5634,7 +5730,7 @@ tbody tr:hover {
 .peq-editor-num-input {
   background: var(--bg-active);
   color: var(--text);
-  border: 1px solid rgba(173,198,255,0.12);
+  border: 1px solid rgba(173,198,255,0.1);
   border-radius: 8px;
   padding: 4px 8px;
   font-size: 12px;
@@ -5655,23 +5751,6 @@ tbody tr:hover {
   font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;
-}
-
-.peq-editor-footer {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  padding-top: 16px;
-  border-top: 1px solid rgba(173,198,255,0.10);
-  margin-top: 12px;
-}
-
-.peq-editor-footer-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
 .peq-copy-wrap {
@@ -5750,16 +5829,36 @@ tbody tr:hover {
   .peq-workspace-shell {
     padding: 18px 16px 18px;
   }
+  .peq-workspace-header h2 {
+    font-size: 22px;
+  }
   .peq-workspace-context {
     grid-template-columns: 1fr;
+  }
+  .peq-workspace-action-rail {
+    grid-template-columns: 1fr;
+    border-radius: 16px;
+    padding: 10px;
+  }
+  .peq-workspace-action-left,
+  .peq-workspace-action-center,
+  .peq-workspace-action-right {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .peq-workspace-action-center .peq-rail-primary {
+    width: 100%;
+  }
+  .peq-editor-preamp-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .peq-preamp-input {
+    width: 100%;
   }
   .peq-save-profile-grid {
     grid-template-columns: 1fr;
   }
-  .peq-editor-footer-actions {
-    justify-content: stretch;
-  }
-  .peq-editor-footer-actions > button,
   .peq-copy-wrap {
     width: 100%;
   }
