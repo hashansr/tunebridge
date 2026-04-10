@@ -1319,17 +1319,27 @@ const Player = (function () {
   }
 
   async function togglePeqPopover() {
-    if (typeof App !== 'undefined'
-        && typeof App.isPeqWorkspaceOpen === 'function'
-        && App.isPeqWorkspaceOpen()) {
-      return;
-    }
     ps.peqOpen = !ps.peqOpen;
     _setPeqPopoverOpen(ps.peqOpen);
     if (ps.peqOpen) {
       await _populatePeqIemList();
       _updateXfadeUI();
     }
+  }
+
+  async function resetPeqPopover() {
+    const iemSel = document.getElementById('peq-iem-select');
+    const profileSel = document.getElementById('peq-profile-select');
+
+    if (iemSel) iemSel.value = '';
+    await onPeqIemChange('');
+
+    if (profileSel) profileSel.value = '';
+    await onPeqProfileChange('');
+
+    ps.crossfadeDuration = 0;
+    try { localStorage.setItem('tb_xfade', '0'); } catch (_) {}
+    _updateXfadeUI();
   }
 
   async function _populatePeqIemList() {
@@ -1827,7 +1837,6 @@ const Player = (function () {
 
   /* ── Crossfade control (Web Audio mode only; mpv uses gapless) ─────── */
   function setXfade(value) {
-    if (_mpvAvailable) return;  // mpv: gapless, no crossfade slider
     ps.crossfadeDuration = Math.max(0, Math.min(12, parseInt(value, 10)));
     try { localStorage.setItem('tb_xfade', ps.crossfadeDuration); } catch (_) {}
     _updateXfadeUI();
@@ -1837,15 +1846,12 @@ const Player = (function () {
     const valEl    = document.getElementById('xfade-val');
     const sliderEl = document.getElementById('xfade-slider');
     const rowEl    = document.getElementById('xfade-row');
-    if (_mpvAvailable) {
-      // Hide crossfade row; mpv handles gapless natively
-      if (rowEl)    rowEl.style.display = 'none';
-      if (valEl)    valEl.textContent   = 'Gapless';
-      return;
-    }
     if (rowEl)    rowEl.style.display = '';
     if (valEl)    valEl.textContent   = ps.crossfadeDuration === 0 ? 'Off' : `${ps.crossfadeDuration}s`;
-    if (sliderEl) sliderEl.value      = ps.crossfadeDuration;
+    if (sliderEl) {
+      sliderEl.disabled = false;
+      sliderEl.value = ps.crossfadeDuration;
+    }
   }
 
   function _updatePlayBtn() {
@@ -2277,6 +2283,7 @@ const Player = (function () {
     onPeqProfileChange,
     applyPeqProfile,
     openPeqWorkspaceFromPopover,
+    resetPeqPopover,
     openCustomEqWorkspace: () => {
       if (typeof App !== 'undefined' && typeof App.openPeqEditor === 'function') {
         App.openPeqEditor({ mode: 'create' });
