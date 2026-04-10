@@ -1913,8 +1913,24 @@ function _collectDapModalDraft() {
     music_root: document.getElementById('dap-music-root')?.value || '',
     template: document.getElementById('dap-path-template')?.value || '',
     export_folder: document.getElementById('dap-export-folder')?.value || '',
+    peq_folder: document.getElementById('dap-peq-folder')?.value || '',
     prefix: document.getElementById('dap-prefix')?.value || '',
   };
+}
+
+function _updateDapModalUnsavedBanner() {
+  const banner = document.getElementById('dap-unsaved-banner');
+  if (!banner) return;
+  if (!_isOverlayOpen('dap-modal')) {
+    banner.style.display = 'none';
+    return;
+  }
+  banner.style.display = _isDapModalDirty() ? '' : 'none';
+}
+
+function _commitDapModalBaseline() {
+  _dapModalInitialJson = JSON.stringify(_collectDapModalDraft());
+  _updateDapModalUnsavedBanner();
 }
 
 function _collectIemModalDraft() {
@@ -1929,6 +1945,21 @@ function _collectIemModalDraft() {
     s3l: document.getElementById('iem-source-label-3')?.value || '',
     s3u: document.getElementById('iem-source-url-3')?.value || '',
   };
+}
+
+function _updateIemModalUnsavedBanner() {
+  const banner = document.getElementById('iem-unsaved-banner');
+  if (!banner) return;
+  if (!_isOverlayOpen('iem-modal')) {
+    banner.style.display = 'none';
+    return;
+  }
+  banner.style.display = _isIemModalDirty() ? '' : 'none';
+}
+
+function _commitIemModalBaseline() {
+  _iemModalInitialJson = JSON.stringify(_collectIemModalDraft());
+  _updateIemModalUnsavedBanner();
 }
 
 function _isDapModalDirty() {
@@ -4690,6 +4721,7 @@ async function showDapDetail(id) {
       <div class="dap-config-field"><label>Storage</label><span>${esc(dap.storage_type === 'internal' ? 'Internal' : 'SD card')}</span></div>
       <div class="dap-config-field"><label>Music folder</label><span>${esc(dap.music_root || 'Music')}</span></div>
       <div class="dap-config-field"><label>Export folder</label><span>${esc(dap.export_folder || 'Playlists')}</span></div>
+      <div class="dap-config-field"><label>PEQ folder</label><span>${esc(dap.peq_folder || '~/PEQ')}</span></div>
       <div class="dap-config-field"><label>Sync template</label><span><code>${esc(dap.path_template || DAP_TEMPLATE_PRESETS.artist_album_track)}</code></span></div>
       <div class="dap-config-field"><label>Path prefix</label><span>${esc(dap.path_prefix || '(none)')}</span></div>
       <div class="dap-config-field"><label>Model</label><span>${esc(dap.model || 'generic')}</span></div>
@@ -4730,7 +4762,7 @@ async function dapExportPlaylist(dapId, plId, btn) {
   }
 }
 
-function showAddDapModal() {
+async function showAddDapModal() {
   _ensureGearProfileSelects();
   const firstModel = Object.keys(DAP_MODEL_PRESETS)[0] || 'other';
   const firstPreset = DAP_MODEL_PRESETS[firstModel] || { folder: 'Playlists', prefix: '' };
@@ -4742,20 +4774,22 @@ function showAddDapModal() {
   document.getElementById('dap-name').value = '';
   document.getElementById('dap-model').value = firstModel;
   document.getElementById('dap-mount').value = '';
+  document.getElementById('dap-mount').dataset.prevMountForPeq = '';
   document.getElementById('dap-mount-manual-toggle').checked = false;
   document.getElementById('dap-mount-manual-wrap').style.display = 'none';
   document.getElementById('dap-music-root').value = 'Music';
   document.getElementById('dap-template-preset').value = 'artist_album_track';
   document.getElementById('dap-path-template').value = DAP_TEMPLATE_PRESETS.artist_album_track;
   document.getElementById('dap-export-folder').value = firstPreset.folder || 'Playlists';
+  document.getElementById('dap-peq-folder').value = '';
   document.getElementById('dap-prefix').value = firstPreset.prefix || '';
   dapModelPreset(firstModel);
   dapTemplateChanged();
   _closeDapHelpPanels();
-  refreshDapMounts('', true, null);
-  validateDapForm(false);
-  _dapModalInitialJson = JSON.stringify(_collectDapModalDraft());
   document.getElementById('dap-modal').style.display = 'flex';
+  await refreshDapMounts('', true, null, true);
+  validateDapForm(false);
+  _commitDapModalBaseline();
 }
 
 async function showEditDapModal(id) {
@@ -4773,6 +4807,7 @@ async function showEditDapModal(id) {
   }
   document.getElementById('dap-model').value = dap.model || (Object.keys(DAP_MODEL_PRESETS)[0] || 'other');
   document.getElementById('dap-mount').value = dap.mount_path || '';
+  document.getElementById('dap-mount').dataset.prevMountForPeq = dap.mount_path || '';
   document.getElementById('dap-mount-volume-uuid').value = dap.mount_volume_uuid || '';
   document.getElementById('dap-mount-disk-uuid').value = dap.mount_disk_uuid || '';
   document.getElementById('dap-mount-device-identifier').value = dap.mount_device_identifier || '';
@@ -4780,23 +4815,26 @@ async function showEditDapModal(id) {
   document.getElementById('dap-path-template').value = dap.path_template || DAP_TEMPLATE_PRESETS.artist_album_track;
   document.getElementById('dap-template-preset').value = _suggestTemplatePreset(document.getElementById('dap-path-template').value);
   document.getElementById('dap-export-folder').value = dap.export_folder || 'Playlists';
+  document.getElementById('dap-peq-folder').value = dap.peq_folder || _defaultPeqFolderForMount(dap.mount_path || '');
   document.getElementById('dap-prefix').value = dap.path_prefix || '';
   _updateDapFolderHint(dap.model || (Object.keys(DAP_MODEL_PRESETS)[0] || 'other'));
   dapTemplateChanged();
   _closeDapHelpPanels();
-  refreshDapMounts(dap.mount_path || '', false, {
+  document.getElementById('dap-modal').style.display = 'flex';
+  await refreshDapMounts(dap.mount_path || '', false, {
     volume_uuid: dap.mount_volume_uuid || '',
     disk_uuid: dap.mount_disk_uuid || '',
     device_identifier: dap.mount_device_identifier || '',
-  });
+  }, true);
   validateDapForm(false);
-  _dapModalInitialJson = JSON.stringify(_collectDapModalDraft());
-  document.getElementById('dap-modal').style.display = 'flex';
+  _commitDapModalBaseline();
 }
 
 function closeDapModal() {
   _closeDapHelpPanels();
   document.getElementById('dap-modal').style.display = 'none';
+  const banner = document.getElementById('dap-unsaved-banner');
+  if (banner) banner.style.display = 'none';
   _dapModalInitialJson = '';
 }
 
@@ -4889,7 +4927,7 @@ function _renderDapTemplatePreview() {
   const root = ((document.getElementById('dap-music-root')?.value || 'Music').trim().replace(/\\/g, '/')).replace(/^\/+|\/+$/g, '');
   const full = [root, rendered].filter(Boolean).join('/');
   const breadcrumb = full.split('/').filter(Boolean).join(' › ');
-  preview.innerHTML = `<span class="dap-template-preview-label">📁 Preview file path:</span> <code class="dap-template-preview-path">${esc(breadcrumb)}</code>`;
+  preview.innerHTML = `<span class="dap-template-preview-label">Preview file path</span><code class="dap-template-preview-path">${esc(breadcrumb)}</code>`;
 }
 
 function _validateDapTemplate(showToast = false) {
@@ -5011,8 +5049,9 @@ function _matchMountByIdentity(mounts, identity) {
   ) || null;
 }
 
-async function refreshDapMounts(preferredPath = '', forceManualOff = false, preferredIdentity = null) {
+async function refreshDapMounts(preferredPath = '', forceManualOff = false, preferredIdentity = null, commitBaseline = false) {
   const currentPath = (preferredPath || document.getElementById('dap-mount')?.value || '').trim();
+  const beforeMount = document.getElementById('dap-mount')?.value || '';
   const currentIdentity = preferredIdentity || {
     volume_uuid: document.getElementById('dap-mount-volume-uuid')?.value || '',
     disk_uuid: document.getElementById('dap-mount-disk-uuid')?.value || '',
@@ -5039,19 +5078,26 @@ async function refreshDapMounts(preferredPath = '', forceManualOff = false, pref
     document.getElementById('dap-mount').value = selPath;
     const selectedMount = _detectedDapMounts.find(m => m.path === selPath) || matchedByIdentity || null;
     _setDapMountIdentityFields(selectedMount);
+    _maybeSyncPeqFolderWithMount(selPath, beforeMount, false);
+    const mountInput = document.getElementById('dap-mount');
+    if (mountInput) mountInput.dataset.prevMountForPeq = selPath || '';
   }
   validateDapForm(false);
-  if (_isOverlayOpen('dap-modal')) {
-    _dapModalInitialJson = JSON.stringify(_collectDapModalDraft());
+  if (commitBaseline && _isOverlayOpen('dap-modal')) {
+    _commitDapModalBaseline();
   }
 }
 
 function selectDapMount(path) {
   if (document.getElementById('dap-mount-manual-toggle')?.checked) return;
+  const beforeMount = document.getElementById('dap-mount')?.value || '';
   const selectedPath = (path || '').trim();
   document.getElementById('dap-mount').value = selectedPath;
   const selectedMount = _detectedDapMounts.find(m => m.path === selectedPath) || null;
   _setDapMountIdentityFields(selectedMount);
+  _maybeSyncPeqFolderWithMount(selectedPath, beforeMount, true);
+  const mountInput = document.getElementById('dap-mount');
+  if (mountInput) mountInput.dataset.prevMountForPeq = selectedPath || '';
   validateDapForm(false);
 }
 
@@ -5060,10 +5106,14 @@ function toggleDapManualMount(enabled) {
   if (wrap) wrap.style.display = enabled ? 'flex' : 'none';
   if (enabled) _setDapMountIdentityFields(null);
   if (!enabled) {
+    const beforeMount = document.getElementById('dap-mount')?.value || '';
     const selPath = document.getElementById('dap-device-select')?.value || '';
     document.getElementById('dap-mount').value = selPath;
     const selectedMount = _detectedDapMounts.find(m => m.path === selPath) || null;
     _setDapMountIdentityFields(selectedMount);
+    _maybeSyncPeqFolderWithMount(selPath, beforeMount, true);
+    const mountInput = document.getElementById('dap-mount');
+    if (mountInput) mountInput.dataset.prevMountForPeq = selPath || '';
   }
   validateDapForm(false);
 }
@@ -5095,6 +5145,7 @@ function validateDapForm(showToast = false) {
     if (!name) toast('Device name is required.');
     else if (mountError) toast(mountError);
   }
+  _updateDapModalUnsavedBanner();
   return ok;
 }
 
@@ -5112,6 +5163,42 @@ function _closeDapHelpPanels() {
   document.querySelectorAll('#dap-modal .dap-inline-help, #dap-modal .dap-template-help').forEach(el => {
     el.style.display = 'none';
   });
+}
+
+function _restoreDapDraftFromSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return;
+  const modelSel = document.getElementById('dap-model');
+  if (modelSel && snapshot.model && !Array.from(modelSel.options).some(o => o.value === snapshot.model)) {
+    const opt = document.createElement('option');
+    opt.value = snapshot.model;
+    opt.textContent = snapshot.model;
+    modelSel.appendChild(opt);
+  }
+  document.getElementById('dap-modal-id').value = snapshot.id || '';
+  document.getElementById('dap-name').value = snapshot.name || '';
+  document.getElementById('dap-model').value = snapshot.model || '';
+  document.getElementById('dap-mount').value = snapshot.mount || '';
+  document.getElementById('dap-mount').dataset.prevMountForPeq = snapshot.mount || '';
+  document.getElementById('dap-music-root').value = snapshot.music_root || '';
+  document.getElementById('dap-path-template').value = snapshot.template || DAP_TEMPLATE_PRESETS.artist_album_track;
+  document.getElementById('dap-export-folder').value = snapshot.export_folder || '';
+  document.getElementById('dap-peq-folder').value = snapshot.peq_folder || _defaultPeqFolderForMount(snapshot.mount || '');
+  document.getElementById('dap-prefix').value = snapshot.prefix || '';
+  const preset = _suggestTemplatePreset(document.getElementById('dap-path-template').value);
+  document.getElementById('dap-template-preset').value = preset;
+  dapTemplateChanged();
+  validateDapForm(false);
+}
+
+function revertDapModalChanges() {
+  if (!_dapModalInitialJson) return;
+  try {
+    const snapshot = JSON.parse(_dapModalInitialJson);
+    _restoreDapDraftFromSnapshot(snapshot);
+    _updateDapModalUnsavedBanner();
+  } catch (_) {
+    // no-op
+  }
 }
 
 function _populateIemTypeSelect() {
@@ -5149,6 +5236,9 @@ async function loadGearProfiles() {
     _gearProfilesLoaded = true;
     _populateDapModelSelect();
     _populateIemTypeSelect();
+    if (_isOverlayOpen('dap-modal') && !_isDapModalDirty()) {
+      _commitDapModalBaseline();
+    }
   }
 }
 
@@ -5170,6 +5260,51 @@ function dapModelPreset(model) {
   document.getElementById('dap-export-folder').value = preset.folder;
   document.getElementById('dap-prefix').value = preset.prefix;
   _updateDapFolderHint(model);
+  validateDapForm(false);
+}
+
+function _normalizePathForCompare(path) {
+  return String(path || '').trim().replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+function _defaultPeqFolderForMount(mountPath) {
+  const mount = _normalizePathForCompare(mountPath);
+  return mount ? `${mount}/PEQ` : '~/PEQ';
+}
+
+function _maybeSyncPeqFolderWithMount(nextMountPath, prevMountPath = '', userDriven = false) {
+  const peqEl = document.getElementById('dap-peq-folder');
+  if (!peqEl) return;
+  const current = String(peqEl.value || '').trim();
+  const prevDefault = _defaultPeqFolderForMount(prevMountPath);
+  const nextDefault = _defaultPeqFolderForMount(nextMountPath);
+  const currentNorm = _normalizePathForCompare(current);
+  const prevNorm = _normalizePathForCompare(prevDefault);
+  // On first modal load, keep PEQ folder empty until user intentionally sets mount path.
+  if (!current && !userDriven) return;
+  if (!current || current === '~/PEQ' || currentNorm === prevNorm) {
+    peqEl.value = nextDefault;
+  }
+}
+
+function onDapMountInput(value) {
+  const mountInput = document.getElementById('dap-mount');
+  const prevMount = mountInput?.dataset.prevMountForPeq || '';
+  _maybeSyncPeqFolderWithMount(value || '', prevMount, true);
+  if (mountInput) mountInput.dataset.prevMountForPeq = value || '';
+  validateDapForm(false);
+}
+
+async function browseDapMount() {
+  const before = document.getElementById('dap-mount')?.value || '';
+  await browseFolder('dap-mount');
+  const after = document.getElementById('dap-mount')?.value || '';
+  if (_normalizePathForCompare(before) !== _normalizePathForCompare(after)) {
+    _setDapMountIdentityFields(null);
+    _maybeSyncPeqFolderWithMount(after, before, true);
+    const mountInput = document.getElementById('dap-mount');
+    if (mountInput) mountInput.dataset.prevMountForPeq = after || '';
+  }
   validateDapForm(false);
 }
 
@@ -5195,6 +5330,7 @@ async function saveDap() {
     music_root: document.getElementById('dap-music-root').value.trim() || 'Music',
     path_template: document.getElementById('dap-path-template').value.trim() || DAP_TEMPLATE_PRESETS.artist_album_track,
     export_folder: document.getElementById('dap-export-folder').value.trim() || 'Playlists',
+    peq_folder: document.getElementById('dap-peq-folder').value.trim() || _defaultPeqFolderForMount(document.getElementById('dap-mount').value.trim()),
     path_prefix: document.getElementById('dap-prefix').value.trim(),
   };
   try {
@@ -6602,7 +6738,7 @@ async function copyCustomPeqToConnectedDap() {
 
 function showAddIemModal() {
   _ensureGearProfileSelects();
-  document.getElementById('iem-modal-title').textContent = 'Add IEM / Headphone';
+  document.getElementById('iem-modal-title').textContent = 'IEM / Headphone Profile';
   document.getElementById('iem-modal-id').value = '';
   document.getElementById('iem-name').value = '';
   const typeSel = document.getElementById('iem-type');
@@ -6611,15 +6747,15 @@ function showAddIemModal() {
   _closeIemHelpPanels();
   document.getElementById('iem-modal-error').style.display = 'none';
   document.getElementById('iem-save-btn').disabled = false;
-  document.getElementById('iem-save-btn').textContent = 'Save IEM';
-  _iemModalInitialJson = JSON.stringify(_collectIemModalDraft());
+  document.getElementById('iem-save-btn').textContent = 'Save';
   document.getElementById('iem-modal').style.display = 'flex';
+  _commitIemModalBaseline();
 }
 
 async function showEditIemModal(id) {
   _ensureGearProfileSelects();
   const iem = await api(`/iems/${id}`);
-  document.getElementById('iem-modal-title').textContent = 'Edit IEM';
+  document.getElementById('iem-modal-title').textContent = 'IEM / Headphone Profile';
   document.getElementById('iem-modal-id').value = id;
   document.getElementById('iem-name').value = iem.name || '';
   const typeSel = document.getElementById('iem-type');
@@ -6636,14 +6772,16 @@ async function showEditIemModal(id) {
   _closeIemHelpPanels();
   document.getElementById('iem-modal-error').style.display = 'none';
   document.getElementById('iem-save-btn').disabled = false;
-  document.getElementById('iem-save-btn').textContent = 'Save IEM';
-  _iemModalInitialJson = JSON.stringify(_collectIemModalDraft());
+  document.getElementById('iem-save-btn').textContent = 'Save';
   document.getElementById('iem-modal').style.display = 'flex';
+  _commitIemModalBaseline();
 }
 
 function closeIemModal() {
   _closeIemHelpPanels();
   document.getElementById('iem-modal').style.display = 'none';
+  const banner = document.getElementById('iem-unsaved-banner');
+  if (banner) banner.style.display = 'none';
   _iemModalInitialJson = '';
 }
 
@@ -6657,6 +6795,41 @@ function _closeIemHelpPanels() {
   document.querySelectorAll('#iem-modal .dap-inline-help').forEach(el => {
     el.style.display = 'none';
   });
+}
+
+function _restoreIemDraftFromSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return;
+  const typeSel = document.getElementById('iem-type');
+  if (typeSel && snapshot.type && !Array.from(typeSel.options).some(o => o.value === snapshot.type)) {
+    const opt = document.createElement('option');
+    opt.value = snapshot.type;
+    opt.textContent = snapshot.type;
+    typeSel.appendChild(opt);
+  }
+  document.getElementById('iem-modal-id').value = snapshot.id || '';
+  document.getElementById('iem-name').value = snapshot.name || '';
+  if (typeSel) typeSel.value = snapshot.type || (typeSel.options.length ? typeSel.options[0].value : 'IEM');
+  document.getElementById('iem-source-label-1').value = snapshot.s1l || '';
+  document.getElementById('iem-source-url-1').value = snapshot.s1u || '';
+  document.getElementById('iem-source-label-2').value = snapshot.s2l || '';
+  document.getElementById('iem-source-url-2').value = snapshot.s2u || '';
+  document.getElementById('iem-source-label-3').value = snapshot.s3l || '';
+  document.getElementById('iem-source-url-3').value = snapshot.s3u || '';
+  _updateIemModalUnsavedBanner();
+}
+
+function revertIemModalChanges() {
+  if (!_iemModalInitialJson) return;
+  try {
+    const snapshot = JSON.parse(_iemModalInitialJson);
+    _restoreIemDraftFromSnapshot(snapshot);
+  } catch (_) {
+    // no-op
+  }
+}
+
+function iemModalChanged() {
+  _updateIemModalUnsavedBanner();
 }
 
 async function saveIem() {
@@ -6689,7 +6862,7 @@ async function saveIem() {
     errEl.textContent = e.message;
     errEl.style.display = 'block';
     btn.disabled = false;
-    btn.textContent = 'Save IEM';
+    btn.textContent = 'Save';
   }
 }
 
@@ -7683,8 +7856,10 @@ const App = {
   showAddDapModal,
   showEditDapModal,
   closeDapModal,
+  revertDapModalChanges,
   dapModelPreset,
   refreshDapMounts,
+  browseDapMount,
   selectDapMount,
   toggleDapManualMount,
   validateDapForm,
@@ -7700,6 +7875,8 @@ const App = {
   showIemDetail,
   showAddIemModal,
   showEditIemModal,
+  iemModalChanged,
+  revertIemModalChanges,
   toggleIemHelp,
   closeIemModal,
   saveIem,

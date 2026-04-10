@@ -46,6 +46,27 @@ Warn on navigation-away for:
 - Avoid oversized wide modals; keep density aligned with app rhythm.
 - Keep header/action spacing compact and consistent with `master-design.md`.
 
+### IEM Modal Baseline Tokens (Reusable)
+
+Use these as the baseline spacing/density values when standardizing other form modals:
+
+- `--iem-control-height`: `48px`
+- `--iem-section-gap`: `8px`
+- `--iem-section-pad-y`: `10px`
+- `--iem-section-first-top`: `12px`
+- `--iem-section-first-bottom`: `6px`
+- `--iem-section-title-gap`: `12px`
+- `--iem-label-gap`: `6px`
+- `--iem-actions-gap-top`: `8px`
+- `--iem-actions-pad-top`: `10px`
+- `--iem-source-row-gap`: `6px`
+- `--iem-source-label-col`: `170px`
+
+Behavior notes for this baseline:
+- Optional source labels are supported per measurement URL row.
+- If a source label is provided, FR graph source dropdowns should display that label.
+- If label is blank, fallback naming is allowed (`Source 1`, `Source 2`, etc.).
+
 ## Implementation Notes
 
 Primary files:
