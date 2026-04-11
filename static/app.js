@@ -281,6 +281,8 @@ let _ctxFavTarget = null;
 
 /* ── Create playlist modal state ────────────────────────────────────── */
 let _createPlPendingIds = [];
+let _dapModalInitialJson = '';
+let _iemModalInitialJson = '';
 let _mlGenOptions = null;
 let _mlGenPreviewTracks = [];
 let _mlGenPreviewDirty = false;
@@ -1896,6 +1898,141 @@ function closeCreatePlaylistModal() {
   _createPlPendingIds = [];
 }
 
+function _isOverlayOpen(id) {
+  const el = document.getElementById(id);
+  if (!el) return false;
+  return el.style.display && el.style.display !== 'none';
+}
+
+function _collectDapModalDraft() {
+  return {
+    id: document.getElementById('dap-modal-id')?.value || '',
+    name: document.getElementById('dap-name')?.value || '',
+    model: document.getElementById('dap-model')?.value || '',
+    mount: document.getElementById('dap-mount')?.value || '',
+    music_root: document.getElementById('dap-music-root')?.value || '',
+    template: document.getElementById('dap-path-template')?.value || '',
+    export_folder: document.getElementById('dap-export-folder')?.value || '',
+    peq_folder: document.getElementById('dap-peq-folder')?.value || '',
+    prefix: document.getElementById('dap-prefix')?.value || '',
+  };
+}
+
+function _updateDapModalUnsavedBanner() {
+  const banner = document.getElementById('dap-unsaved-banner');
+  if (!banner) return;
+  if (!_isOverlayOpen('dap-modal')) {
+    banner.style.display = 'none';
+    return;
+  }
+  banner.style.display = _isDapModalDirty() ? '' : 'none';
+}
+
+function _commitDapModalBaseline() {
+  _dapModalInitialJson = JSON.stringify(_collectDapModalDraft());
+  _updateDapModalUnsavedBanner();
+}
+
+function _collectIemModalDraft() {
+  return {
+    id: document.getElementById('iem-modal-id')?.value || '',
+    name: document.getElementById('iem-name')?.value || '',
+    type: document.getElementById('iem-type')?.value || '',
+    s1l: document.getElementById('iem-source-label-1')?.value || '',
+    s1u: document.getElementById('iem-source-url-1')?.value || '',
+    s2l: document.getElementById('iem-source-label-2')?.value || '',
+    s2u: document.getElementById('iem-source-url-2')?.value || '',
+    s3l: document.getElementById('iem-source-label-3')?.value || '',
+    s3u: document.getElementById('iem-source-url-3')?.value || '',
+  };
+}
+
+function _updateIemModalUnsavedBanner() {
+  const banner = document.getElementById('iem-unsaved-banner');
+  if (!banner) return;
+  if (!_isOverlayOpen('iem-modal')) {
+    banner.style.display = 'none';
+    return;
+  }
+  banner.style.display = _isIemModalDirty() ? '' : 'none';
+}
+
+function _commitIemModalBaseline() {
+  _iemModalInitialJson = JSON.stringify(_collectIemModalDraft());
+  _updateIemModalUnsavedBanner();
+}
+
+function _isDapModalDirty() {
+  if (!_isOverlayOpen('dap-modal')) return false;
+  const current = JSON.stringify(_collectDapModalDraft());
+  return !!_dapModalInitialJson && current !== _dapModalInitialJson;
+}
+
+function _isIemModalDirty() {
+  if (!_isOverlayOpen('iem-modal')) return false;
+  const current = JSON.stringify(_collectIemModalDraft());
+  return !!_iemModalInitialJson && current !== _iemModalInitialJson;
+}
+
+function _isPeqUploadModalDirty() {
+  if (!_isOverlayOpen('peq-modal')) return false;
+  const name = (document.getElementById('peq-name')?.value || '').trim();
+  const fileChosen = !!document.getElementById('peq-file-input')?.files?.length;
+  return !!(name || fileChosen);
+}
+
+function _isCreatePlaylistModalDirty() {
+  if (!_isOverlayOpen('create-playlist-modal')) return false;
+  return !!(document.getElementById('create-playlist-input')?.value || '').trim();
+}
+
+function _isImportModalDirty() {
+  if (!_isOverlayOpen('import-modal')) return false;
+  return !!(_importData || Object.keys(_importMappings || {}).length);
+}
+
+function _isSyncBusy() {
+  if (!_isOverlayOpen('sync-modal')) return false;
+  const modal = document.getElementById('sync-modal');
+  const phase = modal?.getAttribute('data-phase') || 'pick';
+  return phase === 'scanning' || phase === 'copying';
+}
+
+function _guardModalNavigation() {
+  if (_isOverlayOpen('confirm-modal')) return false;
+  if (_isSyncBusy() && !window.confirm('Sync is in progress. Leave this screen and stop monitoring sync?')) {
+    return false;
+  }
+  if (_isDapModalDirty() && !window.confirm('Discard unsaved Device changes?')) return false;
+  if (_isIemModalDirty() && !window.confirm('Discard unsaved IEM changes?')) return false;
+  if (_isPeqUploadModalDirty() && !window.confirm('Discard unsaved PEQ upload details?')) return false;
+  if (_isCreatePlaylistModalDirty() && !window.confirm('Discard new playlist name?')) return false;
+  if (_isImportModalDirty() && !window.confirm('Discard current playlist import mapping?')) return false;
+  return true;
+}
+
+function _closeModalOverlaysForNavigation() {
+  if (_isOverlayOpen('ml-ref-modal')) closeMlReferenceBrowser();
+  if (_isOverlayOpen('ml-gen-modal')) {
+    _resetMlPreviewState();
+    closeMlPlaylistGenerator();
+  }
+  if (_isOverlayOpen('dap-modal')) closeDapModal();
+  if (_isOverlayOpen('iem-modal')) closeIemModal();
+  if (_isOverlayOpen('peq-modal')) closePeqModal();
+  if (_isOverlayOpen('rename-modal')) document.getElementById('rename-modal').style.display = 'none';
+  if (_isOverlayOpen('settings-modal')) closeSettings();
+  if (_isOverlayOpen('help-modal')) closeHelp();
+  if (_isOverlayOpen('sync-modal')) closeSyncModal();
+  if (_isOverlayOpen('import-modal')) closeImportModal();
+  if (_isOverlayOpen('dup-modal')) document.getElementById('dup-modal').style.display = 'none';
+  if (_isOverlayOpen('problem-tracks-modal')) closeProblemTracksModal();
+  if (_isOverlayOpen('genre-distribution-modal')) closeGenreDistributionModal();
+  if (_isOverlayOpen('iem-blindspot-modal')) closeAllBlindspots();
+  if (_isOverlayOpen('iem-compare-modal')) closeIemCompare();
+  if (_isOverlayOpen('create-playlist-modal')) closeCreatePlaylistModal();
+}
+
 async function submitCreatePlaylist() {
   const input = document.getElementById('create-playlist-input');
   const name = input.value.trim();
@@ -2980,6 +3117,8 @@ async function bulkUnfavouriteSelected() {
 function showView(viewName) {
   if (!_guardMlGeneratorNavigation()) return;
   if (!_guardPeqEditorNavigation()) return;
+  if (!_guardModalNavigation()) return;
+  _closeModalOverlaysForNavigation();
   if (viewName === 'fav-artists') {
     state.favPanel = 'artists';
     viewName = 'favourites';
@@ -3037,6 +3176,8 @@ function setActiveNav(view) {
 function backToArtists() {
   if (!_guardMlGeneratorNavigation()) return;
   if (!_guardPeqEditorNavigation()) return;
+  if (!_guardModalNavigation()) return;
+  _closeModalOverlaysForNavigation();
   state.view = 'artists';
   clearSelection();
   setActiveNav('artists');
@@ -3048,6 +3189,8 @@ function backToArtists() {
 function backToGear() {
   if (!_guardMlGeneratorNavigation()) return;
   if (!_guardPeqEditorNavigation()) return;
+  if (!_guardModalNavigation()) return;
+  _closeModalOverlaysForNavigation();
   state.view = 'gear';
   clearSelection();
   setActiveNav('gear');
@@ -3058,6 +3201,8 @@ function backToGear() {
 async function showArtist(artist) {
   if (!_guardMlGeneratorNavigation()) return;
   if (!_guardPeqEditorNavigation()) return;
+  if (!_guardModalNavigation()) return;
+  _closeModalOverlaysForNavigation();
   const main = document.getElementById('main');
   state._artistsScrollTop = main ? main.scrollTop : 0;
   state.artist = artist;
@@ -3072,6 +3217,8 @@ async function showArtist(artist) {
 async function showAlbum(artist, album) {
   if (!_guardMlGeneratorNavigation()) return;
   if (!_guardPeqEditorNavigation()) return;
+  if (!_guardModalNavigation()) return;
+  _closeModalOverlaysForNavigation();
   state.artist = artist;
   state.album = album;
   state.view = 'tracks';
@@ -3407,6 +3554,11 @@ function _updateMappingCount() {
 /* ── Sync ────────────────────────────────────────────────────────────── */
 let _syncPollTimer = null;
 let _syncLastStatus = null;
+let _syncSelectedDapId = '';
+let _syncScanRunId = 0;
+let _syncScanInFlight = false;
+let _syncPreviewWarningCount = 0;
+const _syncSectionCollapsed = { local: true, device: true };
 
 function _fmtBytes(bytes) {
   const n = Number(bytes);
@@ -3469,6 +3621,62 @@ function _syncDeviceStatusPills(dap) {
 }
 
 function _syncPhase(name) {
+  const phaseMeta = {
+    pick: {
+      step: 'Step 1 of 5',
+      title: 'Sync Music',
+      subtitle: 'Choose a connected device to start syncing.',
+    },
+    scanning: {
+      step: 'Step 2 of 5',
+      title: 'Scanning Library',
+      subtitle: 'Comparing your local library and selected device.',
+    },
+    preview: {
+      step: 'Step 3 of 5',
+      title: 'Review Changes',
+      subtitle: 'Select what to copy before starting sync.',
+    },
+    copying: {
+      step: 'Step 4 of 5',
+      title: 'Sync in Progress',
+      subtitle: 'Copying selected files. Keep this modal open.',
+    },
+    done: {
+      step: 'Step 5 of 5',
+      title: 'Sync Complete',
+      subtitle: 'Review the summary and run another scan if needed.',
+    },
+  };
+
+  const meta = phaseMeta[name];
+  if (meta) {
+    const stepEl = document.getElementById('sync-modal-step-label');
+    const titleEl = document.getElementById('sync-modal-title');
+    const subtitleEl = document.getElementById('sync-modal-subtitle');
+    if (stepEl) stepEl.textContent = meta.step;
+    if (titleEl) titleEl.textContent = meta.title;
+    if (subtitleEl) subtitleEl.textContent = meta.subtitle;
+  }
+
+  const progressBanner = document.getElementById('sync-progress-banner');
+  const progressBannerText = document.getElementById('sync-progress-banner-text');
+  const showBusyBanner = name === 'scanning' || name === 'copying';
+  const showWarningBanner = name === 'preview' && _syncPreviewWarningCount > 0;
+  if (progressBanner) {
+    progressBanner.style.display = (showBusyBanner || showWarningBanner) ? '' : 'none';
+    progressBanner.classList.toggle('is-warning', showWarningBanner && !showBusyBanner);
+  }
+  if (progressBannerText) {
+    if (showBusyBanner) {
+      progressBannerText.textContent = name === 'copying'
+        ? 'Sync in progress. Copying files now.'
+        : 'Sync in progress - do not dismiss.';
+    } else if (showWarningBanner) {
+      progressBannerText.textContent = `Warnings detected: ${_syncPreviewWarningCount} item${_syncPreviewWarningCount === 1 ? '' : 's'}. Review before syncing.`;
+    }
+  }
+
   const modal = document.getElementById('sync-modal');
   if (modal) modal.setAttribute('data-phase', name);
   document.querySelectorAll('#sync-modal .sync-phase-step').forEach(el => {
@@ -3476,7 +3684,7 @@ function _syncPhase(name) {
   });
   ['pick', 'scanning', 'preview', 'copying', 'done'].forEach(p => {
     const el = document.getElementById(`sync-phase-${p}`);
-    if (el) el.style.display = p === name ? 'block' : 'none';
+    if (el) el.style.display = p === name ? '' : 'none';
   });
 }
 
@@ -3496,73 +3704,217 @@ async function showSync() {
 
   await api('/sync/reset', { method: 'POST' }).catch(() => {});
   _syncLastStatus = null;
+  _syncSelectedDapId = '';
+  _syncScanInFlight = false;
+  _syncPreviewWarningCount = 0;
   _syncPhase('pick');
   const errWrap = document.getElementById('sync-errors-wrap');
   if (errWrap) errWrap.style.display = 'none';
-  const doneMsg = document.getElementById('sync-done-msg');
-  if (doneMsg) doneMsg.textContent = '';
+  const doneTitle = document.getElementById('sync-done-title');
+  const doneCopy = document.getElementById('sync-done-copy');
+  const doneDetail = document.getElementById('sync-done-detail');
+  if (doneTitle) doneTitle.textContent = 'Sync Complete';
+  if (doneCopy) doneCopy.textContent = 'Your library and DAP are now in harmony.';
+  if (doneDetail) doneDetail.textContent = '';
 
   const daps = await api('/daps').catch(() => []);
   if (!container) { document.getElementById('sync-modal').style.display = 'flex'; return; }
 
   const svgDevice = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>`;
 
+  const _deviceMeta = (dap) => {
+    const summary = dap?.sync_summary || {};
+    const total = Number(summary.space_total_bytes || 0);
+    const free = Number(summary.space_available_bytes || 0);
+    if (dap?.mounted && Number.isFinite(total) && total > 0 && Number.isFinite(free) && free >= 0) {
+      return `${_fmtBytes(free)} free of ${_fmtBytes(total)}`;
+    }
+    if (dap?.mount_path) {
+      return dap.mount_path;
+    }
+    return dap?.mounted ? 'Connected' : 'Not connected';
+  };
+
   if (!daps.length) {
     container.innerHTML = `<p style="color:var(--text-muted);font-size:13px">No DAPs configured — add one in <strong>Gear → DAPs</strong> first.</p>`;
   } else {
+    const firstMounted = daps.find(d => d?.mounted);
+    _syncSelectedDapId = String((firstMounted || {}).id || '');
     container.innerHTML = daps.map(dap => {
-      const connected = dap.mounted;
-      const statusPills = _syncDeviceStatusPills(dap);
+      const selectable = !!dap?.mounted;
+      const selected = selectable && String(dap.id) === String(_syncSelectedDapId);
       return `
-        <button class="sync-device-card${connected ? ' sync-device-card--online' : ''}"
-          ${connected ? '' : 'disabled'}
-          onclick="App.startSyncScan('${dap.id}')">
+        <button
+          class="sync-device-card${selected ? ' is-selected' : ''}${selectable ? '' : ' is-disabled'}"
+          data-dap-id="${esc(dap.id)}"
+          data-selectable="${selectable ? '1' : '0'}"
+          onclick="App.selectSyncDevice('${dap.id}')"
+          ${selectable ? '' : 'disabled aria-disabled="true"'}
+        >
           <div class="sync-device-card-icon">${svgDevice}</div>
           <div class="sync-device-card-info">
             <span class="sync-device-card-name">${esc(dap.name)}</span>
-            <span class="sync-device-status${connected ? ' sync-device-status--on' : ''}">
-              <span class="sync-device-status-dot"></span>
-              ${connected ? 'Connected' : 'Not connected'}
+            <span class="sync-device-meta">
+              ${esc(_deviceMeta(dap))}
             </span>
-            ${statusPills}
+          </div>
+          <div class="sync-device-radio${selected ? ' is-selected' : ''}" aria-hidden="true">
+            <span></span>
           </div>
         </button>`;
     }).join('');
   }
 
+  syncUpdatePickNextCta();
   document.getElementById('sync-modal').style.display = 'flex';
 }
 
 function closeSyncModal() {
   clearInterval(_syncPollTimer);
   _syncPollTimer = null;
+  _syncScanRunId += 1;
+  _syncScanInFlight = false;
+  _syncSelectedDapId = '';
+  _syncPreviewWarningCount = 0;
   document.getElementById('sync-modal').style.display = 'none';
 }
 
+function selectSyncDevice(dapId) {
+  const container = document.getElementById('sync-device-list');
+  const targetId = String(dapId || '');
+  const target = container
+    ? [...container.querySelectorAll('.sync-device-card')].find((el) => String(el.getAttribute('data-dap-id') || '') === targetId)
+    : null;
+  if (target?.dataset?.selectable !== '1') {
+    return;
+  }
+  _syncSelectedDapId = targetId;
+  if (container) {
+    [...container.querySelectorAll('.sync-device-card')].forEach((el) => {
+      const cardId = String(el.getAttribute('data-dap-id') || '');
+      const selectable = el.dataset.selectable === '1';
+      el.classList.toggle('is-selected', selectable && cardId === _syncSelectedDapId);
+      const radio = el.querySelector('.sync-device-radio');
+      if (radio) radio.classList.toggle('is-selected', selectable && cardId === _syncSelectedDapId);
+    });
+  }
+  syncUpdatePickNextCta();
+}
+
+function syncUpdatePickNextCta() {
+  const nextBtn = document.getElementById('sync-pick-next-btn');
+  if (!nextBtn) return;
+  const container = document.getElementById('sync-device-list');
+  const selectedId = String(_syncSelectedDapId || '');
+  const selected = container
+    ? [...container.querySelectorAll('.sync-device-card')].find((el) => String(el.getAttribute('data-dap-id') || '') === selectedId)
+    : null;
+  const canContinue = !!_syncSelectedDapId && selected?.dataset?.selectable === '1';
+  nextBtn.disabled = !canContinue;
+}
+
+async function startSyncFromSelection() {
+  if (!_syncSelectedDapId) {
+    toast('Select a device to continue.');
+    return;
+  }
+  await startSyncScan(_syncSelectedDapId);
+}
+
+function _syncSetScanningVisualProgress(percent) {
+  const pct = Math.max(0, Math.min(100, Number(percent) || 0));
+  const ring = document.getElementById('sync-scan-ring');
+  const label = document.getElementById('sync-scan-percent');
+  if (ring) ring.style.setProperty('--scan-pct', String(pct));
+  if (label) label.textContent = `${Math.round(pct)}%`;
+}
+
+function _syncSetCopyVisualProgress(percent) {
+  const pct = Math.max(0, Math.min(100, Number(percent) || 0));
+  const ring = document.getElementById('sync-copy-ring');
+  const label = document.getElementById('sync-copy-percent');
+  if (ring) ring.style.setProperty('--scan-pct', String(pct));
+  if (label) label.textContent = `${Math.round(pct)}%`;
+}
+
 async function startSyncScan(dapId) {
+  if (_syncScanInFlight) return;
+  _syncScanInFlight = true;
+  const runId = ++_syncScanRunId;
   _syncPhase('scanning');
-  document.getElementById('sync-scanning-msg').textContent = 'Scanning your library files…';
+  const scanMode = document.getElementById('sync-scan-mode');
+  if (scanMode) scanMode.textContent = 'Scanning';
+  _syncSetScanningVisualProgress(0);
+  document.getElementById('sync-scanning-msg').textContent = 'Scanning device…';
+  const scanStartedAt = Date.now();
+  let visualPct = 0;
+  const setVisualPct = (nextPct, force = false) => {
+    const normalized = Math.max(0, Math.min(100, Number(nextPct) || 0));
+    if (!force && normalized < visualPct) return;
+    visualPct = normalized;
+    _syncSetScanningVisualProgress(visualPct);
+  };
+  const preflightAnimTimer = setInterval(() => {
+    if (runId !== _syncScanRunId) return;
+    const elapsedSec = (Date.now() - scanStartedAt) / 1000;
+    const easedPct = 8 + (1 - Math.exp(-elapsedSec / 6.8)) * 72;
+    setVisualPct(easedPct);
+  }, 260);
 
   const res = await api('/sync/scan', { method: 'POST', body: { dap_id: dapId } });
-  if (res.error) { toast(res.error); _syncPhase('pick'); return; }
+  clearInterval(preflightAnimTimer);
+  if (runId !== _syncScanRunId) {
+    _syncScanInFlight = false;
+    return;
+  }
+  if (res.error) {
+    _syncScanInFlight = false;
+    toast(res.error);
+    _syncPhase('pick');
+    return;
+  }
 
-  // CSS indeterminate animation runs on the bar — just poll for completion
+  // Poll status while scanning/copy-prep progresses
   clearInterval(_syncPollTimer);
+  let polling = false;
+  let finished = false;
   _syncPollTimer = setInterval(async () => {
+    if (finished || polling || runId !== _syncScanRunId) return;
+    polling = true;
+    const elapsedSec = (Date.now() - scanStartedAt) / 1000;
+    const easedPct = 10 + (1 - Math.exp(-elapsedSec / 6.8)) * 76;
+    setVisualPct(easedPct);
+
     const status = await api('/sync/status').catch(() => null);
-    if (!status) return;
+    if (!status || runId !== _syncScanRunId) {
+      polling = false;
+      return;
+    }
+
+    const explicitPct = Number(status.progress_pct ?? status.progress ?? status.percent);
+    if (Number.isFinite(explicitPct)) {
+      setVisualPct(explicitPct);
+    }
 
     document.getElementById('sync-scanning-msg').textContent =
       _formatSyncPhaseMessage(status.current || status.message, 'scan');
 
     if (status.status === 'ready') {
+      finished = true;
+      setVisualPct(100, true);
       clearInterval(_syncPollTimer);
+      _syncPollTimer = null;
+      _syncScanInFlight = false;
       renderSyncPreview(status);
     } else if (status.status === 'error') {
+      finished = true;
       clearInterval(_syncPollTimer);
+      _syncPollTimer = null;
+      _syncScanInFlight = false;
       toast('Could not complete scan: ' + status.message);
       _syncPhase('pick');
     }
+    polling = false;
   }, 600);
 }
 
@@ -3570,20 +3922,44 @@ function _syncFileRows(paths, side) {
   if (!paths.length) {
     return `<div class="sync-empty">No files to sync in this direction.</div>`;
   }
-  return paths.map((p, i) => {
+  const originLabel = side === 'local' ? 'Local library' : 'Selected device';
+  return paths.map((p) => {
     const parts = p.replace(/\\/g, '/').split('/');
     const filename = parts[parts.length - 1];
     const folder = parts.slice(0, -1).join('/');
-    return `<label class="sync-file-row">
+    return `<label class="sync-file-row sync-file-row--preview">
       <input type="checkbox" class="sync-chk sync-chk-${side}" data-path="${esc(p)}" checked onchange="App.syncSelectionChanged()" />
-      <div class="sync-file-path-wrap"><span class="sync-file-folder">${esc(folder)}/</span><span class="sync-file-name">${esc(filename)}</span></div>
+      <div class="sync-file-main">
+        <span class="sync-file-name">${esc(filename)}</span>
+        <span class="sync-file-folder">${esc(folder)}/</span>
+      </div>
+      <div class="sync-file-origin">${originLabel}</div>
     </label>`;
   }).join('');
 }
 
 function _syncWarningRows(items) {
   if (!items || !items.length) return `<div class="sync-empty">No issues detected.</div>`;
-  return items.map(msg => `<div class="sync-file-row" style="grid-template-columns:1fr;color:var(--text-muted)">${esc(msg)}</div>`).join('');
+  return items.map(msg => `<div class="sync-warning-row">${esc(msg)}</div>`).join('');
+}
+
+function _syncApplySectionCollapse(section) {
+  const key = section === 'device' ? 'device' : 'local';
+  const wrapperId = key === 'local' ? 'sync-section-local' : 'sync-section-device';
+  const toggleId = key === 'local' ? 'sync-toggle-local' : 'sync-toggle-device';
+  const wrapper = document.getElementById(wrapperId);
+  const toggle = document.getElementById(toggleId);
+  if (!wrapper || !toggle) return;
+  const collapsed = !!_syncSectionCollapsed[key];
+  wrapper.classList.toggle('is-collapsed', collapsed);
+  toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  toggle.title = collapsed ? 'Expand section' : 'Collapse section';
+}
+
+function toggleSyncSection(section) {
+  const key = section === 'device' ? 'device' : 'local';
+  _syncSectionCollapsed[key] = !_syncSectionCollapsed[key];
+  _syncApplySectionCollapse(key);
 }
 
 function renderSyncPreview(status) {
@@ -3593,15 +3969,20 @@ function renderSyncPreview(status) {
   document.getElementById('sync-list-local').innerHTML = _syncFileRows(status.local_only, 'local');
   document.getElementById('sync-list-device').innerHTML = _syncFileRows(status.device_only, 'device');
   const warnings = Array.isArray(status.warnings) ? status.warnings : [];
+  _syncPreviewWarningCount = warnings.length;
   document.getElementById('sync-warning-count').textContent = warnings.length;
   document.getElementById('sync-list-warnings').innerHTML = _syncWarningRows(warnings);
-  document.getElementById('sync-warnings-wrap').style.display = warnings.length ? 'block' : 'none';
+  document.getElementById('sync-warnings-wrap').style.display = 'none';
 
   // Hide "copy to device" section if nothing to copy
   document.getElementById('sync-section-local').style.display =
     status.local_only.length ? 'block' : 'none';
   document.getElementById('sync-section-device').style.display =
     status.device_only.length ? 'block' : 'none';
+  _syncSectionCollapsed.local = true;
+  _syncSectionCollapsed.device = true;
+  _syncApplySectionCollapse('local');
+  _syncApplySectionCollapse('device');
 
   const executeBtn = document.getElementById('sync-execute-btn');
   if (executeBtn) executeBtn.disabled = status.local_only.length === 0 && status.device_only.length === 0;
@@ -3623,6 +4004,7 @@ function syncToggleAll(side, checked) {
 
 function syncSelectionChanged() {
   const panel = document.getElementById('sync-space-summary');
+  const estTime = document.getElementById('sync-est-time');
   const status = _syncLastStatus;
   if (!panel || !status) return;
   const selectedLocal = [...document.querySelectorAll('.sync-chk-local:checked')].map(cb => cb.dataset.path);
@@ -3661,6 +4043,17 @@ function syncSelectionChanged() {
 
   panel.className = className;
   panel.innerHTML = `<div>${esc(tracksLine)}</div><div>${esc(spaceLine)}</div>`;
+  if (estTime) {
+    if (noSelection) {
+      estTime.textContent = '';
+    } else {
+      const throughputBytesPerSec = 12 * 1024 * 1024;
+      const estSeconds = Math.max(10, Math.round(required / throughputBytesPerSec));
+      const mins = Math.floor(estSeconds / 60);
+      const secs = estSeconds % 60;
+      estTime.textContent = `Est. time ~${mins}m ${secs}s`;
+    }
+  }
   if (executeBtn) {
     if (noSelection) {
       executeBtn.disabled = false;
@@ -3684,8 +4077,16 @@ async function executeSync() {
   }
 
   _syncPhase('copying');
-  document.getElementById('sync-copying-msg').textContent = `Preparing to copy 0 / ${local_paths.length + device_paths.length} files…`;
-  document.getElementById('sync-copy-bar').style.width = '0%';
+  const copyMode = document.getElementById('sync-copying-mode');
+  if (copyMode) {
+    if (local_paths.length > 0 && device_paths.length > 0) copyMode.textContent = 'Syncing';
+    else if (device_paths.length > 0) copyMode.textContent = 'Removing';
+    else copyMode.textContent = 'Copying';
+  }
+  document.getElementById('sync-copying-msg').textContent = `Preparing to sync 0 / ${local_paths.length + device_paths.length} files…`;
+  _syncSetCopyVisualProgress(0);
+  const copyPctEl = document.getElementById('sync-copy-percent');
+  if (copyPctEl) copyPctEl.textContent = '0%';
   document.getElementById('sync-copying-current').textContent = '';
 
   const execRes = await fetch('/api/sync/execute', {
@@ -3710,10 +4111,17 @@ async function executeSync() {
     if (!status) return;
 
     const pct = status.total > 0 ? Math.round((status.progress / status.total) * 100) : 0;
-    document.getElementById('sync-copy-bar').style.width = pct + '%';
+    _syncSetCopyVisualProgress(pct);
+    if (copyPctEl) copyPctEl.textContent = pct + '%';
     document.getElementById('sync-copying-msg').textContent =
       _formatSyncPhaseMessage(status.message, 'copy');
     document.getElementById('sync-copying-current').textContent = status.current || '';
+    if (copyMode) {
+      const modeText = `${status.message || ''} ${status.current || ''}`.toLowerCase();
+      if (modeText.includes('remove') || modeText.includes('delet')) copyMode.textContent = 'Removing';
+      else if (modeText.includes('copy') || modeText.includes('write')) copyMode.textContent = 'Copying';
+      else copyMode.textContent = 'Syncing';
+    }
 
     if (status.status === 'done') {
       clearInterval(_syncPollTimer);
@@ -3728,9 +4136,20 @@ async function executeSync() {
 function _showSyncDone(status) {
   const issueCount = Array.isArray(status.errors) ? status.errors.length : 0;
   const baseDone = _formatSyncPhaseMessage(status.message, 'done') || 'Sync complete.';
-  document.getElementById('sync-done-msg').textContent = issueCount
-    ? `${baseDone} Completed with ${issueCount} issue${issueCount === 1 ? '' : 's'}.`
-    : baseDone;
+  const titleEl = document.getElementById('sync-done-title');
+  const copyEl = document.getElementById('sync-done-copy');
+  const detailEl = document.getElementById('sync-done-detail');
+  if (titleEl) {
+    titleEl.textContent = issueCount ? 'Sync Completed with Issues' : 'Sync Complete';
+  }
+  if (copyEl) {
+    copyEl.textContent = issueCount
+      ? `Finished syncing with ${issueCount} issue${issueCount === 1 ? '' : 's'}.`
+      : 'Your library and DAP are now in harmony.';
+  }
+  if (detailEl) {
+    detailEl.textContent = baseDone;
+  }
   const errWrap = document.getElementById('sync-errors-wrap');
   if (status.errors?.length) {
     errWrap.style.display = 'block';
@@ -3745,6 +4164,8 @@ function _showSyncDone(status) {
 
 async function syncScanAgain() {
   await api('/sync/reset', { method: 'POST' }).catch(() => {});
+  _syncScanInFlight = false;
+  _syncPreviewWarningCount = 0;
   _syncPhase('pick');
 }
 
@@ -3857,14 +4278,6 @@ async function loadDapsView() {
     const playlistStatus = _dapPlaylistStatus(d, summary);
     const statusClass = d.mounted ? 'gear-dap-conn--on' : 'gear-dap-conn--off';
     const statusText = d.mounted ? 'Connected' : 'Not connected';
-    const syncState = String(summary.sync_status_state || 'estimated');
-    const syncStateText = syncState === 'checking'
-      ? 'Checking live sync status…'
-      : syncState === 'verified'
-        ? _formatSyncCheckedAt(summary.last_verified_at)
-        : syncState === 'error'
-          ? (summary.sync_status_message || 'Sync check unavailable')
-          : `Estimated • ${_formatSyncCheckedAt(summary.last_scan_at)}`;
     const musicTone = musicStatus.className === 'gear-sync-ok'
       ? 'gear-dap-value--ok'
       : (musicStatus.className === 'gear-sync-neutral' ? 'gear-dap-value--neutral' : 'gear-dap-value--warn');
@@ -3883,7 +4296,6 @@ async function loadDapsView() {
           <div class="gear-card-dap-miniicon">${_DAP_SVG}</div>
         </div>
         <div class="gear-card-subline gear-card-dap-connection ${statusClass}">${statusText.toUpperCase()}</div>
-        <div class="gear-card-meta-text gear-card-dap-checkline">${esc(syncStateText)}</div>
         <div class="gear-card-dap-rule"></div>
         <div class="gear-card-dap-status">
           <span class="gear-dap-label">Music</span>
@@ -4272,7 +4684,7 @@ async function showDapDetail(id) {
         <td class="dap-pl-export-cell">
           <button class="dap-pl-export-btn" ${canExport ? '' : 'disabled title="Device not mounted"'}
             onclick="App.dapExportPlaylist('${dap.id}','${pl.id}',this)">
-            ${dap.mounted ? '→ Export' : 'Not mounted'}
+            ${dap.mounted ? 'Sync' : 'Not mounted'}
           </button>
         </td>
       </tr>
@@ -4309,6 +4721,7 @@ async function showDapDetail(id) {
       <div class="dap-config-field"><label>Storage</label><span>${esc(dap.storage_type === 'internal' ? 'Internal' : 'SD card')}</span></div>
       <div class="dap-config-field"><label>Music folder</label><span>${esc(dap.music_root || 'Music')}</span></div>
       <div class="dap-config-field"><label>Export folder</label><span>${esc(dap.export_folder || 'Playlists')}</span></div>
+      <div class="dap-config-field"><label>PEQ folder</label><span>${esc(dap.peq_folder || '~/PEQ')}</span></div>
       <div class="dap-config-field"><label>Sync template</label><span><code>${esc(dap.path_template || DAP_TEMPLATE_PRESETS.artist_album_track)}</code></span></div>
       <div class="dap-config-field"><label>Path prefix</label><span>${esc(dap.path_prefix || '(none)')}</span></div>
       <div class="dap-config-field"><label>Model</label><span>${esc(dap.model || 'generic')}</span></div>
@@ -4331,10 +4744,10 @@ async function showDapDetail(id) {
 
 async function dapExportPlaylist(dapId, plId, btn) {
   btn.disabled = true;
-  btn.textContent = 'Exporting…';
+  btn.textContent = 'Syncing…';
   try {
     await api(`/daps/${dapId}/export/${plId}`, { method: 'POST' });
-    btn.textContent = '✓ Exported';
+    btn.textContent = '✓ Synced';
     btn.style.background = '#4caf8f';
     // Refresh stale badge
     const row = btn.closest('tr');
@@ -4345,11 +4758,11 @@ async function dapExportPlaylist(dapId, plId, btn) {
   } catch (e) {
     toast('Export failed: ' + e.message);
     btn.disabled = false;
-    btn.textContent = '→ Export';
+    btn.textContent = 'Sync';
   }
 }
 
-function showAddDapModal() {
+async function showAddDapModal() {
   _ensureGearProfileSelects();
   const firstModel = Object.keys(DAP_MODEL_PRESETS)[0] || 'other';
   const firstPreset = DAP_MODEL_PRESETS[firstModel] || { folder: 'Playlists', prefix: '' };
@@ -4361,19 +4774,22 @@ function showAddDapModal() {
   document.getElementById('dap-name').value = '';
   document.getElementById('dap-model').value = firstModel;
   document.getElementById('dap-mount').value = '';
+  document.getElementById('dap-mount').dataset.prevMountForPeq = '';
   document.getElementById('dap-mount-manual-toggle').checked = false;
   document.getElementById('dap-mount-manual-wrap').style.display = 'none';
   document.getElementById('dap-music-root').value = 'Music';
   document.getElementById('dap-template-preset').value = 'artist_album_track';
   document.getElementById('dap-path-template').value = DAP_TEMPLATE_PRESETS.artist_album_track;
   document.getElementById('dap-export-folder').value = firstPreset.folder || 'Playlists';
+  document.getElementById('dap-peq-folder').value = '';
   document.getElementById('dap-prefix').value = firstPreset.prefix || '';
   dapModelPreset(firstModel);
   dapTemplateChanged();
   _closeDapHelpPanels();
-  refreshDapMounts('', true, null);
-  validateDapForm(false);
   document.getElementById('dap-modal').style.display = 'flex';
+  await refreshDapMounts('', true, null, true);
+  validateDapForm(false);
+  _commitDapModalBaseline();
 }
 
 async function showEditDapModal(id) {
@@ -4391,6 +4807,7 @@ async function showEditDapModal(id) {
   }
   document.getElementById('dap-model').value = dap.model || (Object.keys(DAP_MODEL_PRESETS)[0] || 'other');
   document.getElementById('dap-mount').value = dap.mount_path || '';
+  document.getElementById('dap-mount').dataset.prevMountForPeq = dap.mount_path || '';
   document.getElementById('dap-mount-volume-uuid').value = dap.mount_volume_uuid || '';
   document.getElementById('dap-mount-disk-uuid').value = dap.mount_disk_uuid || '';
   document.getElementById('dap-mount-device-identifier').value = dap.mount_device_identifier || '';
@@ -4398,22 +4815,27 @@ async function showEditDapModal(id) {
   document.getElementById('dap-path-template').value = dap.path_template || DAP_TEMPLATE_PRESETS.artist_album_track;
   document.getElementById('dap-template-preset').value = _suggestTemplatePreset(document.getElementById('dap-path-template').value);
   document.getElementById('dap-export-folder').value = dap.export_folder || 'Playlists';
+  document.getElementById('dap-peq-folder').value = dap.peq_folder || _defaultPeqFolderForMount(dap.mount_path || '');
   document.getElementById('dap-prefix').value = dap.path_prefix || '';
   _updateDapFolderHint(dap.model || (Object.keys(DAP_MODEL_PRESETS)[0] || 'other'));
   dapTemplateChanged();
   _closeDapHelpPanels();
-  refreshDapMounts(dap.mount_path || '', false, {
+  document.getElementById('dap-modal').style.display = 'flex';
+  await refreshDapMounts(dap.mount_path || '', false, {
     volume_uuid: dap.mount_volume_uuid || '',
     disk_uuid: dap.mount_disk_uuid || '',
     device_identifier: dap.mount_device_identifier || '',
-  });
+  }, true);
   validateDapForm(false);
-  document.getElementById('dap-modal').style.display = 'flex';
+  _commitDapModalBaseline();
 }
 
 function closeDapModal() {
   _closeDapHelpPanels();
   document.getElementById('dap-modal').style.display = 'none';
+  const banner = document.getElementById('dap-unsaved-banner');
+  if (banner) banner.style.display = 'none';
+  _dapModalInitialJson = '';
 }
 
 const _mountPrefix = (() => {
@@ -4505,7 +4927,7 @@ function _renderDapTemplatePreview() {
   const root = ((document.getElementById('dap-music-root')?.value || 'Music').trim().replace(/\\/g, '/')).replace(/^\/+|\/+$/g, '');
   const full = [root, rendered].filter(Boolean).join('/');
   const breadcrumb = full.split('/').filter(Boolean).join(' › ');
-  preview.innerHTML = `<span class="dap-template-preview-label">📁 Preview file path:</span> <code class="dap-template-preview-path">${esc(breadcrumb)}</code>`;
+  preview.innerHTML = `<span class="dap-template-preview-label">Preview file path</span><code class="dap-template-preview-path">${esc(breadcrumb)}</code>`;
 }
 
 function _validateDapTemplate(showToast = false) {
@@ -4627,8 +5049,9 @@ function _matchMountByIdentity(mounts, identity) {
   ) || null;
 }
 
-async function refreshDapMounts(preferredPath = '', forceManualOff = false, preferredIdentity = null) {
+async function refreshDapMounts(preferredPath = '', forceManualOff = false, preferredIdentity = null, commitBaseline = false) {
   const currentPath = (preferredPath || document.getElementById('dap-mount')?.value || '').trim();
+  const beforeMount = document.getElementById('dap-mount')?.value || '';
   const currentIdentity = preferredIdentity || {
     volume_uuid: document.getElementById('dap-mount-volume-uuid')?.value || '',
     disk_uuid: document.getElementById('dap-mount-disk-uuid')?.value || '',
@@ -4655,16 +5078,26 @@ async function refreshDapMounts(preferredPath = '', forceManualOff = false, pref
     document.getElementById('dap-mount').value = selPath;
     const selectedMount = _detectedDapMounts.find(m => m.path === selPath) || matchedByIdentity || null;
     _setDapMountIdentityFields(selectedMount);
+    _maybeSyncPeqFolderWithMount(selPath, beforeMount, false);
+    const mountInput = document.getElementById('dap-mount');
+    if (mountInput) mountInput.dataset.prevMountForPeq = selPath || '';
   }
   validateDapForm(false);
+  if (commitBaseline && _isOverlayOpen('dap-modal')) {
+    _commitDapModalBaseline();
+  }
 }
 
 function selectDapMount(path) {
   if (document.getElementById('dap-mount-manual-toggle')?.checked) return;
+  const beforeMount = document.getElementById('dap-mount')?.value || '';
   const selectedPath = (path || '').trim();
   document.getElementById('dap-mount').value = selectedPath;
   const selectedMount = _detectedDapMounts.find(m => m.path === selectedPath) || null;
   _setDapMountIdentityFields(selectedMount);
+  _maybeSyncPeqFolderWithMount(selectedPath, beforeMount, true);
+  const mountInput = document.getElementById('dap-mount');
+  if (mountInput) mountInput.dataset.prevMountForPeq = selectedPath || '';
   validateDapForm(false);
 }
 
@@ -4673,10 +5106,14 @@ function toggleDapManualMount(enabled) {
   if (wrap) wrap.style.display = enabled ? 'flex' : 'none';
   if (enabled) _setDapMountIdentityFields(null);
   if (!enabled) {
+    const beforeMount = document.getElementById('dap-mount')?.value || '';
     const selPath = document.getElementById('dap-device-select')?.value || '';
     document.getElementById('dap-mount').value = selPath;
     const selectedMount = _detectedDapMounts.find(m => m.path === selPath) || null;
     _setDapMountIdentityFields(selectedMount);
+    _maybeSyncPeqFolderWithMount(selPath, beforeMount, true);
+    const mountInput = document.getElementById('dap-mount');
+    if (mountInput) mountInput.dataset.prevMountForPeq = selPath || '';
   }
   validateDapForm(false);
 }
@@ -4708,6 +5145,7 @@ function validateDapForm(showToast = false) {
     if (!name) toast('Device name is required.');
     else if (mountError) toast(mountError);
   }
+  _updateDapModalUnsavedBanner();
   return ok;
 }
 
@@ -4725,6 +5163,42 @@ function _closeDapHelpPanels() {
   document.querySelectorAll('#dap-modal .dap-inline-help, #dap-modal .dap-template-help').forEach(el => {
     el.style.display = 'none';
   });
+}
+
+function _restoreDapDraftFromSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return;
+  const modelSel = document.getElementById('dap-model');
+  if (modelSel && snapshot.model && !Array.from(modelSel.options).some(o => o.value === snapshot.model)) {
+    const opt = document.createElement('option');
+    opt.value = snapshot.model;
+    opt.textContent = snapshot.model;
+    modelSel.appendChild(opt);
+  }
+  document.getElementById('dap-modal-id').value = snapshot.id || '';
+  document.getElementById('dap-name').value = snapshot.name || '';
+  document.getElementById('dap-model').value = snapshot.model || '';
+  document.getElementById('dap-mount').value = snapshot.mount || '';
+  document.getElementById('dap-mount').dataset.prevMountForPeq = snapshot.mount || '';
+  document.getElementById('dap-music-root').value = snapshot.music_root || '';
+  document.getElementById('dap-path-template').value = snapshot.template || DAP_TEMPLATE_PRESETS.artist_album_track;
+  document.getElementById('dap-export-folder').value = snapshot.export_folder || '';
+  document.getElementById('dap-peq-folder').value = snapshot.peq_folder || _defaultPeqFolderForMount(snapshot.mount || '');
+  document.getElementById('dap-prefix').value = snapshot.prefix || '';
+  const preset = _suggestTemplatePreset(document.getElementById('dap-path-template').value);
+  document.getElementById('dap-template-preset').value = preset;
+  dapTemplateChanged();
+  validateDapForm(false);
+}
+
+function revertDapModalChanges() {
+  if (!_dapModalInitialJson) return;
+  try {
+    const snapshot = JSON.parse(_dapModalInitialJson);
+    _restoreDapDraftFromSnapshot(snapshot);
+    _updateDapModalUnsavedBanner();
+  } catch (_) {
+    // no-op
+  }
 }
 
 function _populateIemTypeSelect() {
@@ -4762,6 +5236,9 @@ async function loadGearProfiles() {
     _gearProfilesLoaded = true;
     _populateDapModelSelect();
     _populateIemTypeSelect();
+    if (_isOverlayOpen('dap-modal') && !_isDapModalDirty()) {
+      _commitDapModalBaseline();
+    }
   }
 }
 
@@ -4783,6 +5260,51 @@ function dapModelPreset(model) {
   document.getElementById('dap-export-folder').value = preset.folder;
   document.getElementById('dap-prefix').value = preset.prefix;
   _updateDapFolderHint(model);
+  validateDapForm(false);
+}
+
+function _normalizePathForCompare(path) {
+  return String(path || '').trim().replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+function _defaultPeqFolderForMount(mountPath) {
+  const mount = _normalizePathForCompare(mountPath);
+  return mount ? `${mount}/PEQ` : '~/PEQ';
+}
+
+function _maybeSyncPeqFolderWithMount(nextMountPath, prevMountPath = '', userDriven = false) {
+  const peqEl = document.getElementById('dap-peq-folder');
+  if (!peqEl) return;
+  const current = String(peqEl.value || '').trim();
+  const prevDefault = _defaultPeqFolderForMount(prevMountPath);
+  const nextDefault = _defaultPeqFolderForMount(nextMountPath);
+  const currentNorm = _normalizePathForCompare(current);
+  const prevNorm = _normalizePathForCompare(prevDefault);
+  // On first modal load, keep PEQ folder empty until user intentionally sets mount path.
+  if (!current && !userDriven) return;
+  if (!current || current === '~/PEQ' || currentNorm === prevNorm) {
+    peqEl.value = nextDefault;
+  }
+}
+
+function onDapMountInput(value) {
+  const mountInput = document.getElementById('dap-mount');
+  const prevMount = mountInput?.dataset.prevMountForPeq || '';
+  _maybeSyncPeqFolderWithMount(value || '', prevMount, true);
+  if (mountInput) mountInput.dataset.prevMountForPeq = value || '';
+  validateDapForm(false);
+}
+
+async function browseDapMount() {
+  const before = document.getElementById('dap-mount')?.value || '';
+  await browseFolder('dap-mount');
+  const after = document.getElementById('dap-mount')?.value || '';
+  if (_normalizePathForCompare(before) !== _normalizePathForCompare(after)) {
+    _setDapMountIdentityFields(null);
+    _maybeSyncPeqFolderWithMount(after, before, true);
+    const mountInput = document.getElementById('dap-mount');
+    if (mountInput) mountInput.dataset.prevMountForPeq = after || '';
+  }
   validateDapForm(false);
 }
 
@@ -4808,6 +5330,7 @@ async function saveDap() {
     music_root: document.getElementById('dap-music-root').value.trim() || 'Music',
     path_template: document.getElementById('dap-path-template').value.trim() || DAP_TEMPLATE_PRESETS.artist_album_track,
     export_folder: document.getElementById('dap-export-folder').value.trim() || 'Playlists',
+    peq_folder: document.getElementById('dap-peq-folder').value.trim() || _defaultPeqFolderForMount(document.getElementById('dap-mount').value.trim()),
     path_prefix: document.getElementById('dap-prefix').value.trim(),
   };
   try {
@@ -6215,7 +6738,7 @@ async function copyCustomPeqToConnectedDap() {
 
 function showAddIemModal() {
   _ensureGearProfileSelects();
-  document.getElementById('iem-modal-title').textContent = 'Add IEM / Headphone';
+  document.getElementById('iem-modal-title').textContent = 'IEM / Headphone Profile';
   document.getElementById('iem-modal-id').value = '';
   document.getElementById('iem-name').value = '';
   const typeSel = document.getElementById('iem-type');
@@ -6224,14 +6747,15 @@ function showAddIemModal() {
   _closeIemHelpPanels();
   document.getElementById('iem-modal-error').style.display = 'none';
   document.getElementById('iem-save-btn').disabled = false;
-  document.getElementById('iem-save-btn').textContent = 'Save IEM';
+  document.getElementById('iem-save-btn').textContent = 'Save';
   document.getElementById('iem-modal').style.display = 'flex';
+  _commitIemModalBaseline();
 }
 
 async function showEditIemModal(id) {
   _ensureGearProfileSelects();
   const iem = await api(`/iems/${id}`);
-  document.getElementById('iem-modal-title').textContent = 'Edit IEM';
+  document.getElementById('iem-modal-title').textContent = 'IEM / Headphone Profile';
   document.getElementById('iem-modal-id').value = id;
   document.getElementById('iem-name').value = iem.name || '';
   const typeSel = document.getElementById('iem-type');
@@ -6248,13 +6772,17 @@ async function showEditIemModal(id) {
   _closeIemHelpPanels();
   document.getElementById('iem-modal-error').style.display = 'none';
   document.getElementById('iem-save-btn').disabled = false;
-  document.getElementById('iem-save-btn').textContent = 'Save IEM';
+  document.getElementById('iem-save-btn').textContent = 'Save';
   document.getElementById('iem-modal').style.display = 'flex';
+  _commitIemModalBaseline();
 }
 
 function closeIemModal() {
   _closeIemHelpPanels();
   document.getElementById('iem-modal').style.display = 'none';
+  const banner = document.getElementById('iem-unsaved-banner');
+  if (banner) banner.style.display = 'none';
+  _iemModalInitialJson = '';
 }
 
 function toggleIemHelp(id) {
@@ -6267,6 +6795,41 @@ function _closeIemHelpPanels() {
   document.querySelectorAll('#iem-modal .dap-inline-help').forEach(el => {
     el.style.display = 'none';
   });
+}
+
+function _restoreIemDraftFromSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return;
+  const typeSel = document.getElementById('iem-type');
+  if (typeSel && snapshot.type && !Array.from(typeSel.options).some(o => o.value === snapshot.type)) {
+    const opt = document.createElement('option');
+    opt.value = snapshot.type;
+    opt.textContent = snapshot.type;
+    typeSel.appendChild(opt);
+  }
+  document.getElementById('iem-modal-id').value = snapshot.id || '';
+  document.getElementById('iem-name').value = snapshot.name || '';
+  if (typeSel) typeSel.value = snapshot.type || (typeSel.options.length ? typeSel.options[0].value : 'IEM');
+  document.getElementById('iem-source-label-1').value = snapshot.s1l || '';
+  document.getElementById('iem-source-url-1').value = snapshot.s1u || '';
+  document.getElementById('iem-source-label-2').value = snapshot.s2l || '';
+  document.getElementById('iem-source-url-2').value = snapshot.s2u || '';
+  document.getElementById('iem-source-label-3').value = snapshot.s3l || '';
+  document.getElementById('iem-source-url-3').value = snapshot.s3u || '';
+  _updateIemModalUnsavedBanner();
+}
+
+function revertIemModalChanges() {
+  if (!_iemModalInitialJson) return;
+  try {
+    const snapshot = JSON.parse(_iemModalInitialJson);
+    _restoreIemDraftFromSnapshot(snapshot);
+  } catch (_) {
+    // no-op
+  }
+}
+
+function iemModalChanged() {
+  _updateIemModalUnsavedBanner();
 }
 
 async function saveIem() {
@@ -6299,7 +6862,7 @@ async function saveIem() {
     errEl.textContent = e.message;
     errEl.style.display = 'block';
     btn.disabled = false;
-    btn.textContent = 'Save IEM';
+    btn.textContent = 'Save';
   }
 }
 
@@ -7253,8 +7816,12 @@ const App = {
   removeSelectedFromPlaylist,
   showSync,
   closeSyncModal,
+  selectSyncDevice,
+  syncUpdatePickNextCta,
+  startSyncFromSelection,
   startSyncScan,
   syncToggleAll,
+  toggleSyncSection,
   syncSelectionChanged,
   executeSync,
   syncScanAgain,
@@ -7289,8 +7856,10 @@ const App = {
   showAddDapModal,
   showEditDapModal,
   closeDapModal,
+  revertDapModalChanges,
   dapModelPreset,
   refreshDapMounts,
+  browseDapMount,
   selectDapMount,
   toggleDapManualMount,
   validateDapForm,
@@ -7306,6 +7875,8 @@ const App = {
   showIemDetail,
   showAddIemModal,
   showEditIemModal,
+  iemModalChanged,
+  revertIemModalChanges,
   toggleIemHelp,
   closeIemModal,
   saveIem,

@@ -410,6 +410,7 @@
             <h2>IEMs &amp; Headphones</h2>
           </div>
           <div class="gear-section-actions">
+            <button id="iems-create-peq-btn" class="gear-compare-toggle" onclick="App.openPeqEditor({ mode: 'create' })">Create PEQ</button>
             <button id="iems-compare-btn" class="gear-compare-toggle" onclick="App.toggleIemCompareMode()" style="display:none">Compare</button>
             <button class="btn-primary" onclick="App.showAddIemModal()">+ Add</button>
           </div>
@@ -836,7 +837,7 @@
         <div class="modal modal-wide" onclick="event.stopPropagation()">
           <div class="modal-head">
             <h3 id="problem-tracks-modal-title" class="modal-title-sm">Problem Tracks</h3>
-            <button class="modal-x-btn" onclick="App.closeProblemTracksModal()">✕</button>
+            <button class="modal-x-btn" onclick="App.closeProblemTracksModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
           <div id="problem-tracks-modal-body" class="problem-tracks-modal-body"></div>
         </div>
@@ -847,7 +848,7 @@
         <div class="modal modal-wide" onclick="event.stopPropagation()">
           <div class="modal-head">
             <h3 id="genre-distribution-modal-title" class="modal-title-sm">All Genres</h3>
-            <button class="modal-x-btn" onclick="App.closeGenreDistributionModal()">✕</button>
+            <button class="modal-x-btn" onclick="App.closeGenreDistributionModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
           <div id="genre-distribution-modal-body" class="problem-tracks-modal-body"></div>
         </div>
@@ -858,7 +859,7 @@
         <div class="modal modal-wide" onclick="event.stopPropagation()">
           <div class="modal-head">
             <h3 id="iem-blindspot-modal-title" class="modal-title-sm">All Genres</h3>
-            <button class="modal-x-btn" onclick="App.closeAllBlindspots()">✕</button>
+            <button class="modal-x-btn" onclick="App.closeAllBlindspots()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
           <div id="iem-blindspot-modal-body" style="max-height:60vh;overflow-y:auto"></div>
         </div>
@@ -896,9 +897,12 @@
   <!-- Duplicate warning modal -->
   <div id="dup-modal" class="modal-overlay" style="display:none">
     <div class="modal">
-      <div class="modal-icon-row">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="3"/></svg>
-        <h3 id="dup-modal-title">Already in Playlist</h3>
+      <div class="modal-head">
+        <div class="modal-head-group">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="3"/></svg>
+          <h3 id="dup-modal-title">Already in Playlist</h3>
+        </div>
+        <button class="modal-x-btn" onclick="App.dupCancel()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <p id="dup-modal-msg" style="color:var(--text-sub);margin:8px 0 12px;line-height:1.5"></p>
       <div id="dup-modal-list" style="margin-bottom:16px"></div>
@@ -913,9 +917,12 @@
   <!-- Import preview modal -->
   <div id="import-modal" class="modal-overlay" style="display:none">
     <div class="modal modal-wide">
-      <div class="modal-icon-row">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        <h3>Import Playlist</h3>
+      <div class="modal-head">
+        <div class="modal-head-group">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <h3>Import Playlist</h3>
+        </div>
+        <button class="modal-x-btn" onclick="App.closeImportModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <div style="margin:12px 0 6px">
         <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Playlist name</label>
@@ -938,7 +945,7 @@
     <div class="modal modal-help">
       <div class="modal-head modal-head-tight">
         <h3>Help Center</h3>
-        <button class="modal-x-btn" onclick="App.closeHelp()">✕</button>
+        <button class="modal-x-btn" onclick="App.closeHelp()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <p class="help-intro">Need quick steps for playlist export, import, and DAP sync? Start here.</p>
 
@@ -1016,7 +1023,7 @@
     <div class="modal modal-wide">
       <div class="modal-head modal-head-spaced">
         <h3>Device Settings</h3>
-        <button class="modal-x-btn" onclick="App.closeSettings()">✕</button>
+        <button class="modal-x-btn" onclick="App.closeSettings()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
 
       <div class="settings-device-block">
@@ -1056,7 +1063,7 @@
 
   <!-- Sync modal -->
   <div id="sync-modal" class="modal-overlay" style="display:none">
-    <div class="modal modal-wide">
+    <div class="modal modal-wide sync-modal-shell">
 
       <!-- Header -->
       <div class="sync-modal-header">
@@ -1065,114 +1072,144 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
           </div>
           <div>
-            <div class="sync-modal-title">Sync Music</div>
-            <div class="sync-modal-subtitle">Compare your local library with a device and copy missing files.</div>
+            <div class="sync-modal-step-label" id="sync-modal-step-label">Step 1 of 5</div>
+            <div class="sync-modal-title" id="sync-modal-title">Sync Music</div>
+            <div class="sync-modal-subtitle" id="sync-modal-subtitle">Choose a connected device to start syncing.</div>
           </div>
         </div>
         <button class="modal-close-btn" onclick="App.closeSyncModal()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
-      <div class="sync-phase-rail" aria-hidden="true">
-        <span class="sync-phase-step" data-step="pick">Device</span>
-        <span class="sync-phase-step" data-step="scanning">Scan</span>
-        <span class="sync-phase-step" data-step="preview">Review</span>
-        <span class="sync-phase-step" data-step="copying">Copy</span>
-        <span class="sync-phase-step" data-step="done">Done</span>
+      <div class="sync-progress-banner" id="sync-progress-banner" style="display:none">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+        <span id="sync-progress-banner-text">Sync in progress. Please keep this modal open.</span>
       </div>
 
-      <!-- Phase: pick device -->
-      <div id="sync-phase-pick" class="sync-phase-panel">
-        <div class="sync-section-label">Select a device</div>
-        <div id="sync-device-list" class="sync-device-list">
-          <!-- Populated dynamically from DAP list in showSync() -->
-        </div>
-      </div>
-
-      <!-- Phase: scanning -->
-      <div id="sync-phase-scanning" class="sync-phase-panel sync-phase-panel--progress" style="display:none">
-        <div class="sync-progress-phase">
-          <p class="sync-phase-label" id="sync-scanning-msg">Scanning your library files…</p>
-          <div class="sync-progress-wrap"><div class="sync-progress-bar sync-progress-bar--indeterminate" id="sync-scan-bar"></div></div>
-        </div>
-      </div>
-
-      <!-- Phase: preview -->
-      <div id="sync-phase-preview" class="sync-phase-panel" style="display:none">
-
-        <div id="sync-section-local" class="sync-section">
-          <div class="sync-section-hdr">
-            <div class="sync-section-hdr-left">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#adc6ff" stroke-width="2.5" stroke-linecap="round"><polyline points="5 12 12 5 19 12"/><line x1="12" y1="19" x2="12" y2="5"/></svg>
-              <span class="sync-section-title">Copy to device</span>
-              <span class="sync-count-pill" id="sync-local-count">0</span>
-            </div>
-            <label class="sync-check-all">
-              <input type="checkbox" id="chk-all-local" onchange="App.syncToggleAll('local', this.checked)" checked />
-              Select all
-            </label>
-          </div>
-          <div class="sync-list" id="sync-list-local"></div>
-        </div>
-
-        <div id="sync-section-device" class="sync-section">
-          <div class="sync-section-hdr">
-            <div class="sync-section-hdr-left">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#53e16f" stroke-width="2.5" stroke-linecap="round"><polyline points="19 12 12 19 5 12"/><line x1="12" y1="5" x2="12" y2="19"/></svg>
-              <span class="sync-section-title">Copy to local</span>
-              <span class="sync-count-pill" id="sync-device-count">0</span>
-            </div>
-            <label class="sync-check-all">
-              <input type="checkbox" id="chk-all-device" onchange="App.syncToggleAll('device', this.checked)" checked />
-              Select all
-            </label>
-          </div>
-          <div class="sync-list" id="sync-list-device"></div>
-        </div>
-
-        <div id="sync-warnings-wrap" class="sync-section" style="display:none">
-          <div class="sync-section-hdr">
-            <div class="sync-section-hdr-left">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round"><path d="M12 3l9 16H3l9-16z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-              <span class="sync-section-title">Needs review</span>
-              <span class="sync-count-pill" id="sync-warning-count">0</span>
+      <div class="sync-modal-body">
+        <!-- Phase: pick device -->
+        <div id="sync-phase-pick" class="sync-phase-panel sync-phase-panel--pick">
+          <div class="sync-pick-scroll">
+            <div class="sync-section-label">Select a device</div>
+            <div id="sync-device-list" class="sync-device-list">
+              <!-- Populated dynamically from DAP list in showSync() -->
             </div>
           </div>
-          <div class="sync-list" id="sync-list-warnings"></div>
-        </div>
-
-        <div id="sync-space-summary" class="sync-space-summary" style="display:block"></div>
-
-        <div class="modal-actions">
-          <button class="btn-secondary" onclick="App.closeSyncModal()">Cancel</button>
-          <button class="btn-primary" id="sync-execute-btn" onclick="App.executeSync()">Start Sync</button>
-        </div>
-      </div>
-
-      <!-- Phase: copying -->
-      <div id="sync-phase-copying" class="sync-phase-panel sync-phase-panel--progress" style="display:none">
-        <div class="sync-progress-phase">
-          <p class="sync-phase-label" id="sync-copying-msg">Preparing to copy files…</p>
-          <div class="sync-progress-wrap"><div class="sync-progress-bar" id="sync-copy-bar"></div></div>
-          <p class="sync-current-file" id="sync-copying-current"></p>
-        </div>
-      </div>
-
-      <!-- Phase: done -->
-      <div id="sync-phase-done" class="sync-phase-panel sync-phase-panel--progress" style="display:none">
-        <div class="sync-done-wrap">
-          <div class="sync-done-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#53e16f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <div class="modal-actions sync-pick-actions">
+            <button class="btn-secondary" onclick="App.closeSyncModal()">Cancel</button>
+            <button class="btn-primary" id="sync-pick-next-btn" onclick="App.startSyncFromSelection()" disabled>Next: Scan Library</button>
           </div>
-          <p class="sync-phase-label" id="sync-done-msg"></p>
         </div>
-        <div id="sync-errors-wrap" style="display:none;margin-top:16px">
-          <div class="sync-section-label" style="margin-bottom:8px">Errors</div>
-          <div class="sync-list" id="sync-errors-list"></div>
+
+        <!-- Phase: scanning -->
+        <div id="sync-phase-scanning" class="sync-phase-panel sync-phase-panel--progress sync-phase-panel--scan" style="display:none">
+          <div class="sync-progress-phase sync-progress-phase--scan">
+            <div class="sync-scan-center">
+              <div class="sync-scan-ring" id="sync-scan-ring" style="--scan-pct: 0;">
+                <div class="sync-scan-ring-inner">
+                  <div class="sync-scan-percent" id="sync-scan-percent">0%</div>
+                  <div class="sync-scan-percent-sub" id="sync-scan-mode">Scanning</div>
+                </div>
+              </div>
+              <p class="sync-scan-msg" id="sync-scanning-msg">Scanning your library files…</p>
+            </div>
+          </div>
         </div>
-        <div class="modal-actions">
-          <button class="btn-secondary" onclick="App.syncScanAgain()">Run Another Scan</button>
-          <button class="btn-primary" onclick="App.closeSyncModal()">Close</button>
+
+        <!-- Phase: preview -->
+        <div id="sync-phase-preview" class="sync-phase-panel sync-phase-panel--preview" style="display:none">
+          <div class="sync-preview-scroll">
+            <div id="sync-warnings-wrap" class="sync-section sync-section--warning" style="display:none">
+              <div class="sync-section-hdr">
+                <div class="sync-section-hdr-left">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round"><path d="M12 3l9 16H3l9-16z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <span class="sync-section-title">Warnings</span>
+                  <span class="sync-count-pill" id="sync-warning-count">0</span>
+                </div>
+              </div>
+              <div class="sync-list" id="sync-list-warnings"></div>
+            </div>
+
+            <div id="sync-section-local" class="sync-section">
+              <div class="sync-section-hdr">
+                <div class="sync-section-hdr-left">
+                  <button class="sync-accordion-toggle" id="sync-toggle-local" onclick="App.toggleSyncSection('local')" aria-controls="sync-list-local" aria-expanded="false" title="Expand section">
+                    <span class="sync-accordion-chevron" aria-hidden="true"></span>
+                    <span class="sync-section-title sync-section-title--add">Tracks to Add</span>
+                  </button>
+                  <span class="sync-count-pill" id="sync-local-count">0</span>
+                </div>
+                <label class="sync-check-all">
+                  <input type="checkbox" id="chk-all-local" onchange="App.syncToggleAll('local', this.checked)" checked />
+                  Select all
+                </label>
+              </div>
+              <div class="sync-list" id="sync-list-local"></div>
+            </div>
+
+            <div id="sync-section-device" class="sync-section">
+              <div class="sync-section-hdr">
+                <div class="sync-section-hdr-left">
+                  <button class="sync-accordion-toggle" id="sync-toggle-device" onclick="App.toggleSyncSection('device')" aria-controls="sync-list-device" aria-expanded="false" title="Expand section">
+                    <span class="sync-accordion-chevron" aria-hidden="true"></span>
+                    <span class="sync-section-title sync-section-title--remove">Tracks to Remove</span>
+                  </button>
+                  <span class="sync-count-pill" id="sync-device-count">0</span>
+                </div>
+                <label class="sync-check-all">
+                  <input type="checkbox" id="chk-all-device" onchange="App.syncToggleAll('device', this.checked)" checked />
+                  Select all
+                </label>
+              </div>
+              <div class="sync-list" id="sync-list-device"></div>
+            </div>
+
+            <div id="sync-space-summary" class="sync-space-summary" style="display:block"></div>
+          </div>
+
+          <div class="modal-actions sync-preview-actions">
+            <div class="sync-preview-estimate" id="sync-est-time"></div>
+            <div class="sync-preview-buttons">
+              <button class="btn-secondary" onclick="App.closeSyncModal()">Cancel</button>
+              <button class="btn-primary" id="sync-execute-btn" onclick="App.executeSync()">Start Sync</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Phase: copying -->
+        <div id="sync-phase-copying" class="sync-phase-panel sync-phase-panel--progress sync-phase-panel--copying" style="display:none">
+          <div class="sync-progress-phase sync-progress-phase--copy">
+            <div class="sync-scan-center">
+              <div class="sync-scan-ring sync-copy-ring" id="sync-copy-ring" style="--scan-pct: 0;">
+                <div class="sync-scan-ring-inner">
+                  <div class="sync-scan-percent" id="sync-copy-percent">0%</div>
+                  <div class="sync-scan-percent-sub" id="sync-copying-mode">Syncing</div>
+                </div>
+              </div>
+              <p class="sync-scan-msg" id="sync-copying-msg">Preparing to sync files…</p>
+              <p class="sync-current-file sync-current-file--copy" id="sync-copying-current"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Phase: done -->
+        <div id="sync-phase-done" class="sync-phase-panel sync-phase-panel--progress sync-phase-panel--done" style="display:none">
+          <div class="sync-done-wrap">
+            <div class="sync-done-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <h4 class="sync-done-title" id="sync-done-title">Sync Complete</h4>
+            <p class="sync-done-copy" id="sync-done-copy">Your library and DAP are now in harmony.</p>
+            <p class="sync-done-detail" id="sync-done-detail"></p>
+          </div>
+          <div id="sync-errors-wrap" style="display:none;margin-top:16px">
+            <div class="sync-section-label" style="margin-bottom:8px">Errors</div>
+            <div class="sync-list" id="sync-errors-list"></div>
+          </div>
+          <div class="modal-actions modal-actions--stack sync-done-actions">
+            <button class="btn-primary sync-done-finish-btn" onclick="App.closeSyncModal()">Finish</button>
+            <button class="btn-secondary sync-done-repeat-btn" onclick="App.syncScanAgain()">Run Another Scan</button>
+          </div>
         </div>
       </div>
 
@@ -1182,7 +1219,10 @@
   <!-- Rename modal -->
   <div id="rename-modal" class="modal-overlay" style="display:none">
     <div class="modal">
-      <h3>Rename Playlist</h3>
+      <div class="modal-head">
+        <h3>Rename Playlist</h3>
+        <button class="modal-x-btn" onclick="App.closeRenameModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
       <input id="rename-input" type="text" />
       <div class="modal-actions">
         <button class="btn-secondary" onclick="App.closeRenameModal()">Cancel</button>
@@ -1196,130 +1236,168 @@
     <div class="modal modal-wide dap-modal-shell">
       <div class="modal-head modal-head-spaced">
         <h3 id="dap-modal-title">Add Device</h3>
-        <button class="modal-x-btn" onclick="App.closeDapModal()">✕</button>
+        <button class="modal-x-btn" onclick="App.closeDapModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <input type="hidden" id="dap-modal-id" />
       <input type="hidden" id="dap-mount-volume-uuid" />
       <input type="hidden" id="dap-mount-disk-uuid" />
       <input type="hidden" id="dap-mount-device-identifier" />
-      <div class="dap-form-section">
-        <h4 class="dap-form-section-title">Device Setup</h4>
-        <div class="settings-row">
-          <label>Device name</label>
-          <input id="dap-name" type="text" style="flex:1" oninput="App.validateDapForm(false)" />
+      <div id="dap-unsaved-banner" class="dap-modal-banner" style="display:none">
+        <div class="dap-modal-banner-left">
+          <span class="dap-modal-banner-icon" aria-hidden="true">!</span>
+          <span>Unsaved changes detected</span>
         </div>
-        <div class="settings-row">
-          <label>Device type</label>
-          <select id="dap-model" onchange="App.dapModelPreset(this.value)">
-            <option value="loading">Loading presets...</option>
-          </select>
-        </div>
-        <div class="settings-row" style="align-items:flex-start">
-          <label class="dap-label-help" style="padding-top:8px">
-            <span>Device location</span>
-            <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-mount-help')" title="Device location help">?</button>
-          </label>
-          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-            <div class="input-browse-group">
-              <select id="dap-device-select" onchange="App.selectDapMount(this.value)">
-                <option value="">Detecting connected devices…</option>
-              </select>
-              <button class="btn-browse" onclick="App.refreshDapMounts()" type="button">Refresh</button>
-            </div>
-            <label class="dap-advanced-toggle">
-              <input id="dap-mount-manual-toggle" type="checkbox" onchange="App.toggleDapManualMount(this.checked)" />
-              <span>Advanced: enter path manually</span>
-            </label>
-            <div id="dap-mount-manual-wrap" class="input-browse-group" style="display:none">
-              <input id="dap-mount" type="text" oninput="App.validateDapForm(false)" />
-              <button class="btn-browse" onclick="App.browseFolder('dap-mount')" type="button">Browse…</button>
-            </div>
-            <p id="dap-mount-validation" class="dap-inline-validation" style="display:none"></p>
-            <p id="dap-mount-help" class="settings-hint dap-inline-help" style="display:none">
-              Pick a connected external device. If needed, enable advanced mode and enter the mount path manually.
-            </p>
-          </div>
-        </div>
+        <button type="button" class="dap-modal-banner-revert" onclick="App.revertDapModalChanges()">Revert</button>
       </div>
 
-      <div class="dap-form-section">
-        <h4 class="dap-form-section-title">Music Library</h4>
-        <div class="settings-row" style="align-items:flex-start">
-          <label class="dap-label-help" style="padding-top:8px">
-            <span>Music folder (on device)</span>
-            <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-music-help')" title="Music folder help">?</button>
-          </label>
-          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-            <div class="input-browse-group">
-              <input id="dap-music-root" type="text" placeholder="Music" oninput="App.dapTemplateChanged()" />
-              <button class="btn-browse" onclick="App.browseFolder('dap-music-root')" type="button">Browse…</button>
-            </div>
-            <p id="dap-music-help" class="settings-hint dap-inline-help" style="display:none">
-              Where your music files will be stored on the device (for example <code>Music</code>).
-            </p>
+      <div class="dap-modal-scroll">
+        <details class="dap-form-section dap-collapsible dap-form-section--identity" open>
+          <summary class="dap-form-section-summary">
+            <h4 class="dap-form-section-title">Basic Details</h4>
+          </summary>
+          <div class="settings-row">
+            <label>Device name</label>
+            <input id="dap-name" type="text" style="flex:1" oninput="App.validateDapForm(false)" />
           </div>
-        </div>
-        <div class="settings-row">
-          <label>Organisation</label>
-          <select id="dap-template-preset" onchange="App.dapTemplatePreset(this.value)">
-            <option value="artist_album_track">Artist/Album/song-file.flac (Recommended)</option>
-            <option value="artist_track">Artist/song-file.flac</option>
-            <option value="albumartist_album_track">Artist/Year/song-file.flac</option>
-            <option value="flat_track">Genre/song-file.flac</option>
-            <option value="custom">Custom</option>
-          </select>
-        </div>
-        <div class="settings-row" style="align-items:flex-start">
-          <label class="dap-label-help" style="padding-top:8px">
-            <span>File naming format</span>
-            <button class="settings-help-btn" type="button" onclick="App.toggleDapTemplateHelp()" title="File naming format help">?</button>
-          </label>
-          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-            <input id="dap-path-template" type="text" oninput="App.dapTemplateChanged()" placeholder="%artist%/%album%/%track% - %title%" readonly />
-            <div class="token-chip-row">
-              <button class="token-chip" data-token="%artist%" onclick="App.insertDapToken('%artist%')" type="button">Artist</button>
-              <button class="token-chip" data-token="%album%" onclick="App.insertDapToken('%album%')" type="button">Album</button>
-              <button class="token-chip" data-token="%year%" onclick="App.insertDapToken('%year%')" type="button">Year</button>
-              <button class="token-chip" data-token="%genre%" onclick="App.insertDapToken('%genre%')" type="button">Genre</button>
-            </div>
-            <span id="dap-template-validation" style="display:none;font-size:11px;line-height:1.4;color:#fbbf24"></span>
-            <div id="dap-template-preview" class="dap-template-preview"></div>
-            <p id="dap-template-help" class="settings-hint dap-template-help" style="display:none">
-              Sync uses this folder + template to detect differences and copy files. Filename is auto-generated as <code>track - title</code>. Changing the template later remaps by copying into the new structure without deleting old files.
-            </p>
+          <div class="settings-row">
+            <label>Hardware model</label>
+            <select id="dap-model" onchange="App.dapModelPreset(this.value)">
+              <option value="loading">Loading presets...</option>
+            </select>
           </div>
-        </div>
-      </div>
-
-      <div class="dap-form-section">
-        <h4 class="dap-form-section-title">Playlists</h4>
-        <div class="settings-row" style="align-items:flex-start">
-          <label class="dap-label-help" style="padding-top:8px">
-            <span>Playlist folder (on device)</span>
-            <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-folder-hint')" title="Playlist folder help">?</button>
-          </label>
-          <div style="flex:1;display:flex;flex-direction:column;gap:4px">
-            <input id="dap-export-folder" type="text" style="width:100%" />
-            <p id="dap-folder-hint" class="settings-hint dap-inline-help" style="display:none"></p>
-          </div>
-        </div>
-        <details class="dap-advanced-box">
-          <summary>Advanced settings</summary>
-          <div class="settings-row" style="align-items:flex-start; margin-top:8px">
+          <div class="settings-row" style="align-items:flex-start">
             <label class="dap-label-help" style="padding-top:8px">
-              <span>Path prefix (advanced)</span>
-              <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-prefix-help')" title="Path prefix help">?</button>
+              <span>Mount point</span>
+              <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-mount-help')" title="Device location help">?</button>
             </label>
             <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-              <input id="dap-prefix" type="text" />
-              <p id="dap-prefix-help" class="settings-hint dap-inline-help" style="display:none">
-                Optional prefix added to playlist paths (for example <code>/Music</code>).
+              <div class="input-browse-group">
+                <input id="dap-mount" type="text" oninput="App.onDapMountInput(this.value)" />
+                <button class="btn-browse" onclick="App.browseDapMount()" type="button">Browse…</button>
+              </div>
+              <select id="dap-device-select" onchange="App.selectDapMount(this.value)" class="dap-mount-select-hidden" tabindex="-1" aria-hidden="true">
+                <option value="">Detecting connected devices…</option>
+              </select>
+              <label class="dap-advanced-toggle dap-advanced-toggle--hidden">
+                <input id="dap-mount-manual-toggle" type="checkbox" onchange="App.toggleDapManualMount(this.checked)" />
+                <span>Advanced: enter path manually</span>
+              </label>
+              <div id="dap-mount-manual-wrap" class="input-browse-group dap-mount-manual-wrap--hidden" style="display:none">
+                <input type="text" disabled />
+                <button class="btn-browse" type="button" disabled>Browse…</button>
+              </div>
+              <p id="dap-mount-validation" class="dap-inline-validation" style="display:none"></p>
+              <p id="dap-mount-help" class="settings-hint dap-inline-help" style="display:none">
+                Choose your DAP mount folder. The selected path is used for music, playlists, and PEQ export.
+              </p>
+            </div>
+          </div>
+        </details>
+
+        <details class="dap-form-section dap-collapsible dap-form-section--music" open>
+          <summary class="dap-form-section-summary">
+            <h4 class="dap-form-section-title">Music Settings</h4>
+          </summary>
+          <div class="settings-row" style="align-items:flex-start">
+            <label class="dap-label-help" style="padding-top:8px">
+              <span>Library root path</span>
+              <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-music-help')" title="Music folder help">?</button>
+            </label>
+            <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+              <div class="input-browse-group">
+                <input id="dap-music-root" type="text" placeholder="Music" oninput="App.dapTemplateChanged()" />
+                <button class="btn-browse" onclick="App.browseFolder('dap-music-root')" type="button">Browse…</button>
+              </div>
+              <p id="dap-music-help" class="settings-hint dap-inline-help" style="display:none">
+                Where your music files will be stored on the device (for example <code>Music</code>).
+              </p>
+            </div>
+          </div>
+          <div class="settings-row">
+            <label>Naming preset</label>
+            <select id="dap-template-preset" onchange="App.dapTemplatePreset(this.value)">
+              <option value="artist_album_track">Artist/Album/song-file.flac (Recommended)</option>
+              <option value="artist_track">Artist/song-file.flac</option>
+              <option value="albumartist_album_track">Artist/Year/song-file.flac</option>
+              <option value="flat_track">Genre/song-file.flac</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <details class="dap-advanced-box">
+            <summary>Advanced settings</summary>
+            <div class="settings-row" style="align-items:flex-start; margin-top:8px">
+              <label class="dap-label-help" style="padding-top:8px">
+                <span>File naming format</span>
+                <button class="settings-help-btn" type="button" onclick="App.toggleDapTemplateHelp()" title="File naming format help">?</button>
+              </label>
+              <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                <input id="dap-path-template" type="text" oninput="App.dapTemplateChanged()" placeholder="%artist%/%album%/%track% - %title%" readonly />
+                <div class="token-chip-row">
+                  <button class="token-chip" data-token="%artist%" onclick="App.insertDapToken('%artist%')" type="button">Artist</button>
+                  <button class="token-chip" data-token="%album%" onclick="App.insertDapToken('%album%')" type="button">Album</button>
+                  <button class="token-chip" data-token="%year%" onclick="App.insertDapToken('%year%')" type="button">Year</button>
+                  <button class="token-chip" data-token="%genre%" onclick="App.insertDapToken('%genre%')" type="button">Genre</button>
+                </div>
+                <span id="dap-template-validation" style="display:none;font-size:11px;line-height:1.4;color:#fbbf24"></span>
+                <p id="dap-template-help" class="settings-hint dap-template-help" style="display:none">
+                  Sync uses this folder + template to detect differences and copy files. Filename is auto-generated as <code>track - title</code>. Changing the template later remaps by copying into the new structure without deleting old files.
+                </p>
+              </div>
+            </div>
+          </details>
+          <div id="dap-template-preview" class="dap-template-preview"></div>
+        </details>
+
+        <details class="dap-form-section dap-collapsible dap-form-section--playlists" open>
+          <summary class="dap-form-section-summary">
+            <h4 class="dap-form-section-title">Playlist Settings</h4>
+          </summary>
+          <div class="settings-row" style="align-items:flex-start">
+            <label class="dap-label-help" style="padding-top:8px">
+              <span>Export folder</span>
+              <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-folder-hint')" title="Playlist folder help">?</button>
+            </label>
+            <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+              <input id="dap-export-folder" type="text" style="width:100%" />
+              <p id="dap-folder-hint" class="settings-hint dap-inline-help" style="display:none"></p>
+            </div>
+          </div>
+          <details class="dap-advanced-box">
+            <summary>Advanced settings</summary>
+            <div class="settings-row" style="align-items:flex-start; margin-top:8px">
+              <label class="dap-label-help" style="padding-top:8px">
+                <span>Path prefix</span>
+                <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-prefix-help')" title="Path prefix help">?</button>
+              </label>
+              <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                <input id="dap-prefix" type="text" />
+                <p id="dap-prefix-help" class="settings-hint dap-inline-help" style="display:none">
+                  Optional prefix added to playlist paths (for example <code>/Music</code>).
+                </p>
+              </div>
+            </div>
+          </details>
+        </details>
+
+        <details class="dap-form-section dap-collapsible dap-form-section--peq" open>
+          <summary class="dap-form-section-summary">
+            <h4 class="dap-form-section-title">PEQ Settings</h4>
+          </summary>
+          <div class="settings-row" style="align-items:flex-start">
+            <label class="dap-label-help" style="padding-top:8px">
+              <span>PEQ export folder</span>
+              <button class="settings-help-btn" type="button" onclick="App.toggleDapHelp('dap-peq-help')" title="PEQ export folder help">?</button>
+            </label>
+            <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+              <input id="dap-peq-folder" type="text" placeholder="~/PEQ" oninput="App.validateDapForm(false)" />
+              <p id="dap-peq-help" class="settings-hint dap-inline-help" style="display:none">
+                Custom PEQs exported from the PEQ workshop to this DAP are saved into this folder.
               </p>
             </div>
           </div>
         </details>
       </div>
-      <div class="modal-actions" style="margin-top:20px">
+      <div class="modal-actions dap-modal-actions" style="margin-top:20px">
         <button class="btn-secondary" onclick="App.closeDapModal()">Cancel</button>
         <button id="dap-save-btn" class="btn-primary" onclick="App.saveDap()">Save Device</button>
       </div>
@@ -1330,56 +1408,67 @@
   <div id="iem-modal" class="modal-overlay" style="display:none">
     <div class="modal modal-wide dap-modal-shell">
       <div class="modal-head modal-head-spaced">
-        <h3 id="iem-modal-title">Add IEM / Headphone</h3>
-        <button class="modal-x-btn" onclick="App.closeIemModal()">✕</button>
+        <h3 id="iem-modal-title">IEM / Headphone Profile</h3>
+        <button class="modal-x-btn" onclick="App.closeIemModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
+      <p class="iem-modal-subtitle">Add or edit your listening gear metadata and measurement sources.</p>
       <input type="hidden" id="iem-modal-id" />
-      <div class="dap-form-section">
-        <h4 class="dap-form-section-title">Profile</h4>
-        <div class="settings-row">
-          <label>Name</label>
-          <input id="iem-name" type="text" />
+      <div id="iem-unsaved-banner" class="dap-modal-banner" style="display:none">
+        <div class="dap-modal-banner-left">
+          <span class="dap-modal-banner-icon" aria-hidden="true">!</span>
+          <span>Unsaved changes detected</span>
         </div>
-        <div class="settings-row">
-          <label>Type</label>
-          <select id="iem-type">
-            <option value="IEM">IEM</option>
-          </select>
-        </div>
+        <button type="button" class="dap-modal-banner-revert" onclick="App.revertIemModalChanges()">Discard</button>
       </div>
-
-      <div class="dap-form-section">
-        <h4 class="dap-form-section-title">Measurement Sources</h4>
-        <div class="settings-row" style="align-items:flex-start">
-          <label class="dap-label-help" style="padding-top:8px">
-            <span>Source URLs (up to 3)</span>
-            <button class="settings-help-btn" type="button" onclick="App.toggleIemHelp('iem-source-help')" title="Measurement source help">?</button>
-          </label>
-          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-            <div class="iem-source-grid">
-              <div class="iem-source-row">
-                <input id="iem-source-label-1" type="text" placeholder="Label (for example, Stock tips)" />
-                <input id="iem-source-url-1" type="text" placeholder="https://squig.link/..." />
-              </div>
-              <div class="iem-source-row">
-                <input id="iem-source-label-2" type="text" placeholder="Label (for example, Foam tips)" />
-                <input id="iem-source-url-2" type="text" placeholder="https://squig.link/..." />
-              </div>
-              <div class="iem-source-row">
-                <input id="iem-source-label-3" type="text" placeholder="Label (for example, EQ nozzle)" />
-                <input id="iem-source-url-3" type="text" placeholder="https://squig.link/..." />
-              </div>
+      <div class="iem-modal-scroll">
+        <div class="dap-form-section iem-form-section">
+          <h4 class="dap-form-section-title">Gear Identity</h4>
+          <div class="iem-identity-grid">
+            <div class="iem-field-block">
+              <label>Gear Name</label>
+              <input id="iem-name" type="text" oninput="App.iemModalChanged()" />
             </div>
-            <p id="iem-source-help" class="settings-hint dap-inline-help" style="display:none">
-              Add up to three <a href="https://squig.link" target="_blank" rel="noopener" class="squig-link">squig.link</a> share URLs with labels. These sources become selectable across FR charts.
-            </p>
-            <div id="iem-modal-error" class="dap-inline-validation" style="display:none"></div>
+            <div class="iem-field-block">
+              <label>Gear Type</label>
+              <select id="iem-type" onchange="App.iemModalChanged()">
+                <option value="IEM">IEM</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="dap-form-section iem-form-section">
+          <h4 class="dap-form-section-title">Measurement Sources</h4>
+          <div class="settings-row">
+            <label class="dap-label-help">
+              <span>Source URLs</span>
+            </label>
+            <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+              <div class="iem-source-grid iem-source-grid-single">
+                <div class="iem-source-row iem-source-row-single">
+                  <input id="iem-source-label-1" class="iem-source-label-input" type="text" placeholder="Label (optional)" oninput="App.iemModalChanged()" />
+                  <input id="iem-source-url-1" class="iem-source-url-input" type="text" placeholder="https://squig.link/target-curve-url" oninput="App.iemModalChanged()" />
+                </div>
+                <div class="iem-source-row iem-source-row-single">
+                  <input id="iem-source-label-2" class="iem-source-label-input" type="text" placeholder="Label (optional)" oninput="App.iemModalChanged()" />
+                  <input id="iem-source-url-2" class="iem-source-url-input" type="text" placeholder="Secondary source URL" oninput="App.iemModalChanged()" />
+                </div>
+                <div class="iem-source-row iem-source-row-single">
+                  <input id="iem-source-label-3" class="iem-source-label-input" type="text" placeholder="Label (optional)" oninput="App.iemModalChanged()" />
+                  <input id="iem-source-url-3" class="iem-source-url-input" type="text" placeholder="Tertiary source URL" oninput="App.iemModalChanged()" />
+                </div>
+              </div>
+              <p id="iem-source-help" class="settings-hint dap-inline-help">
+                Add frequency response measurements from <a href="https://squig.link" target="_blank" rel="noopener" class="squig-link">squig.link</a>.
+              </p>
+              <div id="iem-modal-error" class="dap-inline-validation" style="display:none"></div>
+            </div>
           </div>
         </div>
       </div>
-      <div class="modal-actions" style="margin-top:20px">
+      <div class="modal-actions iem-modal-actions" style="margin-top:20px">
         <button class="btn-secondary" onclick="App.closeIemModal()">Cancel</button>
-        <button class="btn-primary" id="iem-save-btn" onclick="App.saveIem()">Save IEM</button>
+        <button class="btn-primary" id="iem-save-btn" onclick="App.saveIem()">Save</button>
       </div>
     </div>
   </div>
@@ -1389,7 +1478,7 @@
     <div class="modal">
       <div class="modal-head">
         <h3>Upload PEQ Profile</h3>
-        <button class="modal-x-btn" onclick="App.closePeqModal()">✕</button>
+        <button class="modal-x-btn" onclick="App.closePeqModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <div class="settings-row">
         <label>Profile name</label>
@@ -1462,8 +1551,8 @@
     <!-- Right: EQ + queue + volume -->
     <div class="player-right">
       <div class="player-peq-wrap">
-        <button class="player-btn player-btn-text" id="player-peq-btn" onclick="Player.togglePeqPopover()" title="Parametric EQ">
-          <span class="tb-icon tb-icon-eq" aria-hidden="true"></span>
+        <button class="player-btn player-btn-text player-peq-pill" id="player-peq-btn" onclick="Player.togglePeqPopover()" title="Parametric EQ" aria-label="Parametric EQ">
+          PEQ
         </button>
         <!-- PEQ popover -->
         <div id="peq-popover" class="peq-popover" style="display:none">
@@ -1474,40 +1563,47 @@
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
-          <!-- IEM selector -->
-          <div class="peq-section">
-            <div class="peq-section-label">IEM/Headphone</div>
-            <select id="peq-iem-select" class="peq-select" onchange="Player.onPeqIemChange(this.value)">
-              <option value="">— None —</option>
-            </select>
+
+          <div class="peq-popover-fields">
+            <!-- IEM selector -->
+            <div class="peq-section">
+              <div class="peq-section-label">Tune for IEM/Headphone</div>
+              <select id="peq-iem-select" class="peq-select" onchange="Player.onPeqIemChange(this.value)">
+                <option value="">— None —</option>
+              </select>
+            </div>
+            <!-- Profile selector -->
+            <div class="peq-section" id="peq-profile-row">
+              <div class="peq-section-label">Select PEQ</div>
+              <select id="peq-profile-select" class="peq-select" onchange="Player.onPeqProfileChange(this.value)">
+                <option value="">— None —</option>
+                <option value="__create__">Create PEQ</option>
+              </select>
+            </div>
           </div>
-          <!-- Profile selector -->
-          <div class="peq-section" id="peq-profile-row">
-            <div class="peq-section-label">PEQ Profile</div>
-            <select id="peq-profile-select" class="peq-select" onchange="Player.onPeqProfileChange(this.value)">
-              <option value="">— None —</option>
-              <option value="__create__">Create PEQ</option>
-            </select>
-          </div>
-          <div class="peq-section peq-workspace-entry">
-            <button id="peq-workspace-cta" class="btn-secondary peq-open-workspace-btn" onclick="Player.openPeqWorkspaceFromPopover()">
-              Create PEQ
-            </button>
-          </div>
+
           <!-- Crossfade -->
           <div class="peq-divider"></div>
-          <div class="peq-section">
+          <div class="peq-section" id="xfade-row">
             <div class="peq-xfade-meta">
               <span class="peq-xfade-cat">Crossfade</span>
-              <span class="peq-xfade-sub">Duration</span>
+              <span id="xfade-val" class="peq-xfade-val">Off</span>
             </div>
-            <div id="xfade-val" class="peq-xfade-val">Off</div>
             <input type="range" id="xfade-slider" min="0" max="12" step="1" value="0"
                    class="peq-xfade-slider"
                    oninput="Player.setXfade(this.value)" />
             <div class="peq-xfade-labels">
               <span>Off</span><span>12s</span>
             </div>
+          </div>
+
+          <div class="peq-popover-actions">
+            <button class="btn-secondary peq-open-workspace-btn" onclick="Player.resetPeqPopover()" title="Reset PEQ and crossfade">
+              Reset
+            </button>
+            <button id="peq-workspace-cta" class="btn-primary peq-open-workspace-btn peq-create-btn" onclick="Player.openPeqWorkspaceFromPopover()">
+              Create PEQ
+            </button>
           </div>
         </div>
       </div>
@@ -1739,12 +1835,15 @@
   <!-- Create playlist modal -->
   <div id="create-playlist-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeCreatePlaylistModal()">
     <div class="modal">
-      <div style="text-align:center;margin-bottom:18px">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      <div class="modal-head">
+        <div class="modal-head-group">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          <h3>New Playlist</h3>
+        </div>
+        <button class="modal-x-btn" onclick="App.closeCreatePlaylistModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
-      <h3 style="text-align:center;margin-bottom:16px">New Playlist</h3>
       <input id="create-playlist-input" type="text" placeholder="Give it a name…" maxlength="80" autocomplete="off" spellcheck="false" />
-      <div class="modal-actions" style="margin-top:16px">
+      <div class="modal-actions">
         <button class="btn-secondary" onclick="App.closeCreatePlaylistModal()">Cancel</button>
         <button class="btn-primary" onclick="App.submitCreatePlaylist()">Create</button>
       </div>

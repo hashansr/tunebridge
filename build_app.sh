@@ -362,6 +362,14 @@ print(mp)
   echo -e "${GREEN}done ✅${NC}"
   _info "distro/${APP_NAME}-latest.dmg  (stable latest)"
   _info "distro/${APP_NAME}-v${APP_VERSION}-${BUILD_STAMP}.dmg  (archived)"
+
+  # ── Update /Applications with the new build ─────────────────────────────────
+  printf "  🖥️   Updating /Applications/${APP_NAME}.app... "
+  [ -d "/Applications/${APP_NAME}.app" ] && rm -rf "/Applications/${APP_NAME}.app"
+  cp -R "$APP_PATH" "/Applications/"
+  xattr -cr "/Applications/${APP_NAME}.app" 2>/dev/null || true
+  echo -e "${GREEN}done ✅${NC}"
+  _info "/Applications/${APP_NAME}.app"
 fi
 
 deactivate || true
@@ -377,10 +385,9 @@ if [ "$BUILD_DMG" = "1" ]; then
   echo -e "  ${BOLD}To distribute:${NC}"
   echo "    Share:  distro/${APP_NAME}-latest.dmg"
   echo ""
-  echo -e "  ${BOLD}To install:${NC}"
-  echo "    1.  Open  dist/${APP_NAME}.dmg"
-  echo "    2.  Drag  TuneBridge.app  →  Applications"
-  echo "    3.  Launch TuneBridge"
+  echo -e "  ${BOLD}Local install:${NC}"
+  echo "    /Applications/${APP_NAME}.app has been updated ✅"
+  echo "    Launch TuneBridge from Applications or Spotlight"
 else
   echo -e "  ${BOLD}To install:${NC}"
   echo "    1.  Open  dist/${APP_NAME}.app"
