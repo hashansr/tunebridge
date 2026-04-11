@@ -220,7 +220,11 @@
       "Bash(kill 61372)",
       "Bash(TUNEBRIDGE_PORT=5003 timeout 8 python app.py)",
       "Bash(curl -s http://localhost:5001/static/app.js)",
-      "Bash(curl -s \"http://localhost:5001/api/health/status\")"
+      "Bash(curl -s \"http://localhost:5001/api/health/status\")",
+      "Bash(xargs ps:*)",
+      "Bash(curl -s http://localhost:5001/api/health/status)",
+      "Bash(cp \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/static/index.html\" \"/Applications/TuneBridge.app/Contents/Resources/static/index.html\")",
+      "Bash(cp \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/static/style.css\" \"/Applications/TuneBridge.app/Contents/Resources/static/style.css\")"
     ]
   }
 }
