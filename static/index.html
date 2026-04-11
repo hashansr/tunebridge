@@ -129,16 +129,25 @@
         </div>
         <div id="albums-alpha-bar" class="alpha-bar" style="display:none"></div>
         <div id="artist-hero" class="browse-hero" style="display:none">
-          <div class="hero-art" id="artist-hero-art"></div>
+          <div class="hero-art-sq" id="artist-hero-art"></div>
           <div class="hero-info">
-            <div class="hero-label">Artist</div>
-            <div class="hero-title" id="artist-hero-name"></div>
+            <div class="hero-title-row">
+              <div class="hero-title" id="artist-hero-name"></div>
+              <button class="hero-fav-star" id="artist-hero-fav" title="Favourite">&#9733;</button>
+            </div>
             <div class="hero-meta" id="artist-hero-meta"></div>
             <div class="hero-actions">
-              <button class="btn-play-all" id="artist-hero-play" style="display:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play All</button>
-              <button class="btn-secondary" id="artist-hero-add">+ Add All Songs</button>
-              <button class="btn-secondary" id="artist-hero-browse" onclick="">Browse All Songs</button>
-              <button class="btn-secondary fav-hero-btn" id="artist-hero-fav" title="Add artist to favourites">☆ Favourite</button>
+              <button class="btn-hero-play" id="artist-hero-play"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play</button>
+              <button class="btn-hero-shuffle" id="artist-hero-shuffle"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="4" y1="4" x2="9" y2="9"/></svg> Shuffle</button>
+              <div class="hero-more-wrap" id="artist-hero-more-wrap">
+                <button class="btn-hero-more" id="artist-hero-more" onclick="App.toggleHeroMore('artist')">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                </button>
+                <div class="hero-more-menu" id="artist-hero-more-menu">
+                  <button class="hero-more-item" id="artist-hero-add">Add All Songs to Playlist</button>
+                  <button class="hero-more-item" id="artist-hero-browse">Browse All Songs</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -157,13 +166,23 @@
         <div id="album-hero" class="browse-hero" style="display:none">
           <div class="hero-art-sq" id="album-hero-art"></div>
           <div class="hero-info">
-            <div class="hero-label">Album</div>
-            <div class="hero-title" id="album-hero-name"></div>
+            <div class="hero-title-row">
+              <div class="hero-title" id="album-hero-name"></div>
+              <button class="hero-fav-star" id="album-hero-fav" title="Favourite">&#9733;</button>
+            </div>
             <div class="hero-sub" id="album-hero-artist"></div>
             <div class="hero-meta" id="album-hero-meta"></div>
             <div class="hero-actions">
-              <button class="btn-secondary" id="add-all-btn">+ Add All to Playlist</button>
-              <button class="btn-secondary fav-hero-btn" id="album-hero-fav" title="Add album to favourites">☆ Favourite</button>
+              <button class="btn-hero-play" id="album-hero-play"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play</button>
+              <button class="btn-hero-shuffle" id="album-hero-shuffle"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="4" y1="4" x2="9" y2="9"/></svg> Shuffle</button>
+              <div class="hero-more-wrap" id="album-hero-more-wrap">
+                <button class="btn-hero-more" id="album-hero-more" onclick="App.toggleHeroMore('album')">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                </button>
+                <div class="hero-more-menu" id="album-hero-more-menu">
+                  <button class="hero-more-item" id="add-all-btn">Add All to Playlist</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -319,11 +338,24 @@
       <div id="view-playlist" class="view" style="display:none">
         <div class="view-header">
           <div class="breadcrumb" id="playlist-breadcrumb"></div>
+          <div class="pl-toolbar">
+            <button class="pl-toolbar-btn" id="pl-rename-btn" onclick="App.focusPlaylistName()" title="Rename playlist">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <div class="pl-more-wrap">
+              <button class="pl-toolbar-btn" id="pl-more-btn" onclick="App.togglePlMoreMenu()" title="More actions">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+              </button>
+              <div class="pl-more-menu" id="pl-more-menu" style="display:none">
+                <button class="pl-more-item pl-more-item-danger" id="pl-toolbar-delete-btn" onclick="App.deleteCurrentPlaylist()">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                  Delete Playlist
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="playlist-header">
-          <button class="pl-header-delete-btn" onclick="App.deleteCurrentPlaylist()" title="Delete playlist" aria-label="Delete playlist">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-          </button>
           <div class="playlist-cover-wrap" onclick="App.triggerArtworkUpload()" title="Click to set cover art">
             <div class="playlist-cover" id="pl-cover"></div>
             <div class="cover-upload-overlay">
@@ -334,11 +366,14 @@
           </div>
           <input type="file" id="artwork-file-input" accept="image/*" style="display:none" onchange="App.handleArtworkFile(this)">
           <div class="playlist-meta">
-            <div class="playlist-label">PLAYLIST</div>
             <h1 id="pl-name" contenteditable="true" spellcheck="false" onblur="App.renamePlaylist(this.textContent)"></h1>
             <div class="playlist-stats" id="pl-stats"></div>
-            <div class="playlist-actions" id="dap-export-pills">
-              <!-- Populated dynamically from DAP list in openPlaylist() -->
+            <div class="hero-actions pl-hero-actions">
+              <button class="btn-hero-play" id="pl-play-all-btn" style="display:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play</button>
+              <button class="btn-hero-shuffle" id="pl-shuffle-btn" style="display:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="4" y1="4" x2="9" y2="9"/></svg> Shuffle</button>
+              <div class="playlist-actions" id="dap-export-pills">
+                <!-- Populated dynamically from DAP list in openPlaylist() -->
+              </div>
             </div>
           </div>
         </div>

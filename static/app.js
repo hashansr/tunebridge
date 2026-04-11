@@ -772,7 +772,7 @@ async function loadAlbums(artistFilter = null) {
     const artistData = state.artists?.find(a => a.name === artistFilter);
     const artKey = albums[0]?.artwork_key || artistData?.artwork_key || '';
     document.getElementById('artist-hero-art').innerHTML =
-      artKey ? `<img src="${artworkUrl(artKey)}" />` : musicNote(52);
+      artKey ? `<img src="${artworkUrl(artKey)}" />` : musicNote(64);
     document.getElementById('artist-hero-name').textContent = artistFilter;
     const totalSongs = albums.reduce((s, al) => s + (al.track_count || 0), 0);
     document.getElementById('artist-hero-meta').textContent =
@@ -784,21 +784,25 @@ async function loadAlbums(artistFilter = null) {
       const artistId = _normArtistId(artistFilter);
       const isFav = _isFavourite('artists', artistId);
       artistFavBtn.classList.toggle('is-fav', isFav);
-      artistFavBtn.textContent = isFav ? '★ Favourited' : '☆ Favourite';
       artistFavBtn.onclick = async (e) => {
         e.stopPropagation();
         await toggleFavourite('artists', encodeURIComponent(artistId));
         const nowFav = _isFavourite('artists', artistId);
         artistFavBtn.classList.toggle('is-fav', nowFav);
-        artistFavBtn.textContent = nowFav ? '★ Favourited' : '☆ Favourite';
       };
     }
     const artistPlayBtn = document.getElementById('artist-hero-play');
     if (artistPlayBtn) {
-      artistPlayBtn.style.display = '';
       artistPlayBtn.onclick = async () => {
         const t = await api(`/library/tracks?artist=${encodeURIComponent(artistFilter)}`);
         if (t && t.length) Player.playAll(t);
+      };
+    }
+    const artistShuffleBtn = document.getElementById('artist-hero-shuffle');
+    if (artistShuffleBtn) {
+      artistShuffleBtn.onclick = async () => {
+        const t = await api(`/library/tracks?artist=${encodeURIComponent(artistFilter)}`);
+        if (t && t.length) { if (!Player.getShuffle()) Player.toggleShuffle(); Player.playAll(t); }
       };
     }
     hero.style.display = 'flex';
@@ -838,20 +842,23 @@ async function loadTracks(artist = null, album = null) {
 
   // Album / artist hero
   const albumHero = document.getElementById('album-hero');
-  const heroLabel = albumHero.querySelector('.hero-label');
   if (album && tracks.length) {
     const artKey = tracks[0].artwork_key || '';
     document.getElementById('album-hero-art').innerHTML =
-      artKey ? `<img src="${artworkUrl(artKey)}" />` : musicNote(56);
+      artKey ? `<img src="${artworkUrl(artKey)}" />` : musicNote(64);
     document.getElementById('album-hero-name').textContent = album;
     document.getElementById('album-hero-artist').innerHTML = artist
       ? `<span class="link" data-artist="${esc(artist)}" onclick="App.showArtist(this.dataset.artist)">${esc(artist)}</span>` : '';
     const totalSecs = tracks.reduce((s, t) => s + (t.duration || 0), 0);
     const yr = tracks[0].year;
+    const genre = tracks[0].genre;
+    const fmt = tracks[0].format;
     const meta = [
       yr ? String(yr) : null,
+      genre || null,
       `${tracks.length} songs`,
       totalSecs ? fmtDuration(totalSecs) : null,
+      fmt || null,
     ].filter(Boolean).join(' · ');
     document.getElementById('album-hero-meta').textContent = meta;
     const albumFavBtn = document.getElementById('album-hero-fav');
@@ -860,22 +867,18 @@ async function loadTracks(artist = null, album = null) {
       const isFav = albumId ? _isFavourite('albums', albumId) : false;
       albumFavBtn.style.display = albumId ? '' : 'none';
       albumFavBtn.classList.toggle('is-fav', isFav);
-      albumFavBtn.textContent = isFav ? '★ Favourited' : '☆ Favourite';
       albumFavBtn.onclick = async (e) => {
         e.stopPropagation();
         if (!albumId) return;
         await toggleFavourite('albums', encodeURIComponent(albumId));
-        const nowFav = _isFavourite('albums', albumId);
-        albumFavBtn.classList.toggle('is-fav', nowFav);
-        albumFavBtn.textContent = nowFav ? '★ Favourited' : '☆ Favourite';
+        albumFavBtn.classList.toggle('is-fav', _isFavourite('albums', albumId));
       };
     }
-    heroLabel.textContent = 'Album';
     albumHero.style.display = 'flex';
   } else if (!album && artist && tracks.length) {
     const artKey = tracks[0].artwork_key || '';
     document.getElementById('album-hero-art').innerHTML =
-      artKey ? `<img src="${artworkUrl(artKey)}" />` : musicNote(56);
+      artKey ? `<img src="${artworkUrl(artKey)}" />` : musicNote(64);
     document.getElementById('album-hero-name').textContent = 'All Songs';
     document.getElementById('album-hero-artist').innerHTML =
       `<span class="link" data-artist="${esc(artist)}" onclick="App.showArtist(this.dataset.artist)">${esc(artist)}</span>`;
@@ -884,7 +887,6 @@ async function loadTracks(artist = null, album = null) {
       `${tracks.length} songs${totalSecs ? ' · ' + fmtDuration(totalSecs) : ''}`;
     const albumFavBtn = document.getElementById('album-hero-fav');
     if (albumFavBtn) albumFavBtn.style.display = 'none';
-    heroLabel.textContent = 'Artist';
     albumHero.style.display = 'flex';
   } else {
     albumHero.style.display = 'none';
@@ -897,18 +899,14 @@ async function loadTracks(artist = null, album = null) {
 
   document.getElementById('add-all-btn').onclick = () => App.addAllToPlaylist(tracks.map(t => t.id));
 
-  // Play All button on album/artist hero (always #album-hero in view-tracks)
-  const heroActions = document.querySelector('#album-hero .hero-actions');
-  if (heroActions) {
-    let playBtn = heroActions.querySelector('.btn-play-all');
-    if (!playBtn) {
-      playBtn = document.createElement('button');
-      playBtn.className = 'btn-play-all';
-      playBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play All`;
-      heroActions.prepend(playBtn);
-    }
-    playBtn.onclick = () => Player.playAll(tracks);
-  }
+  // Play / Shuffle buttons on album hero
+  const albumPlayBtn = document.getElementById('album-hero-play');
+  if (albumPlayBtn) albumPlayBtn.onclick = () => Player.playAll(tracks);
+  const albumShuffleBtn = document.getElementById('album-hero-shuffle');
+  if (albumShuffleBtn) albumShuffleBtn.onclick = () => {
+    if (!Player.getShuffle()) Player.toggleShuffle();
+    Player.playAll(tracks);
+  };
 }
 
 function fmtDuration(totalSecs) {
@@ -965,7 +963,12 @@ function trackRow(t, num, inPlaylist) {
       ${inPlaylist ? `<td class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.genre || '')}</td>` : ''}
       ${inPlaylist ? `<td class="col-year" style="color:var(--text-muted);font-size:var(--text-sm)">${t.year || ''}</td>` : ''}
       <td class="col-fav-cell">${_favToggleBtn('songs', t.id, `track-fav-btn${inPlaylist ? '' : ''}`)}</td>
-      <td><div class="col-act-inner">${add}</div></td>
+      <td><div class="col-act-inner">
+        <button class="row-ctx-btn" onclick="event.stopPropagation();App.showTrackCtxMenu(event,'${t.id}')" title="More actions">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+        </button>
+        ${add}
+      </div></td>
     </tr>`;
 }
 
@@ -1007,29 +1010,35 @@ async function openPlaylist(pid) {
   updatePlaylistStats(pl.tracks);
   renderDapExportPills(pid);
 
-  // Register tracks with player and add/update Play button
+  // Register tracks with player
   Player.registerTracks(pl.tracks);
   Player.setPlaybackContext(pl.tracks, `Playlist · ${pl.name}`);
-  let playAllBtn = document.getElementById('pl-play-all-btn');
-  if (!playAllBtn) {
-    playAllBtn = document.createElement('button');
-    playAllBtn.id = 'pl-play-all-btn';
-    playAllBtn.className = 'btn-play-all';
-    playAllBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play`;
-    const stats = document.getElementById('pl-stats');
-    if (stats) stats.insertAdjacentElement('afterend', playAllBtn);
+  const playAllBtn = document.getElementById('pl-play-all-btn');
+  const shuffleBtn = document.getElementById('pl-shuffle-btn');
+  if (playAllBtn) {
+    playAllBtn.onclick = () => Player.playAll(pl.tracks);
+    playAllBtn.style.display = pl.tracks.length ? '' : 'none';
   }
-  playAllBtn.onclick = () => Player.playAll(pl.tracks);
-  playAllBtn.style.display = pl.tracks.length ? '' : 'none';
+  if (shuffleBtn) {
+    shuffleBtn.onclick = () => {
+      if (!Player.getShuffle()) Player.toggleShuffle();
+      Player.playAll(pl.tracks);
+    };
+    shuffleBtn.style.display = pl.tracks.length ? '' : 'none';
+  }
 }
 
 function _applyPlaylistDetailMode(isFavouriteVirtual) {
-  const delBtn = document.querySelector('.pl-header-delete-btn');
+  const delBtn = document.getElementById('pl-toolbar-delete-btn');
+  const renameBtn = document.getElementById('pl-rename-btn');
+  const moreBtn = document.getElementById('pl-more-btn');
   const coverWrap = document.querySelector('.playlist-cover-wrap');
   const removeBtn = document.getElementById('pl-cover-remove');
   const fileInput = document.getElementById('artwork-file-input');
   const nameEl = document.getElementById('pl-name');
   if (delBtn) delBtn.style.display = isFavouriteVirtual ? 'none' : '';
+  if (renameBtn) renameBtn.style.display = isFavouriteVirtual ? 'none' : '';
+  if (moreBtn) moreBtn.style.display = isFavouriteVirtual ? 'none' : '';
   if (removeBtn) removeBtn.style.display = isFavouriteVirtual ? 'none' : removeBtn.style.display;
   if (fileInput) fileInput.disabled = !!isFavouriteVirtual;
   if (coverWrap) {
@@ -1074,17 +1083,19 @@ async function openFavouriteSongsPlaylist() {
 
   Player.registerTracks(pl.tracks);
   Player.setPlaybackContext(pl.tracks, 'Playlist · Favourite Songs');
-  let playAllBtn = document.getElementById('pl-play-all-btn');
-  if (!playAllBtn) {
-    playAllBtn = document.createElement('button');
-    playAllBtn.id = 'pl-play-all-btn';
-    playAllBtn.className = 'btn-play-all';
-    playAllBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play`;
-    const stats = document.getElementById('pl-stats');
-    if (stats) stats.insertAdjacentElement('afterend', playAllBtn);
+  const favPlayBtn = document.getElementById('pl-play-all-btn');
+  const favShuffleBtn = document.getElementById('pl-shuffle-btn');
+  if (favPlayBtn) {
+    favPlayBtn.onclick = () => Player.playAll(pl.tracks);
+    favPlayBtn.style.display = pl.tracks.length ? '' : 'none';
   }
-  playAllBtn.onclick = () => Player.playAll(pl.tracks);
-  playAllBtn.style.display = pl.tracks.length ? '' : 'none';
+  if (favShuffleBtn) {
+    favShuffleBtn.onclick = () => {
+      if (!Player.getShuffle()) Player.toggleShuffle();
+      Player.playAll(pl.tracks);
+    };
+    favShuffleBtn.style.display = pl.tracks.length ? '' : 'none';
+  }
 }
 
 async function renderDapExportPills(pid) {
@@ -1130,6 +1141,36 @@ function closePlaylistDapMenu() {
 async function pickConnectedDapExport(did) {
   closePlaylistDapMenu();
   await exportToDeviceDap(did);
+}
+
+/* ── Hero / playlist toolbar helpers ───────────────────────────────── */
+function toggleHeroMore(which) {
+  const menu = document.getElementById(`${which}-hero-more-menu`);
+  if (!menu) return;
+  const isOpen = menu.classList.contains('open');
+  // close all hero menus first
+  document.querySelectorAll('.hero-more-menu.open').forEach(m => m.classList.remove('open'));
+  if (!isOpen) menu.classList.add('open');
+}
+
+function togglePlMoreMenu() {
+  const menu = document.getElementById('pl-more-menu');
+  if (!menu) return;
+  const isOpen = menu.style.display !== 'none';
+  menu.style.display = isOpen ? 'none' : 'block';
+}
+
+function focusPlaylistName() {
+  const el = document.getElementById('pl-name');
+  if (!el) return;
+  el.focus();
+  // move cursor to end
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  range.collapse(false);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
 }
 
 function _getDisplayedTracks() {
@@ -7785,6 +7826,9 @@ const App = {
   togglePlaylistDapMenu,
   closePlaylistDapMenu,
   pickConnectedDapExport,
+  toggleHeroMore,
+  togglePlMoreMenu,
+  focusPlaylistName,
   rescan,
   rescanClean,
   toggleRescanMenu,
@@ -9646,6 +9690,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     const dd = document.getElementById('add-dropdown');
     if (dd && !dd.contains(e.target)) hideDropdown();
     if (!e.target.closest('#pl-dap-export-dd')) closePlaylistDapMenu();
+
+    // Close hero ··· menus
+    if (!e.target.closest('.hero-more-wrap')) {
+      document.querySelectorAll('.hero-more-menu.open').forEach(m => m.classList.remove('open'));
+    }
+    // Close playlist toolbar ··· menu
+    if (!e.target.closest('.pl-more-wrap')) {
+      const plMenu = document.getElementById('pl-more-menu');
+      if (plMenu) plMenu.style.display = 'none';
+    }
 
     // Close any open mapping results dropdowns
     if (!e.target.closest('.map-row-target')) {
