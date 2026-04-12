@@ -184,6 +184,7 @@
                 <div class="hero-more-menu" id="album-hero-more-menu">
                   <button class="hero-more-item" id="add-all-btn">Add All to Playlist</button>
                   <button class="hero-more-item" id="album-hero-edit-tags" onclick="App.openAlbumTagEditor()">Edit Album Tags</button>
+                  <button class="hero-more-item" id="album-hero-change-art" onclick="App.openAlbumArtModal()">Change Album Art</button>
                 </div>
               </div>
             </div>
@@ -611,7 +612,7 @@
               <label>Last.fm API key</label>
               <div class="input-browse-group">
                 <input id="lastfm-api-key-input" type="text" placeholder="Paste your API key" />
-                <a class="btn-browse" href="https://www.last.fm/api/account/create" target="_blank">Get Key</a>
+                <a class="btn-browse" href="https://www.last.fm/api/accounts" target="_blank">Get Key</a>
               </div>
             </div>
             <div id="fanart-key-row" class="settings-row" style="display:none">
@@ -624,6 +625,28 @@
             <p class="settings-hint">API keys are stored locally on your device and never shared.</p>
             <div class="settings-inline-actions">
               <button class="btn-primary" onclick="App.saveArtistImageSettings()">Save</button>
+            </div>
+
+            <!-- Batch fetch -->
+            <div class="settings-subsection-divider"></div>
+            <h4 class="settings-subsection-title">Auto-fetch Artist Photos</h4>
+            <p class="settings-hint settings-hint-block-gap">
+              Searches for a photo for every artist in your library that doesn't already have one. Uses the service selected above.
+            </p>
+            <div class="settings-inline-actions">
+              <button class="btn-secondary" id="batch-img-start-btn" onclick="App.startArtistImageBatch()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                Fetch missing photos
+              </button>
+              <button class="btn-secondary" id="batch-img-cancel-btn" onclick="App.cancelArtistImageBatch()" style="display:none">Cancel</button>
+            </div>
+
+            <!-- Progress banner -->
+            <div id="batch-img-banner" class="scan-progress-wrap" style="display:none">
+              <div class="scan-bar-outer">
+                <div id="batch-img-bar" class="scan-bar-inner" style="width:0%"></div>
+              </div>
+              <div id="batch-img-msg" class="scan-status-msg"></div>
             </div>
           </div>
 
@@ -2092,43 +2115,55 @@
   <div id="tag-editor-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeTagEditor()">
     <div class="modal modal-wide">
       <div class="modal-head modal-head-spaced">
-        <h3>Edit Track Tags</h3>
-        <button class="modal-x-btn" onclick="App.closeTagEditor()">
+        <div class="modal-head-group">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <h3>Edit Track Tags</h3>
+        </div>
+        <button class="modal-x-btn" onclick="App.closeTagEditor()" title="Close (Esc)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
       <div class="tag-editor-form">
         <div class="settings-row">
           <label>Title</label>
-          <input id="te-title" type="text" />
+          <input id="te-title" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
         </div>
         <div class="settings-row">
           <label>Artist</label>
-          <input id="te-artist" type="text" />
+          <input id="te-artist" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
         </div>
         <div class="settings-row">
           <label>Album Artist</label>
-          <input id="te-album-artist" type="text" />
+          <input id="te-album-artist" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
         </div>
         <div class="settings-row">
           <label>Album</label>
-          <input id="te-album" type="text" />
+          <input id="te-album" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
         </div>
         <div class="tag-editor-row-2col">
           <div class="settings-row">
             <label>Track #</label>
-            <input id="te-track-number" type="text" style="width:80px" />
+            <div>
+              <input id="te-track-number" type="text" maxlength="10" autocomplete="off" placeholder="e.g. 3 or 3/12" />
+              <div class="tag-editor-hint">Number or N/M</div>
+            </div>
           </div>
           <div class="settings-row">
             <label>Year</label>
-            <input id="te-year" type="text" style="width:90px" />
+            <div>
+              <input id="te-year" type="text" maxlength="4" autocomplete="off" placeholder="e.g. 2003" />
+              <div class="tag-editor-hint">4-digit year</div>
+            </div>
           </div>
         </div>
         <div class="settings-row">
           <label>Genre</label>
-          <input id="te-genre" type="text" />
+          <input id="te-genre" type="text" maxlength="100" autocomplete="off" spellcheck="false" />
         </div>
-        <p id="te-error" class="tag-editor-error" style="display:none"></p>
+        <div id="te-error" class="tag-editor-error" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span id="te-error-text"></span>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="App.closeTagEditor()">Cancel</button>
@@ -2141,35 +2176,44 @@
   <div id="album-tag-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeAlbumTagEditor()">
     <div class="modal modal-wide">
       <div class="modal-head modal-head-spaced">
-        <h3 id="album-tag-modal-title">Edit Album Tags</h3>
-        <button class="modal-x-btn" onclick="App.closeAlbumTagEditor()">
+        <div class="modal-head-group">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          <h3 id="album-tag-modal-title">Edit Album Tags</h3>
+        </div>
+        <button class="modal-x-btn" onclick="App.closeAlbumTagEditor()" title="Close (Esc)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
       <div id="album-tag-warning" class="tag-batch-warning">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        <span id="album-tag-warning-text">This will update N files on disk.</span>
+        <span id="album-tag-warning-text">This will update N files on disk. Only filled fields are applied.</span>
       </div>
       <div class="tag-editor-form">
         <div class="settings-row">
           <label>Album</label>
-          <input id="ate-album" type="text" />
+          <input id="ate-album" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
         </div>
         <div class="settings-row">
           <label>Album Artist</label>
-          <input id="ate-album-artist" type="text" />
+          <input id="ate-album-artist" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
         </div>
         <div class="tag-editor-row-2col">
           <div class="settings-row">
             <label>Year</label>
-            <input id="ate-year" type="text" style="width:90px" />
+            <div>
+              <input id="ate-year" type="text" maxlength="4" autocomplete="off" placeholder="e.g. 2003" />
+              <div class="tag-editor-hint">4-digit year</div>
+            </div>
           </div>
           <div class="settings-row">
             <label>Genre</label>
-            <input id="ate-genre" type="text" />
+            <input id="ate-genre" type="text" maxlength="100" autocomplete="off" spellcheck="false" />
           </div>
         </div>
-        <p id="ate-error" class="tag-editor-error" style="display:none"></p>
+        <div id="ate-error" class="tag-editor-error" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span id="ate-error-text"></span>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="App.closeAlbumTagEditor()">Cancel</button>
@@ -2182,25 +2226,99 @@
   <div id="artist-rename-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeArtistRename()">
     <div class="modal modal-wide">
       <div class="modal-head modal-head-spaced">
-        <h3>Rename Artist</h3>
-        <button class="modal-x-btn" onclick="App.closeArtistRename()">
+        <div class="modal-head-group">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <h3>Rename Artist</h3>
+        </div>
+        <button class="modal-x-btn" onclick="App.closeArtistRename()" title="Close (Esc)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
       <div id="artist-rename-warning" class="tag-batch-warning tag-batch-warning--danger">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        <span id="artist-rename-warning-text">This will update the Artist and Album Artist tags on all N tracks for this artist.</span>
+        <span id="artist-rename-warning-text">This will rewrite the Artist and Album Artist tags on all tracks. This cannot be undone.</span>
       </div>
       <div class="tag-editor-form">
         <div class="settings-row">
-          <label>New artist name</label>
-          <input id="ar-new-name" type="text" />
+          <label>New name</label>
+          <input id="ar-new-name" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
         </div>
-        <p id="ar-error" class="tag-editor-error" style="display:none"></p>
+        <div id="ar-error" class="tag-editor-error" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span id="ar-error-text"></span>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="App.closeArtistRename()">Cancel</button>
-        <button class="btn-danger" id="ar-save-btn" onclick="App.saveArtistRename()">Rename Artist</button>
+        <button class="btn-danger-subtle" id="ar-save-btn" onclick="App.saveArtistRename()">Rename Artist</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Album Art Modal -->
+  <div id="album-art-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeAlbumArtModal()">
+    <div class="modal modal-wide">
+      <div class="modal-head modal-head-spaced">
+        <div class="modal-head-group">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <div>
+            <h3>Album Art</h3>
+            <div id="album-art-modal-subtitle" class="modal-subtitle"></div>
+          </div>
+        </div>
+        <button class="modal-x-btn" onclick="App.closeAlbumArtModal()" title="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="artist-image-modal-body">
+
+        <!-- Search section -->
+        <div class="ai-section-label">Find online</div>
+        <div class="artist-image-search-bar">
+          <select id="aa-service-select" class="settings-select" onchange="App.onAlbumArtServiceChange(this.value)">
+            <option value="itunes">iTunes Search</option>
+            <option value="lastfm">Last.fm</option>
+            <option value="fanart">Fanart.tv</option>
+          </select>
+          <button class="btn-primary ai-search-btn-inner" id="aa-search-btn" onclick="App.searchAlbumArt()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Search
+          </button>
+        </div>
+
+        <div id="aa-candidates" class="artist-image-candidates">
+          <p class="artist-image-hint">Select a service and click Search to find covers.</p>
+        </div>
+
+        <!-- Upload section -->
+        <div class="artist-image-divider"><span>or upload your own</span></div>
+        <div class="artist-image-upload-row">
+          <label class="btn-secondary artist-image-upload-label">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Choose file…
+            <input type="file" id="aa-file-input" accept="image/*" style="display:none" onchange="App.onAlbumArtFileSelected(this)">
+          </label>
+          <span id="aa-file-name" class="ai-file-name-label"></span>
+        </div>
+
+        <!-- Error -->
+        <div id="aa-error" class="tag-editor-error" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span id="aa-error-text"></span>
+        </div>
+
+      </div>
+
+      <div class="modal-actions ai-modal-actions">
+        <button id="aa-remove-btn" class="btn-danger-subtle ai-remove-btn" onclick="App.removeAlbumArt()" style="display:none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          Remove art
+        </button>
+        <div class="ai-modal-actions-right">
+          <button class="btn-secondary" onclick="App.closeAlbumArtModal()">Cancel</button>
+          <button class="btn-primary" id="aa-use-btn" onclick="App.saveAlbumArt()" disabled>Save Art</button>
+        </div>
       </div>
     </div>
   </div>
@@ -2209,37 +2327,66 @@
   <div id="artist-image-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeArtistImageModal()">
     <div class="modal modal-wide">
       <div class="modal-head modal-head-spaced">
-        <h3 id="artist-image-modal-title">Artist Image</h3>
-        <button class="modal-x-btn" onclick="App.closeArtistImageModal()">
+        <div class="modal-head-group">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          <div>
+            <h3>Artist Photo</h3>
+            <div id="artist-image-modal-subtitle" class="modal-subtitle"></div>
+          </div>
+        </div>
+        <button class="modal-x-btn" onclick="App.closeArtistImageModal()" title="Close">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
+
       <div class="artist-image-modal-body">
+
+        <!-- Search section -->
+        <div class="ai-section-label">Find online</div>
         <div class="artist-image-search-bar">
           <select id="ai-service-select" class="settings-select">
             <option value="itunes">iTunes Search</option>
             <option value="lastfm">Last.fm</option>
             <option value="fanart">Fanart.tv</option>
           </select>
-          <button class="btn-secondary" id="ai-search-btn" onclick="App.searchArtistImages()">Search</button>
+          <button class="btn-primary ai-search-btn-inner" id="ai-search-btn" onclick="App.searchArtistImages()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Search
+          </button>
         </div>
+
         <div id="ai-candidates" class="artist-image-candidates">
-          <p class="artist-image-hint muted">Click Search to find artist images online.</p>
+          <p class="artist-image-hint">Select a service and click Search to find photos.</p>
         </div>
-        <div class="artist-image-divider"><span>— or upload your own —</span></div>
+
+        <!-- Upload section -->
+        <div class="artist-image-divider"><span>or upload your own</span></div>
         <div class="artist-image-upload-row">
           <label class="btn-secondary artist-image-upload-label">
-            Choose File
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Choose file…
             <input type="file" id="ai-file-input" accept="image/*" style="display:none" onchange="App.onArtistImageFileSelected(this)">
           </label>
-          <span id="ai-file-name" class="muted">no file selected</span>
-          <button id="ai-remove-btn" class="btn-secondary" onclick="App.removeArtistImage()" style="display:none">Remove Image</button>
+          <span id="ai-file-name" class="ai-file-name-label"></span>
         </div>
-        <p id="ai-error" class="tag-editor-error" style="display:none"></p>
+
+        <!-- Error -->
+        <div id="ai-error" class="tag-editor-error" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span id="ai-error-text"></span>
+        </div>
+
       </div>
-      <div class="modal-actions">
-        <button class="btn-secondary" onclick="App.closeArtistImageModal()">Cancel</button>
-        <button class="btn-primary" id="ai-use-btn" onclick="App.saveArtistImage()" disabled>Use This Image</button>
+
+      <div class="modal-actions ai-modal-actions">
+        <button id="ai-remove-btn" class="btn-danger-subtle ai-remove-btn" onclick="App.removeArtistImage()" style="display:none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          Remove photo
+        </button>
+        <div class="ai-modal-actions-right">
+          <button class="btn-secondary" onclick="App.closeArtistImageModal()">Cancel</button>
+          <button class="btn-primary" id="ai-use-btn" onclick="App.saveArtistImage()" disabled>Save Photo</button>
+        </div>
       </div>
     </div>
   </div>

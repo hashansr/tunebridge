@@ -426,19 +426,45 @@ def _validate_image_url(url: str):
 
 _LASTFM_PLACEHOLDER_HASH = '2a96cbd8b46e442fc41c2b86b821562f'
 
+import difflib as _difflib
+
+def _name_matches(searched: str, found: str, threshold: float = 0.6) -> bool:
+    """
+    Return True if `found` is a plausible match for the searched artist name.
+    Checks (in order): exact, substring containment, significant word overlap,
+    and finally fuzzy sequence similarity. This prevents e.g. "Corey Taylor"
+    matching "Taylor Swift" when both contain the token "taylor".
+    """
+    s = searched.lower().strip()
+    f = found.lower().strip()
+    if not s or not f:
+        return False
+    if s == f:
+        return True
+    # Substring: the full searched name must appear inside found (or vice versa)
+    # but NOT just a single shared token — require at least 2 words to share
+    s_words = [w for w in s.split() if len(w) > 2]  # ignore tiny stop-words
+    f_words = set(f.split())
+    if s_words:
+        overlap = sum(1 for w in s_words if w in f_words)
+        # Need ALL (or all-but-one for long names) search words to appear in found
+        required = len(s_words) if len(s_words) <= 2 else len(s_words) - 1
+        if overlap >= required:
+            return True
+    # Fuzzy similarity on the full name string
+    return _difflib.SequenceMatcher(None, s, f).ratio() >= threshold
+
 
 def _search_itunes(artist_name: str) -> list:
     """
     Search iTunes for artist-representative images.
     iTunes doesn't expose artist portraits, so we search for the artist's albums
-    and return unique album artworks as portrait candidates. Users can pick whichever
-    album cover best represents the artist.
+    and return unique album artworks as portrait candidates.
     """
     try:
-        # Search for albums by this artist to get album artworks
         url = (
             f"https://itunes.apple.com/search?"
-            f"term={urlquote(artist_name)}&entity=album&limit=12&media=music&attribute=artistTerm"
+            f"term={urlquote(artist_name)}&entity=album&limit=20&media=music&attribute=artistTerm"
         )
         req = UrlRequest(url, headers={'User-Agent': 'TuneBridge/1.0'})
         with urlopen(req, timeout=10) as r:
@@ -446,14 +472,14 @@ def _search_itunes(artist_name: str) -> list:
         candidates = []
         seen_thumbs = set()
         for item in data.get('results', []):
-            artist_match = (item.get('artistName') or '').lower()
-            if artist_name.lower() not in artist_match and artist_match not in artist_name.lower():
-                continue  # filter out non-matching artists
+            artist_match = (item.get('artistName') or '').strip()
+            # Strict name check — must actually be the right artist
+            if not _name_matches(artist_name, artist_match):
+                continue
             thumb = item.get('artworkUrl100', '')
             if not thumb or thumb in seen_thumbs:
                 continue
             seen_thumbs.add(thumb)
-            # Upscale to 600×600
             full = thumb.replace('100x100bb', '600x600bb').replace('100x100', '600x600')
             candidates.append({
                 'url': full,
@@ -479,7 +505,16 @@ def _search_lastfm(artist_name: str, api_key: str) -> list:
         req = UrlRequest(url, headers={'User-Agent': 'TuneBridge/1.0'})
         with urlopen(req, timeout=10) as r:
             data = json.loads(r.read().decode('utf-8'))
-        images = data.get('artist', {}).get('image', [])
+
+        artist_data = data.get('artist', {})
+
+        # Verify Last.fm returned the right artist (it can redirect to similar names)
+        returned_name = artist_data.get('name', '')
+        if returned_name and not _name_matches(artist_name, returned_name):
+            print(f"[artist-img] Last.fm name mismatch: searched '{artist_name}', got '{returned_name}'")
+            return []
+
+        images = artist_data.get('image', [])
         candidates = []
         seen = set()
         for img in reversed(images):  # largest first
@@ -489,7 +524,6 @@ def _search_lastfm(artist_name: str, api_key: str) -> list:
             if img_url in seen:
                 continue
             seen.add(img_url)
-            # Find a smaller size for thumbnail
             thumb = next(
                 (x.get('#text', '') for x in images if x.get('size') in ('large', 'medium')),
                 img_url
@@ -498,7 +532,7 @@ def _search_lastfm(artist_name: str, api_key: str) -> list:
                 'url': img_url,
                 'thumbnail_url': thumb or img_url,
                 'source': 'lastfm',
-                'label': artist_name,
+                'label': returned_name or artist_name,
             })
             if len(candidates) >= 3:
                 break
@@ -509,12 +543,14 @@ def _search_lastfm(artist_name: str, api_key: str) -> list:
 
 
 def _search_fanart(artist_name: str, api_key: str) -> list:
-    """Search Fanart.tv for artist images (requires MusicBrainz lookup first)."""
+    """Search Fanart.tv for artist images (requires MusicBrainz MBID lookup first)."""
     try:
-        # Step 1: get MBID from MusicBrainz
+        # Step 1: MusicBrainz lookup — use Lucene phrase search ("corey taylor")
+        # to avoid token-splitting that causes wrong matches (e.g. Taylor Swift for Corey Taylor)
+        phrase = f'"{artist_name}"'
         mb_url = (
             f"https://musicbrainz.org/ws/2/artist/"
-            f"?query=artist:{urlquote(artist_name)}&fmt=json&limit=1"
+            f"?query=artist:{urlquote(phrase)}&fmt=json&limit=5"
         )
         req = UrlRequest(mb_url, headers={
             'User-Agent': 'TuneBridge/1.0 (https://github.com/hashansr/tunebridge)',
@@ -522,14 +558,21 @@ def _search_fanart(artist_name: str, api_key: str) -> list:
         })
         with urlopen(req, timeout=10) as r:
             mb_data = json.loads(r.read().decode('utf-8'))
-        artists = mb_data.get('artists', [])
-        if not artists:
-            return []
-        mbid = artists[0].get('id', '')
+
+        # Pick the first result whose name actually matches the search
+        mbid = None
+        for mb_artist in mb_data.get('artists', []):
+            mb_name = mb_artist.get('name', '')
+            if _name_matches(artist_name, mb_name):
+                mbid = mb_artist.get('id', '')
+                print(f"[artist-img] MusicBrainz matched '{mb_name}' (MBID {mbid}) for '{artist_name}'")
+                break
+
         if not mbid:
+            print(f"[artist-img] MusicBrainz: no confident match for '{artist_name}'")
             return []
 
-        # Step 2: fetch Fanart.tv
+        # Step 2: fetch Fanart.tv using the verified MBID
         ft_url = f"https://webservice.fanart.tv/v3/music/{mbid}?api_key={urlquote(api_key)}"
         req2 = UrlRequest(ft_url, headers={'User-Agent': 'TuneBridge/1.0'})
         with urlopen(req2, timeout=10) as r2:
@@ -545,7 +588,7 @@ def _search_fanart(artist_name: str, api_key: str) -> list:
                     'source': 'fanart',
                     'label': artist_name,
                 })
-        # Also include artist backgrounds if no thumbs
+        # Fall back to artist backgrounds if no portrait thumbs
         if not candidates:
             for img in ft_data.get('artistbackground', [])[:3]:
                 img_url = img.get('url', '').strip()
@@ -1420,6 +1463,262 @@ def get_artwork(key):
     return '', 404
 
 
+# ── Album Artwork Management ──────────────────────────────────────────────────
+
+def _search_album_itunes(artist: str, album: str) -> list:
+    """Search iTunes for album cover candidates."""
+    try:
+        term = f"{artist} {album}"
+        url  = (
+            f"https://itunes.apple.com/search?"
+            f"term={urlquote(term)}&entity=album&limit=20&media=music"
+        )
+        req = UrlRequest(url, headers={'User-Agent': 'TuneBridge/1.0'})
+        with urlopen(req, timeout=10) as r:
+            data = json.loads(r.read().decode('utf-8'))
+
+        candidates = []
+        seen = set()
+        for item in data.get('results', []):
+            itunes_artist = (item.get('artistName') or '').strip()
+            itunes_album  = (item.get('collectionName') or '').strip()
+            if not _name_matches(artist, itunes_artist):
+                continue
+            thumb = item.get('artworkUrl100', '')
+            if not thumb or thumb in seen:
+                continue
+            seen.add(thumb)
+            full = thumb.replace('100x100bb', '600x600bb').replace('100x100', '600x600')
+            candidates.append({
+                'url':           full,
+                'thumbnail_url': thumb,
+                'source':        'itunes',
+                'label':         itunes_album,
+            })
+            if len(candidates) >= 8:
+                break
+        return candidates
+    except Exception as e:
+        print(f"[album-art] iTunes search error: {e}")
+        return []
+
+
+def _search_album_lastfm(artist: str, album: str, api_key: str) -> list:
+    """Search Last.fm for album cover candidates via getinfo + album.search."""
+    candidates = []
+    seen = set()
+
+    def _extract_images(images, label):
+        """Pick largest non-placeholder image from a Last.fm image array."""
+        for img in reversed(images):
+            img_url = img.get('#text', '').strip()
+            if not img_url or _LASTFM_PLACEHOLDER_HASH in img_url or img_url in seen:
+                continue
+            seen.add(img_url)
+            thumb = next(
+                (x.get('#text', '') for x in images if x.get('size') in ('large', 'medium') and x.get('#text')),
+                img_url,
+            )
+            candidates.append({
+                'url':           img_url,
+                'thumbnail_url': thumb or img_url,
+                'source':        'lastfm',
+                'label':         label,
+            })
+            return  # one image per call
+
+    # Method 1: album.getinfo — canonical image for this specific album
+    try:
+        url = (
+            f"https://ws.audioscrobbler.com/2.0/?method=album.getinfo"
+            f"&artist={urlquote(artist)}&album={urlquote(album)}"
+            f"&api_key={urlquote(api_key)}&format=json"
+        )
+        req = UrlRequest(url, headers={'User-Agent': 'TuneBridge/1.0'})
+        with urlopen(req, timeout=10) as r:
+            data = json.loads(r.read().decode('utf-8'))
+        album_data = data.get('album', {})
+        _extract_images(album_data.get('image', []), album_data.get('name', album))
+    except Exception as e:
+        print(f"[album-art] Last.fm getinfo error: {e}")
+
+    # Method 2: album.search — find more variants, filtered to this artist
+    try:
+        url = (
+            f"https://ws.audioscrobbler.com/2.0/?method=album.search"
+            f"&album={urlquote(album)}&api_key={urlquote(api_key)}&format=json&limit=10"
+        )
+        req = UrlRequest(url, headers={'User-Agent': 'TuneBridge/1.0'})
+        with urlopen(req, timeout=10) as r:
+            data = json.loads(r.read().decode('utf-8'))
+        albums = data.get('results', {}).get('albummatches', {}).get('album', [])
+        for a in albums:
+            if len(candidates) >= 6:
+                break
+            a_artist = (a.get('artist') or '').strip()
+            if a_artist and a_artist.lower() != 'various artists' and not _name_matches(artist, a_artist):
+                continue
+            _extract_images(a.get('image', []), a.get('name', album))
+    except Exception as e:
+        print(f"[album-art] Last.fm album.search error: {e}")
+
+    return candidates[:6]
+
+
+def _search_album_fanart(artist: str, album: str, api_key: str) -> list:
+    """Search Fanart.tv for album covers via MusicBrainz release-group lookup."""
+    try:
+        # Step 1: MusicBrainz release-group lookup using Lucene phrase search
+        phrase_album  = f'"{album}"'
+        phrase_artist = f'"{artist}"'
+        mb_url = (
+            f"https://musicbrainz.org/ws/2/release-group/"
+            f"?query=releasegroup:{urlquote(phrase_album)}+AND+artist:{urlquote(phrase_artist)}"
+            f"&fmt=json&limit=5"
+        )
+        req = UrlRequest(mb_url, headers={
+            'User-Agent': 'TuneBridge/1.0 (https://github.com/hashansr/tunebridge)',
+            'Accept': 'application/json',
+        })
+        with urlopen(req, timeout=10) as r:
+            mb_data = json.loads(r.read().decode('utf-8'))
+
+        rgid = None
+        for rg in mb_data.get('release-groups', []):
+            rg_title  = rg.get('title', '')
+            rg_artist = next(
+                (ac.get('name', '') for ac in rg.get('artist-credit', []) if isinstance(ac, dict)),
+                '',
+            )
+            if _name_matches(album, rg_title) and (not rg_artist or _name_matches(artist, rg_artist)):
+                rgid = rg.get('id', '')
+                print(f"[album-art] MusicBrainz RG matched '{rg_title}' ({rgid}) for '{artist} – {album}'")
+                break
+
+        if not rgid:
+            print(f"[album-art] MusicBrainz: no confident release-group match for '{artist} – {album}'")
+            return []
+
+        # Step 2: Fanart.tv album covers for this release group
+        ft_url = f"https://webservice.fanart.tv/v3/music/albums/{rgid}?api_key={urlquote(api_key)}"
+        req2   = UrlRequest(ft_url, headers={'User-Agent': 'TuneBridge/1.0'})
+        with urlopen(req2, timeout=10) as r2:
+            ft_data = json.loads(r2.read().decode('utf-8'))
+
+        candidates = []
+        for rg_val in ft_data.get('albums', {}).values():
+            for img in rg_val.get('albumcover', [])[:6]:
+                img_url = img.get('url', '').strip()
+                if img_url:
+                    candidates.append({
+                        'url':           img_url,
+                        'thumbnail_url': img_url,
+                        'source':        'fanart',
+                        'label':         album,
+                    })
+        return candidates[:6]
+    except Exception as e:
+        print(f"[album-art] Fanart.tv album search error: {e}")
+        return []
+
+
+@app.route('/api/library/albums/artwork/search')
+def search_album_artwork():
+    """Search for album cover candidates from the chosen service."""
+    artist  = request.args.get('artist',  '').strip()
+    album   = request.args.get('album',   '').strip()
+    service = request.args.get('service', 'itunes').strip().lower()
+    if not artist or not album:
+        return jsonify({'error': 'artist and album are required'}), 400
+
+    settings   = load_settings()
+    candidates = []
+
+    if service == 'lastfm':
+        api_key = (settings.get('lastfm_api_key') or '').strip()
+        if not api_key:
+            return jsonify({'error': 'Last.fm API key not configured. Add it in Settings → Artist Images.'}), 400
+        candidates = _search_album_lastfm(artist, album, api_key)
+    elif service == 'fanart':
+        api_key = (settings.get('fanart_api_key') or '').strip()
+        if not api_key:
+            return jsonify({'error': 'Fanart.tv API key not configured. Add it in Settings → Artist Images.'}), 400
+        candidates = _search_album_fanart(artist, album, api_key)
+    else:
+        candidates = _search_album_itunes(artist, album)
+
+    return jsonify({'candidates': candidates})
+
+
+@app.route('/api/library/albums/artwork', methods=['POST'])
+def set_album_artwork():
+    """Upload or fetch artwork for an album and save it to the artwork cache."""
+    artist = request.args.get('artist', '').strip()
+    album  = request.args.get('album',  '').strip()
+    if not artist or not album:
+        return jsonify({'error': 'artist and album are required'}), 400
+
+    artwork_key  = get_artwork_key(artist, album)
+    artwork_path = ARTWORK_DIR / f"{artwork_key}.jpg"
+
+    try:
+        if 'file' in request.files:
+            # File upload
+            f = request.files['file']
+            raw = f.read()
+        elif request.is_json and request.json.get('source_url'):
+            # Fetch from URL (validated against allowlist)
+            source_url = request.json['source_url']
+            _validate_image_url(source_url)
+            req = UrlRequest(source_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urlopen(req, timeout=15) as r:
+                raw = r.read()
+        else:
+            return jsonify({'error': 'Provide a file upload or source_url'}), 400
+
+        # Process: resize to 600×600 JPEG
+        processed = _process_artist_image(raw)
+        artwork_path.write_bytes(processed)
+        size_kb = round(len(processed) / 1024, 1)
+
+        # Invalidate in-memory library so next load picks up new artwork_key
+        with library_lock:
+            for t in library:
+                ta = (t.get('album_artist') or t.get('artist') or '').strip()
+                tl = (t.get('album') or '').strip()
+                if get_artwork_key(ta, tl) == artwork_key or get_artwork_key(t.get('artist',''), tl) == artwork_key:
+                    t['artwork_key'] = artwork_key
+
+        return jsonify({'artwork_key': artwork_key, 'size_kb': size_kb})
+    except Exception as e:
+        print(f"[album-art] save error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/library/albums/artwork', methods=['DELETE'])
+def delete_album_artwork():
+    """Remove the cached artwork file for an album."""
+    artist = request.args.get('artist', '').strip()
+    album  = request.args.get('album',  '').strip()
+    if not artist or not album:
+        return jsonify({'error': 'artist and album are required'}), 400
+
+    artwork_key  = get_artwork_key(artist, album)
+    artwork_path = ARTWORK_DIR / f"{artwork_key}.jpg"
+    if artwork_path.exists():
+        artwork_path.unlink()
+
+    # Clear from in-memory library
+    with library_lock:
+        for t in library:
+            ta = (t.get('album_artist') or t.get('artist') or '').strip()
+            tl = (t.get('album') or '').strip()
+            if get_artwork_key(ta, tl) == artwork_key or get_artwork_key(t.get('artist',''), tl) == artwork_key:
+                t['artwork_key'] = None
+
+    return '', 204
+
+
 # ── Artist Images ─────────────────────────────────────────────────────────────
 
 @app.route('/api/artists/<artist_key>/image')
@@ -1624,6 +1923,182 @@ def save_artist_image_by_name():
         'image_url': f'/api/artists/{artist_key}/image',
         'size_kb': round(len(processed) / 1024, 1),
     })
+
+
+# ── Artist Image Batch Fetch ─────────────────────────────────────────────────
+
+_artist_image_batch_state = {
+    'status':   'idle',    # idle | running | done | error | cancelled
+    'done':     0,         # artists processed so far
+    'total':    0,         # total artists to process
+    'fetched':  0,         # new images successfully saved
+    'skipped':  0,         # already had images (skipped)
+    'failed':   0,         # search returned nothing or error
+    'service':  'itunes',  # which service is being used
+    'errors':   [],        # [{artist, reason}, ...] capped at 20
+}
+_artist_image_batch_lock = threading.Lock()
+
+
+def _run_artist_image_batch(service: str, overwrite: bool) -> None:
+    """Background thread: fetch missing artist images for all artists in library."""
+    global _artist_image_batch_state
+
+    # Collect distinct artist names from the library
+    with library_lock:
+        all_artists = sorted({
+            (t.get('album_artist') or t.get('artist') or '').strip()
+            for t in library
+        } - {''})
+
+    settings = load_settings()
+    api_key  = ''
+    if service == 'lastfm':
+        api_key = (settings.get('lastfm_api_key') or '').strip()
+    elif service == 'fanart':
+        api_key = (settings.get('fanart_api_key') or '').strip()
+
+    with _artist_image_batch_lock:
+        _artist_image_batch_state.update({
+            'status':  'running',
+            'done':    0,
+            'total':   len(all_artists),
+            'fetched': 0,
+            'skipped': 0,
+            'failed':  0,
+            'service': service,
+            'errors':  [],
+        })
+
+    existing_keys = _db.db_get_all_artist_image_keys()
+
+    for i, artist_name in enumerate(all_artists):
+        # Cancellation check
+        if _artist_image_batch_state['status'] != 'running':
+            break
+
+        artist_key = get_artist_image_key(artist_name)
+
+        # Skip if already has an image (unless overwrite requested)
+        if not overwrite and artist_key in existing_keys:
+            with _artist_image_batch_lock:
+                _artist_image_batch_state['skipped'] += 1
+                _artist_image_batch_state['done'] = i + 1
+            continue
+
+        # Search for candidates
+        try:
+            if service == 'lastfm' and api_key:
+                candidates = _search_lastfm(artist_name, api_key)
+            elif service == 'fanart' and api_key:
+                candidates = _search_fanart(artist_name, api_key)
+            else:
+                candidates = _search_itunes(artist_name)
+        except Exception as e:
+            candidates = []
+            print(f"[batch-img] search error for '{artist_name}': {e}")
+
+        if not candidates:
+            with _artist_image_batch_lock:
+                _artist_image_batch_state['failed'] += 1
+                _artist_image_batch_state['done'] = i + 1
+                if len(_artist_image_batch_state['errors']) < 20:
+                    _artist_image_batch_state['errors'].append(
+                        {'artist': artist_name, 'reason': 'No results found'}
+                    )
+            # Rate-limit courtesy pause even on misses
+            time.sleep(0.3)
+            continue
+
+        # Fetch and save the first (best) candidate
+        chosen = candidates[0]
+        try:
+            ok, err = _validate_image_url(chosen['url'])
+            if not ok:
+                raise ValueError(err)
+            req = UrlRequest(chosen['url'], headers={'User-Agent': 'TuneBridge/1.0'})
+            with urlopen(req, timeout=15) as r:
+                raw = r.read()
+            if len(raw) > 10 * 1024 * 1024:
+                raise ValueError('Image too large (> 10 MB)')
+            processed = _process_artist_image(raw)
+            img_path  = ARTIST_ARTWORK_DIR / f"{artist_key}.jpg"
+            img_path.write_bytes(processed)
+            _db.db_save_artist_image(artist_key, artist_name, str(img_path), chosen.get('source', service))
+            existing_keys.add(artist_key)  # update local set so next iteration is correct
+            with _artist_image_batch_lock:
+                _artist_image_batch_state['fetched'] += 1
+                _artist_image_batch_state['done'] = i + 1
+        except Exception as e:
+            print(f"[batch-img] save error for '{artist_name}': {e}")
+            with _artist_image_batch_lock:
+                _artist_image_batch_state['failed'] += 1
+                _artist_image_batch_state['done'] = i + 1
+                if len(_artist_image_batch_state['errors']) < 20:
+                    _artist_image_batch_state['errors'].append(
+                        {'artist': artist_name, 'reason': str(e)}
+                    )
+
+        # Rate-limit: be polite to external APIs
+        # Fanart needs MusicBrainz first (already slowed by network), iTunes is lenient
+        if service == 'fanart':
+            time.sleep(1.2)   # MusicBrainz: 1 req/s guideline
+        elif service == 'lastfm':
+            time.sleep(0.5)
+        else:
+            time.sleep(0.25)  # iTunes: no published limit
+
+    # Mark final state
+    final_status = _artist_image_batch_state['status']
+    with _artist_image_batch_lock:
+        if final_status == 'running':
+            _artist_image_batch_state['status'] = 'done'
+        # if cancelled, leave status as 'cancelled'
+    print(
+        f"[batch-img] finished — "
+        f"fetched={_artist_image_batch_state['fetched']} "
+        f"skipped={_artist_image_batch_state['skipped']} "
+        f"failed={_artist_image_batch_state['failed']}"
+    )
+
+
+@app.route('/api/artists/images/batch', methods=['POST'])
+def start_artist_image_batch():
+    """Start the background artist-image batch fetch job."""
+    if _artist_image_batch_state['status'] == 'running':
+        return jsonify({'error': 'Batch job is already running'}), 409
+
+    settings  = load_settings()
+    body      = request.json or {}
+    service   = body.get('service', settings.get('artist_image_service', 'itunes')).strip().lower()
+    overwrite = bool(body.get('overwrite', False))
+
+    # Validate API key is present for keyed services
+    if service == 'lastfm' and not (settings.get('lastfm_api_key') or '').strip():
+        return jsonify({'error': 'Last.fm API key not configured. Add it in Settings → Artist Images.'}), 400
+    if service == 'fanart' and not (settings.get('fanart_api_key') or '').strip():
+        return jsonify({'error': 'Fanart.tv API key not configured. Add it in Settings → Artist Images.'}), 400
+
+    threading.Thread(
+        target=_run_artist_image_batch,
+        args=(service, overwrite),
+        daemon=True,
+    ).start()
+
+    return jsonify({'ok': True, 'service': service})
+
+
+@app.route('/api/artists/images/batch/status')
+def artist_image_batch_status():
+    return jsonify(dict(_artist_image_batch_state))
+
+
+@app.route('/api/artists/images/batch/cancel', methods=['POST'])
+def cancel_artist_image_batch():
+    if _artist_image_batch_state['status'] == 'running':
+        with _artist_image_batch_lock:
+            _artist_image_batch_state['status'] = 'cancelled'
+    return jsonify({'ok': True})
 
 
 def has_playlist_artwork(pid):

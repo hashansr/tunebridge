@@ -741,6 +741,9 @@ function renderAlbumsGrid() {
             </button>
           </div>
           ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn')}
+          <button class="album-art-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App._openAlbumArtForCard(this.dataset.artist,this.dataset.album)" title="Change album art">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
         </div>
         <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
         ${!artistFilter ? `<div class="album-artist">${esc(al.artist)}</div>` : ''}
@@ -2735,7 +2738,7 @@ function _favOrderIds(type) {
 
 function _favSummaryCard(title, count, panel) {
   return `
-    <button class="favourites-summary-card" data-fav-panel="${esc(panel)}" onclick="App.selectFavouritesPanel('${esc(panel)}')">
+    <button class="favourites-summary-card" data-fav-panel="${esc(panel)}" aria-pressed="false" onclick="App.selectFavouritesPanel('${esc(panel)}')">
       <div class="favourites-summary-title">${esc(title)}</div>
       <div class="favourites-summary-count">${count}</div>
     </button>
@@ -2744,7 +2747,9 @@ function _favSummaryCard(title, count, panel) {
 
 function _applyFavouritesPanelState() {
   document.querySelectorAll('.favourites-summary-card[data-fav-panel]').forEach(btn => {
-    btn.classList.toggle('is-active', btn.dataset.favPanel === state.favPanel);
+    const isActive = btn.dataset.favPanel === state.favPanel;
+    btn.classList.toggle('is-active', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
 }
 
@@ -2908,6 +2913,9 @@ function _renderFavAlbumCards(rows) {
           </button>
         </div>
         ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn is-fav')}
+        <button class="album-art-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App._openAlbumArtForCard(this.dataset.artist,this.dataset.album)" title="Change album art">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
       </div>
       <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
       <div class="album-artist">${esc(al.artist)}</div>
@@ -7290,6 +7298,13 @@ async function loadSettings() {
   if (fanartIn) fanartIn.value = settings.fanart_api_key || '';
   window._artistImageServicePref = settings.artist_image_service || 'itunes';
 
+  // Resume batch-job progress banner if a job is already running
+  try {
+    const batchStatus = await fetch('/api/artists/images/batch/status').then(r => r.json());
+    _updateArtistBatchBanner(batchStatus);
+    if (batchStatus.status === 'running') _startArtistBatchPolling();
+  } catch (_) {}
+
   return settings;
 }
 
@@ -8036,6 +8051,17 @@ const App = {
   removeArtistImage,
   onArtistImageServiceChange,
   saveArtistImageSettings,
+  startArtistImageBatch,
+  cancelArtistImageBatch,
+  // Album art
+  openAlbumArtModal,
+  _openAlbumArtForCard,
+  closeAlbumArtModal,
+  searchAlbumArt,
+  onAlbumArtServiceChange,
+  onAlbumArtFileSelected,
+  saveAlbumArt,
+  removeAlbumArt,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -9732,36 +9758,89 @@ function changeGearFitSort() {}
 
 /* ── ID3 Tag Editing ─────────────────────────────────────────────────── */
 
-let _tagEditorTrackId = null;
+let _tagEditorTrackId   = null;
+let _tagEditorOriginal  = {};
+let _albumTagOriginal   = {};
+let _artistRenameOriginal = '';
 
-function openTagEditor(trackId) {
-  // Find track from current view or in-memory list
-  const row = document.querySelector(`tr[data-id="${trackId}"]`);
-  if (!row) { toast('Track not found in current view'); return; }
+// ── Validation helpers ─────────────────────────────────────────────────
+function _validateYear(val) {
+  return !val || /^\d{4}$/.test(val.trim());
+}
+function _validateTrackNum(val) {
+  return !val || /^\d+(\s*\/\s*\d+)?$/.test(val.trim());
+}
 
-  _tagEditorTrackId = trackId;
+// ── Dirty-state helpers ────────────────────────────────────────────────
+function _getTagEditorValues() {
+  return {
+    title:        document.getElementById('te-title')?.value.trim()        ?? '',
+    artist:       document.getElementById('te-artist')?.value.trim()       ?? '',
+    album_artist: document.getElementById('te-album-artist')?.value.trim() ?? '',
+    album:        document.getElementById('te-album')?.value.trim()        ?? '',
+    track_number: document.getElementById('te-track-number')?.value.trim() ?? '',
+    year:         document.getElementById('te-year')?.value.trim()         ?? '',
+    genre:        document.getElementById('te-genre')?.value.trim()        ?? '',
+  };
+}
+function _tagEditorDirty() {
+  const cur = _getTagEditorValues();
+  return Object.keys(cur).some(k => cur[k] !== (_tagEditorOriginal[k] ?? ''));
+}
+function _getAlbumTagValues() {
+  return {
+    album:        document.getElementById('ate-album')?.value.trim()        ?? '',
+    album_artist: document.getElementById('ate-album-artist')?.value.trim() ?? '',
+    year:         document.getElementById('ate-year')?.value.trim()         ?? '',
+    genre:        document.getElementById('ate-genre')?.value.trim()        ?? '',
+  };
+}
+function _albumTagDirty() {
+  const cur = _getAlbumTagValues();
+  return Object.keys(cur).some(k => cur[k] !== (_albumTagOriginal[k] ?? ''));
+}
+function _showTagError(id, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = 'flex';
+  const span = el.querySelector('span');
+  if (span) span.textContent = msg;
+  else el.textContent = msg;
+}
+function _hideTagError(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = 'none';
+}
 
-  // Populate fields from data attributes stored on the row, or fetch from API
-  const title       = row.querySelector('.track-title')?.textContent || '';
-  const artist      = row.querySelector('.track-artist')?.textContent || '';
+// ── Track Tag Editor ───────────────────────────────────────────────────
+async function openTagEditor(trackId) {
+  _tagEditorTrackId  = trackId;
+  _tagEditorOriginal = {};
 
-  // Fetch full track data from server for accuracy
-  api(`/library/tracks?q=&artist=&album=`).catch(() => null); // warm up; real load below
+  const btn = document.getElementById('te-save-btn');
+  _hideTagError('te-error');
+  btn.disabled    = true;
+  btn.textContent = 'Loading…';
 
-  // Prefill from DOM immediately, then let server data overwrite
-  document.getElementById('te-title').value        = title.trim();
-  document.getElementById('te-artist').value       = artist.trim();
-  document.getElementById('te-album-artist').value = '';
-  document.getElementById('te-album').value        = '';
-  document.getElementById('te-track-number').value = '';
-  document.getElementById('te-year').value         = '';
-  document.getElementById('te-genre').value        = '';
-  document.getElementById('te-error').style.display = 'none';
+  // Disable inputs and show modal with loading pulse
+  const inputIds = ['te-title','te-artist','te-album-artist','te-album','te-track-number','te-year','te-genre'];
+  inputIds.forEach(id => { const el = document.getElementById(id); if (el) { el.value = ''; el.disabled = true; } });
+  document.getElementById('tag-editor-modal').style.display = 'flex';
 
-  // Fetch accurate data
-  fetch(`/api/library/tracks?q=${encodeURIComponent(title)}`).then(r => r.json()).then(tracks => {
-    const t = tracks.find(x => x.id === trackId);
-    if (!t) return;
+  // Fetch accurate track data from server
+  try {
+    const allTracks = await fetch(`/api/library/tracks?q=${encodeURIComponent(trackId)}`)
+      .then(r => r.json()).catch(() => []);
+    let t = allTracks.find(x => x.id === trackId)
+         || (state.tracks || []).find(x => x.id === trackId);
+
+    if (!t) {
+      _showTagError('te-error', 'Track data not found. Try rescanning the library.');
+      inputIds.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
+      btn.disabled = false; btn.textContent = 'Save Tags';
+      return;
+    }
+
     document.getElementById('te-title').value        = t.title        || '';
     document.getElementById('te-artist').value       = t.artist       || '';
     document.getElementById('te-album-artist').value = t.album_artist || '';
@@ -9769,129 +9848,188 @@ function openTagEditor(trackId) {
     document.getElementById('te-track-number').value = t.track_number || '';
     document.getElementById('te-year').value         = t.year         || '';
     document.getElementById('te-genre').value        = t.genre        || '';
-  }).catch(() => {});
 
-  // Enter key support on all fields
+    _tagEditorOriginal = _getTagEditorValues();
+    inputIds.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
+    btn.disabled = false; btn.textContent = 'Save Tags';
+    document.getElementById('te-title').focus();
+  } catch (e) {
+    _showTagError('te-error', 'Failed to load track data.');
+    inputIds.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
+    btn.disabled = false; btn.textContent = 'Save Tags';
+  }
+
+  // Keyboard handlers (Enter = save, Escape = close)
   document.querySelectorAll('#tag-editor-modal input').forEach(inp => {
-    inp.onkeydown = e => { if (e.key === 'Enter') saveTagEditor(); };
+    inp.onkeydown = e => {
+      if (e.key === 'Enter' && !e.shiftKey) saveTagEditor();
+      if (e.key === 'Escape') closeTagEditor();
+    };
   });
-
-  document.getElementById('te-save-btn').disabled = false;
-  document.getElementById('tag-editor-modal').style.display = 'flex';
 }
 
-function closeTagEditor() {
+async function closeTagEditor() {
+  if (_tagEditorDirty()) {
+    const ok = await _showConfirm({
+      title: 'Discard changes?',
+      message: 'Your tag edits haven\'t been saved.',
+      okText: 'Discard', danger: false,
+    });
+    if (!ok) return;
+  }
   document.getElementById('tag-editor-modal').style.display = 'none';
-  _tagEditorTrackId = null;
+  _tagEditorTrackId  = null;
+  _tagEditorOriginal = {};
 }
 
 async function saveTagEditor() {
   if (!_tagEditorTrackId) return;
   const btn = document.getElementById('te-save-btn');
-  const errEl = document.getElementById('te-error');
-  btn.disabled = true;
-  btn.textContent = 'Saving…';
-  errEl.style.display = 'none';
+  _hideTagError('te-error');
 
-  const changes = {
-    title:        document.getElementById('te-title').value.trim()        || undefined,
-    artist:       document.getElementById('te-artist').value.trim()       || undefined,
-    album_artist: document.getElementById('te-album-artist').value.trim() || undefined,
-    album:        document.getElementById('te-album').value.trim()        || undefined,
-    track_number: document.getElementById('te-track-number').value.trim() || undefined,
-    year:         document.getElementById('te-year').value.trim()         || undefined,
-    genre:        document.getElementById('te-genre').value.trim()        || undefined,
-  };
-  // Remove undefined keys
-  Object.keys(changes).forEach(k => changes[k] === undefined && delete changes[k]);
+  const cur = _getTagEditorValues();
+
+  // Validation
+  if (!cur.title) {
+    _showTagError('te-error', 'Title is required.');
+    document.getElementById('te-title').focus();
+    return;
+  }
+  if (!_validateYear(cur.year)) {
+    _showTagError('te-error', 'Year must be a 4-digit number (e.g. 2003).');
+    document.getElementById('te-year').focus();
+    return;
+  }
+  if (!_validateTrackNum(cur.track_number)) {
+    _showTagError('te-error', 'Track number must be a number or "N/M" format (e.g. 3 or 3/12).');
+    document.getElementById('te-track-number').focus();
+    return;
+  }
+
+  // Only send fields that actually changed (empty = skip, not clear)
+  const changes = {};
+  Object.entries(cur).forEach(([k, v]) => {
+    if (v && v !== (_tagEditorOriginal[k] ?? '')) changes[k] = v;
+  });
+  if (!Object.keys(changes).length) {
+    // Nothing changed — silently close
+    document.getElementById('tag-editor-modal').style.display = 'none';
+    _tagEditorTrackId = null; _tagEditorOriginal = {};
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Saving…';
 
   try {
     await api(`/library/tracks/${_tagEditorTrackId}/tags`, { method: 'PUT', body: changes });
     toast('Tags saved');
-    closeTagEditor();
-    // Refresh current view if applicable
-    if (state.view === 'tracks' || state.view === 'songs') {
-      if (state.view === 'tracks') loadTracks(state.artist, state.album);
-      else loadSongs();
-    }
+    document.getElementById('tag-editor-modal').style.display = 'none';
+    _tagEditorTrackId = null; _tagEditorOriginal = {};
+    if (state.view === 'tracks') loadTracks(state.artist, state.album);
+    else if (state.view === 'songs') loadSongs();
   } catch (e) {
-    errEl.textContent = e.message || 'Save failed';
-    errEl.style.display = '';
-    btn.disabled = false;
-    btn.textContent = 'Save Tags';
+    _showTagError('te-error', e.message || 'Save failed. The file may be read-only or in use.');
+    btn.disabled = false; btn.textContent = 'Save Tags';
   }
 }
 
-// ── Album Tag Editor ─────────────────────────────────────────────────────────
+// ── Album Tag Editor ───────────────────────────────────────────────────
 
 function openAlbumTagEditor() {
-  // Close the hero menu
   document.querySelectorAll('.hero-more-menu.open').forEach(m => m.classList.remove('open'));
-
   if (!state.album || !state.artist) { toast('Open an album first'); return; }
 
   const tracks = state.tracks || [];
-  const count = tracks.length;
+  const count  = tracks.length;
+  const first  = tracks[0] || {};
 
-  document.getElementById('album-tag-modal-title').textContent = `Edit Album Tags · ${count} tracks`;
+  document.getElementById('album-tag-modal-title').textContent = 'Edit Album Tags';
   document.getElementById('album-tag-warning-text').textContent =
-    `This will update ${count} file${count !== 1 ? 's' : ''} on disk.`;
+    `This will overwrite tags on ${count} file${count !== 1 ? 's' : ''} on disk. Only filled fields are applied.`;
 
-  // Prefill from first track
-  const first = tracks[0] || {};
   document.getElementById('ate-album').value        = first.album        || '';
   document.getElementById('ate-album-artist').value = first.album_artist || '';
   document.getElementById('ate-year').value         = first.year         || '';
   document.getElementById('ate-genre').value        = first.genre        || '';
-  document.getElementById('ate-error').style.display = 'none';
-  document.getElementById('ate-save-btn').disabled = false;
+  _hideTagError('ate-error');
+  document.getElementById('ate-save-btn').disabled    = false;
   document.getElementById('ate-save-btn').textContent = 'Save Tags';
 
+  _albumTagOriginal = _getAlbumTagValues();
+
+  document.querySelectorAll('#album-tag-modal input').forEach(inp => {
+    inp.onkeydown = e => { if (e.key === 'Escape') closeAlbumTagEditor(); };
+  });
+
   document.getElementById('album-tag-modal').style.display = 'flex';
+  document.getElementById('ate-album').focus();
 }
 
-function closeAlbumTagEditor() {
+async function closeAlbumTagEditor() {
+  if (_albumTagDirty()) {
+    const ok = await _showConfirm({
+      title: 'Discard changes?',
+      message: 'Your album tag edits haven\'t been saved.',
+      okText: 'Discard', danger: false,
+    });
+    if (!ok) return;
+  }
   document.getElementById('album-tag-modal').style.display = 'none';
+  _albumTagOriginal = {};
 }
 
 async function saveAlbumTags() {
   if (!state.artist || !state.album) return;
   const btn = document.getElementById('ate-save-btn');
-  const errEl = document.getElementById('ate-error');
-  btn.disabled = true;
-  btn.textContent = 'Saving…';
-  errEl.style.display = 'none';
+  _hideTagError('ate-error');
 
+  const cur = _getAlbumTagValues();
+
+  // Validation
+  if (!_validateYear(cur.year)) {
+    _showTagError('ate-error', 'Year must be a 4-digit number (e.g. 2003).');
+    document.getElementById('ate-year').focus();
+    return;
+  }
+
+  // Build changes (non-empty fields only)
   const changes = {};
-  const album       = document.getElementById('ate-album').value.trim();
-  const albumArtist = document.getElementById('ate-album-artist').value.trim();
-  const year        = document.getElementById('ate-year').value.trim();
-  const genre       = document.getElementById('ate-genre').value.trim();
-  if (album)       changes.album        = album;
-  if (albumArtist) changes.album_artist = albumArtist;
-  if (year)        changes.year         = year;
-  if (genre)       changes.genre        = genre;
+  if (cur.album)        changes.album        = cur.album;
+  if (cur.album_artist) changes.album_artist = cur.album_artist;
+  if (cur.year)         changes.year         = cur.year;
+  if (cur.genre)        changes.genre        = cur.genre;
+
+  if (!Object.keys(changes).length) {
+    _showTagError('ate-error', 'Fill in at least one field to update.');
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Saving…';
 
   try {
     const params = `?artist=${encodeURIComponent(state.artist)}&album=${encodeURIComponent(state.album)}`;
     const result = await api(`/library/albums/tags${params}`, { method: 'PUT', body: changes });
-    const errs = result.errors || [];
+    const errs   = result.errors || [];
     if (errs.length) {
-      toast(`Saved ${result.updated}/${result.total} tracks. ${errs.length} error(s).`);
+      // Partial success — stay open so user sees the error
+      _showTagError('ate-error',
+        `${errs.length} file${errs.length !== 1 ? 's' : ''} could not be updated (possibly read-only). ` +
+        `${result.updated} of ${result.total} succeeded.`);
+      toast(`Saved ${result.updated}/${result.total} tracks`, 4000);
+      btn.disabled = false; btn.textContent = 'Save Tags';
     } else {
-      toast(`Album tags saved (${result.updated} tracks)`);
+      toast(`Album tags saved (${result.updated} track${result.updated !== 1 ? 's' : ''})`);
+      document.getElementById('album-tag-modal').style.display = 'none';
+      _albumTagOriginal = {};
+      loadTracks(state.artist, state.album);
     }
-    closeAlbumTagEditor();
-    loadTracks(state.artist, state.album);
   } catch (e) {
-    errEl.textContent = e.message || 'Save failed';
-    errEl.style.display = '';
-    btn.disabled = false;
-    btn.textContent = 'Save Tags';
+    _showTagError('ate-error', e.message || 'Save failed. Files may be read-only or in use.');
+    btn.disabled = false; btn.textContent = 'Save Tags';
   }
 }
 
-// ── Artist Rename ────────────────────────────────────────────────────────────
+// ── Artist Rename ──────────────────────────────────────────────────────
 
 function openArtistRename() {
   document.querySelectorAll('.hero-more-menu.open').forEach(m => m.classList.remove('open'));
@@ -9901,33 +10039,55 @@ function openArtistRename() {
     (state.artists || []).find(a => a.name.toLowerCase() === state.artist.toLowerCase())?.track_count || '?';
 
   document.getElementById('artist-rename-warning-text').textContent =
-    `This will update the Artist and Album Artist tags on all ${trackCount} tracks for "${state.artist}".`;
+    `This will rewrite the Artist and Album Artist tags on all ${trackCount} track${trackCount !== 1 ? 's' : ''} for "${state.artist}". This cannot be undone.`;
   document.getElementById('ar-new-name').value = state.artist;
-  document.getElementById('ar-error').style.display = 'none';
-  document.getElementById('ar-save-btn').disabled = false;
+  _hideTagError('ar-error');
+  document.getElementById('ar-save-btn').disabled    = false;
   document.getElementById('ar-save-btn').textContent = 'Rename Artist';
 
-  document.getElementById('ar-new-name').onkeydown = e => { if (e.key === 'Enter') saveArtistRename(); };
+  _artistRenameOriginal = state.artist;
+
+  document.getElementById('ar-new-name').onkeydown = e => {
+    if (e.key === 'Enter')  saveArtistRename();
+    if (e.key === 'Escape') closeArtistRename();
+  };
+
   document.getElementById('artist-rename-modal').style.display = 'flex';
   document.getElementById('ar-new-name').focus();
   document.getElementById('ar-new-name').select();
 }
 
-function closeArtistRename() {
+async function closeArtistRename() {
+  const cur = document.getElementById('ar-new-name')?.value.trim() || '';
+  if (cur !== _artistRenameOriginal) {
+    const ok = await _showConfirm({
+      title: 'Discard changes?',
+      message: 'The new artist name hasn\'t been saved.',
+      okText: 'Discard', danger: false,
+    });
+    if (!ok) return;
+  }
   document.getElementById('artist-rename-modal').style.display = 'none';
+  _artistRenameOriginal = '';
 }
 
 async function saveArtistRename() {
   if (!state.artist) return;
+  const btn     = document.getElementById('ar-save-btn');
   const newName = document.getElementById('ar-new-name').value.trim();
-  if (!newName) { document.getElementById('ar-error').textContent = 'Name cannot be empty'; document.getElementById('ar-error').style.display = ''; return; }
-  if (newName === state.artist) { closeArtistRename(); return; }
+  _hideTagError('ar-error');
 
-  const btn = document.getElementById('ar-save-btn');
-  const errEl = document.getElementById('ar-error');
-  btn.disabled = true;
-  btn.textContent = 'Renaming…';
-  errEl.style.display = 'none';
+  if (!newName) {
+    _showTagError('ar-error', 'Artist name cannot be empty.');
+    return;
+  }
+  if (newName === state.artist) {
+    document.getElementById('artist-rename-modal').style.display = 'none';
+    _artistRenameOriginal = '';
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Renaming…';
 
   try {
     const result = await api(`/library/artists/${encodeURIComponent(state.artist)}/tags`, {
@@ -9935,19 +10095,232 @@ async function saveArtistRename() {
     });
     const errs = result.errors || [];
     if (errs.length) {
-      toast(`Renamed ${result.updated}/${result.total} tracks. ${errs.length} error(s).`);
+      // Partial success — stay open
+      _showTagError('ar-error',
+        `${errs.length} file${errs.length !== 1 ? 's' : ''} could not be renamed. ` +
+        `${result.updated} of ${result.total} succeeded.`);
+      toast(`Renamed ${result.updated}/${result.total} tracks`, 4000);
+      btn.disabled = false; btn.textContent = 'Rename Artist';
     } else {
-      toast(`Artist renamed to "${newName}" (${result.updated} tracks)`);
+      toast(`Artist renamed to "${newName}" (${result.updated} track${result.updated !== 1 ? 's' : ''})`);
+      document.getElementById('artist-rename-modal').style.display = 'none';
+      _artistRenameOriginal = '';
+      state.artist = newName;
+      loadArtists();
     }
-    closeArtistRename();
-    // Navigate to artist with new name
-    state.artist = newName;
-    loadArtists();
   } catch (e) {
-    errEl.textContent = e.message || 'Rename failed';
-    errEl.style.display = '';
-    btn.disabled = false;
-    btn.textContent = 'Rename Artist';
+    _showTagError('ar-error', e.message || 'Rename failed. Files may be read-only or in use.');
+    btn.disabled = false; btn.textContent = 'Rename Artist';
+  }
+}
+
+/* ── Album Art Management ────────────────────────────────────────────── */
+
+let _albumArtArtist = null;
+let _albumArtAlbum  = null;
+let _albumArtSelectedUrl  = null;
+let _albumArtSelectedFile = null;
+
+function openAlbumArtModal() {
+  document.querySelectorAll('.hero-more-menu.open').forEach(m => m.classList.remove('open'));
+  if (!state.artist || !state.album) { toast('Open an album first'); return; }
+
+  _albumArtArtist       = state.artist;
+  _albumArtAlbum        = state.album;
+  _albumArtSelectedUrl  = null;
+  _albumArtSelectedFile = null;
+
+  document.getElementById('album-art-modal-subtitle').textContent =
+    `${state.artist} — ${state.album}`;
+
+  // Reset candidate grid, error, buttons, file input
+  document.getElementById('aa-candidates').innerHTML =
+    '<p class="artist-image-hint">Select a service and click Search to find covers.</p>';
+  _hideTagError('aa-error');
+  const useBtn = document.getElementById('aa-use-btn');
+  useBtn.disabled    = true;
+  useBtn.textContent = 'Save Art';
+  document.getElementById('aa-file-name').textContent = '';
+  document.getElementById('aa-file-input').value = '';
+
+  // Pre-fill service from global preference (set when settings are loaded)
+  const svcSel = document.getElementById('aa-service-select');
+  if (svcSel) svcSel.value = window._artistImageServicePref || 'itunes';
+
+  _resetAlbumArtSearchBtn();
+
+  // Show Remove only if this album has existing artwork
+  const albumObj = (state.albums || []).find(a =>
+    a.name === state.album && a.artist === state.artist);
+  document.getElementById('aa-remove-btn').style.display =
+    albumObj?.artwork_key ? '' : 'none';
+
+  document.getElementById('album-art-modal').style.display = 'flex';
+}
+
+function _openAlbumArtForCard(artist, album) {
+  // Temporarily populate state so openAlbumArtModal works from the card
+  state.artist = artist;
+  state.album  = album;
+  openAlbumArtModal();
+}
+
+function closeAlbumArtModal() {
+  document.getElementById('album-art-modal').style.display = 'none';
+}
+
+function _resetAlbumArtSearchBtn() {
+  const btn = document.getElementById('aa-search-btn');
+  if (!btn) return;
+  btn.disabled = false;
+  btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Search`;
+}
+
+async function searchAlbumArt() {
+  if (!_albumArtArtist || !_albumArtAlbum) return;
+  const btn       = document.getElementById('aa-search-btn');
+  const container = document.getElementById('aa-candidates');
+  btn.disabled    = true;
+  btn.innerHTML   = 'Searching…';
+  _hideTagError('aa-error');
+  container.innerHTML = '<p class="artist-image-hint">Searching…</p>';
+  _albumArtSelectedUrl  = null;
+  _albumArtSelectedFile = null;
+  document.getElementById('aa-use-btn').disabled = true;
+
+  const service = document.getElementById('aa-service-select')?.value || 'itunes';
+
+  try {
+    const q = [
+      `artist=${encodeURIComponent(_albumArtArtist)}`,
+      `album=${encodeURIComponent(_albumArtAlbum)}`,
+      `service=${encodeURIComponent(service)}`,
+    ].join('&');
+    const data = await fetch(`/api/library/albums/artwork/search?${q}`).then(r =>
+      r.ok ? r.json() : r.json().then(d => { throw new Error(d.error || 'Search failed'); }));
+
+    const candidates = data.candidates || [];
+    const svcLabel = { itunes: 'iTunes', lastfm: 'Last.fm', fanart: 'Fanart.tv' }[service] || service;
+    if (!candidates.length) {
+      container.innerHTML = `<p class="artist-image-hint">No results found on ${svcLabel}. Try a different service or upload your own image.</p>`;
+      _resetAlbumArtSearchBtn();
+      return;
+    }
+
+    container.innerHTML = '';
+    candidates.forEach(c => {
+      const img = document.createElement('img');
+      img.src       = c.thumbnail_url || c.url;
+      img.className = 'artist-img-candidate';
+      img.title     = c.label || '';
+      img.loading   = 'lazy';
+      img.onerror   = () => { img.style.opacity = '0.25'; img.style.pointerEvents = 'none'; };
+      img.onclick   = () => {
+        container.querySelectorAll('.artist-img-candidate').forEach(x => x.classList.remove('selected'));
+        img.classList.add('selected');
+        _albumArtSelectedUrl  = c.url;
+        _albumArtSelectedFile = null;
+        document.getElementById('aa-file-name').textContent = '';
+        document.getElementById('aa-use-btn').disabled = false;
+      };
+      container.appendChild(img);
+    });
+  } catch (e) {
+    _showTagError('aa-error', e.message || 'Search failed.');
+    container.innerHTML = '';
+  }
+
+  _resetAlbumArtSearchBtn();
+}
+
+function onAlbumArtServiceChange(value) {
+  // Reset the candidate grid when the service changes so stale results are cleared
+  const container = document.getElementById('aa-candidates');
+  if (container) {
+    container.innerHTML = '<p class="artist-image-hint">Select a service and click Search to find covers.</p>';
+  }
+  _albumArtSelectedUrl  = null;
+  _albumArtSelectedFile = null;
+  document.getElementById('aa-file-name').textContent = '';
+  const useBtn = document.getElementById('aa-use-btn');
+  if (useBtn) useBtn.disabled = true;
+  _hideTagError('aa-error');
+}
+
+function onAlbumArtFileSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  _albumArtSelectedFile = file;
+  _albumArtSelectedUrl  = null;
+  document.getElementById('aa-file-name').textContent = file.name;
+  document.getElementById('aa-use-btn').disabled = false;
+  document.querySelectorAll('#aa-candidates .artist-img-candidate').forEach(x => x.classList.remove('selected'));
+  _hideTagError('aa-error');
+}
+
+async function saveAlbumArt() {
+  if (!_albumArtArtist || !_albumArtAlbum) return;
+  const btn = document.getElementById('aa-use-btn');
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+  _hideTagError('aa-error');
+
+  const q = `artist=${encodeURIComponent(_albumArtArtist)}&album=${encodeURIComponent(_albumArtAlbum)}`;
+  try {
+    let res;
+    if (_albumArtSelectedFile) {
+      const fd = new FormData();
+      fd.append('file', _albumArtSelectedFile);
+      res = await fetch(`/api/library/albums/artwork?${q}`, { method: 'POST', body: fd })
+        .then(r => r.ok ? r.json() : r.json().then(d => { throw new Error(d.error || 'Upload failed'); }));
+    } else if (_albumArtSelectedUrl) {
+      res = await fetch(`/api/library/albums/artwork?${q}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_url: _albumArtSelectedUrl }),
+      }).then(r => r.ok ? r.json() : r.json().then(d => { throw new Error(d.error || 'Save failed'); }));
+    } else {
+      throw new Error('No image selected');
+    }
+
+    toast(`Album art saved (${res.size_kb} KB)`);
+    closeAlbumArtModal();
+    // Reload albums + current track view to show new art
+    await loadAlbums(state.artist);
+    if (state.view === 'tracks') loadTracks(state.artist, state.album);
+    // Refresh hero art immediately without waiting for full reload
+    const newKey = res.artwork_key;
+    const heroArt = document.getElementById('album-hero-art');
+    if (heroArt && newKey) {
+      heroArt.innerHTML = `<img src="/api/artwork/${newKey}?t=${Date.now()}" alt="${esc(_albumArtAlbum)}" />`;
+    }
+  } catch (e) {
+    _showTagError('aa-error', e.message || 'Save failed. Check the image is accessible.');
+    btn.disabled    = false;
+    btn.textContent = 'Save Art';
+  }
+}
+
+async function removeAlbumArt() {
+  if (!_albumArtArtist || !_albumArtAlbum) return;
+  const confirmed = await _showConfirm({
+    title: 'Remove Album Art',
+    message: `Remove the artwork for "${_albumArtAlbum}"? The album will show a placeholder until art is re-extracted or uploaded.`,
+    okText: 'Remove', danger: true,
+  });
+  if (!confirmed) return;
+
+  const q = `artist=${encodeURIComponent(_albumArtArtist)}&album=${encodeURIComponent(_albumArtAlbum)}`;
+  try {
+    await fetch(`/api/library/albums/artwork?${q}`, { method: 'DELETE' });
+    toast('Album art removed');
+    closeAlbumArtModal();
+    await loadAlbums(state.artist);
+    if (state.view === 'tracks') loadTracks(state.artist, state.album);
+    const heroArt = document.getElementById('album-hero-art');
+    if (heroArt) heroArt.innerHTML = musicNote(64);
+  } catch (e) {
+    toast('Error removing art: ' + e.message);
   }
 }
 
@@ -9963,26 +10336,37 @@ function openArtistImageModal() {
   document.querySelectorAll('.hero-more-menu.open').forEach(m => m.classList.remove('open'));
   if (!state.artist) { toast('Open an artist first'); return; }
 
-  _artistImageKey    = _artistKey(state.artist);
-  _artistImageName   = state.artist;
-  _selectedImageUrl  = null;
+  _artistImageKey      = _artistKey(state.artist);
+  _artistImageName     = state.artist;
+  _selectedImageUrl    = null;
   _selectedImageSource = null;
-  _selectedImageFile = null;
+  _selectedImageFile   = null;
 
-  document.getElementById('artist-image-modal-title').textContent = `Artist Image — ${state.artist}`;
-  document.getElementById('ai-candidates').innerHTML = '<p class="artist-image-hint muted">Click Search to find artist images online.</p>';
-  document.getElementById('ai-error').style.display = 'none';
-  document.getElementById('ai-use-btn').disabled = true;
-  document.getElementById('ai-file-name').textContent = 'no file selected';
+  // Header subtitle shows the artist name
+  document.getElementById('artist-image-modal-subtitle').textContent = state.artist;
+
+  // Reset candidate grid
+  document.getElementById('ai-candidates').innerHTML =
+    '<p class="artist-image-hint">Select a service and click Search to find photos.</p>';
+
+  // Reset error, save button, file input
+  _hideTagError('ai-error');
+  const useBtn = document.getElementById('ai-use-btn');
+  useBtn.disabled    = true;
+  useBtn.textContent = 'Save Photo';
+  document.getElementById('ai-file-name').textContent = '';
   document.getElementById('ai-file-input').value = '';
 
-  // Pre-select preferred service from settings (loaded on settings open)
-  // Default to current setting value if stored
-  const svc = document.getElementById('ai-service-select');
-  const prefSvc = (window._artistImageServicePref || 'itunes');
-  if (svc) svc.value = prefSvc;
+  // Reset search button state
+  const searchBtn = document.getElementById('ai-search-btn');
+  searchBtn.disabled = false;
+  searchBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Search`;
 
-  // Show remove button only if artist already has an image
+  // Pre-select preferred service
+  const svc = document.getElementById('ai-service-select');
+  if (svc) svc.value = window._artistImageServicePref || 'itunes';
+
+  // Show Remove Photo only if this artist already has an image
   const artistObj = (state.artists || []).find(a => a.name === state.artist);
   const removeBtn = document.getElementById('ai-remove-btn');
   if (removeBtn) removeBtn.style.display = artistObj?.image_key ? '' : 'none';
@@ -10007,16 +10391,20 @@ async function searchArtistImages() {
   const errEl = document.getElementById('ai-error');
 
   btn.disabled = true;
-  btn.textContent = 'Searching…';
-  errEl.style.display = 'none';
-  container.innerHTML = '<p class="artist-image-hint muted">Searching…</p>';
+  btn.innerHTML = 'Searching…';
+  _hideTagError('ai-error');
+  container.innerHTML = '<p class="artist-image-hint">Searching…</p>';
   _selectedImageUrl = null;
   _selectedImageSource = null;
   document.getElementById('ai-use-btn').disabled = true;
 
+  const _resetSearchBtn = () => {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Search`;
+  };
+
   try {
     const q = encodeURIComponent(_artistImageName);
-    // Use 'by-name' key placeholder; server resolves artist key from ?q= param
     const url = `/api/artists/by-name/image/search?q=${q}&service=${service}`;
     const data = await fetch(url).then(r => {
       if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Search failed'); });
@@ -10025,61 +10413,59 @@ async function searchArtistImages() {
 
     const candidates = data.candidates || [];
     if (!candidates.length) {
-      container.innerHTML = '<p class="artist-image-hint muted">No images found. Try a different service.</p>';
-      btn.disabled = false;
-      btn.textContent = 'Search';
+      container.innerHTML = '<p class="artist-image-hint">No results found. Try a different service or check your API key in Settings.</p>';
+      _resetSearchBtn();
       return;
     }
 
     container.innerHTML = '';
-    candidates.forEach((c, i) => {
+    candidates.forEach((c) => {
       const img = document.createElement('img');
       img.src = c.thumbnail_url || c.url;
       img.className = 'artist-img-candidate';
       img.title = c.label || '';
-      img.onerror = () => { img.style.opacity = '0.3'; };
+      img.loading = 'lazy';
+      img.onerror = () => { img.style.opacity = '0.25'; img.style.pointerEvents = 'none'; };
       img.onclick = () => {
         container.querySelectorAll('.artist-img-candidate').forEach(x => x.classList.remove('selected'));
         img.classList.add('selected');
-        _selectedImageUrl = c.url;
+        _selectedImageUrl    = c.url;
         _selectedImageSource = c.source;
-        _selectedImageFile = null;
+        _selectedImageFile   = null;
+        document.getElementById('ai-file-name').textContent = '';
         document.getElementById('ai-use-btn').disabled = false;
       };
       container.appendChild(img);
     });
   } catch (e) {
-    errEl.textContent = e.message || 'Search failed';
-    errEl.style.display = '';
+    _showTagError('ai-error', e.message || 'Search failed. Check your API key in Settings.');
     container.innerHTML = '';
   }
 
-  btn.disabled = false;
-  btn.textContent = 'Search';
+  _resetSearchBtn();
 }
 
 
 function onArtistImageFileSelected(input) {
   const file = input.files[0];
   if (!file) return;
-  _selectedImageFile = file;
-  _selectedImageUrl = null;
+  _selectedImageFile   = file;
+  _selectedImageUrl    = null;
   _selectedImageSource = 'upload';
   document.getElementById('ai-file-name').textContent = file.name;
   document.getElementById('ai-use-btn').disabled = false;
-  // Deselect any grid selection
+  // Deselect any grid candidate
   document.querySelectorAll('.artist-img-candidate').forEach(x => x.classList.remove('selected'));
+  _hideTagError('ai-error');
 }
 
 async function saveArtistImage() {
   if (!_artistImageName) return;
   const btn = document.getElementById('ai-use-btn');
-  const errEl = document.getElementById('ai-error');
-  btn.disabled = true;
+  btn.disabled    = true;
   btn.textContent = 'Saving…';
-  errEl.style.display = 'none';
+  _hideTagError('ai-error');
 
-  // Always use the by-name endpoint — server computes the key from artist_name
   try {
     let res;
     if (_selectedImageFile) {
@@ -10098,17 +10484,14 @@ async function saveArtistImage() {
       throw new Error('No image selected');
     }
 
-    toast(`Artist image saved (${res.size_kb} KB)`);
+    toast(`Photo saved for ${_artistImageName} (${res.size_kb} KB)`);
     closeArtistImageModal();
     await loadArtists();
-    if (state.view === 'albums' || state.view === 'tracks') {
-      _refreshArtistHeroImage();
-    }
+    if (state.view === 'albums' || state.view === 'tracks') _refreshArtistHeroImage();
   } catch (e) {
-    errEl.textContent = e.message || 'Save failed';
-    errEl.style.display = '';
-    btn.disabled = false;
-    btn.textContent = 'Use This Image';
+    _showTagError('ai-error', e.message || 'Save failed. Check the image URL is accessible.');
+    btn.disabled    = false;
+    btn.textContent = 'Save Photo';
   }
 }
 
@@ -10149,6 +10532,89 @@ function onArtistImageServiceChange(value) {
   const fanartRow = document.getElementById('fanart-key-row');
   if (lastfmRow) lastfmRow.style.display = value === 'lastfm' ? '' : 'none';
   if (fanartRow) fanartRow.style.display = value === 'fanart' ? '' : 'none';
+}
+
+/* ── Artist Image Batch Fetch ────────────────────────────────────────── */
+
+let _artistBatchPoller = null;
+
+async function startArtistImageBatch() {
+  const service = document.getElementById('artist-image-service-select')?.value || 'itunes';
+  try {
+    const res = await fetch('/api/artists/images/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ service }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      toast(data.error || 'Could not start batch job', 'error');
+      return;
+    }
+    _updateArtistBatchBanner({ status: 'running', done: 0, total: 0, fetched: 0, skipped: 0, failed: 0 });
+    _startArtistBatchPolling();
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+async function cancelArtistImageBatch() {
+  await fetch('/api/artists/images/batch/cancel', { method: 'POST' }).catch(() => {});
+  _updateArtistBatchBanner({ status: 'cancelled', done: 0, total: 0, fetched: 0, skipped: 0, failed: 0 });
+  _stopArtistBatchPolling();
+}
+
+function _startArtistBatchPolling() {
+  if (_artistBatchPoller) return;
+  _artistBatchPoller = setInterval(_pollArtistBatchStatus, 1200);
+}
+
+function _stopArtistBatchPolling() {
+  if (_artistBatchPoller) { clearInterval(_artistBatchPoller); _artistBatchPoller = null; }
+}
+
+async function _pollArtistBatchStatus() {
+  try {
+    const s = await fetch('/api/artists/images/batch/status').then(r => r.json());
+    _updateArtistBatchBanner(s);
+    if (s.status !== 'running') _stopArtistBatchPolling();
+  } catch (e) {
+    // network blip — keep polling
+  }
+}
+
+function _updateArtistBatchBanner(s) {
+  const banner    = document.getElementById('batch-img-banner');
+  const bar       = document.getElementById('batch-img-bar');
+  const msg       = document.getElementById('batch-img-msg');
+  const startBtn  = document.getElementById('batch-img-start-btn');
+  const cancelBtn = document.getElementById('batch-img-cancel-btn');
+  if (!banner) return;
+
+  const running = s.status === 'running';
+  banner.style.display   = (s.status === 'idle') ? 'none' : '';
+  if (startBtn)  startBtn.disabled    = running;
+  if (cancelBtn) cancelBtn.style.display = running ? '' : 'none';
+
+  if (s.status === 'running') {
+    const pct = s.total > 0 ? Math.round((s.done / s.total) * 100) : 0;
+    if (bar) bar.style.width = pct + '%';
+    if (msg) msg.textContent = `Searching… ${s.done.toLocaleString()} / ${s.total.toLocaleString()} artists — ${s.fetched} found, ${s.skipped} skipped`;
+  } else if (s.status === 'done') {
+    if (bar) bar.style.width = '100%';
+    if (msg) {
+      const errNote = s.failed > 0 ? `, ${s.failed} not found` : '';
+      msg.textContent = `Done — ${s.fetched} new photos${errNote}, ${s.skipped} already had photos`;
+    }
+    if (startBtn) startBtn.disabled = false;
+  } else if (s.status === 'cancelled') {
+    if (bar) bar.style.width = '0%';
+    if (msg) msg.textContent = `Cancelled after ${s.done.toLocaleString()} artists — ${s.fetched} photos saved`;
+    if (startBtn) startBtn.disabled = false;
+  } else if (s.status === 'error') {
+    if (msg) msg.textContent = 'Batch job encountered an error.';
+    if (startBtn) startBtn.disabled = false;
+  }
 }
 
 async function saveArtistImageSettings() {
