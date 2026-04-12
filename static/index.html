@@ -146,6 +146,8 @@
                 <div class="hero-more-menu" id="artist-hero-more-menu">
                   <button class="hero-more-item" id="artist-hero-add">Add All Songs to Playlist</button>
                   <button class="hero-more-item" id="artist-hero-browse">Browse All Songs</button>
+                  <button class="hero-more-item" id="artist-hero-edit-image" onclick="App.openArtistImageModal()">Change Artist Image</button>
+                  <button class="hero-more-item" id="artist-hero-rename" onclick="App.openArtistRename()">Rename Artist</button>
                 </div>
               </div>
             </div>
@@ -181,6 +183,7 @@
                 </button>
                 <div class="hero-more-menu" id="album-hero-more-menu">
                   <button class="hero-more-item" id="add-all-btn">Add All to Playlist</button>
+                  <button class="hero-more-item" id="album-hero-edit-tags" onclick="App.openAlbumTagEditor()">Edit Album Tags</button>
                 </div>
               </div>
             </div>
@@ -587,6 +590,40 @@
                 Import Backup
                 <input type="file" accept=".zip" style="display:none" onchange="App.importBackup(this)">
               </label>
+            </div>
+          </div>
+
+          <!-- Artist Images section -->
+          <div class="settings-section">
+            <h3 class="settings-section-title">Artist Images</h3>
+            <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
+              Search for artist portrait images from an online service. Choose a service and optionally add an API key for better results.
+            </p>
+            <div class="settings-row">
+              <label>Image service</label>
+              <select id="artist-image-service-select" class="settings-select" onchange="App.onArtistImageServiceChange(this.value)">
+                <option value="itunes">iTunes Search (no key required)</option>
+                <option value="lastfm">Last.fm</option>
+                <option value="fanart">Fanart.tv</option>
+              </select>
+            </div>
+            <div id="lastfm-key-row" class="settings-row" style="display:none">
+              <label>Last.fm API key</label>
+              <div class="input-browse-group">
+                <input id="lastfm-api-key-input" type="text" placeholder="Paste your API key" />
+                <a class="btn-browse" href="https://www.last.fm/api/account/create" target="_blank">Get Key</a>
+              </div>
+            </div>
+            <div id="fanart-key-row" class="settings-row" style="display:none">
+              <label>Fanart.tv API key</label>
+              <div class="input-browse-group">
+                <input id="fanart-api-key-input" type="text" placeholder="Paste your API key" />
+                <a class="btn-browse" href="https://fanart.tv/get-an-api-key/" target="_blank">Get Key</a>
+              </div>
+            </div>
+            <p class="settings-hint">API keys are stored locally on your device and never shared.</p>
+            <div class="settings-inline-actions">
+              <button class="btn-primary" onclick="App.saveArtistImageSettings()">Save</button>
             </div>
           </div>
 
@@ -2047,6 +2084,162 @@
       <div class="modal-actions">
         <button class="btn-secondary" onclick="App.closeMlReferenceBrowser()">Cancel</button>
         <button class="btn-primary" onclick="App.applyMlReferenceBrowser()">Use Selected</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tag Editor Modal (single track) -->
+  <div id="tag-editor-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeTagEditor()">
+    <div class="modal modal-wide">
+      <div class="modal-head modal-head-spaced">
+        <h3>Edit Track Tags</h3>
+        <button class="modal-x-btn" onclick="App.closeTagEditor()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="tag-editor-form">
+        <div class="settings-row">
+          <label>Title</label>
+          <input id="te-title" type="text" />
+        </div>
+        <div class="settings-row">
+          <label>Artist</label>
+          <input id="te-artist" type="text" />
+        </div>
+        <div class="settings-row">
+          <label>Album Artist</label>
+          <input id="te-album-artist" type="text" />
+        </div>
+        <div class="settings-row">
+          <label>Album</label>
+          <input id="te-album" type="text" />
+        </div>
+        <div class="tag-editor-row-2col">
+          <div class="settings-row">
+            <label>Track #</label>
+            <input id="te-track-number" type="text" style="width:80px" />
+          </div>
+          <div class="settings-row">
+            <label>Year</label>
+            <input id="te-year" type="text" style="width:90px" />
+          </div>
+        </div>
+        <div class="settings-row">
+          <label>Genre</label>
+          <input id="te-genre" type="text" />
+        </div>
+        <p id="te-error" class="tag-editor-error" style="display:none"></p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="App.closeTagEditor()">Cancel</button>
+        <button class="btn-primary" id="te-save-btn" onclick="App.saveTagEditor()">Save Tags</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Album Tag Editor Modal (batch) -->
+  <div id="album-tag-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeAlbumTagEditor()">
+    <div class="modal modal-wide">
+      <div class="modal-head modal-head-spaced">
+        <h3 id="album-tag-modal-title">Edit Album Tags</h3>
+        <button class="modal-x-btn" onclick="App.closeAlbumTagEditor()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="album-tag-warning" class="tag-batch-warning">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span id="album-tag-warning-text">This will update N files on disk.</span>
+      </div>
+      <div class="tag-editor-form">
+        <div class="settings-row">
+          <label>Album</label>
+          <input id="ate-album" type="text" />
+        </div>
+        <div class="settings-row">
+          <label>Album Artist</label>
+          <input id="ate-album-artist" type="text" />
+        </div>
+        <div class="tag-editor-row-2col">
+          <div class="settings-row">
+            <label>Year</label>
+            <input id="ate-year" type="text" style="width:90px" />
+          </div>
+          <div class="settings-row">
+            <label>Genre</label>
+            <input id="ate-genre" type="text" />
+          </div>
+        </div>
+        <p id="ate-error" class="tag-editor-error" style="display:none"></p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="App.closeAlbumTagEditor()">Cancel</button>
+        <button class="btn-primary" id="ate-save-btn" onclick="App.saveAlbumTags()">Save Tags</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Artist Rename Modal -->
+  <div id="artist-rename-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeArtistRename()">
+    <div class="modal modal-wide">
+      <div class="modal-head modal-head-spaced">
+        <h3>Rename Artist</h3>
+        <button class="modal-x-btn" onclick="App.closeArtistRename()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="artist-rename-warning" class="tag-batch-warning tag-batch-warning--danger">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span id="artist-rename-warning-text">This will update the Artist and Album Artist tags on all N tracks for this artist.</span>
+      </div>
+      <div class="tag-editor-form">
+        <div class="settings-row">
+          <label>New artist name</label>
+          <input id="ar-new-name" type="text" />
+        </div>
+        <p id="ar-error" class="tag-editor-error" style="display:none"></p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="App.closeArtistRename()">Cancel</button>
+        <button class="btn-danger" id="ar-save-btn" onclick="App.saveArtistRename()">Rename Artist</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Artist Image Modal -->
+  <div id="artist-image-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)App.closeArtistImageModal()">
+    <div class="modal modal-wide">
+      <div class="modal-head modal-head-spaced">
+        <h3 id="artist-image-modal-title">Artist Image</h3>
+        <button class="modal-x-btn" onclick="App.closeArtistImageModal()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="artist-image-modal-body">
+        <div class="artist-image-search-bar">
+          <select id="ai-service-select" class="settings-select">
+            <option value="itunes">iTunes Search</option>
+            <option value="lastfm">Last.fm</option>
+            <option value="fanart">Fanart.tv</option>
+          </select>
+          <button class="btn-secondary" id="ai-search-btn" onclick="App.searchArtistImages()">Search</button>
+        </div>
+        <div id="ai-candidates" class="artist-image-candidates">
+          <p class="artist-image-hint muted">Click Search to find artist images online.</p>
+        </div>
+        <div class="artist-image-divider"><span>— or upload your own —</span></div>
+        <div class="artist-image-upload-row">
+          <label class="btn-secondary artist-image-upload-label">
+            Choose File
+            <input type="file" id="ai-file-input" accept="image/*" style="display:none" onchange="App.onArtistImageFileSelected(this)">
+          </label>
+          <span id="ai-file-name" class="muted">no file selected</span>
+          <button id="ai-remove-btn" class="btn-secondary" onclick="App.removeArtistImage()" style="display:none">Remove Image</button>
+        </div>
+        <p id="ai-error" class="tag-editor-error" style="display:none"></p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="App.closeArtistImageModal()">Cancel</button>
+        <button class="btn-primary" id="ai-use-btn" onclick="App.saveArtistImage()" disabled>Use This Image</button>
       </div>
     </div>
   </div>

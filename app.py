@@ -220,6 +220,7 @@ DATA_DIR = (
 )
 ARTWORK_DIR = DATA_DIR / 'artwork'
 PLAYLIST_ARTWORK_DIR = DATA_DIR / 'playlist_artwork'
+ARTIST_ARTWORK_DIR = DATA_DIR / 'artist_artwork'
 
 DEFAULT_SETTINGS = {
     'library_path':     str(Path.home() / 'Music'),
@@ -232,6 +233,10 @@ DEFAULT_SETTINGS = {
     'ap80_prefix':      '',   # internal device path, e.g. /mnt/sdcard
     'exclusive_mode':   False,  # CoreAudio exclusive (bit-perfect, requires mpv); off by default for first-time users
     'audio_device':     'auto', # mpv audio device name; 'auto' = system default
+    # Artist image service settings
+    'artist_image_service': 'itunes',  # 'itunes' | 'lastfm' | 'fanart'
+    'lastfm_api_key':   '',
+    'fanart_api_key':   '',
 }
 
 _DEFAULT_GEAR_PROFILES = {
@@ -304,6 +309,7 @@ def get_music_base():
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 ARTWORK_DIR.mkdir(exist_ok=True)
 PLAYLIST_ARTWORK_DIR.mkdir(exist_ok=True)
+ARTIST_ARTWORK_DIR.mkdir(exist_ok=True)
 
 DEVICE_PATHS = {
     'poweramp': Path('/Volumes/FIIO M21'),
@@ -356,6 +362,285 @@ def format_duration(seconds):
 
 def get_artwork_key(artist, album):
     return hashlib.md5(f"{artist}||{album}".encode()).hexdigest()
+
+
+def get_artist_image_key(artist_name):
+    """MD5 of lowercased, stripped artist name — mirrors album art key pattern."""
+    return hashlib.md5(artist_name.lower().strip().encode()).hexdigest()
+
+
+# ── Artist image processing ──────────────────────────────────────────────────
+
+def _process_artist_image(data: bytes) -> bytes:
+    """
+    Resize and compress raw image bytes to a 600×600 square progressive JPEG.
+    Steps: decode → thumbnail 600px → centre-crop to square → save quality 85.
+    """
+    img = Image.open(io.BytesIO(data)).convert('RGB')
+    img.thumbnail((600, 600), Image.LANCZOS)
+    w, h = img.size
+    side = min(w, h)
+    left = (w - side) // 2
+    top  = (h - side) // 2
+    img = img.crop((left, top, left + side, top + side))
+    buf = io.BytesIO()
+    img.save(buf, format='JPEG', quality=85, progressive=True, optimize=True)
+    return buf.getvalue()
+
+
+_PRIVATE_IP_RE = re.compile(
+    r'^(127\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|0\.0\.0\.0|localhost)',
+    re.IGNORECASE
+)
+_ALLOWED_IMAGE_DOMAINS = {
+    'i.last.fm', 'lastfm.freetls.fastly.net',
+    'assets.fanart.tv', 'fanart.tv',
+    'is1-ssl.mzstatic.com', 'is2-ssl.mzstatic.com', 'is3-ssl.mzstatic.com',
+    'is4-ssl.mzstatic.com', 'is5-ssl.mzstatic.com',
+    'a1.mzstatic.com', 'a2.mzstatic.com', 'a3.mzstatic.com',
+}
+
+
+def _validate_image_url(url: str):
+    """
+    SSRF guard: only allow http(s) to known image CDNs.
+    Returns (ok: bool, error_msg: str | None).
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False, 'Invalid URL'
+    if parsed.scheme not in ('http', 'https'):
+        return False, 'Only http/https URLs are allowed'
+    host = parsed.hostname or ''
+    if _PRIVATE_IP_RE.match(host):
+        return False, 'Private/loopback addresses are not allowed'
+    # Allow known CDN domains (exact match or subdomain)
+    for allowed in _ALLOWED_IMAGE_DOMAINS:
+        if host == allowed or host.endswith('.' + allowed):
+            return True, None
+    return False, f'Image host "{host}" is not in the allowed list'
+
+
+# ── Artist image search helpers ──────────────────────────────────────────────
+
+_LASTFM_PLACEHOLDER_HASH = '2a96cbd8b46e442fc41c2b86b821562f'
+
+
+def _search_itunes(artist_name: str) -> list:
+    """
+    Search iTunes for artist-representative images.
+    iTunes doesn't expose artist portraits, so we search for the artist's albums
+    and return unique album artworks as portrait candidates. Users can pick whichever
+    album cover best represents the artist.
+    """
+    try:
+        # Search for albums by this artist to get album artworks
+        url = (
+            f"https://itunes.apple.com/search?"
+            f"term={urlquote(artist_name)}&entity=album&limit=12&media=music&attribute=artistTerm"
+        )
+        req = UrlRequest(url, headers={'User-Agent': 'TuneBridge/1.0'})
+        with urlopen(req, timeout=10) as r:
+            data = json.loads(r.read().decode('utf-8'))
+        candidates = []
+        seen_thumbs = set()
+        for item in data.get('results', []):
+            artist_match = (item.get('artistName') or '').lower()
+            if artist_name.lower() not in artist_match and artist_match not in artist_name.lower():
+                continue  # filter out non-matching artists
+            thumb = item.get('artworkUrl100', '')
+            if not thumb or thumb in seen_thumbs:
+                continue
+            seen_thumbs.add(thumb)
+            # Upscale to 600×600
+            full = thumb.replace('100x100bb', '600x600bb').replace('100x100', '600x600')
+            candidates.append({
+                'url': full,
+                'thumbnail_url': thumb,
+                'source': 'itunes',
+                'label': item.get('collectionName', artist_name),
+            })
+            if len(candidates) >= 6:
+                break
+        return candidates
+    except Exception as e:
+        print(f"[artist-img] iTunes search error: {e}")
+        return []
+
+
+def _search_lastfm(artist_name: str, api_key: str) -> list:
+    """Search Last.fm for artist images."""
+    try:
+        url = (
+            f"https://ws.audioscrobbler.com/2.0/?method=artist.getinfo"
+            f"&artist={urlquote(artist_name)}&api_key={urlquote(api_key)}&format=json"
+        )
+        req = UrlRequest(url, headers={'User-Agent': 'TuneBridge/1.0'})
+        with urlopen(req, timeout=10) as r:
+            data = json.loads(r.read().decode('utf-8'))
+        images = data.get('artist', {}).get('image', [])
+        candidates = []
+        seen = set()
+        for img in reversed(images):  # largest first
+            img_url = img.get('#text', '').strip()
+            if not img_url or _LASTFM_PLACEHOLDER_HASH in img_url:
+                continue
+            if img_url in seen:
+                continue
+            seen.add(img_url)
+            # Find a smaller size for thumbnail
+            thumb = next(
+                (x.get('#text', '') for x in images if x.get('size') in ('large', 'medium')),
+                img_url
+            )
+            candidates.append({
+                'url': img_url,
+                'thumbnail_url': thumb or img_url,
+                'source': 'lastfm',
+                'label': artist_name,
+            })
+            if len(candidates) >= 3:
+                break
+        return candidates
+    except Exception as e:
+        print(f"[artist-img] Last.fm search error: {e}")
+        return []
+
+
+def _search_fanart(artist_name: str, api_key: str) -> list:
+    """Search Fanart.tv for artist images (requires MusicBrainz lookup first)."""
+    try:
+        # Step 1: get MBID from MusicBrainz
+        mb_url = (
+            f"https://musicbrainz.org/ws/2/artist/"
+            f"?query=artist:{urlquote(artist_name)}&fmt=json&limit=1"
+        )
+        req = UrlRequest(mb_url, headers={
+            'User-Agent': 'TuneBridge/1.0 (https://github.com/hashansr/tunebridge)',
+            'Accept': 'application/json',
+        })
+        with urlopen(req, timeout=10) as r:
+            mb_data = json.loads(r.read().decode('utf-8'))
+        artists = mb_data.get('artists', [])
+        if not artists:
+            return []
+        mbid = artists[0].get('id', '')
+        if not mbid:
+            return []
+
+        # Step 2: fetch Fanart.tv
+        ft_url = f"https://webservice.fanart.tv/v3/music/{mbid}?api_key={urlquote(api_key)}"
+        req2 = UrlRequest(ft_url, headers={'User-Agent': 'TuneBridge/1.0'})
+        with urlopen(req2, timeout=10) as r2:
+            ft_data = json.loads(r2.read().decode('utf-8'))
+
+        candidates = []
+        for img in ft_data.get('artistthumb', [])[:6]:
+            img_url = img.get('url', '').strip()
+            if img_url:
+                candidates.append({
+                    'url': img_url,
+                    'thumbnail_url': img_url,
+                    'source': 'fanart',
+                    'label': artist_name,
+                })
+        # Also include artist backgrounds if no thumbs
+        if not candidates:
+            for img in ft_data.get('artistbackground', [])[:3]:
+                img_url = img.get('url', '').strip()
+                if img_url:
+                    candidates.append({
+                        'url': img_url,
+                        'thumbnail_url': img_url,
+                        'source': 'fanart',
+                        'label': artist_name,
+                    })
+        return candidates
+    except Exception as e:
+        print(f"[artist-img] Fanart.tv search error: {e}")
+        return []
+
+
+# ── ID3 tag writing ──────────────────────────────────────────────────────────
+
+from mutagen.id3 import ID3, TIT2, TPE1, TPE2, TALB, TRCK, TDRC, TCON, error as ID3Error
+
+
+def _write_tags_to_file(filepath: Path, changes: dict) -> None:
+    """
+    Write changed tag fields to a FLAC, MP3, or M4A file using mutagen.
+    Only writes fields present in `changes`. Raises on error.
+    """
+    ext = filepath.suffix.lower()
+
+    if ext == '.flac':
+        audio = FLAC(str(filepath))
+        if audio.tags is None:
+            audio.add_tags()
+        mapping = {
+            'title': 'TITLE', 'artist': 'ARTIST', 'album_artist': 'ALBUMARTIST',
+            'album': 'ALBUM', 'track_number': 'TRACKNUMBER', 'year': 'DATE', 'genre': 'GENRE',
+        }
+        for field, tag in mapping.items():
+            if field in changes and changes[field] is not None:
+                audio.tags[tag] = [str(changes[field])]
+        audio.save()
+
+    elif ext == '.mp3':
+        try:
+            audio = MP3(str(filepath), ID3=ID3)
+            if audio.tags is None:
+                audio.add_tags()
+        except ID3Error:
+            audio = MP3(str(filepath))
+            audio.add_tags()
+
+        frame_map = {
+            'title': (TIT2, {}),
+            'artist': (TPE1, {}),
+            'album_artist': (TPE2, {}),
+            'album': (TALB, {}),
+            'track_number': (TRCK, {}),
+            'year': (TDRC, {}),
+            'genre': (TCON, {}),
+        }
+        for field, (FrameCls, kwargs) in frame_map.items():
+            if field in changes and changes[field] is not None:
+                audio.tags.add(FrameCls(encoding=3, text=str(changes[field]), **kwargs))
+        audio.save()
+
+    elif ext in ('.m4a', '.aac', '.mp4'):
+        audio = MP4(str(filepath))
+        if audio.tags is None:
+            audio.add_tags()
+        mp4_map = {
+            'title': '\xa9nam', 'artist': '\xa9ART', 'album_artist': 'aART',
+            'album': '\xa9alb', 'year': '\xa9day', 'genre': '\xa9gen',
+        }
+        for field, tag in mp4_map.items():
+            if field in changes and changes[field] is not None:
+                audio.tags[tag] = [str(changes[field])]
+        if 'track_number' in changes and changes['track_number'] is not None:
+            try:
+                tn = int(str(changes['track_number']).split('/')[0])
+                audio.tags['trkn'] = [(tn, 0)]
+            except (ValueError, TypeError):
+                pass
+        audio.save()
+
+    else:
+        raise ValueError(f"Unsupported file format: {ext}")
+
+
+def _update_library_track(track_id: str, changes: dict):
+    """Update the in-memory library list after a tag write."""
+    with library_lock:
+        for t in library:
+            if t.get('id') == track_id:
+                t.update({k: v for k, v in changes.items() if v is not None})
+                # Recompute duration_fmt if needed (not affected by tag changes)
+                break
 
 
 def get_flac_tag(tags, *keys):
@@ -763,6 +1048,9 @@ def get_artists():
     with library_lock:
         tracks = library[:]
 
+    # Pre-load artist image keys so we can annotate each artist
+    artist_image_keys = _db.db_get_all_artist_image_keys()
+
     artists = {}
     for t in tracks:
         name = t.get('album_artist') or t.get('artist') or 'Unknown Artist'
@@ -774,10 +1062,16 @@ def get_artists():
         if not artists[key]['artwork_key'] and t.get('artwork_key'):
             artists[key]['artwork_key'] = t['artwork_key']
 
-    result = [
-        {'name': v['name'], 'album_count': len(v['albums']), 'track_count': v['track_count'], 'artwork_key': v['artwork_key']}
-        for v in sorted(artists.values(), key=lambda v: artist_sort_key(v['name']))
-    ]
+    result = []
+    for v in sorted(artists.values(), key=lambda v: artist_sort_key(v['name'])):
+        img_key = get_artist_image_key(v['name'])
+        result.append({
+            'name': v['name'],
+            'album_count': len(v['albums']),
+            'track_count': v['track_count'],
+            'artwork_key': v['artwork_key'],
+            'image_key': img_key if img_key in artist_image_keys else None,
+        })
     return jsonify(result)
 
 
@@ -840,6 +1134,147 @@ def library_songs():
     tracks.sort(key=key_fn, reverse=(order == 'desc'))
 
     return jsonify(tracks)
+
+
+# ── ID3 Tag Editing ──────────────────────────────────────────────────────────
+
+_EDITABLE_FIELDS = {'title', 'artist', 'album_artist', 'album', 'track_number', 'year', 'genre'}
+_BATCH_ALBUM_FIELDS = {'album', 'album_artist', 'year', 'genre'}
+
+
+def _apply_tag_edit(track_id: str, changes: dict):
+    """
+    Core helper: validate path, snapshot history, write tags to file,
+    update SQLite and in-memory library.
+    Returns (updated_track_dict, error_message | None).
+    """
+    track = _db.db_get_track(track_id)
+    if not track:
+        return None, 'Track not found'
+
+    music_base = get_music_base()
+    abs_path = music_base / track['path']
+
+    if not abs_path.exists():
+        return None, f'File not found: {track["path"]}'
+    if not os.access(str(abs_path), os.W_OK):
+        return None, f'File is read-only: {track["path"]}'
+
+    # Security: confirm resolved path is inside music_base
+    try:
+        abs_path.resolve().relative_to(music_base.resolve())
+    except ValueError:
+        return None, 'Path traversal detected'
+
+    # Strip out None / empty values; only keep recognised fields
+    clean = {
+        k: v.strip() if isinstance(v, str) else v
+        for k, v in changes.items()
+        if k in _EDITABLE_FIELDS and v is not None and str(v).strip() != ''
+    }
+    if not clean:
+        return track, None  # nothing to do
+
+    # Snapshot old values to tag_history
+    old_values = {field: track.get(field) for field in clean}
+    _db.db_record_tag_changes(track_id, clean, old_values)
+
+    # Write to file
+    _write_tags_to_file(abs_path, clean)
+
+    # Update SQLite cache
+    _db.db_update_track_tags(track_id, clean)
+
+    # Update in-memory library
+    _update_library_track(track_id, clean)
+
+    updated = _db.db_get_track(track_id)
+    return updated, None
+
+
+@app.route('/api/library/tracks/<track_id>/tags', methods=['PUT'])
+def update_track_tags(track_id):
+    """Edit ID3 tags on a single track."""
+    data = request.json or {}
+    changes = {k: data.get(k) for k in _EDITABLE_FIELDS if k in data}
+    updated, err = _apply_tag_edit(track_id, changes)
+    if err:
+        code = 404 if 'not found' in err.lower() else 400
+        return jsonify({'error': err}), code
+    return jsonify(updated)
+
+
+@app.route('/api/library/albums/tags', methods=['PUT'])
+def update_album_tags():
+    """Batch-edit shared tag fields across all tracks in an album."""
+    artist = request.args.get('artist', '')
+    album = request.args.get('album', '')
+    if not artist or not album:
+        return jsonify({'error': 'artist and album query params required'}), 400
+
+    data = request.json or {}
+    changes = {k: data.get(k) for k in _BATCH_ALBUM_FIELDS if k in data}
+    if not changes:
+        return jsonify({'error': 'No editable fields provided'}), 400
+
+    with library_lock:
+        tracks = [
+            t for t in library
+            if (t.get('album_artist') or t.get('artist') or '').lower() == artist.lower()
+            and (t.get('album') or '').lower() == album.lower()
+        ]
+
+    if not tracks:
+        return jsonify({'error': 'No tracks found for that artist/album'}), 404
+
+    updated = 0
+    errors = []
+    for t in tracks:
+        _, err = _apply_tag_edit(t['id'], changes)
+        if err:
+            errors.append({'track': t.get('title', t['id']), 'error': err})
+        else:
+            updated += 1
+
+    return jsonify({'updated': updated, 'total': len(tracks), 'errors': errors})
+
+
+@app.route('/api/library/artists/<path:artist>/tags', methods=['PUT'])
+def update_artist_tags(artist):
+    """Rename an artist across all their tracks (artist + album_artist fields)."""
+    data = request.json or {}
+    new_name = (data.get('artist') or '').strip()
+    if not new_name:
+        return jsonify({'error': 'artist name required'}), 400
+
+    with library_lock:
+        tracks = [
+            t for t in library
+            if (t.get('artist') or '').lower() == artist.lower()
+            or (t.get('album_artist') or '').lower() == artist.lower()
+        ]
+
+    if not tracks:
+        return jsonify({'error': 'No tracks found for that artist'}), 404
+
+    if len(tracks) > 2000:
+        return jsonify({'error': 'Too many tracks (>2000) — split into smaller batches'}), 400
+
+    updated = 0
+    errors = []
+    for t in tracks:
+        changes = {}
+        if (t.get('artist') or '').lower() == artist.lower():
+            changes['artist'] = new_name
+        if (t.get('album_artist') or '').lower() == artist.lower():
+            changes['album_artist'] = new_name
+        _, err = _apply_tag_edit(t['id'], changes)
+        if err:
+            errors.append({'track': t.get('title', t['id']), 'error': err})
+        else:
+            updated += 1
+
+    return jsonify({'updated': updated, 'total': len(tracks), 'errors': errors})
 
 
 # ── Favourites ───────────────────────────────────────────────────────────────
@@ -983,6 +1418,212 @@ def get_artwork(key):
     if artwork_path.exists():
         return send_file(str(artwork_path), mimetype='image/jpeg')
     return '', 404
+
+
+# ── Artist Images ─────────────────────────────────────────────────────────────
+
+@app.route('/api/artists/<artist_key>/image')
+def get_artist_image(artist_key):
+    """Serve a stored artist portrait JPEG."""
+    if not re.fullmatch(r'[0-9a-f]{32}', artist_key):
+        return '', 400
+    img_path = ARTIST_ARTWORK_DIR / f"{artist_key}.jpg"
+    if img_path.exists():
+        return send_file(str(img_path), mimetype='image/jpeg')
+    return '', 404
+
+
+@app.route('/api/artists/by-name/image/search')
+def search_artist_image_by_name():
+    """Search for artist images by artist name (no key needed)."""
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({'error': 'q (artist name) required'}), 400
+
+    settings = load_settings()
+    service = request.args.get('service', settings.get('artist_image_service', 'itunes'))
+
+    if service == 'lastfm':
+        api_key = settings.get('lastfm_api_key', '')
+        if not api_key:
+            return jsonify({'error': 'Last.fm API key not configured in Settings'}), 400
+        candidates = _search_lastfm(q, api_key)
+    elif service == 'fanart':
+        api_key = settings.get('fanart_api_key', '')
+        if not api_key:
+            return jsonify({'error': 'Fanart.tv API key not configured in Settings'}), 400
+        candidates = _search_fanart(q, api_key)
+    else:
+        candidates = _search_itunes(q)
+
+    return jsonify({'candidates': candidates[:6]})
+
+
+@app.route('/api/artists/<artist_key>/image/search')
+def search_artist_image(artist_key):
+    """
+    Search a configured image service for artist portrait candidates.
+    Query params: q=<artist_name>, service=<itunes|lastfm|fanart>
+    Returns { candidates: [{url, thumbnail_url, source, label}] }
+    """
+    if not re.fullmatch(r'[0-9a-f]{32}', artist_key):
+        return jsonify({'error': 'Invalid artist key'}), 400
+
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({'error': 'q (artist name) required'}), 400
+
+    settings = load_settings()
+    service = request.args.get('service', settings.get('artist_image_service', 'itunes'))
+
+    if service == 'lastfm':
+        api_key = settings.get('lastfm_api_key', '')
+        if not api_key:
+            return jsonify({'error': 'Last.fm API key not configured in Settings'}), 400
+        candidates = _search_lastfm(q, api_key)
+    elif service == 'fanart':
+        api_key = settings.get('fanart_api_key', '')
+        if not api_key:
+            return jsonify({'error': 'Fanart.tv API key not configured in Settings'}), 400
+        candidates = _search_fanart(q, api_key)
+    else:
+        candidates = _search_itunes(q)
+
+    return jsonify({'candidates': candidates[:6]})
+
+
+@app.route('/api/artists/<artist_key>/image', methods=['POST'])
+def save_artist_image(artist_key):
+    """
+    Save an artist image. Accepts either:
+    - JSON body: { source_url, artist_name, source }
+    - Multipart: file field + artist_name field
+    """
+    if not re.fullmatch(r'[0-9a-f]{32}', artist_key):
+        return jsonify({'error': 'Invalid artist key'}), 400
+
+    artist_name = ''
+    source = 'upload'
+    image_data = None
+
+    if request.files.get('file'):
+        f = request.files['file']
+        artist_name = request.form.get('artist_name', '')
+        source = 'upload'
+        image_data = f.read()
+        if len(image_data) > 10 * 1024 * 1024:
+            return jsonify({'error': 'File too large (max 10 MB)'}), 400
+    else:
+        body = request.json or {}
+        source_url = (body.get('source_url') or '').strip()
+        artist_name = (body.get('artist_name') or '').strip()
+        source = body.get('source', 'upload')
+
+        if not source_url:
+            return jsonify({'error': 'source_url or file required'}), 400
+
+        ok, err = _validate_image_url(source_url)
+        if not ok:
+            return jsonify({'error': err}), 400
+
+        try:
+            req = UrlRequest(source_url, headers={'User-Agent': 'TuneBridge/1.0'})
+            with urlopen(req, timeout=15) as r:
+                image_data = r.read()
+        except Exception as e:
+            return jsonify({'error': f'Failed to download image: {e}'}), 502
+
+        if len(image_data) > 10 * 1024 * 1024:
+            return jsonify({'error': 'Downloaded image too large (max 10 MB)'}), 400
+
+    try:
+        processed = _process_artist_image(image_data)
+    except Exception as e:
+        return jsonify({'error': f'Invalid image: {e}'}), 400
+
+    img_path = ARTIST_ARTWORK_DIR / f"{artist_key}.jpg"
+    img_path.write_bytes(processed)
+
+    _db.db_save_artist_image(artist_key, artist_name, str(img_path), source)
+
+    return jsonify({
+        'artist_key': artist_key,
+        'image_url': f'/api/artists/{artist_key}/image',
+        'size_kb': round(len(processed) / 1024, 1),
+    })
+
+
+@app.route('/api/artists/<artist_key>/image', methods=['DELETE'])
+def delete_artist_image(artist_key):
+    """Remove a stored artist image."""
+    if not re.fullmatch(r'[0-9a-f]{32}', artist_key):
+        return jsonify({'error': 'Invalid artist key'}), 400
+
+    img_path = ARTIST_ARTWORK_DIR / f"{artist_key}.jpg"
+    if img_path.exists():
+        img_path.unlink()
+    _db.db_delete_artist_image(artist_key)
+    return '', 204
+
+
+@app.route('/api/artists/by-name/image', methods=['POST'])
+def save_artist_image_by_name():
+    """
+    Save artist image by artist name (computes key server-side).
+    Accepts multipart or JSON body with artist_name field.
+    """
+    artist_name = ''
+    source = 'upload'
+    image_data = None
+
+    if request.files.get('file'):
+        f = request.files['file']
+        artist_name = (request.form.get('artist_name') or '').strip()
+        source = 'upload'
+        image_data = f.read()
+        if len(image_data) > 10 * 1024 * 1024:
+            return jsonify({'error': 'File too large (max 10 MB)'}), 400
+    else:
+        body = request.json or {}
+        source_url = (body.get('source_url') or '').strip()
+        artist_name = (body.get('artist_name') or '').strip()
+        source = body.get('source', 'upload')
+
+        if not source_url:
+            return jsonify({'error': 'source_url or file required'}), 400
+
+        ok, err = _validate_image_url(source_url)
+        if not ok:
+            return jsonify({'error': err}), 400
+
+        try:
+            req = UrlRequest(source_url, headers={'User-Agent': 'TuneBridge/1.0'})
+            with urlopen(req, timeout=15) as r:
+                image_data = r.read()
+        except Exception as e:
+            return jsonify({'error': f'Failed to download image: {e}'}), 502
+
+        if len(image_data) > 10 * 1024 * 1024:
+            return jsonify({'error': 'Downloaded image too large (max 10 MB)'}), 400
+
+    if not artist_name:
+        return jsonify({'error': 'artist_name required'}), 400
+
+    try:
+        processed = _process_artist_image(image_data)
+    except Exception as e:
+        return jsonify({'error': f'Invalid image: {e}'}), 400
+
+    artist_key = get_artist_image_key(artist_name)
+    img_path = ARTIST_ARTWORK_DIR / f"{artist_key}.jpg"
+    img_path.write_bytes(processed)
+    _db.db_save_artist_image(artist_key, artist_name, str(img_path), source)
+
+    return jsonify({
+        'artist_key': artist_key,
+        'image_url': f'/api/artists/{artist_key}/image',
+        'size_kb': round(len(processed) / 1024, 1),
+    })
 
 
 def has_playlist_artwork(pid):

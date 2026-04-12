@@ -53,7 +53,7 @@ def close_conn():
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA_SQL = """
 -- Schema versioning
@@ -259,6 +259,27 @@ CREATE TABLE IF NOT EXISTS playlist_gen_config (
 CREATE TABLE IF NOT EXISTS insights_config (
     key   TEXT PRIMARY KEY,
     value TEXT
+);
+
+-- Tag edit history (soft audit trail; enables future undo)
+CREATE TABLE IF NOT EXISTS tag_history (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    track_id    TEXT NOT NULL,
+    field       TEXT NOT NULL,
+    old_value   TEXT,
+    new_value   TEXT,
+    changed_at  INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tag_history_track ON tag_history(track_id);
+
+-- Artist images
+CREATE TABLE IF NOT EXISTS artist_images (
+    artist_key  TEXT PRIMARY KEY,
+    artist_name TEXT NOT NULL,
+    image_path  TEXT NOT NULL,
+    source      TEXT,
+    fetched_at  INTEGER NOT NULL
 );
 """
 
@@ -1420,3 +1441,86 @@ def db_save_playlist_gen_config(cfg):
 
     _flatten(cfg)
     conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Tag history
+# ---------------------------------------------------------------------------
+
+def db_snapshot_tags(track_id, field_values: dict):
+    """Record old tag values before a write. field_values = {field: old_value}."""
+    conn = get_conn()
+    now = int(time.time())
+    conn.executemany(
+        "INSERT INTO tag_history (track_id, field, old_value, new_value, changed_at) VALUES (?, ?, ?, ?, ?)",
+        [(track_id, field, old, None, now) for field, old in field_values.items()]
+    )
+    conn.commit()
+
+
+def db_record_tag_changes(track_id, changes: dict, old_values: dict):
+    """Record each changed field with its old and new value."""
+    conn = get_conn()
+    now = int(time.time())
+    rows = [
+        (track_id, field, str(old_values.get(field, '')), str(new_val), now)
+        for field, new_val in changes.items()
+        if new_val is not None
+    ]
+    if rows:
+        conn.executemany(
+            "INSERT INTO tag_history (track_id, field, old_value, new_value, changed_at) VALUES (?, ?, ?, ?, ?)",
+            rows
+        )
+        conn.commit()
+
+
+def db_update_track_tags(track_id, changes: dict):
+    """Update specific tag fields in the tracks table."""
+    allowed = {'title', 'artist', 'album_artist', 'album', 'track_number', 'year', 'genre'}
+    clean = {k: v for k, v in changes.items() if k in allowed}
+    if not clean:
+        return
+    conn = get_conn()
+    sets = ', '.join(f"{k} = ?" for k in clean)
+    vals = list(clean.values()) + [track_id]
+    conn.execute(f"UPDATE tracks SET {sets} WHERE id = ?", vals)
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Artist images
+# ---------------------------------------------------------------------------
+
+def db_get_artist_image(artist_key: str):
+    """Return artist image record or None."""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM artist_images WHERE artist_key = ?", (artist_key,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def db_save_artist_image(artist_key: str, artist_name: str, image_path: str, source: str):
+    """Insert or replace an artist image record."""
+    conn = get_conn()
+    conn.execute(
+        """INSERT OR REPLACE INTO artist_images (artist_key, artist_name, image_path, source, fetched_at)
+           VALUES (?, ?, ?, ?, ?)""",
+        (artist_key, artist_name, image_path, source, int(time.time()))
+    )
+    conn.commit()
+
+
+def db_delete_artist_image(artist_key: str):
+    """Remove an artist image record."""
+    conn = get_conn()
+    conn.execute("DELETE FROM artist_images WHERE artist_key = ?", (artist_key,))
+    conn.commit()
+
+
+def db_get_all_artist_image_keys() -> set:
+    """Return a set of all artist_key values that have a saved image."""
+    conn = get_conn()
+    rows = conn.execute("SELECT artist_key FROM artist_images").fetchall()
+    return {r['artist_key'] for r in rows}
