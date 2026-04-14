@@ -32,6 +32,8 @@ const Player = (function () {
     historyExpanded: false,
     playbackContextTracks: [],
     playbackContextLabel: '',
+    playbackContext: { sourceType: 'unknown', sourceId: '', sourceLabel: '' },
+    recentContexts: [],
     lastShuffleFirstIdx: -1,
   };
 
@@ -84,6 +86,9 @@ const Player = (function () {
   let _peqCloseTimer        = null; // delayed hide timer for animated popover close
   let _peqCurveRaf          = null;
   let _customPeqState       = null;
+  let _trackSessionStartedAt = 0;
+  let _trackSessionStartPos = 0;
+  let _lastPauseEventAt = 0;
 
   const _CUSTOM_PEQ_KEY = 'tb_custom_peq';
   const _CUSTOM_EQ_ID = '__custom__';
@@ -238,6 +243,7 @@ const Player = (function () {
   }
 
   function _onMpvTrackEnded() {
+    _flushCurrentTrackEvent('ended', { completed: true, minElapsed: 1 });
     if (ps.repeatMode === 'one') {
       // Re-play current track from start
       const t = currentTrack();
@@ -715,6 +721,10 @@ const Player = (function () {
   /* ── Playback core ──────────────────────────────────────────────────── */
   function _loadTrack(track) {
     if (!track) return;
+    const prev = currentTrack();
+    if (prev && prev.id && prev.id !== track.id) {
+      _flushCurrentTrackEvent('switch');
+    }
     _seekRestored = false;
     if (_mpvAvailable) {
       _mpvCmd('play', { track_id: track.id });
@@ -727,6 +737,7 @@ const Player = (function () {
     }
     _updateTrackUI(track);
     _highlightActiveRow();
+    _markTrackSessionStart();
     _saveState();
   }
 
@@ -988,6 +999,24 @@ const Player = (function () {
     _saveState();
   }
 
+  /** Hero Shuffle CTA behavior: replace queue with randomized collection and start at top. */
+  function playCollectionShuffled(tracks, contextLabel = '') {
+    if (!tracks || tracks.length === 0) return;
+    tracks.forEach(t => _registry.set(t.id, t));
+    const shuffled = _fisherYates([...tracks]);
+    ps.queue = shuffled;
+    ps.queueIdx = 0;
+    if (contextLabel) ps.playbackContextLabel = contextLabel;
+    // Keep CTA shuffle independent from player shuffle toggle semantics.
+    ps.shuffle = false;
+    ps.shuffleOrder = [];
+    _updateShuffleBtn();
+    _loadTrack(currentTrack());
+    _startPlay();
+    _renderQueue();
+    _saveState();
+  }
+
   /** Append tracks to end of queue */
   function addToQueue(tracks) {
     if (!Array.isArray(tracks)) tracks = [tracks];
@@ -1145,14 +1174,33 @@ const Player = (function () {
     tracks.forEach(t => { if (t && t.id) _registry.set(t.id, t); });
   }
 
-  function setPlaybackContext(tracks, label = '') {
+  function setPlaybackContext(tracks, context = '') {
     if (!Array.isArray(tracks)) {
       ps.playbackContextTracks = [];
       ps.playbackContextLabel = '';
+      ps.playbackContext = { sourceType: 'unknown', sourceId: '', sourceLabel: '' };
       return;
     }
     ps.playbackContextTracks = tracks.filter(t => t && t.id);
-    ps.playbackContextLabel = label || '';
+    if (typeof context === 'string') {
+      ps.playbackContextLabel = context || '';
+      ps.playbackContext = {
+        sourceType: 'unknown',
+        sourceId: '',
+        sourceLabel: context || '',
+      };
+    } else if (context && typeof context === 'object') {
+      const sourceLabel = String(context.sourceLabel || context.label || '').trim();
+      ps.playbackContextLabel = sourceLabel;
+      ps.playbackContext = {
+        sourceType: String(context.sourceType || 'unknown').toLowerCase() || 'unknown',
+        sourceId: String(context.sourceId || context.id || ''),
+        sourceLabel,
+      };
+    } else {
+      ps.playbackContextLabel = '';
+      ps.playbackContext = { sourceType: 'unknown', sourceId: '', sourceLabel: '' };
+    }
     ps.playbackContextTracks.forEach(t => _registry.set(t.id, t));
   }
 
@@ -1208,6 +1256,7 @@ const Player = (function () {
   function _onEnded() {
     if (this !== _audio) return;   // crossfade already swapped _audio before this fires
     if (_xfadeTriggered) return;   // crossfade handles advancement — don't double-advance
+    _flushCurrentTrackEvent('ended', { completed: true, minElapsed: 1 });
     if (ps.repeatMode === 'one') {
       _audio.currentTime = 0;
       _startPlay();
@@ -1247,7 +1296,16 @@ const Player = (function () {
     _updatePlayBtn();
     _highlightActiveRow();
   }
-  function _onPause() { if (this !== _audio) return; ps.isPlaying = false; _updatePlayBtn(); }
+  function _onPause() {
+    if (this !== _audio) return;
+    const now = Date.now();
+    if (now - _lastPauseEventAt > 12000) {
+      _flushCurrentTrackEvent('pause', { minElapsed: 5 });
+      _lastPauseEventAt = now;
+    }
+    ps.isPlaying = false;
+    _updatePlayBtn();
+  }
 
   [_audioA, _audioB].forEach(el => {
     el.addEventListener('timeupdate',    _onTimeUpdate);
@@ -1950,6 +2008,7 @@ const Player = (function () {
       muted:        ps.muted,
       peqIem:       ps.activePeqIemId     || '',
       peqProfile:   ps.activePeqProfileId || '',
+      recentContexts: Array.isArray(ps.recentContexts) ? ps.recentContexts.slice(0, 30) : [],
       seekTime,
     });
   }
@@ -1990,6 +2049,7 @@ const Player = (function () {
       localStorage.setItem(_LS.peqIem,     ps.activePeqIemId     || '');
       localStorage.setItem(_LS.peqProfile, ps.activePeqProfileId || '');
       localStorage.setItem(_LS.seekTime,   _mpvAvailable ? _mpvPosition : (_audio.currentTime || 0));
+      localStorage.setItem('tb_recent_contexts', JSON.stringify(ps.recentContexts || []));
     } catch (_) { /* quota exceeded — ignore */ }
     _scheduleRemoteSave();
   }
@@ -2014,6 +2074,12 @@ const Player = (function () {
 
       ps.activePeqIemId     = localStorage.getItem(_LS.peqIem)     || null;
       ps.activePeqProfileId = localStorage.getItem(_LS.peqProfile) || null;
+      try {
+        const rcRaw = localStorage.getItem('tb_recent_contexts');
+        ps.recentContexts = rcRaw ? JSON.parse(rcRaw) : [];
+      } catch (_) {
+        ps.recentContexts = [];
+      }
 
       const xfade = parseInt(localStorage.getItem('tb_xfade') ?? '0', 10);
       ps.crossfadeDuration  = isNaN(xfade) ? 0 : Math.max(0, Math.min(12, xfade));
@@ -2041,6 +2107,9 @@ const Player = (function () {
     if (typeof sv.muted      !== 'undefined') ps.muted  = !!sv.muted;
     ps.activePeqIemId     = sv.peqIem     || sv.activePeqIemId     || null;
     ps.activePeqProfileId = sv.peqProfile || sv.activePeqProfileId || null;
+    if (Array.isArray(sv.recentContexts)) {
+      ps.recentContexts = sv.recentContexts.slice(0, 30);
+    }
     ps.queue.forEach(t => { if (t && t.id) _registry.set(t.id, t); });
     return seekTimeOverride ?? sv.seekTime ?? 0;
   }
@@ -2191,6 +2260,38 @@ const Player = (function () {
 
     // Final save on page close
     window.addEventListener('beforeunload', () => {
+      try {
+        const t = currentTrack();
+        if (t) {
+          const { pos, elapsed } = _capturePlaybackSeconds();
+          if (elapsed >= 3) {
+            const duration = Number(t.duration || (_mpvAvailable ? _mpvDuration : _audio.duration) || 0);
+            const payload = JSON.stringify({
+              events: [{
+                track_id: t.id,
+                played_at: Math.floor(_safeNowSec()),
+                play_seconds: elapsed,
+                track_duration_seconds: duration || 0,
+                completed: duration > 0 && pos >= Math.max(duration - 1.0, duration * 0.98),
+                skipped: false,
+                source_type: (ps.playbackContext || {}).sourceType || 'unknown',
+                source_id: (ps.playbackContext || {}).sourceId || '',
+                source_label: (ps.playbackContext || {}).sourceLabel || ps.playbackContextLabel || '',
+                artist: t.artist || '',
+                album: t.album || '',
+                title: t.title || '',
+                format: t.format || '',
+                reason: 'unload',
+              }],
+            });
+            if (navigator && typeof navigator.sendBeacon === 'function') {
+              const blob = new Blob([payload], { type: 'application/json' });
+              navigator.sendBeacon('/api/player/events', blob);
+            }
+          }
+        }
+      } catch (_) {}
+
       const seekPos = _mpvAvailable ? _mpvPosition : (_audio.currentTime || 0);
       try { localStorage.setItem(_LS.seekTime, seekPos); } catch (_) {}
       // Synchronous XHR blocks until Flask responds — more reliable than sendBeacon
@@ -2249,6 +2350,102 @@ const Player = (function () {
     if (typeof toast === 'function') toast(msg, duration);
   }
 
+  function _safeNowSec() {
+    return Date.now() / 1000;
+  }
+
+  function _capturePlaybackSeconds() {
+    const pos = _mpvAvailable ? (_mpvPosition || 0) : (_audio.currentTime || 0);
+    const elapsed = Math.max(0, pos - (_trackSessionStartPos || 0));
+    return { pos, elapsed };
+  }
+
+  function _postPlaybackEvents(events) {
+    if (!Array.isArray(events) || events.length === 0) return;
+    fetch('/api/player/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ events }),
+    }).catch(() => {});
+  }
+
+  function _markTrackSessionStart() {
+    _trackSessionStartedAt = _safeNowSec();
+    _trackSessionStartPos = _mpvAvailable ? (_mpvPosition || 0) : (_audio.currentTime || 0);
+  }
+
+  function _pushRecentContext(track, reason = '') {
+    if (!track || !track.id) return;
+    const ctx = ps.playbackContext || { sourceType: 'unknown', sourceId: '', sourceLabel: '' };
+    const sourceType = String(ctx.sourceType || 'unknown').toLowerCase();
+    const sourceId = String(ctx.sourceId || '');
+    const sourceLabel = String(ctx.sourceLabel || ps.playbackContextLabel || '');
+    const artist = String(track.album_artist || track.artist || '');
+    const album = String(track.album || '');
+
+    let kind = 'album';
+    if (sourceType === 'playlist') kind = 'playlist';
+    else if (sourceType === 'artist') kind = 'artist';
+    else if (!album) kind = 'artist';
+
+    const key = kind === 'playlist'
+      ? `playlist:${sourceId || sourceLabel}`
+      : kind === 'artist'
+        ? `artist:${(sourceId || artist).toLowerCase()}`
+        : `album:${artist.toLowerCase()}||${album.toLowerCase()}`;
+    if (!key || key.endsWith(':') || key.endsWith('||')) return;
+
+    const item = {
+      key,
+      kind,
+      source_type: sourceType,
+      source_id: sourceId,
+      source_label: sourceLabel,
+      track_id: String(track.id || ''),
+      artist,
+      album,
+      title: String(track.title || ''),
+      artwork_key: String(track.artwork_key || ''),
+      played_at: Math.floor(_safeNowSec()),
+      reason,
+    };
+    const previous = Array.isArray(ps.recentContexts) ? ps.recentContexts : [];
+    ps.recentContexts = [item, ...previous.filter((r) => (r && r.key) !== key)].slice(0, 30);
+    _saveState();
+  }
+
+  function _flushCurrentTrackEvent(reason = 'switch', opts = {}) {
+    const t = currentTrack();
+    if (!t) return;
+    const { pos, elapsed } = _capturePlaybackSeconds();
+    const minElapsed = typeof opts.minElapsed === 'number' ? opts.minElapsed : 3;
+    if (elapsed < minElapsed) return;
+    const duration = Number(t.duration || (_mpvAvailable ? _mpvDuration : _audio.duration) || 0);
+    const completed = !!opts.completed || (duration > 0 && pos >= Math.max(duration - 1.0, duration * 0.98));
+    const skipped = !!opts.skipped;
+    const ctx = ps.playbackContext || { sourceType: 'unknown', sourceId: '', sourceLabel: '' };
+    if (reason !== 'pause') {
+      _pushRecentContext(t, reason);
+    }
+    _postPlaybackEvents([{
+      track_id: t.id,
+      played_at: Math.floor(_safeNowSec()),
+      play_seconds: elapsed,
+      track_duration_seconds: duration || 0,
+      completed,
+      skipped,
+      source_type: ctx.sourceType || 'unknown',
+      source_id: ctx.sourceId || '',
+      source_label: ctx.sourceLabel || ps.playbackContextLabel || '',
+      artist: t.artist || '',
+      album: t.album || '',
+      title: t.title || '',
+      format: t.format || '',
+      reason,
+    }]);
+    _trackSessionStartPos = pos;
+  }
+
   /* ── Public API ─────────────────────────────────────────────────────── */
   return {
     init,
@@ -2266,6 +2463,7 @@ const Player = (function () {
     playTrack,
     playTrackById,
     playAll,
+    playCollectionShuffled,
     addToQueue,
     playNext,
     removeFromQueue,

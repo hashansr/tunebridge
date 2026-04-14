@@ -237,6 +237,7 @@ DEFAULT_SETTINGS = {
     'artist_image_service': 'itunes',  # 'itunes' | 'lastfm' | 'fanart'
     'lastfm_api_key':   '',
     'fanart_api_key':   '',
+    'listening_tracking_enabled': True,
 }
 
 _DEFAULT_GEAR_PROFILES = {
@@ -347,6 +348,10 @@ sync_state = {
 }
 sync_check_lock = threading.Lock()
 sync_check_inflight = set()
+
+LISTEN_WINDOW_SECONDS = 365 * 24 * 60 * 60
+VALID_LISTEN_SECONDS = 30.0
+VALID_LISTEN_RATIO = 0.4
 
 library = []
 library_lock = threading.Lock()
@@ -607,7 +612,7 @@ def _search_fanart(artist_name: str, api_key: str) -> list:
 
 # ── ID3 tag writing ──────────────────────────────────────────────────────────
 
-from mutagen.id3 import ID3, TIT2, TPE1, TPE2, TALB, TRCK, TDRC, TCON, error as ID3Error
+from mutagen.id3 import ID3, TIT2, TPE1, TPE2, TALB, TRCK, TDRC, TCON, TCOM, TPOS, COMM, TXXX, error as ID3Error
 
 
 def _write_tags_to_file(filepath: Path, changes: dict) -> None:
@@ -624,6 +629,7 @@ def _write_tags_to_file(filepath: Path, changes: dict) -> None:
         mapping = {
             'title': 'TITLE', 'artist': 'ARTIST', 'album_artist': 'ALBUMARTIST',
             'album': 'ALBUM', 'track_number': 'TRACKNUMBER', 'year': 'DATE', 'genre': 'GENRE',
+            'comment': 'COMMENT', 'composer': 'COMPOSER', 'disc_number': 'DISCNUMBER', 'compilation': 'COMPILATION',
         }
         for field, tag in mapping.items():
             if field in changes and changes[field] is not None:
@@ -647,10 +653,18 @@ def _write_tags_to_file(filepath: Path, changes: dict) -> None:
             'track_number': (TRCK, {}),
             'year': (TDRC, {}),
             'genre': (TCON, {}),
+            'composer': (TCOM, {}),
+            'disc_number': (TPOS, {}),
         }
         for field, (FrameCls, kwargs) in frame_map.items():
             if field in changes and changes[field] is not None:
                 audio.tags.add(FrameCls(encoding=3, text=str(changes[field]), **kwargs))
+        if 'comment' in changes and changes['comment'] is not None:
+            audio.tags.setall('COMM', [COMM(encoding=3, lang='eng', desc='', text=str(changes['comment']))])
+        if 'compilation' in changes and changes['compilation'] is not None:
+            val = str(changes['compilation']).strip().lower()
+            normalized = '1' if val in ('1', 'true', 'yes', 'on') else '0'
+            audio.tags.setall('TXXX:TCMP', [TXXX(encoding=3, desc='TCMP', text=normalized)])
         audio.save()
 
     elif ext in ('.m4a', '.aac', '.mp4'):
@@ -660,6 +674,7 @@ def _write_tags_to_file(filepath: Path, changes: dict) -> None:
         mp4_map = {
             'title': '\xa9nam', 'artist': '\xa9ART', 'album_artist': 'aART',
             'album': '\xa9alb', 'year': '\xa9day', 'genre': '\xa9gen',
+            'comment': '\xa9cmt', 'composer': '\xa9wrt',
         }
         for field, tag in mp4_map.items():
             if field in changes and changes[field] is not None:
@@ -670,6 +685,22 @@ def _write_tags_to_file(filepath: Path, changes: dict) -> None:
                 audio.tags['trkn'] = [(tn, 0)]
             except (ValueError, TypeError):
                 pass
+        if 'disc_number' in changes and changes['disc_number'] is not None:
+            try:
+                raw = str(changes['disc_number'])
+                dn = int(raw.split('/')[0].strip())
+                total = 0
+                if '/' in raw:
+                    try:
+                        total = int(raw.split('/')[1].strip())
+                    except Exception:
+                        total = 0
+                audio.tags['disk'] = [(dn, total)]
+            except (ValueError, TypeError):
+                pass
+        if 'compilation' in changes and changes['compilation'] is not None:
+            val = str(changes['compilation']).strip().lower()
+            audio.tags['cpil'] = [1 if val in ('1', 'true', 'yes', 'on') else 0]
         audio.save()
 
     else:
@@ -1179,10 +1210,664 @@ def library_songs():
     return jsonify(tracks)
 
 
+# ── Home / listening history ────────────────────────────────────────────────
+
+def _to_bool(v):
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    return str(v).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def _normalize_source_type(v):
+    raw = str(v or '').strip().lower()
+    allowed = {'playlist', 'album', 'artist', 'songs', 'favourites'}
+    return raw if raw in allowed else 'unknown'
+
+
+def _current_listen_cutoff():
+    return int(time.time()) - LISTEN_WINDOW_SECONDS
+
+
+def _music_meta_maps():
+    with library_lock:
+        tracks = list(library)
+    track_by_id = {str(t.get('id')): t for t in tracks if t.get('id')}
+    albums = {}
+    artists = {}
+    for t in tracks:
+        artist = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').strip()
+        album = (t.get('album') or 'Unknown Album').strip()
+        key = f"{artist.lower()}||{album.lower()}"
+        slot = albums.get(key)
+        if slot is None:
+            slot = {
+                'artist': artist,
+                'album': album,
+                'artwork_key': t.get('artwork_key'),
+                'track_count': 0,
+                'year': t.get('year'),
+                'date_added': int(t.get('date_added') or 0),
+                'genre': t.get('genre') or '',
+            }
+            albums[key] = slot
+        slot['track_count'] += 1
+        if not slot.get('artwork_key') and t.get('artwork_key'):
+            slot['artwork_key'] = t.get('artwork_key')
+        slot['date_added'] = max(slot.get('date_added', 0), int(t.get('date_added') or 0))
+        if not slot.get('genre') and t.get('genre'):
+            slot['genre'] = t.get('genre')
+        ak = artist.lower()
+        if ak not in artists:
+            artists[ak] = {'artist': artist, 'artwork_key': t.get('artwork_key')}
+        elif not artists[ak].get('artwork_key') and t.get('artwork_key'):
+            artists[ak]['artwork_key'] = t.get('artwork_key')
+    return tracks, track_by_id, albums, artists
+
+
+def _recently_added_items(tracks, albums, playlists, limit=10):
+    now = int(time.time())
+    seven_days_ago = now - 7 * 86400
+    track_by_id = {str(t.get('id')): t for t in tracks if t.get('id')}
+    album_items = sorted(albums.values(), key=lambda a: int(a.get('date_added') or 0), reverse=True)
+    album_cards = [{
+        'kind': 'album',
+        'artist': a['artist'],
+        'album': a['album'],
+        'title': a['album'],
+        'subtitle': a['artist'],
+        'meta': f"{a.get('track_count', 0)} songs",
+        'artwork_key': a.get('artwork_key'),
+        'date_added': int(a.get('date_added') or 0),
+        'is_new': int(a.get('date_added') or 0) >= seven_days_ago,
+    } for a in album_items[:max(1, limit)]]
+
+    playlist_cards = []
+    for pl in sorted((playlists or {}).values(), key=lambda p: int(p.get('updated_at') or 0), reverse=True):
+        ids = pl.get('tracks') or []
+        first = next((track_by_id.get(str(tid)) for tid in ids if track_by_id.get(str(tid))), None)
+        created_at = int(pl.get('created_at') or 0)
+        playlist_cards.append({
+            'kind': 'playlist',
+            'playlist_id': pl.get('id'),
+            'title': pl.get('name') or 'Playlist',
+            'subtitle': f"{len(ids)} songs",
+            'meta': '',
+            'artwork_key': first.get('artwork_key') if first else None,
+            'date_added': created_at,
+            'is_new': created_at >= seven_days_ago,
+        })
+    return (album_cards + playlist_cards)[:limit]
+
+
+def _home_relative_time(ts):
+    """Return a human-readable relative time string for a Unix timestamp."""
+    if not ts:
+        return ''
+    diff = int(time.time()) - int(ts)
+    if diff < 60:
+        return 'Just now'
+    if diff < 3600:
+        m = diff // 60
+        return f"{m} minute{'s' if m != 1 else ''} ago"
+    if diff < 86400:
+        h = diff // 3600
+        return f"{h} hour{'s' if h != 1 else ''} ago"
+    if diff < 7 * 86400:
+        d = diff // 86400
+        return f"{d} day{'s' if d != 1 else ''} ago"
+    if diff < 30 * 86400:
+        w = diff // (7 * 86400)
+        return f"{w} week{'s' if w != 1 else ''} ago"
+    return 'A while ago'
+
+
+def _resolve_context_item(kind, source_id, source_label, track_id, artist, album, artwork_key,
+                          track_by_id, albums, artists_map, playlists):
+    """
+    Resolve a playback context descriptor into a home card dict.
+    Returns None if unresolvable. Adds '_dedup_key' used by callers for deduplication.
+    """
+    if kind == 'playlist':
+        key = f"playlist:{source_id or source_label}"
+        pl = (playlists or {}).get(source_id) if source_id else None
+        if pl:
+            ids = pl.get('tracks') or []
+            first = next((track_by_id.get(str(tid)) for tid in ids if track_by_id.get(str(tid))), None)
+            return {
+                '_dedup_key': key, 'kind': 'playlist', 'playlist_id': source_id,
+                'title': pl.get('name') or 'Playlist',
+                'subtitle': f"{len(ids)} songs",
+                'artwork_key': (first.get('artwork_key') if first else None) or artwork_key,
+            }
+        title = (source_label or '').replace('Playlist · ', '').strip() or 'Playlist'
+        return {
+            '_dedup_key': key, 'kind': 'playlist', 'playlist_id': source_id,
+            'title': title, 'subtitle': '', 'artwork_key': artwork_key,
+        }
+
+    elif kind == 'artist':
+        name = source_id or artist or (source_label or '').replace('Artist · ', '').strip()
+        if not name:
+            return None
+        key = f"artist:{name.lower()}"
+        info = artists_map.get(name.lower(), {'artist': name, 'artwork_key': artwork_key})
+        return {
+            '_dedup_key': key, 'kind': 'artist',
+            'artist': info.get('artist') or name,
+            'title': info.get('artist') or name,
+            'subtitle': 'Artist',
+            'artwork_key': info.get('artwork_key') or artwork_key,
+        }
+
+    else:
+        # album or unknown → resolve to album card
+        if not album and track_id and track_id in track_by_id:
+            t = track_by_id[track_id]
+            album = (t.get('album') or album or '').strip()
+            artist = (t.get('album_artist') or t.get('artist') or artist or '').strip()
+            artwork_key = artwork_key or t.get('artwork_key')
+        if not album:
+            return None
+        info = albums.get(f"{artist.lower()}||{album.lower()}") if artist else None
+        if info is None and track_id and track_id in track_by_id:
+            t = track_by_id[track_id]
+            ta = (t.get('album_artist') or t.get('artist') or '').strip()
+            tb = (t.get('album') or '').strip()
+            if ta and tb:
+                info = albums.get(f"{ta.lower()}||{tb.lower()}")
+                artist = ta or artist
+                album = tb or album
+                artwork_key = artwork_key or t.get('artwork_key')
+        resolved_artist = (info or {}).get('artist') or artist or 'Unknown Artist'
+        resolved_album = (info or {}).get('album') or album
+        key = f"album:{resolved_artist.lower()}||{resolved_album.lower()}"
+        return {
+            '_dedup_key': key, 'kind': 'album',
+            'artist': resolved_artist, 'album': resolved_album,
+            'title': resolved_album, 'subtitle': resolved_artist,
+            'artwork_key': (info or {}).get('artwork_key') or artwork_key,
+        }
+
+
+def _home_continue_listening(recent_contexts, events, albums, artists_map, playlists, track_by_id,
+                              player_state, limit=10):
+    """
+    Merged Continue Listening: client-side recentContexts first, then server-side play_events.
+    Deduplicates across both sources. Falls back to current queue item if both are empty.
+    """
+    now = int(time.time())
+    out, seen = [], set()
+
+    # Phase 1: client-side recentContexts (most fresh — survives across sessions)
+    for raw in (recent_contexts or []):
+        if not isinstance(raw, dict):
+            continue
+        kind = str(raw.get('kind') or '').strip().lower()
+        item = _resolve_context_item(
+            kind,
+            str(raw.get('source_id') or '').strip(),
+            str(raw.get('source_label') or '').strip(),
+            str(raw.get('track_id') or '').strip(),
+            (raw.get('artist') or '').strip(),
+            (raw.get('album') or '').strip(),
+            raw.get('artwork_key'),
+            track_by_id, albums, artists_map, playlists,
+        )
+        if not item:
+            continue
+        dk = item.pop('_dedup_key')
+        if dk in seen:
+            continue
+        seen.add(dk)
+        item['meta'] = _home_relative_time(int(raw.get('played_at') or 0))
+        out.append(item)
+        if len(out) >= limit:
+            return out
+
+    # Phase 2: server-side play_events (fills remaining slots, last 60 days)
+    sixty_days_ago = now - 60 * 86400
+    for e in events:
+        if int(e.get('played_at') or 0) < sixty_days_ago:
+            break
+        st = _normalize_source_type(e.get('source_type'))
+        item = _resolve_context_item(
+            st,
+            str(e.get('source_id') or '').strip(),
+            str(e.get('source_label') or '').strip(),
+            str(e.get('track_id') or '').strip(),
+            (e.get('artist') or '').strip(),
+            (e.get('album') or '').strip(),
+            None,
+            track_by_id, albums, artists_map, playlists,
+        )
+        if not item:
+            continue
+        dk = item.pop('_dedup_key')
+        if dk in seen:
+            continue
+        seen.add(dk)
+        item['meta'] = _home_relative_time(int(e.get('played_at') or 0))
+        out.append(item)
+        if len(out) >= limit:
+            return out
+
+    # Phase 3: current queue fallback (active session not yet flushed as event)
+    if not out:
+        queue = player_state.get('queue') if isinstance(player_state.get('queue'), list) else []
+        q_idx = int(player_state.get('queueIdx') or -1)
+        if queue and 0 <= q_idx < len(queue):
+            t = queue[q_idx] or {}
+            a = (t.get('album_artist') or t.get('artist') or '').strip()
+            al = (t.get('album') or '').strip()
+            if a and al:
+                info = albums.get(f"{a.lower()}||{al.lower()}")
+                out.append({
+                    'kind': 'album',
+                    'artist': (info or {}).get('artist') or a,
+                    'album': (info or {}).get('album') or al,
+                    'title': (info or {}).get('album') or al,
+                    'subtitle': (info or {}).get('artist') or a,
+                    'meta': 'Now playing',
+                    'artwork_key': (info or {}).get('artwork_key') or t.get('artwork_key'),
+                })
+
+    return out
+
+
+def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
+    """
+    Multi-factor Top Picks: recency, frequency, novelty, genre affinity, sonic affinity (optional).
+    Returns up to `limit` album cards, each with a human-readable `reason` string.
+    """
+    import math, random as _random
+
+    valid_events = [e for e in events if int(e.get('valid_listen') or 0)]
+    now = int(time.time())
+    exclude = set(continue_keys or [])
+
+    # --- Cold start: metadata fallback ---
+    if len(valid_events) < 5:
+        items, artists_seen = [], set()
+        for info in sorted(albums.values(), key=lambda a: int(a.get('date_added') or 0), reverse=True):
+            ak = (info.get('artist') or '').lower()
+            if ak in artists_seen:
+                continue
+            artists_seen.add(ak)
+            key = f"{(info.get('artist') or '').lower()}||{(info.get('album') or '').lower()}"
+            if key in exclude:
+                continue
+            items.append({
+                'kind': 'album',
+                'artist': info.get('artist') or 'Unknown Artist',
+                'album': info.get('album') or 'Unknown Album',
+                'title': info.get('album') or 'Unknown Album',
+                'subtitle': info.get('artist') or 'Unknown Artist',
+                'artwork_key': info.get('artwork_key'),
+                'reason': 'Based on your library',
+            })
+            if len(items) >= limit:
+                break
+        return items
+
+    # --- Build per-album play profiles ---
+    profiles = {}
+    for e in valid_events:
+        artist = (e.get('artist') or '').strip()
+        album_name = (e.get('album') or '').strip()
+        if not artist or not album_name:
+            continue
+        key = f"{artist.lower()}||{album_name.lower()}"
+        if key not in profiles:
+            profiles[key] = {'plays': 0, 'total_seconds': 0.0, 'last_played_at': 0}
+        p = profiles[key]
+        p['plays'] += 1
+        p['total_seconds'] += float(e.get('play_seconds') or 0.0)
+        p['last_played_at'] = max(p['last_played_at'], int(e.get('played_at') or 0))
+
+    if not profiles:
+        return []
+
+    max_plays = max(p['plays'] for p in profiles.values()) or 1
+
+    # --- Genre affinity from last 30 days ---
+    thirty_days_ago = now - 30 * 86400
+    recent_genre_counts = {}
+    for e in valid_events:
+        if int(e.get('played_at') or 0) < thirty_days_ago:
+            continue
+        info = albums.get(f"{(e.get('artist') or '').lower()}||{(e.get('album') or '').lower()}")
+        g = (info.get('genre') or '').lower() if info else ''
+        if g:
+            recent_genre_counts[g] = recent_genre_counts.get(g, 0) + 1
+    total_recent_genre = sum(recent_genre_counts.values()) or 1
+
+    # --- Sonic affinity: recent listening profile ---
+    recent_tids = list(dict.fromkeys(
+        e['track_id'] for e in valid_events
+        if int(e.get('played_at') or 0) >= thirty_days_ago and e.get('track_id')
+    ))[:200]
+    recent_features = _db.db_get_features_batch(recent_tids) if recent_tids else {}
+    recent_bands = [f['band_energy'] for f in recent_features.values()
+                    if f and f.get('band_energy') and len(f['band_energy']) == 12 and not f.get('failed')]
+    recent_sonic = ([sum(b[i] for b in recent_bands) / len(recent_bands) for i in range(12)]
+                    if recent_bands else None)
+
+    # --- Initial scoring (no sonic) to get top 20 candidates ---
+    def _basic_score(key, p):
+        days_since = max(0.0, (now - p['last_played_at']) / 86400.0)
+        recency = math.exp(-days_since / 30.0)
+        frequency = math.log(1 + p['plays']) / math.log(1 + max_plays)
+        novelty = math.exp(-0.5 * ((math.log(1 + p['plays']) - math.log(6)) ** 2) / 1.5)
+        info = albums.get(key)
+        g = (info.get('genre') or '').lower() if info else ''
+        genre_aff = min((recent_genre_counts.get(g, 0) / total_recent_genre) * 5.0, 1.0) if g else 0.0
+        return 0.30 * recency + 0.25 * frequency + 0.25 * genre_aff + 0.20 * novelty
+
+    candidates = [
+        (key, p, _basic_score(key, p))
+        for key, p in profiles.items()
+        if key not in exclude and albums.get(key)
+    ]
+    candidates.sort(key=lambda x: x[2], reverse=True)
+    top_candidates = candidates[:20]
+
+    # --- Batch-load sonic features for top 20 candidates ---
+    if recent_sonic:
+        cand_track_ids = []
+        for key, _, _ in top_candidates:
+            for t in track_by_id.values():
+                a_key = f"{(t.get('album_artist') or t.get('artist') or '').lower()}||{(t.get('album') or '').lower()}"
+                if a_key == key:
+                    cand_track_ids.append(str(t.get('id') or ''))
+        cand_features = _db.db_get_features_batch(cand_track_ids) if cand_track_ids else {}
+    else:
+        cand_features = {}
+
+    # --- Build album→band_energy map for candidates ---
+    album_sonic = {}
+    for t in track_by_id.values():
+        tid = str(t.get('id') or '')
+        f = cand_features.get(tid)
+        if not f or not f.get('band_energy') or len(f['band_energy']) != 12 or f.get('failed'):
+            continue
+        a_key = f"{(t.get('album_artist') or t.get('artist') or '').lower()}||{(t.get('album') or '').lower()}"
+        if a_key not in album_sonic:
+            album_sonic[a_key] = []
+        album_sonic[a_key].append(f['band_energy'])
+
+    def _cosine(a, b):
+        dot = sum(a[i] * b[i] for i in range(len(a)))
+        ma = math.sqrt(sum(x * x for x in a))
+        mb = math.sqrt(sum(x * x for x in b))
+        return dot / (ma * mb) if ma > 0 and mb > 0 else 0.0
+
+    # --- Final scoring with sonic for top candidates ---
+    scored = []
+    for key, p, _ in top_candidates:
+        info = albums[key]
+        days_since = max(0.0, (now - p['last_played_at']) / 86400.0)
+        recency  = math.exp(-days_since / 30.0)
+        frequency = math.log(1 + p['plays']) / math.log(1 + max_plays)
+        novelty  = math.exp(-0.5 * ((math.log(1 + p['plays']) - math.log(6)) ** 2) / 1.5)
+        g = (info.get('genre') or '').lower()
+        genre_aff = min((recent_genre_counts.get(g, 0) / total_recent_genre) * 5.0, 1.0) if g else 0.0
+
+        sonic_bands = album_sonic.get(key, [])
+        sonic_aff = 0.0
+        has_sonic = False
+        if recent_sonic and sonic_bands:
+            avg_bands = [sum(b[i] for b in sonic_bands) / len(sonic_bands) for i in range(12)]
+            sonic_aff = _cosine(avg_bands, recent_sonic)
+            has_sonic = True
+
+        if has_sonic:
+            score = 0.30 * recency + 0.25 * frequency + 0.20 * genre_aff + 0.15 * novelty + 0.10 * sonic_aff
+            factors = {'recency': 0.30 * recency, 'frequency': 0.25 * frequency,
+                       'genre': 0.20 * genre_aff, 'novelty': 0.15 * novelty, 'sonic': 0.10 * sonic_aff}
+        else:
+            score = 0.30 * recency + 0.25 * frequency + 0.25 * genre_aff + 0.20 * novelty
+            factors = {'recency': 0.30 * recency, 'frequency': 0.25 * frequency,
+                       'genre': 0.25 * genre_aff, 'novelty': 0.20 * novelty, 'sonic': 0.0}
+
+        dominant = max(factors, key=lambda k: factors[k])
+        genre_label = info.get('genre') or ''
+        reasons = {
+            'recency':   "You've been listening to similar albums lately",
+            'frequency': "One of your most-played albums recently",
+            'genre':     f"Matches your recent {genre_label} listening" if genre_label else "Fits your recent listening taste",
+            'novelty':   "Worth revisiting — you haven't listened in a while",
+            'sonic':     "Similar tonal profile to your recent listening",
+        }
+        scored.append({'key': key, 'score': score, 'info': info, 'reason': reasons[dominant]})
+
+    if not scored:
+        return []
+
+    # Diversity: shuffle top-10, then pick ≤2 per artist
+    scored.sort(key=lambda x: x['score'], reverse=True)
+    pool = scored[:10]
+    _random.shuffle(pool)
+    pool.sort(key=lambda x: x['score'], reverse=True)
+
+    picks, artist_counts = [], {}
+    for s in pool:
+        ak = (s['info'].get('artist') or '').lower()
+        if artist_counts.get(ak, 0) >= 2:
+            continue
+        artist_counts[ak] = artist_counts.get(ak, 0) + 1
+        picks.append(s)
+        if len(picks) >= limit:
+            break
+
+    return [{
+        'kind': 'album',
+        'artist': s['info'].get('artist') or 'Unknown Artist',
+        'album': s['info'].get('album') or 'Unknown Album',
+        'title': s['info'].get('album') or 'Unknown Album',
+        'subtitle': s['info'].get('artist') or 'Unknown Artist',
+        'artwork_key': s['info'].get('artwork_key'),
+        'reason': s['reason'],
+    } for s in picks]
+
+
+def _home_stats_aggregate(events, albums):
+    """Aggregate listening stats from a list of play_events dicts. Returns metrics dict."""
+    valid = [e for e in events if int(e.get('valid_listen') or 0)]
+    if not valid:
+        return {
+            'total_minutes': 0, 'track_count': 0, 'album_count': 0,
+            'artist_count': 0, 'active_days': 0,
+            'top_artist': None, 'top_album': None, 'top_track': None, 'top_genre': None,
+        }
+    total_seconds = sum(float(e.get('play_seconds') or 0.0) for e in valid)
+    unique_tracks  = len({str(e.get('track_id') or '') for e in valid if e.get('track_id')})
+    unique_albums  = len({(e.get('album') or '').strip().lower() for e in valid if (e.get('album') or '').strip()})
+    unique_artists = len({(e.get('artist') or '').strip().lower() for e in valid if (e.get('artist') or '').strip()})
+    active_days    = len({time.strftime('%Y-%m-%d', time.localtime(int(e['played_at']))) for e in valid})
+
+    artist_counts, album_counts, track_counts, genre_counts = {}, {}, {}, {}
+    for e in valid:
+        a = (e.get('artist') or '').strip()
+        al = (e.get('album') or '').strip()
+        ti = (e.get('title') or '').strip()
+        if a:
+            artist_counts[a] = artist_counts.get(a, 0) + 1
+        if al:
+            album_counts[al] = album_counts.get(al, 0) + 1
+        if ti:
+            track_counts[ti] = track_counts.get(ti, 0) + 1
+        if a and al:
+            info = albums.get(f"{a.lower()}||{al.lower()}")
+            g = (info.get('genre') or '') if info else ''
+            if g:
+                genre_counts[g] = genre_counts.get(g, 0) + 1
+
+    return {
+        'total_minutes': round(total_seconds / 60.0, 1),
+        'track_count':   unique_tracks,
+        'album_count':   unique_albums,
+        'artist_count':  unique_artists,
+        'active_days':   active_days,
+        'top_artist':    max(artist_counts, key=artist_counts.get) if artist_counts else None,
+        'top_album':     max(album_counts,  key=album_counts.get)  if album_counts  else None,
+        'top_track':     max(track_counts,  key=track_counts.get)  if track_counts  else None,
+        'top_genre':     max(genre_counts,  key=genre_counts.get)  if genre_counts  else None,
+    }
+
+
+@app.route('/api/home')
+def home():
+    """Main home payload: continue_listening, top_picks, recently_added, library_summary."""
+    settings = load_settings()
+    player_state = _db.db_get_player_state()
+    try:
+        cutoff = _current_listen_cutoff()
+        _db.db_prune_play_events(cutoff)
+        tracks, track_by_id, albums, artists_map = _music_meta_maps()
+        playlists = load_playlists()
+        events = _db.db_load_play_events_since(cutoff, limit=20000)
+        recent_contexts = (player_state.get('recentContexts')
+                           if isinstance(player_state.get('recentContexts'), list) else [])
+
+        continue_items = _home_continue_listening(
+            recent_contexts, events, albums, artists_map, playlists, track_by_id, player_state, limit=10)
+
+        # Build set of album keys already in Continue Listening (for Top Picks exclusion)
+        continue_keys = set()
+        for item in continue_items:
+            if item.get('kind') == 'album':
+                continue_keys.add(
+                    f"{(item.get('artist') or '').lower()}||{(item.get('album') or '').lower()}")
+
+        top_picks = _home_top_picks(events, albums, track_by_id, continue_keys=continue_keys, limit=5)
+        recently_added = _recently_added_items(tracks, albums, playlists, limit=10)
+
+        # Library summary for header strip
+        with library_lock:
+            total_tracks = len(library)
+        total_albums = len(albums)
+        total_artists = len(artists_map)
+        total_playlists = len(playlists)
+        last_scan = settings.get('last_scan_at') or 0
+
+        # Latest playlist (for Quick Actions)
+        sorted_playlists = sorted(playlists.values(), key=lambda p: int(p.get('created_at') or 0), reverse=True)
+        latest_playlist = sorted_playlists[0] if sorted_playlists else None
+
+        has_history = any(int(e.get('valid_listen') or 0) for e in events)
+
+    except Exception as exc:
+        print(f"[home] error: {exc}")
+        import traceback; traceback.print_exc()
+        continue_items = []
+        top_picks = []
+        recently_added = []
+        total_tracks = total_albums = total_artists = total_playlists = 0
+        last_scan = 0
+        latest_playlist = None
+        has_history = False
+
+    return jsonify({
+        'tracking_enabled': _to_bool(settings.get('listening_tracking_enabled', True)),
+        'has_history': has_history,
+        'continue_listening': continue_items,
+        'top_picks': top_picks,
+        'recently_added': recently_added,
+        'library_summary': {
+            'tracks': total_tracks,
+            'albums': total_albums,
+            'artists': total_artists,
+            'playlists': total_playlists,
+        },
+        'last_scan': int(last_scan),
+        'quick_actions': {
+            'latest_playlist_id': latest_playlist.get('id') if latest_playlist else None,
+            'latest_playlist_name': latest_playlist.get('name') if latest_playlist else None,
+            'has_continue': len(continue_items) > 0,
+        },
+    })
+
+
+@app.route('/api/home/stats')
+def home_stats():
+    """Listening stats for a given period. ?period=week|month|year|all"""
+    period = request.args.get('period', 'month')
+    now = int(time.time())
+    period_seconds = {'week': 7 * 86400, 'month': 30 * 86400, 'year': 365 * 86400}
+    secs = period_seconds.get(period)
+
+    if secs:
+        since_ts = now - secs
+        prev_since_ts = now - 2 * secs
+        prev_until_ts = since_ts
+    else:
+        # all time — no previous period comparison
+        since_ts = 0
+        prev_since_ts = None
+        prev_until_ts = None
+
+    try:
+        tracks, track_by_id, albums, artists_map = _music_meta_maps()
+        # Load enough events to cover both current and previous periods
+        load_since = prev_since_ts if prev_since_ts is not None else since_ts
+        all_events = _db.db_load_play_events_since(load_since, limit=50000)
+
+        current_events = [e for e in all_events if int(e.get('played_at') or 0) >= since_ts]
+        current = _home_stats_aggregate(current_events, albums)
+
+        if prev_since_ts is not None and prev_until_ts is not None:
+            prev_events = [e for e in all_events
+                           if prev_since_ts <= int(e.get('played_at') or 0) < prev_until_ts]
+            previous = _home_stats_aggregate(prev_events, albums)
+            # Compute percentage changes for key metrics
+            def _pct(curr, prev):
+                if not prev:
+                    return None
+                return round((curr - prev) / prev * 100, 1)
+            comparison = {
+                'minutes_change': _pct(current['total_minutes'], previous['total_minutes']),
+                'tracks_change':  _pct(current['track_count'],   previous['track_count']),
+            }
+        else:
+            previous = None
+            comparison = {}
+
+    except Exception as exc:
+        print(f"[home/stats] error: {exc}")
+        current = {
+            'total_minutes': 0, 'track_count': 0, 'album_count': 0,
+            'artist_count': 0, 'active_days': 0,
+            'top_artist': None, 'top_album': None, 'top_track': None, 'top_genre': None,
+        }
+        previous = None
+        comparison = {}
+
+    return jsonify({
+        'period': period,
+        'current': current,
+        'previous': previous,
+        'comparison': comparison,
+    })
+
+
+# ─── (legacy alias kept for any cached client requests) ──────────────────────
+@app.route('/api/home/overview')
+def home_overview():
+    return home()
+
+
 # ── ID3 Tag Editing ──────────────────────────────────────────────────────────
 
-_EDITABLE_FIELDS = {'title', 'artist', 'album_artist', 'album', 'track_number', 'year', 'genre'}
-_BATCH_ALBUM_FIELDS = {'album', 'album_artist', 'year', 'genre'}
+_EDITABLE_FIELDS = {
+    'title', 'artist', 'album_artist', 'album', 'track_number', 'year', 'genre',
+    'comment', 'composer', 'disc_number', 'compilation'
+}
+_BATCH_ALBUM_FIELDS = {
+    'title', 'artist', 'album_artist', 'album', 'track_number', 'year', 'genre',
+    'comment', 'composer', 'disc_number', 'compilation'
+}
 
 
 def _apply_tag_edit(track_id: str, changes: dict):
@@ -3526,6 +4211,66 @@ def save_player_state():
     return jsonify({'ok': True})
 
 
+@app.route('/api/player/events', methods=['POST'])
+def player_events():
+    settings = load_settings()
+    if not _to_bool(settings.get('listening_tracking_enabled', True)):
+        return jsonify({'ok': True, 'stored': 0, 'tracking_enabled': False})
+
+    data = request.get_json(force=True) or {}
+    raw_events = data.get('events') if isinstance(data.get('events'), list) else [data]
+    if not raw_events:
+        return jsonify({'ok': True, 'stored': 0, 'tracking_enabled': True})
+
+    now = int(time.time())
+    with library_lock:
+        lib_by_id = {str(t.get('id')): t for t in library if t.get('id')}
+
+    rows = []
+    for raw in raw_events:
+        if not isinstance(raw, dict):
+            continue
+        track_id = str(raw.get('track_id') or '').strip()
+        if not track_id:
+            continue
+        src = lib_by_id.get(track_id, {})
+        played_at = int(raw.get('played_at') or now)
+        play_seconds = max(0.0, float(raw.get('play_seconds') or 0.0))
+        duration = max(0.0, float(raw.get('track_duration_seconds') or src.get('duration') or 0.0))
+        completed = _to_bool(raw.get('completed', False))
+        valid = (play_seconds >= VALID_LISTEN_SECONDS) or (duration > 0 and (play_seconds / duration) >= VALID_LISTEN_RATIO)
+        skipped = _to_bool(raw.get('skipped', False)) or (play_seconds > 0 and not completed and not valid)
+
+        rows.append({
+            'track_id': track_id,
+            'played_at': played_at,
+            'play_seconds': play_seconds,
+            'track_duration_seconds': duration,
+            'completed': completed,
+            'skipped': skipped,
+            'valid_listen': valid,
+            'source_type': _normalize_source_type(raw.get('source_type')),
+            'source_id': str(raw.get('source_id') or ''),
+            'source_label': str(raw.get('source_label') or ''),
+            'artist': str(raw.get('artist') or src.get('artist') or src.get('album_artist') or ''),
+            'album': str(raw.get('album') or src.get('album') or ''),
+            'title': str(raw.get('title') or src.get('title') or ''),
+            'format': str(raw.get('format') or src.get('format') or ''),
+        })
+    if not rows:
+        return jsonify({'ok': True, 'stored': 0, 'tracking_enabled': True})
+
+    _db.db_insert_play_events(rows)
+    _db.db_prune_play_events(_current_listen_cutoff())
+    return jsonify({'ok': True, 'stored': len(rows), 'tracking_enabled': True})
+
+
+@app.route('/api/player/events/clear', methods=['POST'])
+def clear_player_events():
+    _db.db_clear_play_events()
+    return jsonify({'ok': True})
+
+
 @app.route('/api/health/status')
 def health_status():
     import time as _time
@@ -3882,6 +4627,15 @@ def _build_sync_track_entries(template):
     return entries
 
 
+def _stat_signature(path: Path):
+    """Best-effort file signature tuple: (mtime_ns, size_bytes)."""
+    try:
+        st = path.stat()
+        return int(st.st_mtime_ns), int(st.st_size)
+    except Exception:
+        return None, None
+
+
 def _compute_sync_diff_for_dap(dap):
     """Compute music sync diff for a DAP profile and return summary payload."""
     if not dap:
@@ -3905,6 +4659,8 @@ def _compute_sync_diff_for_dap(dap):
     local_copy_map = {}
     warnings = []
     target_collisions = set()
+    device_only = []
+    mtime_tolerance_ns = 2_000_000_000  # 2s safety window for FS timestamp granularity
 
     for e in track_entries:
         local_key = e['local_rel'].casefold()
@@ -3914,7 +4670,15 @@ def _compute_sync_diff_for_dap(dap):
             variants.add(rendered_key)
         expected_keys.update(variants)
 
-        if variants.isdisjoint(device_keys):
+        matched_key = None
+        if rendered_key and rendered_key in device_keys:
+            matched_key = rendered_key
+        elif local_key in device_keys:
+            matched_key = local_key
+        elif not variants.isdisjoint(device_keys):
+            matched_key = next(iter(variants & device_keys))
+
+        if matched_key is None:
             target_rel = e['target_rel']
             if target_rel in local_copy_map and local_copy_map[target_rel] != e['local_rel']:
                 target_collisions.add(target_rel)
@@ -3922,9 +4686,40 @@ def _compute_sync_diff_for_dap(dap):
             local_copy_map[target_rel] = e['local_rel']
             local_only.append(target_rel)
             warnings.extend(e.get('warnings') or [])
+            continue
+
+        # File exists on both sides at some equivalent path. If metadata changed,
+        # the underlying file mtime/size will differ after a tag write.
+        matched_rel = device_map.get(matched_key)
+        if not matched_rel:
+            continue
+        src = get_music_base() / e['local_rel']
+        dst = device_path / matched_rel
+        src_mtime, src_size = _stat_signature(src)
+        dst_mtime, dst_size = _stat_signature(dst)
+        if src_mtime is None or dst_mtime is None:
+            continue
+
+        if src_size != dst_size:
+            if src_mtime >= dst_mtime:
+                local_copy_map[matched_rel] = e['local_rel']
+                local_only.append(matched_rel)
+            else:
+                device_only.append(matched_rel)
+            continue
+
+        delta = src_mtime - dst_mtime
+        if abs(delta) <= mtime_tolerance_ns:
+            continue
+        if delta > 0:
+            local_copy_map[matched_rel] = e['local_rel']
+            local_only.append(matched_rel)
+        else:
+            device_only.append(matched_rel)
 
     local_only = sorted(set(local_only))
-    device_only = sorted([device_map[k] for k in (device_keys - expected_keys)])
+    device_only.extend([device_map[k] for k in (device_keys - expected_keys)])
+    device_only = sorted(set(device_only))
 
     local_only_sizes = {}
     required_bytes = 0

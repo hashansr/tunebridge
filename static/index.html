@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=35" />
+  <link rel="stylesheet" href="/style.css?v=38" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -94,6 +94,79 @@
     <!-- Main -->
     <main id="main">
       <!-- Library views -->
+      <div id="view-home" class="view" style="display:none">
+
+        <!-- Header / Welcome Strip -->
+        <div class="home-header">
+          <div class="home-header-left">
+            <h2 class="home-title">Home</h2>
+            <div class="home-meta-row">
+              <span id="home-library-summary" class="home-meta-chip"></span>
+              <span id="home-last-scan" class="home-meta-chip home-meta-scan"></span>
+            </div>
+          </div>
+          <button class="btn-icon home-refresh-btn" title="Refresh" onclick="App.loadHome()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </button>
+        </div>
+
+        <!-- Continue Listening -->
+        <section class="home-section" id="home-continue-section" style="display:none">
+          <div class="home-section-hdr">
+            <h3 class="home-section-title">Continue Listening</h3>
+          </div>
+          <div id="home-continue" class="home-rail"></div>
+        </section>
+
+        <!-- Top Picks For You -->
+        <section class="home-section" id="home-picks-section" style="display:none">
+          <div class="home-section-hdr">
+            <h3 class="home-section-title">Top Picks For You</h3>
+          </div>
+          <div id="home-picks" class="home-picks-grid"></div>
+        </section>
+
+        <!-- Recently Added -->
+        <section class="home-section" id="home-recent-section" style="display:none">
+          <div class="home-section-hdr">
+            <h3 class="home-section-title">Recently Added</h3>
+          </div>
+          <div id="home-recently-added" class="home-rail"></div>
+        </section>
+
+        <!-- Listening Stats -->
+        <section class="home-section" id="home-stats-section" style="display:none">
+          <div class="home-section-hdr">
+            <h3 class="home-section-title">Listening Stats</h3>
+            <div class="home-period-chips" id="home-period-chips">
+              <button class="home-period-chip active" data-period="week"  onclick="App.homeChangePeriod('week')">Week</button>
+              <button class="home-period-chip"        data-period="month" onclick="App.homeChangePeriod('month')">Month</button>
+              <button class="home-period-chip"        data-period="year"  onclick="App.homeChangePeriod('year')">Year</button>
+              <button class="home-period-chip"        data-period="all"   onclick="App.homeChangePeriod('all')">All Time</button>
+            </div>
+          </div>
+          <div id="home-stats-content" class="home-stats-content"></div>
+        </section>
+
+        <!-- Quick Actions -->
+        <section class="home-section" id="home-actions-section">
+          <div class="home-section-hdr">
+            <h3 class="home-section-title">Quick Actions</h3>
+          </div>
+          <div id="home-actions" class="home-actions-strip"></div>
+        </section>
+
+        <!-- Empty / cold-start state -->
+        <div id="home-empty-state" class="home-empty-state" style="display:none">
+          <div class="home-empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          </div>
+          <div id="home-empty-title" class="home-empty-title">Your library is empty</div>
+          <div id="home-empty-body" class="home-empty-body">Scan your music folder to get started</div>
+        </div>
+
+      </div>
+
       <div id="view-artists" class="view">
         <div class="view-header">
           <h2>Artists</h2>
@@ -557,7 +630,7 @@
         <div class="settings-content">
 
           <!-- Library section -->
-          <div class="settings-section">
+          <div class="settings-section" id="settings-library-section">
             <h3 class="settings-section-title">Library</h3>
             <div class="settings-row">
               <label>Music library path</label>
@@ -574,8 +647,8 @@
           </div>
 
           <!-- Data & Backup section -->
-          <div class="settings-section">
-            <h3 class="settings-section-title">Data &amp; Backup</h3>
+          <div class="settings-section" id="settings-data-backup-section">
+            <h3 class="settings-section-title">Data Backup</h3>
             <p class="settings-data-dir-label">Data location: <code id="settings-data-dir">~/Library/Application Support/TuneBridge</code></p>
             <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
               Your playlists, DAPs, IEMs and settings are preserved here across app updates.
@@ -595,10 +668,10 @@
           </div>
 
           <!-- Artist Images section -->
-          <div class="settings-section">
-            <h3 class="settings-section-title">Artist Images</h3>
+          <div class="settings-section" id="settings-image-search-section">
+            <h3 class="settings-section-title">Image Search</h3>
             <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
-              Search for artist portrait images from an online service. Choose a service and optionally add an API key for better results.
+              Search for both artist portraits and album covers from an online service. Choose a service and optionally add an API key for better results.
             </p>
             <div class="settings-row">
               <label>Image service</label>
@@ -622,7 +695,7 @@
                 <a class="btn-browse" href="https://fanart.tv/get-an-api-key/" target="_blank">Get Key</a>
               </div>
             </div>
-            <p class="settings-hint">API keys are stored locally on your device and never shared.</p>
+            <p class="settings-hint settings-hint-inline-start">API keys are stored locally on your device and never shared.</p>
             <div class="settings-inline-actions">
               <button class="btn-primary" onclick="App.saveArtistImageSettings()">Save</button>
             </div>
@@ -634,9 +707,9 @@
               Searches for a photo for every artist in your library that doesn't already have one. Uses the service selected above.
             </p>
             <div class="settings-inline-actions">
-              <button class="btn-secondary" id="batch-img-start-btn" onclick="App.startArtistImageBatch()">
+              <button class="btn-primary settings-fetch-btn" id="batch-img-start-btn" onclick="App.startArtistImageBatch()">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                Fetch missing photos
+                Fetch Missing Images
               </button>
               <button class="btn-secondary" id="batch-img-cancel-btn" onclick="App.cancelArtistImageBatch()" style="display:none">Cancel</button>
             </div>
@@ -651,7 +724,7 @@
           </div>
 
           <!-- Frequency Response Baselines section -->
-          <div class="settings-section">
+          <div class="settings-section" id="settings-baselines-section">
             <h3 class="settings-section-title">Frequency Response Baselines</h3>
             <p class="settings-baseline-intro">
               Add tuning targets from <a href="https://squig.link" target="_blank" style="color:var(--accent)">squig.link</a>. They appear as reference lines on all IEM &amp; headphone frequency response graphs.
@@ -676,7 +749,7 @@
           </div>
 
           <!-- System Status section -->
-          <div class="settings-section">
+          <div class="settings-section" id="settings-system-status-section">
             <h3 class="settings-section-title">System Status</h3>
             <div id="health-grid" class="health-grid" style="display:none">
               <!-- populated by runHealthCheck() -->
@@ -722,7 +795,7 @@
             </div>
           </div>
 
-          <div class="settings-section">
+          <div class="settings-section" id="settings-peq-section">
             <h3 class="settings-section-title">Parametric EQ</h3>
             <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
               Open Custom PEQ workspace to tune EQ while keeping player controls available.
@@ -733,7 +806,7 @@
           </div>
 
           <!-- Playback section -->
-          <div class="settings-section">
+          <div class="settings-section" id="settings-playback-section">
             <h3 class="settings-section-title">Playback</h3>
 
             <!-- Audio output device -->
@@ -778,11 +851,26 @@
                 <span class="settings-toggle-track"></span>
               </label>
             </div>
+
+            <div class="settings-subsection-divider"></div>
+            <div class="settings-app-row" id="listening-history-row">
+              <div class="settings-app-main">
+                <div class="settings-app-row-label">Listening History</div>
+                <div class="settings-app-row-hint">Stored locally for Home recommendations and 12-month listening stats.</div>
+                <div class="settings-inline-actions">
+                  <button class="btn-secondary" id="listening-history-clear-btn" onclick="App.clearListeningHistory()">Clear History</button>
+                </div>
+              </div>
+              <label class="settings-toggle settings-app-control">
+                <input type="checkbox" id="listening-tracking-toggle" onchange="App.setListeningTracking(this.checked)">
+                <span class="settings-toggle-track"></span>
+              </label>
+            </div>
           </div>
 
           <!-- App section -->
-          <div class="settings-section">
-            <h3 class="settings-section-title">App</h3>
+          <div class="settings-section" id="settings-app-restart-section">
+            <h3 class="settings-section-title">App Restart</h3>
             <div class="settings-app-row">
               <div class="settings-app-main">
                 <div class="settings-app-row-label">Restart &amp; Reload</div>
@@ -2190,6 +2278,14 @@
       </div>
       <div class="tag-editor-form">
         <div class="settings-row">
+          <label>Title</label>
+          <input id="ate-title" type="text" maxlength="200" autocomplete="off" spellcheck="false" placeholder="Leave blank to keep each track title" />
+        </div>
+        <div class="settings-row">
+          <label>Artist</label>
+          <input id="ate-artist" type="text" maxlength="200" autocomplete="off" spellcheck="false" placeholder="Leave blank to keep existing artist tags" />
+        </div>
+        <div class="settings-row">
           <label>Album</label>
           <input id="ate-album" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
         </div>
@@ -2208,6 +2304,44 @@
           <div class="settings-row">
             <label>Genre</label>
             <input id="ate-genre" type="text" maxlength="100" autocomplete="off" spellcheck="false" />
+          </div>
+        </div>
+        <div class="tag-editor-row-2col">
+          <div class="settings-row">
+            <label>Track #</label>
+            <div>
+              <input id="ate-track-number" type="text" maxlength="10" autocomplete="off" placeholder="e.g. 3 or 3/12" />
+              <div class="tag-editor-hint">Leave blank to keep per-track values</div>
+            </div>
+          </div>
+          <div class="settings-row">
+            <label>Disc #</label>
+            <div>
+              <input id="ate-disc-number" type="text" maxlength="10" autocomplete="off" placeholder="e.g. 1 or 1/2" />
+              <div class="tag-editor-hint">Optional</div>
+            </div>
+          </div>
+        </div>
+        <div class="settings-row">
+          <label>Composer</label>
+          <input id="ate-composer" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="settings-row">
+          <label>Comment</label>
+          <input id="ate-comment" type="text" maxlength="300" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="settings-row">
+          <label>Compilation</label>
+          <select id="ate-compilation" class="settings-select">
+            <option value="">Keep existing</option>
+            <option value="1">Yes</option>
+            <option value="0">No</option>
+          </select>
+        </div>
+        <div class="settings-row">
+          <label>Album Art</label>
+          <div class="settings-inline-actions" style="margin-top:0">
+            <button class="btn-secondary" type="button" onclick="App.openAlbumArtModal()">Find / Upload Album Art</button>
           </div>
         </div>
         <div id="ate-error" class="tag-editor-error" style="display:none">
@@ -2391,7 +2525,7 @@
     </div>
   </div>
 
-  <script src="/player.js?v=31"></script>
-  <script src="/app.js?v=31"></script>
+  <script src="/player.js?v=34"></script>
+  <script src="/app.js?v=37"></script>
 </body>
 </html>
