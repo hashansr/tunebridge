@@ -30,7 +30,11 @@
 
       <nav>
         <div class="nav-section-label nav-section-sticky">Library</div>
-        <button class="nav-item active" data-view="artists" onclick="App.showView('artists')">
+        <button class="nav-item" data-view="home" onclick="App.showView('home')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/><polyline points="9 21 9 12 15 12 15 21"/></svg>
+          Home
+        </button>
+        <button class="nav-item" data-view="artists" onclick="App.showView('artists')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Artists
         </button>
@@ -105,7 +109,7 @@
               <span id="home-last-scan" class="home-meta-chip home-meta-scan"></span>
             </div>
           </div>
-          <button class="btn-icon home-refresh-btn" title="Refresh" onclick="App.loadHome()">
+          <button class="btn-icon home-refresh-btn" title="Refresh" onclick="App.homeForceRefresh()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
           </button>
         </div>

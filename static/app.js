@@ -3204,6 +3204,8 @@ async function bulkUnfavouriteSelected() {
 
 let _homeCurrentPeriod = 'month';
 let _homeStatsLoading = false;
+let _homeLastData = null;
+let _homeLastStatsData = {}; // keyed by period
 
 function _homeSectionVisible(id, visible) {
   const el = document.getElementById(id);
@@ -3396,9 +3398,6 @@ async function loadHome() {
   setActiveNav('home');
   showViewEl('home');
 
-  // Show Quick Actions immediately (no data needed)
-  _homeSectionVisible('home-actions-section', true);
-
   let data;
   try {
     data = await api('/home');
@@ -3410,7 +3409,27 @@ async function loadHome() {
     return;
   }
 
-  // Header strip
+  _homeApplyData(data, /* force */ true);
+  _homeLoading = false;
+}
+
+// Silent background refresh — only updates DOM for sections whose data actually changed.
+async function _homeBackgroundRefresh() {
+  if (_homeLoading || state.view !== 'home' || document.hidden) return;
+  let data;
+  try {
+    data = await api('/home');
+  } catch (_) { return; }
+  _homeApplyData(data, /* force */ false);
+}
+
+// Apply home data to DOM. force=true always re-renders all sections (initial load).
+// force=false only updates sections whose serialised data has changed (background refresh).
+function _homeApplyData(data, force) {
+  const prev = _homeLastData;
+  _homeLastData = data;
+
+  // Header strip — always update (cheap text, no repaint flash)
   const summary = data.library_summary || {};
   const summaryEl = document.getElementById('home-library-summary');
   if (summaryEl) {
@@ -3432,22 +3451,39 @@ async function loadHome() {
     document.getElementById('home-empty-title').textContent = 'Your library is empty';
     document.getElementById('home-empty-body').textContent = 'Go to Settings to set your music folder, then scan.';
     _renderHomeQuickActions(data.quick_actions, false);
-    _homeLoading = false;
+    _homeSectionVisible('home-actions-section', true);
     return;
   }
   _homeSectionVisible('home-empty-state', false);
 
-  // Sections
-  _renderHomeRailSection('home-continue-section', 'home-continue', data.continue_listening || [], 'Start listening — your recent sessions will appear here.');
-  _renderHomeTopPicks(data.top_picks || []);
-  _renderHomeRailSection('home-recent-section', 'home-recently-added', data.recently_added || [], 'No items added yet.');
-  _renderHomeQuickActions(data.quick_actions, data.has_history);
+  const changed = (key) => !prev || JSON.stringify(prev[key]) !== JSON.stringify(data[key]);
 
-  // Listening Stats (default period)
-  _homeSectionVisible('home-stats-section', true);
-  homeChangePeriod(_homeCurrentPeriod, /* skipChipUpdate */ true);
+  // Continue Listening
+  if (force || changed('continue_listening')) {
+    _renderHomeRailSection('home-continue-section', 'home-continue', data.continue_listening || [], 'Start listening — your recent sessions will appear here.');
+  }
 
-  _homeLoading = false;
+  // Top Picks
+  if (force || changed('top_picks')) {
+    _renderHomeTopPicks(data.top_picks || []);
+  }
+
+  // Recently Added
+  if (force || changed('recently_added')) {
+    _renderHomeRailSection('home-recent-section', 'home-recently-added', data.recently_added || [], 'No items added yet.');
+  }
+
+  // Quick Actions
+  if (force || changed('quick_actions') || (prev && prev.has_history !== data.has_history)) {
+    _renderHomeQuickActions(data.quick_actions, data.has_history);
+    _homeSectionVisible('home-actions-section', true);
+  }
+
+  // Stats: on initial load fetch them; on background refresh skip (period chips handle updates)
+  if (force) {
+    _homeSectionVisible('home-stats-section', true);
+    homeChangePeriod(_homeCurrentPeriod, /* skipChipUpdate */ true);
+  }
 }
 
 async function homeChangePeriod(period, skipChipUpdate) {
@@ -3459,15 +3495,32 @@ async function homeChangePeriod(period, skipChipUpdate) {
   }
   if (_homeStatsLoading) return;
   _homeStatsLoading = true;
-  const el = document.getElementById('home-stats-content');
-  if (el) el.innerHTML = '<div class="home-stat-loading">Loading…</div>';
+
+  // If we have cached stats for this period, render them immediately while we fetch fresh data
+  if (_homeLastStatsData[period]) {
+    _renderHomeListeningStats(_homeLastStatsData[period]);
+  } else {
+    const el = document.getElementById('home-stats-content');
+    if (el) el.style.opacity = '0.4';
+  }
+
   try {
     const stats = await api(`/home/stats?period=${encodeURIComponent(period)}`);
+    _homeLastStatsData[period] = stats;
+    const el = document.getElementById('home-stats-content');
+    if (el) el.style.opacity = '';
     _renderHomeListeningStats(stats);
   } catch (_) {
-    if (el) el.innerHTML = '<div class="home-rail-empty">Could not load stats.</div>';
+    const el = document.getElementById('home-stats-content');
+    if (el) { el.style.opacity = ''; el.innerHTML = '<div class="home-rail-empty">Could not load stats.</div>'; }
   }
   _homeStatsLoading = false;
+}
+
+function homeForceRefresh() {
+  _homeLastData = null;
+  _homeLastStatsData = {};
+  loadHome();
 }
 
 async function homeShuffleLibrary() {
@@ -3567,8 +3620,8 @@ function showView(viewName) {
   if (viewName === 'home') {
     if (_homeAutoRefreshTimer) clearInterval(_homeAutoRefreshTimer);
     _homeAutoRefreshTimer = setInterval(() => {
-      if (state.view === 'home' && !document.hidden) loadHome();
-    }, 8000);
+      _homeBackgroundRefresh();
+    }, 30000);
   } else if (_homeAutoRefreshTimer) {
     clearInterval(_homeAutoRefreshTimer);
     _homeAutoRefreshTimer = null;
@@ -8164,6 +8217,7 @@ const App = {
   homeOpenItem,
   homePlayItem,
   homeChangePeriod,
+  homeForceRefresh,
   homeShuffleLibrary,
   homeResumeListening,
   backToArtists,
@@ -11116,12 +11170,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (state.view === 'home') {
       clearTimeout(_homeTrackRefreshTimer);
       _homeTrackRefreshTimer = setTimeout(() => {
-        if (state.view === 'home') loadHome();
+        _homeBackgroundRefresh();
       }, 1200);
     }
   });
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && state.view === 'home') loadHome();
+    if (!document.hidden && state.view === 'home') _homeBackgroundRefresh();
   });
   await loadGearProfiles();
   // Enter submits create playlist modal

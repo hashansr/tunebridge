@@ -353,6 +353,36 @@ const Player = (function () {
     const oldEl   = _audio;
     const oldFade = _curFadeGain();
 
+    // Flush play event for the track that just finished, BEFORE swapping _audio.
+    // We must capture pos from oldEl directly (not _audio) because _capturePlaybackSeconds
+    // reads _audio, which is about to be re-pointed.
+    const prevTrack = currentTrack();
+    if (prevTrack) {
+      const pos = _mpvAvailable ? (_mpvPosition || 0) : (oldEl.duration || 0);
+      const elapsed = Math.max(0, pos - (_trackSessionStartPos || 0));
+      if (elapsed >= 1) {
+        const duration = Number(prevTrack.duration || pos || 0);
+        const completed = duration > 0 && pos >= Math.max(duration - 1.0, duration * 0.98);
+        _pushRecentContext(prevTrack, 'xfade');
+        _postPlaybackEvents([{
+          track_id: prevTrack.id,
+          played_at: Math.floor(_safeNowSec()),
+          play_seconds: elapsed,
+          track_duration_seconds: duration,
+          completed,
+          skipped: false,
+          source_type: (ps.playbackContext || {}).sourceType || 'unknown',
+          source_id:   (ps.playbackContext || {}).sourceId   || '',
+          source_label:(ps.playbackContext || {}).sourceLabel || ps.playbackContextLabel || '',
+          artist: prevTrack.artist || '',
+          album:  prevTrack.album  || '',
+          title:  prevTrack.title  || '',
+          format: prevTrack.format || '',
+          reason: 'xfade',
+        }]);
+      }
+    }
+
     // Swap active pointer
     _audio = _nextAudioEl();
 
@@ -381,6 +411,7 @@ const Player = (function () {
       if (fillEl) fillEl.style.width      = (pct * 100) + '%';
     }
 
+    _markTrackSessionStart();
     _highlightActiveRow();
     _saveState();
     if (ps.queueOpen) _renderQueue();
