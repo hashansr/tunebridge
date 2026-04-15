@@ -42,6 +42,9 @@ const state = {
   albumAlpha: '',
   _albumScope: '__all__',
 };
+let _homeLoading = false;
+let _homeAutoRefreshTimer = null;
+let _homeTrackRefreshTimer = null;
 
 let _currentGearTab = 'daps';
 
@@ -86,6 +89,10 @@ function thumbImg(key, size = 38, rounded = '4px') {
 function musicNote(size = 38) {
   const s = Math.round(size * 0.45);
   return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+}
+
+function playSvg(size = 14) {
+  return `<svg class="icon-play-svg" style="--play-icon-size:${Number(size) || 14}px" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg>`;
 }
 
 function esc(str) {
@@ -587,7 +594,7 @@ function renderArtistsGrid() {
           ${imgSrc}
           <div class="card-thumb-overlay">
             <button class="card-play-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.playArtistCard(this.dataset.artist)" title="Play all songs">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+              ${playSvg(15)}
             </button>
           </div>
           <button class="artist-img-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();_openArtistImageForCard(this.dataset.artist)" title="Change artist image">
@@ -737,7 +744,7 @@ function renderAlbumsGrid() {
           ${thumbImg(al.artwork_key, 160, '6px')}
           <div class="card-thumb-overlay">
             <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+              ${playSvg(15)}
             </button>
           </div>
           ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn')}
@@ -824,7 +831,11 @@ async function loadAlbums(artistFilter = null) {
     if (artistShuffleBtn) {
       artistShuffleBtn.onclick = async () => {
         const t = await api(`/library/tracks?artist=${encodeURIComponent(artistFilter)}`);
-        if (t && t.length) { if (!Player.getShuffle()) Player.toggleShuffle(); Player.playAll(t); }
+        if (t && t.length) {
+          Player.registerTracks(t);
+          Player.setPlaybackContext(t, { sourceType: 'artist', sourceId: artistFilter, sourceLabel: `Artist · ${artistFilter}` });
+          Player.playCollectionShuffled(t, `Artist · ${artistFilter}`);
+        }
       };
     }
     hero.style.display = 'flex';
@@ -917,7 +928,13 @@ async function loadTracks(artist = null, album = null) {
   const tbody = document.getElementById('tracks-tbody');
   tbody.innerHTML = tracks.map((t, i) => trackRow(t, i + 1, false)).join('');
   Player.registerTracks(tracks);
-  Player.setPlaybackContext(tracks, album ? `Album · ${album}` : (artist ? `Artist · ${artist}` : 'Tracks'));
+  if (album) {
+    Player.setPlaybackContext(tracks, { sourceType: 'album', sourceId: `${artist || ''}||${album}`, sourceLabel: `Album · ${album}` });
+  } else if (artist) {
+    Player.setPlaybackContext(tracks, { sourceType: 'artist', sourceId: artist, sourceLabel: `Artist · ${artist}` });
+  } else {
+    Player.setPlaybackContext(tracks, { sourceType: 'songs', sourceId: '', sourceLabel: 'Tracks' });
+  }
 
   document.getElementById('add-all-btn').onclick = () => App.addAllToPlaylist(tracks.map(t => t.id));
 
@@ -926,8 +943,8 @@ async function loadTracks(artist = null, album = null) {
   if (albumPlayBtn) albumPlayBtn.onclick = () => Player.playAll(tracks);
   const albumShuffleBtn = document.getElementById('album-hero-shuffle');
   if (albumShuffleBtn) albumShuffleBtn.onclick = () => {
-    if (!Player.getShuffle()) Player.toggleShuffle();
-    Player.playAll(tracks);
+    const label = album ? `Album · ${album}` : (artist ? `Artist · ${artist}` : 'Tracks');
+    Player.playCollectionShuffled(tracks, label);
   };
 }
 
@@ -956,7 +973,7 @@ function trackRow(t, num, inPlaylist) {
     : '';
 
   const checkIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>`;
-  const playIcon  = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`;
+  const playIcon  = playSvg(12);
 
   return `
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
@@ -1037,7 +1054,7 @@ async function openPlaylist(pid) {
 
   // Register tracks with player
   Player.registerTracks(pl.tracks);
-  Player.setPlaybackContext(pl.tracks, `Playlist · ${pl.name}`);
+  Player.setPlaybackContext(pl.tracks, { sourceType: 'playlist', sourceId: pl.id, sourceLabel: `Playlist · ${pl.name}` });
   const playAllBtn = document.getElementById('pl-play-all-btn');
   const shuffleBtn = document.getElementById('pl-shuffle-btn');
   if (playAllBtn) {
@@ -1046,8 +1063,7 @@ async function openPlaylist(pid) {
   }
   if (shuffleBtn) {
     shuffleBtn.onclick = () => {
-      if (!Player.getShuffle()) Player.toggleShuffle();
-      Player.playAll(pl.tracks);
+      Player.playCollectionShuffled(pl.tracks, `Playlist · ${pl.name}`);
     };
     shuffleBtn.style.display = pl.tracks.length ? '' : 'none';
   }
@@ -1107,7 +1123,7 @@ async function openFavouriteSongsPlaylist() {
   renderDapExportPills(pl.id);
 
   Player.registerTracks(pl.tracks);
-  Player.setPlaybackContext(pl.tracks, 'Playlist · Favourite Songs');
+  Player.setPlaybackContext(pl.tracks, { sourceType: 'playlist', sourceId: pl.id, sourceLabel: 'Playlist · Favourite Songs' });
   const favPlayBtn = document.getElementById('pl-play-all-btn');
   const favShuffleBtn = document.getElementById('pl-shuffle-btn');
   if (favPlayBtn) {
@@ -1116,8 +1132,7 @@ async function openFavouriteSongsPlaylist() {
   }
   if (favShuffleBtn) {
     favShuffleBtn.onclick = () => {
-      if (!Player.getShuffle()) Player.toggleShuffle();
-      Player.playAll(pl.tracks);
+      Player.playCollectionShuffled(pl.tracks, 'Playlist · Favourite Songs');
     };
     favShuffleBtn.style.display = pl.tracks.length ? '' : 'none';
   }
@@ -1231,7 +1246,11 @@ function _getDisplayedTracks() {
 function renderPlaylistTracks(tracks) {
   if (tracks && tracks.length) {
     Player.registerTracks(tracks);
-    Player.setPlaybackContext(tracks, `Playlist · ${state.playlist?.name || 'Current'}`);
+    Player.setPlaybackContext(tracks, {
+      sourceType: 'playlist',
+      sourceId: state.playlist?.id || '',
+      sourceLabel: `Playlist · ${state.playlist?.name || 'Current'}`,
+    });
   }
   const tbody = document.getElementById('pl-tbody');
   const table = document.getElementById('pl-table');
@@ -2848,10 +2867,12 @@ function _renderFavArtistCards(rows) {
   grid.innerHTML = rows.map(a => `
     <div class="artist-card" data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
       <div class="artist-thumb">
-        ${thumbImg(a.artwork_key, 120, '6px')}
+        ${a.image_key
+          ? `<img src="/api/artists/${a.image_key}/image" alt="${esc(a.name)}" loading="lazy" />`
+          : thumbImg(a.artwork_key, 120, '6px')}
         <div class="card-thumb-overlay">
           <button class="card-play-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.playArtistCard(this.dataset.artist)" title="Play all songs">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+            ${playSvg(15)}
           </button>
         </div>
         ${_favToggleBtn('artists', _normArtistId(a.name), 'card-fav-btn is-fav')}
@@ -2909,7 +2930,7 @@ function _renderFavAlbumCards(rows) {
         ${thumbImg(al.artwork_key, 160, '6px')}
         <div class="card-thumb-overlay">
           <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+            ${playSvg(15)}
           </button>
         </div>
         ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn is-fav')}
@@ -2952,7 +2973,7 @@ function setFavAlbumsSort(mode) {
 }
 
 function _favSongRow(t, idx) {
-  const playIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`;
+  const playIcon = playSvg(12);
   return `
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
       <td class="col-num">
@@ -3047,7 +3068,7 @@ async function loadFavSongs() {
   }
 
   Player.registerTracks(rows);
-  Player.setPlaybackContext(rows, 'Favourite Songs');
+  Player.setPlaybackContext(rows, { sourceType: 'favourites', sourceId: 'songs', sourceLabel: 'Favourite Songs' });
   tbody.innerHTML = rows.map((t, i) => _favSongRow(t, i)).join('');
 
   if (state.sortable) state.sortable.destroy();
@@ -3089,7 +3110,7 @@ async function playAllFavouriteArtists() {
     return;
   }
   Player.registerTracks(tracks);
-  Player.setPlaybackContext(tracks, 'Favourites · Artists');
+  Player.setPlaybackContext(tracks, { sourceType: 'favourites', sourceId: 'artists', sourceLabel: 'Favourites · Artists' });
   Player.playAll(tracks, 0, 'Favourites · Artists');
 }
 
@@ -3109,7 +3130,7 @@ async function playAllFavouriteAlbums() {
     return;
   }
   Player.registerTracks(tracks);
-  Player.setPlaybackContext(tracks, 'Favourites · Albums');
+  Player.setPlaybackContext(tracks, { sourceType: 'favourites', sourceId: 'albums', sourceLabel: 'Favourites · Albums' });
   Player.playAll(tracks, 0, 'Favourites · Albums');
 }
 
@@ -3125,7 +3146,7 @@ async function playAllFavouriteSongs() {
     return;
   }
   Player.registerTracks(tracks);
-  Player.setPlaybackContext(tracks, 'Favourites · Songs');
+  Player.setPlaybackContext(tracks, { sourceType: 'favourites', sourceId: 'songs', sourceLabel: 'Favourites · Songs' });
   Player.playAll(tracks, 0, 'Favourites · Songs');
 }
 
@@ -3184,6 +3205,456 @@ async function bulkUnfavouriteSelected() {
   toast(`Unfavourited ${ids.length} song${ids.length === 1 ? '' : 's'}.`);
 }
 
+/* ── Home ───────────────────────────────────────────────────────────── */
+/* ── Home helpers ───────────────────────────────────────────────────── */
+
+let _homeCurrentPeriod = 'month';
+let _homeStatsLoading = false;
+let _homeLastData = null;
+let _homeLastStatsData = {}; // keyed by period
+
+function _homeSectionVisible(id, visible) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = visible ? '' : 'none';
+}
+
+function _homeArtEl(item) {
+  const artistImageUrl = (item?.kind === 'artist' && item?.image_key)
+    ? `/api/artists/${esc(item.image_key)}/image`
+    : '';
+  if (artistImageUrl) {
+    return `<img src="${artistImageUrl}" loading="lazy" onerror="this.style.display='none'" />`;
+  }
+  const artworkKey = item?.artwork_key || '';
+  return artworkKey
+    ? `<img src="/api/artwork/${esc(artworkKey)}" loading="lazy" onerror="this.style.display='none'" />`
+    : `<div class="home-card-art-placeholder">${musicNote(36)}</div>`;
+}
+
+function _homeOnClick(item) {
+  const a = encodeURIComponent(item.artist || '');
+  const al = encodeURIComponent(item.album || '');
+  const pid = encodeURIComponent(item.playlist_id || '');
+  return `App.homeOpenItem('${esc(item.kind || '')}','','${a}','${al}','${pid}')`;
+}
+
+function _homeOnPlay(item, e) {
+  const a = encodeURIComponent(item.artist || '');
+  const al = encodeURIComponent(item.album || '');
+  const pid = encodeURIComponent(item.playlist_id || '');
+  return `App.homePlayItem(event,'${esc(item.kind || '')}','${a}','${al}','${pid}')`;
+}
+
+const _HOME_PLAY_SVG = playSvg(16);
+
+function _homeRailCardHtml(item) {
+  const title = item.title || 'Unknown';
+  const subtitle = item.subtitle || '';
+  const isNew = item.is_new;
+  // Use div.home-card-play-btn (not button) to avoid nested-button invalid HTML
+  return `
+    <div class="home-card" onclick="${_homeOnClick(item)}" role="button" tabindex="0">
+      <div class="home-card-art">
+        ${_homeArtEl(item)}
+        ${isNew ? '<span class="home-card-new-badge">NEW</span>' : ''}
+        <div class="home-card-play-btn" onclick="${_homeOnPlay(item)}" role="button" tabindex="0" title="Play">
+          ${_HOME_PLAY_SVG}
+        </div>
+      </div>
+      <div class="home-card-title" title="${esc(title)}">${esc(title)}</div>
+      ${subtitle ? `<div class="home-card-sub">${esc(subtitle)}</div>` : ''}
+    </div>`;
+}
+
+function _homePickCardHtml(item) {
+  const title = item.title || 'Unknown';
+  const subtitle = item.subtitle || '';
+  const reason = item.reason || '';
+  return `
+    <div class="home-pick-card" onclick="${_homeOnClick(item)}" role="button" tabindex="0">
+      <div class="home-pick-art">
+        ${_homeArtEl(item)}
+        <div class="home-card-play-btn" onclick="${_homeOnPlay(item)}" role="button" tabindex="0" title="Play">
+          ${_HOME_PLAY_SVG}
+        </div>
+      </div>
+      <div class="home-pick-title" title="${esc(title)}">${esc(title)}</div>
+      <div class="home-pick-sub">${esc(subtitle)}</div>
+      ${reason ? `<div class="home-pick-reason">${esc(reason)}</div>` : ''}
+    </div>`;
+}
+
+function _renderHomeRailSection(sectionId, railId, items, emptyMsg) {
+  const rail = document.getElementById(railId);
+  if (!rail) return false;
+  if (!Array.isArray(items) || !items.length) {
+    rail.innerHTML = `<div class="home-rail-empty">${esc(emptyMsg)}</div>`;
+    _homeBindRailUX(railId);
+    _homeSectionVisible(sectionId, true);
+    return false;
+  }
+  rail.innerHTML = items.map(_homeRailCardHtml).join('');
+  _homeBindRailUX(railId);
+  _homeSectionVisible(sectionId, true);
+  return true;
+}
+
+function _homeUpdateRailAffordance(railId) {
+  const rail = document.getElementById(railId);
+  const shell = rail?.closest('.home-rail-shell');
+  if (!rail || !shell) return;
+  const leftBtn = shell.querySelector('.home-rail-nav-left');
+  const rightBtn = shell.querySelector('.home-rail-nav-right');
+
+  const maxScroll = Math.max(0, rail.scrollWidth - rail.clientWidth);
+  const canScroll = maxScroll > 2;
+  const atStart = rail.scrollLeft <= 2;
+  const atEnd = rail.scrollLeft >= maxScroll - 2;
+
+  shell.classList.toggle('can-scroll-left', canScroll && !atStart);
+  shell.classList.toggle('can-scroll-right', canScroll && !atEnd);
+
+  if (leftBtn) leftBtn.classList.toggle('is-visible', canScroll && !atStart);
+  if (rightBtn) rightBtn.classList.toggle('is-visible', canScroll && !atEnd);
+}
+
+function _homeBindRailUX(railId) {
+  const rail = document.getElementById(railId);
+  if (!rail) return;
+  if (!rail.dataset.uxBound) {
+    rail.dataset.uxBound = '1';
+    rail.addEventListener('scroll', () => _homeUpdateRailAffordance(railId), { passive: true });
+  }
+  _homeUpdateRailAffordance(railId);
+}
+
+function _homeRefreshRailAffordances() {
+  ['home-continue', 'home-listen-next', 'home-recently-added', 'home-because'].forEach(_homeUpdateRailAffordance);
+}
+
+function homeRailStep(railId, direction = 1) {
+  const rail = document.getElementById(railId);
+  if (!rail) return;
+  const dir = Number(direction) < 0 ? -1 : 1;
+  const step = Math.max(Math.round(rail.clientWidth * 0.86), 240);
+  rail.scrollBy({ left: dir * step, behavior: 'smooth' });
+  setTimeout(() => _homeUpdateRailAffordance(railId), 220);
+}
+
+function _renderHomeTopPicks(items) {
+  return _renderHomeRailSection(
+    'home-because-section',
+    'home-because',
+    items || [],
+    'Keep listening to unlock personalised recommendations.'
+  );
+}
+
+function _renderHomeDataHealth(data) {
+  const el = document.getElementById('home-data-health');
+  if (!el) return;
+  const trackingEnabled = data && data.tracking_enabled !== false;
+  const health = data && data.data_health ? data.data_health : {};
+  const latest = Number(health.latest_event_at || 0);
+  const total = Number(health.total_events || 0);
+  const valid = Number(health.valid_events || 0);
+  const historyFresh = !!health.history_fresh;
+
+  if (!trackingEnabled) {
+    el.style.display = '';
+    el.className = 'home-data-health warn';
+    el.textContent = 'Listening tracking is turned off. Enable it in Settings to personalise Home.';
+    return;
+  }
+  if (!total) {
+    el.style.display = '';
+    el.className = 'home-data-health info';
+    el.textContent = 'Play a few songs to personalise Home.';
+    return;
+  }
+  if (!historyFresh) {
+    const ago = latest ? _homeRelativeTime(latest) : 'a while ago';
+    el.style.display = '';
+    el.className = 'home-data-health warn';
+    el.textContent = `Listening history looks stale (last event ${ago}). Keep listening to refresh recommendations.`;
+    return;
+  }
+  if (valid <= 0) {
+    el.style.display = '';
+    el.className = 'home-data-health info';
+    el.textContent = 'Recent listens are mostly short skips. Full listens improve recommendations and stats.';
+    return;
+  }
+  el.style.display = 'none';
+}
+
+function _renderHomeListeningStats(data) {
+  const el = document.getElementById('home-stats-content');
+  if (!el) return;
+  const c = (data && data.current) || {};
+  const comp = (data && data.comparison) || {};
+
+  const fmtMins = m => {
+    if (!m) return '0 min';
+    if (m < 60) return `${Math.round(m)} min`;
+    const h = Math.floor(m / 60);
+    return h >= 100 ? `${h.toLocaleString()} hrs` : `${h} hr${h !== 1 ? 's' : ''}`;
+  };
+
+  const changePill = (pct) => {
+    if (pct === null || pct === undefined) return '';
+    const sign = pct >= 0 ? '+' : '';
+    const cls = pct >= 0 ? 'home-stat-change-up' : 'home-stat-change-down';
+    return `<span class="${cls}">${sign}${Math.round(pct)}%</span>`;
+  };
+
+  const metricCards = [
+    { label: 'Valid plays', value: (c.track_count || 0).toLocaleString(), change: comp.tracks_change },
+    { label: 'Albums played',  value: (c.album_count  || 0).toLocaleString() },
+    { label: 'Unique artists', value: (c.artist_count || 0).toLocaleString() },
+    { label: 'Active days',    value: (c.active_days  || 0).toLocaleString() },
+  ].map(m => `
+    <div class="home-stat-metric">
+      <div class="home-stat-value">${m.value}${m.change !== undefined ? changePill(m.change) : ''}</div>
+      <div class="home-stat-label">${m.label}</div>
+    </div>`).join('');
+
+  const topRow = [
+    { label: 'Top artist', value: c.top_artist },
+    { label: 'Top album',  value: c.top_album },
+    { label: 'Top track',  value: c.top_track },
+    { label: 'Top genre',  value: c.top_genre },
+  ].filter(r => r.value).map(r => `
+    <div class="home-stat-top-item">
+      <span class="home-stat-top-label">${r.label}</span>
+      <span class="home-stat-top-value">${esc(r.value)}</span>
+    </div>`).join('');
+
+  const minutes = fmtMins(c.total_minutes);
+  el.innerHTML = `
+    <div class="home-stats-shell">
+      <div class="home-stats-hero">
+        <div class="home-stats-hero-kicker">Personal retrospective</div>
+        <div class="home-stats-hero-value">
+          ${minutes}
+          ${comp.minutes_change !== undefined ? changePill(comp.minutes_change) : ''}
+        </div>
+        <div class="home-stats-hero-label">Total listening time</div>
+      </div>
+      <div class="home-stats-right">
+        <div class="home-stat-metrics">${metricCards}</div>
+        ${topRow ? `<div class="home-stat-tops">${topRow}</div>` : ''}
+        ${!c.track_count ? '<div class="home-stat-empty">Start listening to see your stats here.</div>' : ''}
+      </div>
+    </div>
+  `;
+  _homeSectionVisible('home-stats-section', true);
+}
+
+async function loadHome() {
+  if (_homeLoading) return;
+  _homeLoading = true;
+  setActiveNav('home');
+  showViewEl('home');
+
+  let data;
+  try {
+    data = await api('/home');
+  } catch (err) {
+    _homeLoading = false;
+    document.getElementById('home-empty-title').textContent = 'Could not load Home';
+    document.getElementById('home-empty-body').textContent = (err && err.message) || 'Check the server is running.';
+    _homeSectionVisible('home-empty-state', true);
+    return;
+  }
+
+  _homeApplyData(data, /* force */ true);
+  _homeLoading = false;
+}
+
+// Silent background refresh — only updates DOM for sections whose data actually changed.
+async function _homeBackgroundRefresh() {
+  if (_homeLoading || state.view !== 'home' || document.hidden) return;
+  let data;
+  try {
+    data = await api('/home');
+  } catch (_) { return; }
+  _homeApplyData(data, /* force */ false);
+}
+
+// Apply home data to DOM. force=true always re-renders all sections (initial load).
+// force=false only updates sections whose serialised data has changed (background refresh).
+function _homeApplyData(data, force) {
+  const prev = _homeLastData;
+  _homeLastData = data;
+
+  // Header strip — always update (cheap text, no repaint flash)
+  const summary = data.library_summary || {};
+  const summaryEl = document.getElementById('home-library-summary');
+  if (summaryEl) {
+    const parts = [];
+    if (summary.artists) parts.push(`${summary.artists.toLocaleString()} artists`);
+    if (summary.albums)  parts.push(`${summary.albums.toLocaleString()} albums`);
+    if (summary.tracks)  parts.push(`${summary.tracks.toLocaleString()} tracks`);
+    summaryEl.textContent = parts.join(' · ');
+  }
+  const scanEl = document.getElementById('home-last-scan');
+  if (scanEl && data.last_scan) {
+    scanEl.textContent = `Scanned ${_homeRelativeTime(data.last_scan)}`;
+  }
+
+  // Empty library state
+  const hasLibrary = (summary.tracks || 0) > 0;
+  if (!hasLibrary) {
+    _homeSectionVisible('home-empty-state', true);
+    document.getElementById('home-empty-title').textContent = 'Your library is empty';
+    document.getElementById('home-empty-body').textContent = 'Go to Settings to set your music folder, then scan.';
+    _homeSectionVisible('home-continue-section', false);
+    _homeSectionVisible('home-listen-next-section', false);
+    _homeSectionVisible('home-recent-section', false);
+    _homeSectionVisible('home-because-section', false);
+    _homeSectionVisible('home-stats-section', false);
+    _homeSectionVisible('home-data-health', false);
+    return;
+  }
+  _homeSectionVisible('home-empty-state', false);
+
+  const changed = (key) => !prev || JSON.stringify(prev[key]) !== JSON.stringify(data[key]);
+
+  // Jump Back In
+  if (force || changed('jump_back_in') || changed('continue_listening')) {
+    _renderHomeRailSection(
+      'home-continue-section',
+      'home-continue',
+      data.jump_back_in || data.continue_listening || [],
+      'Start listening — your recent sessions will appear here.'
+    );
+  }
+
+  // Listen Next (artists)
+  if (force || changed('listen_next_artists')) {
+    _renderHomeRailSection(
+      'home-listen-next-section',
+      'home-listen-next',
+      data.listen_next_artists || [],
+      'No listening pattern yet. Play more artists to unlock this rail.'
+    );
+  }
+
+  // Recently Added
+  if (force || changed('recently_added')) {
+    _renderHomeRailSection('home-recent-section', 'home-recently-added', data.recently_added || [], 'No items added yet.');
+  }
+
+  // Because You Listened
+  if (force || changed('because_you_listened') || changed('top_picks')) {
+    _renderHomeTopPicks(data.because_you_listened || data.top_picks || []);
+  }
+
+  // Stats: on initial load fetch them; on background refresh skip (period chips handle updates)
+  if (force) {
+    _homeSectionVisible('home-stats-section', true);
+    homeChangePeriod(_homeCurrentPeriod, /* skipChipUpdate */ true);
+  }
+
+  _renderHomeDataHealth(data);
+}
+
+async function homeChangePeriod(period, skipChipUpdate) {
+  _homeCurrentPeriod = period;
+  if (!skipChipUpdate) {
+    document.querySelectorAll('.home-period-chip').forEach(el => {
+      el.classList.toggle('active', el.dataset.period === period);
+    });
+  }
+  if (_homeStatsLoading) return;
+  _homeStatsLoading = true;
+
+  // If we have cached stats for this period, render them immediately while we fetch fresh data
+  if (_homeLastStatsData[period]) {
+    _renderHomeListeningStats(_homeLastStatsData[period]);
+  } else {
+    const el = document.getElementById('home-stats-content');
+    if (el) el.style.opacity = '0.4';
+  }
+
+  try {
+    const stats = await api(`/home/stats?period=${encodeURIComponent(period)}`);
+    _homeLastStatsData[period] = stats;
+    const el = document.getElementById('home-stats-content');
+    if (el) el.style.opacity = '';
+    _renderHomeListeningStats(stats);
+  } catch (_) {
+    const el = document.getElementById('home-stats-content');
+    if (el) { el.style.opacity = ''; el.innerHTML = '<div class="home-rail-empty">Could not load stats.</div>'; }
+  }
+  _homeStatsLoading = false;
+}
+
+function homeForceRefresh() {
+  _homeLastData = null;
+  _homeLastStatsData = {};
+  loadHome();
+}
+
+async function homeShuffleLibrary() {
+  const tracks = await api('/library/tracks');
+  if (tracks && tracks.length) Player.playAll(tracks, { shuffle: true });
+}
+
+function homeResumeListening() {
+  const contEl = document.getElementById('home-continue');
+  if (contEl) {
+    const firstCard = contEl.querySelector('.home-card');
+    if (firstCard) { firstCard.click(); return; }
+  }
+}
+
+function _homeRelativeTime(ts) {
+  if (!ts) return '';
+  const diff = Math.floor(Date.now() / 1000) - ts;
+  if (diff < 60)         return 'just now';
+  if (diff < 3600)       { const m = Math.floor(diff / 60);   return `${m} minute${m !== 1 ? 's' : ''} ago`; }
+  if (diff < 86400)      { const h = Math.floor(diff / 3600); return `${h} hour${h !== 1 ? 's' : ''} ago`; }
+  if (diff < 7 * 86400)  { const d = Math.floor(diff / 86400); return `${d} day${d !== 1 ? 's' : ''} ago`; }
+  if (diff < 30 * 86400) { const w = Math.floor(diff / (7 * 86400)); return `${w} week${w !== 1 ? 's' : ''} ago`; }
+  return 'a while ago';
+}
+
+function homeOpenItem(kind, trackIdEnc = '', artistEnc = '', albumEnc = '', playlistIdEnc = '') {
+  const kindNorm = String(kind || '').toLowerCase();
+  const artist = decodeURIComponent(artistEnc || '');
+  const album  = decodeURIComponent(albumEnc  || '');
+  const playlistId = decodeURIComponent(playlistIdEnc || '');
+  if (kindNorm === 'album'    && artist && album)  { showAlbum(artist, album); return; }
+  if (kindNorm === 'artist'   && artist)           { showArtist(artist); return; }
+  if (kindNorm === 'playlist' && playlistId)       { openPlaylist(playlistId); return; }
+}
+
+function homePlayItem(event, kind, artistEnc = '', albumEnc = '', playlistIdEnc = '') {
+  event && event.stopPropagation();
+  const kindNorm = String(kind || '').toLowerCase();
+  const artist = decodeURIComponent(artistEnc || '');
+  const album  = decodeURIComponent(albumEnc  || '');
+  const playlistId = decodeURIComponent(playlistIdEnc || '');
+  if (kindNorm === 'album' && artist && album) {
+    api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`)
+      .then(tracks => tracks && tracks.length && Player.playAll(tracks));
+    return;
+  }
+  if (kindNorm === 'artist' && artist) {
+    api(`/library/tracks?artist=${encodeURIComponent(artist)}`)
+      .then(tracks => tracks && tracks.length && Player.playAll(tracks, { shuffle: true }));
+    return;
+  }
+  if (kindNorm === 'playlist' && playlistId) {
+    api(`/playlists/${encodeURIComponent(playlistId)}`).then(pl => {
+      if (pl && pl.tracks && pl.tracks.length) Player.playAll(pl.tracks);
+    });
+    return;
+  }
+}
+
 /* ── View navigation ────────────────────────────────────────────────── */
 function showView(viewName) {
   if (!_guardMlGeneratorNavigation()) return;
@@ -3206,7 +3677,8 @@ function showView(viewName) {
 
   showViewEl(viewName);
 
-  if (viewName === 'artists') { state._artistsScrollTop = 0; loadArtists(); }
+  if (viewName === 'home') loadHome();
+  else if (viewName === 'artists') { state._artistsScrollTop = 0; loadArtists(); }
   else if (viewName === 'albums') { state.artist = null; loadAlbums(); }
   else if (viewName === 'songs') loadSongsView();
   else if (viewName === 'favourites') loadFavouritesSummary();
@@ -3218,10 +3690,20 @@ function showView(viewName) {
     loadSettings();
   }
   else if (viewName === 'insights') loadInsightsView();
+
+  if (viewName === 'home') {
+    if (_homeAutoRefreshTimer) clearInterval(_homeAutoRefreshTimer);
+    _homeAutoRefreshTimer = setInterval(() => {
+      _homeBackgroundRefresh();
+    }, 30000);
+  } else if (_homeAutoRefreshTimer) {
+    clearInterval(_homeAutoRefreshTimer);
+    _homeAutoRefreshTimer = null;
+  }
 }
 
 function showViewEl(name) {
-  const views = ['artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights'];
+  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.style.display = v === name ? (v === 'playlist' ? 'flex' : 'block') : 'none';
@@ -7086,13 +7568,13 @@ function renderSongsTable() {
   if (arrow) arrow.textContent = _songsSort.order === 'asc' ? ' \u25B2' : ' \u25BC';
 
   Player.registerTracks(page);
-  Player.setPlaybackContext(tracks, 'Songs');
+  Player.setPlaybackContext(tracks, { sourceType: 'songs', sourceId: '', sourceLabel: 'Songs' });
 
   tbody.innerHTML = page.map((t, i) => {
     const globalIdx = start + i;
     const fmtDate = t.date_added ? new Date(t.date_added * 1000).toLocaleDateString() : '';
     const bitrate = t.bitrate ? t.bitrate + ' kbps' : '';
-    const playIcon = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`;
+    const playIcon = playSvg(11);
     return `
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
       <td class="col-num" onclick="App.toggleTrackSelection('${t.id}', ${globalIdx}, event)">
@@ -7298,6 +7780,11 @@ async function loadSettings() {
   if (fanartIn) fanartIn.value = settings.fanart_api_key || '';
   window._artistImageServicePref = settings.artist_image_service || 'itunes';
 
+  const listeningToggle = document.getElementById('listening-tracking-toggle');
+  if (listeningToggle) {
+    listeningToggle.checked = settings.listening_tracking_enabled !== false;
+  }
+
   // Resume batch-job progress banner if a job is already running
   try {
     const batchStatus = await fetch('/api/artists/images/batch/status').then(r => r.json());
@@ -7306,6 +7793,34 @@ async function loadSettings() {
   } catch (_) {}
 
   return settings;
+}
+
+async function setListeningTracking(enabled) {
+  try {
+    await api('/settings', { method: 'PUT', body: { listening_tracking_enabled: !!enabled } });
+    toast(enabled ? 'Listening history enabled' : 'Listening history paused');
+  } catch (e) {
+    const toggle = document.getElementById('listening-tracking-toggle');
+    if (toggle) toggle.checked = !enabled;
+    toast('Could not update listening history setting: ' + e.message);
+  }
+}
+
+async function clearListeningHistory() {
+  const ok = await _showConfirm({
+    title: 'Clear listening history?',
+    message: 'This removes Home recommendations and 12-month listening stats.',
+    okText: 'Clear',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    await fetch('/api/player/events/clear', { method: 'POST' });
+    toast('Listening history cleared');
+    if (state.view === 'home') loadHome();
+  } catch (e) {
+    toast('Could not clear listening history');
+  }
 }
 
 async function setExclusiveMode(enabled) {
@@ -7772,6 +8287,14 @@ function _getOsPlatform() {
 /* ── Public API ─────────────────────────────────────────────────────── */
 const App = {
   showView,
+  loadHome,
+  homeOpenItem,
+  homePlayItem,
+  homeChangePeriod,
+  homeForceRefresh,
+  homeRailStep,
+  homeShuffleLibrary,
+  homeResumeListening,
   backToArtists,
   showArtist,
   showAlbum,
@@ -7937,6 +8460,8 @@ const App = {
   browseFolder,
   exportBackup,
   importBackup,
+  setListeningTracking,
+  clearListeningHistory,
   // Baselines
   addBaseline,
   deleteBaseline,
@@ -9789,10 +10314,17 @@ function _tagEditorDirty() {
 }
 function _getAlbumTagValues() {
   return {
+    title:        document.getElementById('ate-title')?.value.trim()        ?? '',
+    artist:       document.getElementById('ate-artist')?.value.trim()       ?? '',
     album:        document.getElementById('ate-album')?.value.trim()        ?? '',
     album_artist: document.getElementById('ate-album-artist')?.value.trim() ?? '',
+    track_number: document.getElementById('ate-track-number')?.value.trim() ?? '',
+    disc_number:  document.getElementById('ate-disc-number')?.value.trim()  ?? '',
     year:         document.getElementById('ate-year')?.value.trim()         ?? '',
     genre:        document.getElementById('ate-genre')?.value.trim()        ?? '',
+    composer:     document.getElementById('ate-composer')?.value.trim()     ?? '',
+    comment:      document.getElementById('ate-comment')?.value.trim()      ?? '',
+    compilation:  document.getElementById('ate-compilation')?.value         ?? '',
   };
 }
 function _albumTagDirty() {
@@ -9947,10 +10479,17 @@ function openAlbumTagEditor() {
   document.getElementById('album-tag-warning-text').textContent =
     `This will overwrite tags on ${count} file${count !== 1 ? 's' : ''} on disk. Only filled fields are applied.`;
 
+  document.getElementById('ate-title').value        = '';
+  document.getElementById('ate-artist').value       = '';
   document.getElementById('ate-album').value        = first.album        || '';
   document.getElementById('ate-album-artist').value = first.album_artist || '';
+  document.getElementById('ate-track-number').value = '';
+  document.getElementById('ate-disc-number').value  = '';
   document.getElementById('ate-year').value         = first.year         || '';
   document.getElementById('ate-genre').value        = first.genre        || '';
+  document.getElementById('ate-composer').value     = '';
+  document.getElementById('ate-comment').value      = '';
+  document.getElementById('ate-compilation').value  = '';
   _hideTagError('ate-error');
   document.getElementById('ate-save-btn').disabled    = false;
   document.getElementById('ate-save-btn').textContent = 'Save Tags';
@@ -9991,13 +10530,30 @@ async function saveAlbumTags() {
     document.getElementById('ate-year').focus();
     return;
   }
+  if (!_validateTrackNum(cur.track_number)) {
+    _showTagError('ate-error', 'Track number must be a number or "N/M" format (e.g. 3 or 3/12).');
+    document.getElementById('ate-track-number').focus();
+    return;
+  }
+  if (cur.disc_number && !/^\d+(\s*\/\s*\d+)?$/.test(cur.disc_number)) {
+    _showTagError('ate-error', 'Disc number must be a number or "N/M" format (e.g. 1 or 1/2).');
+    document.getElementById('ate-disc-number').focus();
+    return;
+  }
 
   // Build changes (non-empty fields only)
   const changes = {};
+  if (cur.title)        changes.title        = cur.title;
+  if (cur.artist)       changes.artist       = cur.artist;
   if (cur.album)        changes.album        = cur.album;
   if (cur.album_artist) changes.album_artist = cur.album_artist;
+  if (cur.track_number) changes.track_number = cur.track_number;
+  if (cur.disc_number)  changes.disc_number  = cur.disc_number;
   if (cur.year)         changes.year         = cur.year;
   if (cur.genre)        changes.genre        = cur.genre;
+  if (cur.composer)     changes.composer     = cur.composer;
+  if (cur.comment)      changes.comment      = cur.comment;
+  if (cur.compilation !== '') changes.compilation = cur.compilation;
 
   if (!Object.keys(changes).length) {
     _showTagError('ate-error', 'Fill in at least one field to update.');
@@ -10684,7 +11240,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   }, true);
 
   Player.init();
-  window.addEventListener('tb-track-change', () => refreshPlayerFavouriteButton());
+  window.addEventListener('tb-track-change', () => {
+    refreshPlayerFavouriteButton();
+    if (state.view === 'home') {
+      clearTimeout(_homeTrackRefreshTimer);
+      _homeTrackRefreshTimer = setTimeout(() => {
+        _homeBackgroundRefresh();
+      }, 1200);
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    if (state.view !== 'home') return;
+    window.requestAnimationFrame(_homeRefreshRailAffordances);
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && state.view === 'home') _homeBackgroundRefresh();
+  });
   await loadGearProfiles();
   // Enter submits create playlist modal
   const cpInput = document.getElementById('create-playlist-input');
@@ -10693,7 +11265,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadFavourites();
   await loadPlaylists();
   pollScanStatus();
-  loadArtists();
+  showView('home');
   refreshPlayerFavouriteButton();
 
   // Show first-run onboarding only when settings file does not exist yet.

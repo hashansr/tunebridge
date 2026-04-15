@@ -23,14 +23,15 @@ def ensure_db(data_dir: Path) -> bool:
     except Exception:
         current_version = 0
 
-    if current_version >= db.SCHEMA_VERSION:
-        return True
-
-    print(f"[migrate] Database schema version {current_version} -> {db.SCHEMA_VERSION}")
+    # Always run schema bootstrap to ensure newly added tables/indexes
+    # are created even when schema_version has not changed.
+    target_version = max(current_version, db.SCHEMA_VERSION)
+    print(f"[migrate] Ensuring schema objects (version {current_version}, target {target_version})")
 
     try:
         db.create_schema()
-        db.set_schema_version(db.SCHEMA_VERSION, 'SQLite schema bootstrap')
+        if current_version < db.SCHEMA_VERSION:
+            db.set_schema_version(db.SCHEMA_VERSION, 'SQLite schema bootstrap')
         print("[migrate] Schema ready.")
         return True
     except Exception as e:

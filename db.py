@@ -281,6 +281,29 @@ CREATE TABLE IF NOT EXISTS artist_images (
     source      TEXT,
     fetched_at  INTEGER NOT NULL
 );
+
+-- Local playback history for Home personalization
+CREATE TABLE IF NOT EXISTS play_events (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    track_id                TEXT NOT NULL,
+    played_at               INTEGER NOT NULL,
+    play_seconds            REAL DEFAULT 0,
+    track_duration_seconds  REAL DEFAULT 0,
+    completed               INTEGER DEFAULT 0,
+    skipped                 INTEGER DEFAULT 0,
+    valid_listen            INTEGER DEFAULT 0,
+    source_type             TEXT DEFAULT 'unknown',
+    source_id               TEXT DEFAULT '',
+    source_label            TEXT DEFAULT '',
+    artist                  TEXT DEFAULT '',
+    album                   TEXT DEFAULT '',
+    title                   TEXT DEFAULT '',
+    format                  TEXT DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_play_events_played_at ON play_events(played_at DESC);
+CREATE INDEX IF NOT EXISTS idx_play_events_track_id  ON play_events(track_id);
+CREATE INDEX IF NOT EXISTS idx_play_events_artist    ON play_events(artist COLLATE NOCASE);
 """
 
 # FTS5 must be created separately (can't use IF NOT EXISTS with virtual tables the same way)
@@ -1524,3 +1547,91 @@ def db_get_all_artist_image_keys() -> set:
     conn = get_conn()
     rows = conn.execute("SELECT artist_key FROM artist_images").fetchall()
     return {r['artist_key'] for r in rows}
+
+
+# ---------------------------------------------------------------------------
+# Playback history (Home)
+# ---------------------------------------------------------------------------
+
+def db_insert_play_events(events):
+    """Insert a batch of playback events."""
+    if not events:
+        return
+    rows = []
+    for e in events:
+        rows.append((
+            str(e.get('track_id') or ''),
+            int(e.get('played_at') or 0),
+            float(e.get('play_seconds') or 0.0),
+            float(e.get('track_duration_seconds') or 0.0),
+            1 if e.get('completed') else 0,
+            1 if e.get('skipped') else 0,
+            1 if e.get('valid_listen') else 0,
+            str(e.get('source_type') or 'unknown'),
+            str(e.get('source_id') or ''),
+            str(e.get('source_label') or ''),
+            str(e.get('artist') or ''),
+            str(e.get('album') or ''),
+            str(e.get('title') or ''),
+            str(e.get('format') or ''),
+        ))
+    conn = get_conn()
+    conn.executemany(
+        """INSERT INTO play_events (
+               track_id, played_at, play_seconds, track_duration_seconds,
+               completed, skipped, valid_listen, source_type, source_id, source_label,
+               artist, album, title, format
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        rows
+    )
+    conn.commit()
+
+
+def db_prune_play_events(cutoff_ts: int):
+    """Delete playback events older than cutoff timestamp."""
+    conn = get_conn()
+    conn.execute("DELETE FROM play_events WHERE played_at < ?", (int(cutoff_ts),))
+    conn.commit()
+
+
+def db_clear_play_events():
+    """Delete all playback history."""
+    conn = get_conn()
+    conn.execute("DELETE FROM play_events")
+    conn.commit()
+
+
+def db_load_play_events_since(since_ts: int, limit: int = 20000):
+    """Return playback events from since_ts (descending by played_at)."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT * FROM play_events
+           WHERE played_at >= ?
+           ORDER BY played_at DESC, id DESC
+           LIMIT ?""",
+        (int(since_ts), int(limit))
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def db_get_features_batch(track_ids):
+    """Fetch track_features rows for a list of track_ids in one query. Returns {track_id: feature_dict}."""
+    if not track_ids:
+        return {}
+    conn = get_conn()
+    placeholders = ','.join('?' for _ in track_ids)
+    rows = conn.execute(
+        f"SELECT * FROM track_features WHERE track_id IN ({placeholders})",
+        list(track_ids)
+    ).fetchall()
+    result = {}
+    for row in rows:
+        d = dict(row)
+        d['failed'] = bool(d['failed'])
+        if d['band_energy']:
+            try:
+                d['band_energy'] = json.loads(d['band_energy'])
+            except (json.JSONDecodeError, TypeError):
+                d['band_energy'] = None
+        result[d['track_id']] = d
+    return result
