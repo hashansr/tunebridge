@@ -83,6 +83,8 @@ const Player = (function () {
   let _saveSeekThrottle     = -1;  // last 1-second bucket saved (throttles timeupdate writes)
   let _remoteSaveTimer      = null; // debounce handle for server-side state saves
   let _remoteSeekThrottle   = -1;  // last 5-second bucket that triggered a remote save
+  let _eventPostInFlight    = false;
+  let _pendingPlaybackEvents = [];
   let _peqCloseTimer        = null; // delayed hide timer for animated popover close
   let _peqCurveRaf          = null;
   let _customPeqState       = null;
@@ -247,7 +249,10 @@ const Player = (function () {
     if (ps.repeatMode === 'one') {
       // Re-play current track from start
       const t = currentTrack();
-      if (t) _mpvCmd('play', { track_id: t.id, position: 0 });
+      if (t) {
+        _mpvCmd('play', { track_id: t.id, position: 0 });
+        _markTrackSessionStart();
+      }
     } else if (ps.repeatMode === 'all' || ps.queueIdx < ps.queue.length - 1) {
       const len = ps.shuffle ? ps.shuffleOrder.length : ps.queue.length;
       ps.queueIdx = (ps.queueIdx + 1) % Math.max(1, len);
@@ -259,6 +264,7 @@ const Player = (function () {
           ps.isPlaying = true;
           _updatePlayBtn();
         });
+        _markTrackSessionStart();
         if (ps.queueOpen) _renderQueue();
         _saveState();
       }
@@ -768,6 +774,9 @@ const Player = (function () {
     }
     _updateTrackUI(track);
     _highlightActiveRow();
+    // Immediately bump the active playback context to the front of Jump Back In.
+    // This keeps rails responsive even before a track ends or pauses.
+    _pushRecentContext(track, 'start');
     _markTrackSessionStart();
     _saveState();
   }
@@ -2286,8 +2295,18 @@ const Player = (function () {
       });
     }
 
-    // 9. Periodic server save — every 10 s while app is open (belt-and-suspenders)
-    setInterval(_saveStateToServer, 10000);
+    // 9. Periodic persistence every 10 s:
+    // - save player state
+    // - flush play events during long sessions (so Home/stats update without track switches)
+    setInterval(() => {
+      _saveStateToServer();
+      if (ps.isPlaying && currentTrack()) {
+        // Flush less frequently and only when segment can qualify as a valid listen.
+        _flushCurrentTrackEvent('progress', { minElapsed: 30, contextMinElapsed: 999999 });
+      } else if (_pendingPlaybackEvents.length > 0) {
+        _postPlaybackEvents([]);
+      }
+    }, 10000);
 
     // Final save on page close
     window.addEventListener('beforeunload', () => {
@@ -2335,6 +2354,12 @@ const Player = (function () {
         xhr.setRequestHeader('Content-Type', 'application/json');
         xhr.send(getStateJSON());
       } catch (_) {}
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && _pendingPlaybackEvents.length > 0) {
+        _postPlaybackEvents([]);
+      }
     });
 
     _initKeyboard();
@@ -2392,12 +2417,31 @@ const Player = (function () {
   }
 
   function _postPlaybackEvents(events) {
-    if (!Array.isArray(events) || events.length === 0) return;
+    if (Array.isArray(events) && events.length > 0) {
+      const merged = [..._pendingPlaybackEvents, ...events];
+      // Keep bounded queue; enough to survive brief outages without unbounded growth.
+      _pendingPlaybackEvents = merged.slice(-120);
+    }
+    if (_eventPostInFlight || _pendingPlaybackEvents.length === 0) return;
+    _eventPostInFlight = true;
+    const batch = _pendingPlaybackEvents.slice(0, 50);
     fetch('/api/player/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ events }),
-    }).catch(() => {});
+      body: JSON.stringify({ events: batch }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        // Drop only after confirmed successful delivery.
+        _pendingPlaybackEvents = _pendingPlaybackEvents.slice(batch.length);
+      })
+      .catch(() => {})
+      .finally(() => {
+        _eventPostInFlight = false;
+        if (_pendingPlaybackEvents.length > 0) {
+          setTimeout(() => _postPlaybackEvents([]), 250);
+        }
+      });
   }
 
   function _markTrackSessionStart() {
@@ -2449,15 +2493,16 @@ const Player = (function () {
     const t = currentTrack();
     if (!t) return;
     const { pos, elapsed } = _capturePlaybackSeconds();
+    const contextMinElapsed = typeof opts.contextMinElapsed === 'number' ? opts.contextMinElapsed : 1;
+    if (reason !== 'pause' && elapsed >= contextMinElapsed) {
+      _pushRecentContext(t, reason);
+    }
     const minElapsed = typeof opts.minElapsed === 'number' ? opts.minElapsed : 3;
     if (elapsed < minElapsed) return;
     const duration = Number(t.duration || (_mpvAvailable ? _mpvDuration : _audio.duration) || 0);
     const completed = !!opts.completed || (duration > 0 && pos >= Math.max(duration - 1.0, duration * 0.98));
     const skipped = !!opts.skipped;
     const ctx = ps.playbackContext || { sourceType: 'unknown', sourceId: '', sourceLabel: '' };
-    if (reason !== 'pause') {
-      _pushRecentContext(t, reason);
-    }
     _postPlaybackEvents([{
       track_id: t.id,
       played_at: Math.floor(_safeNowSec()),

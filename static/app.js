@@ -91,6 +91,10 @@ function musicNote(size = 38) {
   return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
 }
 
+function playSvg(size = 14) {
+  return `<svg class="icon-play-svg" style="--play-icon-size:${Number(size) || 14}px" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg>`;
+}
+
 function esc(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -590,7 +594,7 @@ function renderArtistsGrid() {
           ${imgSrc}
           <div class="card-thumb-overlay">
             <button class="card-play-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.playArtistCard(this.dataset.artist)" title="Play all songs">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+              ${playSvg(15)}
             </button>
           </div>
           <button class="artist-img-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();_openArtistImageForCard(this.dataset.artist)" title="Change artist image">
@@ -740,7 +744,7 @@ function renderAlbumsGrid() {
           ${thumbImg(al.artwork_key, 160, '6px')}
           <div class="card-thumb-overlay">
             <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+              ${playSvg(15)}
             </button>
           </div>
           ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn')}
@@ -969,7 +973,7 @@ function trackRow(t, num, inPlaylist) {
     : '';
 
   const checkIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>`;
-  const playIcon  = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`;
+  const playIcon  = playSvg(12);
 
   return `
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
@@ -2863,10 +2867,12 @@ function _renderFavArtistCards(rows) {
   grid.innerHTML = rows.map(a => `
     <div class="artist-card" data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
       <div class="artist-thumb">
-        ${thumbImg(a.artwork_key, 120, '6px')}
+        ${a.image_key
+          ? `<img src="/api/artists/${a.image_key}/image" alt="${esc(a.name)}" loading="lazy" />`
+          : thumbImg(a.artwork_key, 120, '6px')}
         <div class="card-thumb-overlay">
           <button class="card-play-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.playArtistCard(this.dataset.artist)" title="Play all songs">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+            ${playSvg(15)}
           </button>
         </div>
         ${_favToggleBtn('artists', _normArtistId(a.name), 'card-fav-btn is-fav')}
@@ -2924,7 +2930,7 @@ function _renderFavAlbumCards(rows) {
         ${thumbImg(al.artwork_key, 160, '6px')}
         <div class="card-thumb-overlay">
           <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+            ${playSvg(15)}
           </button>
         </div>
         ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn is-fav')}
@@ -2967,7 +2973,7 @@ function setFavAlbumsSort(mode) {
 }
 
 function _favSongRow(t, idx) {
-  const playIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`;
+  const playIcon = playSvg(12);
   return `
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
       <td class="col-num">
@@ -3212,9 +3218,16 @@ function _homeSectionVisible(id, visible) {
   if (el) el.style.display = visible ? '' : 'none';
 }
 
-function _homeArtEl(artwork_key) {
-  return artwork_key
-    ? `<img src="/api/artwork/${esc(artwork_key)}" loading="lazy" onerror="this.style.display='none'" />`
+function _homeArtEl(item) {
+  const artistImageUrl = (item?.kind === 'artist' && item?.image_key)
+    ? `/api/artists/${esc(item.image_key)}/image`
+    : '';
+  if (artistImageUrl) {
+    return `<img src="${artistImageUrl}" loading="lazy" onerror="this.style.display='none'" />`;
+  }
+  const artworkKey = item?.artwork_key || '';
+  return artworkKey
+    ? `<img src="/api/artwork/${esc(artworkKey)}" loading="lazy" onerror="this.style.display='none'" />`
     : `<div class="home-card-art-placeholder">${musicNote(36)}</div>`;
 }
 
@@ -3232,18 +3245,17 @@ function _homeOnPlay(item, e) {
   return `App.homePlayItem(event,'${esc(item.kind || '')}','${a}','${al}','${pid}')`;
 }
 
-const _HOME_PLAY_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>';
+const _HOME_PLAY_SVG = playSvg(16);
 
 function _homeRailCardHtml(item) {
   const title = item.title || 'Unknown';
   const subtitle = item.subtitle || '';
-  const meta = item.meta || '';
   const isNew = item.is_new;
   // Use div.home-card-play-btn (not button) to avoid nested-button invalid HTML
   return `
     <div class="home-card" onclick="${_homeOnClick(item)}" role="button" tabindex="0">
       <div class="home-card-art">
-        ${_homeArtEl(item.artwork_key)}
+        ${_homeArtEl(item)}
         ${isNew ? '<span class="home-card-new-badge">NEW</span>' : ''}
         <div class="home-card-play-btn" onclick="${_homeOnPlay(item)}" role="button" tabindex="0" title="Play">
           ${_HOME_PLAY_SVG}
@@ -3251,7 +3263,6 @@ function _homeRailCardHtml(item) {
       </div>
       <div class="home-card-title" title="${esc(title)}">${esc(title)}</div>
       ${subtitle ? `<div class="home-card-sub">${esc(subtitle)}</div>` : ''}
-      ${meta ? `<div class="home-card-meta">${esc(meta)}</div>` : ''}
     </div>`;
 }
 
@@ -3262,7 +3273,7 @@ function _homePickCardHtml(item) {
   return `
     <div class="home-pick-card" onclick="${_homeOnClick(item)}" role="button" tabindex="0">
       <div class="home-pick-art">
-        ${_homeArtEl(item.artwork_key)}
+        ${_homeArtEl(item)}
         <div class="home-card-play-btn" onclick="${_homeOnPlay(item)}" role="button" tabindex="0" title="Play">
           ${_HOME_PLAY_SVG}
         </div>
@@ -3278,25 +3289,103 @@ function _renderHomeRailSection(sectionId, railId, items, emptyMsg) {
   if (!rail) return false;
   if (!Array.isArray(items) || !items.length) {
     rail.innerHTML = `<div class="home-rail-empty">${esc(emptyMsg)}</div>`;
+    _homeBindRailUX(railId);
     _homeSectionVisible(sectionId, true);
     return false;
   }
   rail.innerHTML = items.map(_homeRailCardHtml).join('');
+  _homeBindRailUX(railId);
   _homeSectionVisible(sectionId, true);
   return true;
 }
 
-function _renderHomeTopPicks(items) {
-  const el = document.getElementById('home-picks');
-  if (!el) return false;
-  if (!Array.isArray(items) || !items.length) {
-    el.innerHTML = `<div class="home-rail-empty">Start listening to unlock personalised picks</div>`;
-    _homeSectionVisible('home-picks-section', true);
-    return false;
+function _homeUpdateRailAffordance(railId) {
+  const rail = document.getElementById(railId);
+  const shell = rail?.closest('.home-rail-shell');
+  if (!rail || !shell) return;
+  const leftBtn = shell.querySelector('.home-rail-nav-left');
+  const rightBtn = shell.querySelector('.home-rail-nav-right');
+
+  const maxScroll = Math.max(0, rail.scrollWidth - rail.clientWidth);
+  const canScroll = maxScroll > 2;
+  const atStart = rail.scrollLeft <= 2;
+  const atEnd = rail.scrollLeft >= maxScroll - 2;
+
+  shell.classList.toggle('can-scroll-left', canScroll && !atStart);
+  shell.classList.toggle('can-scroll-right', canScroll && !atEnd);
+
+  if (leftBtn) leftBtn.classList.toggle('is-visible', canScroll && !atStart);
+  if (rightBtn) rightBtn.classList.toggle('is-visible', canScroll && !atEnd);
+}
+
+function _homeBindRailUX(railId) {
+  const rail = document.getElementById(railId);
+  if (!rail) return;
+  if (!rail.dataset.uxBound) {
+    rail.dataset.uxBound = '1';
+    rail.addEventListener('scroll', () => _homeUpdateRailAffordance(railId), { passive: true });
   }
-  el.innerHTML = items.map(_homePickCardHtml).join('');
-  _homeSectionVisible('home-picks-section', true);
-  return true;
+  _homeUpdateRailAffordance(railId);
+}
+
+function _homeRefreshRailAffordances() {
+  ['home-continue', 'home-listen-next', 'home-recently-added', 'home-because'].forEach(_homeUpdateRailAffordance);
+}
+
+function homeRailStep(railId, direction = 1) {
+  const rail = document.getElementById(railId);
+  if (!rail) return;
+  const dir = Number(direction) < 0 ? -1 : 1;
+  const step = Math.max(Math.round(rail.clientWidth * 0.86), 240);
+  rail.scrollBy({ left: dir * step, behavior: 'smooth' });
+  setTimeout(() => _homeUpdateRailAffordance(railId), 220);
+}
+
+function _renderHomeTopPicks(items) {
+  return _renderHomeRailSection(
+    'home-because-section',
+    'home-because',
+    items || [],
+    'Keep listening to unlock personalised recommendations.'
+  );
+}
+
+function _renderHomeDataHealth(data) {
+  const el = document.getElementById('home-data-health');
+  if (!el) return;
+  const trackingEnabled = data && data.tracking_enabled !== false;
+  const health = data && data.data_health ? data.data_health : {};
+  const latest = Number(health.latest_event_at || 0);
+  const total = Number(health.total_events || 0);
+  const valid = Number(health.valid_events || 0);
+  const historyFresh = !!health.history_fresh;
+
+  if (!trackingEnabled) {
+    el.style.display = '';
+    el.className = 'home-data-health warn';
+    el.textContent = 'Listening tracking is turned off. Enable it in Settings to personalise Home.';
+    return;
+  }
+  if (!total) {
+    el.style.display = '';
+    el.className = 'home-data-health info';
+    el.textContent = 'Play a few songs to personalise Home.';
+    return;
+  }
+  if (!historyFresh) {
+    const ago = latest ? _homeRelativeTime(latest) : 'a while ago';
+    el.style.display = '';
+    el.className = 'home-data-health warn';
+    el.textContent = `Listening history looks stale (last event ${ago}). Keep listening to refresh recommendations.`;
+    return;
+  }
+  if (valid <= 0) {
+    el.style.display = '';
+    el.className = 'home-data-health info';
+    el.textContent = 'Recent listens are mostly short skips. Full listens improve recommendations and stats.';
+    return;
+  }
+  el.style.display = 'none';
 }
 
 function _renderHomeListeningStats(data) {
@@ -3320,10 +3409,9 @@ function _renderHomeListeningStats(data) {
   };
 
   const metricCards = [
-    { label: 'Listening time', value: fmtMins(c.total_minutes), change: comp.minutes_change },
-    { label: 'Tracks played',  value: (c.track_count || 0).toLocaleString(), change: comp.tracks_change },
-    { label: 'Albums',         value: (c.album_count  || 0).toLocaleString() },
-    { label: 'Artists',        value: (c.artist_count || 0).toLocaleString() },
+    { label: 'Valid plays', value: (c.track_count || 0).toLocaleString(), change: comp.tracks_change },
+    { label: 'Albums played',  value: (c.album_count  || 0).toLocaleString() },
+    { label: 'Unique artists', value: (c.artist_count || 0).toLocaleString() },
     { label: 'Active days',    value: (c.active_days  || 0).toLocaleString() },
   ].map(m => `
     <div class="home-stat-metric">
@@ -3342,54 +3430,25 @@ function _renderHomeListeningStats(data) {
       <span class="home-stat-top-value">${esc(r.value)}</span>
     </div>`).join('');
 
+  const minutes = fmtMins(c.total_minutes);
   el.innerHTML = `
-    <div class="home-stat-metrics">${metricCards}</div>
-    ${topRow ? `<div class="home-stat-tops">${topRow}</div>` : ''}
-    ${!c.track_count ? '<div class="home-stat-empty">Start listening to see your stats here</div>' : ''}
+    <div class="home-stats-shell">
+      <div class="home-stats-hero">
+        <div class="home-stats-hero-kicker">Personal retrospective</div>
+        <div class="home-stats-hero-value">
+          ${minutes}
+          ${comp.minutes_change !== undefined ? changePill(comp.minutes_change) : ''}
+        </div>
+        <div class="home-stats-hero-label">Total listening time</div>
+      </div>
+      <div class="home-stats-right">
+        <div class="home-stat-metrics">${metricCards}</div>
+        ${topRow ? `<div class="home-stat-tops">${topRow}</div>` : ''}
+        ${!c.track_count ? '<div class="home-stat-empty">Start listening to see your stats here.</div>' : ''}
+      </div>
+    </div>
   `;
   _homeSectionVisible('home-stats-section', true);
-}
-
-function _renderHomeQuickActions(qaData, hasHistory) {
-  const el = document.getElementById('home-actions');
-  if (!el) return;
-  const qa = qaData || {};
-  const actions = [
-    hasHistory && qa.has_continue ? {
-      label: 'Resume',
-      icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>',
-      onclick: `App.homeResumeListening()`,
-    } : null,
-    {
-      label: 'Shuffle Library',
-      icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>',
-      onclick: `App.homeShuffleLibrary()`,
-    },
-    qa.latest_playlist_id ? {
-      label: esc(qa.latest_playlist_name || 'Latest Playlist'),
-      icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
-      onclick: `App.openPlaylist('${esc(qa.latest_playlist_id)}')`,
-    } : null,
-    {
-      label: 'Insights',
-      icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
-      onclick: `App.showView('insights')`,
-    },
-    {
-      label: 'Favourites',
-      icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
-      onclick: `App.showView('favourites')`,
-    },
-    {
-      label: 'Rescan Library',
-      icon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>',
-      onclick: `App.rescanLibrary()`,
-    },
-  ].filter(Boolean);
-
-  el.innerHTML = actions.map(a =>
-    `<button class="home-action-btn" onclick="${a.onclick}">${a.icon}<span>${a.label}</span></button>`
-  ).join('');
 }
 
 async function loadHome() {
@@ -3450,22 +3509,36 @@ function _homeApplyData(data, force) {
     _homeSectionVisible('home-empty-state', true);
     document.getElementById('home-empty-title').textContent = 'Your library is empty';
     document.getElementById('home-empty-body').textContent = 'Go to Settings to set your music folder, then scan.';
-    _renderHomeQuickActions(data.quick_actions, false);
-    _homeSectionVisible('home-actions-section', true);
+    _homeSectionVisible('home-continue-section', false);
+    _homeSectionVisible('home-listen-next-section', false);
+    _homeSectionVisible('home-recent-section', false);
+    _homeSectionVisible('home-because-section', false);
+    _homeSectionVisible('home-stats-section', false);
+    _homeSectionVisible('home-data-health', false);
     return;
   }
   _homeSectionVisible('home-empty-state', false);
 
   const changed = (key) => !prev || JSON.stringify(prev[key]) !== JSON.stringify(data[key]);
 
-  // Continue Listening
-  if (force || changed('continue_listening')) {
-    _renderHomeRailSection('home-continue-section', 'home-continue', data.continue_listening || [], 'Start listening — your recent sessions will appear here.');
+  // Jump Back In
+  if (force || changed('jump_back_in') || changed('continue_listening')) {
+    _renderHomeRailSection(
+      'home-continue-section',
+      'home-continue',
+      data.jump_back_in || data.continue_listening || [],
+      'Start listening — your recent sessions will appear here.'
+    );
   }
 
-  // Top Picks
-  if (force || changed('top_picks')) {
-    _renderHomeTopPicks(data.top_picks || []);
+  // Listen Next (artists)
+  if (force || changed('listen_next_artists')) {
+    _renderHomeRailSection(
+      'home-listen-next-section',
+      'home-listen-next',
+      data.listen_next_artists || [],
+      'No listening pattern yet. Play more artists to unlock this rail.'
+    );
   }
 
   // Recently Added
@@ -3473,10 +3546,9 @@ function _homeApplyData(data, force) {
     _renderHomeRailSection('home-recent-section', 'home-recently-added', data.recently_added || [], 'No items added yet.');
   }
 
-  // Quick Actions
-  if (force || changed('quick_actions') || (prev && prev.has_history !== data.has_history)) {
-    _renderHomeQuickActions(data.quick_actions, data.has_history);
-    _homeSectionVisible('home-actions-section', true);
+  // Because You Listened
+  if (force || changed('because_you_listened') || changed('top_picks')) {
+    _renderHomeTopPicks(data.because_you_listened || data.top_picks || []);
   }
 
   // Stats: on initial load fetch them; on background refresh skip (period chips handle updates)
@@ -3484,6 +3556,8 @@ function _homeApplyData(data, force) {
     _homeSectionVisible('home-stats-section', true);
     homeChangePeriod(_homeCurrentPeriod, /* skipChipUpdate */ true);
   }
+
+  _renderHomeDataHealth(data);
 }
 
 async function homeChangePeriod(period, skipChipUpdate) {
@@ -7500,7 +7574,7 @@ function renderSongsTable() {
     const globalIdx = start + i;
     const fmtDate = t.date_added ? new Date(t.date_added * 1000).toLocaleDateString() : '';
     const bitrate = t.bitrate ? t.bitrate + ' kbps' : '';
-    const playIcon = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>`;
+    const playIcon = playSvg(11);
     return `
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
       <td class="col-num" onclick="App.toggleTrackSelection('${t.id}', ${globalIdx}, event)">
@@ -8218,6 +8292,7 @@ const App = {
   homePlayItem,
   homeChangePeriod,
   homeForceRefresh,
+  homeRailStep,
   homeShuffleLibrary,
   homeResumeListening,
   backToArtists,
@@ -11173,6 +11248,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         _homeBackgroundRefresh();
       }, 1200);
     }
+  });
+
+  window.addEventListener('resize', () => {
+    if (state.view !== 'home') return;
+    window.requestAnimationFrame(_homeRefreshRailAffordances);
   });
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && state.view === 'home') _homeBackgroundRefresh();

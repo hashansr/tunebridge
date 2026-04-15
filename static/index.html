@@ -114,20 +114,40 @@
           </button>
         </div>
 
-        <!-- Continue Listening -->
+        <!-- Jump Back In -->
         <section class="home-section" id="home-continue-section" style="display:none">
           <div class="home-section-hdr">
-            <h3 class="home-section-title">Continue Listening</h3>
+            <h3 class="home-section-title">Jump Back In</h3>
           </div>
-          <div id="home-continue" class="home-rail"></div>
+          <div class="home-rail-shell" data-rail-id="home-continue">
+            <button class="home-rail-nav home-rail-nav-left" type="button" title="Scroll left" onclick="App.homeRailStep('home-continue', -1)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <div id="home-continue" class="home-rail"></div>
+            <button class="home-rail-nav home-rail-nav-right" type="button" title="Scroll right" onclick="App.homeRailStep('home-continue', 1)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <div class="home-rail-fade home-rail-fade-left" aria-hidden="true"></div>
+            <div class="home-rail-fade home-rail-fade-right" aria-hidden="true"></div>
+          </div>
         </section>
 
-        <!-- Top Picks For You -->
-        <section class="home-section" id="home-picks-section" style="display:none">
+        <!-- Listen Next -->
+        <section class="home-section" id="home-listen-next-section" style="display:none">
           <div class="home-section-hdr">
-            <h3 class="home-section-title">Top Picks For You</h3>
+            <h3 class="home-section-title">Listen Next</h3>
           </div>
-          <div id="home-picks" class="home-picks-grid"></div>
+          <div class="home-rail-shell" data-rail-id="home-listen-next">
+            <button class="home-rail-nav home-rail-nav-left" type="button" title="Scroll left" onclick="App.homeRailStep('home-listen-next', -1)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <div id="home-listen-next" class="home-rail"></div>
+            <button class="home-rail-nav home-rail-nav-right" type="button" title="Scroll right" onclick="App.homeRailStep('home-listen-next', 1)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <div class="home-rail-fade home-rail-fade-left" aria-hidden="true"></div>
+            <div class="home-rail-fade home-rail-fade-right" aria-hidden="true"></div>
+          </div>
         </section>
 
         <!-- Recently Added -->
@@ -135,7 +155,35 @@
           <div class="home-section-hdr">
             <h3 class="home-section-title">Recently Added</h3>
           </div>
-          <div id="home-recently-added" class="home-rail"></div>
+          <div class="home-rail-shell" data-rail-id="home-recently-added">
+            <button class="home-rail-nav home-rail-nav-left" type="button" title="Scroll left" onclick="App.homeRailStep('home-recently-added', -1)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <div id="home-recently-added" class="home-rail"></div>
+            <button class="home-rail-nav home-rail-nav-right" type="button" title="Scroll right" onclick="App.homeRailStep('home-recently-added', 1)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <div class="home-rail-fade home-rail-fade-left" aria-hidden="true"></div>
+            <div class="home-rail-fade home-rail-fade-right" aria-hidden="true"></div>
+          </div>
+        </section>
+
+        <!-- Because You Listened -->
+        <section class="home-section" id="home-because-section" style="display:none">
+          <div class="home-section-hdr">
+            <h3 class="home-section-title">Because You Listened</h3>
+          </div>
+          <div class="home-rail-shell" data-rail-id="home-because">
+            <button class="home-rail-nav home-rail-nav-left" type="button" title="Scroll left" onclick="App.homeRailStep('home-because', -1)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <div id="home-because" class="home-rail"></div>
+            <button class="home-rail-nav home-rail-nav-right" type="button" title="Scroll right" onclick="App.homeRailStep('home-because', 1)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <div class="home-rail-fade home-rail-fade-left" aria-hidden="true"></div>
+            <div class="home-rail-fade home-rail-fade-right" aria-hidden="true"></div>
+          </div>
         </section>
 
         <!-- Listening Stats -->
@@ -152,13 +200,7 @@
           <div id="home-stats-content" class="home-stats-content"></div>
         </section>
 
-        <!-- Quick Actions -->
-        <section class="home-section" id="home-actions-section">
-          <div class="home-section-hdr">
-            <h3 class="home-section-title">Quick Actions</h3>
-          </div>
-          <div id="home-actions" class="home-actions-strip"></div>
-        </section>
+        <div id="home-data-health" class="home-data-health" style="display:none"></div>
 
         <!-- Empty / cold-start state -->
         <div id="home-empty-state" class="home-empty-state" style="display:none">
@@ -213,7 +255,7 @@
             </div>
             <div class="hero-meta" id="artist-hero-meta"></div>
             <div class="hero-actions">
-              <button class="btn-hero-play" id="artist-hero-play"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play</button>
+              <button class="btn-hero-play" id="artist-hero-play"><svg class="icon-play-svg" style="--play-icon-size:13px" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg> Play</button>
               <button class="btn-hero-shuffle" id="artist-hero-shuffle"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="4" y1="4" x2="9" y2="9"/></svg> Shuffle</button>
               <button class="hero-fav-star" id="artist-hero-fav" title="Favourite">&#9733;</button>
               <div class="hero-more-wrap" id="artist-hero-more-wrap">
@@ -251,7 +293,7 @@
             <div class="hero-sub" id="album-hero-artist"></div>
             <div class="hero-meta" id="album-hero-meta"></div>
             <div class="hero-actions">
-              <button class="btn-hero-play" id="album-hero-play"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play</button>
+              <button class="btn-hero-play" id="album-hero-play"><svg class="icon-play-svg" style="--play-icon-size:13px" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg> Play</button>
               <button class="btn-hero-shuffle" id="album-hero-shuffle"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="4" y1="4" x2="9" y2="9"/></svg> Shuffle</button>
               <button class="hero-fav-star" id="album-hero-fav" title="Favourite">&#9733;</button>
               <div class="hero-more-wrap" id="album-hero-more-wrap">
@@ -339,7 +381,7 @@
               <div class="favourites-panel-titlebar">
                 <h3>Favourite Artists</h3>
                 <button class="btn-play-all favourites-play-all-btn" onclick="App.playAllFavouriteArtists()">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                  <svg class="icon-play-svg" style="--play-icon-size:13px" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg>
                   Play All
                 </button>
               </div>
@@ -357,7 +399,7 @@
               <div class="favourites-panel-titlebar">
                 <h3>Favourite Albums</h3>
                 <button class="btn-play-all favourites-play-all-btn" onclick="App.playAllFavouriteAlbums()">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                  <svg class="icon-play-svg" style="--play-icon-size:13px" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg>
                   Play All
                 </button>
               </div>
@@ -375,7 +417,7 @@
               <div class="favourites-panel-titlebar">
                 <h3>Favourite Songs</h3>
                 <button class="btn-play-all favourites-play-all-btn" onclick="App.playAllFavouriteSongs()">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                  <svg class="icon-play-svg" style="--play-icon-size:13px" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg>
                   Play All
                 </button>
               </div>
@@ -450,7 +492,7 @@
             <h1 id="pl-name" contenteditable="true" spellcheck="false" onblur="App.renamePlaylist(this.textContent)"></h1>
             <div class="playlist-stats" id="pl-stats"></div>
             <div class="hero-actions pl-hero-actions">
-              <button class="btn-hero-play" id="pl-play-all-btn" style="display:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Play</button>
+              <button class="btn-hero-play" id="pl-play-all-btn" style="display:none"><svg class="icon-play-svg" style="--play-icon-size:13px" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg> Play</button>
               <button class="btn-hero-shuffle" id="pl-shuffle-btn" style="display:none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="4" y1="4" x2="9" y2="9"/></svg> Shuffle</button>
               <div class="playlist-actions" id="dap-export-pills">
                 <!-- Populated dynamically from DAP list in openPlaylist() -->
@@ -2529,7 +2571,7 @@
     </div>
   </div>
 
-  <script src="/player.js?v=34"></script>
+  <script src="/player.js?v=35"></script>
   <script src="/app.js?v=37"></script>
 </body>
 </html>

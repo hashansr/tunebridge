@@ -1236,6 +1236,7 @@ def _music_meta_maps():
     track_by_id = {str(t.get('id')): t for t in tracks if t.get('id')}
     albums = {}
     artists = {}
+    artist_image_keys = _db.db_get_all_artist_image_keys()
     for t in tracks:
         artist = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').strip()
         album = (t.get('album') or 'Unknown Album').strip()
@@ -1260,7 +1261,12 @@ def _music_meta_maps():
             slot['genre'] = t.get('genre')
         ak = artist.lower()
         if ak not in artists:
-            artists[ak] = {'artist': artist, 'artwork_key': t.get('artwork_key')}
+            img_key = get_artist_image_key(artist)
+            artists[ak] = {
+                'artist': artist,
+                'artwork_key': t.get('artwork_key'),
+                'image_key': img_key if img_key in artist_image_keys else None,
+            }
         elif not artists[ak].get('artwork_key') and t.get('artwork_key'):
             artists[ak]['artwork_key'] = t.get('artwork_key')
     return tracks, track_by_id, albums, artists
@@ -1352,12 +1358,13 @@ def _resolve_context_item(kind, source_id, source_label, track_id, artist, album
         if not name:
             return None
         key = f"artist:{name.lower()}"
-        info = artists_map.get(name.lower(), {'artist': name, 'artwork_key': artwork_key})
+        info = artists_map.get(name.lower(), {'artist': name, 'artwork_key': artwork_key, 'image_key': None})
         return {
             '_dedup_key': key, 'kind': 'artist',
             'artist': info.get('artist') or name,
             'title': info.get('artist') or name,
             'subtitle': 'Artist',
+            'image_key': info.get('image_key'),
             'artwork_key': info.get('artwork_key') or artwork_key,
         }
 
@@ -1672,6 +1679,50 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
     } for s in picks]
 
 
+def _home_listen_next_artists(events, artists_map, limit=10):
+    """
+    Recency-weighted artist ranking from valid listening events.
+    Returns artist cards for the Home "Listen Next" rail.
+    """
+    now = int(time.time())
+    scores = {}
+    for e in events:
+        if not int(e.get('valid_listen') or 0):
+            continue
+        name = (e.get('artist') or '').strip()
+        if not name:
+            continue
+        played_at = int(e.get('played_at') or 0)
+        if played_at <= 0:
+            continue
+        days_since = max(0.0, (now - played_at) / 86400.0)
+        # 30-day decay keeps recent taste strong while still considering older habits.
+        recency_weight = math.exp(-days_since / 30.0)
+        play_seconds = max(1.0, float(e.get('play_seconds') or 0.0))
+        # Damp very long tracks; avoid one track dominating artist rank.
+        duration_weight = min(play_seconds / 240.0, 1.5)
+        key = name.lower()
+        scores[key] = scores.get(key, 0.0) + recency_weight * duration_weight
+
+    if not scores:
+        return []
+
+    ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[: max(1, int(limit))]
+    out = []
+    for artist_key, _score in ranked:
+        info = artists_map.get(artist_key) or {}
+        artist_name = info.get('artist') or artist_key
+        out.append({
+            'kind': 'artist',
+            'artist': artist_name,
+            'title': artist_name,
+            'subtitle': 'Artist',
+            'image_key': info.get('image_key'),
+            'artwork_key': info.get('artwork_key'),
+        })
+    return out
+
+
 def _home_stats_aggregate(events, albums):
     """Aggregate listening stats from a list of play_events dicts. Returns metrics dict."""
     valid = [e for e in events if int(e.get('valid_listen') or 0)]
@@ -1719,7 +1770,7 @@ def _home_stats_aggregate(events, albums):
 
 @app.route('/api/home')
 def home():
-    """Main home payload: continue_listening, top_picks, recently_added, library_summary."""
+    """Main home payload for Home v2 (legacy + spec-aligned keys)."""
     settings = load_settings()
     player_state = _db.db_get_player_state()
     try:
@@ -1741,7 +1792,9 @@ def home():
                 continue_keys.add(
                     f"{(item.get('artist') or '').lower()}||{(item.get('album') or '').lower()}")
 
-        top_picks = _home_top_picks(events, albums, track_by_id, continue_keys=continue_keys, limit=5)
+        top_picks = _home_top_picks(events, albums, track_by_id, continue_keys=continue_keys, limit=10)
+        listen_next_artists = _home_listen_next_artists(events, artists_map, limit=10)
+        because_you_listened = top_picks[:10]
         recently_added = _recently_added_items(tracks, albums, playlists, limit=10)
 
         # Library summary for header strip
@@ -1756,22 +1809,45 @@ def home():
         sorted_playlists = sorted(playlists.values(), key=lambda p: int(p.get('created_at') or 0), reverse=True)
         latest_playlist = sorted_playlists[0] if sorted_playlists else None
 
-        has_history = any(int(e.get('valid_listen') or 0) for e in events)
+        valid_events = [e for e in events if int(e.get('valid_listen') or 0)]
+        has_history = len(valid_events) > 0
+        latest_event_at = max((int(e.get('played_at') or 0) for e in events), default=0)
+        data_health = {
+            'total_events': len(events),
+            'valid_events': len(valid_events),
+            'latest_event_at': latest_event_at,
+            'history_fresh': (int(time.time()) - latest_event_at) < (72 * 3600) if latest_event_at else False,
+        }
 
     except Exception as exc:
         print(f"[home] error: {exc}")
         import traceback; traceback.print_exc()
         continue_items = []
         top_picks = []
+        listen_next_artists = []
+        because_you_listened = []
         recently_added = []
         total_tracks = total_albums = total_artists = total_playlists = 0
         last_scan = 0
         latest_playlist = None
         has_history = False
+        data_health = {
+            'total_events': 0,
+            'valid_events': 0,
+            'latest_event_at': 0,
+            'history_fresh': False,
+        }
 
     return jsonify({
         'tracking_enabled': _to_bool(settings.get('listening_tracking_enabled', True)),
         'has_history': has_history,
+        # Spec-aligned names
+        'jump_back_in': continue_items,
+        'listen_next_artists': listen_next_artists,
+        'because_you_listened': because_you_listened,
+        'music_stats_window': '12m',
+        'data_health': data_health,
+        # Legacy keys (kept for backwards compatibility while UI migrates)
         'continue_listening': continue_items,
         'top_picks': top_picks,
         'recently_added': recently_added,
