@@ -4762,13 +4762,15 @@ def _compute_sync_diff_for_dap(dap):
     device_map = {_normalize_rel(p).casefold(): _normalize_rel(p) for p in device_files}
 
     device_keys = set(device_map.keys())
+    manifest_records = _get_dap_sync_manifest(dap_id)
+    manifest_updates = {}
+    manifest_seen_keys = set()
     expected_keys = set()
     local_only = []
     local_copy_map = {}
     warnings = []
     target_collisions = set()
     device_only = []
-    mtime_tolerance_ns = 2_000_000_000  # 2s safety window for FS timestamp granularity
 
     for e in track_entries:
         local_key = e['local_rel'].casefold()
@@ -4808,26 +4810,60 @@ def _compute_sync_diff_for_dap(dap):
         if src_mtime is None or dst_mtime is None:
             continue
 
-        if src_size != dst_size:
-            if src_mtime >= dst_mtime:
-                local_copy_map[matched_rel] = e['local_rel']
-                local_only.append(matched_rel)
-            else:
-                device_only.append(matched_rel)
-            continue
+        now_ts = int(time.time())
 
-        delta = src_mtime - dst_mtime
-        if abs(delta) <= mtime_tolerance_ns:
-            continue
-        if delta > 0:
+        if src_size != dst_size:
+            # iTunes-like behavior: local library is authoritative for matched paths.
             local_copy_map[matched_rel] = e['local_rel']
             local_only.append(matched_rel)
-        else:
-            device_only.append(matched_rel)
+            manifest_seen_keys.add(matched_key)
+            manifest_updates[matched_key] = {
+                'target_rel': matched_rel,
+                'local_rel': e['local_rel'],
+                'local_size': int(src_size or 0),
+                'local_mtime_ns': int(src_mtime or 0),
+                'local_hash': '',
+                'device_size': int(dst_size or 0),
+                'device_mtime_ns': int(dst_mtime or 0),
+                'device_hash': '',
+                'updated_at': now_ts,
+            }
+            continue
+
+        manifest_seen_keys.add(matched_key)
+        manifest_entry = manifest_records.get(matched_key) or {}
+        local_changed_since_manifest = not (
+            manifest_entry
+            and manifest_entry.get('local_rel', '').casefold() == e['local_rel'].casefold()
+            and int(manifest_entry.get('local_size') or 0) == int(src_size)
+            and int(manifest_entry.get('local_mtime_ns') or 0) == int(src_mtime)
+        )
+        if local_changed_since_manifest and manifest_entry:
+            local_copy_map[matched_rel] = e['local_rel']
+            local_only.append(matched_rel)
+
+        manifest_updates[matched_key] = {
+            'target_rel': matched_rel,
+            'local_rel': e['local_rel'],
+            'local_size': int(src_size or 0),
+            'local_mtime_ns': int(src_mtime or 0),
+            'local_hash': str(manifest_entry.get('local_hash') or ''),
+            'device_size': int(dst_size or 0),
+            'device_mtime_ns': int(dst_mtime or 0),
+            'device_hash': str(manifest_entry.get('device_hash') or ''),
+            'updated_at': now_ts,
+        }
 
     local_only = sorted(set(local_only))
     device_only.extend([device_map[k] for k in (device_keys - expected_keys)])
     device_only = sorted(set(device_only))
+
+    # Keep only current device-file keys for this DAP and refresh verified entries.
+    _update_dap_sync_manifest(
+        dap_id,
+        manifest_updates,
+        prune_to_keys=device_keys.union(manifest_seen_keys),
+    )
 
     local_only_sizes = {}
     required_bytes = 0
@@ -5279,6 +5315,59 @@ def _normalize_music_root(path):
 def _normalize_path_template(tpl):
     s = str(tpl or DEFAULT_DAP_PATH_TEMPLATE).strip()
     return s or DEFAULT_DAP_PATH_TEMPLATE
+
+
+def _normalize_sync_manifest_entry(entry):
+    if not isinstance(entry, dict):
+        return {}
+    out = {
+        'target_rel': _normalize_rel(entry.get('target_rel')),
+        'local_rel': _normalize_rel(entry.get('local_rel')),
+        'local_hash': str(entry.get('local_hash') or ''),
+        'device_hash': str(entry.get('device_hash') or ''),
+        'updated_at': 0,
+    }
+    for k in ('local_size', 'local_mtime_ns', 'device_size', 'device_mtime_ns', 'updated_at'):
+        try:
+            out[k] = int(entry.get(k) or 0)
+        except Exception:
+            out[k] = 0
+    return out
+
+
+def _get_dap_sync_manifest(dap_id):
+    raw = _db.db_load_sync_manifest(dap_id)
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for k, v in raw.items():
+        key = _normalize_rel(k).casefold()
+        if not key:
+            continue
+        ent = _normalize_sync_manifest_entry(v)
+        if ent:
+            out[key] = ent
+    return out
+
+
+def _update_dap_sync_manifest(dap_id, records, prune_to_keys=None):
+    if not dap_id:
+        return
+    clean_records = {}
+    if isinstance(records, dict):
+        for k, v in records.items():
+            key = _normalize_rel(k).casefold()
+            if not key:
+                continue
+            ent = _normalize_sync_manifest_entry(v)
+            if ent:
+                clean_records[key] = ent
+
+    allowed = None
+    if prune_to_keys is not None:
+        allowed = {_normalize_rel(k).casefold() for k in prune_to_keys if _normalize_rel(k)}
+
+    _db.db_upsert_sync_manifest(dap_id, clean_records, prune_to_keys=allowed)
 
 
 def _normalize_export_folder(path):

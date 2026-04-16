@@ -149,6 +149,24 @@ CREATE TABLE IF NOT EXISTS dap_playlist_exports (
     PRIMARY KEY (dap_id, playlist_id)
 );
 
+-- Sync manifest (per-DAP file signatures for fast/stable delta decisions)
+CREATE TABLE IF NOT EXISTS sync_manifest (
+    dap_id           TEXT NOT NULL REFERENCES daps(id) ON DELETE CASCADE,
+    target_rel_key   TEXT NOT NULL,
+    target_rel       TEXT NOT NULL,
+    local_rel        TEXT DEFAULT '',
+    local_size       INTEGER DEFAULT 0,
+    local_mtime_ns   INTEGER DEFAULT 0,
+    local_hash       TEXT DEFAULT '',
+    device_size      INTEGER DEFAULT 0,
+    device_mtime_ns  INTEGER DEFAULT 0,
+    device_hash      TEXT DEFAULT '',
+    updated_at       INTEGER DEFAULT 0,
+    PRIMARY KEY (dap_id, target_rel_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_manifest_dap ON sync_manifest(dap_id);
+
 -- IEMs
 CREATE TABLE IF NOT EXISTS iems (
     id                  TEXT PRIMARY KEY,
@@ -1014,6 +1032,85 @@ def db_record_dap_export(dap_id, playlist_id, exported_at=None):
         "INSERT OR REPLACE INTO dap_playlist_exports (dap_id, playlist_id, exported_at) VALUES (?, ?, ?)",
         (dap_id, playlist_id, exported_at or int(time.time()))
     )
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Sync manifest
+# ---------------------------------------------------------------------------
+
+def db_load_sync_manifest(dap_id):
+    """Return manifest rows keyed by target_rel_key for a single DAP."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT target_rel_key, target_rel, local_rel, local_size, local_mtime_ns,
+                  local_hash, device_size, device_mtime_ns, device_hash, updated_at
+           FROM sync_manifest
+           WHERE dap_id = ?""",
+        (str(dap_id),)
+    ).fetchall()
+    out = {}
+    for r in rows:
+        d = dict(r)
+        key = str(d.pop('target_rel_key') or '')
+        if not key:
+            continue
+        out[key] = d
+    return out
+
+
+def db_upsert_sync_manifest(dap_id, records, prune_to_keys=None):
+    """
+    Upsert manifest entries for one DAP.
+
+    records: dict[target_rel_key] -> entry dict
+    prune_to_keys: optional iterable of keys to retain (others deleted)
+    """
+    conn = get_conn()
+    did = str(dap_id)
+    recs = records if isinstance(records, dict) else {}
+    now = int(time.time())
+
+    rows = []
+    for key, entry in recs.items():
+        if not key:
+            continue
+        e = entry if isinstance(entry, dict) else {}
+        rows.append((
+            did,
+            str(key),
+            str(e.get('target_rel') or ''),
+            str(e.get('local_rel') or ''),
+            int(e.get('local_size') or 0),
+            int(e.get('local_mtime_ns') or 0),
+            str(e.get('local_hash') or ''),
+            int(e.get('device_size') or 0),
+            int(e.get('device_mtime_ns') or 0),
+            str(e.get('device_hash') or ''),
+            int(e.get('updated_at') or now),
+        ))
+
+    if rows:
+        conn.executemany(
+            """INSERT OR REPLACE INTO sync_manifest (
+                   dap_id, target_rel_key, target_rel, local_rel,
+                   local_size, local_mtime_ns, local_hash,
+                   device_size, device_mtime_ns, device_hash, updated_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            rows
+        )
+
+    if prune_to_keys is not None:
+        allowed = [str(k) for k in prune_to_keys if str(k)]
+        if allowed:
+            placeholders = ','.join('?' for _ in allowed)
+            conn.execute(
+                f"DELETE FROM sync_manifest WHERE dap_id = ? AND target_rel_key NOT IN ({placeholders})",
+                [did] + allowed
+            )
+        else:
+            conn.execute("DELETE FROM sync_manifest WHERE dap_id = ?", (did,))
+
     conn.commit()
 
 
