@@ -52,6 +52,12 @@ let _navHistory = [];             // back stack: array of nav snapshots
 let _isNavigatingBack = false;    // suppresses history push during back/forward restoration
 
 /* ── API helpers ────────────────────────────────────────────────────── */
+/* ── Utilities ──────────────────────────────────────────────────────── */
+function _debounce(fn, ms) {
+  let t;
+  return function(...args) { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), ms); };
+}
+
 async function api(path, opts = {}) {
   const res = await fetch('/api' + path, {
     headers: { 'Content-Type': 'application/json' },
@@ -507,12 +513,12 @@ function _renderAlphaButtons({ barEl, presentLetters, activeLetter, clickFn }) {
 }
 
 /* ── Artists view ───────────────────────────────────────────────────── */
+const _debouncedRenderArtistsGrid = _debounce(() => { renderArtistsGrid(); _scrollMainTop(); }, 200);
 function setArtistSearch(query) {
   state.artistSearch = String(query || '');
   const clearBtn = document.getElementById('artists-filter-clear');
   if (clearBtn) clearBtn.style.display = state.artistSearch ? 'block' : 'none';
-  renderArtistsGrid();
-  _scrollMainTop();
+  _debouncedRenderArtistsGrid();
 }
 
 function clearArtistSearch() {
@@ -652,12 +658,12 @@ function scrollToLetter(letter) {
 }
 
 /* ── Albums view ────────────────────────────────────────────────────── */
+const _debouncedRenderAlbumsGrid = _debounce(() => { renderAlbumsGrid(); _scrollMainTop(); }, 200);
 function setAlbumSearch(query) {
   state.albumSearch = String(query || '');
   const clearBtn = document.getElementById('albums-filter-clear');
   if (clearBtn) clearBtn.style.display = state.albumSearch ? 'block' : 'none';
-  renderAlbumsGrid();
-  _scrollMainTop();
+  _debouncedRenderAlbumsGrid();
 }
 
 function clearAlbumSearch() {
@@ -1343,11 +1349,12 @@ function renderPlaylistTracks(tracks) {
   }
 }
 
+const _debouncedRenderPlaylistTracks = _debounce(() => renderPlaylistTracks(state.playlist?.tracks || []), 200);
 function filterPlaylist(query) {
   state.plFilter = query;
   const clearBtn = document.getElementById('pl-filter-clear');
   if (clearBtn) clearBtn.style.display = query ? 'block' : 'none';
-  renderPlaylistTracks(state.playlist?.tracks || []);
+  _debouncedRenderPlaylistTracks();
 }
 
 function clearPlaylistFilter() {
@@ -7824,12 +7831,13 @@ function _scrollSongsTop() {
   if (main) main.scrollTop = 0;
 }
 
+const _debouncedRenderSongsTable = _debounce(() => renderSongsTable(), 200);
 function filterSongs(val) {
   _songsFilter = val;
   _songsPage = 0;
   const clearBtn = document.getElementById('songs-filter-clear');
   if (clearBtn) clearBtn.style.display = val ? 'block' : 'none';
-  renderSongsTable();
+  _debouncedRenderSongsTable();
 }
 
 function clearSongsFilter() {
