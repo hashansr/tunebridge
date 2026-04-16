@@ -2828,6 +2828,13 @@ tr.track-selected .track-check-indicator {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.sync-file-reason {
+  font-size: 11px;
+  color: rgba(253, 214, 121, 0.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .sync-file-origin {
   font-size: 10px;
   color: var(--text-muted);
@@ -4355,11 +4362,6 @@ nav {
   background: var(--app-page-gradient);
 }
 
-#view-artists,
-#view-albums {
-  background: transparent;
-}
-
 .artist-grid {
   gap: 16px;
 }
@@ -4490,6 +4492,7 @@ tbody tr:hover {
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
+  margin-bottom: 0;
 }
 #view-playlist .export-group {
   display: inline-flex;
@@ -4498,9 +4501,13 @@ tbody tr:hover {
   flex-wrap: wrap;
 }
 #view-playlist .btn-export {
-  min-height: 34px;
-  padding: 6px 12px;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 9px 18px;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1;
 }
 #view-playlist .pl-controls {
   margin: 0;

@@ -294,6 +294,7 @@ async function refreshCurrentLibraryView() {
 /* ── Context menu state ─────────────────────────────────────────────── */
 let _ctxTracks = [];
 let _ctxFavTarget = null;
+let _ctxDetailMode = null; // 'album' | 'artist' | null
 
 /* ── Create playlist modal state ────────────────────────────────────── */
 let _createPlPendingIds = [];
@@ -1701,6 +1702,11 @@ function hideCtxMenu() {
   clearTimeout(_ctxSubmenuTimer);
   _ctxTracks = [];
   _ctxFavTarget = null;
+  _ctxDetailMode = null;
+  const editAlbumItem = document.getElementById('ctx-edit-album-tags-item');
+  const editArtistItem = document.getElementById('ctx-rename-artist-item');
+  if (editAlbumItem) editAlbumItem.style.display = 'none';
+  if (editArtistItem) editArtistItem.style.display = 'none';
 }
 
 function showTrackCtxMenu(e, trackId) {
@@ -1763,6 +1769,9 @@ async function showArtistDetailCtxMenu(e, artistName = null) {
   const artist = artistName || state.artist || document.getElementById('artist-hero-name')?.textContent || '';
   if (!artist) return;
   await showArtistCtxMenu(_ctxAnchorEvent(e), artist);
+  _ctxDetailMode = 'artist';
+  const editArtistItem = document.getElementById('ctx-rename-artist-item');
+  if (editArtistItem) editArtistItem.style.display = '';
 }
 
 async function showAlbumDetailCtxMenu(e, artistName = null, albumName = null) {
@@ -1772,6 +1781,9 @@ async function showAlbumDetailCtxMenu(e, artistName = null, albumName = null) {
   const album = albumName || state.album || document.getElementById('album-hero-name')?.textContent || null;
   if (!artist || !album) return;
   await showAlbumCtxMenu(_ctxAnchorEvent(e), artist, album);
+  _ctxDetailMode = 'album';
+  const editAlbumItem = document.getElementById('ctx-edit-album-tags-item');
+  if (editAlbumItem) editAlbumItem.style.display = '';
 }
 
 function ctxPlayNext() {
@@ -1800,6 +1812,16 @@ async function ctxToggleFavourite() {
   hideCtxMenu();
   if (!target?.type || !target?.id) return;
   await toggleFavourite(target.type, encodeURIComponent(target.id));
+}
+
+function ctxEditAlbumTags() {
+  hideCtxMenu();
+  openAlbumTagEditor();
+}
+
+function ctxRenameArtist() {
+  hideCtxMenu();
+  openArtistRename();
 }
 
 function ctxAddToPlaylist(e) {
@@ -4316,6 +4338,7 @@ function _updateMappingCount() {
 let _syncPollTimer = null;
 let _syncLastStatus = null;
 let _syncSelectedDapId = '';
+let _syncSelectedDapName = 'Selected device';
 let _syncScanRunId = 0;
 let _syncScanInFlight = false;
 let _syncPreviewWarningCount = 0;
@@ -4466,6 +4489,7 @@ async function showSync() {
   await api('/sync/reset', { method: 'POST' }).catch(() => {});
   _syncLastStatus = null;
   _syncSelectedDapId = '';
+  _syncSelectedDapName = 'Selected device';
   _syncScanInFlight = false;
   _syncPreviewWarningCount = 0;
   _syncPhase('pick');
@@ -4501,6 +4525,7 @@ async function showSync() {
   } else {
     const firstMounted = daps.find(d => d?.mounted);
     _syncSelectedDapId = String((firstMounted || {}).id || '');
+    _syncSelectedDapName = String((firstMounted || {}).name || 'Selected device');
     container.innerHTML = daps.map(dap => {
       const selectable = !!dap?.mounted;
       const selected = selectable && String(dap.id) === String(_syncSelectedDapId);
@@ -4536,6 +4561,7 @@ function closeSyncModal() {
   _syncScanRunId += 1;
   _syncScanInFlight = false;
   _syncSelectedDapId = '';
+  _syncSelectedDapName = 'Selected device';
   _syncPreviewWarningCount = 0;
   document.getElementById('sync-modal').style.display = 'none';
 }
@@ -4550,6 +4576,7 @@ function selectSyncDevice(dapId) {
     return;
   }
   _syncSelectedDapId = targetId;
+  _syncSelectedDapName = String(target.querySelector('.sync-device-card-name')?.textContent || '').trim() || 'Selected device';
   if (container) {
     [...container.querySelectorAll('.sync-device-card')].forEach((el) => {
       const cardId = String(el.getAttribute('data-dap-id') || '');
@@ -4596,6 +4623,19 @@ function _syncSetCopyVisualProgress(percent) {
   const label = document.getElementById('sync-copy-percent');
   if (ring) ring.style.setProperty('--scan-pct', String(pct));
   if (label) label.textContent = `${Math.round(pct)}%`;
+}
+
+function _syncDeviceNameLabel() {
+  const name = String(_syncSelectedDapName || '').trim();
+  return name || 'Selected device';
+}
+
+function _syncUpdatePreviewDirectionLabels() {
+  const deviceLabel = _syncDeviceNameLabel();
+  const localTitle = document.getElementById('sync-local-title');
+  const deviceTitle = document.getElementById('sync-device-title');
+  if (localTitle) localTitle.textContent = `Tracks to Add to ${deviceLabel}`;
+  if (deviceTitle) deviceTitle.textContent = 'Tracks to Add to Local Library';
 }
 
 async function startSyncScan(dapId) {
@@ -4679,20 +4719,25 @@ async function startSyncScan(dapId) {
   }, 600);
 }
 
-function _syncFileRows(paths, side) {
+function _syncFileRows(paths, side, reasons = {}) {
   if (!paths.length) {
     return `<div class="sync-empty">No files to sync in this direction.</div>`;
   }
-  const originLabel = side === 'local' ? 'Local library' : 'Selected device';
+  const deviceLabel = _syncDeviceNameLabel();
+  const originLabel = side === 'local'
+    ? `Local Library → ${deviceLabel}`
+    : `${deviceLabel} → Local Library`;
   return paths.map((p) => {
     const parts = p.replace(/\\/g, '/').split('/');
     const filename = parts[parts.length - 1];
     const folder = parts.slice(0, -1).join('/');
+    const reason = String(reasons[p] || '').trim();
     return `<label class="sync-file-row sync-file-row--preview">
       <input type="checkbox" class="sync-chk sync-chk-${side}" data-path="${esc(p)}" checked onchange="App.syncSelectionChanged()" />
       <div class="sync-file-main">
         <span class="sync-file-name">${esc(filename)}</span>
         <span class="sync-file-folder">${esc(folder)}/</span>
+        ${reason ? `<span class="sync-file-reason">${esc(reason)}</span>` : ''}
       </div>
       <div class="sync-file-origin">${originLabel}</div>
     </label>`;
@@ -4725,10 +4770,19 @@ function toggleSyncSection(section) {
 
 function renderSyncPreview(status) {
   _syncLastStatus = status || null;
+  _syncUpdatePreviewDirectionLabels();
   document.getElementById('sync-local-count').textContent = status.local_only.length;
   document.getElementById('sync-device-count').textContent = status.device_only.length;
-  document.getElementById('sync-list-local').innerHTML = _syncFileRows(status.local_only, 'local');
-  document.getElementById('sync-list-device').innerHTML = _syncFileRows(status.device_only, 'device');
+  document.getElementById('sync-list-local').innerHTML = _syncFileRows(
+    status.local_only,
+    'local',
+    status.local_only_reasons || {}
+  );
+  document.getElementById('sync-list-device').innerHTML = _syncFileRows(
+    status.device_only,
+    'device',
+    status.device_only_reasons || {}
+  );
   const warnings = Array.isArray(status.warnings) ? status.warnings : [];
   _syncPreviewWarningCount = warnings.length;
   document.getElementById('sync-warning-count').textContent = warnings.length;
@@ -4819,11 +4873,21 @@ function syncSelectionChanged() {
     if (noSelection) {
       executeBtn.disabled = false;
       executeBtn.textContent = 'Done';
+      executeBtn.title = '';
       executeBtn.onclick = () => App.closeSyncModal();
     } else {
-      executeBtn.disabled = shortfall > 0;
-      executeBtn.textContent = 'Start Sync';
-      executeBtn.onclick = () => App.executeSync();
+      executeBtn.disabled = false;
+      if (shortfall > 0) {
+        executeBtn.textContent = `Need ${_fmtBytes(shortfall)} More Space`;
+        executeBtn.title = `Not enough space: short by ${_fmtBytes(shortfall)}`;
+        executeBtn.onclick = () => {
+          toast(`Not enough device space. Short by ${_fmtBytes(shortfall)}.`);
+        };
+      } else {
+        executeBtn.textContent = 'Start Sync';
+        executeBtn.title = '';
+        executeBtn.onclick = () => App.executeSync();
+      }
     }
   }
 }
@@ -8555,6 +8619,8 @@ const App = {
   ctxAddToQueue,
   ctxCreateSmartPlaylist,
   ctxToggleFavourite,
+  ctxEditAlbumTags,
+  ctxRenameArtist,
   ctxAddToPlaylist,
   openCtxSubmenu,
   closeCtxSubmenu,

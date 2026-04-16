@@ -337,6 +337,10 @@ sync_state = {
     'current': '',
     'local_copy_map': {},
     'local_only_sizes': {},
+    'local_only_copy_sizes': {},
+    'local_only_existing_sizes': {},
+    'local_only_reasons': {},
+    'device_only_reasons': {},
     'music_out_of_sync_count': 0,
     'music_to_add_count': 0,
     'music_to_remove_count': 0,
@@ -4579,6 +4583,16 @@ def export_to_device():
 # ── Music Sync ────────────────────────────────────────────────────────────────
 
 SYNC_EXTENSIONS = {'.flac', '.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus', '.wv', '.aiff', '.aif', '.ape', '.wma', '.alac'}
+SYNC_SKIP_DIR_NAMES = {
+    '.fseventsd',
+    '.spotlight-v100',
+    '.temporaryitems',
+    '.trashes',
+    '.trash',
+    '$recycle.bin',
+    'system volume information',
+    '@eadir',
+}
 
 def _normalize_rel(path):
     return str(path or '').replace('\\', '/').strip('/')
@@ -4587,6 +4601,14 @@ def _normalize_rel(path):
 def _is_music_file_path(path):
     ext = Path(str(path or '')).suffix.lower()
     return ext in SYNC_EXTENSIONS
+
+
+def _should_skip_scan_dir(dirname):
+    name = str(dirname or '').strip()
+    if not name:
+        return True
+    low = name.casefold()
+    return low in SYNC_SKIP_DIR_NAMES
 
 
 def _safe_segment(value):
@@ -4654,13 +4676,17 @@ def _render_device_relpath(track, template):
         parts = [_safe_segment(Path(track.get('path') or '').name) or 'Unknown.flac']
     filename = parts[-1]
     ext = Path(track.get('path') or '').suffix.lower()
-    if not Path(filename).suffix and ext:
-        filename = f'{filename}{ext}'
     if _INVALID_FS_CHARS_RE.search(filename):
         invalid_char_hit = True
     filename = _safe_segment(filename)
-    if ext and not Path(filename).suffix:
-        filename = f'{filename}{ext}'
+    # Preserve the source audio extension even when title text contains dots
+    # (e.g. "K.U.S.H"), which can look like a suffix to Path(...).suffix.
+    if ext:
+        low = filename.lower()
+        if not low.endswith(ext):
+            current_suffix = Path(filename).suffix.lower()
+            if current_suffix not in SYNC_EXTENSIONS:
+                filename = f'{filename}{ext}'
     parts[-1] = filename or ('track' + (ext or '.flac'))
     rel = '/'.join([p for p in parts if p])
     if invalid_char_hit:
@@ -4686,8 +4712,8 @@ def walk_music_files(root):
     if not root.exists():
         return files
     for dirpath, dirnames, filenames in os.walk(root):
-        # Skip hidden directories
-        dirnames[:] = [d for d in dirnames if not d.startswith('.')]
+        # Skip only known system/index folders; allow valid dot-prefixed album names.
+        dirnames[:] = [d for d in dirnames if not _should_skip_scan_dir(d)]
         for fn in filenames:
             if fn.startswith('.') or fn.startswith('._'):
                 continue
@@ -4768,9 +4794,12 @@ def _compute_sync_diff_for_dap(dap):
     expected_keys = set()
     local_only = []
     local_copy_map = {}
+    local_only_existing_sizes = {}
+    local_only_reasons = {}
     warnings = []
     target_collisions = set()
     device_only = []
+    device_only_reasons = {}
 
     for e in track_entries:
         local_key = e['local_rel'].casefold()
@@ -4795,6 +4824,7 @@ def _compute_sync_diff_for_dap(dap):
                 continue
             local_copy_map[target_rel] = e['local_rel']
             local_only.append(target_rel)
+            local_only_reasons[target_rel] = 'Missing on device at destination path'
             warnings.extend(e.get('warnings') or [])
             continue
 
@@ -4815,7 +4845,12 @@ def _compute_sync_diff_for_dap(dap):
         if src_size != dst_size:
             # iTunes-like behavior: local library is authoritative for matched paths.
             local_copy_map[matched_rel] = e['local_rel']
+            local_only_existing_sizes[matched_rel] = int(dst_size or 0)
             local_only.append(matched_rel)
+            local_only_reasons[matched_rel] = (
+                f'Size mismatch: local {int(src_size or 0)} bytes, '
+                f'device {int(dst_size or 0)} bytes'
+            )
             manifest_seen_keys.add(matched_key)
             manifest_updates[matched_key] = {
                 'target_rel': matched_rel,
@@ -4840,7 +4875,9 @@ def _compute_sync_diff_for_dap(dap):
         )
         if local_changed_since_manifest and manifest_entry:
             local_copy_map[matched_rel] = e['local_rel']
+            local_only_existing_sizes[matched_rel] = int(dst_size or 0)
             local_only.append(matched_rel)
+            local_only_reasons[matched_rel] = 'Local file changed since last verified sync'
 
         manifest_updates[matched_key] = {
             'target_rel': matched_rel,
@@ -4857,6 +4894,8 @@ def _compute_sync_diff_for_dap(dap):
     local_only = sorted(set(local_only))
     device_only.extend([device_map[k] for k in (device_keys - expected_keys)])
     device_only = sorted(set(device_only))
+    for rel in device_only:
+        device_only_reasons[rel] = 'Present on device only (not found in local library scan)'
 
     # Keep only current device-file keys for this DAP and refresh verified entries.
     _update_dap_sync_manifest(
@@ -4865,7 +4904,11 @@ def _compute_sync_diff_for_dap(dap):
         prune_to_keys=device_keys.union(manifest_seen_keys),
     )
 
+    # Net required bytes for local->device copy:
+    #   max(0, source_size - existing_destination_size)
+    # This accounts for overwrite reuse of space on the device.
     local_only_sizes = {}
+    local_only_copy_sizes = {}
     required_bytes = 0
     music_base = get_music_base()
     for device_rel in local_only:
@@ -4879,8 +4922,11 @@ def _compute_sync_diff_for_dap(dap):
                 size = int(src.stat().st_size)
         except Exception:
             size = 0
-        local_only_sizes[device_rel] = size
-        required_bytes += size
+        existing = int(local_only_existing_sizes.get(device_rel) or 0)
+        net = max(0, size - existing)
+        local_only_copy_sizes[device_rel] = size
+        local_only_sizes[device_rel] = net
+        required_bytes += net
 
     mount_root, _ = _resolve_dap_mount(dap)
     usage_path = mount_root if (mount_root and mount_root.exists()) else device_path
@@ -4916,6 +4962,10 @@ def _compute_sync_diff_for_dap(dap):
         'warnings': warnings,
         'local_copy_map': local_copy_map,
         'local_only_sizes': local_only_sizes,
+        'local_only_copy_sizes': local_only_copy_sizes,
+        'local_only_existing_sizes': local_only_existing_sizes,
+        'local_only_reasons': local_only_reasons,
+        'device_only_reasons': device_only_reasons,
         'total': len(local_only) + len(device_only),
         'music_out_of_sync_count': len(local_only) + len(device_only),
         'music_to_add_count': len(local_only),
@@ -5024,6 +5074,10 @@ def sync_scan():
         'current': '',
         'local_copy_map': {},
         'local_only_sizes': {},
+        'local_only_copy_sizes': {},
+        'local_only_existing_sizes': {},
+        'local_only_reasons': {},
+        'device_only_reasons': {},
         'music_out_of_sync_count': 0,
         'music_to_add_count': 0,
         'music_to_remove_count': 0,
@@ -5052,6 +5106,10 @@ def sync_scan():
                 'warnings': diff['warnings'],
                 'local_copy_map': diff['local_copy_map'],
                 'local_only_sizes': diff['local_only_sizes'],
+                'local_only_copy_sizes': diff.get('local_only_copy_sizes', {}),
+                'local_only_existing_sizes': diff.get('local_only_existing_sizes', {}),
+                'local_only_reasons': diff.get('local_only_reasons', {}),
+                'device_only_reasons': diff.get('device_only_reasons', {}),
                 'total': diff['total'],
                 'current': '',
                 'music_out_of_sync_count': diff['music_out_of_sync_count'],
@@ -5207,6 +5265,10 @@ def sync_reset():
         'progress': 0, 'total': 0, 'local_only': [], 'device_only': [],
         'warnings': [], 'errors': [], 'current': '', 'local_copy_map': {},
         'local_only_sizes': {},
+        'local_only_copy_sizes': {},
+        'local_only_existing_sizes': {},
+        'local_only_reasons': {},
+        'device_only_reasons': {},
         'music_out_of_sync_count': 0,
         'music_to_add_count': 0,
         'music_to_remove_count': 0,
