@@ -356,6 +356,11 @@ VALID_LISTEN_RATIO = 0.4
 library = []
 library_lock = threading.Lock()
 
+# ── Performance caches ────────────────────────────────────────────────────────
+_home_cache = {'data': None, 'ts': 0}       # /api/home — 60s TTL
+_home_cache_lock = threading.Lock()
+_meta_maps_cache = None                     # _music_meta_maps() result, cleared on rescan
+
 
 def format_duration(seconds):
     m, s = divmod(int(seconds), 60)
@@ -941,6 +946,10 @@ def do_scan():
     new_count = len(tracks) - prev_count
     scan_state.update({'status': 'done', 'message': f'Library ready — {len(tracks)} tracks', 'progress': len(files), 'total': len(files), 'new_tracks': new_count, 'total_tracks': len(tracks)})
     print(f"Scan complete: {len(tracks)} tracks ({new_count:+d} new)")
+    _invalidate_home_cache()
+    global _meta_maps_cache, _stream_track_cache
+    _meta_maps_cache = None
+    _stream_track_cache = {}
 
 
 def load_library():
@@ -972,6 +981,7 @@ def load_playlists():
 
 def save_playlists(playlists):
     _db.db_save_playlists(playlists)
+    _invalidate_home_cache()
 
 
 def _normalize_favourite_rows(rows):
@@ -1231,6 +1241,10 @@ def _current_listen_cutoff():
 
 
 def _music_meta_maps():
+    global _meta_maps_cache
+    if _meta_maps_cache is not None:
+        return _meta_maps_cache
+
     with library_lock:
         tracks = list(library)
     track_by_id = {str(t.get('id')): t for t in tracks if t.get('id')}
@@ -1269,7 +1283,9 @@ def _music_meta_maps():
             }
         elif not artists[ak].get('artwork_key') and t.get('artwork_key'):
             artists[ak]['artwork_key'] = t.get('artwork_key')
-    return tracks, track_by_id, albums, artists
+    result = (tracks, track_by_id, albums, artists)
+    _meta_maps_cache = result
+    return result
 
 
 def _recently_added_items(tracks, albums, playlists, limit=10):
@@ -1768,9 +1784,21 @@ def _home_stats_aggregate(events, albums):
     }
 
 
+def _invalidate_home_cache():
+    """Call after any mutation that should bust the home payload cache."""
+    with _home_cache_lock:
+        _home_cache['ts'] = 0
+
+
 @app.route('/api/home')
 def home():
     """Main home payload for Home v2 (legacy + spec-aligned keys)."""
+    global _home_cache
+    # Serve from cache if fresh (60s TTL)
+    with _home_cache_lock:
+        if _home_cache['data'] is not None and (time.time() - _home_cache['ts']) < 60:
+            return jsonify(_home_cache['data'])
+
     settings = load_settings()
     player_state = _db.db_get_player_state()
     try:
@@ -1838,7 +1866,7 @@ def home():
             'history_fresh': False,
         }
 
-    return jsonify({
+    payload = {
         'tracking_enabled': _to_bool(settings.get('listening_tracking_enabled', True)),
         'has_history': has_history,
         # Spec-aligned names
@@ -1863,7 +1891,11 @@ def home():
             'latest_playlist_name': latest_playlist.get('name') if latest_playlist else None,
             'has_continue': len(continue_items) > 0,
         },
-    })
+    }
+    with _home_cache_lock:
+        _home_cache['data'] = payload
+        _home_cache['ts'] = time.time()
+    return jsonify(payload)
 
 
 @app.route('/api/home/stats')
@@ -6692,9 +6724,16 @@ def delete_baseline(bid):
     return jsonify({'ok': True})
 
 
+_stream_track_cache = {}   # track_id → track dict; cleared on rescan
+
 def _get_track_by_id(tid):
-    """Look up a track by its ID."""
-    return _db.db_get_track(tid)
+    """Look up a track by its ID. Uses in-memory cache to avoid DB hit on every Range request."""
+    if tid in _stream_track_cache:
+        return _stream_track_cache[tid]
+    track = _db.db_get_track(tid)
+    if track:
+        _stream_track_cache[tid] = track
+    return track
 
 
 _AUDIO_MIMES = {
@@ -7028,34 +7067,49 @@ def insights_tag_health():
 
     total = len(tracks)
 
-    def _missing(t, field, sentinel=None):
-        v = t.get(field)
-        return not v or (sentinel is not None and v == sentinel)
+    # Single-pass accumulation of all completeness counters, artist groups, and problem tracks
+    missing_counts = {'title': 0, 'artist': 0, 'album': 0, 'year': 0, 'genre': 0}
+    artist_groups = defaultdict(list)
+    problem_tracks = []
 
-    field_defs = [
-        ('title',  None),
-        ('artist', 'Unknown Artist'),
-        ('album',  'Unknown Album'),
-        ('year',   None),
-        ('genre',  None),
-    ]
+    for t in tracks:
+        issues = []
+        if not t.get('title'):
+            missing_counts['title'] += 1; issues.append('title')
+        v_artist = t.get('artist') or ''
+        if not v_artist or v_artist == 'Unknown Artist':
+            missing_counts['artist'] += 1; issues.append('artist')
+        v_album = t.get('album') or ''
+        if not v_album or v_album == 'Unknown Album':
+            missing_counts['album'] += 1; issues.append('album')
+        if not t.get('year'):
+            missing_counts['year'] += 1; issues.append('year')
+        if not t.get('genre'):
+            missing_counts['genre'] += 1; issues.append('genre')
+
+        raw = (t.get('album_artist') or t.get('artist') or '').strip()
+        if raw and raw.lower() != 'unknown artist':
+            artist_groups[re.sub(r'\s+', ' ', raw.lower())].append(raw)
+
+        if issues:
+            problem_tracks.append({
+                'id':     t['id'],
+                'title':  t.get('title') or t.get('filename', '?'),
+                'artist': t.get('artist', ''),
+                'album':  t.get('album', ''),
+                'path':   t.get('path', ''),
+                'issues': issues,
+            })
 
     completeness = {}
-    for field, sentinel in field_defs:
-        n_missing = sum(1 for t in tracks if _missing(t, field, sentinel))
-        present   = total - n_missing
+    for field in ('title', 'artist', 'album', 'year', 'genre'):
+        n_missing = missing_counts[field]
+        present = total - n_missing
         completeness[field] = {
             'present': present,
             'missing': n_missing,
             'pct':     round(present / total * 100, 1),
         }
-
-    artist_groups = defaultdict(list)
-    for t in tracks:
-        raw = (t.get('album_artist') or t.get('artist') or '').strip()
-        if raw and raw.lower() != 'unknown artist':
-            norm = re.sub(r'\s+', ' ', raw.lower())
-            artist_groups[norm].append(raw)
 
     duplicates = []
     for norm, raw_list in artist_groups.items():
@@ -7067,24 +7121,6 @@ def insights_tag_health():
                 'track_count': len(raw_list),
             })
     duplicates.sort(key=lambda x: -x['track_count'])
-
-    problem_tracks = []
-    for t in tracks:
-        issues = []
-        if _missing(t, 'title'):                    issues.append('title')
-        if _missing(t, 'artist', 'Unknown Artist'): issues.append('artist')
-        if _missing(t, 'album',  'Unknown Album'):  issues.append('album')
-        if _missing(t, 'year'):                     issues.append('year')
-        if _missing(t, 'genre'):                    issues.append('genre')
-        if issues:
-            problem_tracks.append({
-                'id':     t['id'],
-                'title':  t.get('title') or t.get('filename', '?'),
-                'artist': t.get('artist', ''),
-                'album':  t.get('album', ''),
-                'path':   t.get('path', ''),
-                'issues': issues,
-            })
     problem_tracks.sort(key=lambda x: -len(x['issues']))
 
     return jsonify({
