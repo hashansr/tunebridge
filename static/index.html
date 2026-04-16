@@ -97,6 +97,12 @@
 
     <!-- Main -->
     <main id="main">
+      <div id="main-nav-bar">
+        <button id="nav-back-btn" onclick="App.navBack()" title="Back" aria-label="Go back" style="visibility:hidden">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div id="main-nav-right"></div>
+      </div>
       <!-- Library views -->
       <div id="view-home" class="view" style="display:none">
 
@@ -109,9 +115,6 @@
               <span id="home-last-scan" class="home-meta-chip home-meta-scan"></span>
             </div>
           </div>
-          <button class="btn-icon home-refresh-btn" title="Refresh" onclick="App.homeForceRefresh()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-          </button>
         </div>
 
         <!-- Jump Back In -->
@@ -236,7 +239,7 @@
 
       <div id="view-albums" class="view" style="display:none">
         <div class="view-header">
-          <div class="breadcrumb" id="albums-breadcrumb"></div>
+          <h2>Albums</h2>
           <div class="view-count" id="albums-count"></div>
           <div class="library-toolbar library-toolbar-inline">
             <div class="pl-filter-wrap library-filter-wrap">
@@ -259,7 +262,7 @@
               <button class="btn-hero-shuffle" id="artist-hero-shuffle"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="4" y1="4" x2="9" y2="9"/></svg> Shuffle</button>
               <button class="hero-fav-star" id="artist-hero-fav" title="Favourite">&#9733;</button>
               <div class="hero-more-wrap" id="artist-hero-more-wrap">
-                <button class="btn-hero-more" id="artist-hero-more" onclick="App.toggleHeroMore('artist')">
+                <button class="btn-hero-more" id="artist-hero-more" onclick="App.showArtistDetailCtxMenu(event)">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
                 </button>
                 <div class="hero-more-menu" id="artist-hero-more-menu">
@@ -281,9 +284,6 @@
       </div>
 
       <div id="view-tracks" class="view" style="display:none">
-        <div class="view-header">
-          <div class="breadcrumb" id="tracks-breadcrumb"></div>
-        </div>
         <div id="album-hero" class="browse-hero" style="display:none">
           <div class="hero-art-sq" id="album-hero-art"></div>
           <div class="hero-info">
@@ -297,7 +297,7 @@
               <button class="btn-hero-shuffle" id="album-hero-shuffle"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="4" y1="4" x2="9" y2="9"/></svg> Shuffle</button>
               <button class="hero-fav-star" id="album-hero-fav" title="Favourite">&#9733;</button>
               <div class="hero-more-wrap" id="album-hero-more-wrap">
-                <button class="btn-hero-more" id="album-hero-more" onclick="App.toggleHeroMore('album')">
+                <button class="btn-hero-more" id="album-hero-more" onclick="App.showAlbumDetailCtxMenu(event)">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
                 </button>
                 <div class="hero-more-menu" id="album-hero-more-menu">
@@ -460,7 +460,6 @@
       <!-- Playlist view -->
       <div id="view-playlist" class="view" style="display:none">
         <div class="view-header">
-          <div class="breadcrumb" id="playlist-breadcrumb"></div>
           <div class="pl-toolbar">
             <button class="pl-toolbar-btn" id="pl-rename-btn" onclick="App.focusPlaylistName()" title="Rename playlist">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -611,17 +610,11 @@
 
       <!-- DAP detail view -->
       <div id="view-dap-detail" class="view" style="display:none">
-        <div class="view-header">
-          <div class="breadcrumb" id="dap-detail-breadcrumb"></div>
-        </div>
         <div id="dap-detail-content"></div>
       </div>
 
       <!-- IEM detail view -->
       <div id="view-iem-detail" class="view" style="display:none">
-        <div class="view-header">
-          <div class="breadcrumb" id="iem-detail-breadcrumb"></div>
-        </div>
         <div id="iem-detail-content"></div>
       </div>
 
@@ -1870,6 +1863,9 @@
   <section id="peq-workspace" class="peq-workspace" style="display:none">
     <div class="peq-workspace-shell">
       <div class="peq-workspace-header">
+        <button class="peq-workspace-back-btn" onclick="App.closePeqEditor()" title="Back" aria-label="Back">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
         <div class="peq-workspace-title-block">
           <div class="peq-workspace-overline">Tune for immersion</div>
           <h2>Custom PEQ</h2>
