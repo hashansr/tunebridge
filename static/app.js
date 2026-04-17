@@ -138,6 +138,355 @@ let _peqWorkspaceConnectedDaps = [];
 let _peqWorkspaceCopyDapId = '';
 let _peqWorkspaceEditContext = null;
 let _peqWorkspaceIemCache = [];
+const _FR_OVERLAY_STORAGE_KEY = 'tb.fr_overlays.v1';
+const _FR_OVERLAY_DEFS = [
+  { id: 'sub_bass',      label: 'Sub Bass',      f1: 20,   f2: 50,    tier: 'primary', defaultOn: true },
+  { id: 'bass',          label: 'Bass',          f1: 50,   f2: 160,   tier: 'primary', defaultOn: true },
+  { id: 'lower_mids',    label: 'Lower Mids',    f1: 160,  f2: 400,   tier: 'primary', defaultOn: true },
+  { id: 'upper_mids',    label: 'Upper Mids',    f1: 400,  f2: 1200,  tier: 'primary', defaultOn: true },
+  { id: 'lower_treble',  label: 'Lower Treble',  f1: 1200, f2: 4000,  tier: 'primary', defaultOn: true },
+  { id: 'upper_treble',  label: 'Upper Treble',  f1: 4000, f2: 15000, tier: 'primary', defaultOn: true },
+  { id: 'bass_feel',     label: 'Bass Feel',     f1: 20,   f2: 160,   tier: 'secondary', defaultOn: false },
+  { id: 'slam',          label: 'Slam',          f1: 50,   f2: 75,    tier: 'secondary', defaultOn: false },
+  { id: 'male_vocals',   label: 'Male Vocals',   f1: 100,  f2: 400,   tier: 'secondary', defaultOn: false },
+  { id: 'female_vocals', label: 'Female Vocals', f1: 330,  f2: 3000,  tier: 'secondary', defaultOn: false },
+  { id: 'note_weight',   label: 'Note Weight',   f1: 80,   f2: 1000,  tier: 'secondary', defaultOn: false },
+  { id: 'sound_stage',   label: 'Sound Stage',   f1: 155,  f2: 15000, tier: 'secondary', defaultOn: false },
+  { id: 'detail',        label: 'Detail',        f1: 4000, f2: 6000,  tier: 'secondary', defaultOn: false },
+  { id: 'sibilance',     label: 'Sibilance',     f1: 4000, f2: 10000, tier: 'secondary', defaultOn: false },
+  { id: 'texture',       label: 'Texture',       f1: 4000, f2: 8000,  tier: 'secondary', defaultOn: false },
+  { id: 'timbre',        label: 'Timbre',        f1: 20,   f2: 1200,  tier: 'secondary', defaultOn: false },
+];
+const _FR_OVERLAY_DEF_MAP = Object.fromEntries(_FR_OVERLAY_DEFS.map(d => [d.id, d]));
+let _frOverlaySelected = null;
+let _frOverlayMenuOpen = null;
+let _frOverlayRefreshTimer = null;
+let _iemCompareLastData = null;
+
+function _frOverlayDefaultIds() {
+  // New product default: no overlays selected.
+  return [];
+}
+
+function _initFrOverlaySelection() {
+  if (_frOverlaySelected instanceof Set) return;
+  const valid = new Set(_FR_OVERLAY_DEFS.map(d => d.id));
+  let ids = [];
+  let hasSaved = false;
+  try {
+    const raw = localStorage.getItem(_FR_OVERLAY_STORAGE_KEY);
+    hasSaved = raw !== null;
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(parsed)) ids = parsed.filter(id => valid.has(id));
+  } catch (_) {}
+  if (!hasSaved) ids = _frOverlayDefaultIds();
+  _frOverlaySelected = new Set(ids);
+}
+
+function _saveFrOverlaySelection() {
+  _initFrOverlaySelection();
+  try {
+    localStorage.setItem(_FR_OVERLAY_STORAGE_KEY, JSON.stringify([..._frOverlaySelected]));
+  } catch (_) {}
+}
+
+function _frOverlaySelectedDefs() {
+  _initFrOverlaySelection();
+  return _FR_OVERLAY_DEFS.filter(d => _frOverlaySelected.has(d.id));
+}
+
+function _frOverlayCount() {
+  _initFrOverlaySelection();
+  return _frOverlaySelected.size;
+}
+
+function _frOverlayHzLabel(hz) {
+  const n = Number(hz || 0);
+  if (n >= 1000) {
+    const k = n / 1000;
+    return Number.isInteger(k) ? `${k}kHz` : `${k.toFixed(1)}kHz`;
+  }
+  return `${Math.round(n)}Hz`;
+}
+
+function _frOverlayMenuKey(rawKey) {
+  return String(rawKey || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function _frOverlayControlInnerHtml(contextKey) {
+  _initFrOverlaySelection();
+  const menuKey = _frOverlayMenuKey(contextKey);
+  const isOpen = _frOverlayMenuOpen === menuKey;
+  const mk = (tier) => _FR_OVERLAY_DEFS
+    .filter(d => d.tier === tier)
+    .map(d => `
+      <label class="fr-ov-opt">
+        <input type="checkbox" data-overlay-id="${esc(d.id)}" ${_frOverlaySelected.has(d.id) ? 'checked' : ''} onchange="App.setFrOverlay('${d.id}', this.checked)" />
+        <span class="fr-ov-opt-label">${esc(d.label)}</span>
+        <span class="fr-ov-opt-range">${_frOverlayHzLabel(d.f1)} - ${_frOverlayHzLabel(d.f2)}</span>
+      </label>
+    `).join('');
+  return `
+    <div class="fr-ov-shell">
+      <button class="fr-ov-trigger${isOpen ? ' open' : ''}" onclick="App.toggleFrOverlayMenu('${menuKey}', event)">Overlays (${_frOverlayCount()})</button>
+      <div class="fr-ov-menu${isOpen ? ' open' : ''}">
+        <div class="fr-ov-actions">
+          <button onclick="App.frOverlaysDefault()">None</button>
+          <button onclick="App.frOverlaysBasic()">Basic</button>
+          <button onclick="App.frOverlaysAdvanced()">Advanced</button>
+        </div>
+        <div class="fr-ov-group-title">Primary</div>
+        <div class="fr-ov-group">${mk('primary')}</div>
+        <div class="fr-ov-group-title">Secondary</div>
+        <div class="fr-ov-group">${mk('secondary')}</div>
+      </div>
+    </div>
+  `;
+}
+
+function _syncFrOverlayControlsInPlace() {
+  _initFrOverlaySelection();
+  let synced = 0;
+  document.querySelectorAll('[data-fr-overlay-host="1"]').forEach(host => {
+    const ctx = host.dataset.frOverlayContext || '';
+    const menuKey = _frOverlayMenuKey(ctx);
+    const trigger = host.querySelector('.fr-ov-trigger');
+    const menu = host.querySelector('.fr-ov-menu');
+    if (!trigger || !menu) return;
+    trigger.textContent = `Overlays (${_frOverlayCount()})`;
+    trigger.classList.toggle('open', _frOverlayMenuOpen === menuKey);
+    menu.classList.toggle('open', _frOverlayMenuOpen === menuKey);
+    host.querySelectorAll('input[type="checkbox"][data-overlay-id]').forEach(inp => {
+      const id = inp.getAttribute('data-overlay-id') || '';
+      inp.checked = _frOverlaySelected.has(id);
+    });
+    synced++;
+  });
+  return synced > 0;
+}
+
+function _refreshFrOverlayControls() {
+  _initFrOverlaySelection();
+  document.querySelectorAll('[data-fr-overlay-host="1"]').forEach(host => {
+    const ctx = host.dataset.frOverlayContext || '';
+    host.innerHTML = _frOverlayControlInnerHtml(ctx);
+  });
+}
+
+function _scheduleFrOverlayChartsRefresh() {
+  if (_frOverlayRefreshTimer) clearTimeout(_frOverlayRefreshTimer);
+  _frOverlayRefreshTimer = setTimeout(async () => {
+    _frOverlayRefreshTimer = null;
+    try {
+      if (document.getElementById('freq-canvas') && _currentIemId) {
+        await _loadIemGraph(_currentIemId, _activePeqId, _activeIemSourceId);
+      }
+      if (document.getElementById('iem-compare-modal')?.style.display === 'flex' && _iemCompareLastData) {
+        _buildIemCompareChart(_iemCompareLastData);
+      }
+      if (_peqWorkspaceOpen && document.getElementById('peq-editor-canvas')) {
+        await _refreshPeqWorkspaceGraph();
+      }
+      const openFitIds = Object.keys(_iemFitFRCharts || {}).filter(iemId => document.getElementById(`iemfit-fr-canvas-${iemId}`));
+      for (const iemId of openFitIds) {
+        await _renderIemFRPanel(iemId, _iemFitPeqState[iemId] || null);
+      }
+    } catch (_) {}
+  }, 60);
+}
+
+function _setFrOverlaySelection(nextIds) {
+  _initFrOverlaySelection();
+  const valid = new Set(_FR_OVERLAY_DEFS.map(d => d.id));
+  _frOverlaySelected = new Set((nextIds || []).filter(id => valid.has(id)));
+  _saveFrOverlaySelection();
+  if (!_syncFrOverlayControlsInPlace()) _refreshFrOverlayControls();
+  _scheduleFrOverlayChartsRefresh();
+}
+
+function setFrOverlay(id, enabled) {
+  _initFrOverlaySelection();
+  const next = new Set(_frOverlaySelected);
+  if (enabled) next.add(id);
+  else next.delete(id);
+  _setFrOverlaySelection([...next]);
+}
+
+function frOverlaysPrimaryOnly() {
+  _setFrOverlaySelection(_FR_OVERLAY_DEFS.filter(d => d.tier === 'primary').map(d => d.id));
+}
+
+function frOverlaysDefault() {
+  _setFrOverlaySelection([]);
+}
+
+function frOverlaysBasic() {
+  _setFrOverlaySelection(_FR_OVERLAY_DEFS.filter(d => d.tier === 'primary').map(d => d.id));
+}
+
+function frOverlaysAdvanced() {
+  _setFrOverlaySelection(_FR_OVERLAY_DEFS.map(d => d.id));
+}
+
+function frOverlaysAll() {
+  _setFrOverlaySelection(_FR_OVERLAY_DEFS.map(d => d.id));
+}
+
+function frOverlaysNone() {
+  _setFrOverlaySelection([]);
+}
+
+function frOverlaysClearSecondary() {
+  _initFrOverlaySelection();
+  const next = _FR_OVERLAY_DEFS
+    .filter(d => d.tier === 'primary' && _frOverlaySelected.has(d.id))
+    .map(d => d.id);
+  _setFrOverlaySelection(next);
+}
+
+function frOverlaysResetDefaults() {
+  _setFrOverlaySelection(_frOverlayDefaultIds());
+}
+
+function toggleFrOverlayMenu(menuKey, event) {
+  if (event) event.stopPropagation();
+  _frOverlayMenuOpen = _frOverlayMenuOpen === menuKey ? null : menuKey;
+  if (!_syncFrOverlayControlsInPlace()) _refreshFrOverlayControls();
+}
+
+function _closeFrOverlayMenu() {
+  if (_frOverlayMenuOpen == null) return;
+  _frOverlayMenuOpen = null;
+  if (!_syncFrOverlayControlsInPlace()) _refreshFrOverlayControls();
+}
+
+function _createFrOverlayPlugin(pluginId, opts = {}) {
+  const showPrimaryLabels = opts.showPrimaryLabels !== false;
+  const extraDraw = typeof opts.extraDraw === 'function' ? opts.extraDraw : null;
+  return {
+    id: pluginId,
+    beforeDatasetsDraw(chart) {
+      const area = chart?.chartArea;
+      const x = chart?.scales?.x;
+      if (!area || !x) return;
+      const { left, right, top, bottom } = area;
+      const ctx = chart.ctx;
+      const selected = _frOverlaySelectedDefs();
+      if (selected.length) {
+        const primary = selected.filter(d => d.tier === 'primary');
+        const secondary = selected.filter(d => d.tier === 'secondary');
+        const primaryFillById = {
+          sub_bass: 'rgba(173,198,255,0.10)',
+          bass: 'rgba(173,198,255,0.06)',
+          lower_mids: 'rgba(173,198,255,0.095)',
+          upper_mids: 'rgba(173,198,255,0.06)',
+          lower_treble: 'rgba(173,198,255,0.09)',
+          upper_treble: 'rgba(173,198,255,0.06)',
+        };
+        const primaryEdgeById = {
+          sub_bass: 'rgba(173,198,255,0.2)',
+          bass: 'rgba(173,198,255,0.14)',
+          lower_mids: 'rgba(173,198,255,0.2)',
+          upper_mids: 'rgba(173,198,255,0.14)',
+          lower_treble: 'rgba(173,198,255,0.2)',
+          upper_treble: 'rgba(173,198,255,0.14)',
+        };
+        primary.forEach(d => {
+          const x1 = Math.max(left, Math.min(right, x.getPixelForValue(d.f1)));
+          const x2 = Math.max(left, Math.min(right, x.getPixelForValue(d.f2)));
+          if ((x2 - x1) <= 0) return;
+          ctx.fillStyle = primaryFillById[d.id] || 'rgba(173,198,255,0.14)';
+          ctx.fillRect(x1, top, x2 - x1, bottom - top);
+          // Subtle top edge to increase readability without overpowering the graph.
+          ctx.strokeStyle = primaryEdgeById[d.id] || 'rgba(173,198,255,0.3)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x1, top + 0.5);
+          ctx.lineTo(x2, top + 0.5);
+          ctx.stroke();
+        });
+
+        if (secondary.length) {
+          const sorted = [...secondary].sort((a, b) => a.f1 - b.f1 || a.f2 - b.f2);
+          const rows = [];
+          const rowEnds = [];
+          sorted.forEach(d => {
+            let rowIdx = -1;
+            for (let i = 0; i < rowEnds.length; i++) {
+              if (d.f1 >= rowEnds[i] * 1.01) {
+                rowIdx = i;
+                break;
+              }
+            }
+            if (rowIdx < 0) {
+              rows.push([]);
+              rowEnds.push(0);
+              rowIdx = rows.length - 1;
+            }
+            rows[rowIdx].push(d);
+            rowEnds[rowIdx] = Math.max(rowEnds[rowIdx], d.f2);
+          });
+          // Secondary overlays as bars with in-bar labels, packed into non-overlapping rows.
+          const barStyleById = {
+            bass_feel:     { fill: 'rgba(173,198,255,0.32)', stroke: 'rgba(173,198,255,0.42)' },
+            slam:          { fill: 'rgba(123,163,224,0.34)', stroke: 'rgba(123,163,224,0.44)' },
+            male_vocals:   { fill: 'rgba(240,180,41,0.34)',  stroke: 'rgba(240,180,41,0.46)'  },
+            female_vocals: { fill: 'rgba(83,225,111,0.28)',  stroke: 'rgba(83,225,111,0.42)'  },
+            note_weight:   { fill: 'rgba(83,225,111,0.22)',  stroke: 'rgba(83,225,111,0.34)'  },
+            sound_stage:   { fill: 'rgba(193,198,215,0.30)', stroke: 'rgba(193,198,215,0.42)' },
+            detail:        { fill: 'rgba(173,198,255,0.28)', stroke: 'rgba(173,198,255,0.42)' },
+            sibilance:     { fill: 'rgba(255,179,181,0.30)', stroke: 'rgba(255,179,181,0.42)' },
+            texture:       { fill: 'rgba(240,180,41,0.24)',  stroke: 'rgba(240,180,41,0.38)'  },
+            timbre:        { fill: 'rgba(107,107,123,0.32)', stroke: 'rgba(193,198,215,0.30)' },
+          };
+          const laneTop = top + 6;
+          const rowH = 10;
+          const rowGap = 4;
+          rows.forEach((defs, rowIdx) => {
+            const y = laneTop + rowIdx * (rowH + rowGap);
+            defs.forEach(d => {
+              const x1 = Math.max(left, Math.min(right, x.getPixelForValue(d.f1)));
+              const x2 = Math.max(left, Math.min(right, x.getPixelForValue(d.f2)));
+              const w = x2 - x1;
+              if (w < 18) return;
+              const st = barStyleById[d.id] || { fill: 'rgba(173,198,255,0.28)', stroke: 'rgba(173,198,255,0.40)' };
+              ctx.save();
+              ctx.fillStyle = st.fill;
+              ctx.strokeStyle = st.stroke;
+              ctx.lineWidth = 1;
+              ctx.fillRect(x1, y, w, rowH);
+              ctx.strokeRect(x1 + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, rowH - 1));
+              if (w >= 54) {
+                const label = d.label.length > 18 ? `${d.label.slice(0, 18)}…` : d.label;
+                ctx.font = '600 9px Inter, sans-serif';
+                ctx.fillStyle = 'rgba(229,226,225,0.95)';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(label, x1 + (w / 2), y + (rowH / 2) + 0.2);
+              }
+              ctx.restore();
+            });
+          });
+        }
+      }
+      if (showPrimaryLabels) {
+        const labels = selected.filter(d => d.tier === 'primary');
+        ctx.save();
+        ctx.font = '9px Inter, sans-serif';
+        ctx.fillStyle = 'rgba(229,226,225,0.48)';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        labels.forEach(d => {
+          const x1 = Math.max(left, Math.min(right, x.getPixelForValue(d.f1)));
+          const x2 = Math.max(left, Math.min(right, x.getPixelForValue(d.f2)));
+          if ((x2 - x1) > 34) ctx.fillText(d.label, (x1 + x2) / 2, bottom - 2);
+        });
+        ctx.restore();
+      }
+      if (extraDraw) extraDraw(chart, { left, right, top, bottom, x, ctx });
+    },
+  };
+}
 
 function _isFavourite(type, id) {
   if (!state.favourites[type]) return false;
@@ -787,6 +1136,22 @@ async function loadAlbums(artistFilter = null) {
        <p class="library-error-hint">Check that your music folder is accessible, then rescan in Settings.</p></div>`;
     return;
   }
+  const _albumYearNum = (al) => {
+    const raw = String((al && al.year) || '').trim();
+    if (!raw) return Number.POSITIVE_INFINITY;
+    const m = raw.match(/\d{4}/);
+    if (!m) return Number.POSITIVE_INFINITY;
+    const y = Number.parseInt(m[0], 10);
+    return Number.isFinite(y) ? y : Number.POSITIVE_INFINITY;
+  };
+  if (artistFilter) {
+    albums = [...albums].sort((a, b) => {
+      const ay = _albumYearNum(a);
+      const by = _albumYearNum(b);
+      if (ay !== by) return ay - by;
+      return String(a?.name || '').localeCompare(String(b?.name || ''));
+    });
+  }
   state.albums = albums;
 
   const scope = artistFilter ? `artist:${artistFilter}` : '__all__';
@@ -951,15 +1316,16 @@ async function loadTracks(artist = null, album = null) {
     albumHero.style.display = 'none';
   }
 
-  const tbody = document.getElementById('tracks-tbody');
-  tbody.innerHTML = tracks.map((t, i) => trackRow(t, i + 1, false)).join('');
-  Player.registerTracks(tracks);
+  if (album) _tracksSort = { col: 'track_number', order: 'asc' };
+  state.tracks = _tracksSortedRows(tracks);
+  _renderTracksTable();
+  Player.registerTracks(state.tracks);
   if (album) {
-    Player.setPlaybackContext(tracks, { sourceType: 'album', sourceId: `${artist || ''}||${album}`, sourceLabel: `Album · ${album}` });
+    Player.setPlaybackContext(state.tracks, { sourceType: 'album', sourceId: `${artist || ''}||${album}`, sourceLabel: `Album · ${album}` });
   } else if (artist) {
-    Player.setPlaybackContext(tracks, { sourceType: 'artist', sourceId: artist, sourceLabel: `Artist · ${artist}` });
+    Player.setPlaybackContext(state.tracks, { sourceType: 'artist', sourceId: artist, sourceLabel: `Artist · ${artist}` });
   } else {
-    Player.setPlaybackContext(tracks, { sourceType: 'songs', sourceId: '', sourceLabel: 'Tracks' });
+    Player.setPlaybackContext(state.tracks, { sourceType: 'songs', sourceId: '', sourceLabel: 'Tracks' });
   }
 
   const addAllBtn = document.getElementById('add-all-btn');
@@ -970,17 +1336,17 @@ async function loadTracks(artist = null, album = null) {
       const menu = document.getElementById('album-hero-more-menu');
       if (menu) menu.classList.remove('open');
       const anchor = document.getElementById('album-hero-more') || addAllBtn;
-      App.addAllToPlaylist(tracks.map(t => t.id), anchor);
+      App.addAllToPlaylist(state.tracks.map(t => t.id), anchor);
     };
   }
 
   // Play / Shuffle buttons on album hero
   const albumPlayBtn = document.getElementById('album-hero-play');
-  if (albumPlayBtn) albumPlayBtn.onclick = () => Player.playAll(tracks);
+  if (albumPlayBtn) albumPlayBtn.onclick = () => Player.playAll(state.tracks);
   const albumShuffleBtn = document.getElementById('album-hero-shuffle');
   if (albumShuffleBtn) albumShuffleBtn.onclick = () => {
     const label = album ? `Album · ${album}` : (artist ? `Artist · ${artist}` : 'Tracks');
-    Player.playCollectionShuffled(tracks, label);
+    Player.playCollectionShuffled(state.tracks, label);
   };
 }
 
@@ -991,8 +1357,91 @@ function fmtDuration(totalSecs) {
   return `${m} min`;
 }
 
+let _tracksSort = { col: 'track_number', order: 'asc' };
+
+function _trackNumberSortValue(track) {
+  const raw = String(track?.track_number || '').trim();
+  if (!raw) return Number.POSITIVE_INFINITY;
+  const main = raw.split('/')[0].trim();
+  const n = Number.parseInt(main, 10);
+  return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
+}
+
+function _tracksSortedRows(rows) {
+  const col = String(_tracksSort.col || 'track_number');
+  const dir = _tracksSort.order === 'desc' ? -1 : 1;
+  const out = [...(rows || [])];
+  out.sort((a, b) => {
+    if (col === 'track_number') {
+      const an = _trackNumberSortValue(a);
+      const bn = _trackNumberSortValue(b);
+      if (an !== bn) return (an - bn) * dir;
+      return String(a?.title || '').localeCompare(String(b?.title || ''));
+    }
+    if (col === 'duration') {
+      const ad = Number(a?.duration || 0);
+      const bd = Number(b?.duration || 0);
+      if (ad !== bd) return (ad - bd) * dir;
+      return String(a?.title || '').localeCompare(String(b?.title || ''));
+    }
+    if (col === 'album') {
+      const cmpAlbum = String(a?.album || '').localeCompare(String(b?.album || ''));
+      if (cmpAlbum !== 0) return cmpAlbum * dir;
+      const an = _trackNumberSortValue(a);
+      const bn = _trackNumberSortValue(b);
+      if (an !== bn) return an - bn;
+      return String(a?.title || '').localeCompare(String(b?.title || ''));
+    }
+    const cmp = String(a?.title || '').localeCompare(String(b?.title || ''));
+    if (cmp !== 0) return cmp * dir;
+    return _trackNumberSortValue(a) - _trackNumberSortValue(b);
+  });
+  return out;
+}
+
+function _renderTracksTable() {
+  const tbody = document.getElementById('tracks-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = (state.tracks || []).map((t, i) => trackRow(t, i + 1, false)).join('');
+  document.querySelectorAll('#tracks-table .sort-arrow').forEach(el => { el.textContent = ''; });
+  const arrow = document.getElementById(`tracks-sort-${_tracksSort.col}`);
+  if (arrow) arrow.textContent = _tracksSort.order === 'asc' ? '▲' : '▼';
+}
+
+function sortTracks(col) {
+  const key = String(col || '').trim();
+  if (!key) return;
+  if (_tracksSort.col === key) {
+    _tracksSort.order = _tracksSort.order === 'asc' ? 'desc' : 'asc';
+  } else {
+    _tracksSort.col = key;
+    _tracksSort.order = 'asc';
+  }
+  state.tracks = _tracksSortedRows(state.tracks || []);
+  _renderTracksTable();
+  Player.registerTracks(state.tracks);
+  if (state.album) {
+    Player.setPlaybackContext(state.tracks, { sourceType: 'album', sourceId: `${state.artist || ''}||${state.album}`, sourceLabel: `Album · ${state.album}` });
+  } else if (state.artist) {
+    Player.setPlaybackContext(state.tracks, { sourceType: 'artist', sourceId: state.artist, sourceLabel: `Artist · ${state.artist}` });
+  } else {
+    Player.setPlaybackContext(state.tracks, { sourceType: 'songs', sourceId: '', sourceLabel: 'Tracks' });
+  }
+}
+
+function _formatTrackNumber(trackNumber, fallbackNum) {
+  const raw = String(trackNumber || '').trim();
+  if (!raw) return String(fallbackNum);
+  const main = raw.split('/')[0].trim();
+  if (!main) return String(fallbackNum);
+  const parsed = Number.parseInt(main, 10);
+  if (Number.isFinite(parsed) && parsed > 0) return String(parsed);
+  return main;
+}
+
 /* ── Track row (library) ────────────────────────────────────────────── */
 function trackRow(t, num, inPlaylist) {
+  const trackNumLabel = inPlaylist ? String(num) : _formatTrackNumber(t.track_number, num);
   const isFavVirtualPlaylist = !!(inPlaylist && state.playlist?.is_favourites);
   const add = inPlaylist
     ? `<button class="remove-btn" onclick="${isFavVirtualPlaylist ? `App.removeSongFromFavourites('${t.id}')` : `App.removeFromPlaylist('${t.id}')`}" title="${isFavVirtualPlaylist ? 'Remove from favourites' : 'Remove'}">
@@ -1016,8 +1465,8 @@ function trackRow(t, num, inPlaylist) {
       <td class="col-num" onclick="App.toggleTrackSelection('${t.id}', ${num - 1}, event)">
         <div class="num-cell">
           ${dragHandle}
-          <span class="track-num">${num}</span>
           <span class="track-check-indicator">${checkIcon}</span>
+          <span class="track-num">${esc(trackNumLabel)}</span>
         </div>
       </td>
       <td>
@@ -1389,7 +1838,18 @@ function setPlaylistInSort(mode) {
 function _getCurrentViewTrackList() {
   if (state.view === 'tracks') return state.tracks;
   if (state.view === 'playlist') return _getDisplayedTracks();
+  if (state.view === 'songs') return _getSongsFilteredTracks();
   return [];
+}
+
+function _getSelectedTracksInCurrentView() {
+  if (!state.selectedTrackIds.size) return [];
+  const tracks = _getCurrentViewTrackList() || [];
+  if (!tracks.length) return [];
+  const byId = new Map(tracks.map((t) => [String(t.id), t]));
+  return [...state.selectedTrackIds]
+    .map((id) => byId.get(String(id)))
+    .filter(Boolean);
 }
 
 function toggleTrackSelection(id, idx, event) {
@@ -1436,7 +1896,7 @@ function updateSelectionUI() {
   }
 
   // Update row visual states across all track tables
-  ['tracks-tbody', 'search-tbody', 'pl-tbody'].forEach(tbodyId => {
+  ['tracks-tbody', 'search-tbody', 'songs-tbody', 'pl-tbody'].forEach(tbodyId => {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
     tbody.classList.toggle('has-selection', count > 0);
@@ -1713,9 +2173,30 @@ function showTrackCtxMenu(e, trackId) {
   e.preventDefault();
   e.stopPropagation();
   hideDropdown();
-  const track = Player.getTrack(trackId);
+  const id = String(trackId || '');
+  const selectedTracks = _getSelectedTracksInCurrentView();
+  const clickedIsSelected = state.selectedTrackIds.has(id);
+
+  if (selectedTracks.length > 1 && clickedIsSelected) {
+    _showCtxMenu(
+      e.clientX,
+      e.clientY,
+      selectedTracks,
+      `${selectedTracks.length} songs selected`
+    );
+    return;
+  }
+
+  if (selectedTracks.length && !clickedIsSelected) {
+    state.selectedTrackIds.clear();
+    state.selectedTrackIds.add(id);
+    state.lastSelectedIdx = null;
+    updateSelectionUI();
+  }
+
+  const track = Player.getTrack(id);
   if (!track) return;
-  _showCtxMenu(e.clientX, e.clientY, [track], track.title, { type: 'songs', id: String(trackId) });
+  _showCtxMenu(e.clientX, e.clientY, [track], track.title, { type: 'songs', id });
 }
 
 async function playArtistCard(artistName) {
@@ -2893,12 +3374,10 @@ async function loadFavouritesSummary() {
   const grid = document.getElementById('favourites-summary-grid');
   const empty = document.getElementById('favourites-empty');
   if (!grid || !empty) return;
-  if (!state.artists.length) {
-    state.artists = await api('/library/artists').catch(() => []);
-  }
-  if (!state.albums.length) {
-    state.albums = await api('/library/albums').catch(() => []);
-  }
+  // Always hydrate from full-library endpoints here; state.artists/state.albums
+  // may currently hold scoped subsets (e.g. single-artist albums view).
+  state.artists = await api('/library/artists').catch(() => state.artists || []);
+  state.albums = await api('/library/albums').catch(() => state.albums || []);
 
   const favSongsRes = await api('/favourites/songs/tracks').catch(() => ({ tracks: [] }));
   const favSongs = Array.isArray(favSongsRes?.tracks) ? favSongsRes.tracks : [];
@@ -2968,9 +3447,7 @@ function _getFavArtistsRowsSorted() {
 }
 
 async function loadFavArtists() {
-  if (!state.artists.length) {
-    state.artists = await api('/library/artists').catch(() => []);
-  }
+  state.artists = await api('/library/artists').catch(() => state.artists || []);
   const rows = _getFavArtistsRowsSorted();
   _renderFavArtistCards(rows);
 }
@@ -3030,9 +3507,7 @@ function _getFavAlbumsRowsSorted() {
 }
 
 async function loadFavAlbums() {
-  if (!state.albums.length) {
-    state.albums = await api('/library/albums').catch(() => []);
-  }
+  state.albums = await api('/library/albums').catch(() => state.albums || []);
   const rows = _getFavAlbumsRowsSorted();
   _renderFavAlbumCards(rows);
 }
@@ -3321,13 +3796,11 @@ const _HOME_PLAY_SVG = playSvg(16);
 function _homeRailCardHtml(item) {
   const title = item.title || 'Unknown';
   const subtitle = item.subtitle || '';
-  const isNew = item.is_new;
   // Use div.home-card-play-btn (not button) to avoid nested-button invalid HTML
   return `
     <div class="home-card" onclick="${_homeOnClick(item)}" role="button" tabindex="0">
       <div class="home-card-art">
         ${_homeArtEl(item)}
-        ${isNew ? '<span class="home-card-new-badge">NEW</span>' : ''}
         <div class="home-card-play-btn" onclick="${_homeOnPlay(item)}" role="button" tabindex="0" title="Play">
           ${_HOME_PLAY_SVG}
         </div>
@@ -5238,6 +5711,7 @@ async function showIemCompare() {
   const res = await fetch(`/api/iems/${encodeURIComponent(primary)}/graph?${params}`).catch(() => null);
   if (!res || !res.ok) { showToast('Could not load comparison data.'); return; }
   const data = await res.json();
+  _iemCompareLastData = data;
   document.getElementById('iem-compare-modal').style.display = 'flex';
   _buildIemCompareChart(data);
 }
@@ -5251,8 +5725,23 @@ function closeIemCompare(event) {
 function _buildIemCompareChart(data) {
   const canvas = document.getElementById('iem-compare-canvas');
   const legendEl = document.getElementById('iem-compare-legend');
+  const hdr = document.querySelector('#iem-compare-modal .iem-compare-hdr');
   if (!canvas) return;
   if (_iemCompareChart) { _iemCompareChart.destroy(); _iemCompareChart = null; }
+  if (hdr) {
+    let host = document.getElementById('iem-compare-overlay-host');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'iem-compare-overlay-host';
+      host.className = 'fr-overlay-host fr-overlay-host--compare';
+      host.setAttribute('data-fr-overlay-host', '1');
+      host.setAttribute('data-fr-overlay-context', 'iem-compare');
+      const closeBtn = hdr.querySelector('.modal-x-btn');
+      if (closeBtn) hdr.insertBefore(host, closeBtn);
+      else hdr.appendChild(host);
+    }
+  }
+  _refreshFrOverlayControls();
 
   // Use backend-assigned colors directly — each IEM has its own palette color
   const datasets = data.curves.map(c => ({
@@ -5266,20 +5755,7 @@ function _buildIemCompareChart(data) {
     hidden:      c.id.startsWith('baseline-'),
   }));
 
-  const regionPlugin = {
-    id: 'compareRegions',
-    beforeDatasetsDraw(chart) {
-      const { ctx, chartArea: { left, right, top, bottom }, scales: { x } } = chart;
-      [{ f1:20,f2:80,c:.04 },{ f1:80,f2:300,c:.025 },{ f1:300,f2:1000,c:.015 },
-       { f1:1000,f2:4000,c:.025 },{ f1:4000,f2:6000,c:.04 },{ f1:6000,f2:10000,c:.025 },
-       { f1:10000,f2:20000,c:.04 }].forEach(r => {
-        ctx.fillStyle = `rgba(173,198,255,${r.c})`;
-        ctx.fillRect(Math.max(x.getPixelForValue(r.f1), left), top,
-          Math.min(x.getPixelForValue(r.f2), right) - Math.max(x.getPixelForValue(r.f1), left),
-          bottom - top);
-      });
-    },
-  };
+  const regionPlugin = _createFrOverlayPlugin('compareRegions');
 
   _iemCompareChart = new Chart(canvas, {
     type: 'line',
@@ -6261,6 +6737,7 @@ async function showIemDetail(id) {
           <option value="">None (raw measurement)</option>
           ${peqOptions}
         </select>
+        <div id="freq-overlay-host" class="fr-overlay-host fr-overlay-host--toolbar" data-fr-overlay-host="1" data-fr-overlay-context="iem-detail"></div>
       </div>
       <div id="freq-canvas-wrap">
         ${hasMeasurement
@@ -6282,6 +6759,7 @@ async function showIemDetail(id) {
       ${_renderPeqList(iem.peq_profiles || [])}
     </div>
   `;
+  _refreshFrOverlayControls();
 
   if (hasMeasurement) {
     await _loadIemGraph(id, null, _activeIemSourceId);
@@ -6394,43 +6872,7 @@ async function _loadIemGraph(iemId, peqId, sourceId = null) {
 
   if (_iemChart) { _iemChart.destroy(); _iemChart = null; }
 
-  const regionPlugin = {
-    id: 'freqRegions',
-    beforeDatasetsDraw(chart) {
-      const { ctx, chartArea: { left, right, top, bottom, height }, scales: { x } } = chart;
-      // squig.link-style 7 region bands
-      const regions = [
-        { f1: 20,   f2: 80,    color: 'rgba(173,198,255,.04)', label: 'Sub bass' },
-        { f1: 80,   f2: 300,   color: 'rgba(173,198,255,.025)', label: 'Mid bass' },
-        { f1: 300,  f2: 1000,  color: 'rgba(173,198,255,.015)', label: 'Lower midrange' },
-        { f1: 1000, f2: 4000,  color: 'rgba(173,198,255,.025)', label: 'Upper midrange' },
-        { f1: 4000, f2: 6000,  color: 'rgba(173,198,255,.04)', label: 'Presence region' },
-        { f1: 6000, f2: 10000, color: 'rgba(173,198,255,.025)', label: 'Mid treble' },
-        { f1: 10000,f2: 20000, color: 'rgba(173,198,255,.04)', label: 'Air' },
-      ];
-      regions.forEach(r => {
-        const x1 = Math.max(x.getPixelForValue(r.f1), left);
-        const x2 = Math.min(x.getPixelForValue(r.f2), right);
-        ctx.fillStyle = r.color;
-        ctx.fillRect(x1, top, x2 - x1, bottom - top);
-      });
-      // Draw region labels at bottom
-      ctx.save();
-      ctx.font = '9px Inter, sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
-      regions.forEach(r => {
-        const x1 = Math.max(x.getPixelForValue(r.f1), left);
-        const x2 = Math.min(x.getPixelForValue(r.f2), right);
-        const cx = (x1 + x2) / 2;
-        if (x2 - x1 > 30) { // Only draw if region is wide enough
-          ctx.fillText(r.label, cx, bottom - 2);
-        }
-      });
-      ctx.restore();
-    },
-  };
+  const regionPlugin = _createFrOverlayPlugin('freqRegions');
 
   // L = blue, R = red, PEQ = green — consistent regardless of comparison palette
   function _iemCurveColor(id, backendColor) {
@@ -6767,39 +7209,7 @@ async function _refreshPeqWorkspaceGraph() {
     return;
   }
   if (_peqWorkspaceChart) _destroyPeqWorkspaceChart();
-  const regionPlugin = {
-    id: 'peqWorkspaceFreqRegions',
-    beforeDatasetsDraw(chart) {
-      const { ctx, chartArea: { left, right, top, bottom }, scales: { x } } = chart;
-      const regions = [
-        { f1: 20,   f2: 80,    color: 'rgba(173,198,255,.04)', label: 'Sub bass' },
-        { f1: 80,   f2: 300,   color: 'rgba(173,198,255,.025)', label: 'Mid bass' },
-        { f1: 300,  f2: 1000,  color: 'rgba(173,198,255,.015)', label: 'Lower midrange' },
-        { f1: 1000, f2: 4000,  color: 'rgba(173,198,255,.025)', label: 'Upper midrange' },
-        { f1: 4000, f2: 6000,  color: 'rgba(173,198,255,.04)', label: 'Presence region' },
-        { f1: 6000, f2: 10000, color: 'rgba(173,198,255,.025)', label: 'Mid treble' },
-        { f1: 10000,f2: 20000, color: 'rgba(173,198,255,.04)', label: 'Air' },
-      ];
-      regions.forEach(r => {
-        const x1 = Math.max(x.getPixelForValue(r.f1), left);
-        const x2 = Math.min(x.getPixelForValue(r.f2), right);
-        ctx.fillStyle = r.color;
-        ctx.fillRect(x1, top, x2 - x1, bottom - top);
-      });
-      ctx.save();
-      ctx.font = '9px Inter, sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
-      regions.forEach(r => {
-        const x1 = Math.max(x.getPixelForValue(r.f1), left);
-        const x2 = Math.min(x.getPixelForValue(r.f2), right);
-        const cx = (x1 + x2) / 2;
-        if (x2 - x1 > 30) ctx.fillText(r.label, cx, bottom - 2);
-      });
-      ctx.restore();
-    },
-  };
+  const regionPlugin = _createFrOverlayPlugin('peqWorkspaceFreqRegions');
   function _workspaceCurveColor(id, backendColor) {
     if (id.startsWith('baseline-')) return backendColor || '#f0b429';
     if (id.includes('-custom-')) return '#53e16f';
@@ -6887,6 +7297,18 @@ async function _loadPeqWorkspaceContext() {
   const iemSel = document.getElementById('peq-workspace-iem-select');
   const peqSel = document.getElementById('peq-workspace-peq-select');
   const targetSel = document.getElementById('peq-workspace-target-select');
+  const ctx = document.querySelector('#peq-workspace .peq-workspace-context');
+  if (ctx && !document.getElementById('peq-workspace-overlay-field')) {
+    const field = document.createElement('div');
+    field.id = 'peq-workspace-overlay-field';
+    field.className = 'peq-workspace-field';
+    field.innerHTML = `
+      <label class="peq-editor-col-label">Overlays</label>
+      <div id="peq-workspace-overlay-host" class="fr-overlay-host" data-fr-overlay-host="1" data-fr-overlay-context="peq-workspace"></div>
+    `;
+    ctx.appendChild(field);
+  }
+  _refreshFrOverlayControls();
   if (iemSel) {
     iemSel.innerHTML = '<option value="">No IEM / Headphone selected</option>';
   }
@@ -7753,6 +8175,17 @@ let _songsFilter = '';
 let _songsPage = 0;
 const SONGS_PER_PAGE = 100;
 
+function _getSongsFilteredTracks() {
+  let tracks = _songsData;
+  if (_songsFilter) {
+    const q = _songsFilter.toLowerCase();
+    tracks = tracks.filter(t =>
+      ((t.title || '') + ' ' + (t.artist || '') + ' ' + (t.album || '')).toLowerCase().includes(q)
+    );
+  }
+  return tracks;
+}
+
 async function loadSongsView() {
   try {
     _songsData = await api(`/library/songs?sort=${_songsSort.col}&order=${_songsSort.order}`);
@@ -7768,13 +8201,7 @@ async function loadSongsView() {
 }
 
 function renderSongsTable() {
-  let tracks = _songsData;
-  if (_songsFilter) {
-    const q = _songsFilter.toLowerCase();
-    tracks = tracks.filter(t =>
-      ((t.title || '') + ' ' + (t.artist || '') + ' ' + (t.album || '')).toLowerCase().includes(q)
-    );
-  }
+  let tracks = _getSongsFilteredTracks();
   const total = tracks.length;
   const songsWrap = document.getElementById('songs-table-wrap');
   const songsEmpty = document.getElementById('songs-empty');
@@ -7825,7 +8252,7 @@ function renderSongsTable() {
   // Update sort arrows
   document.querySelectorAll('#songs-table .sort-arrow').forEach(el => el.textContent = '');
   const arrow = document.getElementById(`songs-sort-${_songsSort.col}`);
-  if (arrow) arrow.textContent = _songsSort.order === 'asc' ? ' \u25B2' : ' \u25BC';
+  if (arrow) arrow.textContent = _songsSort.order === 'asc' ? '\u25B2' : '\u25BC';
 
   Player.registerTracks(page);
   Player.setPlaybackContext(tracks, { sourceType: 'songs', sourceId: '', sourceLabel: 'Songs' });
@@ -7839,8 +8266,8 @@ function renderSongsTable() {
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
       <td class="col-num" onclick="App.toggleTrackSelection('${t.id}', ${globalIdx}, event)">
         <div class="num-cell">
-          <span class="track-num">${t.track_number || (globalIdx + 1)}</span>
           <span class="track-check-indicator"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <span class="track-num">${t.track_number || (globalIdx + 1)}</span>
         </div>
       </td>
       <td>
@@ -8651,6 +9078,16 @@ const App = {
   showIemCompare,
   closeIemCompare,
   _toggleCompareDataset,
+  toggleFrOverlayMenu,
+  setFrOverlay,
+  frOverlaysDefault,
+  frOverlaysBasic,
+  frOverlaysAdvanced,
+  frOverlaysPrimaryOnly,
+  frOverlaysAll,
+  frOverlaysNone,
+  frOverlaysClearSecondary,
+  frOverlaysResetDefaults,
 
   loadPlaylistsView,
   togglePlViewSort,
@@ -8707,6 +9144,7 @@ const App = {
   syncSelectionChanged,
   executeSync,
   syncScanAgain,
+  sortTracks,
   // Songs
   sortSongs,
   filterSongs,
@@ -9763,83 +10201,54 @@ const _ALL_DIM_LABELS_FE = {
 // genreFingerprint: {bandKey: 0–1} — when provided draws genre salience shading.
 // genreLabel: display name for the selected genre (shown as chart annotation).
 function _buildCompactFRChart(canvas, curves, genreFingerprint = null, genreLabel = null) {
-  const regionPlugin = {
-    id: 'fitFRRegions',
-    beforeDatasetsDraw(chart) {
-      const { ctx, chartArea: { left, right, top, bottom }, scales: { x } } = chart;
-
-      // ── 1. Frequency region bands (cool blue tint, always shown) ──────────
-      const regions = [
-        { f1: 20,    f2: 80,    color: 'rgba(173,198,255,.05)' },
-        { f1: 80,    f2: 300,   color: 'rgba(173,198,255,.03)' },
-        { f1: 300,   f2: 1000,  color: 'rgba(173,198,255,.015)' },
-        { f1: 1000,  f2: 4000,  color: 'rgba(173,198,255,.03)' },
-        { f1: 4000,  f2: 6000,  color: 'rgba(173,198,255,.05)' },
-        { f1: 6000,  f2: 10000, color: 'rgba(173,198,255,.03)' },
-        { f1: 10000, f2: 20000, color: 'rgba(173,198,255,.05)' },
-      ];
-      regions.forEach(r => {
-        const x1 = Math.max(x.getPixelForValue(r.f1), left);
-        const x2 = Math.min(x.getPixelForValue(r.f2), right);
-        ctx.fillStyle = r.color;
-        ctx.fillRect(x1, top, x2 - x1, bottom - top);
-      });
-
-      // ── 2. Genre salience shading (amber, shown when a genre is selected) ──
-      if (genreFingerprint) {
-        // Sample 300 log-spaced frequencies and sum band energies at each point.
-        // Bands overlap intentionally — summing creates a smooth "importance terrain".
-        const N = 300;
-        const logMin = Math.log10(20);
-        const logMax = Math.log10(20000);
-        const saliences = [];
-        const freqs = [];
-        for (let i = 0; i < N; i++) {
-          const f = Math.pow(10, logMin + (logMax - logMin) * i / (N - 1));
-          freqs.push(f);
-          let s = 0;
-          for (const { key, f1, f2 } of _FR_BAND_RANGES) {
-            if (f >= f1 && f <= f2) s += genreFingerprint[key] || 0;
-          }
-          saliences.push(s);
+  const regionPlugin = _createFrOverlayPlugin('fitFRRegions', {
+    extraDraw(chart, meta) {
+      const { left, right, top, bottom, x, ctx } = meta;
+      if (!genreFingerprint) return;
+      const N = 300;
+      const logMin = Math.log10(20);
+      const logMax = Math.log10(20000);
+      const saliences = [];
+      const freqs = [];
+      for (let i = 0; i < N; i++) {
+        const f = Math.pow(10, logMin + (logMax - logMin) * i / (N - 1));
+        freqs.push(f);
+        let s = 0;
+        for (const { key, f1, f2 } of _FR_BAND_RANGES) {
+          if (f >= f1 && f <= f2) s += genreFingerprint[key] || 0;
         }
-        const maxS = Math.max(...saliences, 1e-9);
-
-        // Draw filled path rising from the bottom of the chart
-        const MAX_H = 0.42 * (bottom - top);  // salience fills up to 42% of chart height
+        saliences.push(s);
+      }
+      const maxS = Math.max(...saliences, 1e-9);
+      const maxH = 0.42 * (bottom - top);
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(left, bottom);
+      for (let i = 0; i < N; i++) {
+        const px = Math.max(left, Math.min(right, x.getPixelForValue(freqs[i])));
+        const py = bottom - (saliences[i] / maxS) * maxH;
+        ctx.lineTo(px, py);
+      }
+      ctx.lineTo(right, bottom);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, bottom - maxH, 0, bottom);
+      grad.addColorStop(0,   'rgba(240,168,48,0.28)');
+      grad.addColorStop(0.5, 'rgba(240,168,48,0.18)');
+      grad.addColorStop(1,   'rgba(240,168,48,0.06)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore();
+      if (genreLabel) {
         ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(left, bottom);
-        for (let i = 0; i < N; i++) {
-          const px = Math.max(left, Math.min(right, x.getPixelForValue(freqs[i])));
-          const py = bottom - (saliences[i] / maxS) * MAX_H;
-          ctx.lineTo(px, py);
-        }
-        ctx.lineTo(right, bottom);
-        ctx.closePath();
-
-        // Vertical gradient: brighter at peak, fades toward the bottom
-        const grad = ctx.createLinearGradient(0, bottom - MAX_H, 0, bottom);
-        grad.addColorStop(0,   'rgba(240,168,48,0.28)');
-        grad.addColorStop(0.5, 'rgba(240,168,48,0.18)');
-        grad.addColorStop(1,   'rgba(240,168,48,0.06)');
-        ctx.fillStyle = grad;
-        ctx.fill();
+        ctx.font = '600 10px Inter, sans-serif';
+        ctx.fillStyle = 'rgba(240,168,48,0.75)';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(genreLabel, right - 4, bottom - 4);
         ctx.restore();
-
-        // Genre name label — bottom-right corner, subtle amber
-        if (genreLabel) {
-          ctx.save();
-          ctx.font = '600 10px Inter, sans-serif';
-          ctx.fillStyle = 'rgba(240,168,48,0.75)';
-          ctx.textAlign = 'right';
-          ctx.textBaseline = 'bottom';
-          ctx.fillText(genreLabel, right - 4, bottom - 4);
-          ctx.restore();
-        }
       }
     },
-  };
+  });
 
   function _frCurveColor(id) {
     if (id.includes('-peq-')) return '#53e16f';
@@ -10214,8 +10623,9 @@ async function _renderIemFRPanel(iemId, activePeqId) {
              ).join('')}
            </select>
          </div>` : '';
-
-    controlsEl.innerHTML = sourceCtrl + peqCtrl + genreCtrl;
+    const overlayCtrl = `<div class="fr-overlay-host fr-overlay-host--compact" data-fr-overlay-host="1" data-fr-overlay-context="iemfit:${esc(iemId)}"></div>`;
+    controlsEl.innerHTML = sourceCtrl + peqCtrl + overlayCtrl + genreCtrl;
+    _refreshFrOverlayControls();
   }
 
   // Fetch FR curves from graph endpoint
@@ -11461,6 +11871,7 @@ async function saveArtistImageSettings() {
 
 /* ── Init ───────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
+  _initFrOverlaySelection();
   window.addEventListener('beforeunload', (e) => {
     if (!_hasUnsavedMlPreview()) return;
     e.preventDefault();
@@ -11487,12 +11898,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!e.target.closest('.map-row-target')) {
       document.querySelectorAll('.map-results').forEach(el => el.style.display = 'none');
     }
+    if (!e.target.closest('.fr-ov-shell')) {
+      _closeFrOverlayMenu();
+    }
 
   });
 
   // Keyboard shortcut: Escape closes dropdown and context menu
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { hideDropdown(); hideCtxMenu(); closePlaylistDapMenu(); }
+    if (e.key === 'Escape') { hideDropdown(); hideCtxMenu(); closePlaylistDapMenu(); _closeFrOverlayMenu(); }
   });
 
   // Close context menu on outside click or scroll

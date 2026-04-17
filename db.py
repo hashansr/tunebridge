@@ -405,6 +405,15 @@ def _coerce_year(val):
     """Convert year to int. Handles '2024', None, ''."""
     if val is None:
         return None
+
+
+def _format_duration(seconds):
+    try:
+        s = int(float(seconds or 0))
+    except (ValueError, TypeError):
+        s = 0
+    m, s = divmod(max(0, s), 60)
+    return f"{m}:{s:02d}"
     s = str(val).strip()
     if not s:
         return None
@@ -455,6 +464,8 @@ def _row_to_track(row):
         d['track_number'] = str(d['track_number'])
     if d.get('year') is not None:
         d['year'] = str(d['year'])
+    # DB schema stores numeric duration only; frontend expects duration_fmt too.
+    d['duration_fmt'] = _format_duration(d.get('duration'))
     return d
 
 

@@ -2049,7 +2049,82 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; backgrou
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-#tracks-table-wrap { overflow-x: auto; }
+#tracks-table-wrap {
+  overflow-x: auto;
+  border-radius: 16px;
+  background:
+    radial-gradient(140% 120% at 0% 0%, rgba(173, 198, 255, 0.08), transparent 58%),
+    linear-gradient(180deg, rgba(28, 27, 27, 0.72), rgba(22, 22, 22, 0.78));
+  border: 1px solid rgba(173, 198, 255, 0.14);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.24);
+}
+
+#tracks-table {
+  min-width: 760px;
+  table-layout: fixed;
+}
+
+#tracks-table thead th {
+  padding-top: 11px;
+  padding-bottom: 11px;
+  white-space: nowrap;
+  background: rgba(42, 42, 42, 0.58);
+  border-bottom: 1px solid rgba(173, 198, 255, 0.16);
+}
+
+#tracks-table thead th[data-sort] {
+  cursor: pointer;
+  transition: color 0.14s ease, background 0.14s ease;
+}
+
+#tracks-table thead th[data-sort]:hover {
+  color: var(--text);
+  background: rgba(53, 53, 52, 0.78);
+}
+
+#tracks-table .th-sort-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+#tracks-table .sort-arrow {
+  width: 0.9em;
+  min-width: 0.9em;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  color: rgba(173, 198, 255, 0.9);
+}
+
+#tracks-table .col-num {
+  width: 98px;
+  padding-left: 12px;
+  padding-right: 8px;
+}
+
+#tracks-table .col-title { width: 48%; }
+
+#tracks-table .col-album { width: 220px; }
+
+#tracks-table .col-dur {
+  width: 84px;
+  text-align: right;
+}
+
+#tracks-table td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+#tracks-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.018);
+}
+
+#tracks-table tbody tr:hover {
+  background: linear-gradient(90deg, rgba(173, 198, 255, 0.11), rgba(173, 198, 255, 0.04));
+}
 
 /* ── Track selection ─────────────────────────────────────────────────── */
 .track-check-indicator {
@@ -3655,6 +3730,7 @@ tr:hover .fav-toggle,
   object-fit: contain;
   opacity: 0.82;
   filter: grayscale(1) brightness(0) invert(0.9);
+  transform: scaleX(-1);
 }
 .gear-card-iem-body {
   flex: 1;
@@ -3853,26 +3929,33 @@ tr:hover .fav-toggle,
 /* IEM detail */
 .iem-detail-header {
   display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 12px 0 20px;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 10px 0 22px;
   margin-bottom: 14px;
 }
 .iem-detail-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
-  background: var(--bg-elevated);
+  width: 128px;
+  height: 128px;
+  border-radius: 20px;
+  background:
+    radial-gradient(120% 120% at 20% 16%, rgba(173, 198, 255, 0.18), rgba(173, 198, 255, 0.06) 58%),
+    rgba(42, 42, 42, 0.62);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-sub);
   flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 .iem-detail-icon .gear-iem-icon-image {
-  width: 24px;
-  height: 24px;
-  opacity: 0.84;
+  width: 64px;
+  height: 64px;
+  opacity: 0.92;
+}
+.iem-detail-icon svg {
+  width: 62px;
+  height: 62px;
 }
 .iem-detail-title {
   font-size: 22px;
@@ -3889,9 +3972,9 @@ tr:hover .fav-toggle,
 /* Frequency response graph */
 .freq-graph-wrap {
   background: transparent;
-  border: 1px solid rgba(173, 198, 255, 0.1);
+  border: none;
   border-radius: 1.35rem;
-  padding: 16px 16px 14px;
+  padding: 14px 0 10px;
   margin-bottom: 20px;
   backdrop-filter: none;
   box-shadow: none;
@@ -3902,6 +3985,113 @@ tr:hover .fav-toggle,
   gap: 10px;
   margin-bottom: 12px;
   flex-wrap: wrap;
+}
+.fr-overlay-host {
+  position: relative;
+  margin-left: 2px;
+}
+.fr-overlay-host--toolbar {
+  margin-left: auto;
+}
+.fr-ov-shell {
+  position: relative;
+}
+.fr-ov-trigger {
+  background: rgba(53, 53, 52, 0.78);
+  border: 1px solid rgba(173, 198, 255, 0.14);
+  border-radius: 9999px;
+  color: var(--text);
+  padding: 5px 11px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.fr-ov-trigger:hover,
+.fr-ov-trigger.open {
+  background: rgba(53, 53, 52, 0.92);
+  border-color: rgba(173, 198, 255, 0.3);
+}
+.fr-ov-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(340px, 80vw);
+  max-height: 380px;
+  overflow-y: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(173, 198, 255, 0.16);
+  background: rgba(20, 20, 20, 0.96);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
+  padding: 10px;
+  z-index: 80;
+  display: none;
+}
+.fr-ov-menu.open { display: block; }
+.fr-ov-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.fr-ov-actions button {
+  border: 1px solid rgba(173, 198, 255, 0.18);
+  border-radius: 9999px;
+  background: rgba(173, 198, 255, 0.08);
+  color: var(--text-sub);
+  font-size: 11px;
+  padding: 4px 9px;
+}
+.fr-ov-actions button:hover {
+  background: rgba(173, 198, 255, 0.16);
+  color: var(--text);
+}
+.fr-ov-group-title {
+  margin-top: 6px;
+  margin-bottom: 5px;
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.fr-ov-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fr-ov-opt {
+  display: grid;
+  grid-template-columns: 16px minmax(88px, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 2px;
+  font-size: 12px;
+}
+.fr-ov-opt input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  accent-color: #adc6ff;
+}
+.fr-ov-opt-label {
+  color: var(--text-sub);
+}
+.fr-ov-opt-range {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.fr-overlay-host--compact .fr-ov-trigger {
+  border-radius: 8px;
+  font-size: 11px;
+  padding: 4px 8px;
+}
+.fr-overlay-host--compare .fr-ov-trigger {
+  border-radius: 10px;
+  font-size: 12px;
+  padding: 5px 10px;
+}
+.iem-compare-hdr .fr-overlay-host--compare {
+  margin-left: auto;
 }
 .freq-graph-toolbar label {
   font-size: var(--text-xs);
@@ -3925,6 +4115,19 @@ tr:hover .fav-toggle,
   border-color: rgba(173, 198, 255, 0.34);
 }
 #freq-canvas-wrap { position: relative; height: 420px; }
+
+@media (max-width: 960px) {
+  .iem-detail-icon {
+    width: 96px;
+    height: 96px;
+    border-radius: 16px;
+  }
+  .iem-detail-icon .gear-iem-icon-image,
+  .iem-detail-icon svg {
+    width: 50px;
+    height: 50px;
+  }
+}
 
 .freq-no-data {
   display: flex;
@@ -10143,6 +10346,7 @@ tr.player-active .track-title { color: var(--accent); }
   align-items: center;
   gap: 14px;
   margin-left: auto;
+  flex-wrap: wrap;
 }
 .iemfit-fr-ctrl-group { display: flex; align-items: center; gap: 6px; }
 .iemfit-fr-ctrl-label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }

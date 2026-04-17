@@ -29,6 +29,7 @@ from mutagen.mp3 import MP3
 from mutagen.mp4 import MP4
 import hashlib
 import re
+import unicodedata
 from PIL import Image
 
 import db as _db
@@ -442,23 +443,39 @@ _LASTFM_PLACEHOLDER_HASH = '2a96cbd8b46e442fc41c2b86b821562f'
 
 import difflib as _difflib
 
-def _name_matches(searched: str, found: str, threshold: float = 0.6) -> bool:
+def _canonical_name(value: str) -> str:
+    s = str(value or '')
+    s = unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode('ascii')
+    s = s.lower().replace('&', ' and ')
+    s = re.sub(r'[^a-z0-9]+', ' ', s)
+    return re.sub(r'\s+', ' ', s).strip()
+
+
+def _name_matches(searched: str, found: str, threshold: float = 0.6, strict_single_token: bool = False) -> bool:
     """
     Return True if `found` is a plausible match for the searched artist name.
     Checks (in order): exact, substring containment, significant word overlap,
     and finally fuzzy sequence similarity. This prevents e.g. "Corey Taylor"
     matching "Taylor Swift" when both contain the token "taylor".
     """
-    s = searched.lower().strip()
-    f = found.lower().strip()
+    s = _canonical_name(searched)
+    f = _canonical_name(found)
     if not s or not f:
         return False
     if s == f:
         return True
+    s_tokens = [w for w in s.split() if w]
+    f_tokens = [w for w in f.split() if w]
+
+    # For ambiguous one-word artist names (e.g. "Bush", "Cold"),
+    # require exact single-token artist-name equality.
+    if strict_single_token and len(s_tokens) == 1:
+        return len(f_tokens) == 1 and s_tokens[0] == f_tokens[0]
+
     # Substring: the full searched name must appear inside found (or vice versa)
     # but NOT just a single shared token — require at least 2 words to share
-    s_words = [w for w in s.split() if len(w) > 2]  # ignore tiny stop-words
-    f_words = set(f.split())
+    s_words = [w for w in s_tokens if len(w) > 2]  # ignore tiny stop-words
+    f_words = set(f_tokens)
     if s_words:
         overlap = sum(1 for w in s_words if w in f_words)
         # Need ALL (or all-but-one for long names) search words to appear in found
@@ -476,19 +493,54 @@ def _search_itunes(artist_name: str) -> list:
     and return unique album artworks as portrait candidates.
     """
     try:
-        url = (
+        # 1) Resolve best-matching iTunes artist first (by ID) to avoid
+        # similarly named artists (e.g. "Bush" -> "Kate Bush").
+        artist_search_url = (
             f"https://itunes.apple.com/search?"
-            f"term={urlquote(artist_name)}&entity=album&limit=20&media=music&attribute=artistTerm"
+            f"term={urlquote(artist_name)}&entity=musicArtist&limit=25&media=music&attribute=artistTerm"
         )
-        req = UrlRequest(url, headers={'User-Agent': 'TuneBridge/1.0'})
+        req = UrlRequest(artist_search_url, headers={'User-Agent': 'TuneBridge/1.0'})
         with urlopen(req, timeout=10) as r:
-            data = json.loads(r.read().decode('utf-8'))
+            artist_data = json.loads(r.read().decode('utf-8'))
+
+        artist_id = None
+        for item in artist_data.get('results', []):
+            artist_match = (item.get('artistName') or '').strip()
+            if _name_matches(artist_name, artist_match, strict_single_token=True):
+                artist_id = item.get('artistId')
+                break
+
+        album_results = []
+        if artist_id:
+            # 2) Pull albums for the resolved artist ID.
+            lookup_url = (
+                f"https://itunes.apple.com/lookup?"
+                f"id={urlquote(str(artist_id))}&entity=album&limit=200"
+            )
+            req2 = UrlRequest(lookup_url, headers={'User-Agent': 'TuneBridge/1.0'})
+            with urlopen(req2, timeout=10) as r2:
+                lookup_data = json.loads(r2.read().decode('utf-8'))
+            album_results = [
+                item for item in lookup_data.get('results', [])
+                if str(item.get('wrapperType') or '').lower() == 'collection'
+            ]
+        else:
+            # Fallback path if artist lookup fails.
+            url = (
+                f"https://itunes.apple.com/search?"
+                f"term={urlquote(artist_name)}&entity=album&limit=20&media=music&attribute=artistTerm"
+            )
+            req3 = UrlRequest(url, headers={'User-Agent': 'TuneBridge/1.0'})
+            with urlopen(req3, timeout=10) as r3:
+                data = json.loads(r3.read().decode('utf-8'))
+            album_results = data.get('results', [])
+
         candidates = []
         seen_thumbs = set()
-        for item in data.get('results', []):
+        for item in album_results:
             artist_match = (item.get('artistName') or '').strip()
             # Strict name check — must actually be the right artist
-            if not _name_matches(artist_name, artist_match):
+            if not _name_matches(artist_name, artist_match, strict_single_token=True):
                 continue
             thumb = item.get('artworkUrl100', '')
             if not thumb or thumb in seen_thumbs:
@@ -524,7 +576,7 @@ def _search_lastfm(artist_name: str, api_key: str) -> list:
 
         # Verify Last.fm returned the right artist (it can redirect to similar names)
         returned_name = artist_data.get('name', '')
-        if returned_name and not _name_matches(artist_name, returned_name):
+        if returned_name and not _name_matches(artist_name, returned_name, strict_single_token=True):
             print(f"[artist-img] Last.fm name mismatch: searched '{artist_name}', got '{returned_name}'")
             return []
 
@@ -577,7 +629,7 @@ def _search_fanart(artist_name: str, api_key: str) -> list:
         mbid = None
         for mb_artist in mb_data.get('artists', []):
             mb_name = mb_artist.get('name', '')
-            if _name_matches(artist_name, mb_name):
+            if _name_matches(artist_name, mb_name, strict_single_token=True):
                 mbid = mb_artist.get('id', '')
                 print(f"[artist-img] MusicBrainz matched '{mb_name}' (MBID {mbid}) for '{artist_name}'")
                 break

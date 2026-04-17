@@ -312,10 +312,10 @@
         <div id="tracks-table-wrap">
           <table id="tracks-table">
             <thead><tr>
-              <th class="col-num">#</th>
-              <th class="col-title">Title</th>
-              <th class="col-album">Album</th>
-              <th class="col-dur">Time</th>
+              <th class="col-num" data-sort="track_number" onclick="App.sortTracks('track_number')"><span class="th-sort-label">Track&nbsp;# <span class="sort-arrow" id="tracks-sort-track_number"></span></span></th>
+              <th class="col-title" data-sort="title" onclick="App.sortTracks('title')"><span class="th-sort-label">Title <span class="sort-arrow" id="tracks-sort-title"></span></span></th>
+              <th class="col-album" data-sort="album" onclick="App.sortTracks('album')"><span class="th-sort-label">Album <span class="sort-arrow" id="tracks-sort-album"></span></span></th>
+              <th class="col-dur" data-sort="duration" onclick="App.sortTracks('duration')"><span class="th-sort-label">Time <span class="sort-arrow" id="tracks-sort-duration"></span></span></th>
               <th class="col-fav"></th>
               <th class="col-act"></th>
             </tr></thead>
