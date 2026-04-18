@@ -72,14 +72,72 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
-/* ── Toast ──────────────────────────────────────────────────────────── */
-let toastTimer;
-function toast(msg, duration = 2800) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
+/* ── Toast System ───────────────────────────────────────────────────── */
+const _toastQueue  = [];
+const _toastActive = [];
+const _TOAST_MAX   = 3;
+
+function toast(msg, durationOrType, maybeType) {
+  let duration, type;
+  if (typeof durationOrType === 'string') {
+    type = durationOrType; duration = null;
+  } else {
+    duration = (typeof durationOrType === 'number' && durationOrType > 0) ? durationOrType : null;
+    type = typeof maybeType === 'string' ? maybeType : null;
+  }
+  if (!type) type = _toastClassify(msg);
+  if (!duration) {
+    const base = type === 'error' ? 2340 : 1800;
+    duration = Math.min(4500, Math.max(base, base + msg.length * 12));
+  }
+  _toastEnqueue({ msg, type, duration });
+}
+
+function _toastClassify(msg) {
+  const s = msg.toLowerCase();
+  if (/error|fail|could not|unable|unavailable|invalid|required/.test(s)) return 'error';
+  if (/warning|limit|works best|only first|double-check/.test(s)) return 'warning';
+  if (/saved|updated|renamed|removed|copied|imported|exported|added.*to|enabled|complete|ready|cleared/.test(s)) return 'success';
+  if (/downloading|analysing|checking|preparing|searching/.test(s)) return 'info';
+  return 'neutral';
+}
+
+function _toastEnqueue(item) {
+  if (_toastActive.length < _TOAST_MAX) _toastShow(item);
+  else _toastQueue.push(item);
+}
+
+function _toastShow(item) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const el = document.createElement('div');
+  el.className = `toast-item toast-${item.type}`;
+  el.setAttribute('role', 'status');
+  const text = document.createElement('span');
+  text.className = 'toast-msg';
+  text.textContent = item.msg;
+  el.appendChild(text);
+  el.addEventListener('click', () => _toastDismiss(el), { once: true });
+  container.appendChild(el);
+  _toastActive.push(el);
+  el.getBoundingClientRect(); // force reflow before adding .show
   el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+  el._toastTimer = setTimeout(() => _toastDismiss(el), item.duration);
+}
+
+function _toastDismiss(el) {
+  clearTimeout(el._toastTimer);
+  if (!_toastActive.includes(el)) return;
+  el.classList.remove('show');
+  el.classList.add('hide');
+  const cleanup = () => {
+    el.remove();
+    const idx = _toastActive.indexOf(el);
+    if (idx !== -1) _toastActive.splice(idx, 1);
+    if (_toastQueue.length > 0) _toastShow(_toastQueue.shift());
+  };
+  el.addEventListener('transitionend', cleanup, { once: true });
+  setTimeout(cleanup, 350); // fallback if transitionend doesn't fire
 }
 
 /* ── Artwork ────────────────────────────────────────────────────────── */
@@ -559,7 +617,7 @@ async function toggleFavourite(type, encodedId) {
     else state.favourites[type].delete(id);
     _applyFavouriteDomState(type, id, had);
     refreshPlayerFavouriteButton();
-    toast('Could not update favourites: ' + e.message);
+    toast('Could not update favourites');
   }
 }
 
@@ -1443,10 +1501,13 @@ function _formatTrackNumber(trackNumber, fallbackNum) {
 function trackRow(t, num, inPlaylist) {
   const trackNumLabel = inPlaylist ? String(num) : _formatTrackNumber(t.track_number, num);
   const isFavVirtualPlaylist = !!(inPlaylist && state.playlist?.is_favourites);
-  const add = inPlaylist
-    ? `<button class="remove-btn" onclick="${isFavVirtualPlaylist ? `App.removeSongFromFavourites('${t.id}')` : `App.removeFromPlaylist('${t.id}')`}" title="${isFavVirtualPlaylist ? 'Remove from favourites' : 'Remove'}">
-         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  const removeAction = inPlaylist
+    ? `<button class="remove-btn" onclick="event.stopPropagation();${isFavVirtualPlaylist ? `App.removeSongFromFavourites('${t.id}')` : `App.removeFromPlaylist('${t.id}')`}" title="${isFavVirtualPlaylist ? 'Remove from favourites' : 'Remove from playlist'}">
+         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
        </button>`
+    : '';
+  const addAction = inPlaylist
+    ? ''
     : `<button class="add-btn" onclick="App.showAddDropdown(event, '${t.id}')" title="Add to playlist">
          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
        </button>`;
@@ -1488,13 +1549,14 @@ function trackRow(t, num, inPlaylist) {
       ${inPlaylist ? `<td class="col-year" style="color:var(--text-muted);font-size:var(--text-sm)">${t.year || ''}</td>` : ''}
       <td class="col-fav-cell">${_favToggleBtn('songs', t.id, `track-fav-btn${inPlaylist ? '' : ''}`)}</td>
       <td><div class="col-act-inner">
+        ${removeAction}
         <button class="row-ctx-btn" onclick="event.stopPropagation();App.showTrackCtxMenu(event,'${t.id}')" title="More actions">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
         </button>
         <button class="track-edit-btn" onclick="event.stopPropagation();App.openTagEditor('${t.id}')" title="Edit tags">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
-        ${add}
+        ${addAction}
       </div></td>
     </tr>`;
 }
@@ -1628,13 +1690,22 @@ async function renderDapExportPills(pid) {
     const label = isFavVirtual
       ? (isFavUpToDate ? `Copy to ${dap.name} (up to date)` : `Copy to ${dap.name}`)
       : `Copy to ${dap.name}`;
+    const isBusy = _playlistDapExportBusyDid === String(dap.id);
+    const disabled = !!_playlistDapExportBusyDid;
     return `
-      <button class="btn-export btn-export-device" onclick="${isFavVirtual ? `App.copyFavSongsToDap('${dap.id}')` : `App.pickConnectedDapExport('${dap.id}')`}">
+      <button
+        class="btn-export btn-export-device${isBusy ? ' is-busy' : ''}"
+        data-dap-id="${esc(dap.id)}"
+        data-default-label="${esc(label)}"
+        ${disabled ? 'disabled' : ''}
+        onclick="${isFavVirtual ? `App.copyFavSongsToDap('${dap.id}', this)` : `App.pickConnectedDapExport('${dap.id}', this)`}"
+      >
         ${svgDevice}
-        ${esc(label)}
+        <span class="dap-export-label">${esc(label)}</span>
       </button>
     `;
   }).join('');
+  if (_playlistDapExportBusyDid) _startPlaylistDapExportTicker();
 }
 
 function togglePlaylistDapMenu() {
@@ -1651,6 +1722,66 @@ function closePlaylistDapMenu() {
 async function pickConnectedDapExport(did) {
   closePlaylistDapMenu();
   await exportToDeviceDap(did);
+}
+
+let _playlistDapExportBusyDid = null;
+let _playlistDapExportStartedAt = 0;
+let _playlistDapExportTicker = null;
+
+function _stopPlaylistDapExportTicker() {
+  if (_playlistDapExportTicker) {
+    clearInterval(_playlistDapExportTicker);
+    _playlistDapExportTicker = null;
+  }
+}
+
+function _updatePlaylistDapExportProgressLabel() {
+  if (!_playlistDapExportBusyDid) return;
+  const container = document.getElementById('dap-export-pills');
+  if (!container) return;
+  const btn = container.querySelector(`.btn-export-device[data-dap-id="${_playlistDapExportBusyDid}"]`);
+  if (!btn) return;
+  const labelEl = btn.querySelector('.dap-export-label');
+  if (!labelEl) return;
+  const elapsed = Math.max(0, Math.floor((Date.now() - _playlistDapExportStartedAt) / 1000));
+  labelEl.textContent = `Copying… ${elapsed}s`;
+}
+
+function _startPlaylistDapExportTicker() {
+  _stopPlaylistDapExportTicker();
+  _updatePlaylistDapExportProgressLabel();
+  _playlistDapExportTicker = setInterval(_updatePlaylistDapExportProgressLabel, 1000);
+}
+
+function _setPlaylistDapExportBusy(did, busy) {
+  const busyDid = busy ? String(did || '') : null;
+  _playlistDapExportBusyDid = busyDid;
+  _playlistDapExportStartedAt = busy ? Date.now() : 0;
+
+  const container = document.getElementById('dap-export-pills');
+  if (!container) {
+    if (busy) _startPlaylistDapExportTicker();
+    else _stopPlaylistDapExportTicker();
+    return;
+  }
+
+  container.querySelectorAll('.btn-export-device[data-dap-id]').forEach((btn) => {
+    const btnDid = String(btn.getAttribute('data-dap-id') || '');
+    const labelEl = btn.querySelector('.dap-export-label');
+    const defaultLabel = String(btn.getAttribute('data-default-label') || '').trim();
+    if (busyDid) {
+      btn.disabled = true;
+      btn.classList.toggle('is-busy', btnDid === busyDid);
+      if (btnDid !== busyDid && labelEl && defaultLabel) labelEl.textContent = defaultLabel;
+    } else {
+      btn.disabled = false;
+      btn.classList.remove('is-busy');
+      if (labelEl && defaultLabel) labelEl.textContent = defaultLabel;
+    }
+  });
+
+  if (busyDid) _startPlaylistDapExportTicker();
+  else _stopPlaylistDapExportTicker();
 }
 
 /* ── Hero / playlist toolbar helpers ───────────────────────────────── */
@@ -1913,25 +2044,12 @@ function clearSelection() {
 }
 
 async function removeSelectedFromPlaylist() {
-  if (state.view !== 'playlist' || !state.playlist) return;
-  const ids = new Set(state.selectedTrackIds);
-  const count = ids.size;
-  const remaining = state.playlist.tracks
-    .filter(t => !ids.has(t.id))
-    .map(t => t.id);
-
-  await api(`/playlists/${state.playlist.id}`, {
-    method: 'PUT',
-    body: { tracks: remaining },
+  if (state.view !== 'playlist' || !state.playlist || state.playlist?.is_favourites) return;
+  const ids = [...state.selectedTrackIds];
+  if (!ids.length) return;
+  await _removeTracksFromCurrentPlaylist(ids, {
+    toastText: `Removed ${ids.length} song${ids.length !== 1 ? 's' : ''} from playlist`,
   });
-
-  clearSelection();
-  const pl = await api(`/playlists/${state.playlist.id}`);
-  state.playlist = pl;
-  renderPlaylistTracks(pl.tracks);
-  updatePlaylistCover(pl.tracks);
-  updatePlaylistStats(pl.tracks);
-  toast(`Removed ${count} song${count !== 1 ? 's' : ''} from playlist`);
 }
 
 function updatePlaylistCover(tracks) {
@@ -2104,7 +2222,7 @@ async function _commitToPlaylist(pid, plName) {
     loadPlaylists();  // refresh track_count + artwork_keys in list view (non-blocking)
     if (state.playlist?.id === pid) await openPlaylist(pid);
   } catch (e) {
-    toast('Error: ' + e.message);
+    toast('Could not add to playlist. Try again.');
   }
 }
 
@@ -2122,6 +2240,8 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null) {
   const smartLabel = document.getElementById('ctx-smart-playlist-label');
   const favItem = document.getElementById('ctx-favourite-item');
   const favLabel = document.getElementById('ctx-favourite-label');
+  const removeItem = document.getElementById('ctx-remove-from-playlist-item');
+  const removeLabel = document.getElementById('ctx-remove-from-playlist-label');
   if (labelEl) labelEl.textContent = label || (tracks.length === 1 ? tracks[0].title : `${tracks.length} songs`);
   if (smartLabel) {
     smartLabel.textContent = tracks.length === 1
@@ -2136,6 +2256,15 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null) {
       favLabel.textContent = _isFavourite(favTarget.type, favTarget.id)
         ? 'Remove from Favourites'
         : 'Add to Favourites';
+    }
+  }
+  if (removeItem && removeLabel) {
+    const canRemove = state.view === 'playlist' && !!state.playlist && !state.playlist?.is_favourites && tracks.length > 0;
+    removeItem.style.display = canRemove ? '' : 'none';
+    if (canRemove) {
+      removeLabel.textContent = tracks.length === 1
+        ? 'Remove from Playlist'
+        : `Remove ${tracks.length} from Playlist`;
     }
   }
   menu.style.display = 'block';
@@ -2165,8 +2294,10 @@ function hideCtxMenu() {
   _ctxDetailMode = null;
   const editAlbumItem = document.getElementById('ctx-edit-album-tags-item');
   const editArtistItem = document.getElementById('ctx-rename-artist-item');
+  const removeItem = document.getElementById('ctx-remove-from-playlist-item');
   if (editAlbumItem) editAlbumItem.style.display = 'none';
   if (editArtistItem) editArtistItem.style.display = 'none';
+  if (removeItem) removeItem.style.display = 'none';
 }
 
 function showTrackCtxMenu(e, trackId) {
@@ -2308,6 +2439,17 @@ function ctxRenameArtist() {
 function ctxAddToPlaylist(e) {
   // Legacy path — now handled by submenu; kept as fallback
   openCtxSubmenu(e);
+}
+
+async function ctxRemoveFromPlaylist() {
+  const ids = _ctxTracks.map(t => String(t?.id || '')).filter(Boolean);
+  hideCtxMenu();
+  if (!ids.length || !state.playlist || state.playlist?.is_favourites) return;
+  await _removeTracksFromCurrentPlaylist(ids, {
+    toastText: ids.length === 1
+      ? 'Removed from playlist'
+      : `Removed ${ids.length} songs from playlist`,
+  });
 }
 
 let _ctxSubmenuTimer = null;
@@ -2511,13 +2653,42 @@ async function dupAddAnyway() {
 }
 
 async function removeFromPlaylist(trackId) {
-  if (!state.playlist) return;
-  await api(`/playlists/${state.playlist.id}/tracks/${trackId}`, { method: 'DELETE' });
-  state.playlist.tracks = state.playlist.tracks.filter(t => t.id !== trackId);
-  renderPlaylistTracks(state.playlist.tracks);
-  updatePlaylistCover(state.playlist.tracks);
-  updatePlaylistStats(state.playlist.tracks);
+  if (!trackId || !state.playlist || state.playlist?.is_favourites) return;
+  await _removeTracksFromCurrentPlaylist([trackId], { toastText: 'Removed from playlist' });
+}
+
+async function _removeTracksFromCurrentPlaylist(trackIds, { toastText = '' } = {}) {
+  if (!state.playlist || state.playlist?.is_favourites) return;
+  const uniqueIds = [...new Set((trackIds || []).map(id => String(id || '').trim()).filter(Boolean))];
+  if (!uniqueIds.length) return;
+  if (uniqueIds.length >= 5) {
+    const ok = await _showConfirm({
+      title: 'Remove Songs',
+      message: `Remove ${uniqueIds.length} songs from "${state.playlist.name || 'this playlist'}"?`,
+      okText: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
+  }
+
+  const ids = new Set(uniqueIds);
+  const remaining = (state.playlist.tracks || [])
+    .filter(t => !ids.has(String(t.id || '')))
+    .map(t => t.id);
+
+  await api(`/playlists/${state.playlist.id}`, {
+    method: 'PUT',
+    body: { tracks: remaining },
+  });
+
+  clearSelection();
+  const pl = await api(`/playlists/${state.playlist.id}`);
+  state.playlist = pl;
+  renderPlaylistTracks(pl.tracks);
+  updatePlaylistCover(pl.tracks);
+  updatePlaylistStats(pl.tracks);
   loadPlaylists();  // refresh track_count in list view
+  if (toastText) toast(toastText);
 }
 
 /* ── Playlist CRUD ──────────────────────────────────────────────────── */
@@ -2682,6 +2853,8 @@ async function submitCreatePlaylist() {
     const res = await api(`/playlists/${pl.id}/tracks`, { method: 'POST', body: { track_ids: trackIds } });
     state.lastUsedPlaylistId = pl.id;
     toast(`Added ${res.added} song${res.added !== 1 ? 's' : ''} to "${pl.name}"`);
+  } else {
+    toast(`Playlist "${pl.name}" created`);
   }
   await openPlaylist(pl.id);
 }
@@ -3128,7 +3301,7 @@ async function openMlPlaylistGenerator(context = 'global', options = {}) {
     _renderMlReferenceResults('');
     _applyMlModeUi();
   } catch (e) {
-    toast('Could not load generation options: ' + e.message);
+    toast('Could not load generation options');
   }
 }
 
@@ -3151,7 +3324,7 @@ async function runMlPlaylistPreview({ regenerate = false } = {}) {
     const payload = _currentMlPayload();
     if (regenerate) payload.regenerate = true;
     if (payload.mode === 'seed' && !payload.seed_track_ids.length) {
-      toast('Track DNA works best with selected reference tracks.');
+      toast('Works best when you pick some reference tracks first');
     }
     const res = await api('/playlists/generate/preview', { method: 'POST', body: payload });
     _mlGenPreviewTracks = Array.isArray(res.tracks) ? res.tracks : [];
@@ -3162,7 +3335,7 @@ async function runMlPlaylistPreview({ regenerate = false } = {}) {
     if (regenBtn) regenBtn.disabled = !_mlGenPreviewTracks.length;
     if (!_mlGenPreviewTracks.length) toast('No tracks matched. Try relaxed genre mode or wider targets.');
   } catch (e) {
-    toast('Preview failed: ' + e.message);
+    toast('No results. Try adjusting the settings.');
   } finally {
     if (previewBtn) {
       previewBtn.disabled = false;
@@ -3178,7 +3351,7 @@ async function regenerateMlPlaylist() {
 
 async function saveMlGeneratedPlaylist() {
   if (!_mlGenPreviewTracks.length) {
-    toast('Generate a preview first.');
+    toast('Generate a preview first');
     return;
   }
   const name = (document.getElementById('ml-gen-name')?.value || '').trim();
@@ -3196,7 +3369,7 @@ async function saveMlGeneratedPlaylist() {
     toast(`Saved playlist "${res.name}" (${res.track_count} tracks)`);
     await openPlaylist(res.id);
   } catch (e) {
-    toast('Save failed: ' + e.message);
+    toast('Could not save the playlist');
   }
 }
 
@@ -3218,6 +3391,7 @@ async function deletePlaylist(pid) {
   });
   if (!ok) return;
   await api(`/playlists/${pid}`, { method: 'DELETE' });
+  toast(`"${pl?.name || 'Playlist'}" deleted`);
   if (state.playlist?.id === pid) {
     state.playlist = null;
     showView('playlists');
@@ -3278,20 +3452,29 @@ async function exportPlaylistDap(did) {
 
 async function exportToDeviceDap(did) {
   if (!state.playlist) return;
+  if (_playlistDapExportBusyDid) return;
+  _setPlaylistDapExportBusy(did, true);
   try {
     if (state.playlist.is_favourites) {
       await api(`/daps/${did}/export/favourites`, { method: 'POST' });
-      toast('Favourite Songs copied to device ✓');
+      toast('Favourite songs copied to device');
       await loadFavourites();
       renderDapExportPills(state.playlist.id);
       return;
     }
     const res = await api(`/daps/${did}/export/${state.playlist.id}`, { method: 'POST' });
-    toast(`Exported to device ✓`);
+    const missingCount = Number(res?.missing_on_device_count || 0);
+    if (missingCount > 0) {
+      toast(`Playlist synced, but ${missingCount} track${missingCount === 1 ? '' : 's'} are missing on device. Run Sync Music to copy files.`);
+    } else {
+      toast('Exported to device');
+    }
     // Refresh pills so sync status updates
-    renderDapExportPills(state.playlist.id);
+    await renderDapExportPills(state.playlist.id);
   } catch (e) {
-    toast('Error: ' + e.message);
+    toast('Export failed. Check the device is connected.');
+  } finally {
+    _setPlaylistDapExportBusy(null, false);
   }
 }
 
@@ -3712,22 +3895,26 @@ async function copyFavSongsToConnectedDap() {
   const daps = await api('/daps').catch(() => []);
   const connected = daps.find(d => d.mounted);
   if (!connected) {
-    toast('No DAP connected.');
+    toast('No DAP connected');
     return;
   }
   await copyFavSongsToDap(connected.id);
 }
 
 async function copyFavSongsToDap(did) {
+  if (_playlistDapExportBusyDid) return;
+  _setPlaylistDapExportBusy(did, true);
   try {
     await api(`/daps/${did}/export/favourites`, { method: 'POST' });
-    toast('Favourite Songs copied to DAP.');
+    toast('Favourite songs copied to DAP');
     await loadFavourites();
     if (state.playlist?.is_favourites) {
-      renderDapExportPills(state.playlist.id);
+      await renderDapExportPills(state.playlist.id);
     }
   } catch (e) {
-    toast('Export failed: ' + e.message);
+    toast('Export failed. Check the device is connected.');
+  } finally {
+    _setPlaylistDapExportBusy(null, false);
   }
 }
 
@@ -5458,6 +5645,11 @@ function _showSyncDone(status) {
     errWrap.style.display = 'none';
   }
   _syncPhase('done');
+  // Refresh DAP sync badges/details so Gear reflects post-sync state immediately.
+  loadDapsView().catch(() => {});
+  if (state.view === 'dap-detail' && _currentDapId) {
+    showDapDetail(_currentDapId).catch(() => {});
+  }
 }
 
 async function syncScanAgain() {
@@ -6049,7 +6241,7 @@ async function dapExportPlaylist(dapId, plId, btn) {
       if (statusCell) statusCell.innerHTML = `<span class="gear-sync-badge gear-sync-ok">✓ Up to date</span>`;
     }
   } catch (e) {
-    toast('Export failed: ' + e.message);
+    toast('Export failed. Check the device is connected.');
     btn.disabled = false;
     btn.textContent = 'Sync';
   }
@@ -6435,7 +6627,7 @@ function validateDapForm(showToast = false) {
   if (saveBtn) saveBtn.disabled = !ok;
 
   if (!ok && showToast) {
-    if (!name) toast('Device name is required.');
+    if (!name) toast('Device name is required');
     else if (mountError) toast(mountError);
   }
   _updateDapModalUnsavedBanner();
@@ -6639,7 +6831,7 @@ async function saveDap() {
       showView('gear');
     }
   } catch (e) {
-    toast('Error: ' + e.message);
+    toast('Could not save. Check the details and try again.');
   }
 }
 
@@ -8380,10 +8572,10 @@ async function importBackup(input) {
       toast('Backup restored successfully — reloading…');
       setTimeout(() => location.reload(), 1500);
     } else {
-      toast('Import failed: ' + (data.error || 'Unknown error'));
+      toast('Restore failed. The file may be corrupt.');
     }
   } catch(e) {
-    toast('Import failed: ' + e.message);
+    toast('Restore failed. The file may be corrupt.');
   }
   input.value = '';  // reset so same file can be re-selected
 }
@@ -8490,7 +8682,7 @@ async function setListeningTracking(enabled) {
   } catch (e) {
     const toggle = document.getElementById('listening-tracking-toggle');
     if (toggle) toggle.checked = !enabled;
-    toast('Could not update listening history setting: ' + e.message);
+    toast('Could not update listening history');
   }
 }
 
@@ -8537,7 +8729,7 @@ async function setExclusiveMode(enabled) {
 
     toast(data.exclusive_mode ? 'Exclusive mode on — bit-perfect output active' : 'Exclusive mode off');
   } catch (e) {
-    toast('Error toggling exclusive mode: ' + e.message);
+    toast('Could not toggle exclusive mode');
   }
 }
 
@@ -8600,7 +8792,7 @@ async function installMpv() {
         msg = `${msg} (python-mpv is installed, but libmpv is still missing)`;
       }
     } catch (_) {}
-    toast('mpv install failed: ' + msg);
+    toast('mpv install failed. Restart the app and try again.');
     if (btn) {
       btn.disabled = false;
       btn.textContent = 'Install mpv';
@@ -8640,7 +8832,7 @@ async function saveLibraryPath() {
     await api('/settings', { method: 'PUT', body: { library_path: path } });
     toast('Library path saved. Rescan to apply changes.');
   } catch (e) {
-    toast('Error: ' + e.message);
+    toast('Could not save library path');
   }
 }
 
@@ -8667,7 +8859,7 @@ async function completeOnboarding() {
   const preferredAudioFormat = document.getElementById('onboard-file-format')?.value || 'flac';
 
   if (!path) {
-    toast('Please choose your music library folder.');
+    toast('Choose your music library folder');
     return;
   }
 
@@ -8686,7 +8878,7 @@ async function completeOnboarding() {
     if (libInput) libInput.value = path;
     toast('Welcome to TuneBridge. Setup saved.');
   } catch (e) {
-    toast('Could not save onboarding settings: ' + e.message);
+    toast('Could not save settings');
   }
 }
 
@@ -8933,7 +9125,7 @@ async function addBaseline() {
   const url  = urlEl.value.trim();
   if (!name || !url) { toast('Enter a name and a squig.link URL'); return; }
   if (url && !url.match(/^https?:\/\/(?:[^./]+\.)?squig\.link\//i)) {
-    toast('⚠ URL doesn\'t look like a squig.link address — double-check it');
+    toast('That doesn\'t look like a squig.link URL');
     return;
   }
   btn.disabled = true;
@@ -9049,6 +9241,7 @@ const App = {
   ctxEditAlbumTags,
   ctxRenameArtist,
   ctxAddToPlaylist,
+  ctxRemoveFromPlaylist,
   openCtxSubmenu,
   closeCtxSubmenu,
   _ctxSubmenuLeaveItem,

@@ -27,6 +27,7 @@ from urllib.request import Request as UrlRequest
 from mutagen.flac import FLAC
 from mutagen.mp3 import MP3
 from mutagen.mp4 import MP4
+from mutagen.wave import WAVE
 import hashlib
 import re
 import unicodedata
@@ -895,6 +896,39 @@ def scan_file(filepath):
             elif eff_artist and album:
                 k = get_artwork_key(eff_artist, album)
                 artwork_key = k if (ARTWORK_DIR / f"{k}.jpg").exists() else None
+        elif filename.lower().endswith('.wav'):
+            audio = WAVE(str(filepath))
+            tags = audio.tags
+            duration = int(audio.info.length)
+
+            def wav_tag(key):
+                if tags and key in tags:
+                    v = str(tags[key])
+                    return v.strip() if v.strip() else None
+                return None
+
+            artist = wav_tag('TPE1')
+            album_artist = wav_tag('TPE2')
+            album = wav_tag('TALB')
+            title = wav_tag('TIT2')
+            track_num = wav_tag('TRCK')
+            year = wav_tag('TDRC') or wav_tag('TYER')
+            genre = wav_tag('TCON')
+
+            artwork_key = None
+            eff_artist = album_artist or artist
+            if eff_artist and album and tags:
+                for key, val in tags.items():
+                    if str(key).startswith('APIC'):
+                        artwork_key = get_artwork_key(eff_artist, album)
+                        artwork_path = ARTWORK_DIR / f"{artwork_key}.jpg"
+                        if not artwork_path.exists():
+                            try:
+                                with open(artwork_path, 'wb') as f:
+                                    f.write(val.data)
+                            except Exception:
+                                artwork_key = None
+                        break
 
         else:
             return None
@@ -978,7 +1012,7 @@ def do_scan():
         for fn in sorted(filenames):
             if fn.startswith('.') or fn.startswith('._'):
                 continue
-            if fn.lower().endswith(('.flac', '.mp3', '.m4a', '.aac', '.mp4')):
+            if fn.lower().endswith(('.flac', '.mp3', '.m4a', '.aac', '.mp4', '.wav')):
                 files.append(Path(root) / fn)
 
     scan_state['total'] = len(files)
@@ -3778,6 +3812,40 @@ def generate_m3u(tracks, playlist_name, path_prefix=''):
     return '\n'.join(lines)
 
 
+def _m3u_write_encoding_for_dap(dap):
+    """
+    Return preferred .m3u write encoding for a target DAP profile.
+    AP80 firmware is more reliable with UTF-8 BOM for Unicode paths.
+    """
+    model = str((dap or {}).get('model') or '').strip().lower()
+    if model == 'hidizs_ap80':
+        return 'utf-8-sig'
+    return 'utf-8'
+
+
+def _ascii_fold_relpath(relpath: str) -> str:
+    """Return an ASCII-safe relative path variant for strict playlist parsers."""
+    raw = _normalize_rel(relpath)
+    if not raw:
+        return raw
+    out_parts = []
+    for part in raw.split('/'):
+        # Keep extension while folding base name.
+        stem = Path(part).stem
+        ext = Path(part).suffix
+        if ext:
+            folded_stem = unicodedata.normalize('NFKD', stem).encode('ascii', 'ignore').decode('ascii')
+            folded_stem = _safe_segment(folded_stem) or _safe_segment(stem) or 'track'
+            folded_ext = unicodedata.normalize('NFKD', ext).encode('ascii', 'ignore').decode('ascii')
+            folded_ext = folded_ext if folded_ext.startswith('.') else ('.' + folded_ext if folded_ext else ext)
+            folded = f'{folded_stem}{folded_ext}'
+        else:
+            folded_plain = unicodedata.normalize('NFKD', part).encode('ascii', 'ignore').decode('ascii')
+            folded = _safe_segment(folded_plain) or _safe_segment(part) or 'Unknown'
+        out_parts.append(folded)
+    return _normalize_rel('/'.join(out_parts))
+
+
 @app.route('/api/playlists/<pid>/export/<fmt>')
 def export_playlist(pid, fmt):
     playlists = load_playlists()
@@ -4634,7 +4702,7 @@ def export_to_device():
 
 # ── Music Sync ────────────────────────────────────────────────────────────────
 
-SYNC_EXTENSIONS = {'.flac', '.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus', '.wv', '.aiff', '.aif', '.ape', '.wma', '.alac'}
+SYNC_EXTENSIONS = {'.flac', '.mp3', '.m4a', '.aac', '.mp4', '.wav', '.ogg', '.opus', '.wv', '.aiff', '.aif', '.ape', '.wma', '.alac'}
 SYNC_SKIP_DIR_NAMES = {
     '.fseventsd',
     '.spotlight-v100',
@@ -5295,13 +5363,58 @@ def sync_execute():
             sync_state['message'] = f'Copying {progress} / {total} files…'
 
         copied = total - len(errors)
+        post_copy_diff = None
+        diff_error = None
+        try:
+            daps = load_daps()
+            dap = next((d for d in daps if d.get('id') == dap_id), None)
+            if dap:
+                post_copy_diff = _compute_sync_diff_for_dap(dap)
+                now_ts = int(time.time())
+                _update_dap_sync_summary(dap_id, {
+                    'music_out_of_sync_count': post_copy_diff['music_out_of_sync_count'],
+                    'music_to_add_count': post_copy_diff['music_to_add_count'],
+                    'music_to_remove_count': post_copy_diff['music_to_remove_count'],
+                    'space_available_bytes': post_copy_diff['space_available_bytes'],
+                    'space_total_bytes': post_copy_diff['space_total_bytes'],
+                    'space_required_bytes': post_copy_diff['space_required_bytes'],
+                    'space_shortfall_bytes': post_copy_diff['space_shortfall_bytes'],
+                    'space_ok': post_copy_diff['space_ok'],
+                    'last_scan_at': now_ts,
+                    'last_verified_at': now_ts,
+                    'sync_status_state': 'verified',
+                    'sync_status_message': (
+                        'Sync completed with some copy issues'
+                        if errors else
+                        'Sync complete'
+                    ),
+                })
+        except Exception as e:
+            diff_error = str(e)
+
         sync_state.update({
             'status': 'done',
             'errors': errors,
             'current': '',
+            'music_out_of_sync_count': (
+                post_copy_diff['music_out_of_sync_count']
+                if isinstance(post_copy_diff, dict) else
+                sync_state.get('music_out_of_sync_count', 0)
+            ),
+            'music_to_add_count': (
+                post_copy_diff['music_to_add_count']
+                if isinstance(post_copy_diff, dict) else
+                sync_state.get('music_to_add_count', 0)
+            ),
+            'music_to_remove_count': (
+                post_copy_diff['music_to_remove_count']
+                if isinstance(post_copy_diff, dict) else
+                sync_state.get('music_to_remove_count', 0)
+            ),
             'message': (
                 f'Done — {copied} file(s) copied.'
                 + (f' {len(errors)} error(s).' if errors else '')
+                + (f' Could not verify final sync state ({diff_error}).' if diff_error else '')
             ),
         })
 
@@ -5871,11 +5984,12 @@ def dap_export_favourites(did):
     favourites = load_favourites()
     tracks, _ = _resolve_favourite_tracks(favourites.get('songs') or [])
     prefix = dap.get('path_prefix', '')
+    m3u_encoding = _m3u_write_encoding_for_dap(dap)
     out_dir = device_root / dap.get('export_folder', 'Playlists')
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
         content = generate_m3u(tracks, 'Favourite Songs', path_prefix=prefix)
-        with open(out_dir / "Favourite Songs.m3u", 'w', encoding='utf-8') as f:
+        with open(out_dir / "Favourite Songs.m3u", 'w', encoding=m3u_encoding) as f:
             f.write(content)
     except OSError as e:
         import errno as _errno
@@ -5911,14 +6025,99 @@ def dap_export_playlist(did, pid):
               for e in playlist.get('tracks', [])
               if (e if isinstance(e, str) else e.get('id')) in lib_map]
 
+    # Export playlist paths by preferring the real location currently on device.
+    # This avoids regressions when older files were copied with a previous layout
+    # while newer files use the current path template.
+    template = dap.get('path_template') or DEFAULT_DAP_PATH_TEMPLATE
+    is_ap80 = str(dap.get('model') or '').strip().lower() == 'hidizs_ap80'
+    device_music_root = get_dap_music_path(did)
+    device_map = {}
+    if device_music_root and device_music_root.exists():
+        device_map = {
+            _normalize_rel(p).casefold(): _normalize_rel(p)
+            for p in walk_music_files(device_music_root)
+        }
+
+    manifest_by_local = {}
+    try:
+        manifest = _get_dap_sync_manifest(did)
+        for ent in (manifest or {}).values():
+            lrel = _normalize_rel(ent.get('local_rel'))
+            trel = _normalize_rel(ent.get('target_rel'))
+            if lrel and trel and lrel.casefold() not in manifest_by_local:
+                manifest_by_local[lrel.casefold()] = trel
+    except Exception:
+        manifest_by_local = {}
+
+    export_tracks = []
+    for t in tracks:
+        local_rel = _normalize_rel(t.get('path'))
+        rendered_rel, _ = _render_device_relpath(t, template)
+        candidates = []
+        if local_rel and manifest_by_local.get(local_rel.casefold()):
+            candidates.append(manifest_by_local[local_rel.casefold()])
+        if rendered_rel:
+            candidates.append(rendered_rel)
+        if local_rel:
+            candidates.append(local_rel)
+
+        chosen_rel = ''
+        for cand in candidates:
+            key = _normalize_rel(cand).casefold()
+            if key and key in device_map:
+                # Preserve actual on-device casing/path segment text.
+                chosen_rel = device_map[key]
+                break
+        if not chosen_rel:
+            chosen_rel = next((c for c in candidates if c), '')
+
+        # AP80 playlist parser can drop some Unicode paths even when files exist.
+        # Create/use an ASCII-safe alias path for playlist references when needed.
+        if is_ap80 and chosen_rel and any(ord(ch) > 127 for ch in chosen_rel):
+            ascii_rel = _ascii_fold_relpath(chosen_rel)
+            if ascii_rel and ascii_rel != chosen_rel and device_music_root and device_music_root.exists():
+                src = device_music_root / chosen_rel
+                alias = device_music_root / ascii_rel
+                try:
+                    if src.exists() and not alias.exists():
+                        alias.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(src, alias)
+                        # Keep device map fresh for later validation in this export run.
+                        device_map[_normalize_rel(ascii_rel).casefold()] = _normalize_rel(ascii_rel)
+                    if alias.exists():
+                        chosen_rel = _normalize_rel(ascii_rel)
+                except Exception:
+                    # Fall back to original path if alias creation fails.
+                    pass
+
+        export_t = dict(t)
+        if chosen_rel:
+            export_t['path'] = chosen_rel
+        export_tracks.append(export_t)
+
+    # Validate playlist references against files currently present on the device's music root.
+    # This keeps "playlist synced" from being misleading when tracks haven't been copied yet.
+    missing_on_device = []
+    if device_music_root and device_music_root.exists():
+        for t in export_tracks:
+            rel = str(t.get('path') or '').replace('\\', '/').lstrip('/')
+            if not rel:
+                continue
+            if _normalize_rel(rel).casefold() not in device_map:
+                missing_on_device.append(rel)
+    else:
+        # If music root is unavailable, treat all playlist entries as unresolved.
+        missing_on_device = [str(t.get('path') or '') for t in export_tracks if str(t.get('path') or '').strip()]
+
     prefix = dap.get('path_prefix', '')
+    m3u_encoding = _m3u_write_encoding_for_dap(dap)
 
     out_dir = device_root / dap.get('export_folder', 'Playlists')
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
-        content = generate_m3u(tracks, playlist['name'], path_prefix=prefix)
+        content = generate_m3u(export_tracks, playlist['name'], path_prefix=prefix)
         safe_name = playlist['name'].replace('/', '-').replace(':', '-')
-        with open(out_dir / f"{safe_name}.m3u", 'w', encoding='utf-8') as f:
+        with open(out_dir / f"{safe_name}.m3u", 'w', encoding=m3u_encoding) as f:
             f.write(content)
     except OSError as e:
         import errno as _errno
@@ -5930,7 +6129,12 @@ def dap_export_playlist(did, pid):
         dap['playlist_exports'] = {}
     dap['playlist_exports'][pid] = int(time.time())
     save_daps(daps)
-    return jsonify({'exported_at': dap['playlist_exports'][pid]})
+    return jsonify({
+        'exported_at': dap['playlist_exports'][pid],
+        'track_count': len(export_tracks),
+        'missing_on_device_count': len(missing_on_device),
+        'missing_on_device_sample': missing_on_device[:8],
+    })
 
 
 # ── IEM Management ────────────────────────────────────────────────────────────

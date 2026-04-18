@@ -1176,6 +1176,7 @@ const Player = (function () {
       _highlightActiveRow();
       _renderQueue();
       _saveState();
+      _toast('Queue cleared');
       return;
     }
 
@@ -1186,6 +1187,7 @@ const Player = (function () {
     _highlightActiveRow();
     _renderQueue();
     _saveState();
+    _toast('Queue cleared');
   }
 
   function moveQueueItem(fromIdx, toIdx) {
