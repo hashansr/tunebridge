@@ -2,13 +2,15 @@
 # 🎵 TuneBridge — Build Distributable App + DMG
 #
 # Usage:
-#   bash build_app.sh          # builds dist/TuneBridge.app
-#   bash build_app.sh --dmg    # also creates dist/TuneBridge.dmg
+#   bash build_app.sh                # dev build, app only (current branch)
+#   bash build_app.sh --dmg          # dev build + DMG
+#   bash build_app.sh --dmg --dev    # same as above, explicit
+#   bash build_app.sh --dmg --test   # RC: checkout main, merge current branch, build
+#   bash build_app.sh --dmg --prod   # Prod: checkout main, merge, tag, build, push, publish
 #
-# Distribution target:
-#   - Apple Silicon macOS only (arm64)
-#   - No Python required on end-user machines
-#   - Drag TuneBridge.app to /Applications and launch
+# --test and --prod handle all git workflow automatically:
+#   stash uncommitted changes → checkout main → merge your branch →
+#   build → (prod: commit version, tag, push, publish) → restore branch + unstash
 
 set -euo pipefail
 
@@ -20,31 +22,67 @@ DISTRO_DIR="${PROJECT_DIR}/distro"
 APP_PATH="${DIST_DIR}/${APP_NAME}.app"
 BUILD_VENV="${PROJECT_DIR}/.build-venv"
 
-# ── Channel detection ─────────────────────────────────────────────────────────
-GIT_BRANCH=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-GIT_TAG=$(git -C "$PROJECT_DIR" tag --points-at HEAD 2>/dev/null | grep -E '^v[0-9]' | head -1 || echo "")
-GIT_HASH=$(git -C "$PROJECT_DIR" rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
-
-BUILD_CHANNEL="dev"
-[[ "$GIT_BRANCH" == "main" ]] && BUILD_CHANNEL="rc"
-[[ -n "$GIT_TAG" && "$GIT_BRANCH" == "main" ]] && BUILD_CHANNEL="prod"
-
+# ── Flag parsing ──────────────────────────────────────────────────────────────
 BUILD_DMG=0
-BUILD_PUBLISH=0
+BUILD_CHANNEL="dev"  # default: stay on current branch, dev channel
+
 for arg in "$@"; do
-  [ "$arg" = "--dmg" ]     && BUILD_DMG=1
-  [ "$arg" = "--publish" ] && BUILD_DMG=1 && BUILD_PUBLISH=1
-  [[ "$arg" =~ ^--channel=(.+)$ ]] && BUILD_CHANNEL="${BASH_REMATCH[1]}"
+  [ "$arg" = "--dmg" ]  && BUILD_DMG=1
+  [ "$arg" = "--dev" ]  && BUILD_CHANNEL="dev"
+  [ "$arg" = "--test" ] && BUILD_CHANNEL="rc"   && BUILD_DMG=1
+  [ "$arg" = "--prod" ] && BUILD_CHANNEL="prod" && BUILD_DMG=1
 done
 
-# Guard: --publish requires prod channel
-if [ "$BUILD_PUBLISH" = "1" ] && [ "$BUILD_CHANNEL" != "prod" ]; then
-  echo "❌  --publish is only allowed on prod channel (channel=${BUILD_CHANNEL})"
-  echo "    Merge to main and tag the commit first:  git tag v<N>"
-  exit 1
+# ── Git workflow helpers ──────────────────────────────────────────────────────
+_ORIGINAL_BRANCH=""
+_DID_STASH=0
+
+_git_prepare() {
+  _ORIGINAL_BRANCH=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  [ -z "$_ORIGINAL_BRANCH" ] && { echo "❌  Not a git repository."; exit 1; }
+
+  # Stash any dirty state (tracked modifications + untracked files)
+  local stash_out
+  stash_out=$(git -C "$PROJECT_DIR" stash push --include-untracked \
+    -m "build-auto-stash-$(date +%s)" 2>&1) || true
+  echo "$stash_out" | grep -q "Saved working directory" && _DID_STASH=1
+
+  # Switch to main and bring in the current branch
+  git -C "$PROJECT_DIR" checkout main
+  git -C "$PROJECT_DIR" merge "$_ORIGINAL_BRANCH" --no-edit
+}
+
+_git_restore() {
+  # Always switch back to the original branch (called from trap too)
+  if [ -n "$_ORIGINAL_BRANCH" ] && [ "$_ORIGINAL_BRANCH" != "main" ]; then
+    git -C "$PROJECT_DIR" merge --abort 2>/dev/null || true
+    git -C "$PROJECT_DIR" checkout "$_ORIGINAL_BRANCH" 2>/dev/null || true
+    if [ "$_DID_STASH" = "1" ]; then
+      git -C "$PROJECT_DIR" stash pop 2>/dev/null || {
+        # Resolve any conflicts by keeping the stashed (working) versions
+        git -C "$PROJECT_DIR" diff --name-only --diff-filter=U 2>/dev/null \
+          | while IFS= read -r f; do
+              git -C "$PROJECT_DIR" checkout --theirs -- "$f" 2>/dev/null || true
+            done
+        git -C "$PROJECT_DIR" reset HEAD -- 2>/dev/null || true
+      }
+      _DID_STASH=0
+    fi
+    # Sync version.json back so next build increments from the correct number
+    git -C "$PROJECT_DIR" show main:version.json > "${PROJECT_DIR}/version.json" 2>/dev/null || true
+  fi
+  _ORIGINAL_BRANCH=""
+}
+
+# Kick off git workflow now for --test / --prod (before version increment)
+if [[ "$BUILD_CHANNEL" == "rc" || "$BUILD_CHANNEL" == "prod" ]]; then
+  _git_prepare
 fi
 
 # ── Version auto-increment ────────────────────────────────────────────────────
+GIT_BRANCH=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+GIT_HASH=$(git -C "$PROJECT_DIR"   rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
+
 BUILD_NUM=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/version.json'))['build']+1)")
 APP_VERSION="0.${BUILD_NUM}"
 
@@ -88,7 +126,8 @@ _spin_start() {
 _spin_stop() {
   [ -n "$_SP" ] && { kill "$_SP" 2>/dev/null; wait "$_SP" 2>/dev/null || true; _SP=""; printf "\r\033[K"; }
 }
-trap '_spin_stop' EXIT INT TERM
+_cleanup() { _spin_stop; _git_restore; }
+trap '_cleanup' EXIT INT TERM
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 _phase() { echo ""; echo -e "${BOLD}${CYAN}$1${NC}"; echo -e "${DIM}────────────────────────────────────────${NC}"; echo ""; }
@@ -416,32 +455,54 @@ fi
 
 deactivate || true
 
-# ── Publish to public releases repo ──────────────────────────────────────────
-if [ "$BUILD_PUBLISH" = "1" ]; then
-  _phase "🚀 Publish to tunebridge-releases"
+# ── Prod: commit version.json, tag, push, publish ─────────────────────────────
+if [ "$BUILD_CHANNEL" = "prod" ]; then
+  _phase "🚀 Release v${APP_VERSION}"
+
+  # Commit version.json bump to main (only after a successful build)
+  printf "  📝  Committing version.json to main... "
+  git -C "$PROJECT_DIR" add version.json
+  git -C "$PROJECT_DIR" commit -m "Release v${APP_VERSION}"
+  echo -e "${GREEN}done ✅${NC}"
+
+  # Tag the release commit
+  printf "  🏷️   Tagging v${APP_VERSION}... "
+  git -C "$PROJECT_DIR" tag "v${APP_VERSION}" 2>/dev/null \
+    || git -C "$PROJECT_DIR" tag -f "v${APP_VERSION}"
+  echo -e "${GREEN}done ✅${NC}"
+
+  # Push main branch + tag to private source repo
+  printf "  🔒  Pushing to private repo... "
+  git -C "$PROJECT_DIR" push origin main
+  git -C "$PROJECT_DIR" push origin "v${APP_VERSION}"
+  echo -e "${GREEN}done ✅${NC}"
+  _info "hashansr/tunebridge  main + v${APP_VERSION}"
+
+  # Publish DMG + version.json to public releases repo
   RELEASES_REPO="${HOME}/tunebridge-releases"
-
   if [ ! -d "$RELEASES_REPO/.git" ]; then
-    _err "Releases repo not found at ${RELEASES_REPO}"
+    _warn "Releases repo not found at ${RELEASES_REPO} — skipping public publish"
     _info "One-time setup:  git clone https://github.com/hashansr/tunebridge-releases ~/tunebridge-releases"
-    exit 1
+  else
+    printf "  📋  Copying artifacts to releases repo... "
+    cp -f "$DISTRO_LATEST" "${RELEASES_REPO}/TuneBridge-latest.dmg"
+    cp -f "${PROJECT_DIR}/version.json" "${RELEASES_REPO}/version.json"
+    echo -e "${GREEN}done ✅${NC}"
+
+    printf "  📝  Committing releases repo... "
+    git -C "$RELEASES_REPO" add TuneBridge-latest.dmg version.json
+    git -C "$RELEASES_REPO" commit -m "Release v${APP_VERSION}"
+    echo -e "${GREEN}done ✅${NC}"
+
+    printf "  🌐  Pushing releases repo... "
+    git -C "$RELEASES_REPO" push
+    echo -e "${GREEN}done ✅${NC}"
+    _ok "Published v${APP_VERSION} → hashansr/tunebridge-releases"
   fi
-
-  printf "  📋  Copying artifacts... "
-  cp -f "$DISTRO_LATEST" "${RELEASES_REPO}/TuneBridge-latest.dmg"
-  cp -f "${PROJECT_DIR}/version.json" "${RELEASES_REPO}/version.json"
-  echo -e "${GREEN}done ✅${NC}"
-
-  printf "  📝  Committing... "
-  git -C "$RELEASES_REPO" add TuneBridge-latest.dmg version.json
-  git -C "$RELEASES_REPO" commit -m "Release v${APP_VERSION}"
-  echo -e "${GREEN}done ✅${NC}"
-
-  printf "  🌐  Pushing... "
-  git -C "$RELEASES_REPO" push
-  echo -e "${GREEN}done ✅${NC}"
-  _ok "Published v${APP_VERSION} → hashansr/tunebridge-releases"
 fi
+
+# ── Restore git state (back to original branch + unstash) ────────────────────
+_git_restore
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
@@ -450,21 +511,34 @@ TOTAL_ELAPSED=$(_elapsed "$T0")
 echo -e "${GREEN}${BOLD}🎉  Build complete — v${VERSION_FULL}  (total: ${TOTAL_ELAPSED})${NC}"
 echo ""
 
-if [ "$BUILD_DMG" = "1" ]; then
-  echo -e "  ${BOLD}To distribute:${NC}"
-  echo "    Share:  distro/${APP_NAME}-latest.dmg"
-  echo ""
-  echo -e "  ${BOLD}Local install:${NC}"
-  echo "    /Applications/${APP_NAME}.app has been updated ✅"
-  echo "    Launch TuneBridge from Applications or Spotlight"
-else
-  echo -e "  ${BOLD}To install:${NC}"
-  echo "    1.  Open  dist/${APP_NAME}.app"
-  echo "    2.  Drag to Applications (optional)"
-  echo "    3.  Launch TuneBridge"
-fi
+case "$BUILD_CHANNEL" in
+  prod)
+    echo -e "  ${BOLD}Released:${NC}"
+    echo "    🏷️   Tag v${APP_VERSION} pushed to hashansr/tunebridge"
+    echo "    🌐  DMG live at hashansr/tunebridge-releases"
+    echo ""
+    echo -e "  ${BOLD}Local install updated:${NC}"
+    echo "    /Applications/${APP_NAME}.app ✅"
+    ;;
+  rc)
+    echo -e "  ${BOLD}RC build — not published:${NC}"
+    echo "    Share for testing:  distro/${APP_NAME}-latest.dmg"
+    echo "    To release:  bash build_app.sh --prod"
+    echo ""
+    echo -e "  ${BOLD}Local install updated:${NC}"
+    echo "    /Applications/${APP_NAME}.app ✅"
+    ;;
+  *)
+    if [ "$BUILD_DMG" = "1" ]; then
+      echo -e "  ${BOLD}Dev build:${NC}"
+      echo "    distro/${APP_NAME}-latest.dmg"
+    else
+      echo -e "  ${BOLD}To install:${NC}"
+      echo "    Open  dist/${APP_NAME}.app  and drag to Applications"
+    fi
+    ;;
+esac
 
 echo ""
-echo -e "  ${DIM}First launch: user data created at${NC}"
-echo -e "  ${DIM}~/Library/Application Support/TuneBridge${NC}"
+echo -e "  ${DIM}First launch: user data at ~/Library/Application Support/TuneBridge${NC}"
 echo ""
