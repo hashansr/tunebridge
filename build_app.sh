@@ -12,7 +12,6 @@
 
 set -euo pipefail
 
-APP_VERSION="1.0"
 APP_NAME="TuneBridge"
 BUNDLE_ID="com.tunebridge.app"
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -21,10 +20,51 @@ DISTRO_DIR="${PROJECT_DIR}/distro"
 APP_PATH="${DIST_DIR}/${APP_NAME}.app"
 BUILD_VENV="${PROJECT_DIR}/.build-venv"
 
+# ── Channel detection ─────────────────────────────────────────────────────────
+GIT_BRANCH=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+GIT_TAG=$(git -C "$PROJECT_DIR" tag --points-at HEAD 2>/dev/null | grep -E '^v[0-9]' | head -1 || echo "")
+GIT_HASH=$(git -C "$PROJECT_DIR" rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
+
+BUILD_CHANNEL="dev"
+[[ "$GIT_BRANCH" == "main" ]] && BUILD_CHANNEL="rc"
+[[ -n "$GIT_TAG" && "$GIT_BRANCH" == "main" ]] && BUILD_CHANNEL="prod"
+
 BUILD_DMG=0
+BUILD_PUBLISH=0
 for arg in "$@"; do
-  [ "$arg" = "--dmg" ] && BUILD_DMG=1
+  [ "$arg" = "--dmg" ]     && BUILD_DMG=1
+  [ "$arg" = "--publish" ] && BUILD_DMG=1 && BUILD_PUBLISH=1
+  [[ "$arg" =~ ^--channel=(.+)$ ]] && BUILD_CHANNEL="${BASH_REMATCH[1]}"
 done
+
+# Guard: --publish requires prod channel
+if [ "$BUILD_PUBLISH" = "1" ] && [ "$BUILD_CHANNEL" != "prod" ]; then
+  echo "❌  --publish is only allowed on prod channel (channel=${BUILD_CHANNEL})"
+  echo "    Merge to main and tag the commit first:  git tag v<N>"
+  exit 1
+fi
+
+# ── Version auto-increment ────────────────────────────────────────────────────
+BUILD_NUM=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/version.json'))['build']+1)")
+APP_VERSION="0.${BUILD_NUM}"
+
+case "$BUILD_CHANNEL" in
+  prod) VERSION_FULL="${APP_VERSION}" ;;
+  rc)   VERSION_FULL="${APP_VERSION}-rc" ;;
+  *)    VERSION_FULL="${APP_VERSION}-dev+${GIT_HASH}" ;;
+esac
+
+python3 -c "
+import json
+with open('${PROJECT_DIR}/version.json', 'w') as f:
+    json.dump({
+        'version': '${APP_VERSION}',
+        'build': ${BUILD_NUM},
+        'channel': '${BUILD_CHANNEL}',
+        'released': '$(date +%Y-%m-%d)'
+    }, f, indent=2)
+    f.write('\n')
+"
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 BOLD='\033[1m'
@@ -66,12 +106,14 @@ _elapsed() {
 
 # ── Header ────────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${BOLD}🏗️   TuneBridge — Build Distributable v${APP_VERSION}${NC}"
+echo -e "${BOLD}🏗️   TuneBridge — Build Distributable v${VERSION_FULL}${NC}"
 echo -e "${DIM}════════════════════════════════════════════${NC}"
 echo ""
 _kv "📁 Project:" "${PROJECT_DIR}"
 _kv "📤 Output:"  "${APP_PATH}"
-_kv "🏷️  Mode:"    "$( [ "$BUILD_DMG" = "1" ] && echo "App + DMG" || echo "App only" )"
+_kv "🏷️  Version:" "${VERSION_FULL}  (channel: ${BUILD_CHANNEL})"
+_kv "🔀 Branch:"  "${GIT_BRANCH}  ${GIT_HASH}"
+_kv "⚙️  Mode:"    "$( [ "$BUILD_DMG" = "1" ] && echo "App + DMG" || echo "App only" )"
 
 if [ "$(uname -s)" != "Darwin" ]; then
   _err "This script supports macOS only."
@@ -356,12 +398,12 @@ print(mp)
   printf "  📤  Publishing to distro/... "
   BUILD_STAMP="$(date +%Y%m%d-%H%M%S)"
   DISTRO_LATEST="${DISTRO_DIR}/${APP_NAME}-latest.dmg"
-  DISTRO_VERSIONED="${DISTRO_DIR}/${APP_NAME}-v${APP_VERSION}-${BUILD_STAMP}.dmg"
+  DISTRO_VERSIONED="${DISTRO_DIR}/${APP_NAME}-v${VERSION_FULL}-${BUILD_STAMP}.dmg"
   cp -f "$DMG_PATH" "$DISTRO_LATEST"
   cp -f "$DMG_PATH" "$DISTRO_VERSIONED"
   echo -e "${GREEN}done ✅${NC}"
   _info "distro/${APP_NAME}-latest.dmg  (stable latest)"
-  _info "distro/${APP_NAME}-v${APP_VERSION}-${BUILD_STAMP}.dmg  (archived)"
+  _info "distro/${APP_NAME}-v${VERSION_FULL}-${BUILD_STAMP}.dmg  (archived)"
 
   # ── Update /Applications with the new build ─────────────────────────────────
   printf "  🖥️   Updating /Applications/${APP_NAME}.app... "
@@ -374,11 +416,38 @@ fi
 
 deactivate || true
 
+# ── Publish to public releases repo ──────────────────────────────────────────
+if [ "$BUILD_PUBLISH" = "1" ]; then
+  _phase "🚀 Publish to tunebridge-releases"
+  RELEASES_REPO="${HOME}/tunebridge-releases"
+
+  if [ ! -d "$RELEASES_REPO/.git" ]; then
+    _err "Releases repo not found at ${RELEASES_REPO}"
+    _info "One-time setup:  git clone https://github.com/hashansr/tunebridge-releases ~/tunebridge-releases"
+    exit 1
+  fi
+
+  printf "  📋  Copying artifacts... "
+  cp -f "$DISTRO_LATEST" "${RELEASES_REPO}/TuneBridge-latest.dmg"
+  cp -f "${PROJECT_DIR}/version.json" "${RELEASES_REPO}/version.json"
+  echo -e "${GREEN}done ✅${NC}"
+
+  printf "  📝  Committing... "
+  git -C "$RELEASES_REPO" add TuneBridge-latest.dmg version.json
+  git -C "$RELEASES_REPO" commit -m "Release v${APP_VERSION}"
+  echo -e "${GREEN}done ✅${NC}"
+
+  printf "  🌐  Pushing... "
+  git -C "$RELEASES_REPO" push
+  echo -e "${GREEN}done ✅${NC}"
+  _ok "Published v${APP_VERSION} → hashansr/tunebridge-releases"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${DIM}════════════════════════════════════════════${NC}"
 TOTAL_ELAPSED=$(_elapsed "$T0")
-echo -e "${GREEN}${BOLD}🎉  Build complete!  (total: ${TOTAL_ELAPSED})${NC}"
+echo -e "${GREEN}${BOLD}🎉  Build complete — v${VERSION_FULL}  (total: ${TOTAL_ELAPSED})${NC}"
 echo ""
 
 if [ "$BUILD_DMG" = "1" ]; then

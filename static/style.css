@@ -11935,4 +11935,27 @@ tr:hover .track-edit-btn:hover {
 .artist-thumb,
 .album-thumb { position: relative; }
 
+/* ── Build channel badge (Settings → App) ────────────────────────────────── */
+.build-channel-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  margin-left: 8px;
+  vertical-align: middle;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.build-channel-badge--dev {
+  background: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.25);
+}
+.build-channel-badge--rc {
+  background: rgba(173, 198, 255, 0.15);
+  color: #adc6ff;
+  border: 1px solid rgba(173, 198, 255, 0.25);
+}
+
 /* Album art search bar: button + hint text inline */

@@ -8672,6 +8672,25 @@ async function loadSettings() {
     if (batchStatus.status === 'running') _startArtistBatchPolling();
   } catch (_) {}
 
+  // Display app version + channel badge
+  try {
+    const ver = await fetch('/api/version').then(r => r.json());
+    const verEl    = document.getElementById('app-version-display');
+    const badgeEl  = document.getElementById('build-channel-badge');
+    const updateBtn = document.getElementById('check-update-btn');
+    if (verEl && ver.version) {
+      verEl.textContent = `v${ver.version}${ver.released ? '  ·  Released ' + ver.released : ''}`;
+    }
+    if (badgeEl && ver.channel && ver.channel !== 'prod') {
+      badgeEl.textContent = ver.channel.toUpperCase();
+      badgeEl.className   = `build-channel-badge build-channel-badge--${ver.channel}`;
+      badgeEl.style.display = '';
+    } else if (badgeEl) {
+      badgeEl.style.display = 'none';
+    }
+    if (updateBtn) updateBtn.style.display = (ver.channel === 'prod') ? '' : 'none';
+  } catch (_) {}
+
   return settings;
 }
 
@@ -8896,6 +8915,40 @@ async function restartApp() {
       if (r.ok) { clearInterval(poll); window.location.reload(); }
     } catch (_) { /* still restarting */ }
   }, 800);
+}
+
+async function checkForUpdate() {
+  const btn   = document.getElementById('check-update-btn');
+  const row   = document.getElementById('update-status-row');
+  const label = document.getElementById('update-status-label');
+  const hint  = document.getElementById('update-status-hint');
+  const dlBtn = document.getElementById('update-download-btn');
+
+  if (btn)   { btn.disabled = true; btn.textContent = 'Checking…'; }
+  if (row)   row.style.display = '';
+  if (label) label.textContent = 'Checking for updates…';
+  if (hint)  hint.textContent  = '';
+  if (dlBtn) dlBtn.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/update/check').then(r => r.json());
+    if (res.error) {
+      if (label) label.textContent = 'Could not check for updates';
+      if (hint)  hint.textContent  = res.error;
+    } else if (res.update_available) {
+      if (label) label.textContent = `Update available: v${res.latest}`;
+      if (hint)  hint.textContent  = `You have v${res.current}.${res.released ? '  Released ' + res.released + '.' : ''}`;
+      if (dlBtn) { dlBtn.href = res.download_url; dlBtn.style.display = ''; }
+    } else {
+      if (label) label.textContent = "You're up to date";
+      if (hint)  hint.textContent  = `v${res.current} is the latest version.`;
+    }
+  } catch (e) {
+    if (label) label.textContent = 'Update check failed';
+    if (hint)  hint.textContent  = String(e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Check for Update'; }
+  }
 }
 
 function setHealthSectionExpanded(expanded) {
@@ -9350,6 +9403,7 @@ const App = {
   closeOnboarding,
   completeOnboarding,
   restartApp,
+  checkForUpdate,
   setExclusiveMode,
   setAudioDevice,
   retryMpvDetection,

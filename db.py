@@ -55,6 +55,28 @@ def close_conn():
 
 SCHEMA_VERSION = 2
 
+# ---------------------------------------------------------------------------
+# Migrations
+# ---------------------------------------------------------------------------
+# Ordered list of ALTER TABLE (or other additive) migrations applied AFTER
+# the base schema is bootstrapped. create_schema() handles fresh installs via
+# CREATE TABLE IF NOT EXISTS; these entries patch existing databases.
+#
+# Each entry: (version: int, description: str, sql: list[str] | None)
+#   version  — must be > SCHEMA_VERSION and consecutive
+#   sql      — list of SQL statements; None if the change is a new table only
+#              (new tables are handled by create_schema() automatically)
+#
+# HOW TO ADD A NEW MIGRATION
+#   1. Add the column/table to _SCHEMA_SQL below (fresh-install path)
+#   2. Append an entry here:
+#      (3, 'Add colour to playlists', ['ALTER TABLE playlists ADD COLUMN colour TEXT'])
+#   3. Bump SCHEMA_VERSION to match the highest version in _MIGRATIONS
+_MIGRATIONS: list[tuple] = [
+    # (3, 'Example: add colour to playlists',
+    #     ['ALTER TABLE playlists ADD COLUMN colour TEXT']),
+]
+
 _SCHEMA_SQL = """
 -- Schema versioning
 CREATE TABLE IF NOT EXISTS schema_version (

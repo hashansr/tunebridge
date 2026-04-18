@@ -4628,6 +4628,57 @@ def restart_server():
     return jsonify({'message': 'Restarting…'})
 
 
+# ── Version & update check ─────────────────────────────────────────────────
+
+_VERSION_FILE = Path(__file__).parent / 'version.json'
+_RELEASES_VERSION_URL  = 'https://raw.githubusercontent.com/hashansr/tunebridge-releases/main/version.json'
+_RELEASES_DOWNLOAD_URL = 'https://github.com/hashansr/tunebridge-releases/raw/main/TuneBridge-latest.dmg'
+
+
+def _version_gt(a: str, b: str) -> bool:
+    """Return True if semver string a is greater than b (compares numeric parts only)."""
+    try:
+        def _parts(v):
+            return tuple(int(x) for x in v.split('-')[0].split('.'))
+        return _parts(a) > _parts(b)
+    except Exception:
+        return False
+
+
+@app.route('/api/version')
+def get_version():
+    try:
+        with open(_VERSION_FILE) as f:
+            return jsonify(json.load(f))
+    except Exception:
+        return jsonify({'version': 'unknown', 'channel': 'unknown'})
+
+
+@app.route('/api/update/check')
+def check_for_update():
+    try:
+        with open(_VERSION_FILE) as f:
+            local = json.load(f)
+    except Exception:
+        local = {'version': '0.0', 'channel': 'dev'}
+
+    try:
+        from urllib.request import Request as _Req, urlopen as _urlopen
+        req = _Req(_RELEASES_VERSION_URL, headers={'User-Agent': 'TuneBridge'})
+        with _urlopen(req, timeout=5) as r:
+            remote = json.loads(r.read())
+    except Exception as e:
+        return jsonify({'error': f'Could not reach update server: {e}'})
+
+    return jsonify({
+        'current':          local.get('version'),
+        'latest':           remote.get('version'),
+        'released':         remote.get('released'),
+        'update_available': _version_gt(remote.get('version', '0.0'), local.get('version', '0.0')),
+        'download_url':     _RELEASES_DOWNLOAD_URL,
+    })
+
+
 @app.route('/api/devices/status')
 def devices_status():
     settings = load_settings()
