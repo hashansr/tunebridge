@@ -911,43 +911,31 @@
           <div class="settings-section" id="settings-app-restart-section">
             <h3 class="settings-section-title">App</h3>
 
-            <!-- Version row -->
-            <div class="settings-app-row">
+            <!-- Version + channel — compact single row -->
+            <div class="settings-app-row settings-version-row">
               <div class="settings-app-main">
-                <div class="settings-app-row-label">Version</div>
-                <div class="settings-app-row-hint" id="app-version-display">—</div>
+                <div class="settings-version-top">
+                  <span class="settings-version-label">Version</span>
+                  <span id="app-version-display" class="settings-version-val">—</span>
+                  <select id="update-channel-select" class="settings-channel-pill"
+                          onchange="App.setUpdateChannel(this.value)">
+                    <option value="dev">Dev</option>
+                    <option value="rc">RC</option>
+                    <option value="prod">Prod</option>
+                  </select>
+                </div>
+                <div id="update-status-line" class="settings-update-status" style="display:none">
+                  <span id="update-status-icon" class="settings-update-status-icon"></span>
+                  <span id="update-status-label"></span>
+                </div>
               </div>
-            </div>
-
-            <!-- Channel picker row -->
-            <div class="settings-app-row">
-              <div class="settings-app-main">
-                <div class="settings-app-row-label">Update Channel</div>
-                <div class="settings-app-row-hint" id="update-channel-hint">Prod receives stable releases. RC and Dev are pre-release builds.</div>
-              </div>
-              <select id="update-channel-select" class="settings-select settings-app-control"
-                      onchange="App.setUpdateChannel(this.value)">
-                <option value="dev">Dev</option>
-                <option value="rc">RC</option>
-                <option value="prod">Prod</option>
-              </select>
-            </div>
-
-            <!-- Check for update row (shown for prod channel) -->
-            <div class="settings-app-row" id="update-status-row" style="display:none">
-              <div class="settings-app-main">
-                <div class="settings-app-row-label" id="update-status-label"></div>
-                <div class="settings-app-row-hint" id="update-status-hint"></div>
-              </div>
-              <div style="display:flex;gap:8px;align-items:center">
-                <button class="btn-secondary settings-app-control" id="check-update-btn"
-                        onclick="App.checkForUpdate()">
-                  Check for Update
+              <div class="settings-version-actions">
+                <button class="btn-secondary" id="check-update-btn"
+                        onclick="App.checkForUpdate()">Check for Update</button>
+                <button class="btn-primary" id="update-download-btn"
+                        onclick="App.confirmUpdate()" style="display:none">
+                  Update
                 </button>
-                <a class="btn-primary settings-app-control" id="update-download-btn"
-                   href="#" target="_blank" style="display:none; text-decoration:none">
-                  Download
-                </a>
               </div>
             </div>
 

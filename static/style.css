@@ -11942,27 +11942,61 @@ tr:hover .track-edit-btn:hover {
 .artist-thumb,
 .album-thumb { position: relative; }
 
-/* ── Build channel badge (Settings → App) ────────────────────────────────── */
-.build-channel-badge {
-  display: inline-block;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 10px;
-  margin-left: 8px;
-  vertical-align: middle;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+/* ── Version row (Settings → App) ────────────────────────────────────────── */
+.settings-version-row { align-items: center; }
+
+.settings-version-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
-.build-channel-badge--dev {
-  background: rgba(255, 193, 7, 0.15);
-  color: #ffc107;
-  border: 1px solid rgba(255, 193, 7, 0.25);
+.settings-version-label {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
 }
-.build-channel-badge--rc {
-  background: rgba(173, 198, 255, 0.15);
-  color: #adc6ff;
-  border: 1px solid rgba(173, 198, 255, 0.25);
+.settings-version-val {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.settings-channel-pill {
+  appearance: auto;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 20px;
+  padding: 2px 10px 2px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.settings-channel-pill:hover  { border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.10); }
+.settings-channel-pill:focus  { border-color: var(--accent-primary); }
+
+.settings-update-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.settings-update-status-icon { font-size: 13px; }
+.settings-update-status--ok    { color: #53e16f; }
+.settings-update-status--avail { color: var(--accent-primary); }
+.settings-update-status--error { color: var(--accent-secondary); }
+
+.settings-version-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 /* Album art search bar: button + hint text inline */

@@ -8677,12 +8677,10 @@ async function loadSettings() {
     const ver = await fetch('/api/version').then(r => r.json());
     const verEl = document.getElementById('app-version-display');
     const channelSel = document.getElementById('update-channel-select');
-    const updateRow  = document.getElementById('update-status-row');
     if (verEl && ver.version && ver.version !== 'unknown') {
-      verEl.textContent = `v${ver.version}${ver.released ? '  ·  Released ' + ver.released : ''}`;
+      verEl.textContent = `v${ver.version}${ver.released ? '  ·  ' + ver.released : ''}`;
     }
     if (channelSel && ver.channel) channelSel.value = ver.channel;
-    if (updateRow) updateRow.style.display = (ver.channel === 'prod') ? '' : 'none';
   } catch (_) {}
 
   return settings;
@@ -8911,6 +8909,19 @@ async function restartApp() {
   }, 800);
 }
 
+let _updateDownloadUrl = '';
+
+function _setUpdateStatus(state, text) {
+  const line  = document.getElementById('update-status-line');
+  const icon  = document.getElementById('update-status-icon');
+  const label = document.getElementById('update-status-label');
+  if (!line) return;
+  line.style.display = '';
+  line.className = 'settings-update-status' + (state ? ' settings-update-status--' + state : '');
+  if (icon)  icon.textContent  = state === 'ok' ? '✓' : state === 'avail' ? '↑' : state === 'error' ? '✕' : '…';
+  if (label) label.textContent = text;
+}
+
 async function setUpdateChannel(channel) {
   try {
     await fetch('/api/version/channel', {
@@ -8919,46 +8930,60 @@ async function setUpdateChannel(channel) {
       body: JSON.stringify({ channel }),
     });
   } catch (_) {}
-  const updateRow = document.getElementById('update-status-row');
-  const label     = document.getElementById('update-status-label');
-  const hint      = document.getElementById('update-status-hint');
-  const dlBtn     = document.getElementById('update-download-btn');
-  if (label) label.textContent = '';
-  if (hint)  hint.textContent  = '';
+  // Reset status and auto-check on channel switch
+  const line  = document.getElementById('update-status-line');
+  const dlBtn = document.getElementById('update-download-btn');
+  if (line)  line.style.display = 'none';
   if (dlBtn) dlBtn.style.display = 'none';
-  if (updateRow) updateRow.style.display = (channel === 'prod') ? '' : 'none';
+  _updateDownloadUrl = '';
+  checkForUpdate();
 }
 
 async function checkForUpdate() {
   const btn   = document.getElementById('check-update-btn');
-  const label = document.getElementById('update-status-label');
-  const hint  = document.getElementById('update-status-hint');
   const dlBtn = document.getElementById('update-download-btn');
 
-  if (btn)   { btn.disabled = true; btn.textContent = 'Checking…'; }
-  if (label) label.textContent = 'Checking for updates…';
-  if (hint)  hint.textContent  = '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
   if (dlBtn) dlBtn.style.display = 'none';
+  _setUpdateStatus('', 'Checking for updates…');
 
   try {
     const res = await fetch('/api/update/check').then(r => r.json());
     if (res.error) {
-      if (label) label.textContent = 'Could not check for updates';
-      if (hint)  hint.textContent  = res.error;
+      _setUpdateStatus('error', res.error);
     } else if (res.update_available) {
-      if (label) label.textContent = `Update available: v${res.latest}`;
-      if (hint)  hint.textContent  = `You have v${res.current}.${res.released ? '  Released ' + res.released + '.' : ''}`;
-      if (dlBtn) { dlBtn.href = res.download_url; dlBtn.style.display = ''; }
+      const rel = res.released ? ' · ' + res.released : '';
+      _setUpdateStatus('avail', `v${res.latest} available${rel}`);
+      _updateDownloadUrl = res.download_url || '';
+      if (dlBtn) dlBtn.style.display = '';
     } else {
-      if (label) label.textContent = "You're up to date";
-      if (hint)  hint.textContent  = `v${res.current} is the latest version.`;
+      _setUpdateStatus('ok', `v${res.current} — you're up to date`);
     }
   } catch (e) {
-    if (label) label.textContent = 'Update check failed';
-    if (hint)  hint.textContent  = String(e);
+    _setUpdateStatus('error', 'Could not reach update server');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Check for Update'; }
   }
+}
+
+async function confirmUpdate() {
+  const channelSel = document.getElementById('update-channel-select');
+  const channel = channelSel?.value || 'prod';
+  const disclaimers = {
+    dev: 'Dev builds are unstable and may break functionality. Only update if you know what you\'re doing.',
+    rc:  'RC builds are pre-release candidates. They\'re mostly stable but may have minor issues.',
+  };
+  const disclaimer = disclaimers[channel];
+  if (disclaimer) {
+    const ok = await _showConfirm({
+      title: `Update to ${channel.toUpperCase()} build?`,
+      message: disclaimer,
+      okText: 'Update Anyway',
+      danger: false,
+    });
+    if (!ok) return;
+  }
+  if (_updateDownloadUrl) window.open(_updateDownloadUrl, '_blank');
 }
 
 function setHealthSectionExpanded(expanded) {
@@ -9415,6 +9440,7 @@ const App = {
   restartApp,
   setUpdateChannel,
   checkForUpdate,
+  confirmUpdate,
   setExclusiveMode,
   setAudioDevice,
   retryMpvDetection,
