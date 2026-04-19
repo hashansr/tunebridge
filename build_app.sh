@@ -541,7 +541,7 @@ if [ "$BUILD_DMG" = "1" ]; then
     echo -e "${GREEN}done ✅${NC}"
     _info "hashansr/tunebridge  main + v${APP_VERSION}"
   else
-    _phase "📦 Publish ${BUILD_CHANNEL^^} v${VERSION_FULL}"
+    _phase "📦 Publish $(echo "$BUILD_CHANNEL" | tr '[:lower:]' '[:upper:]') v${VERSION_FULL}"
   fi
 
   # Publish DMG + version file to public releases repo (all channels)
@@ -564,13 +564,13 @@ if [ "$BUILD_DMG" = "1" ]; then
 
     printf "  📝  Committing releases repo... "
     git -C "$RELEASES_REPO" add "${DMG_DEST}" "${VER_DEST}" CHANGELOG.md
-    git -C "$RELEASES_REPO" commit -m "${BUILD_CHANNEL^^} v${VERSION_FULL}"
+    git -C "$RELEASES_REPO" commit -m "$(echo "$BUILD_CHANNEL" | tr '[:lower:]' '[:upper:]') v${VERSION_FULL}"
     echo -e "${GREEN}done ✅${NC}"
 
     printf "  🌐  Pushing releases repo... "
     git -C "$RELEASES_REPO" push
     echo -e "${GREEN}done ✅${NC}"
-    _ok "Published ${BUILD_CHANNEL^^} v${VERSION_FULL} → hashansr/tunebridge-releases  (${DMG_DEST})"
+    _ok "Published $(echo "$BUILD_CHANNEL" | tr '[:lower:]' '[:upper:]') v${VERSION_FULL} → hashansr/tunebridge-releases  (${DMG_DEST})"
   fi
 fi
 

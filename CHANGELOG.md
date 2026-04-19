@@ -1,5 +1,9 @@
 # TuneBridge — Changelog
 
+## v0.5-rc · 2026-04-19
+- 3
+
+
 ## v0.4-dev · 2026-04-19
 - Fix: Version display showed "unknown" in bundled app — version.json now bundled via PyInstaller
 - Fix: All app modes (dev server + built app) now share the same App Support database — no more missing favourites/listening history
