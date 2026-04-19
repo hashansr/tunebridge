@@ -212,14 +212,9 @@ def artist_sort_key(name):
     """Return sort key that ignores leading articles (The, A, An)."""
     return _ARTICLE_RE.sub('', name).lower()
 
-# In bundled .app mode, store user data in ~/Library/Application Support/TuneBridge/
-# so it survives app updates and works even when app is in /Applications (read-only).
-_BUNDLED = os.environ.get('TUNEBRIDGE_BUNDLED') == '1'
-DATA_DIR = (
-    Path.home() / 'Library' / 'Application Support' / 'TuneBridge'
-    if _BUNDLED else
-    Path(__file__).parent / 'data'
-)
+# Always store user data in ~/Library/Application Support/TuneBridge/ so the
+# dev server and the .app always share the same database and never diverge.
+DATA_DIR = Path.home() / 'Library' / 'Application Support' / 'TuneBridge'
 ARTWORK_DIR = DATA_DIR / 'artwork'
 PLAYLIST_ARTWORK_DIR = DATA_DIR / 'playlist_artwork'
 ARTIST_ARTWORK_DIR = DATA_DIR / 'artist_artwork'
