@@ -3903,13 +3903,7 @@ def put_settings():
 
 @app.route('/api/health')
 def health():
-    return jsonify({
-        'status': 'ok',
-        # Lets the GUI launcher verify it connected to the server instance
-        # started by the current process (not a stale older process on the port).
-        'instance_token': os.environ.get('TUNEBRIDGE_INSTANCE_TOKEN'),
-        'pid': os.getpid(),
-    })
+    return jsonify({'status': 'ok', 'pid': os.getpid()})
 
 
 # ── mpv audio engine ──────────────────────────────────────────────────────

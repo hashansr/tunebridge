@@ -14,7 +14,6 @@ import os
 import sys
 import threading
 import time
-import uuid
 from pathlib import Path
 
 
@@ -77,58 +76,46 @@ def _start_server():
         app.run(host="127.0.0.1", port=PORT, debug=False, use_reloader=False)
 
 
-def _wait_for_server(expected_token: str, timeout: int = 15):
-    """
-    Poll until our own server responds.
-
-    Returns: (ok: bool, reason: str)
-      - (True, 'ok') on success
-      - (False, 'other_instance') when another TuneBridge instance is already bound
-      - (False, 'timeout') if no server became healthy
-    """
+def _health_check() -> bool:
+    """Return True if a TuneBridge server is already healthy on PORT."""
     import urllib.request
     import json as _json
+    try:
+        with urllib.request.urlopen(f"{URL}/api/health", timeout=2) as r:
+            return _json.loads(r.read().decode()).get("status") == "ok"
+    except Exception:
+        return False
+
+
+def _wait_for_server(timeout: int = 15) -> bool:
+    """Poll until a healthy server responds on PORT. Returns True on success."""
     deadline = time.time() + timeout
-    foreign_hits = 0
     while time.time() < deadline:
-        try:
-            with urllib.request.urlopen(f"{URL}/api/health", timeout=1) as r:
-                data = _json.loads(r.read().decode("utf-8"))
-            if data.get("status") == "ok" and data.get("instance_token") == expected_token:
-                return True, 'ok'
-            if data.get("status") == "ok":
-                foreign_hits += 1
-                if foreign_hits >= 2:
-                    return False, 'other_instance'
-        except Exception:
-            time.sleep(0.3)
-    return False, 'timeout'
+        if _health_check():
+            return True
+        time.sleep(0.3)
+    return False
 
 
 def main():
-    # Unique token so this process can detect if port 5001 is serving a stale
-    # older TuneBridge process instead of the server we just started.
-    instance_token = str(uuid.uuid4())
-    os.environ["TUNEBRIDGE_INSTANCE_TOKEN"] = instance_token
+    # If a TuneBridge server is already running (e.g. a dev server, or a
+    # previous app instance), reuse it instead of showing an error.
+    reusing = _health_check()
 
-    # Start server in background before creating the window
-    server_thread = threading.Thread(target=_start_server, daemon=True)
-    server_thread.start()
-
-    ok, reason = _wait_for_server(instance_token)
-    if not ok:
-        msg = (
-            "Another TuneBridge instance appears to be running on port 5001."
-            if reason == 'other_instance' else
-            "TuneBridge failed to start."
-        )
-        webview.create_window(
-            "TuneBridge — Error",
-            html="<h2 style='font-family:sans-serif;color:#c00;padding:40px'>"
-                 f"{msg}<br><small>Close existing instances and relaunch.</small></h2>",
-        )
-        webview.start()
-        return
+    if not reusing:
+        server_thread = threading.Thread(target=_start_server, daemon=True)
+        server_thread.start()
+        if not _wait_for_server():
+            # Last-chance check: maybe a concurrent launch beat us to the port
+            if not _health_check():
+                webview.create_window(
+                    "TuneBridge — Error",
+                    html="<h2 style='font-family:sans-serif;color:#c00;padding:40px'>"
+                         "TuneBridge failed to start.<br>"
+                         "<small>Check that port 5001 is not blocked.</small></h2>",
+                )
+                webview.start()
+                return
 
     # Per-launch query param prevents WKWebView from reusing a stale cached
     # document shell on cold start.
