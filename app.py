@@ -3913,6 +3913,14 @@ _mpv_load_time        = 0.0    # epoch timestamp of last player_play() call (gra
 _mpv_last_volume      = 1.0    # logical 0.0–1.0 volume persisted across reinit
 _mpv_last_af          = ''     # last applied lavfi chain (PEQ) persisted across reinit
 
+# Crossfade state — dual-instance overlap crossfade
+_mpv_xfade_instance   = None   # secondary mpv instance during crossfade
+_mpv_xfade_lock       = threading.Lock()  # guards _mpv_xfade_instance; never nest with _mpv_lock
+_mpv_xfade_track_id   = None
+_mpv_xfade_ended      = False  # end-file(eof) from secondary; one-shot flag
+_mpv_xfade_load_time  = 0.0    # epoch of secondary loadfile (grace period)
+_xfade_in_progress    = False
+
 
 def _get_mpv():
     """Return the mpv.MPV singleton, creating it lazily (thread-safe)."""
@@ -3935,6 +3943,7 @@ def _create_mpv_instance():
     audio_device = settings.get('audio_device', 'auto') or 'auto'
     player = _mpv_lib.MPV(
         audio_exclusive='yes' if exclusive else 'no',
+        gapless_audio='yes' if not exclusive else 'no',  # pre-decode next track; disabled for exclusive (conflicts with SR reinit)
         audio_device=audio_device,
         video='no',
         # Log output silenced — uncomment for debugging:
@@ -3970,6 +3979,84 @@ def _create_mpv_instance():
         player.af = _mpv_last_af or ''
     except Exception:
         pass
+
+
+def _build_lavfi_afade(direction, duration_sec):
+    """Return an mpv af string that extends the current PEQ chain with an afade node.
+
+    direction: 'in' or 'out'
+    The afade filter is appended last so EQ is applied before the fade envelope.
+    Handles both empty and non-empty _mpv_last_af cases without nesting lavfi=.
+    """
+    fade = f'afade=t={direction}:st=0:d={float(duration_sec):.3f}'
+    base = _mpv_last_af or ''
+    if not base:
+        return f'lavfi=[{fade}]'
+    # base is 'lavfi=[filter1,filter2,...]' — strip wrapper, append, re-wrap
+    inner = base[7:-1] if base.startswith('lavfi=[') and base.endswith(']') else base
+    return f'lavfi=[{inner},{fade}]'
+
+
+def _create_xfade_instance():
+    """Create secondary mpv instance (non-exclusive) for crossfade.
+    Must be called inside _mpv_xfade_lock.
+    """
+    global _mpv_xfade_instance, _mpv_xfade_ended
+    settings = load_settings()
+    audio_device = settings.get('audio_device', 'auto') or 'auto'
+    xplayer = _mpv_lib.MPV(
+        audio_exclusive='no',   # secondary never takes exclusive; primary may hold it
+        audio_device=audio_device,
+        video='no',
+    )
+
+    @xplayer.event_callback('end-file')
+    def _on_xfade_end_file(event):
+        global _mpv_xfade_ended
+        try:
+            reason = event.as_dict().get('reason')
+            if reason in (b'eof', 'eof'):
+                _mpv_xfade_ended = True
+        except Exception:
+            pass
+
+    _mpv_xfade_instance = xplayer
+    # Match primary's volume so the fade-in level is consistent
+    try:
+        xplayer.volume = max(0.0, min(1.0, float(_mpv_last_volume))) * 100.0
+    except Exception:
+        pass
+
+
+def _cancel_xfade_internal():
+    """Shared crossfade teardown — terminate secondary and restore primary af.
+    Callers must set _xfade_in_progress = False themselves.
+    Never acquires both locks simultaneously.
+    """
+    global _mpv_xfade_instance, _mpv_xfade_track_id, _mpv_xfade_ended
+
+    # 1. Terminate and null the secondary instance
+    old_xfade = None
+    with _mpv_xfade_lock:
+        old_xfade = _mpv_xfade_instance
+        _mpv_xfade_instance = None
+        _mpv_xfade_track_id = None
+        _mpv_xfade_ended    = False
+
+    if old_xfade is not None:
+        try:
+            old_xfade.terminate()
+        except Exception:
+            pass
+
+    # 2. Restore primary's af to PEQ-only chain (strip any afade filter)
+    with _mpv_lock:
+        p = _mpv_instance
+    if p is not None:
+        try:
+            p.af = _mpv_last_af or ''
+        except Exception:
+            pass
 
 
 def _resolve_track_path_mpv(track_id):
@@ -4218,7 +4305,7 @@ def player_set_audio_device():
 @app.route('/api/player/play', methods=['POST'])
 def player_play():
     """Start playback of a track by ID. Optional: position (seconds) to start from."""
-    global _mpv_current_track_id, _mpv_track_ended, _mpv_load_time
+    global _mpv_current_track_id, _mpv_track_ended, _mpv_load_time, _xfade_in_progress
     _refresh_mpv_backend()
     if not MPV_AVAILABLE:
         return jsonify({'error': 'mpv not available — run: brew install mpv'}), 503
@@ -4230,6 +4317,11 @@ def player_play():
     if not path:
         return jsonify({'error': 'track not found'}), 404
     position = float(data.get('position') or 0)
+
+    # Cancel any in-progress crossfade before loading a new file
+    if _xfade_in_progress:
+        _cancel_xfade_internal()
+        _xfade_in_progress = False
 
     _mpv_track_ended = False        # clear before loading new file
     _mpv_load_time   = time.time()  # start grace period (suppresses false end-file)
@@ -4328,6 +4420,8 @@ def player_peq():
     _refresh_mpv_backend()
     if not MPV_AVAILABLE:
         return jsonify({'error': 'mpv not available'}), 503
+    if _xfade_in_progress:
+        return jsonify({'error': 'crossfade in progress — wait for completion'}), 409
     data      = request.get_json(force=True) or {}
     preamp_db = data.get('preamp_db', 0)
     filters   = data.get('filters', [])
@@ -4341,10 +4435,144 @@ def player_peq():
     return jsonify({'ok': True, 'af': af})
 
 
+@app.route('/api/player/crossfade_start', methods=['POST'])
+def player_crossfade_start():
+    """Begin a dual-instance crossfade: fade out primary, fade in secondary.
+    Body: {next_track_id: str, duration: float (seconds)}
+    """
+    global _xfade_in_progress, _mpv_xfade_track_id, _mpv_xfade_load_time, _mpv_xfade_ended
+    _refresh_mpv_backend()
+    if not MPV_AVAILABLE:
+        return jsonify({'error': 'mpv not available'}), 503
+    data          = request.get_json(force=True) or {}
+    next_track_id = data.get('next_track_id')
+    duration      = float(data.get('duration') or 3.0)
+    if not next_track_id:
+        return jsonify({'error': 'next_track_id required'}), 400
+    path = _resolve_track_path_mpv(next_track_id)
+    if not path:
+        return jsonify({'error': 'track not found'}), 404
+    if _xfade_in_progress:
+        return jsonify({'error': 'crossfade already in progress'}), 409
+
+    _xfade_in_progress    = True
+    _mpv_xfade_track_id   = next_track_id
+    _mpv_xfade_ended      = False
+
+    # Clamp duration to next track's length if shorter (avoid fade longer than track)
+    next_track = _db.db_get_track(next_track_id)
+    if next_track:
+        next_dur = float(next_track.get('duration') or 0)
+        if next_dur > 0:
+            duration = min(duration, next_dur - 0.5)
+    duration = max(0.5, duration)
+
+    # Apply fade-out on primary (transient — NOT saved to _mpv_last_af)
+    with _mpv_lock:
+        p = _mpv_instance
+    if p is not None:
+        try:
+            p.af = _build_lavfi_afade('out', duration)
+        except Exception:
+            pass   # afade unavailable — primary plays to end naturally
+
+    # Create secondary instance and start fade-in
+    with _mpv_xfade_lock:
+        try:
+            _create_xfade_instance()
+            xp = _mpv_xfade_instance
+            if xp is not None:
+                try:
+                    xp.af = _build_lavfi_afade('in', duration)
+                except Exception:
+                    pass  # fade-in af failed — still loads and plays
+                xp.command('loadfile', path, 'replace')
+                xp.pause = False
+                _mpv_xfade_load_time = time.time()
+        except Exception as e:
+            _xfade_in_progress  = False
+            _mpv_xfade_track_id = None
+            return jsonify({'error': f'xfade instance creation failed: {e}'}), 500
+
+    return jsonify({'ok': True, 'duration': duration})
+
+
+@app.route('/api/player/crossfade_complete', methods=['POST'])
+def player_crossfade_complete():
+    """Promote secondary mpv instance to primary after crossfade window.
+    Called by the frontend after crossfade_duration seconds have elapsed.
+    """
+    global _mpv_instance, _mpv_current_track_id, _xfade_in_progress
+    global _mpv_xfade_instance, _mpv_xfade_track_id, _mpv_xfade_ended
+    _refresh_mpv_backend()
+    if not MPV_AVAILABLE:
+        return jsonify({'error': 'mpv not available'}), 503
+    if not _xfade_in_progress:
+        return jsonify({'error': 'no crossfade in progress'}), 409
+
+    # Capture promoted track id before nulling
+    promoted_track_id = _mpv_xfade_track_id
+
+    # 1. Terminate old primary (outside _mpv_lock to avoid deadlock with event thread)
+    old_primary = None
+    with _mpv_lock:
+        old_primary    = _mpv_instance
+        _mpv_instance  = None   # callers block on lock until step 4
+
+    if old_primary is not None:
+        try:
+            old_primary.terminate()
+        except Exception:
+            pass
+
+    # 2. Promote secondary to primary
+    new_primary = None
+    with _mpv_xfade_lock:
+        new_primary           = _mpv_xfade_instance
+        _mpv_xfade_instance   = None
+        _mpv_xfade_track_id   = None
+        _mpv_xfade_ended      = False
+
+    # 3. Strip afade-in from new primary's af (restore PEQ-only chain)
+    if new_primary is not None:
+        try:
+            new_primary.af = _mpv_last_af or ''
+        except Exception:
+            pass
+
+    # 4. Re-establish exclusive mode if configured (brief ~150 ms gap during reinit)
+    settings = load_settings()
+    if settings.get('exclusive_mode') and new_primary is not None:
+        # Null the promoted instance and run standard reinit which creates a fresh
+        # exclusive instance; the promoted instance is terminated inside reinit.
+        with _mpv_lock:
+            _mpv_instance = new_primary
+        _mpv_safe_reinit()
+    else:
+        with _mpv_lock:
+            _mpv_instance = new_primary
+
+    _mpv_current_track_id = promoted_track_id
+    _xfade_in_progress    = False
+    return jsonify({'ok': True, 'promoted_track_id': promoted_track_id})
+
+
+@app.route('/api/player/crossfade_cancel', methods=['POST'])
+def player_crossfade_cancel():
+    """Cancel an in-progress crossfade: destroy secondary, restore primary af."""
+    global _xfade_in_progress
+    _refresh_mpv_backend()
+    if not _xfade_in_progress:
+        return jsonify({'ok': True, 'was_in_progress': False})
+    _cancel_xfade_internal()
+    _xfade_in_progress = False
+    return jsonify({'ok': True, 'was_in_progress': True})
+
+
 @app.route('/api/player/mpv_state')
 def player_mpv_state():
     """Live playback state: position, duration, playing, track_ended flag."""
-    global _mpv_track_ended
+    global _mpv_track_ended, _mpv_xfade_ended
     _refresh_mpv_backend()
     if not MPV_AVAILABLE:
         return jsonify({'available': False})
@@ -4361,36 +4589,66 @@ def player_mpv_state():
                         'track_ended': False, 'track_id': _mpv_current_track_id})
     ended    = _mpv_track_ended
     if ended:
+        # Suppress primary track_ended during crossfade — queue advance is handled
+        # by the crossfade completion path, not the track-ended path.
+        if _xfade_in_progress:
+            ended            = False
+            _mpv_track_ended = False  # discard
         # Grace period: discard any end-file event that fires within 750 ms of
         # player_play() — these are false positives from loadfile-replace stopping
         # the previous track, not genuine natural track endings.
-        if (time.time() - _mpv_load_time) < 0.75:
-            ended = False
+        elif (time.time() - _mpv_load_time) < 0.75:
+            ended            = False
             _mpv_track_ended = False  # discard
         else:
             _mpv_track_ended = False  # consume the one-shot flag
+
+    # Xfade secondary state (all reads wrapped in try/except — instance may be None)
+    xfade_track_ended = False
+    with _mpv_xfade_lock:
+        xp = _mpv_xfade_instance
+        xt = _mpv_xfade_track_id
+    try:
+        xfade_pos = float(xp.playback_time or 0) if xp else 0.0
+        xfade_dur = float(xp.duration       or 0) if xp else 0.0
+    except Exception:
+        xfade_pos, xfade_dur = 0.0, 0.0
+
+    if _mpv_xfade_ended:
+        # Grace period for secondary (same 750 ms logic)
+        if (time.time() - _mpv_xfade_load_time) >= 0.75:
+            xfade_track_ended  = True
+            _mpv_xfade_ended   = False   # consume
+
     return jsonify({
-        'available':   True,
-        'position':    position if position is not None else 0.0,
-        'duration':    duration if duration is not None else 0.0,
-        'playing':     (not paused) and (not idle) and (position is not None),
-        'paused':      paused,
-        'idle':        idle,
-        'track_ended': ended,
-        'track_id':    _mpv_current_track_id,
+        'available':        True,
+        'position':         position if position is not None else 0.0,
+        'duration':         duration if duration is not None else 0.0,
+        'playing':          (not paused) and (not idle) and (position is not None),
+        'paused':           paused,
+        'idle':             idle,
+        'track_ended':      ended,
+        'track_id':         _mpv_current_track_id,
+        'xfade_in_progress': _xfade_in_progress,
+        'xfade_track_id':   xt,
+        'xfade_track_ended': xfade_track_ended,
     })
 
 
 @app.route('/api/player/exclusive', methods=['POST'])
 def player_exclusive():
     """Toggle CoreAudio exclusive mode. Restarts mpv instance to apply."""
-    global _mpv_instance
+    global _mpv_instance, _xfade_in_progress
     _refresh_mpv_backend()
     data    = request.get_json(force=True) or {}
     enabled = bool(data.get('enabled', False))
     settings = load_settings()
     settings['exclusive_mode'] = enabled
     save_settings(settings)
+    # Cancel any crossfade before teardown — secondary instance must not outlive primary
+    if _xfade_in_progress:
+        _cancel_xfade_internal()
+        _xfade_in_progress = False
     # Capture playback state before tearing down so the frontend can resume.
     # terminate() does not set eof-reached, so no track-end signal is emitted.
     resume_track_id = _mpv_current_track_id

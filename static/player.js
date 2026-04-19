@@ -47,9 +47,8 @@ const Player = (function () {
 
   function _isMpvActive() {
     if (!_mpvAvailable) return false;
-    // Crossfade requires dual HTMLAudio playback paths.
-    // Keep mpv only when crossfade is off or bit-perfect mode is on.
-    if (ps.crossfadeDuration > 0 && !_exclusiveMode) return false;
+    // Crossfade is now handled by the mpv dual-instance backend path.
+    // The Web Audio path is only used when mpv is not available at all.
     return true;
   }
 
@@ -81,9 +80,13 @@ const Player = (function () {
   let _volNode    = null;   // GainNode — user volume
   let _peqNodes   = [];     // BiquadFilterNode[] — PEQ chain
 
-  // Crossfade state
-  let _xfadeTriggered = false;  // true while a crossfade is in progress
+  // Crossfade state (Web Audio path)
+  let _xfadeTriggered = false;  // true while a Web Audio crossfade is in progress
   let _xfadeTimeout   = null;   // setTimeout handle for _completeCrossfade
+
+  // Crossfade state (mpv backend path)
+  let _mpvXfadeTriggered = false;  // true after crossfade_start sent to backend
+  let _mpvXfadeQueueIdx  = -1;     // queue index of the fading-in track
 
   let _queueSortable        = null;
   let _seekDragging         = false;
@@ -161,11 +164,47 @@ const Player = (function () {
   }
 
   /* ── Web Audio graph init (fallback mode only) ─────────────────────── */
-  function _initAudioContext() {
-    if (_ctx || _isMpvActive()) return;
+
+  function _teardownAudioContext() {
+    // Disconnect all nodes and close the context. close() is async but we don't
+    // await it — the old context is abandoned and GC'd; creating a new context
+    // immediately after is safe because MediaElementSource bindings are per-context.
     try {
-      _ctx        = new (window.AudioContext || window.webkitAudioContext)();
-      // One MediaElementSource per audio element (can only be created once per element)
+      if (_volNode)    { try { _volNode.disconnect();    } catch (_) {} }
+      if (_preampNode) { try { _preampNode.disconnect(); } catch (_) {} }
+      if (_fadeGainA)  { try { _fadeGainA.disconnect();  } catch (_) {} }
+      if (_fadeGainB)  { try { _fadeGainB.disconnect();  } catch (_) {} }
+      if (_srcA)       { try { _srcA.disconnect();       } catch (_) {} }
+      if (_srcB)       { try { _srcB.disconnect();       } catch (_) {} }
+      _peqNodes.forEach(n => { try { n.disconnect(); } catch (_) {} });
+      if (_ctx) _ctx.close().catch(() => {});
+    } catch (_) {}
+    _ctx = _srcA = _srcB = _fadeGainA = _fadeGainB = _preampNode = _volNode = null;
+    _peqNodes = [];
+  }
+
+  function _initAudioContext(sampleRate) {
+    if (_isMpvActive()) return;
+    const targetSr = (sampleRate && sampleRate > 0) ? sampleRate : 44100;
+
+    // Recreate context if sample rate changed — avoids resampling hi-res sources
+    if (_ctx) {
+      if (Math.round(_ctx.sampleRate) === targetSr) return;  // already matched
+      _teardownAudioContext();
+    }
+
+    try {
+      // sampleRate is advisory: WKWebView silently clamps to nearest hardware-supported rate
+      _ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: targetSr });
+    } catch (_) {
+      // Fallback if sampleRate arg is rejected (older WebKit)
+      try { _ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { console.warn('Player: Web Audio API init failed', e); return; }
+    }
+
+    try {
+      // One MediaElementSource per audio element (can only be created once per element,
+      // but closing the old context destroys the binding, allowing rebind to new context)
       _srcA       = _ctx.createMediaElementSource(_audioA);
       _srcB       = _ctx.createMediaElementSource(_audioB);
       _fadeGainA  = _ctx.createGain();
@@ -191,7 +230,7 @@ const Player = (function () {
         _loadAndApplyPeq(ps.activePeqIemId, ps.activePeqProfileId);
       }
     } catch (e) {
-      console.warn('Player: Web Audio API init failed', e);
+      console.warn('Player: Web Audio graph wiring failed', e);
     }
   }
 
@@ -247,7 +286,28 @@ const Player = (function () {
       }
     }
 
-    // Track ended — advance queue
+    // Crossfade trigger: when remaining time falls within crossfade window
+    if (!_mpvXfadeTriggered && ps.crossfadeDuration > 0 && ps.isPlaying && _mpvDuration > 0) {
+      const remaining = _mpvDuration - _mpvPosition;
+      // Extra 150 ms buffer absorbs afade filter activation lag
+      if (remaining > 0.1
+          && remaining <= ps.crossfadeDuration + 0.15
+          && _mpvPosition > 0.5
+          && _mpvDuration > ps.crossfadeDuration + 2) {
+        _startMpvCrossfade();
+      }
+    }
+
+    // xfade_track_ended: secondary finished naturally before our timeout — complete early
+    if (state.xfade_track_ended && _mpvXfadeTriggered && _mpvXfadeQueueIdx >= 0) {
+      const nextRealIdx = (ps.shuffle && ps.shuffleOrder.length > 0)
+        ? (ps.shuffleOrder[_mpvXfadeQueueIdx] ?? _mpvXfadeQueueIdx)
+        : _mpvXfadeQueueIdx;
+      const nextTrack = ps.queue[nextRealIdx];
+      if (nextTrack) _completeMpvCrossfade(nextTrack, _mpvXfadeQueueIdx);
+    }
+
+    // Track ended — advance queue (suppressed by backend during xfade)
     if (state.track_ended) {
       _onMpvTrackEnded();
     }
@@ -295,6 +355,11 @@ const Player = (function () {
   function _nxtFadeGain()  { return _audio === _audioA ? _fadeGainB : _fadeGainA; }
 
   function _cancelCrossfade() {
+    if (_isMpvActive()) {
+      _cancelMpvCrossfade();
+      return;
+    }
+    // Web Audio path
     if (_xfadeTimeout) { clearTimeout(_xfadeTimeout); _xfadeTimeout = null; }
     _xfadeTriggered = false;
     _seeking = false;
@@ -311,6 +376,113 @@ const Player = (function () {
     if (standbyFade) standbyFade.gain.setValueAtTime(0, now);
     standbyEl.pause();
     standbyEl.src = '';
+  }
+
+  /* ── mpv backend crossfade ───────────────────────────────────────────── */
+
+  function _cancelMpvCrossfade() {
+    if (_xfadeTimeout) { clearTimeout(_xfadeTimeout); _xfadeTimeout = null; }
+    _mpvXfadeTriggered = false;
+    _mpvXfadeQueueIdx  = -1;
+    _seeking           = false;
+    _seekRestored      = false;
+    // Fire-and-forget — don't block UI on this
+    _mpvCmd('crossfade_cancel', {}).catch(() => {});
+  }
+
+  function _startMpvCrossfade() {
+    if (_mpvXfadeTriggered || !ps.isPlaying || ps.crossfadeDuration <= 0) return;
+    if (_seekRestored) return;
+
+    // Determine next queue position (same shuffle-aware logic as _startCrossfade)
+    let nextQueueIdx;
+    if (ps.repeatMode === 'one') {
+      nextQueueIdx = ps.queueIdx;
+    } else if (ps.queueIdx < ps.queue.length - 1) {
+      nextQueueIdx = ps.queueIdx + 1;
+    } else if (ps.repeatMode === 'all') {
+      nextQueueIdx = 0;
+    } else {
+      return;  // end of queue, no repeat — let it finish naturally
+    }
+
+    const nextRealIdx = (ps.shuffle && ps.shuffleOrder.length > 0)
+      ? (ps.shuffleOrder[nextQueueIdx] ?? nextQueueIdx)
+      : nextQueueIdx;
+    const nextTrack = ps.queue[nextRealIdx];
+    if (!nextTrack) return;
+
+    _mpvXfadeTriggered = true;
+    _mpvXfadeQueueIdx  = nextQueueIdx;
+
+    const dur = ps.crossfadeDuration;
+
+    _mpvCmd('crossfade_start', { next_track_id: nextTrack.id, duration: dur })
+      .then(r => {
+        if (!r || !r.ok) {
+          // Backend rejected — reset and let track end naturally
+          _mpvXfadeTriggered = false;
+          _mpvXfadeQueueIdx  = -1;
+          return;
+        }
+        // Schedule completion after fade duration
+        _xfadeTimeout = setTimeout(
+          () => _completeMpvCrossfade(nextTrack, nextQueueIdx),
+          dur * 1000
+        );
+      })
+      .catch(() => {
+        _mpvXfadeTriggered = false;
+        _mpvXfadeQueueIdx  = -1;
+      });
+  }
+
+  function _completeMpvCrossfade(nextTrack, nextQueueIdx) {
+    if (_xfadeTimeout) { clearTimeout(_xfadeTimeout); _xfadeTimeout = null; }
+
+    // Capture position before any state change (for accurate playback event logging)
+    const finishPos = _mpvPosition;
+
+    // Flush playback event for the track that just faded out
+    const prevTrack = currentTrack();
+    if (prevTrack) {
+      const elapsed = Math.max(0, finishPos - (_trackSessionStartPos || 0));
+      if (elapsed >= 1) {
+        const duration = Number(prevTrack.duration || finishPos || 0);
+        const completed = duration > 0 && finishPos >= Math.max(duration - 1.0, duration * 0.98);
+        _pushRecentContext(prevTrack, 'xfade');
+        _postPlaybackEvents([{
+          track_id:                prevTrack.id,
+          played_at:               Math.floor(_safeNowSec()),
+          play_seconds:            elapsed,
+          track_duration_seconds:  duration,
+          completed,
+          skipped:      false,
+          source_type:  (ps.playbackContext || {}).sourceType  || 'unknown',
+          source_id:    (ps.playbackContext || {}).sourceId    || '',
+          source_label: (ps.playbackContext || {}).sourceLabel || ps.playbackContextLabel || '',
+          artist:  prevTrack.artist  || '',
+          album:   prevTrack.album   || '',
+          title:   prevTrack.title   || '',
+          format:  prevTrack.format  || '',
+          reason:  'xfade',
+        }]);
+      }
+    }
+
+    // Tell backend to promote secondary → primary
+    _mpvCmd('crossfade_complete', {})
+      .catch(() => {})
+      .finally(() => {
+        ps.queueIdx = nextQueueIdx;
+        _updateTrackUI(nextTrack);
+        _highlightActiveRow();
+        _markTrackSessionStart();
+        _saveState();
+        if (ps.queueOpen) _renderQueue();
+        _mpvXfadeTriggered = false;
+        _mpvXfadeQueueIdx  = -1;
+      });
   }
 
   function _startCrossfade() {
@@ -778,6 +950,8 @@ const Player = (function () {
       _updatePlayBtn();
     } else {
       _cancelCrossfade();
+      // Pass sample rate so the AudioContext is created (or recreated) at source rate
+      _initAudioContext(track.sample_rate);
       _audio.src = `/api/stream/${track.id}`;
       _audio.load();
     }
@@ -1915,36 +2089,48 @@ const Player = (function () {
     const track = currentTrack();
     if (!track) {
       if (bpBadge) bpBadge.style.display = 'none';
-      if (llBadge) llBadge.style.display = 'none';
+      if (llBadge) { llBadge.style.display = 'none'; llBadge.classList.remove('player-hires-badge'); }
       return;
     }
-    const lossless = _isLosslessSource(track);
-    const bitPerfect = (
-      _mpvAvailable &&
-      _exclusiveMode &&
-      lossless &&
-      !_isEqActive() &&
-      !ps.muted &&
-      Math.abs((ps.volume ?? 1) - 1) < 0.0001
-    );
-    const bpReasons = [];
-    if (!_mpvAvailable) bpReasons.push('mpv backend unavailable');
-    if (!_exclusiveMode) bpReasons.push('exclusive mode off');
-    if (_isEqActive()) bpReasons.push('EQ/DSP active');
-    if (ps.muted || Math.abs((ps.volume ?? 1) - 1) >= 0.0001) bpReasons.push('volume not 100%');
+    const lossless   = _isLosslessSource(track);
+    const volAtUnity = !ps.muted && Math.abs((ps.volume ?? 1) - 1) < 0.0001;
+    const bitPerfect = _mpvAvailable && _exclusiveMode && lossless && !_isEqActive() && volAtUnity;
+    // HI-RES: exclusive mode + lossless + DSP (EQ or volume ≠ 100%) applied via mpv lavfi
+    const hiRes = !bitPerfect && _mpvAvailable && _exclusiveMode && lossless;
+
     if (bpBadge) {
       bpBadge.style.display = bitPerfect ? '' : 'none';
       bpBadge.title = 'Bit-perfect: exclusive mode on, no EQ/DSP, volume 100%.';
     }
     if (llBadge) {
-      llBadge.style.display = (!bitPerfect && lossless) ? '' : 'none';
-      llBadge.title = bpReasons.length
-        ? `Lossless source. Not bit-perfect: ${bpReasons.join(', ')}.`
-        : 'Lossless source. Output path is not bit-perfect.';
+      if (bitPerfect) {
+        llBadge.style.display = 'none';
+        llBadge.classList.remove('player-hires-badge');
+      } else if (hiRes) {
+        llBadge.style.display = '';
+        llBadge.textContent = 'HI-RES';
+        llBadge.classList.add('player-hires-badge');
+        llBadge.title = 'Lossless source. EQ/volume DSP applied via mpv lavfi in exclusive mode.';
+      } else if (lossless) {
+        llBadge.style.display = '';
+        llBadge.textContent = 'LOSSLESS';
+        llBadge.classList.remove('player-hires-badge');
+        const reasons = [];
+        if (!_mpvAvailable)   reasons.push('mpv backend unavailable');
+        if (!_exclusiveMode)  reasons.push('exclusive mode off');
+        if (_isEqActive())    reasons.push('EQ/DSP active');
+        if (!volAtUnity)      reasons.push('volume not 100%');
+        llBadge.title = reasons.length
+          ? `Lossless source. Not bit-perfect: ${reasons.join(', ')}.`
+          : 'Lossless source. Output path is not bit-perfect.';
+      } else {
+        llBadge.style.display = 'none';
+        llBadge.classList.remove('player-hires-badge');
+      }
     }
   }
 
-  /* ── Crossfade control (Web Audio mode only; mpv uses gapless) ─────── */
+  /* ── Crossfade control ──────────────────────────────────────────────── */
   function setXfade(value) {
     let next = Math.max(0, Math.min(12, parseInt(value, 10)));
     if (_mpvAvailable && _exclusiveMode && next > 0) {
@@ -1981,16 +2167,20 @@ const Player = (function () {
     if (mpvActive) {
       _cancelCrossfade();
       _audio.pause();
+      _audio.src = '';
       if (track) {
         _mpvCmd('play', { track_id: track.id, position: resumePos }).then(() => {
           if (!wasPlaying) _mpvCmd('pause', { paused: true });
+          _applyVolume();
         });
       }
       _startPolling();
     } else {
       _stopPolling();
-      _mpvCmd('pause', { paused: true });
-      _initAudioContext();
+      // Ensure mpv output path is fully torn down before starting Web Audio playback.
+      _mpvCmd('stop', {});
+      _initAudioContext(track ? track.sample_rate : null);
+      _applyVolume();
       _cancelCrossfade();
       if (track) {
         _audio.src = `/api/stream/${track.id}`;
