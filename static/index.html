@@ -914,28 +914,41 @@
             <!-- Version row -->
             <div class="settings-app-row">
               <div class="settings-app-main">
-                <div class="settings-app-row-label">
-                  Version
-                  <span class="build-channel-badge" id="build-channel-badge" style="display:none"></span>
-                </div>
+                <div class="settings-app-row-label">Version</div>
                 <div class="settings-app-row-hint" id="app-version-display">—</div>
               </div>
-              <button class="btn-secondary settings-app-control" id="check-update-btn"
-                      onclick="App.checkForUpdate()" style="display:none">
-                Check for Update
-              </button>
             </div>
 
-            <!-- Update status row (shown after check) -->
+            <!-- Channel picker row -->
+            <div class="settings-app-row">
+              <div class="settings-app-main">
+                <div class="settings-app-row-label">Update Channel</div>
+                <div class="settings-app-row-hint" id="update-channel-hint">Prod receives stable releases. RC and Dev are pre-release builds.</div>
+              </div>
+              <select id="update-channel-select" class="settings-select settings-app-control"
+                      onchange="App.setUpdateChannel(this.value)">
+                <option value="dev">Dev</option>
+                <option value="rc">RC</option>
+                <option value="prod">Prod</option>
+              </select>
+            </div>
+
+            <!-- Check for update row (shown for prod channel) -->
             <div class="settings-app-row" id="update-status-row" style="display:none">
               <div class="settings-app-main">
                 <div class="settings-app-row-label" id="update-status-label"></div>
                 <div class="settings-app-row-hint" id="update-status-hint"></div>
               </div>
-              <a class="btn-primary settings-app-control" id="update-download-btn"
-                 href="#" target="_blank" style="display:none; text-decoration:none">
-                Download
-              </a>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button class="btn-secondary settings-app-control" id="check-update-btn"
+                        onclick="App.checkForUpdate()">
+                  Check for Update
+                </button>
+                <a class="btn-primary settings-app-control" id="update-download-btn"
+                   href="#" target="_blank" style="display:none; text-decoration:none">
+                  Download
+                </a>
+              </div>
             </div>
 
             <!-- Restart row -->

@@ -8672,23 +8672,17 @@ async function loadSettings() {
     if (batchStatus.status === 'running') _startArtistBatchPolling();
   } catch (_) {}
 
-  // Display app version + channel badge
+  // Display app version + channel picker
   try {
     const ver = await fetch('/api/version').then(r => r.json());
-    const verEl    = document.getElementById('app-version-display');
-    const badgeEl  = document.getElementById('build-channel-badge');
-    const updateBtn = document.getElementById('check-update-btn');
-    if (verEl && ver.version) {
+    const verEl = document.getElementById('app-version-display');
+    const channelSel = document.getElementById('update-channel-select');
+    const updateRow  = document.getElementById('update-status-row');
+    if (verEl && ver.version && ver.version !== 'unknown') {
       verEl.textContent = `v${ver.version}${ver.released ? '  ·  Released ' + ver.released : ''}`;
     }
-    if (badgeEl && ver.channel && ver.channel !== 'prod') {
-      badgeEl.textContent = ver.channel.toUpperCase();
-      badgeEl.className   = `build-channel-badge build-channel-badge--${ver.channel}`;
-      badgeEl.style.display = '';
-    } else if (badgeEl) {
-      badgeEl.style.display = 'none';
-    }
-    if (updateBtn) updateBtn.style.display = (ver.channel === 'prod') ? '' : 'none';
+    if (channelSel && ver.channel) channelSel.value = ver.channel;
+    if (updateRow) updateRow.style.display = (ver.channel === 'prod') ? '' : 'none';
   } catch (_) {}
 
   return settings;
@@ -8917,15 +8911,31 @@ async function restartApp() {
   }, 800);
 }
 
+async function setUpdateChannel(channel) {
+  try {
+    await fetch('/api/version/channel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel }),
+    });
+  } catch (_) {}
+  const updateRow = document.getElementById('update-status-row');
+  const label     = document.getElementById('update-status-label');
+  const hint      = document.getElementById('update-status-hint');
+  const dlBtn     = document.getElementById('update-download-btn');
+  if (label) label.textContent = '';
+  if (hint)  hint.textContent  = '';
+  if (dlBtn) dlBtn.style.display = 'none';
+  if (updateRow) updateRow.style.display = (channel === 'prod') ? '' : 'none';
+}
+
 async function checkForUpdate() {
   const btn   = document.getElementById('check-update-btn');
-  const row   = document.getElementById('update-status-row');
   const label = document.getElementById('update-status-label');
   const hint  = document.getElementById('update-status-hint');
   const dlBtn = document.getElementById('update-download-btn');
 
   if (btn)   { btn.disabled = true; btn.textContent = 'Checking…'; }
-  if (row)   row.style.display = '';
   if (label) label.textContent = 'Checking for updates…';
   if (hint)  hint.textContent  = '';
   if (dlBtn) dlBtn.style.display = 'none';
@@ -9403,6 +9413,7 @@ const App = {
   closeOnboarding,
   completeOnboarding,
   restartApp,
+  setUpdateChannel,
   checkForUpdate,
   setExclusiveMode,
   setAudioDevice,

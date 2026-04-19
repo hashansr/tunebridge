@@ -240,6 +240,7 @@ DEFAULT_SETTINGS = {
     'lastfm_api_key':   '',
     'fanart_api_key':   '',
     'listening_tracking_enabled': True,
+    'update_channel':   '',   # '' = use built-in channel from version.json; 'dev'|'rc'|'prod' = user override
 }
 
 _DEFAULT_GEAR_PROFILES = {
@@ -4630,7 +4631,11 @@ def restart_server():
 
 # ── Version & update check ─────────────────────────────────────────────────
 
-_VERSION_FILE = Path(__file__).parent / 'version.json'
+import sys as _sys
+# In a PyInstaller bundle sys._MEIPASS points to the extracted data dir; fall back to source dir.
+_BUNDLE_DIR = Path(_sys._MEIPASS) if (getattr(_sys, 'frozen', False) and hasattr(_sys, '_MEIPASS')) \
+              else Path(__file__).parent
+_VERSION_FILE = _BUNDLE_DIR / 'version.json'
 _RELEASES_VERSION_URL  = 'https://raw.githubusercontent.com/hashansr/tunebridge-releases/main/version.json'
 _RELEASES_DOWNLOAD_URL = 'https://github.com/hashansr/tunebridge-releases/raw/main/TuneBridge-latest.dmg'
 
@@ -4645,22 +4650,51 @@ def _version_gt(a: str, b: str) -> bool:
         return False
 
 
+def _effective_channel() -> str:
+    """Return the active update channel: user preference if set, otherwise built-in from version.json."""
+    pref = load_settings().get('update_channel', '')
+    if pref in ('dev', 'rc', 'prod'):
+        return pref
+    try:
+        with open(_VERSION_FILE) as f:
+            return json.load(f).get('channel', 'dev')
+    except Exception:
+        return 'dev'
+
+
 @app.route('/api/version')
 def get_version():
     try:
         with open(_VERSION_FILE) as f:
-            return jsonify(json.load(f))
+            info = json.load(f)
     except Exception:
-        return jsonify({'version': 'unknown', 'channel': 'unknown'})
+        info = {'version': 'unknown', 'build': 0, 'released': ''}
+    info['channel'] = _effective_channel()
+    return jsonify(info)
+
+
+@app.route('/api/version/channel', methods=['POST'])
+def set_update_channel():
+    data = request.get_json(force=True) or {}
+    channel = data.get('channel', '')
+    if channel not in ('dev', 'rc', 'prod', ''):
+        return jsonify({'error': 'invalid channel'}), 400
+    s = load_settings()
+    s['update_channel'] = channel
+    save_settings(s)
+    return jsonify({'ok': True, 'channel': channel or _effective_channel()})
 
 
 @app.route('/api/update/check')
 def check_for_update():
+    channel = _effective_channel()
+    if channel != 'prod':
+        return jsonify({'error': f'Update checks are only available on the Prod channel (current: {channel}).'})
     try:
         with open(_VERSION_FILE) as f:
             local = json.load(f)
     except Exception:
-        local = {'version': '0.0', 'channel': 'dev'}
+        local = {'version': '0.0', 'channel': channel}
 
     try:
         from urllib.request import Request as _Req, urlopen as _urlopen

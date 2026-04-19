@@ -1,16 +1,12 @@
 #!/bin/bash
 # 🎵 TuneBridge — Build Distributable App + DMG
 #
-# Usage:
-#   bash build_app.sh                # dev build, app only (current branch)
-#   bash build_app.sh --dmg          # dev build + DMG
-#   bash build_app.sh --dmg --dev    # same as above, explicit
-#   bash build_app.sh --dmg --test   # RC: checkout main, merge current branch, build
-#   bash build_app.sh --dmg --prod   # Prod: checkout main, merge, tag, build, push, publish
-#
-# --test and --prod handle all git workflow automatically:
-#   stash uncommitted changes → checkout main → merge your branch →
-#   build → (prod: commit version, tag, push, publish) → restore branch + unstash
+# Run with no flags (or just --dmg) for an interactive menu.
+# Or pass a channel flag directly to skip the menu:
+#   bash build_app.sh --dev           # dev build, app only
+#   bash build_app.sh --dmg --dev     # dev build + DMG
+#   bash build_app.sh --dmg --test    # RC build + DMG
+#   bash build_app.sh --dmg --prod    # full prod release
 
 set -euo pipefail
 
@@ -24,7 +20,7 @@ BUILD_VENV="${PROJECT_DIR}/.build-venv"
 
 # ── Flag parsing ──────────────────────────────────────────────────────────────
 BUILD_DMG=0
-BUILD_CHANNEL="dev"  # default: stay on current branch, dev channel
+BUILD_CHANNEL=""   # empty = not yet chosen; triggers interactive menu
 
 for arg in "$@"; do
   [ "$arg" = "--dmg" ]  && BUILD_DMG=1
@@ -32,6 +28,39 @@ for arg in "$@"; do
   [ "$arg" = "--test" ] && BUILD_CHANNEL="rc"   && BUILD_DMG=1
   [ "$arg" = "--prod" ] && BUILD_CHANNEL="prod" && BUILD_DMG=1
 done
+
+# ── Interactive menu (shown when no channel flag was given) ───────────────────
+if [ -z "$BUILD_CHANNEL" ]; then
+  _CUR_BRANCH=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  _CUR_VER=$(python3 -c "import json; d=json.load(open('${PROJECT_DIR}/version.json')); print('v'+d['version'])" 2>/dev/null || echo "")
+
+  echo ""
+  echo -e "\033[1m🏗️   TuneBridge Build\033[0m  \033[2m(current: ${_CUR_BRANCH}${_CUR_VER:+  ·  ${_CUR_VER}})\033[0m"
+  echo -e "\033[2m────────────────────────────────────────────\033[0m"
+  echo ""
+  echo "  1)  Dev      — app only        (current branch, no DMG)"
+  echo "  2)  Dev      — app + DMG       (current branch)"
+  echo "  3)  Test     — app + DMG       (RC build: merges to main, no publish)"
+  echo "  4)  Prod     — app + DMG       (full release: merges, tags, pushes, publishes)"
+  echo "  5)  Exit"
+  echo ""
+  printf "  Choice [1–5]: "
+  read -r _CHOICE </dev/tty
+
+  case "$_CHOICE" in
+    1) BUILD_CHANNEL="dev";  BUILD_DMG=0 ;;
+    2) BUILD_CHANNEL="dev";  BUILD_DMG=1 ;;
+    3) BUILD_CHANNEL="rc";   BUILD_DMG=1 ;;
+    4) BUILD_CHANNEL="prod"; BUILD_DMG=1 ;;
+    5) echo ""; echo "  Cancelled."; echo ""; exit 0 ;;
+    *) echo ""; echo "  ❌  Invalid choice '${_CHOICE}'. Exiting."; echo ""; exit 1 ;;
+  esac
+
+  # If user passed --dmg explicitly but chose option 1, honour it
+  for arg in "$@"; do [ "$arg" = "--dmg" ] && BUILD_DMG=1; done
+
+  echo ""
+fi
 
 # ── Git workflow helpers ──────────────────────────────────────────────────────
 _ORIGINAL_BRANCH=""
@@ -258,6 +287,7 @@ PYI_ARGS=(
   --collect-submodules soundfile
   --collect-submodules mpv
   --add-data "${PROJECT_DIR}/static:static"
+  --add-data "${PROJECT_DIR}/version.json:."
 )
 [ -f "$ICON_PATH" ] && PYI_ARGS+=(--icon "$ICON_PATH")
 if [ -d "${PROJECT_DIR}/data/features" ]; then
