@@ -3971,8 +3971,16 @@ function _homeArtEl(item) {
   if (artistImageUrl) {
     return `<img src="${artistImageUrl}" loading="lazy" onerror="this.style.display='none'" />`;
   }
-  const artworkKey = item?.artwork_key || '';
   const kind = String(item?.kind || '').toLowerCase();
+  const playlistId = String(item?.playlist_id || '').trim();
+  const artworkKey = item?.artwork_key || '';
+  if (kind === 'playlist' && playlistId) {
+    const playlistArt = `/api/playlists/${encodeURIComponent(playlistId)}/artwork?t=${Date.now()}`;
+    const fallback = artworkKey ? `/api/artwork/${esc(artworkKey)}` : '';
+    return fallback
+      ? `<img src="${playlistArt}" loading="lazy" onerror="this.onerror=null;this.src='${fallback}'" />`
+      : `<img src="${playlistArt}" loading="lazy" onerror="this.style.display='none'" />`;
+  }
   const fallbackKind = kind === 'artist' ? 'artist' : (kind === 'album' ? 'album' : 'song');
   return artworkKey
     ? `<img src="/api/artwork/${esc(artworkKey)}" loading="lazy" onerror="this.style.display='none'" />`
