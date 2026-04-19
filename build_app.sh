@@ -59,15 +59,6 @@ if [ -z "$BUILD_CHANNEL" ]; then
   # If user passed --dmg explicitly but chose option 1, honour it
   for arg in "$@"; do [ "$arg" = "--dmg" ] && BUILD_DMG=1; done
 
-  # Prompt for release notes when building a DMG (these go into CHANGELOG.md)
-  RELEASE_NOTES=""
-  if [ "$BUILD_DMG" = "1" ]; then
-    echo ""
-    echo -e "\033[2m  What's new in this build? (one line, Enter to skip)\033[0m"
-    printf "  Notes: "
-    read -r RELEASE_NOTES </dev/tty
-  fi
-
   echo ""
 fi
 
@@ -495,25 +486,42 @@ fi
 
 deactivate || true
 
-# ── Update CHANGELOG.md ───────────────────────────────────────────────────────
+# ── Promote [Unreleased] → versioned entry in CHANGELOG.md ───────────────────
 CHANGELOG="${PROJECT_DIR}/CHANGELOG.md"
-if [ "$BUILD_DMG" = "1" ]; then
-  # Build the new entry header
+if [ "$BUILD_DMG" = "1" ] && [ -f "$CHANGELOG" ]; then
   _ENTRY_HEADER="## v${VERSION_FULL} · $(date '+%Y-%m-%d')"
-  _ENTRY_NOTES="${RELEASE_NOTES:-No notes provided.}"
 
-  # Only prepend if this exact version isn't already the first entry
-  if ! grep -qF "## v${VERSION_FULL}" "$CHANGELOG" 2>/dev/null; then
-    _NEW_ENTRY="${_ENTRY_HEADER}"$'\n'"- ${_ENTRY_NOTES}"$'\n'
+  if grep -qF "## [Unreleased]" "$CHANGELOG"; then
+    # Replace the [Unreleased] header with the versioned one, strip comment hints,
+    # then inject a fresh [Unreleased] placeholder at the top for next cycle
+    python3 - "$CHANGELOG" "$_ENTRY_HEADER" << 'PYEOF'
+import sys, re
 
-    if [ -f "$CHANGELOG" ]; then
-      # Preserve the existing content after the title line
-      _EXISTING=$(tail -n +2 "$CHANGELOG")
-      { head -1 "$CHANGELOG"; echo ""; echo "$_NEW_ENTRY"; echo "$_EXISTING"; } > "${CHANGELOG}.tmp"
-    else
-      { echo "# TuneBridge — Changelog"; echo ""; echo "$_NEW_ENTRY"; } > "${CHANGELOG}.tmp"
-    fi
-    mv "${CHANGELOG}.tmp" "$CHANGELOG"
+path, new_header = sys.argv[1], sys.argv[2]
+text = open(path).read()
+
+# Strip the [Unreleased] header and its comment-only hint lines entirely,
+# keeping any real bullet entries that follow
+text = re.sub(
+    r'## \[Unreleased\]\n(<!--[^\n]*-->\n)*',
+    new_header + '\n',
+    text, count=1
+)
+
+# Fresh [Unreleased] placeholder injected right after the title line
+fresh = (
+    "\n## [Unreleased]\n"
+    "<!-- Claude Code: add entries here as changes are made during development -->\n"
+    "<!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->\n"
+)
+text = re.sub(r'(# TuneBridge — Changelog\n)', r'\1' + fresh, text, count=1)
+
+open(path, 'w').write(text)
+print(f"  ✅  Promoted [Unreleased] → {new_header}")
+PYEOF
+  else
+    # No [Unreleased] section — nothing to promote, CHANGELOG untouched
+    echo -e "  ${DIM}ℹ️   No [Unreleased] entries in CHANGELOG.md — skipping promotion${NC}"
   fi
 fi
 

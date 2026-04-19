@@ -3,6 +3,19 @@
 > Current storage model (2026-04-09): TuneBridge runtime persistence is SQLite-only (`tunebridge.db`).
 > Some older notes below reference JSON files from pre-migration history.
 
+## Changelog Maintenance (IMPORTANT)
+At the end of every session where code changes were made, update `CHANGELOG.md` by adding entries under the `## [Unreleased]` section. Use these prefixes:
+- `- Fix:` for bug fixes
+- `- Add:` for new features or capabilities
+- `- Change:` for behaviour changes to existing features
+- `- Remove:` for removed features
+
+**Rules:**
+- One line per meaningful change — user-facing language, no internal implementation detail
+- Only add entries for changes that affect user-visible behaviour or the build/release process
+- Never modify versioned entries (anything below `[Unreleased]`) — those are locked
+- The build script automatically promotes `[Unreleased]` to a versioned entry on each DMG build
+
 ## What This Is
 A local web-based music manager for a personal FLAC music library. Built with Flask (Python) + Vanilla JS. Lets you browse your library, build playlists with drag-and-drop, export them to portable music players, and sync music between local storage and SD cards.
 

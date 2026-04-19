@@ -1,8 +1,13 @@
 # TuneBridge — Changelog
 
-## v0.5-rc · 2026-04-19
-- 3
+## [Unreleased]
+<!-- Claude Code: add entries here as changes are made during development -->
+<!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.5-rc · 2026-04-19
+- Fix: bash 3.2 incompatibility in build script (replaced ^^ with tr)
+- Add: CHANGELOG.md published to tunebridge-releases with every DMG build
+- Add: Release notes prompt during interactive build menu
 
 ## v0.4-dev · 2026-04-19
 - Fix: Version display showed "unknown" in bundled app — version.json now bundled via PyInstaller
