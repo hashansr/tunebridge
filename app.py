@@ -4625,8 +4625,19 @@ import sys as _sys
 _BUNDLE_DIR = Path(_sys._MEIPASS) if (getattr(_sys, 'frozen', False) and hasattr(_sys, '_MEIPASS')) \
               else Path(__file__).parent
 _VERSION_FILE = _BUNDLE_DIR / 'version.json'
-_RELEASES_VERSION_URL  = 'https://raw.githubusercontent.com/hashansr/tunebridge-releases/main/version.json'
-_RELEASES_DOWNLOAD_URL = 'https://github.com/hashansr/tunebridge-releases/raw/main/TuneBridge-latest.dmg'
+_RELEASES_BASE = 'https://raw.githubusercontent.com/hashansr/tunebridge-releases/main'
+_RELEASES_DL_BASE = 'https://github.com/hashansr/tunebridge-releases/raw/main'
+
+_CHANNEL_VERSION_FILE = {
+    'prod': 'version.json',
+    'rc':   'version-rc.json',
+    'dev':  'version-dev.json',
+}
+_CHANNEL_DMG_FILE = {
+    'prod': 'TuneBridge-latest.dmg',
+    'rc':   'TuneBridge-rc.dmg',
+    'dev':  'TuneBridge-dev.dmg',
+}
 
 
 def _version_gt(a: str, b: str) -> bool:
@@ -4677,28 +4688,32 @@ def set_update_channel():
 @app.route('/api/update/check')
 def check_for_update():
     channel = _effective_channel()
-    if channel != 'prod':
-        return jsonify({'error': f'Update checks are only available on the Prod channel (current: {channel}).'})
+    ver_file = _CHANNEL_VERSION_FILE.get(channel, 'version.json')
+    dmg_file = _CHANNEL_DMG_FILE.get(channel, 'TuneBridge-latest.dmg')
+    version_url  = f'{_RELEASES_BASE}/{ver_file}'
+    download_url = f'{_RELEASES_DL_BASE}/{dmg_file}'
+
     try:
         with open(_VERSION_FILE) as f:
             local = json.load(f)
     except Exception:
-        local = {'version': '0.0', 'channel': channel}
+        local = {'version': '0.0', 'version_full': '0.0'}
 
     try:
         from urllib.request import Request as _Req, urlopen as _urlopen
-        req = _Req(_RELEASES_VERSION_URL, headers={'User-Agent': 'TuneBridge'})
+        req = _Req(version_url, headers={'User-Agent': 'TuneBridge'})
         with _urlopen(req, timeout=5) as r:
             remote = json.loads(r.read())
     except Exception as e:
         return jsonify({'error': f'Could not reach update server: {e}'})
 
     return jsonify({
-        'current':          local.get('version'),
-        'latest':           remote.get('version'),
+        'current':          local.get('version_full') or local.get('version'),
+        'latest':           remote.get('version_full') or remote.get('version'),
         'released':         remote.get('released'),
         'update_available': _version_gt(remote.get('version', '0.0'), local.get('version', '0.0')),
-        'download_url':     _RELEASES_DOWNLOAD_URL,
+        'download_url':     download_url,
+        'channel':          channel,
     })
 
 

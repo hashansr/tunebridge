@@ -486,49 +486,59 @@ fi
 
 deactivate || true
 
-# ── Prod: commit version.json, tag, push, publish ─────────────────────────────
-if [ "$BUILD_CHANNEL" = "prod" ]; then
-  _phase "🚀 Release v${APP_VERSION}"
-
-  # Commit version.json bump to main (only after a successful build)
-  printf "  📝  Committing version.json to main... "
-  git -C "$PROJECT_DIR" add version.json
-  git -C "$PROJECT_DIR" commit -m "Release v${APP_VERSION}"
-  echo -e "${GREEN}done ✅${NC}"
-
-  # Tag the release commit
-  printf "  🏷️   Tagging v${APP_VERSION}... "
-  git -C "$PROJECT_DIR" tag "v${APP_VERSION}" 2>/dev/null \
-    || git -C "$PROJECT_DIR" tag -f "v${APP_VERSION}"
-  echo -e "${GREEN}done ✅${NC}"
-
-  # Push main branch + tag to private source repo
-  printf "  🔒  Pushing to private repo... "
-  git -C "$PROJECT_DIR" push origin main
-  git -C "$PROJECT_DIR" push origin "v${APP_VERSION}"
-  echo -e "${GREEN}done ✅${NC}"
-  _info "hashansr/tunebridge  main + v${APP_VERSION}"
-
-  # Publish DMG + version.json to public releases repo
+# ── Publish to tunebridge-releases (all channels with DMG) ───────────────────
+if [ "$BUILD_DMG" = "1" ]; then
   RELEASES_REPO="${HOME}/tunebridge-releases"
+
+  # Prod-only: commit version.json to main, tag, and push private repo
+  if [ "$BUILD_CHANNEL" = "prod" ]; then
+    _phase "🚀 Release v${VERSION_FULL}"
+
+    printf "  📝  Committing version.json to main... "
+    git -C "$PROJECT_DIR" add version.json
+    git -C "$PROJECT_DIR" commit -m "Release v${APP_VERSION}"
+    echo -e "${GREEN}done ✅${NC}"
+
+    printf "  🏷️   Tagging v${APP_VERSION}... "
+    git -C "$PROJECT_DIR" tag "v${APP_VERSION}" 2>/dev/null \
+      || git -C "$PROJECT_DIR" tag -f "v${APP_VERSION}"
+    echo -e "${GREEN}done ✅${NC}"
+
+    printf "  🔒  Pushing to private repo... "
+    git -C "$PROJECT_DIR" push origin main
+    git -C "$PROJECT_DIR" push origin "v${APP_VERSION}"
+    echo -e "${GREEN}done ✅${NC}"
+    _info "hashansr/tunebridge  main + v${APP_VERSION}"
+  else
+    _phase "📦 Publish ${BUILD_CHANNEL^^} v${VERSION_FULL}"
+  fi
+
+  # Publish DMG + version file to public releases repo (all channels)
   if [ ! -d "$RELEASES_REPO/.git" ]; then
-    _warn "Releases repo not found at ${RELEASES_REPO} — skipping public publish"
+    _warn "Releases repo not found at ${RELEASES_REPO} — skipping publish"
     _info "One-time setup:  git clone https://github.com/hashansr/tunebridge-releases ~/tunebridge-releases"
   else
+    # Channel-specific filenames so each channel has its own slot
+    case "$BUILD_CHANNEL" in
+      prod) DMG_DEST="TuneBridge-latest.dmg";  VER_DEST="version.json" ;;
+      rc)   DMG_DEST="TuneBridge-rc.dmg";      VER_DEST="version-rc.json" ;;
+      *)    DMG_DEST="TuneBridge-dev.dmg";     VER_DEST="version-dev.json" ;;
+    esac
+
     printf "  📋  Copying artifacts to releases repo... "
-    cp -f "$DISTRO_LATEST" "${RELEASES_REPO}/TuneBridge-latest.dmg"
-    cp -f "${PROJECT_DIR}/version.json" "${RELEASES_REPO}/version.json"
+    cp -f "$DISTRO_LATEST" "${RELEASES_REPO}/${DMG_DEST}"
+    cp -f "${PROJECT_DIR}/version.json" "${RELEASES_REPO}/${VER_DEST}"
     echo -e "${GREEN}done ✅${NC}"
 
     printf "  📝  Committing releases repo... "
-    git -C "$RELEASES_REPO" add TuneBridge-latest.dmg version.json
-    git -C "$RELEASES_REPO" commit -m "Release v${APP_VERSION}"
+    git -C "$RELEASES_REPO" add "${DMG_DEST}" "${VER_DEST}"
+    git -C "$RELEASES_REPO" commit -m "${BUILD_CHANNEL^^} v${VERSION_FULL}"
     echo -e "${GREEN}done ✅${NC}"
 
     printf "  🌐  Pushing releases repo... "
     git -C "$RELEASES_REPO" push
     echo -e "${GREEN}done ✅${NC}"
-    _ok "Published v${APP_VERSION} → hashansr/tunebridge-releases"
+    _ok "Published ${BUILD_CHANNEL^^} v${VERSION_FULL} → hashansr/tunebridge-releases  (${DMG_DEST})"
   fi
 fi
 
