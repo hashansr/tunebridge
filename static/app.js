@@ -8678,7 +8678,8 @@ async function loadSettings() {
     const verEl = document.getElementById('app-version-display');
     const channelSel = document.getElementById('update-channel-select');
     if (verEl && ver.version && ver.version !== 'unknown') {
-      verEl.textContent = `v${ver.version}${ver.released ? '  ·  ' + ver.released : ''}`;
+      const display = ver.version_full || ver.version;
+      verEl.textContent = `v${display}${ver.released ? '  ·  ' + ver.released : ''}`;
     }
     if (channelSel && ver.channel) channelSel.value = ver.channel;
   } catch (_) {}

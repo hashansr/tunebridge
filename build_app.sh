@@ -126,6 +126,7 @@ import json
 with open('${PROJECT_DIR}/version.json', 'w') as f:
     json.dump({
         'version': '${APP_VERSION}',
+        'version_full': '${VERSION_FULL}',
         'build': ${BUILD_NUM},
         'channel': '${BUILD_CHANNEL}',
         'released': '$(date +%Y-%m-%d)'
