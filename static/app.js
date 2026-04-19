@@ -145,12 +145,20 @@ function artworkUrl(key) {
   return key ? `/api/artwork/${key}` : null;
 }
 
+function coverPlaceholder(kind = 'song', size = 38, rounded = '4px', full = false) {
+  const validKind = ['artist', 'album', 'song'].includes(kind) ? kind : 'song';
+  const style = full
+    ? `width:100%;height:100%;border-radius:${rounded};`
+    : `width:${size}px;height:${size}px;border-radius:${rounded};`;
+  return `<div class="cover-placeholder cover-placeholder-${validKind}" style="${style}"><img src="/icons/empty-${validKind}.svg" alt="" aria-hidden="true" loading="lazy" /></div>`;
+}
+
 function thumbImg(key, size = 38, rounded = '4px') {
   const url = artworkUrl(key);
   if (url) {
     return `<img src="${url}" width="${size}" height="${size}" style="border-radius:${rounded};object-fit:cover" loading="lazy" onerror="this.style.display='none'" />`;
   }
-  return musicNote(size);
+  return coverPlaceholder('song', size, rounded);
 }
 
 function musicNote(size = 38) {
@@ -847,7 +855,7 @@ async function loadPlaylistsView() {
     } else {
       const keys = (pl.artwork_keys || []).slice(0, 4);
       if (!keys.length) {
-        coverHtml = `<div class="cover-placeholder">${musicNote(40)}</div>`;
+        coverHtml = coverPlaceholder('song', 40, '8px');
       } else if (keys.length === 1) {
         coverHtml = `<img src="/api/artwork/${keys[0]}" style="width:100%;height:100%;object-fit:cover" loading="lazy" />`;
       } else {
@@ -1234,7 +1242,7 @@ async function loadAlbums(artistFilter = null) {
     const artistImgKey = artistData?.image_key;
     document.getElementById('artist-hero-art').innerHTML = artistImgKey
       ? `<img src="/api/artists/${artistImgKey}/image?t=${Date.now()}" alt="${esc(artistFilter)}" />`
-      : (artKey ? `<img src="${artworkUrl(artKey)}" />` : musicNote(64));
+      : (artKey ? `<img src="${artworkUrl(artKey)}" />` : coverPlaceholder('artist', 64, 'var(--radius)', true));
     document.getElementById('artist-hero-name').textContent = artistFilter;
     const totalSongs = albums.reduce((s, al) => s + (al.track_count || 0), 0);
     document.getElementById('artist-hero-meta').textContent =
@@ -1320,7 +1328,7 @@ async function loadTracks(artist = null, album = null) {
   if (album && tracks.length) {
     const artKey = tracks[0].artwork_key || '';
     document.getElementById('album-hero-art').innerHTML =
-      artKey ? `<img src="${artworkUrl(artKey)}" />` : musicNote(64);
+      artKey ? `<img src="${artworkUrl(artKey)}" />` : coverPlaceholder('album', 64, 'var(--radius)', true);
     document.getElementById('album-hero-name').textContent = album;
     document.getElementById('album-hero-artist').innerHTML = artist
       ? `<span class="link" data-artist="${esc(artist)}" onclick="App.showArtist(this.dataset.artist)">${esc(artist)}</span>` : '';
@@ -1356,7 +1364,7 @@ async function loadTracks(artist = null, album = null) {
   } else if (!album && artist && tracks.length) {
     const artKey = tracks[0].artwork_key || '';
     document.getElementById('album-hero-art').innerHTML =
-      artKey ? `<img src="${artworkUrl(artKey)}" />` : musicNote(64);
+      artKey ? `<img src="${artworkUrl(artKey)}" />` : coverPlaceholder('song', 64, 'var(--radius)', true);
     document.getElementById('album-hero-name').textContent = 'All Songs';
     document.getElementById('album-hero-artist').innerHTML =
       `<span class="link" data-artist="${esc(artist)}" onclick="App.showArtist(this.dataset.artist)">${esc(artist)}</span>`;
@@ -2070,7 +2078,7 @@ function updatePlaylistCover(tracks) {
 
   if (!keys.length) {
     cover.className = 'playlist-cover';
-    cover.innerHTML = `<div class="cover-placeholder">${musicNote(56)}</div>`;
+    cover.innerHTML = coverPlaceholder('song', 56, '8px');
     return;
   }
 
@@ -3959,9 +3967,11 @@ function _homeArtEl(item) {
     return `<img src="${artistImageUrl}" loading="lazy" onerror="this.style.display='none'" />`;
   }
   const artworkKey = item?.artwork_key || '';
+  const kind = String(item?.kind || '').toLowerCase();
+  const fallbackKind = kind === 'artist' ? 'artist' : (kind === 'album' ? 'album' : 'song');
   return artworkKey
     ? `<img src="/api/artwork/${esc(artworkKey)}" loading="lazy" onerror="this.style.display='none'" />`
-    : `<div class="home-card-art-placeholder">${musicNote(36)}</div>`;
+    : `<div class="home-card-art-placeholder">${coverPlaceholder(fallbackKind, 56, '14px')}</div>`;
 }
 
 function _homeOnClick(item) {
@@ -11835,7 +11845,7 @@ async function removeAlbumArt() {
     await loadAlbums(state.artist);
     if (state.view === 'tracks') loadTracks(state.artist, state.album);
     const heroArt = document.getElementById('album-hero-art');
-    if (heroArt) heroArt.innerHTML = musicNote(64);
+    if (heroArt) heroArt.innerHTML = coverPlaceholder('album', 64, 'var(--radius)', true);
   } catch (e) {
     toast('Error removing art: ' + e.message);
   }
