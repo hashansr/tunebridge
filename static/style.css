@@ -1796,6 +1796,13 @@ tbody tr:hover .remove-btn { opacity: 1; }
   -webkit-mask-position: center;
   -webkit-mask-size: contain;
 }
+.empty-state-art {
+  display: block;
+  width: 60px;
+  height: 60px;
+  opacity: 0.98;
+  filter: drop-shadow(0 8px 20px rgba(11, 16, 28, 0.28));
+}
 .empty-mask-icon-player-fill {
   mask-image: url('/icons/music-player-fill-svgrepo-com.svg');
   -webkit-mask-image: url('/icons/music-player-fill-svgrepo-com.svg');
