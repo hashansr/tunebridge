@@ -1010,12 +1010,15 @@ function renderArtistsGrid() {
   if (artistsEmpty) artistsEmpty.style.display = 'none';
   if (grid) {
     grid.innerHTML = filtered.map(a => {
+      const hasArtistArt = !!(a.image_key || a.artwork_key);
       const imgSrc = a.image_key
         ? `<img src="/api/artists/${a.image_key}/image" alt="${esc(a.name)}" loading="lazy" />`
-        : thumbImg(a.artwork_key, 120, '6px');
+        : (a.artwork_key
+          ? thumbImg(a.artwork_key, 120, '6px')
+          : coverPlaceholder('artist', 120, '6px'));
       return `
       <div class="artist-card" data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
-        <div class="artist-thumb">
+        <div class="artist-thumb${hasArtistArt ? '' : ' artist-thumb--placeholder'}">
           ${imgSrc}
           <div class="card-thumb-overlay">
             <button class="card-play-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.playArtistCard(this.dataset.artist)" title="Play all songs">
@@ -3607,10 +3610,12 @@ function _renderFavArtistCards(rows) {
   }
   grid.innerHTML = rows.map(a => `
     <div class="artist-card" data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
-      <div class="artist-thumb">
+      <div class="artist-thumb${(a.image_key || a.artwork_key) ? '' : ' artist-thumb--placeholder'}">
         ${a.image_key
           ? `<img src="/api/artists/${a.image_key}/image" alt="${esc(a.name)}" loading="lazy" />`
-          : thumbImg(a.artwork_key, 120, '6px')}
+          : (a.artwork_key
+            ? thumbImg(a.artwork_key, 120, '6px')
+            : coverPlaceholder('artist', 120, '6px'))}
         <div class="card-thumb-overlay">
           <button class="card-play-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.playArtistCard(this.dataset.artist)" title="Play all songs">
             ${playSvg(15)}

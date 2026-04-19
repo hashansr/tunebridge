@@ -43,6 +43,15 @@ const Player = (function () {
   let _pollTimer     = null;   // setInterval handle for mpv state polling
   let _mpvPosition   = 0;      // last known position from mpv (seconds)
   let _mpvDuration   = 0;      // last known duration from mpv (seconds)
+  let _lastMpvActive = false;
+
+  function _isMpvActive() {
+    if (!_mpvAvailable) return false;
+    // Crossfade requires dual HTMLAudio playback paths.
+    // Keep mpv only when crossfade is off or bit-perfect mode is on.
+    if (ps.crossfadeDuration > 0 && !_exclusiveMode) return false;
+    return true;
+  }
 
   /* ── Track registry (populated by app.js via Player.registerTracks) ── */
   const _registry = new Map();   // id → track object
@@ -153,7 +162,7 @@ const Player = (function () {
 
   /* ── Web Audio graph init (fallback mode only) ─────────────────────── */
   function _initAudioContext() {
-    if (_ctx || _mpvAvailable) return;
+    if (_ctx || _isMpvActive()) return;
     try {
       _ctx        = new (window.AudioContext || window.webkitAudioContext)();
       // One MediaElementSource per audio element (can only be created once per element)
@@ -364,7 +373,7 @@ const Player = (function () {
     // reads _audio, which is about to be re-pointed.
     const prevTrack = currentTrack();
     if (prevTrack) {
-      const pos = _mpvAvailable ? (_mpvPosition || 0) : (oldEl.duration || 0);
+      const pos = _isMpvActive() ? (_mpvPosition || 0) : (oldEl.duration || 0);
       const elapsed = Math.max(0, pos - (_trackSessionStartPos || 0));
       if (elapsed >= 1) {
         const duration = Number(prevTrack.duration || pos || 0);
@@ -441,7 +450,7 @@ const Player = (function () {
   function _dBToLinear(db) { return Math.pow(10, db / 20); }
 
   function _buildPeqChain(peqProfile) {
-    if (_mpvAvailable) {
+    if (_isMpvActive()) {
       // mpv mode: send profile to backend as a lavfi audio filter
       if (!peqProfile) {
         _mpvCmd('peq', { preamp_db: 0, filters: [] });
@@ -527,7 +536,7 @@ const Player = (function () {
   }
 
   function _updateBandParam(enabledBandIndex, fc, gain, q) {
-    if (_mpvAvailable) {
+    if (_isMpvActive()) {
       // In mpv mode, re-send the entire custom PEQ state so all bands are in sync
       const st = _loadCustomPeqState();
       _applyCustomPeq(st);
@@ -546,7 +555,7 @@ const Player = (function () {
   }
 
   function _updatePreamp(preampDb) {
-    if (_mpvAvailable) {
+    if (_isMpvActive()) {
       const st = _loadCustomPeqState();
       _applyCustomPeq(st);
       return;
@@ -649,7 +658,7 @@ const Player = (function () {
     let combined = new Float32Array(N).fill(1);
     let hasFilters = false;
 
-    if (_mpvAvailable) {
+    if (_isMpvActive()) {
       // Analytical computation from current custom PEQ state
       const st = _loadCustomPeqState();
       if (st && st.enabled) {
@@ -763,7 +772,7 @@ const Player = (function () {
       _flushCurrentTrackEvent('switch');
     }
     _seekRestored = false;
-    if (_mpvAvailable) {
+    if (_isMpvActive()) {
       _mpvCmd('play', { track_id: track.id });
       ps.isPlaying = true;
       _updatePlayBtn();
@@ -782,7 +791,7 @@ const Player = (function () {
   }
 
   function _startPlay() {
-    if (_mpvAvailable) {
+    if (_isMpvActive()) {
       // If mpv has no file loaded yet (e.g. first play after app restore),
       // _mpvDuration will be 0. Send a full loadfile instead of just unpause.
       if (_mpvDuration === 0) {
@@ -804,7 +813,7 @@ const Player = (function () {
   }
 
   function _pauseAudio() {
-    if (_mpvAvailable) {
+    if (_isMpvActive()) {
       _mpvCmd('pause', { paused: true });
     } else {
       _audio.pause();
@@ -833,9 +842,9 @@ const Player = (function () {
   function prev() {
     if (ps.queue.length === 0) return;
     // Restart current track if more than 3 s in
-    const curPos = _mpvAvailable ? _mpvPosition : _audio.currentTime;
+    const curPos = _isMpvActive() ? _mpvPosition : _audio.currentTime;
     if (curPos > 3) {
-      if (_mpvAvailable) { _mpvCmd('seek', { position: 0 }); }
+      if (_isMpvActive()) { _mpvCmd('seek', { position: 0 }); }
       else { _audio.currentTime = 0; }
       return;
     }
@@ -863,7 +872,7 @@ const Player = (function () {
 
   function seekInput(value) {
     // Guard: no-op if nothing is loaded
-    const dur = _mpvAvailable ? _mpvDuration : _audio.duration;
+    const dur = _isMpvActive() ? _mpvDuration : _audio.duration;
     if (!currentTrack() || !isFinite(dur) || dur === 0) return;
     // Called on input (dragging) — update visuals only, not audio
     _seekDragging = true;
@@ -875,13 +884,13 @@ const Player = (function () {
   }
 
   function seek(value) {
-    const dur = _mpvAvailable ? _mpvDuration : _audio.duration;
+    const dur = _isMpvActive() ? _mpvDuration : _audio.duration;
     if (!currentTrack() || !isFinite(dur) || dur === 0) {
       _seekDragging = false;
       return;
     }
     const position = (parseFloat(value) / 1000) * dur;
-    if (_mpvAvailable) {
+    if (_isMpvActive()) {
       _mpvCmd('seek', { position });
     } else {
       _audio.currentTime = position;
@@ -907,7 +916,7 @@ const Player = (function () {
 
   function _applyVolume() {
     const v = ps.muted ? 0 : ps.volume;
-    if (_mpvAvailable) {
+    if (_isMpvActive()) {
       _mpvCmd('volume', { volume: v });
     } else if (_volNode) {
       _volNode.gain.value = v;
@@ -1146,7 +1155,7 @@ const Player = (function () {
     if (ps.queue.length === 0) {
       ps.queueIdx = -1;
       ps.shuffleOrder = [];
-      if (_mpvAvailable) { _mpvCmd('stop', {}); } else { _audio.src = ''; }
+      if (_isMpvActive()) { _mpvCmd('stop', {}); } else { _audio.src = ''; }
       ps.isPlaying = false;
       _updateTrackUI(null);
       _updatePlayBtn();
@@ -1165,7 +1174,7 @@ const Player = (function () {
       ps.queue        = [];
       ps.queueIdx     = -1;
       ps.shuffleOrder = [];
-      if (_mpvAvailable) {
+      if (_isMpvActive()) {
         _mpvCmd('stop', {});
       } else {
         _audio.src = '';
@@ -1248,7 +1257,7 @@ const Player = (function () {
 
   /* ── Audio element events (attached to both A and B; Web Audio mode only) ── */
   function _onTimeUpdate() {
-    if (_mpvAvailable) return;     // mpv mode: polling handles seeks
+    if (_isMpvActive()) return;     // mpv mode: polling handles seeks
     if (this !== _audio) return;   // ignore events from the standby element
     if (_seekDragging) return;
     if (_seeking) return;
@@ -1937,21 +1946,71 @@ const Player = (function () {
 
   /* ── Crossfade control (Web Audio mode only; mpv uses gapless) ─────── */
   function setXfade(value) {
-    ps.crossfadeDuration = Math.max(0, Math.min(12, parseInt(value, 10)));
+    let next = Math.max(0, Math.min(12, parseInt(value, 10)));
+    if (_mpvAvailable && _exclusiveMode && next > 0) {
+      next = 0;
+      _toast('Crossfade is unavailable while bit-perfect output is enabled.');
+    }
+    ps.crossfadeDuration = next;
     try { localStorage.setItem('tb_xfade', ps.crossfadeDuration); } catch (_) {}
     _updateXfadeUI();
+    _syncBackendModeForCrossfade();
   }
 
   function _updateXfadeUI() {
     const valEl    = document.getElementById('xfade-val');
     const sliderEl = document.getElementById('xfade-slider');
     const rowEl    = document.getElementById('xfade-row');
+    const blocked  = _mpvAvailable && _exclusiveMode;
     if (rowEl)    rowEl.style.display = '';
-    if (valEl)    valEl.textContent   = ps.crossfadeDuration === 0 ? 'Off' : `${ps.crossfadeDuration}s`;
+    if (valEl)    valEl.textContent   = blocked ? 'Off (Bit-perfect)' : (ps.crossfadeDuration === 0 ? 'Off' : `${ps.crossfadeDuration}s`);
     if (sliderEl) {
-      sliderEl.disabled = false;
+      sliderEl.disabled = blocked;
       sliderEl.value = ps.crossfadeDuration;
     }
+  }
+
+  function _syncBackendModeForCrossfade() {
+    const mpvActive = _isMpvActive();
+    if (mpvActive === _lastMpvActive) return;
+
+    const track = currentTrack();
+    const wasPlaying = !!ps.isPlaying;
+    const resumePos = _lastMpvActive ? (_mpvPosition || 0) : (_audio.currentTime || 0);
+
+    if (mpvActive) {
+      _cancelCrossfade();
+      _audio.pause();
+      if (track) {
+        _mpvCmd('play', { track_id: track.id, position: resumePos }).then(() => {
+          if (!wasPlaying) _mpvCmd('pause', { paused: true });
+        });
+      }
+      _startPolling();
+    } else {
+      _stopPolling();
+      _mpvCmd('pause', { paused: true });
+      _initAudioContext();
+      _cancelCrossfade();
+      if (track) {
+        _audio.src = `/api/stream/${track.id}`;
+        _audio.load();
+        const applySeek = () => {
+          if (isFinite(_audio.duration) && resumePos < _audio.duration) {
+            _audio.currentTime = resumePos;
+          }
+        };
+        if (_audio.readyState >= 1) applySeek();
+        else _audio.addEventListener('loadedmetadata', applySeek, { once: true });
+        if (wasPlaying) {
+          const p = _audio.play();
+          if (p) p.catch(() => {});
+        }
+      }
+      ps.isPlaying = wasPlaying;
+      _updatePlayBtn();
+    }
+    _lastMpvActive = mpvActive;
   }
 
   function _updatePlayBtn() {
@@ -2039,7 +2098,7 @@ const Player = (function () {
   }
 
   function getStateJSON() {
-    const seekTime = _mpvAvailable ? _mpvPosition : (_audio.currentTime || 0);
+    const seekTime = _isMpvActive() ? _mpvPosition : (_audio.currentTime || 0);
     return JSON.stringify({
       queue:        ps.queue,
       queueIdx:     ps.queueIdx,
@@ -2090,7 +2149,7 @@ const Player = (function () {
       localStorage.setItem(_LS.muted,      ps.muted);
       localStorage.setItem(_LS.peqIem,     ps.activePeqIemId     || '');
       localStorage.setItem(_LS.peqProfile, ps.activePeqProfileId || '');
-      localStorage.setItem(_LS.seekTime,   _mpvAvailable ? _mpvPosition : (_audio.currentTime || 0));
+      localStorage.setItem(_LS.seekTime,   _isMpvActive() ? _mpvPosition : (_audio.currentTime || 0));
       localStorage.setItem('tb_recent_contexts', JSON.stringify(ps.recentContexts || []));
     } catch (_) { /* quota exceeded — ignore */ }
     _scheduleRemoteSave();
@@ -2187,7 +2246,7 @@ const Player = (function () {
     }
 
     // 4. Apply volume
-    if (_mpvAvailable) {
+    if (_isMpvActive()) {
       _mpvCmd('volume', { volume: ps.muted ? 0 : ps.volume });
     } else {
       _audioA.volume = ps.muted ? 0 : ps.volume;
@@ -2205,7 +2264,7 @@ const Player = (function () {
     const track = currentTrack();
     if (track) {
       _updateTrackUI(track);
-      if (!_mpvAvailable) {
+      if (!_isMpvActive()) {
         // Web Audio fallback: pre-load into HTMLAudioElement (no play)
         _audio.src = `/api/stream/${track.id}`;
         _audio.load();
@@ -2238,7 +2297,7 @@ const Player = (function () {
     }
 
     if (restoredCustom.enabled) {
-      if (_mpvAvailable) {
+      if (_isMpvActive()) {
         _applyCustomPeq(restoredCustom);
       } else if (_ctx) {
         _applyCustomPeq(restoredCustom);
@@ -2246,7 +2305,8 @@ const Player = (function () {
     }
 
     // 7. Start mpv polling loop
-    if (_mpvAvailable) {
+    _lastMpvActive = _isMpvActive();
+    if (_lastMpvActive) {
       _startPolling();
     }
 
@@ -2317,7 +2377,7 @@ const Player = (function () {
         if (t) {
           const { pos, elapsed } = _capturePlaybackSeconds();
           if (elapsed >= 3) {
-            const duration = Number(t.duration || (_mpvAvailable ? _mpvDuration : _audio.duration) || 0);
+            const duration = Number(t.duration || (_isMpvActive() ? _mpvDuration : _audio.duration) || 0);
             const payload = JSON.stringify({
               events: [{
                 track_id: t.id,
@@ -2344,7 +2404,7 @@ const Player = (function () {
         }
       } catch (_) {}
 
-      const seekPos = _mpvAvailable ? _mpvPosition : (_audio.currentTime || 0);
+      const seekPos = _isMpvActive() ? _mpvPosition : (_audio.currentTime || 0);
       try { localStorage.setItem(_LS.seekTime, seekPos); } catch (_) {}
       // Synchronous XHR blocks until Flask responds — more reliable than sendBeacon
       // in WKWebView where the server and page die simultaneously on os._exit(0).
@@ -2413,7 +2473,7 @@ const Player = (function () {
   }
 
   function _capturePlaybackSeconds() {
-    const pos = _mpvAvailable ? (_mpvPosition || 0) : (_audio.currentTime || 0);
+    const pos = _isMpvActive() ? (_mpvPosition || 0) : (_audio.currentTime || 0);
     const elapsed = Math.max(0, pos - (_trackSessionStartPos || 0));
     return { pos, elapsed };
   }
@@ -2448,7 +2508,7 @@ const Player = (function () {
 
   function _markTrackSessionStart() {
     _trackSessionStartedAt = _safeNowSec();
-    _trackSessionStartPos = _mpvAvailable ? (_mpvPosition || 0) : (_audio.currentTime || 0);
+    _trackSessionStartPos = _isMpvActive() ? (_mpvPosition || 0) : (_audio.currentTime || 0);
   }
 
   function _pushRecentContext(track, reason = '') {
@@ -2501,7 +2561,7 @@ const Player = (function () {
     }
     const minElapsed = typeof opts.minElapsed === 'number' ? opts.minElapsed : 3;
     if (elapsed < minElapsed) return;
-    const duration = Number(t.duration || (_mpvAvailable ? _mpvDuration : _audio.duration) || 0);
+    const duration = Number(t.duration || (_isMpvActive() ? _mpvDuration : _audio.duration) || 0);
     const completed = !!opts.completed || (duration > 0 && pos >= Math.max(duration - 1.0, duration * 0.98));
     const skipped = !!opts.skipped;
     const ctx = ps.playbackContext || { sourceType: 'unknown', sourceId: '', sourceLabel: '' };
@@ -2580,11 +2640,23 @@ const Player = (function () {
     // Bit-perfect badge sync (called by app.js when Settings toggle changes)
     updateExclusiveMode(enabled) {
       _exclusiveMode = !!enabled;
+      if (_exclusiveMode && ps.crossfadeDuration > 0) {
+        ps.crossfadeDuration = 0;
+        try { localStorage.setItem('tb_xfade', '0'); } catch (_) {}
+      }
+      _updateXfadeUI();
+      _syncBackendModeForCrossfade();
       _updateBitPerfectBadge();
     },
     updateCapabilities(cap) {
       _mpvAvailable = !!(cap && cap.mpv_available);
       _exclusiveMode = !!(cap && cap.exclusive_mode);
+      if (_exclusiveMode && ps.crossfadeDuration > 0) {
+        ps.crossfadeDuration = 0;
+        try { localStorage.setItem('tb_xfade', '0'); } catch (_) {}
+      }
+      _updateXfadeUI();
+      _syncBackendModeForCrossfade();
       _updateBitPerfectBadge();
     },
     // Resume a specific track at a position on the new mpv instance after
