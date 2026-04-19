@@ -59,6 +59,15 @@ if [ -z "$BUILD_CHANNEL" ]; then
   # If user passed --dmg explicitly but chose option 1, honour it
   for arg in "$@"; do [ "$arg" = "--dmg" ] && BUILD_DMG=1; done
 
+  # Prompt for release notes when building a DMG (these go into CHANGELOG.md)
+  RELEASE_NOTES=""
+  if [ "$BUILD_DMG" = "1" ]; then
+    echo ""
+    echo -e "\033[2m  What's new in this build? (one line, Enter to skip)\033[0m"
+    printf "  Notes: "
+    read -r RELEASE_NOTES </dev/tty
+  fi
+
   echo ""
 fi
 
@@ -486,6 +495,28 @@ fi
 
 deactivate || true
 
+# ── Update CHANGELOG.md ───────────────────────────────────────────────────────
+CHANGELOG="${PROJECT_DIR}/CHANGELOG.md"
+if [ "$BUILD_DMG" = "1" ]; then
+  # Build the new entry header
+  _ENTRY_HEADER="## v${VERSION_FULL} · $(date '+%Y-%m-%d')"
+  _ENTRY_NOTES="${RELEASE_NOTES:-No notes provided.}"
+
+  # Only prepend if this exact version isn't already the first entry
+  if ! grep -qF "## v${VERSION_FULL}" "$CHANGELOG" 2>/dev/null; then
+    _NEW_ENTRY="${_ENTRY_HEADER}"$'\n'"- ${_ENTRY_NOTES}"$'\n'
+
+    if [ -f "$CHANGELOG" ]; then
+      # Preserve the existing content after the title line
+      _EXISTING=$(tail -n +2 "$CHANGELOG")
+      { head -1 "$CHANGELOG"; echo ""; echo "$_NEW_ENTRY"; echo "$_EXISTING"; } > "${CHANGELOG}.tmp"
+    else
+      { echo "# TuneBridge — Changelog"; echo ""; echo "$_NEW_ENTRY"; } > "${CHANGELOG}.tmp"
+    fi
+    mv "${CHANGELOG}.tmp" "$CHANGELOG"
+  fi
+fi
+
 # ── Publish to tunebridge-releases (all channels with DMG) ───────────────────
 if [ "$BUILD_DMG" = "1" ]; then
   RELEASES_REPO="${HOME}/tunebridge-releases"
@@ -494,8 +525,8 @@ if [ "$BUILD_DMG" = "1" ]; then
   if [ "$BUILD_CHANNEL" = "prod" ]; then
     _phase "🚀 Release v${VERSION_FULL}"
 
-    printf "  📝  Committing version.json to main... "
-    git -C "$PROJECT_DIR" add version.json
+    printf "  📝  Committing version.json + changelog to main... "
+    git -C "$PROJECT_DIR" add version.json CHANGELOG.md
     git -C "$PROJECT_DIR" commit -m "Release v${APP_VERSION}"
     echo -e "${GREEN}done ✅${NC}"
 
@@ -528,10 +559,11 @@ if [ "$BUILD_DMG" = "1" ]; then
     printf "  📋  Copying artifacts to releases repo... "
     cp -f "$DISTRO_LATEST" "${RELEASES_REPO}/${DMG_DEST}"
     cp -f "${PROJECT_DIR}/version.json" "${RELEASES_REPO}/${VER_DEST}"
+    cp -f "${CHANGELOG}" "${RELEASES_REPO}/CHANGELOG.md"
     echo -e "${GREEN}done ✅${NC}"
 
     printf "  📝  Committing releases repo... "
-    git -C "$RELEASES_REPO" add "${DMG_DEST}" "${VER_DEST}"
+    git -C "$RELEASES_REPO" add "${DMG_DEST}" "${VER_DEST}" CHANGELOG.md
     git -C "$RELEASES_REPO" commit -m "${BUILD_CHANNEL^^} v${VERSION_FULL}"
     echo -e "${GREEN}done ✅${NC}"
 
