@@ -1666,13 +1666,17 @@ tbody tr:hover .remove-btn { opacity: 1; }
   object-fit: contain;
   opacity: 1;
 }
+.cover-placeholder-album img {
+  width: 84%;
+  height: 84%;
+}
 .cover-placeholder-song img {
   width: 70%;
   height: 70%;
 }
 .cover-placeholder-playlist img {
-  width: 70%;
-  height: 70%;
+  width: 82%;
+  height: 82%;
 }
 
 .playlist-label { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }

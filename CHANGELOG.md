@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Playlist empty-state icon now renders centered in full-cover mode in both playlist grid and detail views
+- Change: Increased empty-state SVG scale for playlist and album placeholders to better match card proportions
 
 ## v0.6-rc · 2026-04-20
 - Add: Backend crossfade via dual mpv instances — EQ and crossfade now stay on the lossless mpv path instead of falling back to Web Audio
