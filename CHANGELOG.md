@@ -3,6 +3,9 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: AP80 sync scan now canonicalizes Unicode/diacritics/apostrophes in path matching to prevent false “present on device only” results (e.g. `Mötley` vs `Motley`, `C’mon` vs `Cmon`)
+
+## v0.6-rc · 2026-04-20
 - Fix: Playlist empty-state icon now renders centered in full-cover mode in both playlist grid and detail views
 - Change: Increased empty-state SVG scale for playlist and album placeholders to better match card proportions
 

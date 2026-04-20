@@ -5158,6 +5158,27 @@ SYNC_SKIP_DIR_NAMES = {
 def _normalize_rel(path):
     return str(path or '').replace('\\', '/').strip('/')
 
+_SYNC_APOSTROPHE_CHARS = "'’`´ʼʻ"
+
+def _sync_match_key(path):
+    """
+    Canonical key used only for sync path matching.
+    Makes matching resilient to Unicode normalization / diacritics / apostrophes
+    (e.g. "Mötley Crüe" vs "Motley Crue", "C’mon" vs "Cmon").
+    """
+    rel = _normalize_rel(path)
+    if not rel:
+        return ''
+    segs = []
+    for seg in rel.split('/'):
+        s = unicodedata.normalize('NFKD', str(seg or ''))
+        s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+        for ap in _SYNC_APOSTROPHE_CHARS:
+            s = s.replace(ap, '')
+        s = re.sub(r'\s+', ' ', s).strip()
+        segs.append(s.casefold())
+    return '/'.join(segs)
+
 
 def _is_music_file_path(path):
     ext = Path(str(path or '')).suffix.lower()
@@ -5295,10 +5316,14 @@ def _build_sync_track_entries(template):
         tracks = list(library)
 
     lib_by_rel = {}
+    lib_by_match = {}
     for t in tracks:
         rel = _normalize_rel(t.get('path'))
         if rel and _is_music_file_path(rel):
             lib_by_rel[rel.casefold()] = t
+            mk = _sync_match_key(rel)
+            if mk:
+                lib_by_match.setdefault(mk, t)
 
     local_files = walk_music_files(get_music_base())
     entries = []
@@ -5307,6 +5332,8 @@ def _build_sync_track_entries(template):
         if not local_rel:
             continue
         t = lib_by_rel.get(local_rel.casefold())
+        if not t:
+            t = lib_by_match.get(_sync_match_key(local_rel))
         rendered_rel = ''
         warns = []
         if t:
@@ -5347,12 +5374,19 @@ def _compute_sync_diff_for_dap(dap):
 
     device_files = sorted(walk_music_files(device_path))
     device_map = {_normalize_rel(p).casefold(): _normalize_rel(p) for p in device_files}
+    device_by_match = {}
+    for p in device_files:
+        rel = _normalize_rel(p)
+        mk = _sync_match_key(rel)
+        if mk:
+            device_by_match.setdefault(mk, []).append(rel.casefold())
 
     device_keys = set(device_map.keys())
     manifest_records = _get_dap_sync_manifest(dap_id)
     manifest_updates = {}
     manifest_seen_keys = set()
     expected_keys = set()
+    expected_match_keys = set()
     local_only = []
     local_copy_map = {}
     local_only_existing_sizes = {}
@@ -5369,6 +5403,12 @@ def _compute_sync_diff_for_dap(dap):
         if rendered_key:
             variants.add(rendered_key)
         expected_keys.update(variants)
+        local_match_key = _sync_match_key(e['local_rel'])
+        rendered_match_key = _sync_match_key(e['rendered_rel']) if e['rendered_rel'] else ''
+        if local_match_key:
+            expected_match_keys.add(local_match_key)
+        if rendered_match_key:
+            expected_match_keys.add(rendered_match_key)
 
         matched_key = None
         if rendered_key and rendered_key in device_keys:
@@ -5377,6 +5417,16 @@ def _compute_sync_diff_for_dap(dap):
             matched_key = local_key
         elif not variants.isdisjoint(device_keys):
             matched_key = next(iter(variants & device_keys))
+        else:
+            # Canonicalized fallback match for Unicode/ASCII punctuation variants.
+            candidate_keys = []
+            if rendered_match_key:
+                candidate_keys.extend(device_by_match.get(rendered_match_key, []))
+            if not candidate_keys and local_match_key:
+                candidate_keys.extend(device_by_match.get(local_match_key, []))
+            if candidate_keys:
+                # Deterministic winner (stable across scans).
+                matched_key = sorted(set(candidate_keys))[0]
 
         if matched_key is None:
             target_rel = e['target_rel']
@@ -5453,7 +5503,14 @@ def _compute_sync_diff_for_dap(dap):
         }
 
     local_only = sorted(set(local_only))
-    device_only.extend([device_map[k] for k in (device_keys - expected_keys)])
+    for key in (device_keys - expected_keys):
+        rel = device_map.get(key)
+        if not rel:
+            continue
+        mk = _sync_match_key(rel)
+        if mk and mk in expected_match_keys:
+            continue
+        device_only.append(rel)
     device_only = sorted(set(device_only))
     for rel in device_only:
         device_only_reasons[rel] = 'Present on device only (not found in local library scan)'
