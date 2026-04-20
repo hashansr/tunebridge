@@ -146,7 +146,7 @@ function artworkUrl(key) {
 }
 
 function coverPlaceholder(kind = 'song', size = 38, rounded = '4px', full = false) {
-  const validKind = ['artist', 'album', 'song'].includes(kind) ? kind : 'song';
+  const validKind = ['artist', 'album', 'song', 'playlist'].includes(kind) ? kind : 'song';
   const style = full
     ? `width:100%;height:100%;border-radius:${rounded};`
     : `width:${size}px;height:${size}px;border-radius:${rounded};`;
@@ -855,7 +855,7 @@ async function loadPlaylistsView() {
     } else {
       const keys = (pl.artwork_keys || []).slice(0, 4);
       if (!keys.length) {
-        coverHtml = coverPlaceholder('song', 40, '8px');
+        coverHtml = coverPlaceholder('playlist', 40, '8px');
       } else if (keys.length === 1) {
         coverHtml = `<img src="/api/artwork/${keys[0]}" style="width:100%;height:100%;object-fit:cover" loading="lazy" />`;
       } else {
@@ -2081,7 +2081,7 @@ function updatePlaylistCover(tracks) {
 
   if (!keys.length) {
     cover.className = 'playlist-cover';
-    cover.innerHTML = coverPlaceholder('song', 56, '8px');
+    cover.innerHTML = coverPlaceholder('playlist', 56, '8px');
     return;
   }
 

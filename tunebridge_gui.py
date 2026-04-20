@@ -72,6 +72,8 @@ _NX_SUBTYPE_AUX_CONTROL_BUTTON = 8
 _NX_KEYTYPE_PLAY     = 16
 _NX_KEYTYPE_NEXT     = 17
 _NX_KEYTYPE_PREVIOUS = 18
+_NX_KEYTYPE_FAST     = 19
+_NX_KEYTYPE_REWIND   = 20
 
 
 def _start_server():
@@ -135,14 +137,17 @@ def _start_media_key_bridge(window):
                     if cmd == 'play_pause':
                         window.evaluate_js(
                             'if (window.Player && Player.togglePlay) { Player.togglePlay(); }'
+                            ' else { document.getElementById("player-play-btn")?.click(); }'
                         )
                     elif cmd == 'next':
                         window.evaluate_js(
                             'if (window.Player && Player.next) { Player.next(); }'
+                            ' else { document.getElementById("player-next-btn")?.click(); }'
                         )
                     elif cmd == 'previous':
                         window.evaluate_js(
                             'if (window.Player && Player.prev) { Player.prev(); }'
+                            ' else { document.getElementById("player-prev-btn")?.click(); }'
                         )
                 except Exception:
                     # Window closed / JS runtime unavailable; stop silently.
@@ -150,6 +155,17 @@ def _start_media_key_bridge(window):
 
     worker = threading.Thread(target=_drain_js_worker, daemon=True)
     worker.start()
+
+    _last_fire = {'play_pause': 0.0, 'next': 0.0, 'previous': 0.0}
+    _dedupe_sec = 0.12
+
+    def _maybe_enqueue(cmd: str):
+        now = time.monotonic()
+        last = _last_fire.get(cmd, 0.0)
+        if (now - last) < _dedupe_sec:
+            return
+        _last_fire[cmd] = now
+        _enqueue(cmd)
 
     def _handle_event(ev):
         try:
@@ -168,11 +184,11 @@ def _start_media_key_bridge(window):
                 return ev
 
             if key_code == _NX_KEYTYPE_PLAY:
-                _enqueue('play_pause')
-            elif key_code == _NX_KEYTYPE_NEXT:
-                _enqueue('next')
-            elif key_code == _NX_KEYTYPE_PREVIOUS:
-                _enqueue('previous')
+                _maybe_enqueue('play_pause')
+            elif key_code in (_NX_KEYTYPE_NEXT, _NX_KEYTYPE_FAST):
+                _maybe_enqueue('next')
+            elif key_code in (_NX_KEYTYPE_PREVIOUS, _NX_KEYTYPE_REWIND):
+                _maybe_enqueue('previous')
         except Exception:
             pass
         return ev
