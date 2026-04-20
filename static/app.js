@@ -5322,8 +5322,10 @@ function _syncUpdatePreviewDirectionLabels() {
   const deviceLabel = _syncDeviceNameLabel();
   const localTitle = document.getElementById('sync-local-title');
   const deviceTitle = document.getElementById('sync-device-title');
+  const playlistTitle = document.getElementById('sync-playlist-title');
   if (localTitle) localTitle.textContent = `Tracks to Add to ${deviceLabel}`;
   if (deviceTitle) deviceTitle.textContent = 'Tracks to Add to Local Library';
+  if (playlistTitle) playlistTitle.textContent = `Playlists to Sync to ${deviceLabel}`;
 }
 
 async function startSyncScan(dapId) {
@@ -5432,6 +5434,28 @@ function _syncFileRows(paths, side, reasons = {}) {
   }).join('');
 }
 
+function _syncPlaylistRows(items = []) {
+  if (!items.length) {
+    return `<div class="sync-empty">No playlists need syncing.</div>`;
+  }
+  const deviceLabel = _syncDeviceNameLabel();
+  return items.map((pl) => {
+    const pid = String(pl.id || '');
+    const name = String(pl.name || 'Playlist');
+    const trackCount = Number(pl.track_count || 0);
+    const reason = String(pl.reason || '').trim();
+    return `<label class="sync-file-row sync-file-row--preview">
+      <input type="checkbox" class="sync-chk sync-chk-playlists" data-plid="${esc(pid)}" checked onchange="App.syncSelectionChanged()" />
+      <div class="sync-file-main">
+        <span class="sync-file-name">${esc(name)}</span>
+        <span class="sync-file-folder">${trackCount} track${trackCount === 1 ? '' : 's'}</span>
+        ${reason ? `<span class="sync-file-reason">${esc(reason)}</span>` : ''}
+      </div>
+      <div class="sync-file-origin">Local Playlists → ${esc(deviceLabel)}</div>
+    </label>`;
+  }).join('');
+}
+
 function _syncWarningRows(items) {
   if (!items || !items.length) return `<div class="sync-empty">No issues detected.</div>`;
   return items.map(msg => `<div class="sync-warning-row">${esc(msg)}</div>`).join('');
@@ -5461,6 +5485,8 @@ function renderSyncPreview(status) {
   _syncUpdatePreviewDirectionLabels();
   document.getElementById('sync-local-count').textContent = status.local_only.length;
   document.getElementById('sync-device-count').textContent = status.device_only.length;
+  const playlistsOut = Array.isArray(status.playlists_out_of_sync) ? status.playlists_out_of_sync : [];
+  document.getElementById('sync-playlist-count').textContent = playlistsOut.length;
   document.getElementById('sync-list-local').innerHTML = _syncFileRows(
     status.local_only,
     'local',
@@ -5471,6 +5497,7 @@ function renderSyncPreview(status) {
     'device',
     status.device_only_reasons || {}
   );
+  document.getElementById('sync-list-playlists').innerHTML = _syncPlaylistRows(playlistsOut);
   const warnings = Array.isArray(status.warnings) ? status.warnings : [];
   _syncPreviewWarningCount = warnings.length;
   document.getElementById('sync-warning-count').textContent = warnings.length;
@@ -5482,6 +5509,8 @@ function renderSyncPreview(status) {
     status.local_only.length ? 'block' : 'none';
   document.getElementById('sync-section-device').style.display =
     status.device_only.length ? 'block' : 'none';
+  document.getElementById('sync-section-playlists').style.display =
+    playlistsOut.length ? 'block' : 'none';
   _syncSectionCollapsed.local = true;
   _syncSectionCollapsed.device = true;
   _syncApplySectionCollapse('local');
@@ -5493,8 +5522,10 @@ function renderSyncPreview(status) {
   // Reset select-all checkboxes
   const allLocal = document.getElementById('chk-all-local');
   const allDevice = document.getElementById('chk-all-device');
+  const allPlaylists = document.getElementById('chk-all-playlists');
   if (allLocal) allLocal.checked = true;
   if (allDevice) allDevice.checked = true;
+  if (allPlaylists) allPlaylists.checked = true;
   syncSelectionChanged();
 
   _syncPhase('preview');
@@ -5511,6 +5542,7 @@ function syncSelectionChanged() {
   const status = _syncLastStatus;
   if (!panel || !status) return;
   const selectedLocal = [...document.querySelectorAll('.sync-chk-local:checked')].map(cb => cb.dataset.path);
+  const selectedPlaylists = [...document.querySelectorAll('.sync-chk-playlists:checked')].map(cb => cb.dataset.plid);
   const localSizes = status.local_only_sizes || {};
   const required = selectedLocal.reduce((sum, rel) => sum + Number(localSizes[rel] || 0), 0);
   const available = (status.space_available_bytes === null || status.space_available_bytes === undefined)
@@ -5521,10 +5553,11 @@ function syncSelectionChanged() {
 
   const addCount = selectedLocal.length;
   const removeCount = [...document.querySelectorAll('.sync-chk-device:checked')].length;
-  const noSelection = addCount === 0 && removeCount === 0;
+  const playlistCount = selectedPlaylists.length;
+  const noSelection = addCount === 0 && removeCount === 0 && playlistCount === 0;
   const tracksLine = noSelection
     ? 'All synced and sounding great. Nothing to copy right now.'
-    : `Music files selected: ${addCount} add • ${removeCount} remove`;
+    : `Selected: ${addCount} track${addCount === 1 ? '' : 's'} to device • ${removeCount} track${removeCount === 1 ? '' : 's'} to local • ${playlistCount} playlist${playlistCount === 1 ? '' : 's'} to sync`;
   let spaceLine = '';
   let className = 'sync-space-summary';
 
@@ -5583,20 +5616,22 @@ function syncSelectionChanged() {
 async function executeSync() {
   const local_paths = [...document.querySelectorAll('.sync-chk-local:checked')].map(cb => cb.dataset.path);
   const device_paths = [...document.querySelectorAll('.sync-chk-device:checked')].map(cb => cb.dataset.path);
+  const playlist_ids = [...document.querySelectorAll('.sync-chk-playlists:checked')].map(cb => cb.dataset.plid);
 
-  if (!local_paths.length && !device_paths.length) {
-    toast('Select at least one file to sync.');
+  if (!local_paths.length && !device_paths.length && !playlist_ids.length) {
+    toast('Select at least one file or playlist to sync.');
     return;
   }
 
   _syncPhase('copying');
   const copyMode = document.getElementById('sync-copying-mode');
   if (copyMode) {
-    if (local_paths.length > 0 && device_paths.length > 0) copyMode.textContent = 'Syncing';
+    if (playlist_ids.length > 0 && local_paths.length === 0 && device_paths.length === 0) copyMode.textContent = 'Syncing Playlists';
+    else if (local_paths.length > 0 && device_paths.length > 0) copyMode.textContent = 'Syncing';
     else if (device_paths.length > 0) copyMode.textContent = 'Removing';
     else copyMode.textContent = 'Copying';
   }
-  document.getElementById('sync-copying-msg').textContent = `Preparing to sync 0 / ${local_paths.length + device_paths.length} files…`;
+  document.getElementById('sync-copying-msg').textContent = `Preparing to sync 0 / ${local_paths.length + device_paths.length + playlist_ids.length} items…`;
   _syncSetCopyVisualProgress(0);
   const copyPctEl = document.getElementById('sync-copy-percent');
   if (copyPctEl) copyPctEl.textContent = '0%';
@@ -5605,7 +5640,7 @@ async function executeSync() {
   const execRes = await fetch('/api/sync/execute', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ local_paths, device_paths }),
+    body: JSON.stringify({ local_paths, device_paths, playlist_ids }),
   });
   if (!execRes.ok) {
     const err = await execRes.json().catch(() => ({}));
@@ -6224,6 +6259,9 @@ async function showDapDetail(id) {
           <button id="dap-check-sync-btn" class="btn-secondary" onclick="App.checkDapSyncStatus('${dap.id}')" ${syncState === 'checking' ? 'disabled' : ''}>
             ${syncState === 'checking' ? 'Checking…' : 'Check Sync Status'}
           </button>
+          <button class="btn-secondary" onclick="App.dapExportAllPlaylists('${dap.id}', this)" ${dap.mounted ? '' : 'disabled title="Device not mounted"'}>
+            ${dap.mounted ? 'Sync All Playlists' : 'Not mounted'}
+          </button>
           <button class="btn-secondary" onclick="App.showEditDapModal('${dap.id}')">Edit</button>
           <button class="btn-danger-sm" onclick="App.deleteDap('${dap.id}')">Delete</button>
         </div>
@@ -6272,6 +6310,30 @@ async function dapExportPlaylist(dapId, plId, btn) {
     toast('Export failed. Check the device is connected.');
     btn.disabled = false;
     btn.textContent = 'Sync';
+  }
+}
+
+async function dapExportAllPlaylists(dapId, btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Syncing…';
+  }
+  try {
+    const res = await api(`/daps/${dapId}/export-all-playlists`, {
+      method: 'POST',
+      body: { only_out_of_sync: true },
+    });
+    const exported = Number(res?.exported_count || 0);
+    const failed = Number(res?.failed_count || 0);
+    toast(`Playlists synced: ${exported}${failed ? `, failed: ${failed}` : ''}`);
+    await showDapDetail(dapId);
+    await loadDapsView();
+  } catch (e) {
+    toast('Playlist sync failed: ' + e.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Sync All Playlists';
+    }
   }
 }
 
@@ -9506,6 +9568,7 @@ const App = {
   saveDap,
   deleteDap,
   dapExportPlaylist,
+  dapExportAllPlaylists,
   // IEM
   showIemDetail,
   showAddIemModal,

@@ -348,6 +348,8 @@ sync_state = {
     'space_required_bytes': 0,
     'space_shortfall_bytes': 0,
     'space_ok': True,
+    'playlists_out_of_sync': [],
+    'playlists_out_of_sync_count': 0,
 }
 sync_check_lock = threading.Lock()
 sync_check_inflight = set()

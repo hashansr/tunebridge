@@ -2904,21 +2904,24 @@ tr.track-selected .track-check-indicator {
 /* Step 3: hard-disable nested scroll containers (single modal scroll only) */
 #sync-phase-preview #sync-warnings-wrap,
 #sync-phase-preview #sync-section-local,
-#sync-phase-preview #sync-section-device {
+#sync-phase-preview #sync-section-device,
+#sync-phase-preview #sync-section-playlists {
   max-height: none !important;
   overflow: visible !important;
 }
 
 #sync-phase-preview #sync-list-warnings,
 #sync-phase-preview #sync-list-local,
-#sync-phase-preview #sync-list-device {
+#sync-phase-preview #sync-list-device,
+#sync-phase-preview #sync-list-playlists {
   max-height: none !important;
   overflow: visible !important;
 }
 
 #sync-phase-preview #sync-list-warnings::-webkit-scrollbar,
 #sync-phase-preview #sync-list-local::-webkit-scrollbar,
-#sync-phase-preview #sync-list-device::-webkit-scrollbar {
+#sync-phase-preview #sync-list-device::-webkit-scrollbar,
+#sync-phase-preview #sync-list-playlists::-webkit-scrollbar {
   width: 0 !important;
   height: 0 !important;
   display: none !important;

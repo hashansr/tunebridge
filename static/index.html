@@ -1492,6 +1492,20 @@
               <div class="sync-list" id="sync-list-device"></div>
             </div>
 
+            <div id="sync-section-playlists" class="sync-section">
+              <div class="sync-section-hdr">
+                <div class="sync-section-hdr-left">
+                  <span class="sync-section-title sync-section-title--add" id="sync-playlist-title">Playlists to Sync</span>
+                  <span class="sync-count-pill" id="sync-playlist-count">0</span>
+                </div>
+                <label class="sync-check-all">
+                  <input type="checkbox" id="chk-all-playlists" onchange="App.syncToggleAll('playlists', this.checked)" checked />
+                  Select all
+                </label>
+              </div>
+              <div class="sync-list" id="sync-list-playlists"></div>
+            </div>
+
             <div id="sync-space-summary" class="sync-space-summary" style="display:block"></div>
           </div>
 
