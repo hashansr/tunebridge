@@ -4444,6 +4444,7 @@ function showView(viewName) {
     viewName = 'favourites';
   }
   state.view = viewName;
+  if (viewName !== 'missing-tags') _insightsMissingTagsOpen = false;
   state.playlist = null;
   clearSelection();
   setActiveNav(viewName);
@@ -4477,7 +4478,7 @@ function showView(viewName) {
 }
 
 function showViewEl(name) {
-  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights'];
+  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'missing-tags'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.style.display = v === name ? (v === 'playlist' ? 'flex' : 'block') : 'none';
@@ -4503,6 +4504,7 @@ function setActiveNav(view) {
     'fav-artists': 'favourites',
     'fav-albums': 'favourites',
     'fav-songs': 'favourites',
+    'missing-tags': 'insights',
   };
   const navView = NAV_MAP[view] || view;
   document.querySelectorAll('.nav-item').forEach(el => {
@@ -4638,6 +4640,9 @@ async function _restoreNavSnapshot(snap) {
       setActiveNav('insights'); renderSidebarPlaylists(); showViewEl('insights');
       await loadInsightsView();
       break;
+    case 'missing-tags':
+      await openMissingTagsEditor();
+      return;
   }
   if (main && snap.scrollTop !== undefined) {
     setTimeout(() => { main.scrollTop = snap.scrollTop; }, 60);
@@ -9554,6 +9559,11 @@ const App = {
   closeMissingTagsEditor,
   setMissingTagsFilter,
   setMissingTagsSearch,
+  toggleMissingTagSelection,
+  toggleMissingTagsSelectAll,
+  openMissingTagsBulkEditor,
+  closeMissingTagsBulkEditor,
+  saveMissingTagsBulkEditor,
   openGenreDistributionModal,
   closeGenreDistributionModal,
 
@@ -9688,9 +9698,6 @@ async function loadInsightsView() {
   if (sonicRes && sonicRes.ok)  { try { _renderInsightsSonicProfile(await sonicRes.json()); } catch (_) {} }
   if (matchRes && matchRes.ok)  { try { _renderInsightsMatchOverview(await matchRes.json()); } catch (_) { _renderInsightsMatchOverview(null); } }
   else                          _renderInsightsMatchOverview(null);  // show CTA to run analysis
-  if (_insightsMissingTagsOpen) {
-    await openMissingTagsEditor();
-  }
 }
 
 let _insightsGenreChart = null;
@@ -9699,6 +9706,7 @@ let _insightsMissingTags = [];
 let _insightsMissingTagsFilter = 'all';
 let _insightsMissingTagsSearch = '';
 let _insightsMissingTagsOpen = false;
+let _insightsMissingSelected = new Set();
 
 function _renderInsightsOverview(d) {
   const el = document.getElementById('insights-overview-content');
@@ -9931,18 +9939,35 @@ function _filteredMissingTags() {
   });
 }
 
+function _syncMissingTagsActions() {
+  const selectedCount = _insightsMissingSelected.size;
+  const bulkBtn = document.getElementById('missing-tags-bulk-edit-btn');
+  if (bulkBtn) {
+    bulkBtn.disabled = selectedCount === 0;
+    bulkBtn.textContent = selectedCount > 0 ? `Edit selected (${selectedCount})` : 'Edit selected';
+  }
+  const filteredRows = _filteredMissingTags();
+  const allSelected = filteredRows.length > 0 && filteredRows.every(t => _insightsMissingSelected.has(t.id));
+  const selectAllBtn = document.getElementById('missing-tags-select-all-btn');
+  if (selectAllBtn) {
+    selectAllBtn.textContent = allSelected ? 'Unselect all' : 'Select all';
+  }
+}
+
 function _renderMissingTagsTable() {
   const wrap = document.getElementById('insights-missing-tags-content');
   if (!wrap) return;
   const rows = _filteredMissingTags();
   if (!rows.length) {
     wrap.innerHTML = `<div class="insights-missing-tags-empty">No tracks match the current filter.</div>`;
+    _syncMissingTagsActions();
     return;
   }
   wrap.innerHTML = `<div class="insights-missing-tags-wrap">
     <table class="insights-missing-tags-table">
       <thead>
         <tr>
+          <th style="width:44px"></th>
           <th>Title</th>
           <th>Artist</th>
           <th>Album</th>
@@ -9953,6 +9978,9 @@ function _renderMissingTagsTable() {
       <tbody>
         ${rows.map(t => `
           <tr>
+            <td>
+              <input type="checkbox" class="row-select" ${_insightsMissingSelected.has(t.id) ? 'checked' : ''} onchange="App.toggleMissingTagSelection('${t.id}', this.checked)" />
+            </td>
             <td><div class="track-title">${esc(t.title || '')}</div></td>
             <td>${esc(t.artist || '')}</td>
             <td>${esc(t.album || '')}</td>
@@ -9963,34 +9991,43 @@ function _renderMissingTagsTable() {
       </tbody>
     </table>
   </div>`;
+  _syncMissingTagsActions();
 }
 
 async function openMissingTagsEditor() {
-  const section = document.getElementById('insights-missing-tags-section');
+  const section = document.getElementById('view-missing-tags');
   const content = document.getElementById('insights-missing-tags-content');
   if (!section || !content) return;
+  state.view = 'missing-tags';
+  setActiveNav('missing-tags');
+  renderSidebarPlaylists();
+  showViewEl('missing-tags');
   const filterEl = document.getElementById('insights-missing-tags-filter');
   const searchEl = document.getElementById('insights-missing-tags-search');
   if (filterEl) filterEl.value = _insightsMissingTagsFilter;
   if (searchEl) searchEl.value = _insightsMissingTagsSearch;
   _insightsMissingTagsOpen = true;
-  section.style.display = 'block';
   content.innerHTML = '<div class="insights-spinner-wrap"><div class="spinner"></div></div>';
   try {
     const res = await fetch('/api/insights/tag-health?problem_limit=10000');
     if (!res.ok) throw new Error('Could not load problem tracks');
     const data = await res.json();
     _insightsMissingTags = data.problem_tracks || [];
+    _insightsMissingSelected = new Set();
     _renderMissingTagsTable();
   } catch (e) {
     content.innerHTML = '<div class="insights-missing-tags-empty">Could not load missing-tag tracks.</div>';
+    _syncMissingTagsActions();
   }
 }
 
 function closeMissingTagsEditor() {
   _insightsMissingTagsOpen = false;
-  const section = document.getElementById('insights-missing-tags-section');
-  if (section) section.style.display = 'none';
+  state.view = 'insights';
+  setActiveNav('insights');
+  renderSidebarPlaylists();
+  showViewEl('insights');
+  loadInsightsView();
 }
 
 function setMissingTagsFilter(value) {
@@ -10001,6 +10038,89 @@ function setMissingTagsFilter(value) {
 function setMissingTagsSearch(value) {
   _insightsMissingTagsSearch = value || '';
   _renderMissingTagsTable();
+}
+
+function toggleMissingTagSelection(trackId, checked) {
+  if (checked) _insightsMissingSelected.add(trackId);
+  else _insightsMissingSelected.delete(trackId);
+  _syncMissingTagsActions();
+}
+
+function toggleMissingTagsSelectAll() {
+  const rows = _filteredMissingTags();
+  if (!rows.length) return;
+  const allSelected = rows.every(t => _insightsMissingSelected.has(t.id));
+  if (allSelected) rows.forEach(t => _insightsMissingSelected.delete(t.id));
+  else rows.forEach(t => _insightsMissingSelected.add(t.id));
+  _renderMissingTagsTable();
+}
+
+function openMissingTagsBulkEditor() {
+  const selected = _insightsMissingSelected.size;
+  if (!selected) {
+    toast('Select at least one track');
+    return;
+  }
+  document.getElementById('missing-tags-bulk-warning-text').textContent =
+    `This will overwrite tags on ${selected} selected file${selected !== 1 ? 's' : ''} on disk. Only filled fields are applied.`;
+  ['mtb-artist', 'mtb-album-artist', 'mtb-album', 'mtb-year', 'mtb-genre'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  _hideTagError('mtb-error');
+  const btn = document.getElementById('mtb-save-btn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Save Tags'; }
+  const modal = document.getElementById('missing-tags-bulk-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeMissingTagsBulkEditor() {
+  const modal = document.getElementById('missing-tags-bulk-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function saveMissingTagsBulkEditor() {
+  const ids = [..._insightsMissingSelected];
+  if (!ids.length) return;
+  const changes = {
+    artist: document.getElementById('mtb-artist')?.value.trim() || '',
+    album_artist: document.getElementById('mtb-album-artist')?.value.trim() || '',
+    album: document.getElementById('mtb-album')?.value.trim() || '',
+    year: document.getElementById('mtb-year')?.value.trim() || '',
+    genre: document.getElementById('mtb-genre')?.value.trim() || '',
+  };
+  if (!_validateYear(changes.year)) {
+    _showTagError('mtb-error', 'Year must be a 4-digit number (e.g. 2003).');
+    return;
+  }
+  const payload = {};
+  Object.entries(changes).forEach(([k, v]) => {
+    if (v) payload[k] = v;
+  });
+  if (!Object.keys(payload).length) {
+    _showTagError('mtb-error', 'Fill in at least one field to update.');
+    return;
+  }
+  const btn = document.getElementById('mtb-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  _hideTagError('mtb-error');
+  try {
+    const result = await api('/library/tracks/bulk-tags', {
+      method: 'PUT',
+      body: { track_ids: ids, changes: payload },
+    });
+    const errors = result.errors || [];
+    if (errors.length) {
+      toast(`Saved ${result.updated}/${result.total} tracks`, 4500);
+    } else {
+      toast(`Tags saved for ${result.updated} track${result.updated !== 1 ? 's' : ''}`);
+    }
+    closeMissingTagsBulkEditor();
+    await openMissingTagsEditor();
+  } catch (e) {
+    _showTagError('mtb-error', e.message || 'Bulk save failed.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Tags'; }
+  }
 }
 
 function openGenreDistributionModal() {
@@ -11548,6 +11668,8 @@ async function saveTagEditor() {
       const tagRes = await fetch('/api/insights/tag-health').catch(() => null);
       if (tagRes && tagRes.ok) _renderInsightsTagHealth(await tagRes.json());
       if (_insightsMissingTagsOpen) await openMissingTagsEditor();
+    } else if (state.view === 'missing-tags') {
+      await openMissingTagsEditor();
     }
   } catch (e) {
     _showTagError('te-error', e.message || 'Save failed. The file may be read-only or in use.');

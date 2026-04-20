@@ -2137,6 +2137,45 @@ def update_track_tags(track_id):
     return jsonify(updated)
 
 
+@app.route('/api/library/tracks/bulk-tags', methods=['PUT'])
+def update_tracks_bulk_tags():
+    """Batch-edit tag fields across selected tracks."""
+    data = request.json or {}
+    track_ids = data.get('track_ids') or []
+    if not isinstance(track_ids, list) or not track_ids:
+        return jsonify({'error': 'track_ids must be a non-empty list'}), 400
+
+    # Normalize/dedupe IDs while preserving order.
+    seen = set()
+    normalized_ids = []
+    for tid in track_ids:
+        sid = str(tid or '').strip()
+        if not sid or sid in seen:
+            continue
+        seen.add(sid)
+        normalized_ids.append(sid)
+    if not normalized_ids:
+        return jsonify({'error': 'No valid track IDs provided'}), 400
+
+    raw_changes = data.get('changes') or {}
+    if not isinstance(raw_changes, dict):
+        return jsonify({'error': 'changes must be an object'}), 400
+    changes = {k: raw_changes.get(k) for k in _EDITABLE_FIELDS if k in raw_changes}
+    if not changes:
+        return jsonify({'error': 'No editable fields provided'}), 400
+
+    updated = 0
+    errors = []
+    for tid in normalized_ids:
+        _, err = _apply_tag_edit(tid, changes)
+        if err:
+            errors.append({'id': tid, 'error': err})
+            continue
+        updated += 1
+
+    return jsonify({'updated': updated, 'total': len(normalized_ids), 'errors': errors})
+
+
 @app.route('/api/library/albums/tags', methods=['PUT'])
 def update_album_tags():
     """Batch-edit shared tag fields across all tracks in an album."""

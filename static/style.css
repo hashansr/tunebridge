@@ -8717,6 +8717,7 @@ tr.player-active .track-title { color: var(--accent); }
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
   margin: 4px 0 12px;
 }
 
@@ -8739,7 +8740,7 @@ tr.player-active .track-title { color: var(--accent); }
   overflow: auto;
   border: 1px solid var(--line-soft);
   border-radius: 12px;
-  background: var(--surface-2);
+  background: var(--surface-table-gradient-muted);
 }
 
 .insights-missing-tags-table {
@@ -8769,9 +8770,22 @@ tr.player-active .track-title { color: var(--accent); }
   color: var(--text-secondary);
 }
 
+.insights-missing-tags-table tbody tr:nth-child(even) {
+  background: rgba(255,255,255,0.015);
+}
+
+.insights-missing-tags-table tbody tr:hover {
+  background: rgba(173,198,255,0.06);
+}
+
 .insights-missing-tags-table .track-title {
   color: var(--text-primary);
   font-weight: 600;
+}
+
+.insights-missing-tags-table .row-select {
+  width: 18px;
+  height: 18px;
 }
 
 .insights-missing-tags-empty {
