@@ -9622,6 +9622,8 @@ const App = {
   closeMissingTagsEditor,
   setMissingTagsFilter,
   setMissingTagsSearch,
+  setMissingTagDraft,
+  saveMissingTagRow,
   toggleMissingTagSelection,
   toggleMissingTagsSelectAll,
   openMissingTagsBulkEditor,
@@ -9770,6 +9772,53 @@ let _insightsMissingTagsFilter = 'all';
 let _insightsMissingTagsSearch = '';
 let _insightsMissingTagsOpen = false;
 let _insightsMissingSelected = new Set();
+let _insightsMissingDrafts = {};
+
+function _missingIssuesForTrack(t) {
+  const issues = [];
+  if (!String(t?.title || '').trim()) issues.push('title');
+  if (!String(t?.artist || '').trim()) issues.push('artist');
+  if (!String(t?.album || '').trim()) issues.push('album');
+  if (!String(t?.year || '').trim()) issues.push('year');
+  if (!String(t?.genre || '').trim()) issues.push('genre');
+  return issues;
+}
+
+function _missingFieldPlaceholder(field) {
+  const map = {
+    title: 'Enter title',
+    artist: 'Enter artist',
+    album: 'Enter album',
+    year: 'YYYY',
+    genre: 'Enter genre',
+  };
+  return map[field] || 'Enter value';
+}
+
+function _missingDraftFor(trackId) {
+  return _insightsMissingDrafts[trackId] || {};
+}
+
+function _renderMissingInlineEditor(track) {
+  const issues = track?.issues || [];
+  if (!issues.length) return '<span class="muted">No missing tags</span>';
+  const draft = _missingDraftFor(track.id);
+  const fieldsHtml = issues.map(field => {
+    const v = String(draft[field] || '').replace(/"/g, '&quot;');
+    const ph = _missingFieldPlaceholder(field);
+    return `<label class="missing-inline-field">
+      <span>${esc(field)}</span>
+      <input
+        type="text"
+        class="missing-inline-input"
+        value="${v}"
+        placeholder="${ph}"
+        oninput="App.setMissingTagDraft('${track.id}', '${field}', this.value)"
+      />
+    </label>`;
+  }).join('');
+  return `<div class="missing-inline-editor">${fieldsHtml}</div>`;
+}
 
 function _renderInsightsOverview(d) {
   const el = document.getElementById('insights-overview-content');
@@ -10035,7 +10084,8 @@ function _renderMissingTagsTable() {
           <th>Artist</th>
           <th>Album</th>
           <th>Missing Tags</th>
-          <th>Action</th>
+          <th style="min-width:260px">Inline Edit</th>
+          <th>Save</th>
         </tr>
       </thead>
       <tbody>
@@ -10048,7 +10098,8 @@ function _renderMissingTagsTable() {
             <td>${esc(t.artist || '')}</td>
             <td>${esc(t.album || '')}</td>
             <td>${(t.issues || []).map(i => `<span class="tag-issue-chip">${esc(i)}</span>`).join(' ')}</td>
-            <td><button class="btn-secondary" onclick="App.openTagEditor('${t.id}')">Edit tags</button></td>
+            <td>${_renderMissingInlineEditor(t)}</td>
+            <td><button class="btn-primary btn-sm" onclick="App.saveMissingTagRow('${t.id}')">Save</button></td>
           </tr>
         `).join('')}
       </tbody>
@@ -10061,6 +10112,7 @@ async function openMissingTagsEditor() {
   const section = document.getElementById('view-missing-tags');
   const content = document.getElementById('insights-missing-tags-content');
   if (!section || !content) return;
+  if (state.view !== 'missing-tags') _pushToNavHistory();
   state.view = 'missing-tags';
   setActiveNav('missing-tags');
   renderSidebarPlaylists();
@@ -10075,8 +10127,12 @@ async function openMissingTagsEditor() {
     const res = await fetch('/api/insights/tag-health?problem_limit=10000');
     if (!res.ok) throw new Error('Could not load problem tracks');
     const data = await res.json();
-    _insightsMissingTags = data.problem_tracks || [];
+    _insightsMissingTags = (data.problem_tracks || []).map(t => ({
+      ...t,
+      issues: Array.isArray(t.issues) && t.issues.length ? t.issues : _missingIssuesForTrack(t),
+    }));
     _insightsMissingSelected = new Set();
+    _insightsMissingDrafts = {};
     _renderMissingTagsTable();
   } catch (e) {
     content.innerHTML = '<div class="insights-missing-tags-empty">Could not load missing-tag tracks.</div>';
@@ -10091,6 +10147,54 @@ function closeMissingTagsEditor() {
   renderSidebarPlaylists();
   showViewEl('insights');
   loadInsightsView();
+}
+
+function setMissingTagDraft(trackId, field, value) {
+  const id = String(trackId || '');
+  if (!id || !field) return;
+  if (!_insightsMissingDrafts[id]) _insightsMissingDrafts[id] = {};
+  _insightsMissingDrafts[id][field] = String(value || '');
+}
+
+async function saveMissingTagRow(trackId) {
+  const id = String(trackId || '');
+  if (!id) return;
+  const draft = _missingDraftFor(id);
+  const payload = {};
+  ['title', 'artist', 'album', 'year', 'genre'].forEach(k => {
+    const v = String(draft[k] || '').trim();
+    if (v) payload[k] = v;
+  });
+  if (!Object.keys(payload).length) {
+    toast('Add at least one value for this row');
+    return;
+  }
+  if (!_validateYear(payload.year || '')) {
+    toast('Year must be a 4-digit number');
+    return;
+  }
+  try {
+    const updated = await api(`/library/tracks/${encodeURIComponent(id)}/tags`, {
+      method: 'PUT',
+      body: payload,
+    });
+    const idx = (_insightsMissingTags || []).findIndex(t => String(t.id) === id);
+    if (idx >= 0) {
+      const next = { ..._insightsMissingTags[idx], ...updated };
+      next.issues = _missingIssuesForTrack(next);
+      if (!next.issues.length) {
+        _insightsMissingTags.splice(idx, 1);
+        _insightsMissingSelected.delete(id);
+      } else {
+        _insightsMissingTags[idx] = next;
+      }
+    }
+    delete _insightsMissingDrafts[id];
+    _renderMissingTagsTable();
+    toast('Tags saved');
+  } catch (e) {
+    toast(e.message || 'Could not save tags');
+  }
 }
 
 function setMissingTagsFilter(value) {

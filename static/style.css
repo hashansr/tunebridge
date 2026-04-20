@@ -8799,6 +8799,42 @@ tr.player-active .track-title { color: var(--accent); }
   height: 18px;
 }
 
+.missing-inline-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.missing-inline-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 120px;
+}
+
+.missing-inline-field > span {
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.missing-inline-input {
+  background: var(--surface-2);
+  color: var(--text-primary);
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  padding: 7px 9px;
+  font-size: 12px;
+  min-width: 120px;
+}
+
+.missing-inline-input:focus {
+  outline: none;
+  border-color: rgba(173, 198, 255, 0.55);
+  box-shadow: 0 0 0 2px rgba(173, 198, 255, 0.14);
+}
+
 .insights-missing-tags-empty {
   padding: 14px;
   color: var(--text-muted);
