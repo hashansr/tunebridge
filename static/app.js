@@ -9550,6 +9550,10 @@ const App = {
   insightsRescanLibrary,
   openProblemTracksModal,
   closeProblemTracksModal,
+  openMissingTagsEditor,
+  closeMissingTagsEditor,
+  setMissingTagsFilter,
+  setMissingTagsSearch,
   openGenreDistributionModal,
   closeGenreDistributionModal,
 
@@ -9684,10 +9688,17 @@ async function loadInsightsView() {
   if (sonicRes && sonicRes.ok)  { try { _renderInsightsSonicProfile(await sonicRes.json()); } catch (_) {} }
   if (matchRes && matchRes.ok)  { try { _renderInsightsMatchOverview(await matchRes.json()); } catch (_) { _renderInsightsMatchOverview(null); } }
   else                          _renderInsightsMatchOverview(null);  // show CTA to run analysis
+  if (_insightsMissingTagsOpen) {
+    await openMissingTagsEditor();
+  }
 }
 
 let _insightsGenreChart = null;
 let _allInsightGenres = [];
+let _insightsMissingTags = [];
+let _insightsMissingTagsFilter = 'all';
+let _insightsMissingTagsSearch = '';
+let _insightsMissingTagsOpen = false;
 
 function _renderInsightsOverview(d) {
   const el = document.getElementById('insights-overview-content');
@@ -9863,7 +9874,7 @@ function _renderInsightsTagHealth(d) {
     </div>`;
   }).join('');
 
-  // Pre-populate problem tracks modal
+  // Pre-populate problem tracks modal (legacy)
   const modalTitle = document.getElementById('problem-tracks-modal-title');
   const modalBody  = document.getElementById('problem-tracks-modal-body');
   if (d.problem_track_count > 0 && modalBody) {
@@ -9878,8 +9889,8 @@ function _renderInsightsTagHealth(d) {
 
   const problemFooter = d.problem_track_count === 0
     ? `<span class="tag-health-ok-note">All tracks have complete metadata</span>`
-    : `<button class="tag-health-problem-btn" onclick="App.openProblemTracksModal()">
-        View ${d.problem_track_count.toLocaleString()} track${d.problem_track_count > 1 ? 's' : ''} with missing tags →
+    : `<button class="tag-health-problem-btn" onclick="App.openMissingTagsEditor()">
+        Manage ${d.problem_track_count.toLocaleString()} track${d.problem_track_count > 1 ? 's' : ''} with missing tags →
       </button>`;
 
   const dupNote = d.artist_duplicates.length > 0
@@ -9905,6 +9916,91 @@ function openProblemTracksModal() {
 
 function closeProblemTracksModal() {
   document.getElementById('problem-tracks-modal').style.display = 'none';
+}
+
+function _filteredMissingTags() {
+  const q = (_insightsMissingTagsSearch || '').toLowerCase().trim();
+  return (_insightsMissingTags || []).filter(t => {
+    const matchFilter = _insightsMissingTagsFilter === 'all'
+      ? true
+      : (t.issues || []).includes(_insightsMissingTagsFilter);
+    if (!matchFilter) return false;
+    if (!q) return true;
+    const blob = `${t.title || ''} ${t.artist || ''} ${t.album || ''} ${t.path || ''}`.toLowerCase();
+    return blob.includes(q);
+  });
+}
+
+function _renderMissingTagsTable() {
+  const wrap = document.getElementById('insights-missing-tags-content');
+  if (!wrap) return;
+  const rows = _filteredMissingTags();
+  if (!rows.length) {
+    wrap.innerHTML = `<div class="insights-missing-tags-empty">No tracks match the current filter.</div>`;
+    return;
+  }
+  wrap.innerHTML = `<div class="insights-missing-tags-wrap">
+    <table class="insights-missing-tags-table">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Artist</th>
+          <th>Album</th>
+          <th>Missing Tags</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(t => `
+          <tr>
+            <td><div class="track-title">${esc(t.title || '')}</div></td>
+            <td>${esc(t.artist || '')}</td>
+            <td>${esc(t.album || '')}</td>
+            <td>${(t.issues || []).map(i => `<span class="tag-issue-chip">${esc(i)}</span>`).join(' ')}</td>
+            <td><button class="btn-secondary" onclick="App.openTagEditor('${t.id}')">Edit tags</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+async function openMissingTagsEditor() {
+  const section = document.getElementById('insights-missing-tags-section');
+  const content = document.getElementById('insights-missing-tags-content');
+  if (!section || !content) return;
+  const filterEl = document.getElementById('insights-missing-tags-filter');
+  const searchEl = document.getElementById('insights-missing-tags-search');
+  if (filterEl) filterEl.value = _insightsMissingTagsFilter;
+  if (searchEl) searchEl.value = _insightsMissingTagsSearch;
+  _insightsMissingTagsOpen = true;
+  section.style.display = 'block';
+  content.innerHTML = '<div class="insights-spinner-wrap"><div class="spinner"></div></div>';
+  try {
+    const res = await fetch('/api/insights/tag-health?problem_limit=10000');
+    if (!res.ok) throw new Error('Could not load problem tracks');
+    const data = await res.json();
+    _insightsMissingTags = data.problem_tracks || [];
+    _renderMissingTagsTable();
+  } catch (e) {
+    content.innerHTML = '<div class="insights-missing-tags-empty">Could not load missing-tag tracks.</div>';
+  }
+}
+
+function closeMissingTagsEditor() {
+  _insightsMissingTagsOpen = false;
+  const section = document.getElementById('insights-missing-tags-section');
+  if (section) section.style.display = 'none';
+}
+
+function setMissingTagsFilter(value) {
+  _insightsMissingTagsFilter = value || 'all';
+  _renderMissingTagsTable();
+}
+
+function setMissingTagsSearch(value) {
+  _insightsMissingTagsSearch = value || '';
+  _renderMissingTagsTable();
 }
 
 function openGenreDistributionModal() {
@@ -11345,10 +11441,15 @@ async function openTagEditor(trackId) {
 
   // Fetch accurate track data from server
   try {
-    const allTracks = await fetch(`/api/library/tracks?q=${encodeURIComponent(trackId)}`)
-      .then(r => r.json()).catch(() => []);
-    let t = allTracks.find(x => x.id === trackId)
-         || (state.tracks || []).find(x => x.id === trackId);
+    let t = null;
+    const byId = await fetch(`/api/library/tracks/${encodeURIComponent(trackId)}`).catch(() => null);
+    if (byId && byId.ok) t = await byId.json();
+    if (!t) {
+      const allTracks = await fetch(`/api/library/tracks?q=${encodeURIComponent(trackId)}`)
+        .then(r => r.json()).catch(() => []);
+      t = allTracks.find(x => x.id === trackId)
+       || (state.tracks || []).find(x => x.id === trackId);
+    }
 
     if (!t) {
       _showTagError('te-error', 'Track data not found. Try rescanning the library.');
@@ -11443,6 +11544,11 @@ async function saveTagEditor() {
     _tagEditorTrackId = null; _tagEditorOriginal = {};
     if (state.view === 'tracks') loadTracks(state.artist, state.album);
     else if (state.view === 'songs') loadSongs();
+    else if (state.view === 'insights') {
+      const tagRes = await fetch('/api/insights/tag-health').catch(() => null);
+      if (tagRes && tagRes.ok) _renderInsightsTagHealth(await tagRes.json());
+      if (_insightsMissingTagsOpen) await openMissingTagsEditor();
+    }
   } catch (e) {
     _showTagError('te-error', e.message || 'Save failed. The file may be read-only or in use.');
     btn.disabled = false; btn.textContent = 'Save Tags';

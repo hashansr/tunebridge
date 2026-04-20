@@ -427,6 +427,13 @@ def _coerce_year(val):
     """Convert year to int. Handles '2024', None, ''."""
     if val is None:
         return None
+    s = str(val).strip()
+    if not s:
+        return None
+    try:
+        return int(s[:4])
+    except (ValueError, TypeError):
+        return None
 
 
 def _format_duration(seconds):
@@ -436,13 +443,6 @@ def _format_duration(seconds):
         s = 0
     m, s = divmod(max(0, s), 60)
     return f"{m}:{s:02d}"
-    s = str(val).strip()
-    if not s:
-        return None
-    try:
-        return int(s[:4])
-    except (ValueError, TypeError):
-        return None
 
 
 # ---------------------------------------------------------------------------

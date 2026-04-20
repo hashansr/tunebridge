@@ -1214,6 +1214,14 @@ def get_tracks():
     return jsonify(tracks)
 
 
+@app.route('/api/library/tracks/<track_id>', methods=['GET'])
+def get_track_by_id(track_id):
+    t = _db.db_get_track(track_id)
+    if not t:
+        return jsonify({'error': 'Track not found'}), 404
+    return jsonify(t)
+
+
 @app.route('/api/library/artists')
 def get_artists():
     with library_lock:
@@ -1648,7 +1656,7 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
         if int(e.get('played_at') or 0) < thirty_days_ago:
             continue
         info = albums.get(f"{(e.get('artist') or '').lower()}||{(e.get('album') or '').lower()}")
-        g = (info.get('genre') or '').lower() if info else ''
+        g = _norm_genre_text(info.get('genre')) if info else ''
         if g:
             recent_genre_counts[g] = recent_genre_counts.get(g, 0) + 1
     total_recent_genre = sum(recent_genre_counts.values()) or 1
@@ -1671,7 +1679,7 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
         frequency = math.log(1 + p['plays']) / math.log(1 + max_plays)
         novelty = math.exp(-0.5 * ((math.log(1 + p['plays']) - math.log(6)) ** 2) / 1.5)
         info = albums.get(key)
-        g = (info.get('genre') or '').lower() if info else ''
+        g = _norm_genre_text(info.get('genre')) if info else ''
         genre_aff = min((recent_genre_counts.get(g, 0) / total_recent_genre) * 5.0, 1.0) if g else 0.0
         return 0.30 * recency + 0.25 * frequency + 0.25 * genre_aff + 0.20 * novelty
 
@@ -1721,7 +1729,7 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
         recency  = math.exp(-days_since / 30.0)
         frequency = math.log(1 + p['plays']) / math.log(1 + max_plays)
         novelty  = math.exp(-0.5 * ((math.log(1 + p['plays']) - math.log(6)) ** 2) / 1.5)
-        g = (info.get('genre') or '').lower()
+        g = _norm_genre_text(info.get('genre'))
         genre_aff = min((recent_genre_counts.get(g, 0) / total_recent_genre) * 5.0, 1.0) if g else 0.0
 
         sonic_bands = album_sonic.get(key, [])
@@ -1742,7 +1750,7 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
                        'genre': 0.25 * genre_aff, 'novelty': 0.20 * novelty, 'sonic': 0.0}
 
         dominant = max(factors, key=lambda k: factors[k])
-        genre_label = info.get('genre') or ''
+        genre_label = _genre_display_label(_norm_genre_text(info.get('genre')))
         reasons = {
             'recency':   "You've been listening to similar albums lately",
             'frequency': "One of your most-played albums recently",
@@ -1854,9 +1862,11 @@ def _home_stats_aggregate(events, albums):
             track_counts[ti] = track_counts.get(ti, 0) + 1
         if a and al:
             info = albums.get(f"{a.lower()}||{al.lower()}")
-            g = (info.get('genre') or '') if info else ''
+            g = _norm_genre_text(info.get('genre')) if info else ''
             if g:
                 genre_counts[g] = genre_counts.get(g, 0) + 1
+
+    top_genre_key = max(genre_counts,  key=genre_counts.get)  if genre_counts  else None
 
     return {
         'total_minutes': round(total_seconds / 60.0, 1),
@@ -1867,7 +1877,7 @@ def _home_stats_aggregate(events, albums):
         'top_artist':    max(artist_counts, key=artist_counts.get) if artist_counts else None,
         'top_album':     max(album_counts,  key=album_counts.get)  if album_counts  else None,
         'top_track':     max(track_counts,  key=track_counts.get)  if track_counts  else None,
-        'top_genre':     max(genre_counts,  key=genre_counts.get)  if genre_counts  else None,
+        'top_genre':     _genre_display_label(top_genre_key) if top_genre_key else None,
     }
 
 
@@ -3176,8 +3186,36 @@ def remove_track(pid, track_id):
 
 # ── ML Playlist Generation (v1) ───────────────────────────────────────────────
 
+def _norm_text_key(s):
+    raw = str(s or '').strip().lower()
+    if not raw:
+        return ''
+    raw = re.sub(r'\s+', ' ', raw).strip()
+    return raw
+
+
 def _norm_genre_text(s):
-    return re.sub(r'\s+', ' ', str(s or '').strip().lower())
+    raw = _norm_text_key(s)
+    if not raw:
+        return ''
+    # Treat hyphens/underscores as separators for stable genre bucketing.
+    raw = re.sub(r'[-_]+', ' ', raw)
+    raw = re.sub(r'\s+', ' ', raw).strip()
+    return raw
+
+
+def _genre_display_label(norm):
+    if not norm:
+        return ''
+    special = {
+        'hip hop': 'Hip Hop',
+        'nu metal': 'Nu Metal',
+        'r and b': 'R&B',
+        'rnb': 'R&B',
+    }
+    if norm in special:
+        return special[norm]
+    return ' '.join(w.capitalize() for w in norm.split())
 
 
 def _split_track_genres(raw):
@@ -3399,7 +3437,7 @@ def _build_playlist_generation_preview(payload):
     if arc not in ('steady', 'gradual_build', 'peak_release', 'wind_down'):
         arc = 'steady'
     excluded_track_ids = {str(x) for x in (payload.get('excluded_track_ids') or [])}
-    excluded_artists = {_norm_genre_text(x) for x in (payload.get('excluded_artists') or []) if str(x).strip()}
+    excluded_artists = {_norm_text_key(x) for x in (payload.get('excluded_artists') or []) if str(x).strip()}
 
     payload_seed = int(payload.get('seed', 1337))
     rng = random.Random(payload_seed if deterministic else time.time_ns())
@@ -3422,7 +3460,7 @@ def _build_playlist_generation_preview(payload):
         tid = t.get('id')
         if not tid or tid in excluded_track_ids:
             continue
-        if _norm_genre_text(t.get('artist')) in excluded_artists:
+        if _norm_text_key(t.get('artist')) in excluded_artists:
             continue
         if year_range:
             y = _safe_float(t.get('year'))
@@ -3499,8 +3537,8 @@ def _build_playlist_generation_preview(payload):
             'reason': 'Seed anchor',
         })
         selected_ids.add(s0['id'])
-        artist_counts[_norm_genre_text(s0.get('artist'))] = 1
-        album_counts[_norm_genre_text(s0.get('album'))] = 1
+        artist_counts[_norm_text_key(s0.get('artist'))] = 1
+        album_counts[_norm_text_key(s0.get('album'))] = 1
         prev_track, prev_vec = s0, v0
 
     while len(selected) < playlist_length:
@@ -3514,8 +3552,8 @@ def _build_playlist_generation_preview(payload):
             if not tid or tid in selected_ids:
                 continue
 
-            artist_k = _norm_genre_text(c['track'].get('artist'))
-            album_k = _norm_genre_text(c['track'].get('album'))
+            artist_k = _norm_text_key(c['track'].get('artist'))
+            album_k = _norm_text_key(c['track'].get('album'))
             repeat_artist_pen = 0.0
             repeat_album_pen = 0.0
             if not allow_repeat_artists and artist_counts.get(artist_k, 0) > 0:
@@ -3565,8 +3603,8 @@ def _build_playlist_generation_preview(payload):
             'score_components': c['scores'],
         })
         selected_ids.add(t['id'])
-        artist_counts[_norm_genre_text(t.get('artist'))] = artist_counts.get(_norm_genre_text(t.get('artist')), 0) + 1
-        album_counts[_norm_genre_text(t.get('album'))] = album_counts.get(_norm_genre_text(t.get('album')), 0) + 1
+        artist_counts[_norm_text_key(t.get('artist'))] = artist_counts.get(_norm_text_key(t.get('artist')), 0) + 1
+        album_counts[_norm_text_key(t.get('album'))] = album_counts.get(_norm_text_key(t.get('album')), 0) + 1
         prev_track, prev_vec = t, c['vec']
 
     out_tracks = [s['track'] for s in selected]
@@ -3608,7 +3646,7 @@ def playlist_generate_options():
     for t in tracks:
         for g in _split_track_genres(t.get('genre')):
             genres[g] = genres.get(g, 0) + 1
-    top_genres = [g for g, _ in sorted(genres.items(), key=lambda kv: (-kv[1], kv[0]))[:80]]
+    top_genres = [_genre_display_label(g) for g, _ in sorted(genres.items(), key=lambda kv: (-kv[1], kv[0]))[:80]]
     cfg = load_playlist_gen_config()
     return jsonify({
         'modes': ['seed', 'genre', 'hybrid'],
@@ -7806,14 +7844,21 @@ def insights_overview():
     sample_rates = dict(sorted(sample_rates.items(), key=lambda x: _sr_num(x[0])))
     bit_depths   = dict(sorted(bit_depths.items()))
 
-    # Genre distribution — top 20 by track count
+    # Genre distribution — top 20 by track count (normalized buckets)
     genres_raw = {}
+    tagged_count = 0
     for t in tracks:
-        g = (t.get('genre') or '').strip()
-        if g:
+        parts = _split_track_genres(t.get('genre'))
+        if parts:
+            tagged_count += 1
+        for g in parts:
             genres_raw[g] = genres_raw.get(g, 0) + 1
-    genres_sorted = dict(sorted(genres_raw.items(), key=lambda x: -x[1]))
-    genres = dict(list(genres_sorted.items())[:20])
+    genres_sorted_items = sorted(
+        [(_genre_display_label(k), v) for k, v in genres_raw.items()],
+        key=lambda x: (-x[1], x[0].lower()),
+    )
+    genres_sorted = dict(genres_sorted_items)
+    genres = dict(genres_sorted_items[:20])
 
     return jsonify({
         'total_tracks':  len(tracks),
@@ -7825,7 +7870,7 @@ def insights_overview():
         'genres':        genres,
         'genres_all':    genres_sorted,
         'genres_total':  len(genres_sorted),
-        'genres_tagged': sum(1 for t in tracks if (t.get('genre') or '').strip()),
+        'genres_tagged': tagged_count,
     })
 
 
@@ -7837,25 +7882,45 @@ def insights_tag_health():
         return jsonify({'error': 'Library is empty'}), 404
 
     total = len(tracks)
+    problem_limit_raw = request.args.get('problem_limit')
+    try:
+        problem_limit = int(problem_limit_raw) if problem_limit_raw is not None else 100
+    except (ValueError, TypeError):
+        problem_limit = 100
+    if problem_limit < 0:
+        problem_limit = 0
 
     # Single-pass accumulation of all completeness counters, artist groups, and problem tracks
     missing_counts = {'title': 0, 'artist': 0, 'album': 0, 'year': 0, 'genre': 0}
     artist_groups = defaultdict(list)
     problem_tracks = []
 
+    def _norm_text(v):
+        return str(v or '').strip()
+
+    def _norm_year(v):
+        y = _norm_text(v)
+        if not y:
+            return ''
+        if len(y) >= 4 and y[:4].isdigit():
+            return y[:4]
+        return ''
+
     for t in tracks:
         issues = []
-        if not t.get('title'):
+        v_title = _norm_text(t.get('title'))
+        if not v_title:
             missing_counts['title'] += 1; issues.append('title')
-        v_artist = t.get('artist') or ''
-        if not v_artist or v_artist == 'Unknown Artist':
+        v_artist = _norm_text(t.get('artist'))
+        if not v_artist or v_artist.lower() == 'unknown artist':
             missing_counts['artist'] += 1; issues.append('artist')
-        v_album = t.get('album') or ''
-        if not v_album or v_album == 'Unknown Album':
+        v_album = _norm_text(t.get('album'))
+        if not v_album or v_album.lower() == 'unknown album':
             missing_counts['album'] += 1; issues.append('album')
-        if not t.get('year'):
+        v_year = _norm_year(t.get('year') or t.get('date'))
+        if not v_year:
             missing_counts['year'] += 1; issues.append('year')
-        if not t.get('genre'):
+        if not _split_track_genres(t.get('genre')):
             missing_counts['genre'] += 1; issues.append('genre')
 
         raw = (t.get('album_artist') or t.get('artist') or '').strip()
@@ -7898,7 +7963,7 @@ def insights_tag_health():
         'total':                total,
         'completeness':         completeness,
         'artist_duplicates':    duplicates[:50],
-        'problem_tracks':       problem_tracks[:100],
+        'problem_tracks':       problem_tracks[:problem_limit] if problem_limit else [],
         'problem_track_count':  len(problem_tracks),
     })
 
@@ -8480,7 +8545,10 @@ def _compute_genre_fingerprints(features, library_tracks):
     """
     import numpy as np
     band_keys   = [b[0] for b in _PERC_BANDS]
-    id_to_genre = {t['id']: (t.get('genre') or '').strip() for t in library_tracks}
+    id_to_genres = {
+        t['id']: _split_track_genres(t.get('genre')) or ['unknown']
+        for t in library_tracks
+    }
 
     genre_lists = {}
     for f in features:
@@ -8488,8 +8556,9 @@ def _compute_genre_fingerprints(features, library_tracks):
             continue
         if f.get('analysis_version') != 3:
             continue
-        genre = id_to_genre.get(f['track_id'], '') or 'Unknown'
-        genre_lists.setdefault(genre, []).append(f['band_energy'])
+        genres = id_to_genres.get(f['track_id'], ['unknown'])
+        for genre in genres:
+            genre_lists.setdefault(genre, []).append(f['band_energy'])
 
     if not genre_lists:
         return {}
@@ -8506,8 +8575,9 @@ def _compute_genre_fingerprints(features, library_tracks):
             raw[g]['avg'][b_i] = (raw[g]['avg'][b_i] - mn) / rng
 
     result = {}
-    for genre, data in raw.items():
-        slug = re.sub(r'[^a-z0-9_-]', '_', genre.lower().strip())
+    for genre_key, data in raw.items():
+        genre = _genre_display_label(genre_key)
+        slug = re.sub(r'[^a-z0-9_-]', '_', genre_key.lower().strip())
         result[slug] = {
             'genre': genre, 'slug': slug, 'track_count': data['tc'],
             'fingerprint': {k: round(float(v), 4)
@@ -8915,11 +8985,20 @@ def set_heatmap_genres():
     genres = data.get('extra_genres', [])
     if not isinstance(genres, list):
         return jsonify({'error': 'extra_genres must be a list'}), 400
-    genres = [str(g) for g in genres if g][:5]
+    canonical = []
+    seen = set()
+    for g in genres:
+        key = _norm_genre_text(g)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        canonical.append(_genre_display_label(key))
+        if len(canonical) >= 5:
+            break
     cfg = load_insights_config()
-    cfg['heatmap_extra_genres'] = genres
+    cfg['heatmap_extra_genres'] = canonical
     save_insights_config(cfg)
-    return jsonify({'extra_genres': genres})
+    return jsonify({'extra_genres': canonical})
 
 
 # ── SQLite initialization ─────────────────────────────────────────────────────

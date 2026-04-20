@@ -1023,6 +1023,31 @@
                 </div>
               </div>
 
+              <!-- Missing tags editor -->
+              <div class="insights-section" id="insights-missing-tags-section" style="display:none">
+                <div class="insights-section-hdr">
+                  <div class="insights-section-hdr-text">
+                    <h3 class="insights-section-title">Missing Tags Editor</h3>
+                    <p class="insights-section-desc">Review tracks with missing metadata and edit tags directly.</p>
+                  </div>
+                  <div class="insights-section-hdr-actions">
+                    <button class="btn-secondary" type="button" onclick="App.closeMissingTagsEditor()">Close</button>
+                  </div>
+                </div>
+                <div class="insights-missing-tags-controls">
+                  <input id="insights-missing-tags-search" type="text" placeholder="Filter tracks..." oninput="App.setMissingTagsSearch(this.value)" />
+                  <select id="insights-missing-tags-filter" onchange="App.setMissingTagsFilter(this.value)">
+                    <option value="all">All missing tags</option>
+                    <option value="title">Missing title</option>
+                    <option value="artist">Missing artist</option>
+                    <option value="album">Missing album</option>
+                    <option value="year">Missing year</option>
+                    <option value="genre">Missing genre</option>
+                  </select>
+                </div>
+                <div id="insights-missing-tags-content"></div>
+              </div>
+
               <!-- Sonic Profile (includes analysis CTA) -->
               <div class="insights-section" id="insights-sonic-section">
                 <div class="insights-section-hdr">
