@@ -14,6 +14,7 @@ import os
 import sys
 import threading
 import time
+from collections import deque
 from pathlib import Path
 
 
@@ -65,6 +66,14 @@ PORT = int(os.environ.get("TUNEBRIDGE_PORT", 5001))
 URL  = f"http://localhost:{PORT}"
 
 
+# ── macOS media key integration ──────────────────────────────────────────────
+# NX constants from <IOKit/hidsystem/ev_keymap.h>
+_NX_SUBTYPE_AUX_CONTROL_BUTTON = 8
+_NX_KEYTYPE_PLAY     = 16
+_NX_KEYTYPE_NEXT     = 17
+_NX_KEYTYPE_PREVIOUS = 18
+
+
 def _start_server():
     """Start the Waitress/Flask server in a daemon thread."""
     from app import app  # noqa: F401 — imports register all routes
@@ -95,6 +104,95 @@ def _wait_for_server(timeout: int = 15) -> bool:
             return True
         time.sleep(0.3)
     return False
+
+
+def _start_media_key_bridge(window):
+    """
+    Capture macOS media keys (Play/Pause, Next, Previous) and dispatch
+    to the web Player API in a background thread.
+    """
+    # Keep these refs alive for app lifetime (PyObjC monitor callbacks are GC-sensitive).
+    refs = {'local': None, 'global': None}
+    cmd_queue = deque()
+    queue_lock = threading.Lock()
+    queue_event = threading.Event()
+
+    def _enqueue(cmd: str):
+        with queue_lock:
+            cmd_queue.append(cmd)
+        queue_event.set()
+
+    def _drain_js_worker():
+        while True:
+            queue_event.wait(timeout=1.0)
+            while True:
+                with queue_lock:
+                    if not cmd_queue:
+                        queue_event.clear()
+                        break
+                    cmd = cmd_queue.popleft()
+                try:
+                    if cmd == 'play_pause':
+                        window.evaluate_js(
+                            'if (window.Player && Player.togglePlay) { Player.togglePlay(); }'
+                        )
+                    elif cmd == 'next':
+                        window.evaluate_js(
+                            'if (window.Player && Player.next) { Player.next(); }'
+                        )
+                    elif cmd == 'previous':
+                        window.evaluate_js(
+                            'if (window.Player && Player.prev) { Player.prev(); }'
+                        )
+                except Exception:
+                    # Window closed / JS runtime unavailable; stop silently.
+                    return
+
+    worker = threading.Thread(target=_drain_js_worker, daemon=True)
+    worker.start()
+
+    def _handle_event(ev):
+        try:
+            if ev is None:
+                return ev
+            if int(ev.subtype()) != _NX_SUBTYPE_AUX_CONTROL_BUTTON:
+                return ev
+
+            data1 = int(ev.data1())
+            key_code = (data1 & 0xFFFF0000) >> 16
+            key_flags = (data1 & 0x0000FFFF)
+            key_state = (key_flags & 0xFF00) >> 8
+
+            # Only fire on key-down to avoid double-trigger on key-up.
+            if key_state != 0xA:
+                return ev
+
+            if key_code == _NX_KEYTYPE_PLAY:
+                _enqueue('play_pause')
+            elif key_code == _NX_KEYTYPE_NEXT:
+                _enqueue('next')
+            elif key_code == _NX_KEYTYPE_PREVIOUS:
+                _enqueue('previous')
+        except Exception:
+            pass
+        return ev
+
+    try:
+        from AppKit import NSEvent
+
+        # System-defined events include hardware media keys.
+        system_mask = 1 << 14
+        refs['local'] = NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
+            system_mask, _handle_event
+        )
+        refs['global'] = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
+            system_mask, _handle_event
+        )
+        print('TuneBridge: media key bridge enabled (Play/Pause, Next, Previous)')
+    except Exception as exc:
+        print(f'TuneBridge: media key bridge unavailable: {exc}')
+
+    return refs
 
 
 def main():
@@ -161,6 +259,9 @@ def main():
 
     watcher = threading.Thread(target=_player_state_watcher, daemon=True)
     watcher.start()
+
+    # Install native macOS media key bridge.
+    _media_key_refs = _start_media_key_bridge(window)
 
     window.events.closed += lambda: os._exit(0)
 
