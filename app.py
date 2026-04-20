@@ -4654,61 +4654,70 @@ def player_mpv_state():
     _refresh_mpv_backend()
     if not MPV_AVAILABLE:
         return jsonify({'available': False})
-    p = _get_mpv()
-    try:
-        position = p.playback_time   # None when idle
-        duration = p.duration        # None when idle
-        paused   = p.pause
-        idle     = p.idle_active
-    except Exception:
-        # mpv handle may be briefly invalid during instance recreation
+
+    # Hold _mpv_lock for the ENTIRE duration of primary property reads.
+    # Releasing the lock between getting the reference and reading properties
+    # creates a use-after-free: crossfade_complete or safe_reinit can call
+    # terminate() on the handle in that window, causing a SIGSEGV in libmpv.
+    position = duration = paused = idle = None
+    with _mpv_lock:
+        p = _mpv_instance
+        if p is not None:
+            try:
+                position = p.playback_time
+                duration = p.duration
+                paused   = p.pause
+                idle     = p.idle_active
+            except Exception:
+                pass  # instance briefly invalid during reinit — fall through to idle response
+
+    if p is None or paused is None:
         return jsonify({'available': True, 'position': 0.0, 'duration': 0.0,
                         'playing': False, 'paused': True, 'idle': True,
-                        'track_ended': False, 'track_id': _mpv_current_track_id})
-    ended    = _mpv_track_ended
+                        'track_ended': False, 'track_id': _mpv_current_track_id,
+                        'xfade_in_progress': _xfade_in_progress,
+                        'xfade_track_id': None, 'xfade_track_ended': False})
+
+    ended = _mpv_track_ended
     if ended:
-        # Suppress primary track_ended during crossfade — queue advance is handled
-        # by the crossfade completion path, not the track-ended path.
         if _xfade_in_progress:
             ended            = False
-            _mpv_track_ended = False  # discard
-        # Grace period: discard any end-file event that fires within 750 ms of
-        # player_play() — these are false positives from loadfile-replace stopping
-        # the previous track, not genuine natural track endings.
+            _mpv_track_ended = False  # discard — crossfade path handles queue advance
         elif (time.time() - _mpv_load_time) < 0.75:
             ended            = False
-            _mpv_track_ended = False  # discard
+            _mpv_track_ended = False  # grace period: false positive from loadfile-replace
         else:
             _mpv_track_ended = False  # consume the one-shot flag
 
-    # Xfade secondary state (all reads wrapped in try/except — instance may be None)
+    # Hold _mpv_xfade_lock for the ENTIRE duration of secondary property reads —
+    # same use-after-free risk: _cancel_xfade_internal nulls the instance then
+    # calls terminate() outside the lock; we must not be reading from it then.
+    xfade_pos = xfade_dur = 0.0
     xfade_track_ended = False
     with _mpv_xfade_lock:
         xp = _mpv_xfade_instance
         xt = _mpv_xfade_track_id
-    try:
-        xfade_pos = float(xp.playback_time or 0) if xp else 0.0
-        xfade_dur = float(xp.duration       or 0) if xp else 0.0
-    except Exception:
-        xfade_pos, xfade_dur = 0.0, 0.0
-
-    if _mpv_xfade_ended:
-        # Grace period for secondary (same 750 ms logic)
-        if (time.time() - _mpv_xfade_load_time) >= 0.75:
-            xfade_track_ended  = True
-            _mpv_xfade_ended   = False   # consume
+        if xp is not None:
+            try:
+                xfade_pos = float(xp.playback_time or 0)
+                xfade_dur = float(xp.duration       or 0)
+            except Exception:
+                pass
+        if _mpv_xfade_ended and (time.time() - _mpv_xfade_load_time) >= 0.75:
+            xfade_track_ended = True
+            _mpv_xfade_ended  = False  # consume
 
     return jsonify({
-        'available':        True,
-        'position':         position if position is not None else 0.0,
-        'duration':         duration if duration is not None else 0.0,
-        'playing':          (not paused) and (not idle) and (position is not None),
-        'paused':           paused,
-        'idle':             idle,
-        'track_ended':      ended,
-        'track_id':         _mpv_current_track_id,
+        'available':         True,
+        'position':          position if position is not None else 0.0,
+        'duration':          duration if duration is not None else 0.0,
+        'playing':           (not paused) and (not idle) and (position is not None),
+        'paused':            paused,
+        'idle':              idle,
+        'track_ended':       ended,
+        'track_id':          _mpv_current_track_id,
         'xfade_in_progress': _xfade_in_progress,
-        'xfade_track_id':   xt,
+        'xfade_track_id':    xt,
         'xfade_track_ended': xfade_track_ended,
     })
 
@@ -5611,6 +5620,39 @@ def _playlist_sync_counts_for_dap(dap):
     return stale_count, never_exported
 
 
+def _playlist_sync_candidates_for_dap(dap):
+    playlists = load_playlists()
+    exports = (dap or {}).get('playlist_exports', {}) or {}
+    rows = []
+    for pl in sorted(playlists.values(), key=lambda p: str(p.get('name') or '').casefold()):
+        pid = str(pl.get('id') or '')
+        if not pid:
+            continue
+        exported_at = exports.get(pid)
+        updated_at = int(pl.get('updated_at') or 0)
+        if not exported_at:
+            status = 'never_exported'
+            reason = 'Never exported to this DAP'
+        elif int(exported_at) < updated_at:
+            status = 'outdated'
+            reason = 'Playlist changed since last export'
+        else:
+            status = 'in_sync'
+            reason = 'Up to date'
+        if status == 'in_sync':
+            continue
+        rows.append({
+            'id': pid,
+            'name': str(pl.get('name') or 'Untitled Playlist'),
+            'track_count': len(pl.get('tracks') or []),
+            'status': status,
+            'reason': reason,
+            'exported_at': int(exported_at or 0),
+            'updated_at': updated_at,
+        })
+    return rows
+
+
 def _start_dap_sync_status_check(dap_id):
     if not dap_id:
         return False, 'missing_dap_id'
@@ -5704,6 +5746,8 @@ def sync_scan():
         'space_required_bytes': 0,
         'space_shortfall_bytes': 0,
         'space_ok': True,
+        'playlists_out_of_sync': [],
+        'playlists_out_of_sync_count': 0,
     }
 
     def do_scan():
@@ -5716,6 +5760,8 @@ def sync_scan():
                 raise RuntimeError('DAP not found')
             sync_state['current'] = 'Scanning device…'
             diff = _compute_sync_diff_for_dap(dap)
+            playlists_out = _playlist_sync_candidates_for_dap(dap)
+            stale_count, never_exported = _playlist_sync_counts_for_dap(dap)
 
             sync_state.update({
                 'status': 'ready',
@@ -5738,9 +5784,12 @@ def sync_scan():
                 'space_required_bytes': diff['space_required_bytes'],
                 'space_shortfall_bytes': diff['space_shortfall_bytes'],
                 'space_ok': diff['space_ok'],
+                'playlists_out_of_sync': playlists_out,
+                'playlists_out_of_sync_count': len(playlists_out),
                 'message': diff['message'],
             })
             _update_dap_sync_summary(dap_id, {
+                'playlist_out_of_sync_count': int(stale_count) + int(never_exported),
                 'music_out_of_sync_count': diff['music_out_of_sync_count'],
                 'music_to_add_count': diff['music_to_add_count'],
                 'music_to_remove_count': diff['music_to_remove_count'],
@@ -5776,15 +5825,16 @@ def sync_execute():
     data = request.json or {}
     local_paths = data.get('local_paths', [])   # copy local → device (device-relative path keys)
     device_paths = data.get('device_paths', []) # copy device → local
+    playlist_ids = [str(x) for x in (data.get('playlist_ids') or []) if str(x).strip()]
     dap_id = sync_state['dap_id']
     device_path = get_dap_music_path(dap_id)
 
     if not device_path or not device_path.exists():
         return jsonify({'error': 'Device not mounted'}), 400
 
-    total = len(local_paths) + len(device_paths)
+    total = len(local_paths) + len(device_paths) + len(playlist_ids)
     if total == 0:
-        return jsonify({'error': 'No files selected'}), 400
+        return jsonify({'error': 'No files or playlists selected'}), 400
 
     # Re-check device free space right before copy starts.
     required_selected = 0
@@ -5860,16 +5910,35 @@ def sync_execute():
             sync_state['progress'] = progress
             sync_state['message'] = f'Copying {progress} / {total} files…'
 
+        daps_cache = load_daps()
+        playlists_cache = load_playlists()
+        for pid in playlist_ids:
+            pl_name = str((playlists_cache.get(pid) or {}).get('name') or pid)
+            sync_state['current'] = f'↻ Playlist: {pl_name}'
+            try:
+                _export_playlist_to_dap(dap_id, pid, daps=daps_cache, playlists=playlists_cache, save_after=False)
+            except Exception as e:
+                errors.append(f'Playlist "{pl_name}": {e}')
+            progress += 1
+            sync_state['progress'] = progress
+            sync_state['message'] = f'Syncing {progress} / {total} items…'
+        if playlist_ids:
+            save_daps(daps_cache)
+
         copied = total - len(errors)
         post_copy_diff = None
         diff_error = None
+        playlist_out = sync_state.get('playlists_out_of_sync_count', 0)
         try:
             daps = load_daps()
             dap = next((d for d in daps if d.get('id') == dap_id), None)
             if dap:
                 post_copy_diff = _compute_sync_diff_for_dap(dap)
+                stale_count, never_exported = _playlist_sync_counts_for_dap(dap)
+                playlist_out = int(stale_count) + int(never_exported)
                 now_ts = int(time.time())
                 _update_dap_sync_summary(dap_id, {
+                    'playlist_out_of_sync_count': playlist_out,
                     'music_out_of_sync_count': post_copy_diff['music_out_of_sync_count'],
                     'music_to_add_count': post_copy_diff['music_to_add_count'],
                     'music_to_remove_count': post_copy_diff['music_to_remove_count'],
@@ -5909,8 +5978,9 @@ def sync_execute():
                 if isinstance(post_copy_diff, dict) else
                 sync_state.get('music_to_remove_count', 0)
             ),
+            'playlists_out_of_sync_count': playlist_out,
             'message': (
-                f'Done — {copied} file(s) copied.'
+                f'Done — {copied} item(s) synced.'
                 + (f' {len(errors)} error(s).' if errors else '')
                 + (f' Could not verify final sync state ({diff_error}).' if diff_error else '')
             ),
@@ -5940,6 +6010,8 @@ def sync_reset():
         'space_required_bytes': 0,
         'space_shortfall_bytes': 0,
         'space_ok': True,
+        'playlists_out_of_sync': [],
+        'playlists_out_of_sync_count': 0,
     }
     return jsonify({'ok': True})
 
@@ -6500,21 +6572,20 @@ def dap_export_favourites(did):
     return jsonify({'exported_at': favourites['dap_exports'][did]})
 
 
-@app.route('/api/daps/<did>/export/<pid>', methods=['POST'])
-def dap_export_playlist(did, pid):
-    daps = load_daps()
+def _export_playlist_to_dap(did, pid, daps=None, playlists=None, save_after=True):
+    daps = daps if isinstance(daps, list) else load_daps()
     dap = next((d for d in daps if d['id'] == did), None)
     if not dap:
-        return jsonify({'error': 'DAP not found'}), 404
+        raise RuntimeError('DAP not found')
 
     device_root, _ = _resolve_dap_mount(dap)
     if not device_root or not device_root.exists():
-        return jsonify({'error': f"Device not mounted. Last configured path: {dap.get('mount_path', 'not set')}"}), 404
+        raise RuntimeError(f"Device not mounted. Last configured path: {dap.get('mount_path', 'not set')}")
 
-    playlists = load_playlists()
+    playlists = playlists if isinstance(playlists, dict) else load_playlists()
     playlist = playlists.get(pid)
     if not playlist:
-        return jsonify({'error': 'Playlist not found'}), 404
+        raise RuntimeError('Playlist not found')
 
     with library_lock:
         lib_map = {t['id']: t for t in library}
@@ -6620,18 +6691,93 @@ def dap_export_playlist(did, pid):
     except OSError as e:
         import errno as _errno
         if e.errno == _errno.EROFS:
-            return jsonify({'error': f"Device is mounted read-only. Eject and reconnect {dap['name']}, then try again."}), 409
-        return jsonify({'error': f"Could not write to device: {e.strerror}"}), 409
+            raise RuntimeError(f"Device is mounted read-only. Eject and reconnect {dap['name']}, then try again.")
+        raise RuntimeError(f"Could not write to device: {e.strerror}")
 
     if 'playlist_exports' not in dap:
         dap['playlist_exports'] = {}
     dap['playlist_exports'][pid] = int(time.time())
-    save_daps(daps)
-    return jsonify({
+    if save_after:
+        save_daps(daps)
+    return {
         'exported_at': dap['playlist_exports'][pid],
         'track_count': len(export_tracks),
         'missing_on_device_count': len(missing_on_device),
         'missing_on_device_sample': missing_on_device[:8],
+    }
+
+
+@app.route('/api/daps/<did>/export/<pid>', methods=['POST'])
+def dap_export_playlist(did, pid):
+    try:
+        payload = _export_playlist_to_dap(did, pid)
+        return jsonify(payload)
+    except RuntimeError as e:
+        msg = str(e)
+        if 'not found' in msg.lower():
+            return jsonify({'error': msg}), 404
+        if 'read-only' in msg.lower():
+            return jsonify({'error': msg}), 409
+        if 'could not write' in msg.lower():
+            return jsonify({'error': msg}), 409
+        return jsonify({'error': msg}), 400
+
+
+@app.route('/api/daps/<did>/export-all-playlists', methods=['POST'])
+def dap_export_all_playlists(did):
+    data = request.json or {}
+    only_out = bool(data.get('only_out_of_sync', True))
+    requested_ids = [str(x) for x in (data.get('playlist_ids') or []) if str(x).strip()]
+
+    daps = load_daps()
+    dap = next((d for d in daps if d.get('id') == did), None)
+    if not dap:
+        return jsonify({'error': 'DAP not found'}), 404
+    playlists = load_playlists()
+    exports = (dap or {}).get('playlist_exports', {}) or {}
+
+    if requested_ids:
+        target_ids = [pid for pid in requested_ids if pid in playlists]
+    else:
+        target_ids = []
+        for pl in playlists.values():
+            pid = str(pl.get('id') or '')
+            if not pid:
+                continue
+            if not only_out:
+                target_ids.append(pid)
+                continue
+            exported_at = exports.get(pid)
+            updated_at = int(pl.get('updated_at') or 0)
+            if not exported_at or int(exported_at) < updated_at:
+                target_ids.append(pid)
+
+    results = []
+    failures = []
+    for pid in target_ids:
+        try:
+            payload = _export_playlist_to_dap(did, pid, daps=daps, playlists=playlists, save_after=False)
+            payload['playlist_id'] = pid
+            payload['playlist_name'] = str((playlists.get(pid) or {}).get('name') or 'Playlist')
+            results.append(payload)
+        except RuntimeError as e:
+            failures.append({
+                'playlist_id': pid,
+                'playlist_name': str((playlists.get(pid) or {}).get('name') or 'Playlist'),
+                'error': str(e),
+            })
+    if results:
+        save_daps(daps)
+
+    stale_count, never_exported = _playlist_sync_counts_for_dap(next((d for d in daps if d.get('id') == did), dap))
+    return jsonify({
+        'ok': True,
+        'requested_count': len(target_ids),
+        'exported_count': len(results),
+        'failed_count': len(failures),
+        'results': results,
+        'failures': failures,
+        'playlist_out_of_sync_count': int(stale_count) + int(never_exported),
     })
 
 
