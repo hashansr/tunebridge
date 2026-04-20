@@ -235,7 +235,8 @@ DEFAULT_SETTINGS = {
     'lastfm_api_key':   '',
     'fanart_api_key':   '',
     'listening_tracking_enabled': True,
-    'update_channel':   '',   # '' = use built-in channel from version.json; 'dev'|'rc'|'prod' = user override
+    'update_channel':         '',   # '' = use built-in channel from version.json; 'dev'|'rc'|'prod' = user override
+    'update_channel_version': '',   # version the preference was set for; stale if build version changed
 }
 
 _DEFAULT_GEAR_PROFILES = {
@@ -4908,24 +4909,38 @@ def _version_gt(a: str, b: str) -> bool:
         return False
 
 
-def _effective_channel() -> str:
-    """Return the active update channel: user preference if set, otherwise built-in from version.json."""
-    pref = load_settings().get('update_channel', '')
-    if pref in ('dev', 'rc', 'prod'):
-        return pref
+def _built_version_info() -> dict:
+    """Return parsed version.json or safe defaults."""
     try:
         with open(_VERSION_FILE) as f:
-            return json.load(f).get('channel', 'dev')
+            return json.load(f)
     except Exception:
-        return 'dev'
+        return {'channel': 'dev', 'version': ''}
+
+
+def _effective_channel() -> str:
+    """Return the active update channel.
+
+    Uses the user's stored preference ONLY when it was set for the current
+    build version.  If the build version has changed (new install), the
+    stored preference is stale and the build's native channel is used instead.
+    """
+    s = load_settings()
+    pref         = s.get('update_channel', '')
+    pref_version = s.get('update_channel_version', '')
+    v            = _built_version_info()
+    built_channel = v.get('channel', 'dev')
+    built_version = v.get('version', '')
+
+    if pref in ('dev', 'rc', 'prod') and pref_version == built_version:
+        return pref
+    return built_channel
 
 
 @app.route('/api/version')
 def get_version():
-    try:
-        with open(_VERSION_FILE) as f:
-            info = json.load(f)
-    except Exception:
+    info = _built_version_info()
+    if info.get('version') == '':
         info = {'version': 'unknown', 'build': 0, 'released': ''}
     info['channel'] = _effective_channel()
     return jsonify(info)
@@ -4939,6 +4954,8 @@ def set_update_channel():
         return jsonify({'error': 'invalid channel'}), 400
     s = load_settings()
     s['update_channel'] = channel
+    # Stamp which build version this preference belongs to so it auto-resets on update
+    s['update_channel_version'] = _built_version_info().get('version', '')
     save_settings(s)
     return jsonify({'ok': True, 'channel': channel or _effective_channel()})
 
