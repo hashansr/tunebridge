@@ -5170,6 +5170,15 @@ def _normalize_rel(path):
     return str(path or '').replace('\\', '/').strip('/')
 
 _SYNC_APOSTROPHE_CHARS = "'’`´ʼʻ"
+_SYNC_COMPAT_TRANSLATE = str.maketrans({
+    'æ': 'ae', 'Æ': 'ae',
+    'œ': 'oe', 'Œ': 'oe',
+    'ß': 'ss',
+    'ø': 'o',  'Ø': 'o',
+    'ð': 'd',  'Ð': 'd',
+    'þ': 'th', 'Þ': 'th',
+    'ł': 'l',  'Ł': 'l',
+})
 
 def _sync_match_key(path):
     """
@@ -5184,11 +5193,169 @@ def _sync_match_key(path):
     for seg in rel.split('/'):
         s = unicodedata.normalize('NFKD', str(seg or ''))
         s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+        s = s.translate(_SYNC_COMPAT_TRANSLATE)
         for ap in _SYNC_APOSTROPHE_CHARS:
             s = s.replace(ap, '')
         s = re.sub(r'\s+', ' ', s).strip()
         segs.append(s.casefold())
     return '/'.join(segs)
+
+
+def _sync_relaxed_match_key(path):
+    """Relaxed path key for cross-filesystem punctuation/separator variants."""
+    rel = _normalize_rel(path)
+    if not rel:
+        return ''
+    segs = []
+    for seg in rel.split('/'):
+        s = unicodedata.normalize('NFKD', str(seg or ''))
+        s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+        s = s.translate(_SYNC_COMPAT_TRANSLATE)
+        for ap in _SYNC_APOSTROPHE_CHARS:
+            s = s.replace(ap, '')
+        s = ''.join(ch if ch.isalnum() else ' ' for ch in s.casefold())
+        s = re.sub(r'\s+', ' ', s).strip()
+        segs.append(s)
+    return '/'.join(segs)
+
+
+def _sync_ascii_relaxed_match_key(path):
+    """Lowest-confidence fallback key (ASCII-drop) for parser/device variants."""
+    rel = _normalize_rel(path)
+    if not rel:
+        return ''
+    segs = []
+    for seg in rel.split('/'):
+        s = unicodedata.normalize('NFKD', str(seg or ''))
+        s = s.encode('ascii', 'ignore').decode('ascii')
+        for ap in _SYNC_APOSTROPHE_CHARS:
+            s = s.replace(ap, '')
+        s = ''.join(ch if ch.isalnum() else ' ' for ch in s.casefold())
+        s = re.sub(r'\s+', ' ', s).strip()
+        segs.append(s)
+    return '/'.join(segs)
+
+
+def _sync_tail_join_variants(path):
+    """
+    Recover legacy split-title paths where '/' inside title became nested dirs.
+    """
+    rel = _normalize_rel(path)
+    if not rel:
+        return []
+    segs = rel.split('/')
+    if len(segs) < 2:
+        return []
+    tail = segs[-1]
+    ext = Path(tail).suffix.lower()
+    stem = Path(tail).stem
+    head = (segs[-2] or '').strip()
+    if ext not in SYNC_EXTENSIONS or not stem or not head:
+        return []
+    if not re.match(r'^\d{1,3}\s*[\.\-_ ]', head):
+        return []
+    parent = segs[:-2]
+    out = []
+    seen = set()
+    for sep in (' ', ' - ', '_'):
+        joined_stem = f'{head}{sep}{stem}'.strip()
+        cand = _normalize_rel('/'.join(parent + [f'{joined_stem}{ext}']))
+        if not cand or cand == rel:
+            continue
+        k = cand.casefold()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(cand)
+    return out
+
+
+def _sync_match_keys(path):
+    """
+    Ordered keys from strict to relaxed tiers. Prefix tier to avoid collisions.
+    """
+    rel = _normalize_rel(path)
+    if not rel:
+        return []
+    keys = []
+    seen = set()
+
+    def _add(prefix, val):
+        if not val:
+            return
+        k = f'{prefix}:{val}'
+        if k in seen:
+            return
+        seen.add(k)
+        keys.append(k)
+
+    rel_variants = [rel] + _sync_tail_join_variants(rel)
+    for cand in rel_variants:
+        _add('S', _sync_match_key(cand))
+    for cand in rel_variants:
+        _add('R', _sync_relaxed_match_key(cand))
+    for cand in rel_variants:
+        _add('A', _sync_ascii_relaxed_match_key(cand))
+    return keys
+
+
+def _sync_rel_parts(rel):
+    raw = _normalize_rel(rel)
+    if not raw:
+        return '', '', ''
+    parts = raw.split('/')
+    parent = '/'.join(parts[:-1]) if len(parts) > 1 else ''
+    name = parts[-1]
+    stem = Path(name).stem
+    return parent, name, stem
+
+
+def _sync_pick_candidate_key(candidates, local_rel, rendered_rel):
+    """
+    Choose a deterministic high-confidence candidate; return None if ambiguous.
+    """
+    if not candidates:
+        return None
+    uniq = sorted(set(candidates))
+    if len(uniq) == 1:
+        return uniq[0]
+
+    local_parent, local_name, local_stem = _sync_rel_parts(local_rel)
+    rend_parent, rend_name, rend_stem = _sync_rel_parts(rendered_rel)
+    local_parent_r = _sync_relaxed_match_key(local_parent)
+    rend_parent_r = _sync_relaxed_match_key(rend_parent)
+    local_stem_r = _sync_relaxed_match_key(local_stem)
+    rend_stem_r = _sync_relaxed_match_key(rend_stem)
+    local_name_r = _sync_relaxed_match_key(local_name)
+    rend_name_r = _sync_relaxed_match_key(rend_name)
+
+    scored = []
+    for cand in uniq:
+        c_parent, c_name, c_stem = _sync_rel_parts(cand)
+        c_parent_r = _sync_relaxed_match_key(c_parent)
+        c_stem_r = _sync_relaxed_match_key(c_stem)
+        c_name_r = _sync_relaxed_match_key(c_name)
+        score = 0
+        if rend_parent_r and c_parent_r and rend_parent_r == c_parent_r:
+            score += 5
+        elif local_parent_r and c_parent_r and local_parent_r == c_parent_r:
+            score += 3
+        if rend_name_r and c_name_r and rend_name_r == c_name_r:
+            score += 5
+        elif local_name_r and c_name_r and local_name_r == c_name_r:
+            score += 4
+        if rend_stem_r and c_stem_r and rend_stem_r == c_stem_r:
+            score += 3
+        elif local_stem_r and c_stem_r and local_stem_r == c_stem_r:
+            score += 2
+        scored.append((score, cand))
+
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    if not scored or scored[0][0] <= 0:
+        return None
+    if len(scored) > 1 and scored[0][0] == scored[1][0]:
+        return None
+    return scored[0][1]
 
 
 def _is_music_file_path(path):
@@ -5332,8 +5499,7 @@ def _build_sync_track_entries(template):
         rel = _normalize_rel(t.get('path'))
         if rel and _is_music_file_path(rel):
             lib_by_rel[rel.casefold()] = t
-            mk = _sync_match_key(rel)
-            if mk:
+            for mk in _sync_match_keys(rel):
                 lib_by_match.setdefault(mk, t)
 
     local_files = walk_music_files(get_music_base())
@@ -5344,7 +5510,10 @@ def _build_sync_track_entries(template):
             continue
         t = lib_by_rel.get(local_rel.casefold())
         if not t:
-            t = lib_by_match.get(_sync_match_key(local_rel))
+            for mk in _sync_match_keys(local_rel):
+                t = lib_by_match.get(mk)
+                if t:
+                    break
         rendered_rel = ''
         warns = []
         if t:
@@ -5388,12 +5557,18 @@ def _compute_sync_diff_for_dap(dap):
     device_by_match = {}
     for p in device_files:
         rel = _normalize_rel(p)
-        mk = _sync_match_key(rel)
-        if mk:
+        for mk in _sync_match_keys(rel):
             device_by_match.setdefault(mk, []).append(rel.casefold())
 
     device_keys = set(device_map.keys())
     manifest_records = _get_dap_sync_manifest(dap_id)
+    manifest_by_local = {}
+    for _, ent in (manifest_records or {}).items():
+        lrel = _normalize_rel((ent or {}).get('local_rel'))
+        trel = _normalize_rel((ent or {}).get('target_rel'))
+        if not lrel or not trel:
+            continue
+        manifest_by_local.setdefault(lrel.casefold(), set()).add(trel.casefold())
     manifest_updates = {}
     manifest_seen_keys = set()
     expected_keys = set()
@@ -5414,12 +5589,12 @@ def _compute_sync_diff_for_dap(dap):
         if rendered_key:
             variants.add(rendered_key)
         expected_keys.update(variants)
-        local_match_key = _sync_match_key(e['local_rel'])
-        rendered_match_key = _sync_match_key(e['rendered_rel']) if e['rendered_rel'] else ''
-        if local_match_key:
-            expected_match_keys.add(local_match_key)
-        if rendered_match_key:
-            expected_match_keys.add(rendered_match_key)
+        local_match_keys = _sync_match_keys(e['local_rel'])
+        rendered_match_keys = _sync_match_keys(e['rendered_rel']) if e['rendered_rel'] else []
+        expected_match_keys.update(local_match_keys)
+        expected_match_keys.update(rendered_match_keys)
+        for mk in manifest_by_local.get(local_key, set()):
+            expected_keys.add(mk)
 
         matched_key = None
         if rendered_key and rendered_key in device_keys:
@@ -5428,16 +5603,20 @@ def _compute_sync_diff_for_dap(dap):
             matched_key = local_key
         elif not variants.isdisjoint(device_keys):
             matched_key = next(iter(variants & device_keys))
+        elif manifest_by_local.get(local_key):
+            manifest_candidates = [k for k in manifest_by_local.get(local_key, set()) if k in device_keys]
+            if manifest_candidates:
+                matched_key = _sync_pick_candidate_key(manifest_candidates, e['local_rel'], e['rendered_rel'])
         else:
             # Canonicalized fallback match for Unicode/ASCII punctuation variants.
             candidate_keys = []
-            if rendered_match_key:
-                candidate_keys.extend(device_by_match.get(rendered_match_key, []))
-            if not candidate_keys and local_match_key:
-                candidate_keys.extend(device_by_match.get(local_match_key, []))
+            for mk in rendered_match_keys:
+                candidate_keys.extend(device_by_match.get(mk, []))
+            if not candidate_keys:
+                for mk in local_match_keys:
+                    candidate_keys.extend(device_by_match.get(mk, []))
             if candidate_keys:
-                # Deterministic winner (stable across scans).
-                matched_key = sorted(set(candidate_keys))[0]
+                matched_key = _sync_pick_candidate_key(candidate_keys, e['local_rel'], e['rendered_rel'])
 
         if matched_key is None:
             target_rel = e['target_rel']
@@ -5518,8 +5697,7 @@ def _compute_sync_diff_for_dap(dap):
         rel = device_map.get(key)
         if not rel:
             continue
-        mk = _sync_match_key(rel)
-        if mk and mk in expected_match_keys:
+        if any(mk in expected_match_keys for mk in _sync_match_keys(rel)):
             continue
         device_only.append(rel)
     device_only = sorted(set(device_only))
