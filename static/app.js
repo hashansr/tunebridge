@@ -1443,11 +1443,34 @@ function _trackDiscSortValue(track) {
     const n = Number.parseInt(main, 10);
     if (Number.isFinite(n) && n > 0) return n;
   }
-  const p = String(track?.path || '').toLowerCase();
-  if (p) {
-    const m = p.match(/(?:^|[\\/._\-\s])(disc|cd)\s*0*([1-9]\d?)(?:[\\/._\-\s]|$)/i);
+  // Common metadata aliases from different scanners/tag readers.
+  const aliasDirect = [track?.disc, track?.disk, track?.disc_no, track?.discnum, track?.discNum]
+    .map(v => String(v || '').trim())
+    .find(Boolean);
+  if (aliasDirect) {
+    const main = aliasDirect.split('/')[0].trim();
+    const n = Number.parseInt(main, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  const pathValue = String(track?.path || '').trim();
+  const fileValue = String(track?.filename || '').trim();
+  const source = (pathValue || fileValue).toLowerCase();
+  if (source) {
+    const m = source.match(/(?:^|[\\/._\-\s])(disc|cd|disk)\s*0*([1-9]\d?)(?:[\\/._\-\s]|$)/i);
     if (m && m[2]) {
       const n = Number.parseInt(m[2], 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    // File-prefix patterns used by multi-disc releases, e.g. "1-01 Track.flac", "CD2-07 ...".
+    const file = source.split(/[\\/]/).pop() || source;
+    const prefixedCd = file.match(/^(?:disc|cd|disk)\s*0*([1-9]\d?)\s*[-_.\s]+\d{1,3}(?:[-_.\s]|$)/i);
+    if (prefixedCd && prefixedCd[1]) {
+      const n = Number.parseInt(prefixedCd[1], 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    const discTrackPrefix = file.match(/^([1-9]\d?)\s*[-_.]\s*\d{1,3}(?:[-_.\s]|$)/);
+    if (discTrackPrefix && discTrackPrefix[1]) {
+      const n = Number.parseInt(discTrackPrefix[1], 10);
       if (Number.isFinite(n) && n > 0) return n;
     }
   }
@@ -1465,9 +1488,18 @@ function _trackDiscLabelFromPath(track) {
   const parts = p.split(/[\\/]+/).filter(Boolean);
   if (parts.length < 2) return '';
   const parent = parts[parts.length - 2] || '';
+  const grandParent = parts.length > 2 ? (parts[parts.length - 3] || '') : '';
   const albumName = String(state.album || '').trim().toLowerCase();
   const parentNorm = parent.trim().toLowerCase();
-  if (!parentNorm || (albumName && parentNorm === albumName)) return '';
+  const grandParentNorm = grandParent.trim().toLowerCase();
+  if (!parentNorm) return '';
+  // Typical pattern: ".../<Album>/<Disc Folder>/<Track>".
+  if (albumName && parentNorm === albumName && grandParentNorm && grandParentNorm !== albumName) {
+    const gm = grandParent.match(/(?:disc|cd|disk)\s*0*([1-9]\d?)/i);
+    if (gm && gm[1]) return `disc:${Number.parseInt(gm[1], 10)}`;
+    return `folder:${grandParentNorm}`;
+  }
+  if (albumName && parentNorm === albumName) return '';
   const m = parent.match(/(?:disc|cd)\s*0*([1-9]\d?)/i);
   if (m && m[1]) return `disc:${Number.parseInt(m[1], 10)}`;
   return `folder:${parentNorm}`;
@@ -8884,7 +8916,6 @@ function renderSongsTable() {
       </td>
       <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
-      <td data-col="genre" class="cell-genre" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
       <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
       <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn')}</td>
       <td data-col="genre" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
