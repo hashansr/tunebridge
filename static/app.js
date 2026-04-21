@@ -1497,31 +1497,65 @@ function _tracksSortedRows(rows) {
 }
 
 function _renderTracksTable() {
-  const tbody = document.getElementById('tracks-tbody');
-  if (!tbody) return;
   const rows = state.tracks || [];
+  const wrap = document.getElementById('tracks-table-wrap');
+  const baseTable = document.getElementById('tracks-table');
+  const tbody = document.getElementById('tracks-tbody');
+  if (!wrap || !baseTable || !tbody) return;
+  const existingMulti = document.getElementById('tracks-multi-disc-container');
+
   const shouldGroupByDisc = !!(state.album && _tracksSort.col === 'track_number' && _hasMultiDiscTracks(rows));
   if (!shouldGroupByDisc) {
+    if (existingMulti) existingMulti.remove();
+    baseTable.style.display = 'table';
     tbody.innerHTML = rows.map((t, i) => trackRow(t, i + 1, false)).join('');
+    document.querySelectorAll('#tracks-table .sort-arrow').forEach(el => { el.textContent = ''; });
+    const arrow = document.getElementById(`tracks-sort-${_tracksSort.col}`);
+    if (arrow) arrow.textContent = _tracksSort.order === 'asc' ? '▲' : '▼';
   } else {
-    let html = '';
-    let rowNum = 0;
-    let currentDisc = null;
-    rows.forEach((t) => {
+    baseTable.style.display = 'none';
+    tbody.innerHTML = '';
+    if (existingMulti) existingMulti.remove();
+
+    const groups = new Map();
+    rows.forEach((t, idx) => {
       const disc = _trackDiscSortValue(t);
-      if (disc !== currentDisc) {
-        currentDisc = disc;
-        html += `<tr class="track-disc-separator-row"><td class="track-disc-separator-cell" colspan="20">Disc ${disc}</td></tr>`;
-      }
-      rowNum += 1;
-      html += trackRow(t, rowNum, false);
+      if (!groups.has(disc)) groups.set(disc, []);
+      groups.get(disc).push({ track: t, idx });
     });
-    tbody.innerHTML = html;
+    const discs = [...groups.keys()].sort((a, b) => a - b);
+    const headerHtml = `
+      <thead><tr>
+        <th class="col-num" data-col="track_number"><span class="th-sort-label">Track #</span></th>
+        <th class="col-title" data-col="title"><span class="th-sort-label">Title</span></th>
+        <th class="col-album" data-col="album"><span class="th-sort-label">Album</span></th>
+        <th class="col-genre" data-col="genre"><span class="th-sort-label">Genre</span></th>
+        <th class="col-dur" data-col="duration"><span class="th-sort-label">Time</span></th>
+        <th class="col-fav" data-col="favourite"></th>
+        <th class="col-act" data-col="actions"></th>
+      </tr></thead>`;
+    const multi = document.createElement('div');
+    multi.id = 'tracks-multi-disc-container';
+    multi.className = 'tracks-multi-disc-container';
+    multi.innerHTML = discs.map((disc) => {
+      const bodyRows = (groups.get(disc) || [])
+        .map(({ track, idx }) => trackRow(track, idx + 1, false))
+        .join('');
+      return `
+        <section class="tracks-disc-block">
+          <h3 class="tracks-disc-heading">Disc ${disc}</h3>
+          <table class="tracks-table-disc">
+            ${headerHtml}
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </section>
+      `;
+    }).join('');
+    wrap.appendChild(multi);
+
+    document.querySelectorAll('#tracks-table .sort-arrow').forEach(el => { el.textContent = ''; });
   }
   _applyTableColumnVisibility();
-  document.querySelectorAll('#tracks-table .sort-arrow').forEach(el => { el.textContent = ''; });
-  const arrow = document.getElementById(`tracks-sort-${_tracksSort.col}`);
-  if (arrow) arrow.textContent = _tracksSort.order === 'asc' ? '▲' : '▼';
 }
 
 function sortTracks(col) {
@@ -8587,6 +8621,10 @@ function _applyTableColumnVisibility() {
       el.style.display = _isTableColVisible(key) ? '' : 'none';
     });
   });
+  document.querySelectorAll('#tracks-multi-disc-container [data-col]').forEach(el => {
+    const key = el.getAttribute('data-col') || '';
+    el.style.display = _isTableColVisible(key) ? '' : 'none';
+  });
 }
 
 function _ensureTableColsPopover() {
@@ -8626,7 +8664,7 @@ function _getColumnContextKeys(anchor) {
     return ['track_number', 'title', 'artist', 'album', 'duration', 'favourite', 'actions'];
   }
   if (anchor.closest('#view-tracks') || anchor.closest('#view-albums')) {
-    return ['track_number', 'title', 'album', 'duration', 'favourite', 'actions'];
+    return ['track_number', 'title', 'album', 'genre', 'duration', 'favourite', 'actions'];
   }
   return _TABLE_COLUMNS.map(c => c.key);
 }
@@ -8788,6 +8826,7 @@ function renderSongsTable() {
       </td>
       <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
+      <td data-col="genre" class="cell-genre" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
       <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
       <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn')}</td>
       <td data-col="genre" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>

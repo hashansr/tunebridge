@@ -2189,6 +2189,10 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; backgrou
 
 #tracks-table .col-album { width: 220px; }
 
+#tracks-table .col-genre {
+  width: 140px;
+}
+
 #tracks-table .col-dur {
   width: 84px;
   text-align: right;
@@ -10231,6 +10235,56 @@ tr.player-active .track-title { color: var(--accent); }
   text-transform: uppercase;
   font-weight: 700;
   color: rgba(173, 198, 255, 0.9);
+}
+
+#view-tracks #album-hero.browse-hero {
+  padding-bottom: 10px;
+  margin-bottom: 2px;
+}
+#view-tracks .table-columns-toolbar {
+  margin-top: 0;
+  margin-bottom: 6px;
+}
+
+.tracks-multi-disc-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tracks-disc-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tracks-disc-heading {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+.tracks-table-disc {
+  width: 100%;
+  min-width: 760px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.tracks-table-disc thead th {
+  padding-top: 11px;
+  padding-bottom: 11px;
+  white-space: nowrap;
+  background: rgba(42, 42, 42, 0.58);
+  border-bottom: 1px solid rgba(173, 198, 255, 0.16);
+}
+.tracks-table-disc td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.tracks-table-disc tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.018);
+}
+.tracks-table-disc tbody tr:hover {
+  background: linear-gradient(90deg, rgba(173, 198, 255, 0.11), rgba(173, 198, 255, 0.04));
 }
 #view-songs .songs-pagination {
   padding-top: 12px;
