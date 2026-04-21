@@ -8683,6 +8683,7 @@ let _songsFilter = '';
 let _songsPage = 0;
 const SONGS_PER_PAGE = 100;
 const _TABLE_COLUMNS_STORAGE_KEY = 'tb.table_columns.v1';
+const _TABLE_WIDTHS_STORAGE_KEY = 'tb.table_widths.v1';
 const _TABLE_COLUMNS = [
   { key: 'track_number', label: 'Track #' },
   { key: 'title', label: 'Title' },
@@ -8724,6 +8725,7 @@ const _TABLE_COL_DEFAULTS = {
 let _tableColVisible = { ..._TABLE_COL_DEFAULTS };
 let _tableColsPopoverEl = null;
 let _tableColsContextKeys = _TABLE_COLUMNS.map(c => c.key);
+let _tableColWidths = {};
 
 function _loadTableColumnPrefs() {
   try {
@@ -8746,6 +8748,115 @@ function _saveTableColumnPrefs() {
   } catch (_) {}
 }
 
+function _loadTableWidthPrefs() {
+  try {
+    const raw = localStorage.getItem(_TABLE_WIDTHS_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+    _tableColWidths = parsed;
+  } catch (_) {}
+}
+
+function _saveTableWidthPrefs() {
+  try {
+    localStorage.setItem(_TABLE_WIDTHS_STORAGE_KEY, JSON.stringify(_tableColWidths));
+  } catch (_) {}
+}
+
+function _tableResizeKey(table) {
+  if (!table) return '';
+  if (table.id) return table.id;
+  if (table.classList.contains('tracks-table-disc')) return 'tracks-table-disc';
+  return table.tagName.toLowerCase();
+}
+
+function _tableMinColWidth(colKey) {
+  if (colKey === 'favourite' || colKey === 'actions') return 56;
+  if (colKey === 'track_number' || colKey === 'year' || colKey === 'disc_number') return 72;
+  return 84;
+}
+
+function _applyColumnWidth(table, colKey, width) {
+  const tableKey = _tableResizeKey(table);
+  if (!tableKey || !colKey) return;
+  const px = Math.max(_tableMinColWidth(colKey), Math.round(Number(width) || 0));
+  const scope = tableKey === 'tracks-table-disc'
+    ? document.querySelectorAll('table.tracks-table-disc')
+    : [table];
+  scope.forEach((tbl) => {
+    tbl.querySelectorAll(`thead th[data-col="${colKey}"]`).forEach((th) => {
+      th.style.width = `${px}px`;
+      th.style.minWidth = `${px}px`;
+    });
+  });
+}
+
+function _applyTableColumnWidths() {
+  const tables = [
+    ...['songs-table', 'tracks-table', 'pl-table', 'fav-songs-table']
+      .map(id => document.getElementById(id))
+      .filter(Boolean),
+    ...Array.from(document.querySelectorAll('table.tracks-table-disc')),
+  ];
+  tables.forEach((table) => {
+    const key = _tableResizeKey(table);
+    const byCol = _tableColWidths[key] || {};
+    Object.entries(byCol).forEach(([colKey, width]) => _applyColumnWidth(table, colKey, width));
+  });
+}
+
+function _bindTableColumnResizers() {
+  const tables = [
+    ...['songs-table', 'tracks-table', 'pl-table', 'fav-songs-table']
+      .map(id => document.getElementById(id))
+      .filter(Boolean),
+    ...Array.from(document.querySelectorAll('table.tracks-table-disc')),
+  ];
+  tables.forEach((table) => {
+    table.querySelectorAll('thead th[data-col]').forEach((th) => {
+      const colKey = String(th.getAttribute('data-col') || '').trim();
+      if (!colKey) return;
+      if (th.querySelector('.table-col-resizer')) return;
+      const handle = document.createElement('span');
+      handle.className = 'table-col-resizer';
+      handle.setAttribute('role', 'separator');
+      handle.setAttribute('aria-orientation', 'vertical');
+      handle.title = 'Resize column';
+      handle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const tableKey = _tableResizeKey(table);
+        const startX = e.clientX;
+        const startW = th.getBoundingClientRect().width;
+        const onMove = (ev) => {
+          const next = startW + (ev.clientX - startX);
+          _applyColumnWidth(table, colKey, next);
+        };
+        const onUp = (ev) => {
+          const next = startW + (ev.clientX - startX);
+          const finalW = Math.max(_tableMinColWidth(colKey), Math.round(next));
+          _tableColWidths[tableKey] = _tableColWidths[tableKey] || {};
+          _tableColWidths[tableKey][colKey] = finalW;
+          _saveTableWidthPrefs();
+          document.body.classList.remove('is-col-resizing');
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+        };
+        document.body.classList.add('is-col-resizing');
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp, { once: true });
+      });
+      th.appendChild(handle);
+    });
+  });
+  _applyTableColumnWidths();
+}
+
 function _isTableColVisible(colKey) {
   if (!colKey) return true;
   if (colKey === 'actions') return true;
@@ -8766,6 +8877,7 @@ function _applyTableColumnVisibility() {
     const key = el.getAttribute('data-col') || '';
     el.style.display = _isTableColVisible(key) ? '' : 'none';
   });
+  _bindTableColumnResizers();
 }
 
 function _ensureTableColsPopover() {
@@ -8862,6 +8974,7 @@ document.addEventListener('click', (e) => {
 });
 
 _loadTableColumnPrefs();
+_loadTableWidthPrefs();
 
 function _getSongsFilteredTracks() {
   let tracks = _songsData;
