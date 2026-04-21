@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.12-rc.220426-0848 · 2026-04-22
 - Add: Insights Tag Health now includes a Track # completeness pill alongside Title, Artist, Album, Year, and Genre
 - Change: Insights Sonic Profile now shows Library Tonal Demand chart before the Spectral Centroid and Dynamic Energy histograms
 - Change: Insights Sonic Profile histogram charts renamed to Spectral Centroid Distribution and Dynamic Energy Distribution with explanatory subtitles; RMS stat row now shows relative spread percentage instead of raw floats
