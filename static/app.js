@@ -1477,6 +1477,26 @@ function _trackDiscSortValue(track) {
   return 1;
 }
 
+function _trackDiscTagValue(track) {
+  const direct = String(track?.disc_number || '').trim();
+  if (direct) {
+    const main = direct.split('/')[0].trim();
+    const m = main.match(/([1-9]\d?)/);
+    const n = Number.parseInt((m && m[1]) || main, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  const aliasDirect = [track?.disc, track?.disk, track?.disc_no, track?.discnum, track?.discNum]
+    .map(v => String(v || '').trim())
+    .find(Boolean);
+  if (aliasDirect) {
+    const main = aliasDirect.split('/')[0].trim();
+    const m = main.match(/([1-9]\d?)/);
+    const n = Number.parseInt((m && m[1]) || main, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
 function _hasMultiDiscTracks(rows) {
   const discs = new Set((rows || []).map(_trackDiscSortValue).filter(n => Number.isFinite(n) && n > 0));
   return discs.size > 1;
@@ -1510,18 +1530,21 @@ function _buildAlbumDiscGroups(rows) {
   if (!state.album || !list.length) return [{ key: 'disc:1', label: 'Disc 1', rows: list }];
 
   const explicitNums = [...new Set(list
-    .map(t => _trackDiscSortValue(t))
+    .map(t => _trackDiscTagValue(t))
     .filter(n => Number.isFinite(n) && n > 0)
   )];
   if (explicitNums.length > 1) {
     const groups = new Map();
     explicitNums.sort((a, b) => a - b).forEach(n => groups.set(`disc:${n}`, { key: `disc:${n}`, label: `Disc ${n}`, rows: [] }));
     list.forEach(t => {
-      const n = _trackDiscSortValue(t);
+      const n = _trackDiscTagValue(t);
       const k = groups.has(`disc:${n}`) ? `disc:${n}` : `disc:1`;
       groups.get(k).rows.push(t);
     });
     return [...groups.values()].filter(g => g.rows.length);
+  }
+  if (explicitNums.length === 1) {
+    return [{ key: `disc:${explicitNums[0]}`, label: `Disc ${explicitNums[0]}`, rows: list }];
   }
 
   const folderKeys = list.map(_trackDiscLabelFromPath).filter(Boolean);
@@ -8722,9 +8745,36 @@ const _TABLE_COL_DEFAULTS = {
   favourite: true,
   actions: true,
 };
-let _tableColVisible = { ..._TABLE_COL_DEFAULTS };
+const _TABLE_COL_CONTEXTS = ['songs', 'tracks', 'playlist', 'fav_songs'];
+const _TRACKS_TABLE_COL_DEFAULTS = {
+  ..._TABLE_COL_DEFAULTS,
+  duration: false,
+  album_artist: false,
+  year: false,
+  disc_number: false,
+  format: false,
+  bitrate: false,
+  sample_rate: false,
+  bit_depth: false,
+  date_added: false,
+  filename: false,
+  track_number: true,
+  title: true,
+  album: true,
+  artist: true,
+  genre: true,
+  favourite: true,
+  actions: true,
+};
+let _tableColVisibleByContext = {
+  songs: { ..._TABLE_COL_DEFAULTS },
+  tracks: { ..._TRACKS_TABLE_COL_DEFAULTS },
+  playlist: { ..._TABLE_COL_DEFAULTS },
+  fav_songs: { ..._TABLE_COL_DEFAULTS },
+};
 let _tableColsPopoverEl = null;
 let _tableColsContextKeys = _TABLE_COLUMNS.map(c => c.key);
+let _tableColsContext = 'songs';
 let _tableColWidths = {};
 
 function _loadTableColumnPrefs() {
@@ -8733,18 +8783,35 @@ function _loadTableColumnPrefs() {
     if (!raw) return;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return;
-    _tableColVisible = { ..._TABLE_COL_DEFAULTS };
-    for (const c of _TABLE_COLUMNS) {
-      if (Object.prototype.hasOwnProperty.call(parsed, c.key)) {
-        _tableColVisible[c.key] = !!parsed[c.key];
+    const looksLegacyFlat = _TABLE_COLUMNS.some(c => Object.prototype.hasOwnProperty.call(parsed, c.key));
+    if (looksLegacyFlat) {
+      // Backward compatibility: existing global prefs become Songs defaults.
+      _tableColVisibleByContext.songs = { ..._TABLE_COL_DEFAULTS };
+      for (const c of _TABLE_COLUMNS) {
+        if (Object.prototype.hasOwnProperty.call(parsed, c.key)) {
+          _tableColVisibleByContext.songs[c.key] = !!parsed[c.key];
+        }
       }
+      // Keep requested Album Detail first-load defaults for tracks context.
+      return;
+    }
+    for (const ctx of _TABLE_COL_CONTEXTS) {
+      const source = parsed?.[ctx];
+      if (!source || typeof source !== 'object') continue;
+      const base = ctx === 'tracks' ? { ..._TRACKS_TABLE_COL_DEFAULTS } : { ..._TABLE_COL_DEFAULTS };
+      for (const c of _TABLE_COLUMNS) {
+        if (Object.prototype.hasOwnProperty.call(source, c.key)) {
+          base[c.key] = !!source[c.key];
+        }
+      }
+      _tableColVisibleByContext[ctx] = base;
     }
   } catch (_) {}
 }
 
 function _saveTableColumnPrefs() {
   try {
-    localStorage.setItem(_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(_tableColVisible));
+    localStorage.setItem(_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(_tableColVisibleByContext));
   } catch (_) {}
 }
 
@@ -8769,6 +8836,25 @@ function _tableResizeKey(table) {
   if (table.id) return table.id;
   if (table.classList.contains('tracks-table-disc')) return 'tracks-table-disc';
   return table.tagName.toLowerCase();
+}
+
+function _tableContextFromTable(table) {
+  if (!table) return 'songs';
+  const id = String(table.id || '');
+  if (id === 'songs-table') return 'songs';
+  if (id === 'tracks-table') return 'tracks';
+  if (id === 'pl-table') return 'playlist';
+  if (id === 'fav-songs-table') return 'fav_songs';
+  if (table.classList.contains('tracks-table-disc')) return 'tracks';
+  return 'songs';
+}
+
+function _tableContextFromAnchor(anchor) {
+  if (!anchor) return 'songs';
+  if (anchor.closest('#view-tracks') || anchor.closest('#view-albums')) return 'tracks';
+  if (anchor.closest('#view-playlist')) return 'playlist';
+  if (anchor.closest('#view-fav-songs')) return 'fav_songs';
+  return 'songs';
 }
 
 function _tableMinColWidth(colKey) {
@@ -8857,25 +8943,27 @@ function _bindTableColumnResizers() {
   _applyTableColumnWidths();
 }
 
-function _isTableColVisible(colKey) {
+function _isTableColVisible(colKey, context = 'songs') {
   if (!colKey) return true;
   if (colKey === 'actions') return true;
   if (!Object.prototype.hasOwnProperty.call(_TABLE_COL_DEFAULTS, colKey)) return true;
-  return !!_tableColVisible[colKey];
+  const byCtx = _tableColVisibleByContext[context] || _TABLE_COL_DEFAULTS;
+  return !!byCtx[colKey];
 }
 
 function _applyTableColumnVisibility() {
   ['songs-table', 'tracks-table', 'pl-table', 'fav-songs-table'].forEach(id => {
     const table = document.getElementById(id);
     if (!table) return;
+    const ctx = _tableContextFromTable(table);
     table.querySelectorAll('[data-col]').forEach(el => {
       const key = el.getAttribute('data-col') || '';
-      el.style.display = _isTableColVisible(key) ? '' : 'none';
+      el.style.display = _isTableColVisible(key, ctx) ? '' : 'none';
     });
   });
   document.querySelectorAll('#tracks-multi-disc-container [data-col]').forEach(el => {
     const key = el.getAttribute('data-col') || '';
-    el.style.display = _isTableColVisible(key) ? '' : 'none';
+    el.style.display = _isTableColVisible(key, 'tracks') ? '' : 'none';
   });
   _bindTableColumnResizers();
 }
@@ -8898,7 +8986,7 @@ function _renderTableColumnsPopover() {
     <div class="table-columns-popover-title">Visible Columns</div>
     ${visibleDefs.map(c => `
       <label class="table-columns-popover-item">
-        <input type="checkbox" ${_isTableColVisible(c.key) ? 'checked' : ''} onchange="App.setTableColumnVisible('${c.key}', this.checked)" />
+        <input type="checkbox" ${_isTableColVisible(c.key, _tableColsContext) ? 'checked' : ''} onchange="App.setTableColumnVisible('${c.key}', this.checked)" />
         <span>${esc(c.label)}</span>
       </label>
     `).join('')}
@@ -8931,6 +9019,7 @@ function toggleTableColumnsPopover(evt) {
     pop.style.display = 'none';
     return;
   }
+  _tableColsContext = _tableContextFromAnchor(anchor);
   _tableColsContextKeys = _getColumnContextKeys(anchor);
   _renderTableColumnsPopover();
   const rect = anchor.getBoundingClientRect();
@@ -8952,14 +9041,17 @@ function toggleTableColumnsPopover(evt) {
 }
 
 function setTableColumnVisible(colKey, visible) {
+  const ctx = _tableColsContext || 'songs';
   if (colKey === 'actions') {
-    _tableColVisible.actions = true;
+    _tableColVisibleByContext[ctx] = _tableColVisibleByContext[ctx] || { ..._TABLE_COL_DEFAULTS };
+    _tableColVisibleByContext[ctx].actions = true;
     _saveTableColumnPrefs();
     _applyTableColumnVisibility();
     return;
   }
   if (!Object.prototype.hasOwnProperty.call(_TABLE_COL_DEFAULTS, colKey)) return;
-  _tableColVisible[colKey] = !!visible;
+  _tableColVisibleByContext[ctx] = _tableColVisibleByContext[ctx] || { ..._TABLE_COL_DEFAULTS };
+  _tableColVisibleByContext[ctx][colKey] = !!visible;
   _saveTableColumnPrefs();
   _applyTableColumnVisibility();
 }

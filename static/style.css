@@ -2147,7 +2147,7 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; backgrou
 
 #tracks-table {
   width: max-content;
-  min-width: 1280px;
+  min-width: 100%;
   table-layout: auto;
 }
 #songs-table,
@@ -2198,13 +2198,11 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; backgrou
   padding-right: 8px;
 }
 
-#tracks-table .col-title { width: 48%; }
+#tracks-table .col-title { min-width: 260px; }
 
-#tracks-table .col-album { width: 220px; }
+#tracks-table .col-album { min-width: 180px; }
 
-#tracks-table .col-genre {
-  width: 140px;
-}
+#tracks-table .col-genre { min-width: 120px; }
 
 #tracks-table .col-dur {
   width: 84px;
@@ -10273,11 +10271,12 @@ tr.player-active .track-title { color: var(--accent); }
 .tracks-disc-heading {
   margin: 0;
   padding-left: 4px;
-  line-height: 1.2;
-  font-size: 1.18rem;
-  font-weight: 700;
-  letter-spacing: 0.015em;
-  color: var(--text);
+  line-height: 1.35;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 .tracks-disc-table-wrap {
   width: 100%;
@@ -10286,7 +10285,7 @@ tr.player-active .track-title { color: var(--accent); }
 }
 .tracks-table-disc {
   width: max-content;
-  min-width: 1280px;
+  min-width: 100%;
   table-layout: auto;
   border-collapse: collapse;
 }
