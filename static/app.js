@@ -1459,6 +1459,63 @@ function _hasMultiDiscTracks(rows) {
   return discs.size > 1;
 }
 
+function _trackDiscLabelFromPath(track) {
+  const p = String(track?.path || '');
+  if (!p) return '';
+  const parts = p.split(/[\\/]+/).filter(Boolean);
+  if (parts.length < 2) return '';
+  const parent = parts[parts.length - 2] || '';
+  const albumName = String(state.album || '').trim().toLowerCase();
+  const parentNorm = parent.trim().toLowerCase();
+  if (!parentNorm || (albumName && parentNorm === albumName)) return '';
+  const m = parent.match(/(?:disc|cd)\s*0*([1-9]\d?)/i);
+  if (m && m[1]) return `disc:${Number.parseInt(m[1], 10)}`;
+  return `folder:${parentNorm}`;
+}
+
+function _buildAlbumDiscGroups(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!state.album || !list.length) return [{ key: 'disc:1', label: 'Disc 1', rows: list }];
+
+  const explicitNums = [...new Set(list
+    .map(t => _trackDiscSortValue(t))
+    .filter(n => Number.isFinite(n) && n > 0)
+  )];
+  if (explicitNums.length > 1) {
+    const groups = new Map();
+    explicitNums.sort((a, b) => a - b).forEach(n => groups.set(`disc:${n}`, { key: `disc:${n}`, label: `Disc ${n}`, rows: [] }));
+    list.forEach(t => {
+      const n = _trackDiscSortValue(t);
+      const k = groups.has(`disc:${n}`) ? `disc:${n}` : `disc:1`;
+      groups.get(k).rows.push(t);
+    });
+    return [...groups.values()].filter(g => g.rows.length);
+  }
+
+  const folderKeys = list.map(_trackDiscLabelFromPath).filter(Boolean);
+  const uniqueFolders = [...new Set(folderKeys)];
+  if (uniqueFolders.length > 1) {
+    const folderToDisc = new Map();
+    uniqueFolders.forEach((k, i) => folderToDisc.set(k, i + 1));
+    const groups = new Map();
+    list.forEach(t => {
+      const fk = _trackDiscLabelFromPath(t);
+      const disc = fk ? (folderToDisc.get(fk) || 1) : 1;
+      const key = `disc:${disc}`;
+      if (!groups.has(key)) groups.set(key, { key, label: `Disc ${disc}`, rows: [] });
+      groups.get(key).rows.push(t);
+    });
+    const out = [...groups.values()].sort((a, b) => {
+      const an = Number.parseInt(a.key.split(':')[1], 10) || 1;
+      const bn = Number.parseInt(b.key.split(':')[1], 10) || 1;
+      return an - bn;
+    });
+    if (out.length > 1) return out;
+  }
+
+  return [{ key: 'disc:1', label: 'Disc 1', rows: list }];
+}
+
 function _tracksSortedRows(rows) {
   const col = String(_tracksSort.col || 'track_number');
   const dir = _tracksSort.order === 'desc' ? -1 : 1;
@@ -1504,7 +1561,8 @@ function _renderTracksTable() {
   if (!wrap || !baseTable || !tbody) return;
   const existingMulti = document.getElementById('tracks-multi-disc-container');
 
-  const shouldGroupByDisc = !!(state.album && _tracksSort.col === 'track_number' && _hasMultiDiscTracks(rows));
+  const discGroups = _buildAlbumDiscGroups(rows);
+  const shouldGroupByDisc = !!(state.album && discGroups.length > 1);
   if (!shouldGroupByDisc) {
     if (existingMulti) existingMulti.remove();
     baseTable.style.display = 'table';
@@ -1517,13 +1575,6 @@ function _renderTracksTable() {
     tbody.innerHTML = '';
     if (existingMulti) existingMulti.remove();
 
-    const groups = new Map();
-    rows.forEach((t, idx) => {
-      const disc = _trackDiscSortValue(t);
-      if (!groups.has(disc)) groups.set(disc, []);
-      groups.get(disc).push({ track: t, idx });
-    });
-    const discs = [...groups.keys()].sort((a, b) => a - b);
     const headerHtml = `
       <thead><tr>
         <th class="col-num" data-col="track_number"><span class="th-sort-label">Track #</span></th>
@@ -1532,18 +1583,18 @@ function _renderTracksTable() {
         <th class="col-genre" data-col="genre"><span class="th-sort-label">Genre</span></th>
         <th class="col-dur" data-col="duration"><span class="th-sort-label">Time</span></th>
         <th class="col-fav" data-col="favourite"></th>
-        <th class="col-act" data-col="actions"></th>
+        <th class="col-act" data-col="actions"><span class="th-sort-label">Actions</span></th>
       </tr></thead>`;
     const multi = document.createElement('div');
     multi.id = 'tracks-multi-disc-container';
     multi.className = 'tracks-multi-disc-container';
-    multi.innerHTML = discs.map((disc) => {
-      const bodyRows = (groups.get(disc) || [])
-        .map(({ track, idx }) => trackRow(track, idx + 1, false))
+    multi.innerHTML = discGroups.map((group) => {
+      const bodyRows = (group.rows || [])
+        .map((track, idx) => trackRow(track, idx + 1, false))
         .join('');
       return `
         <section class="tracks-disc-block">
-          <h3 class="tracks-disc-heading">Disc ${disc}</h3>
+          <h3 class="tracks-disc-heading">${esc(group.label)}</h3>
           <table class="tracks-table-disc">
             ${headerHtml}
             <tbody>${bodyRows}</tbody>
@@ -8608,6 +8659,7 @@ function _saveTableColumnPrefs() {
 
 function _isTableColVisible(colKey) {
   if (!colKey) return true;
+  if (colKey === 'actions') return true;
   if (!Object.prototype.hasOwnProperty.call(_TABLE_COL_DEFAULTS, colKey)) return true;
   return !!_tableColVisible[colKey];
 }
@@ -8699,6 +8751,12 @@ function toggleTableColumnsPopover(evt) {
 }
 
 function setTableColumnVisible(colKey, visible) {
+  if (colKey === 'actions') {
+    _tableColVisible.actions = true;
+    _saveTableColumnPrefs();
+    _applyTableColumnVisibility();
+    return;
+  }
   if (!Object.prototype.hasOwnProperty.call(_TABLE_COL_DEFAULTS, colKey)) return;
   _tableColVisible[colKey] = !!visible;
   _saveTableColumnPrefs();
