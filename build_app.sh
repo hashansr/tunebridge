@@ -115,10 +115,11 @@ GIT_HASH=$(git -C "$PROJECT_DIR"   rev-parse --short=7 HEAD 2>/dev/null || echo 
 BUILD_NUM=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/version.json'))['build']+1)")
 APP_VERSION="0.${BUILD_NUM}"
 
-BUILD_DATE=$(date +%Y%m%d)
+BUILD_DATE=$(date +%d%m%y)
+BUILD_TIME=$(date +%H%M)
 case "$BUILD_CHANNEL" in
   prod) VERSION_FULL="${APP_VERSION}" ;;
-  rc)   VERSION_FULL="${APP_VERSION}-rc.${BUILD_DATE}" ;;
+  rc)   VERSION_FULL="${APP_VERSION}-rc.${BUILD_DATE}-${BUILD_TIME}" ;;
   *)    VERSION_FULL="${APP_VERSION}-dev.${BUILD_DATE}+${GIT_HASH}" ;;
 esac
 
