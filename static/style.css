@@ -30,6 +30,9 @@
   --radius-lg:      24px;
   --sidebar-w:      260px;
   --view-gutter:    32px;
+  --main-nav-side-inset: clamp(14px, 2.1vw, 25px);
+  --main-nav-top-inset: var(--main-nav-side-inset);
+  --main-nav-btn-size: 34px;
 
   /* Type */
   --text-xs:   11px;
@@ -939,9 +942,9 @@ h4.settings-subsection-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 42px;
-  padding: 8px var(--view-gutter) 0;
-  margin-bottom: -42px;
+  min-height: var(--main-nav-btn-size);
+  padding: var(--main-nav-top-inset) var(--main-nav-side-inset) 0;
+  margin-bottom: calc(-1 * (var(--main-nav-top-inset) + var(--main-nav-btn-size)));
   flex-shrink: 0;
   border: none;
   box-shadow: none;
@@ -962,8 +965,8 @@ h4.settings-subsection-title {
 }
 
 #nav-back-btn {
-  width: 34px;
-  height: 34px;
+  width: var(--main-nav-btn-size);
+  height: var(--main-nav-btn-size);
   border-radius: 50%;
   background: rgba(28, 27, 27, 0.82);
   border: 1px solid rgba(173, 198, 255, 0.1);
@@ -992,11 +995,11 @@ h4.settings-subsection-title {
 }
 
 :root {
-  --main-nav-overlay-clearance: 22px;
+  --main-nav-overlay-clearance: calc(var(--main-nav-top-inset) + 18px);
 }
 
 .view {
-  padding: calc(28px + var(--main-nav-overlay-clearance)) var(--view-gutter) 28px;
+  padding: calc(28px + var(--main-nav-overlay-clearance)) var(--main-nav-side-inset) 28px;
   min-height: 100%;
   background: var(--app-page-gradient);
 }
@@ -10508,7 +10511,7 @@ body.is-col-resizing {
 
 /* Gear facelift: align with Favourites / Insights surface language */
 #view-gear {
-  padding: calc(28px + var(--main-nav-overlay-clearance)) 32px 90px;
+  padding: calc(28px + var(--main-nav-overlay-clearance)) var(--main-nav-side-inset) 90px;
 }
 #view-gear .gear-section-header {
   margin-bottom: 20px;
@@ -10885,7 +10888,7 @@ body.is-col-resizing {
    Insights Facelift (Obsidian Lens / UI-only)
    ========================================================================== */
 #view-insights.insights-view {
-  padding: calc(22px + var(--main-nav-overlay-clearance)) 16px 90px;
+  padding: calc(22px + var(--main-nav-overlay-clearance)) var(--main-nav-side-inset) 90px;
   background: var(--app-page-gradient);
 }
 .insights-hero {
@@ -10912,7 +10915,7 @@ body.is-col-resizing {
 
 /* ── Home view ─────────────────────────────────────────────────────── */
 #view-home {
-  padding: calc(22px + var(--main-nav-overlay-clearance)) calc(var(--view-gutter) + 14px) 132px;
+  padding: calc(22px + var(--main-nav-overlay-clearance)) var(--main-nav-side-inset) 132px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -10926,14 +10929,14 @@ body.is-col-resizing {
 /* ── Home v2 ──────────────────────────────────────────────────────────── */
 @media (min-width: 1500px) {
   #view-home {
-    padding-left: calc(var(--view-gutter) + 26px);
-    padding-right: calc(var(--view-gutter) + 26px);
+    padding-left: var(--main-nav-side-inset);
+    padding-right: var(--main-nav-side-inset);
   }
 }
 @media (min-width: 1760px) {
   #view-home {
-    padding-left: calc(var(--view-gutter) + 42px);
-    padding-right: calc(var(--view-gutter) + 42px);
+    padding-left: var(--main-nav-side-inset);
+    padding-right: var(--main-nav-side-inset);
   }
 }
 
@@ -11512,7 +11515,7 @@ body.is-col-resizing {
     font-size: 18px;
   }
   #view-home {
-    padding: 24px calc(var(--view-gutter) + 4px) 122px;
+    padding: calc(18px + var(--main-nav-overlay-clearance)) var(--main-nav-side-inset) 122px;
     gap: 28px;
   }
 }
@@ -11537,7 +11540,7 @@ body.is-col-resizing {
     font-size: 17px;
   }
   #view-home {
-    padding: 20px var(--view-gutter) 114px;
+    padding: calc(14px + var(--main-nav-overlay-clearance)) var(--main-nav-side-inset) 114px;
     gap: 22px;
   }
 }
