@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.6-rc.210426-1508 · 2026-04-21
+
 ## v0.6-rc · 2026-04-21
 - Fix: Songs table header/data alignment issue by removing duplicate Genre cell and restoring correct column order (Time/Favourite/Genre/Year)
 - Change: Track-table row action hover states are now icon-color only (blue for standard actions, red for delete) with no circular hover background
