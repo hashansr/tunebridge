@@ -8325,7 +8325,7 @@ def insights_tag_health():
         problem_limit = 0
 
     # Single-pass accumulation of all completeness counters, artist groups, and problem tracks
-    missing_counts = {'title': 0, 'artist': 0, 'album': 0, 'year': 0, 'genre': 0}
+    missing_counts = {'title': 0, 'artist': 0, 'album': 0, 'track_number': 0, 'year': 0, 'genre': 0}
     artist_groups = defaultdict(list)
     problem_tracks = []
 
@@ -8356,6 +8356,11 @@ def insights_tag_health():
             missing_counts['year'] += 1; issues.append('year')
         if not _split_track_genres(t.get('genre')):
             missing_counts['genre'] += 1; issues.append('genre')
+        v_tn = _norm_text(t.get('track_number'))
+        if v_tn and '/' in v_tn:
+            v_tn = v_tn.split('/')[0].strip()
+        if not v_tn:
+            missing_counts['track_number'] += 1; issues.append('track_number')
 
         raw = (t.get('album_artist') or t.get('artist') or '').strip()
         if raw and raw.lower() != 'unknown artist':
@@ -8372,7 +8377,7 @@ def insights_tag_health():
             })
 
     completeness = {}
-    for field in ('title', 'artist', 'album', 'year', 'genre'):
+    for field in ('title', 'artist', 'album', 'track_number', 'year', 'genre'):
         n_missing = missing_counts[field]
         present = total - n_missing
         completeness[field] = {
@@ -8709,6 +8714,9 @@ _PERC_BANDS = [
 
 # 5 derived perceptual dimensions (computed from IEM FR shape, not FFT energy)
 _DERIVED_DIMS = ['sound_stage', 'timbre_color', 'masking', 'layering', 'tonality']
+# When True, derived dimension average applies a small penalty to match scores (max −8%)
+# so the radar chart (17 dims) and list scores stay consistent
+_MATCH_INCLUDE_DERIVED_PENALTY = True
 
 _ALL_DIM_LABELS = {b[0]: b[3] for b in _PERC_BANDS}
 _ALL_DIM_LABELS.update({
@@ -9043,6 +9051,12 @@ def _build_match_matrix(genre_fps, iem_profiles):
         for iem in iem_profiles:
             is_ = np.array([iem['scores_12band'].get(k, 5.0) for k in band_keys])
             pct = round(min(float((ge * is_).sum() / te) * 10.0, 100.0), 1)
+            if _MATCH_INCLUDE_DERIVED_PENALTY and iem.get('scores_all'):
+                d_scores = [iem['scores_all'].get(k, 5.0) for k in _DERIVED_DIMS]
+                d_mean = sum(d_scores) / len(d_scores)
+                # d_mean=10 → modifier 1.0 (no change); d_mean=1 → 0.92 (−8% max)
+                derived_modifier = 0.92 + (d_mean - 1.0) / 9.0 * 0.08
+                pct = round(min(pct * derived_modifier, 100.0), 1)
             top = [band_keys[i] for i in np.argsort(-(ge * is_))[:3] if ge[i] > 0.1]
             matches.append({'iem_id': iem['id'], 'iem_name': iem['name'],
                             'score': pct, 'best_dimensions': top})

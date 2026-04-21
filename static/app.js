@@ -10501,10 +10501,10 @@ function _renderInsightsOverview(d) {
 
   el.innerHTML = `
     <div class="ov-stat-grid">
-      ${_statCard(_noteSvg, 'FLAC library', d.total_tracks.toLocaleString(), 'Total Tracks')}
-      ${_statCard(_discSvg, `${d.total_albums.toLocaleString()} in library`, d.total_albums.toLocaleString(), 'Albums')}
+      ${_statCard(_noteSvg, 'Music Library', d.total_tracks.toLocaleString(), 'Total Tracks')}
+      ${_statCard(_discSvg, 'Unique albums', d.total_albums.toLocaleString(), 'Albums')}
       ${_statCard(_peopleSvg, 'Unique artists', d.total_artists.toLocaleString(), 'Artists')}
-      ${_statCard(_genreSvg, 'Tagged categories', (d.genres_total != null ? d.genres_total : Object.keys(d.genres || {}).length).toLocaleString(), 'Genres')}
+      ${_statCard(_genreSvg, 'Genre Distribution', (d.genres_total != null ? d.genres_total : Object.keys(d.genres || {}).length).toLocaleString(), 'Genres')}
     </div>
 
     <div class="ov-charts-row">
@@ -10604,8 +10604,8 @@ function _renderInsightsGenreDistribution(d) {
 function _renderInsightsTagHealth(d) {
   const el = document.getElementById('insights-tag-health-content');
 
-  const fieldLabels = { title: 'Title', artist: 'Artist', album: 'Album', year: 'Year', genre: 'Genre' };
-  const fieldOrder = ['title', 'artist', 'album', 'year', 'genre'];
+  const fieldLabels = { title: 'Title', artist: 'Artist', album: 'Album', track_number: 'Track #', year: 'Year', genre: 'Genre' };
+  const fieldOrder = ['title', 'artist', 'album', 'track_number', 'year', 'genre'];
 
   const barsHtml = fieldOrder.filter(f => d.completeness[f]).map(field => {
     const s = d.completeness[field];
@@ -11107,10 +11107,10 @@ function _updateAnalysisInfo(info) {
   const btn = document.getElementById('insights-analyse-btn');
   if (!el) return;
   if (info.status === 'needs_upgrade' || info.needs_upgrade) {
-    el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--warn"></span>Model upgraded — re-analysis required for Library Fit`;
+    el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--warn"></span>Model upgraded. Re-analysis required for Library Fit.`;
     if (btn && !btn.disabled) btn.textContent = 'Re-analyse Library';
   } else if (info.status === 'up_to_date') {
-    el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--ok"></span>Analysis up to date — ${info.analysed.toLocaleString()} tracks analysed`;
+    el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--ok"></span>Analysis up to date · ${info.analysed.toLocaleString()} tracks analysed`;
     if (btn && !btn.disabled) btn.textContent = 'Re-analyse';
   } else if (info.status === 'pending') {
     el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--warn"></span>${info.pending.toLocaleString()} song${info.pending !== 1 ? 's' : ''} pending analysis`;
@@ -11126,14 +11126,14 @@ const _INSIGHTS_HELP = {
   overview: {
     title: 'Library Overview',
     body: `<p>Shows the distribution of <strong>file formats</strong>, <strong>sample rates</strong>, and <strong>bit depths</strong> across your entire library.</p>
-           <p><strong>How to read:</strong> Taller bars = more tracks in that category. Ideally your library is consistent — e.g. mostly FLAC at 44.1 kHz / 16-bit for CD rips, or 96–192 kHz for Hi-Res downloads.</p>
+           <p><strong>How to read:</strong> Taller bars = more tracks in that category. Ideally your library is consistent. For example, mostly FLAC at 44.1 kHz / 16-bit for CD rips, or 96–192 kHz for Hi-Res downloads.</p>
            <p><strong>Example:</strong> If 95% of your tracks are FLAC at 44.1 kHz / 16-bit, your library is clean and consistent. A large MP3 slice alongside FLAC suggests rips from mixed sources.</p>`,
   },
   'tag-health': {
     title: 'Tag Health',
     body: `<p>Measures how <strong>complete</strong> the metadata tags are across your library files.</p>
            <p><strong>How to read:</strong> Green = high coverage, red = many tracks missing that tag. Title, Artist, and Album are critical for browsing; Genre and Year are optional but useful for filtering and playlists.</p>
-           <p><strong>Example:</strong> A Genre score of 45% means more than half your tracks have no genre tag — worth fixing before building genre-based playlists.</p>`,
+           <p><strong>Example:</strong> A Genre score of 45% means more than half your tracks have no genre tag. Worth fixing before building genre-based playlists.</p>`,
   },
   genre: {
     title: 'Genre Distribution',
@@ -11152,12 +11152,12 @@ const _INSIGHTS_HELP = {
   gear: {
     title: 'IEM / Headphone Fit',
     body: `<p>Scores how well each IEM matches your library's tonal demands, measured against a chosen target curve.</p>
-           <p><strong>Scoring target</strong> — the FR curve each IEM is scored against. <em>Flat / Neutral</em> (default) = perfectly flat response. You can also pick any target you've added in Settings (e.g. Harman, Rtings) to score IEMs against a preferred tuning signature instead.</p>
-           <p><strong>Library character</strong> — which frequency bands your music exercises most (salience). Deviations from the target in heavily-used bands cost more points.</p>
-           <p><strong>IEM Fit Score</strong> — 100% = matches the target exactly. Factory vs PEQ tabs let you compare the raw measurement against a PEQ-equalised version.</p>
-           <p><strong>Band bars</strong> — deviation from the target at 0 dB centre. Left = recessed vs target; right = boosted vs target.</p>
-           <p><strong>Collection Coverage</strong> — across all your IEMs, how well is each band covered by at least one IEM close to the target?</p>
-           <p><strong>Example:</strong> Scoring against Harman IEM 2019 instead of flat will favour IEMs with a slight bass shelf and ear-gain peak — penalising overly neutral-sounding IEMs that most listeners find thin.</p>`,
+           <p><strong>Scoring target:</strong> the FR curve each IEM is scored against. <em>Flat / Neutral</em> (default) = perfectly flat response. You can also pick any target you've added in Settings (e.g. Harman, Rtings) to score IEMs against a preferred tuning signature instead.</p>
+           <p><strong>Library character:</strong> which frequency bands your music exercises most (salience). Deviations from the target in heavily-used bands cost more points.</p>
+           <p><strong>IEM Fit Score:</strong> 100% = matches the target exactly. Factory vs PEQ tabs let you compare the raw measurement against a PEQ-equalised version.</p>
+           <p><strong>Band bars:</strong> deviation from the target at 0 dB centre. Left = recessed vs target; right = boosted vs target.</p>
+           <p><strong>Collection Coverage:</strong> across all your IEMs, how well is each band covered by at least one IEM close to the target?</p>
+           <p><strong>Example:</strong> Scoring against Harman IEM 2019 instead of flat will favour IEMs with a slight bass shelf and ear-gain peak, penalising overly neutral-sounding IEMs that most listeners find thin.</p>`,
   },
 };
 
@@ -11371,9 +11371,11 @@ function _renderInsightsSonicProfile(d) {
         <div class="sonic-insight-meta">RMS IQR: ${es.p25.toFixed(3)} - ${es.p75.toFixed(3)}</div>
       </div>
     </div>
+    ${bandProfileHtml}
     <div class="sonic-charts-grid">
       <div class="sonic-chart-card">
-        <div class="sonic-chart-title">Brightness Distribution (Tonal Tilt)</div>
+        <div class="sonic-chart-title">Spectral Centroid Distribution</div>
+        <div class="sonic-chart-subtitle">Peak left = warm/dark library · Peak right = bright/detail-forward</div>
         <div class="insights-chart-wrap" style="height:138px"><canvas id="sonic-brightness-canvas"></canvas></div>
         <div class="sonic-stat-row">
           <span class="sonic-stat">Median <strong>${_hz(bs.median)} Hz</strong></span>
@@ -11382,18 +11384,17 @@ function _renderInsightsSonicProfile(d) {
         </div>
       </div>
       <div class="sonic-chart-card">
-        <div class="sonic-chart-title">RMS Energy Distribution (Mastering Density)</div>
+        <div class="sonic-chart-title">Dynamic Energy Distribution</div>
+        <div class="sonic-chart-subtitle">Wide spread = varied mastering · Tight cluster = consistently compressed</div>
         <div class="insights-chart-wrap" style="height:138px"><canvas id="sonic-energy-canvas"></canvas></div>
         <div class="sonic-stat-row">
-          <span class="sonic-stat">Median <strong>${es.median.toFixed(3)}</strong></span>
-          <span class="sonic-stat">Mean <strong>${es.mean.toFixed(3)}</strong></span>
-          <span class="sonic-stat">IQR <strong>${es.p25.toFixed(3)}–${es.p75.toFixed(3)}</strong></span>
+          <span class="sonic-stat">Spread <strong>${(energySpread / Math.max(es.mean, 0.001) * 100).toFixed(0)}%</strong></span>
+          <span class="sonic-stat">${energySpread >= 0.08 ? 'High variation' : energySpread <= 0.03 ? 'Consistent' : 'Moderate variation'}</span>
         </div>
       </div>
     </div>
-    ${bandProfileHtml}
     <div class="sonic-caveat">
-      <strong>Compatibility cues</strong> — ${cues.map(c => esc(c)).join(' ')} <strong>Analysis covers FLAC files only</strong> — M4A/AAC tracks are skipped.
+      <strong>Compatibility cues:</strong> ${cues.map(c => esc(c)).join(' ')} <strong>Note:</strong> Analysis covers FLAC files only. M4A/AAC tracks are skipped.
     </div>
     </div>`;
 
@@ -11740,7 +11741,7 @@ function _renderInsightsMatchOverview(d, errMsg) {
                 <div class="iemfit-iem-meta">
                   ${iem.best_genre  ? `Best for <strong>${esc(iem.best_genre)}</strong>` : ''}
                   ${iem.worst_genre ? ` · Worst for <strong>${esc(iem.worst_genre)}</strong>` : ''}
-                  ${iem.genres_total ? ` · <span>${iem.genres_above_70}/${iem.genres_total} genres ≥70%</span>` : ''}
+                  ${iem.genres_total ? ` · <span>${iem.genres_above_70} of ${iem.genres_total} genres at strong fit</span>` : ''}
                 </div>
               </div>
               <svg class="iemfit-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
@@ -11749,7 +11750,13 @@ function _renderInsightsMatchOverview(d, errMsg) {
           </div>`;
       }).join('');
 
-  el.innerHTML = `<div class="iemfit-iem-list">${iemListHtml}</div>`;
+  el.innerHTML = `
+    <div class="iemfit-score-legend">
+      <span><span class="iemfit-legend-dot" style="background:#53e16f"></span>Strong fit ≥75%</span>
+      <span><span class="iemfit-legend-dot" style="background:#f0b429"></span>Partial 55–74%</span>
+      <span><span class="iemfit-legend-dot" style="background:#ffb3b5"></span>Weak &lt;55%</span>
+    </div>
+    <div class="iemfit-iem-list">${iemListHtml}</div>`;
 }
 
 async function _toggleIemAccordion(iemId) {
@@ -11819,8 +11826,8 @@ function _renderIemDetail(iemId, container) {
         </div>
         <div class="iemfit-detail-section">
           <div class="iemfit-detail-section-hdr">
-            <span class="iemfit-detail-section-title">Blindspot Detector</span>
-            <span class="iemfit-detail-section-hint">Genres this IEM handles least well</span>
+            <span class="iemfit-detail-section-title">Weak Genre Coverage</span>
+            <span class="iemfit-detail-section-hint">Genres where this IEM is the weakest match for your library</span>
           </div>
           <div id="iemfit-bs-${esc(iemId)}" class="iemfit-bs-body"></div>
         </div>
@@ -11941,7 +11948,7 @@ async function _renderIemFRPanel(iemId, activePeqId) {
            </select>
          </div>` : '';
     const overlayCtrl = `<div class="fr-overlay-host fr-overlay-host--compact" data-fr-overlay-host="1" data-fr-overlay-context="iemfit:${esc(iemId)}"></div>`;
-    controlsEl.innerHTML = sourceCtrl + peqCtrl + overlayCtrl + genreCtrl;
+    controlsEl.innerHTML = sourceCtrl + genreCtrl + peqCtrl + overlayCtrl;
     _refreshFrOverlayControls();
   }
 
@@ -12047,7 +12054,7 @@ function _renderIemHeatmapPanel(iemId, peqScores12 = null) {
   }).join('');
 
   const viewAllBtn = total > 8
-    ? `<button class="iemfit-bs-more-btn iemfit-panel-cta" onclick="App.showAllIemGenres('${esc(iemId)}')">${total} genres total — view all →</button>`
+    ? `<button class="iemfit-bs-more-btn iemfit-panel-cta" onclick="App.showAllIemGenres('${esc(iemId)}')">View all ${total} genres →</button>`
     : '';
 
   el.innerHTML = `<div class="iemfit-heatmap-grid">${rowsHtml}</div>${viewAllBtn}`;
@@ -12092,7 +12099,7 @@ function _renderIemBlindspotPanel(iemId, peqScores12 = null) {
   }).join('');
 
   const moreBtn = total > 10
-    ? `<button class="iemfit-bs-more-btn iemfit-panel-cta" onclick="App.showAllIemBlindspots('${esc(iemId)}')">${total} genres total — view all →</button>`
+    ? `<button class="iemfit-bs-more-btn iemfit-panel-cta" onclick="App.showAllIemBlindspots('${esc(iemId)}')">View all ${total} genres →</button>`
     : '';
 
   el.innerHTML = `<div class="iemfit-bs-list">${rowsHtml}</div>${moreBtn}`;
@@ -12200,7 +12207,7 @@ async function showAllIemGenres(iemId) {
   const bodyEl  = document.getElementById('iem-blindspot-modal-body');
   const modal   = document.getElementById('iem-blindspot-modal');
   if (!modal || !bodyEl) return;
-  if (titleEl) titleEl.textContent = `All Genres — ${iemName}`;
+  if (titleEl) titleEl.textContent = `All Genres: ${iemName}`;
 
   bodyEl.innerHTML = genreScores.map(g => {
     const fillColor = g.score >= 75 ? 'rgba(83,225,111,0.75)' : g.score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
@@ -12242,7 +12249,7 @@ async function showAllIemBlindspots(iemId) {
   const bodyEl  = document.getElementById('iem-blindspot-modal-body');
   const modal   = document.getElementById('iem-blindspot-modal');
   if (!modal || !bodyEl) return;
-  if (titleEl) titleEl.textContent = `All Genres — ${iemName}`;
+  if (titleEl) titleEl.textContent = `All Genres: ${iemName}`;
 
   bodyEl.innerHTML = genreScores.map(g => {
     const fillColor = g.score >= 75 ? 'rgba(83,225,111,0.75)' : g.score >= 55 ? 'rgba(240,180,41,0.75)' : 'rgba(255,179,181,0.75)';
