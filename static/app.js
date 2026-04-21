@@ -1637,10 +1637,12 @@ function _renderTracksTable() {
       return `
         <section class="tracks-disc-block">
           <h3 class="tracks-disc-heading">${esc(group.label)}</h3>
-          <table class="tracks-table-disc">
-            ${headerHtml}
-            <tbody>${bodyRows}</tbody>
-          </table>
+          <div class="tracks-disc-table-wrap">
+            <table class="tracks-table-disc">
+              ${headerHtml}
+              <tbody>${bodyRows}</tbody>
+            </table>
+          </div>
         </section>
       `;
     }).join('');

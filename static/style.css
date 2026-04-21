@@ -2145,8 +2145,9 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; backgrou
 }
 
 #tracks-table {
-  min-width: 760px;
-  table-layout: fixed;
+  width: max-content;
+  min-width: 1280px;
+  table-layout: auto;
 }
 
 #tracks-table thead th {
@@ -10253,27 +10254,32 @@ tr.player-active .track-title { color: var(--accent); }
 .tracks-multi-disc-container {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
+  padding: 12px 14px 14px;
 }
 .tracks-disc-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 2px;
+  gap: 10px;
 }
 .tracks-disc-heading {
-  margin: 2px 0 0;
-  padding-left: 2px;
+  margin: 0;
+  padding-left: 4px;
   line-height: 1.2;
   font-size: 1.18rem;
   font-weight: 700;
   letter-spacing: 0.015em;
   color: var(--text);
 }
-.tracks-table-disc {
+.tracks-disc-table-wrap {
   width: 100%;
-  min-width: 760px;
-  table-layout: fixed;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.tracks-table-disc {
+  width: max-content;
+  min-width: 1280px;
+  table-layout: auto;
   border-collapse: collapse;
 }
 .tracks-table-disc thead th {
