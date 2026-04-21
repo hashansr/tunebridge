@@ -115,10 +115,11 @@ GIT_HASH=$(git -C "$PROJECT_DIR"   rev-parse --short=7 HEAD 2>/dev/null || echo 
 BUILD_NUM=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/version.json'))['build']+1)")
 APP_VERSION="0.${BUILD_NUM}"
 
+BUILD_DATE=$(date +%Y%m%d)
 case "$BUILD_CHANNEL" in
   prod) VERSION_FULL="${APP_VERSION}" ;;
-  rc)   VERSION_FULL="${APP_VERSION}-rc" ;;
-  *)    VERSION_FULL="${APP_VERSION}-dev+${GIT_HASH}" ;;
+  rc)   VERSION_FULL="${APP_VERSION}-rc.${BUILD_DATE}" ;;
+  *)    VERSION_FULL="${APP_VERSION}-dev.${BUILD_DATE}+${GIT_HASH}" ;;
 esac
 
 python3 -c "
@@ -529,27 +530,29 @@ fi
 if [ "$BUILD_DMG" = "1" ]; then
   RELEASES_REPO="${HOME}/tunebridge-releases"
 
-  # Prod-only: commit version.json to main, tag, and push private repo
-  if [ "$BUILD_CHANNEL" = "prod" ]; then
-    _phase "🚀 Release v${VERSION_FULL}"
+  # RC + Prod: commit version.json to main so build counter always advances
+  if [ "$BUILD_CHANNEL" = "rc" ] || [ "$BUILD_CHANNEL" = "prod" ]; then
+    _phase "$([ "$BUILD_CHANNEL" = "prod" ] && echo "🚀 Release" || echo "📦 RC") v${VERSION_FULL}"
 
     printf "  📝  Committing version.json + changelog to main... "
     git -C "$PROJECT_DIR" add version.json CHANGELOG.md
-    git -C "$PROJECT_DIR" commit -m "Release v${APP_VERSION}"
+    git -C "$PROJECT_DIR" commit -m "$([ "$BUILD_CHANNEL" = "prod" ] && echo "Release" || echo "RC build") v${VERSION_FULL}"
     echo -e "${GREEN}done ✅${NC}"
 
-    printf "  🏷️   Tagging v${APP_VERSION}... "
-    git -C "$PROJECT_DIR" tag "v${APP_VERSION}" 2>/dev/null \
-      || git -C "$PROJECT_DIR" tag -f "v${APP_VERSION}"
-    echo -e "${GREEN}done ✅${NC}"
+    if [ "$BUILD_CHANNEL" = "prod" ]; then
+      printf "  🏷️   Tagging v${APP_VERSION}... "
+      git -C "$PROJECT_DIR" tag "v${APP_VERSION}" 2>/dev/null \
+        || git -C "$PROJECT_DIR" tag -f "v${APP_VERSION}"
+      echo -e "${GREEN}done ✅${NC}"
+    fi
 
     printf "  🔒  Pushing to private repo... "
     git -C "$PROJECT_DIR" push origin main
-    git -C "$PROJECT_DIR" push origin "v${APP_VERSION}"
+    [ "$BUILD_CHANNEL" = "prod" ] && git -C "$PROJECT_DIR" push origin "v${APP_VERSION}"
     echo -e "${GREEN}done ✅${NC}"
-    _info "hashansr/tunebridge  main + v${APP_VERSION}"
+    _info "hashansr/tunebridge  main$([ "$BUILD_CHANNEL" = "prod" ] && echo " + v${APP_VERSION}")"
   else
-    _phase "📦 Publish $(echo "$BUILD_CHANNEL" | tr '[:lower:]' '[:upper:]') v${VERSION_FULL}"
+    _phase "📦 Publish DEV v${VERSION_FULL}"
   fi
 
   # Publish DMG + version file to public releases repo (all channels)
