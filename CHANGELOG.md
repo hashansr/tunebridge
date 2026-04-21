@@ -17,6 +17,7 @@
 - Fix: Album Detail multi-disc section heading (`Disc N`) spacing and typography for cleaner separation above each disc table
 - Fix: Album Detail multi-disc tables now use per-disc horizontal scroll wrappers to prevent header/data overlap when many columns are enabled
 - Fix: Album Detail track tables now use responsive wide-table sizing (`max-content` + horizontal scroll) to avoid column compression with extended ID3 fields
+- Fix: Library scanner now extracts Disc # metadata for FLAC/MP3/M4A/WAV and persists it in SQLite, so `Disc #` column and album disc grouping are driven by actual tags (with path heuristics as fallback)
 
 ## v0.6-rc · 2026-04-21
 

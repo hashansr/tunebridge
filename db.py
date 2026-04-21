@@ -53,7 +53,7 @@ def close_conn():
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -73,6 +73,8 @@ SCHEMA_VERSION = 2
 #      (3, 'Add colour to playlists', ['ALTER TABLE playlists ADD COLUMN colour TEXT'])
 #   3. Bump SCHEMA_VERSION to match the highest version in _MIGRATIONS
 _MIGRATIONS: list[tuple] = [
+    (3, 'Add disc_number to tracks',
+        ['ALTER TABLE tracks ADD COLUMN disc_number INTEGER']),
     # (3, 'Example: add colour to playlists',
     #     ['ALTER TABLE playlists ADD COLUMN colour TEXT']),
 ]
@@ -95,6 +97,7 @@ CREATE TABLE IF NOT EXISTS tracks (
     album_artist    TEXT,
     album           TEXT,
     track_number    INTEGER,
+    disc_number     INTEGER,
     year            INTEGER,
     genre           TEXT,
     duration        REAL,
@@ -423,6 +426,22 @@ def _coerce_track_number(val):
         return None
 
 
+def _coerce_disc_number(val):
+    """Convert disc_number string to int. Handles '1', '1/4', None."""
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    if '/' in s:
+        s = s.split('/')[0]
+    try:
+        n = int(s)
+        return n if n > 0 else None
+    except (ValueError, TypeError):
+        return None
+
+
 def _coerce_year(val):
     """Convert year to int. Handles '2024', None, ''."""
     if val is None:
@@ -456,14 +475,15 @@ def db_save_library(tracks):
     conn.execute("DELETE FROM tracks_fts")
     conn.executemany(
         """INSERT INTO tracks (id, path, filename, title, artist, album_artist,
-           album, track_number, year, genre, duration, artwork_key, bitrate,
+           album, track_number, disc_number, year, genre, duration, artwork_key, bitrate,
            format, sample_rate, bits_per_sample, date_added)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 t['id'], t.get('path', ''), t.get('filename', ''),
                 t.get('title'), t.get('artist'), t.get('album_artist'),
                 t.get('album'), _coerce_track_number(t.get('track_number')),
+                _coerce_disc_number(t.get('disc_number')),
                 _coerce_year(t.get('year')), t.get('genre'),
                 t.get('duration'), t.get('artwork_key'),
                 t.get('bitrate'), t.get('format'),
@@ -484,6 +504,8 @@ def _row_to_track(row):
     # Restore string track_number for API compat
     if d.get('track_number') is not None:
         d['track_number'] = str(d['track_number'])
+    if d.get('disc_number') is not None:
+        d['disc_number'] = str(d['disc_number'])
     if d.get('year') is not None:
         d['year'] = str(d['year'])
     # DB schema stores numeric duration only; frontend expects duration_fmt too.
@@ -639,6 +661,7 @@ def db_get_songs(q='', sort_by='title', order='asc'):
         'album_artist': 'COALESCE(album_artist, artist) COLLATE NOCASE',
         'format': 'format COLLATE NOCASE',
         'bitrate': 'bitrate',
+        'disc_number': 'disc_number',
     }
     sort_col = sort_map.get(sort_by, 'title COLLATE NOCASE')
     direction = 'DESC' if order == 'desc' else 'ASC'
@@ -1630,10 +1653,16 @@ def db_record_tag_changes(track_id, changes: dict, old_values: dict):
 
 def db_update_track_tags(track_id, changes: dict):
     """Update specific tag fields in the tracks table."""
-    allowed = {'title', 'artist', 'album_artist', 'album', 'track_number', 'year', 'genre'}
+    allowed = {'title', 'artist', 'album_artist', 'album', 'track_number', 'disc_number', 'year', 'genre'}
     clean = {k: v for k, v in changes.items() if k in allowed}
     if not clean:
         return
+    if 'track_number' in clean:
+        clean['track_number'] = _coerce_track_number(clean.get('track_number'))
+    if 'disc_number' in clean:
+        clean['disc_number'] = _coerce_disc_number(clean.get('disc_number'))
+    if 'year' in clean:
+        clean['year'] = _coerce_year(clean.get('year'))
     conn = get_conn()
     sets = ', '.join(f"{k} = ?" for k in clean)
     vals = list(clean.values()) + [track_id]
