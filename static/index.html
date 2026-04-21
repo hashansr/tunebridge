@@ -309,15 +309,18 @@
             </div>
           </div>
         </div>
+        <div class="table-columns-toolbar">
+          <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)">Columns</button>
+        </div>
         <div id="tracks-table-wrap">
           <table id="tracks-table">
             <thead><tr>
-              <th class="col-num" data-sort="track_number" onclick="App.sortTracks('track_number')"><span class="th-sort-label">Track&nbsp;# <span class="sort-arrow" id="tracks-sort-track_number"></span></span></th>
-              <th class="col-title" data-sort="title" onclick="App.sortTracks('title')"><span class="th-sort-label">Title <span class="sort-arrow" id="tracks-sort-title"></span></span></th>
-              <th class="col-album" data-sort="album" onclick="App.sortTracks('album')"><span class="th-sort-label">Album <span class="sort-arrow" id="tracks-sort-album"></span></span></th>
-              <th class="col-dur" data-sort="duration" onclick="App.sortTracks('duration')"><span class="th-sort-label">Time <span class="sort-arrow" id="tracks-sort-duration"></span></span></th>
-              <th class="col-fav"></th>
-              <th class="col-act"></th>
+              <th class="col-num" data-col="track_number" data-sort="track_number" onclick="App.sortTracks('track_number')"><span class="th-sort-label">Track&nbsp;# <span class="sort-arrow" id="tracks-sort-track_number"></span></span></th>
+              <th class="col-title" data-col="title" data-sort="title" onclick="App.sortTracks('title')"><span class="th-sort-label">Title <span class="sort-arrow" id="tracks-sort-title"></span></span></th>
+              <th class="col-album" data-col="album" data-sort="album" onclick="App.sortTracks('album')"><span class="th-sort-label">Album <span class="sort-arrow" id="tracks-sort-album"></span></span></th>
+              <th class="col-dur" data-col="duration" data-sort="duration" onclick="App.sortTracks('duration')"><span class="th-sort-label">Time <span class="sort-arrow" id="tracks-sort-duration"></span></span></th>
+              <th class="col-fav" data-col="favourite"></th>
+              <th class="col-act" data-col="actions"></th>
             </tr></thead>
             <tbody id="tracks-tbody"></tbody>
           </table>
@@ -336,23 +339,24 @@
             <input id="songs-filter-input" type="text" placeholder="Filter songs..." oninput="App.filterSongs(this.value)" />
             <button id="songs-filter-clear" class="pl-filter-clear" onclick="App.clearSongsFilter()" style="display:none" title="Clear filter">&#10005;</button>
           </div>
+          <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)">Columns</button>
         </div>
         <div id="songs-table-wrap" style="overflow-x:auto">
           <table id="songs-table">
             <thead><tr>
-              <th class="col-num" data-sort="track_number">#</th>
-              <th class="col-title" data-sort="title" onclick="App.sortSongs('title')">Title <span class="sort-arrow" id="songs-sort-title"></span></th>
-              <th class="col-artist" data-sort="artist" onclick="App.sortSongs('artist')">Artist <span class="sort-arrow" id="songs-sort-artist"></span></th>
-              <th class="col-album" data-sort="album" onclick="App.sortSongs('album')">Album <span class="sort-arrow" id="songs-sort-album"></span></th>
-              <th class="col-dur" data-sort="duration" onclick="App.sortSongs('duration')">Time <span class="sort-arrow" id="songs-sort-duration"></span></th>
-              <th class="col-fav">Favourite</th>
-              <th data-sort="genre" onclick="App.sortSongs('genre')" style="min-width:80px">Genre <span class="sort-arrow" id="songs-sort-genre"></span></th>
-              <th data-sort="year" onclick="App.sortSongs('year')" style="min-width:50px">Year <span class="sort-arrow" id="songs-sort-year"></span></th>
-              <th data-sort="album_artist" onclick="App.sortSongs('album_artist')" style="min-width:120px">Album Artist <span class="sort-arrow" id="songs-sort-album_artist"></span></th>
-              <th data-sort="format" onclick="App.sortSongs('format')" style="min-width:60px">Format <span class="sort-arrow" id="songs-sort-format"></span></th>
-              <th data-sort="bitrate" onclick="App.sortSongs('bitrate')" style="min-width:70px">Bitrate <span class="sort-arrow" id="songs-sort-bitrate"></span></th>
-              <th data-sort="date_added" onclick="App.sortSongs('date_added')" style="min-width:90px">Date Added <span class="sort-arrow" id="songs-sort-date_added"></span></th>
-              <th class="col-act">Add to Playlist</th>
+              <th class="col-num" data-col="track_number" data-sort="track_number">#</th>
+              <th class="col-title" data-col="title" data-sort="title" onclick="App.sortSongs('title')">Title <span class="sort-arrow" id="songs-sort-title"></span></th>
+              <th class="col-artist" data-col="artist" data-sort="artist" onclick="App.sortSongs('artist')">Artist <span class="sort-arrow" id="songs-sort-artist"></span></th>
+              <th class="col-album" data-col="album" data-sort="album" onclick="App.sortSongs('album')">Album <span class="sort-arrow" id="songs-sort-album"></span></th>
+              <th class="col-dur" data-col="duration" data-sort="duration" onclick="App.sortSongs('duration')">Time <span class="sort-arrow" id="songs-sort-duration"></span></th>
+              <th class="col-fav" data-col="favourite"></th>
+              <th data-col="genre" data-sort="genre" onclick="App.sortSongs('genre')" style="min-width:80px">Genre <span class="sort-arrow" id="songs-sort-genre"></span></th>
+              <th data-col="year" data-sort="year" onclick="App.sortSongs('year')" style="min-width:50px">Year <span class="sort-arrow" id="songs-sort-year"></span></th>
+              <th data-col="album_artist" data-sort="album_artist" onclick="App.sortSongs('album_artist')" style="min-width:120px">Album Artist <span class="sort-arrow" id="songs-sort-album_artist"></span></th>
+              <th data-col="format" data-sort="format" onclick="App.sortSongs('format')" style="min-width:60px">Format <span class="sort-arrow" id="songs-sort-format"></span></th>
+              <th data-col="bitrate" data-sort="bitrate" onclick="App.sortSongs('bitrate')" style="min-width:70px">Bitrate <span class="sort-arrow" id="songs-sort-bitrate"></span></th>
+              <th data-col="date_added" data-sort="date_added" onclick="App.sortSongs('date_added')" style="min-width:90px">Date Added <span class="sort-arrow" id="songs-sort-date_added"></span></th>
+              <th class="col-act" data-col="actions"></th>
             </tr></thead>
             <tbody id="songs-tbody"></tbody>
           </table>
@@ -434,6 +438,7 @@
                 <button class="pl-sort-pill" data-fav-song-sort="az" onclick="App.setFavSongsSort('az')">A–Z</button>
                 <button class="pl-sort-pill" data-fav-song-sort="album" onclick="App.setFavSongsSort('album')">Album</button>
               </div>
+              <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)">Columns</button>
             </div>
             <div id="fav-songs-orphans" class="favourites-orphan-notice" style="display:none"></div>
             <div id="fav-songs-empty" class="empty-state" style="display:none">
@@ -443,13 +448,13 @@
             </div>
             <table id="fav-songs-table" style="display:none">
               <thead><tr>
-                <th class="col-num">#</th>
-                <th class="col-title">Title</th>
-                <th class="col-artist">Artist</th>
-                <th class="col-album">Album</th>
-                <th class="col-dur">Time</th>
-                <th class="col-fav"></th>
-                <th class="col-act"></th>
+                <th class="col-num" data-col="track_number">#</th>
+                <th class="col-title" data-col="title">Title</th>
+                <th class="col-artist" data-col="artist">Artist</th>
+                <th class="col-album" data-col="album">Album</th>
+                <th class="col-dur" data-col="duration">Time</th>
+                <th class="col-fav" data-col="favourite"></th>
+                <th class="col-act" data-col="actions"></th>
               </tr></thead>
               <tbody id="fav-songs-tbody"></tbody>
             </table>
@@ -513,6 +518,7 @@
             <button class="pl-sort-pill" data-sort="album" onclick="App.setPlaylistInSort('album')">Album</button>
             <button class="pl-sort-pill" data-sort="year" onclick="App.setPlaylistInSort('year')">Year <span class="pl-sort-dir" id="pl-sort-year-dir"></span></button>
           </div>
+          <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)">Columns</button>
         </div>
 
         <div id="pl-empty" class="empty-state" style="display:none">
@@ -523,15 +529,15 @@
 
         <table id="pl-table" style="display:none">
           <thead><tr>
-            <th class="col-num">#</th>
-            <th class="col-title">Title</th>
-            <th class="col-artist">Artist</th>
-            <th class="col-album">Album</th>
-            <th class="col-dur">Time</th>
-            <th class="col-genre">Genre</th>
-            <th class="col-year">Year</th>
-            <th class="col-fav">Favourite</th>
-            <th class="col-act"></th>
+            <th class="col-num" data-col="track_number">#</th>
+            <th class="col-title" data-col="title">Title</th>
+            <th class="col-artist" data-col="artist">Artist</th>
+            <th class="col-album" data-col="album">Album</th>
+            <th class="col-dur" data-col="duration">Time</th>
+            <th class="col-genre" data-col="genre">Genre</th>
+            <th class="col-year" data-col="year">Year</th>
+            <th class="col-fav" data-col="favourite"></th>
+            <th class="col-act" data-col="actions"></th>
           </tr></thead>
           <tbody id="pl-tbody"></tbody>
         </table>

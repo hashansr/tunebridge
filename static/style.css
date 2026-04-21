@@ -10135,10 +10135,66 @@ tr.player-active .track-title { color: var(--accent); }
 #songs-table thead th {
   background: rgba(42, 42, 42, 0.64);
   border-bottom: 1px solid rgba(173, 198, 255, 0.12);
+  white-space: nowrap;
+}
+#tracks-table thead th,
+#pl-table thead th,
+#fav-songs-table thead th {
+  white-space: nowrap;
 }
 #songs-table td {
   padding-top: 10px;
   padding-bottom: 10px;
+}
+#view-songs .table-columns-toolbar,
+#view-tracks .table-columns-toolbar,
+#view-playlist .table-columns-toolbar,
+#view-fav-songs .table-columns-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.table-columns-btn {
+  min-width: 96px;
+}
+.table-columns-popover {
+  position: fixed;
+  z-index: 11000;
+  min-width: 220px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(173, 198, 255, 0.22);
+  background: rgba(25, 27, 35, 0.96);
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 20px 38px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.table-columns-popover-title {
+  margin-bottom: 8px;
+  font-size: 0.72rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.table-columns-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: var(--text-sub);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.table-columns-popover-item:hover {
+  background: rgba(173, 198, 255, 0.12);
+  color: var(--text);
+}
+.table-columns-popover-item input {
+  accent-color: var(--accent);
 }
 #view-songs .songs-pagination {
   padding-top: 12px;

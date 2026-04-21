@@ -1472,6 +1472,7 @@ function _renderTracksTable() {
   const tbody = document.getElementById('tracks-tbody');
   if (!tbody) return;
   tbody.innerHTML = (state.tracks || []).map((t, i) => trackRow(t, i + 1, false)).join('');
+  _applyTableColumnVisibility();
   document.querySelectorAll('#tracks-table .sort-arrow').forEach(el => { el.textContent = ''; });
   const arrow = document.getElementById(`tracks-sort-${_tracksSort.col}`);
   if (arrow) arrow.textContent = _tracksSort.order === 'asc' ? '▲' : '▼';
@@ -1534,14 +1535,14 @@ function trackRow(t, num, inPlaylist) {
 
   return `
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
-      <td class="col-num" onclick="App.toggleTrackSelection('${t.id}', ${num - 1}, event)">
+      <td class="col-num" data-col="track_number" onclick="App.toggleTrackSelection('${t.id}', ${num - 1}, event)">
         <div class="num-cell">
           ${dragHandle}
           <span class="track-check-indicator">${checkIcon}</span>
           <span class="track-num">${esc(trackNumLabel)}</span>
         </div>
       </td>
-      <td>
+      <td data-col="title">
         <div class="title-cell">
           <div class="thumb-wrap">
             <div class="thumb">${thumbImg(t.artwork_key, 38, '4px')}</div>
@@ -1553,13 +1554,13 @@ function trackRow(t, num, inPlaylist) {
           </div>
         </div>
       </td>
-      ${inPlaylist ? `<td class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>` : ''}
-      <td class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
-      <td class="col-dur">${esc(t.duration_fmt || '')}</td>
-      ${inPlaylist ? `<td class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.genre || '')}</td>` : ''}
-      ${inPlaylist ? `<td class="col-year" style="color:var(--text-muted);font-size:var(--text-sm)">${t.year || ''}</td>` : ''}
-      <td class="col-fav-cell">${_favToggleBtn('songs', t.id, `track-fav-btn${inPlaylist ? '' : ''}`)}</td>
-      <td><div class="col-act-inner">
+      ${inPlaylist ? `<td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>` : ''}
+      <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
+      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
+      ${inPlaylist ? `<td data-col="genre" class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.genre || '')}</td>` : ''}
+      ${inPlaylist ? `<td data-col="year" class="col-year" style="color:var(--text-muted);font-size:var(--text-sm)">${t.year || ''}</td>` : ''}
+      <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, `track-fav-btn${inPlaylist ? '' : ''}`)}</td>
+      <td data-col="actions"><div class="col-act-inner">
         ${removeAction}
         <button class="row-ctx-btn" onclick="event.stopPropagation();App.showTrackCtxMenu(event,'${t.id}')" title="More actions">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
@@ -1910,6 +1911,7 @@ function renderPlaylistTracks(tracks) {
   table.style.display = 'table';
   empty.style.display = 'none';
   tbody.innerHTML = displayed.map((t, i) => trackRow(t, i + 1, true)).join('');
+  _applyTableColumnVisibility();
 
   // Toggle drag handles
   tbody.classList.toggle('pl-sort-drag-disabled', !isDragEnabled);
@@ -3718,7 +3720,7 @@ function _favSongRow(t, idx) {
   const playIcon = playSvg(12);
   return `
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
-      <td class="col-num">
+      <td class="col-num" data-col="track_number">
         <div class="num-cell">
           <div class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="9" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg>
@@ -3726,7 +3728,7 @@ function _favSongRow(t, idx) {
           <span class="track-num">${idx + 1}</span>
         </div>
       </td>
-      <td>
+      <td data-col="title">
         <div class="title-cell">
           <div class="thumb-wrap">
             <div class="thumb">${thumbImg(t.artwork_key, 38, '4px')}</div>
@@ -3738,11 +3740,14 @@ function _favSongRow(t, idx) {
           </div>
         </div>
       </td>
-      <td class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
-      <td class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
-      <td class="col-dur">${esc(t.duration_fmt || '')}</td>
-      <td class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn is-fav')}</td>
-      <td><div class="col-act-inner">
+      <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
+      <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
+      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
+      <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn is-fav')}</td>
+      <td data-col="actions"><div class="col-act-inner">
+        <button class="track-edit-btn" onclick="event.stopPropagation();App.openTagEditor('${t.id}')" title="Edit tags">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
         <button class="add-btn" onclick="App.showAddDropdown(event, '${t.id}')" title="Add to playlist">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
@@ -3812,6 +3817,7 @@ async function loadFavSongs() {
   Player.registerTracks(rows);
   Player.setPlaybackContext(rows, { sourceType: 'favourites', sourceId: 'songs', sourceLabel: 'Favourite Songs' });
   tbody.innerHTML = rows.map((t, i) => _favSongRow(t, i)).join('');
+  _applyTableColumnVisibility();
 
   if (state.sortable) state.sortable.destroy();
   if (state.favSongsSort === 'my') {
@@ -8456,6 +8462,123 @@ let _songsSort = { col: 'title', order: 'asc' };
 let _songsFilter = '';
 let _songsPage = 0;
 const SONGS_PER_PAGE = 100;
+const _TABLE_COLUMNS_STORAGE_KEY = 'tb.table_columns.v1';
+const _TABLE_COLUMNS = [
+  { key: 'track_number', label: 'Track #' },
+  { key: 'title', label: 'Title' },
+  { key: 'artist', label: 'Artist' },
+  { key: 'album', label: 'Album' },
+  { key: 'album_artist', label: 'Album Artist' },
+  { key: 'genre', label: 'Genre' },
+  { key: 'year', label: 'Year' },
+];
+const _TABLE_COL_DEFAULTS = {
+  track_number: true,
+  title: true,
+  artist: true,
+  album: true,
+  album_artist: true,
+  genre: true,
+  year: true,
+};
+let _tableColVisible = { ..._TABLE_COL_DEFAULTS };
+let _tableColsPopoverEl = null;
+
+function _loadTableColumnPrefs() {
+  try {
+    const raw = localStorage.getItem(_TABLE_COLUMNS_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+    _tableColVisible = { ..._TABLE_COL_DEFAULTS };
+    for (const c of _TABLE_COLUMNS) {
+      if (Object.prototype.hasOwnProperty.call(parsed, c.key)) {
+        _tableColVisible[c.key] = !!parsed[c.key];
+      }
+    }
+  } catch (_) {}
+}
+
+function _saveTableColumnPrefs() {
+  try {
+    localStorage.setItem(_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(_tableColVisible));
+  } catch (_) {}
+}
+
+function _isTableColVisible(colKey) {
+  if (!colKey) return true;
+  if (!Object.prototype.hasOwnProperty.call(_TABLE_COL_DEFAULTS, colKey)) return true;
+  return !!_tableColVisible[colKey];
+}
+
+function _applyTableColumnVisibility() {
+  ['songs-table', 'tracks-table', 'pl-table', 'fav-songs-table'].forEach(id => {
+    const table = document.getElementById(id);
+    if (!table) return;
+    table.querySelectorAll('[data-col]').forEach(el => {
+      const key = el.getAttribute('data-col') || '';
+      el.style.display = _isTableColVisible(key) ? '' : 'none';
+    });
+  });
+}
+
+function _ensureTableColsPopover() {
+  if (_tableColsPopoverEl) return _tableColsPopoverEl;
+  const pop = document.createElement('div');
+  pop.id = 'table-columns-popover';
+  pop.className = 'table-columns-popover';
+  pop.style.display = 'none';
+  document.body.appendChild(pop);
+  _tableColsPopoverEl = pop;
+  return pop;
+}
+
+function _renderTableColumnsPopover() {
+  const pop = _ensureTableColsPopover();
+  pop.innerHTML = `
+    <div class="table-columns-popover-title">Visible Columns</div>
+    ${_TABLE_COLUMNS.map(c => `
+      <label class="table-columns-popover-item">
+        <input type="checkbox" ${_isTableColVisible(c.key) ? 'checked' : ''} onchange="App.setTableColumnVisible('${c.key}', this.checked)" />
+        <span>${esc(c.label)}</span>
+      </label>
+    `).join('')}
+  `;
+}
+
+function toggleTableColumnsPopover(evt) {
+  const anchor = evt?.currentTarget;
+  if (!anchor) return;
+  const pop = _ensureTableColsPopover();
+  const willOpen = pop.style.display !== 'block';
+  if (!willOpen) {
+    pop.style.display = 'none';
+    return;
+  }
+  _renderTableColumnsPopover();
+  const rect = anchor.getBoundingClientRect();
+  pop.style.left = `${Math.max(12, Math.round(rect.left))}px`;
+  pop.style.top = `${Math.round(rect.bottom + 8)}px`;
+  pop.style.display = 'block';
+}
+
+function setTableColumnVisible(colKey, visible) {
+  if (!Object.prototype.hasOwnProperty.call(_TABLE_COL_DEFAULTS, colKey)) return;
+  _tableColVisible[colKey] = !!visible;
+  _saveTableColumnPrefs();
+  _applyTableColumnVisibility();
+}
+
+document.addEventListener('click', (e) => {
+  const pop = _tableColsPopoverEl;
+  if (!pop || pop.style.display !== 'block') return;
+  const t = e.target;
+  if (pop.contains(t)) return;
+  if (t && (t.closest('.table-columns-btn'))) return;
+  pop.style.display = 'none';
+});
+
+_loadTableColumnPrefs();
 
 function _getSongsFilteredTracks() {
   let tracks = _songsData;
@@ -8546,13 +8669,13 @@ function renderSongsTable() {
     const playIcon = playSvg(11);
     return `
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
-      <td class="col-num" onclick="App.toggleTrackSelection('${t.id}', ${globalIdx}, event)">
+      <td class="col-num" data-col="track_number" onclick="App.toggleTrackSelection('${t.id}', ${globalIdx}, event)">
         <div class="num-cell">
           <span class="track-check-indicator"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg></span>
           <span class="track-num">${t.track_number || (globalIdx + 1)}</span>
         </div>
       </td>
-      <td>
+      <td data-col="title">
         <div class="title-cell">
           <div class="thumb-wrap" style="width:34px;height:34px">
             <div class="thumb">${thumbImg(t.artwork_key, 34, '4px')}</div>
@@ -8563,23 +8686,30 @@ function renderSongsTable() {
           </div>
         </div>
       </td>
-      <td class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
-      <td class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
-      <td class="col-dur">${esc(t.duration_fmt || '')}</td>
-      <td class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn')}</td>
-      <td style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
-      <td style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.year || '')}</td>
-      <td style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.album_artist || '')}">${esc(t.album_artist || '')}</td>
-      <td style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.format || '')}</td>
-      <td style="color:var(--text-muted);font-size:var(--text-sm)">${bitrate}</td>
-      <td style="color:var(--text-muted);font-size:var(--text-sm)">${fmtDate}</td>
-      <td><div class="col-act-inner">
+      <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
+      <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
+      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
+      <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn')}</td>
+      <td data-col="genre" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
+      <td data-col="year" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.year || '')}</td>
+      <td data-col="album_artist" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.album_artist || '')}">${esc(t.album_artist || '')}</td>
+      <td data-col="format" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.format || '')}</td>
+      <td data-col="bitrate" style="color:var(--text-muted);font-size:var(--text-sm)">${bitrate}</td>
+      <td data-col="date_added" style="color:var(--text-muted);font-size:var(--text-sm)">${fmtDate}</td>
+      <td data-col="actions"><div class="col-act-inner">
+        <button class="row-ctx-btn" onclick="event.stopPropagation();App.showTrackCtxMenu(event,'${t.id}')" title="More actions">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+        </button>
+        <button class="track-edit-btn" onclick="event.stopPropagation();App.openTagEditor('${t.id}')" title="Edit tags">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
         <button class="add-btn" onclick="App.showAddDropdown(event, '${t.id}')" title="Add to playlist">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div></td>
     </tr>`;
   }).join('');
+  _applyTableColumnVisibility();
 }
 
 function sortSongs(col) {
@@ -9523,6 +9653,8 @@ const App = {
   clearSongsFilter,
   songsPrevPage,
   songsNextPage,
+  toggleTableColumnsPopover,
+  setTableColumnVisible,
   // Settings
   loadSettings,
   saveLibraryPath,
