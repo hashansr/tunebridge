@@ -16,6 +16,7 @@
 - Change: Unified global page rail alignment so back button uses equal top/left inset and Home/Insights/Gear content aligns to the same left gutter as back navigation
 - Change: Refined global nav spacing: back-button top/left rail now targets ~25px on desktop, with larger gap between back button and page titles for cleaner hierarchy
 - Change: Finalized app-wide nav/content spacing to match UI spec: 15px back-button top/left inset, 15px back-button-to-title vertical gap, and 35px content left inset
+- Change: Applied 15/15/35 nav spacing tokens globally across Home, Insights, Gear, and shared views so back navigation and content rail stay visually consistent
 
 ## v0.6-rc · 2026-04-21
 - Fix: Songs table header/data alignment issue by removing duplicate Genre cell and restoring correct column order (Time/Favourite/Genre/Year)

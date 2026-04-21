@@ -30,9 +30,11 @@
   --radius-lg:      24px;
   --sidebar-w:      260px;
   --view-gutter:    32px;
-  --main-nav-side-inset: clamp(14px, 2.1vw, 25px);
+  --page-content-inset: 35px;
+  --main-nav-side-inset: 15px;
   --main-nav-top-inset: var(--main-nav-side-inset);
   --main-nav-btn-size: 34px;
+  --main-nav-title-gap: 15px;
 
   /* Type */
   --text-xs:   11px;
@@ -995,11 +997,11 @@ h4.settings-subsection-title {
 }
 
 :root {
-  --main-nav-overlay-clearance: calc(var(--main-nav-top-inset) + 18px);
+  --main-nav-overlay-clearance: calc(var(--main-nav-btn-size) + var(--main-nav-title-gap));
 }
 
 .view {
-  padding: calc(28px + var(--main-nav-overlay-clearance)) var(--main-nav-side-inset) 28px;
+  padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance)) var(--page-content-inset) 28px;
   min-height: 100%;
   background: var(--app-page-gradient);
 }
@@ -10511,7 +10513,7 @@ body.is-col-resizing {
 
 /* Gear facelift: align with Favourites / Insights surface language */
 #view-gear {
-  padding: calc(28px + var(--main-nav-overlay-clearance)) var(--main-nav-side-inset) 90px;
+  padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance)) var(--page-content-inset) 90px;
 }
 #view-gear .gear-section-header {
   margin-bottom: 20px;
@@ -10888,7 +10890,7 @@ body.is-col-resizing {
    Insights Facelift (Obsidian Lens / UI-only)
    ========================================================================== */
 #view-insights.insights-view {
-  padding: calc(22px + var(--main-nav-overlay-clearance)) var(--main-nav-side-inset) 90px;
+  padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance)) var(--page-content-inset) 90px;
   background: var(--app-page-gradient);
 }
 .insights-hero {
@@ -10915,7 +10917,7 @@ body.is-col-resizing {
 
 /* ── Home view ─────────────────────────────────────────────────────── */
 #view-home {
-  padding: calc(22px + var(--main-nav-overlay-clearance)) var(--main-nav-side-inset) 132px;
+  padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) - 4px) var(--page-content-inset) 132px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -10929,14 +10931,14 @@ body.is-col-resizing {
 /* ── Home v2 ──────────────────────────────────────────────────────────── */
 @media (min-width: 1500px) {
   #view-home {
-    padding-left: var(--main-nav-side-inset);
-    padding-right: var(--main-nav-side-inset);
+    padding-left: var(--page-content-inset);
+    padding-right: var(--page-content-inset);
   }
 }
 @media (min-width: 1760px) {
   #view-home {
-    padding-left: var(--main-nav-side-inset);
-    padding-right: var(--main-nav-side-inset);
+    padding-left: var(--page-content-inset);
+    padding-right: var(--page-content-inset);
   }
 }
 
@@ -11515,7 +11517,7 @@ body.is-col-resizing {
     font-size: 18px;
   }
   #view-home {
-    padding: calc(18px + var(--main-nav-overlay-clearance)) var(--main-nav-side-inset) 122px;
+    padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) - 8px) var(--page-content-inset) 122px;
     gap: 28px;
   }
 }
@@ -11540,7 +11542,7 @@ body.is-col-resizing {
     font-size: 17px;
   }
   #view-home {
-    padding: calc(14px + var(--main-nav-overlay-clearance)) var(--main-nav-side-inset) 114px;
+    padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) - 10px) var(--page-content-inset) 114px;
     gap: 22px;
   }
 }
