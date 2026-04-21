@@ -14,6 +14,7 @@
 - Fix: Removed all em dashes from user-facing Insights copy
 - Fix: Tag Health card footer gap tightened; section description formatting cleaned up
 - Change: Insights IEM detail FR chart controls reordered to Source, Genre overlay, PEQ, Overlays for a more natural flow
+- Fix: Insights → Edit Missing Tags row save now accepts Track # inline edits (including `N/M` format) and correctly keeps Track # in missing-tag validation
 
 ## v0.11-rc.220426-0741 · 2026-04-22
 

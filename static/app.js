@@ -10405,6 +10405,7 @@ function _missingIssuesForTrack(t) {
   if (!String(t?.title || '').trim()) issues.push('title');
   if (!String(t?.artist || '').trim()) issues.push('artist');
   if (!String(t?.album || '').trim()) issues.push('album');
+  if (!String(t?.track_number || '').trim()) issues.push('track_number');
   if (!String(t?.year || '').trim()) issues.push('year');
   if (!String(t?.genre || '').trim()) issues.push('genre');
   return issues;
@@ -10415,6 +10416,7 @@ function _missingFieldPlaceholder(field) {
     title: 'Enter title',
     artist: 'Enter artist',
     album: 'Enter album',
+    track_number: 'e.g. 3 or 3/12',
     year: 'YYYY',
     genre: 'Enter genre',
   };
@@ -10787,12 +10789,16 @@ async function saveMissingTagRow(trackId) {
   if (!id) return;
   const draft = _missingDraftFor(id);
   const payload = {};
-  ['title', 'artist', 'album', 'year', 'genre'].forEach(k => {
+  ['title', 'artist', 'album', 'track_number', 'year', 'genre'].forEach(k => {
     const v = String(draft[k] || '').trim();
     if (v) payload[k] = v;
   });
   if (!Object.keys(payload).length) {
     toast('Add at least one value for this row');
+    return;
+  }
+  if (!_validateTrackNum(payload.track_number || '')) {
+    toast('Track # must be a number or N/M format');
     return;
   }
   if (!_validateYear(payload.year || '')) {
