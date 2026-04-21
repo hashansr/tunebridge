@@ -1436,12 +1436,40 @@ function _trackNumberSortValue(track) {
   return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
 }
 
+function _trackDiscSortValue(track) {
+  const direct = String(track?.disc_number || '').trim();
+  if (direct) {
+    const main = direct.split('/')[0].trim();
+    const n = Number.parseInt(main, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  const p = String(track?.path || '').toLowerCase();
+  if (p) {
+    const m = p.match(/(?:^|[\\/._\-\s])(disc|cd)\s*0*([1-9]\d?)(?:[\\/._\-\s]|$)/i);
+    if (m && m[2]) {
+      const n = Number.parseInt(m[2], 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  return 1;
+}
+
+function _hasMultiDiscTracks(rows) {
+  const discs = new Set((rows || []).map(_trackDiscSortValue).filter(n => Number.isFinite(n) && n > 0));
+  return discs.size > 1;
+}
+
 function _tracksSortedRows(rows) {
   const col = String(_tracksSort.col || 'track_number');
   const dir = _tracksSort.order === 'desc' ? -1 : 1;
   const out = [...(rows || [])];
   out.sort((a, b) => {
     if (col === 'track_number') {
+      if (state.album) {
+        const ad = _trackDiscSortValue(a);
+        const bd = _trackDiscSortValue(b);
+        if (ad !== bd) return (ad - bd) * dir;
+      }
       const an = _trackNumberSortValue(a);
       const bn = _trackNumberSortValue(b);
       if (an !== bn) return (an - bn) * dir;
@@ -1471,7 +1499,25 @@ function _tracksSortedRows(rows) {
 function _renderTracksTable() {
   const tbody = document.getElementById('tracks-tbody');
   if (!tbody) return;
-  tbody.innerHTML = (state.tracks || []).map((t, i) => trackRow(t, i + 1, false)).join('');
+  const rows = state.tracks || [];
+  const shouldGroupByDisc = !!(state.album && _tracksSort.col === 'track_number' && _hasMultiDiscTracks(rows));
+  if (!shouldGroupByDisc) {
+    tbody.innerHTML = rows.map((t, i) => trackRow(t, i + 1, false)).join('');
+  } else {
+    let html = '';
+    let rowNum = 0;
+    let currentDisc = null;
+    rows.forEach((t) => {
+      const disc = _trackDiscSortValue(t);
+      if (disc !== currentDisc) {
+        currentDisc = disc;
+        html += `<tr class="track-disc-separator-row"><td class="track-disc-separator-cell" colspan="20">Disc ${disc}</td></tr>`;
+      }
+      rowNum += 1;
+      html += trackRow(t, rowNum, false);
+    });
+    tbody.innerHTML = html;
+  }
   _applyTableColumnVisibility();
   document.querySelectorAll('#tracks-table .sort-arrow').forEach(el => { el.textContent = ''; });
   const arrow = document.getElementById(`tracks-sort-${_tracksSort.col}`);
@@ -8466,23 +8512,44 @@ const _TABLE_COLUMNS_STORAGE_KEY = 'tb.table_columns.v1';
 const _TABLE_COLUMNS = [
   { key: 'track_number', label: 'Track #' },
   { key: 'title', label: 'Title' },
+  { key: 'duration', label: 'Time' },
   { key: 'artist', label: 'Artist' },
   { key: 'album', label: 'Album' },
   { key: 'album_artist', label: 'Album Artist' },
   { key: 'genre', label: 'Genre' },
   { key: 'year', label: 'Year' },
+  { key: 'disc_number', label: 'Disc #' },
+  { key: 'format', label: 'Format' },
+  { key: 'bitrate', label: 'Bitrate' },
+  { key: 'sample_rate', label: 'Sample Rate' },
+  { key: 'bit_depth', label: 'Bit Depth' },
+  { key: 'date_added', label: 'Date Added' },
+  { key: 'filename', label: 'Filename' },
+  { key: 'favourite', label: 'Favourite' },
+  { key: 'actions', label: 'Actions' },
 ];
 const _TABLE_COL_DEFAULTS = {
   track_number: true,
   title: true,
+  duration: true,
   artist: true,
   album: true,
   album_artist: true,
   genre: true,
   year: true,
+  disc_number: false,
+  format: false,
+  bitrate: false,
+  sample_rate: false,
+  bit_depth: false,
+  date_added: false,
+  filename: false,
+  favourite: true,
+  actions: true,
 };
 let _tableColVisible = { ..._TABLE_COL_DEFAULTS };
 let _tableColsPopoverEl = null;
+let _tableColsContextKeys = _TABLE_COLUMNS.map(c => c.key);
 
 function _loadTableColumnPrefs() {
   try {
@@ -8535,15 +8602,33 @@ function _ensureTableColsPopover() {
 
 function _renderTableColumnsPopover() {
   const pop = _ensureTableColsPopover();
+  const visibleDefs = _TABLE_COLUMNS.filter(c => _tableColsContextKeys.includes(c.key));
   pop.innerHTML = `
     <div class="table-columns-popover-title">Visible Columns</div>
-    ${_TABLE_COLUMNS.map(c => `
+    ${visibleDefs.map(c => `
       <label class="table-columns-popover-item">
         <input type="checkbox" ${_isTableColVisible(c.key) ? 'checked' : ''} onchange="App.setTableColumnVisible('${c.key}', this.checked)" />
         <span>${esc(c.label)}</span>
       </label>
     `).join('')}
   `;
+}
+
+function _getColumnContextKeys(anchor) {
+  if (!anchor) return _TABLE_COLUMNS.map(c => c.key);
+  if (anchor.closest('#view-songs')) {
+    return ['track_number', 'title', 'artist', 'album', 'duration', 'favourite', 'genre', 'year', 'disc_number', 'album_artist', 'format', 'bitrate', 'sample_rate', 'bit_depth', 'date_added', 'filename', 'actions'];
+  }
+  if (anchor.closest('#view-playlist')) {
+    return ['track_number', 'title', 'artist', 'album', 'duration', 'genre', 'year', 'favourite', 'actions'];
+  }
+  if (anchor.closest('#view-fav-songs')) {
+    return ['track_number', 'title', 'artist', 'album', 'duration', 'favourite', 'actions'];
+  }
+  if (anchor.closest('#view-tracks') || anchor.closest('#view-albums')) {
+    return ['track_number', 'title', 'album', 'duration', 'favourite', 'actions'];
+  }
+  return _TABLE_COLUMNS.map(c => c.key);
 }
 
 function toggleTableColumnsPopover(evt) {
@@ -8555,11 +8640,24 @@ function toggleTableColumnsPopover(evt) {
     pop.style.display = 'none';
     return;
   }
+  _tableColsContextKeys = _getColumnContextKeys(anchor);
   _renderTableColumnsPopover();
   const rect = anchor.getBoundingClientRect();
-  pop.style.left = `${Math.max(12, Math.round(rect.left))}px`;
-  pop.style.top = `${Math.round(rect.bottom + 8)}px`;
+  pop.style.visibility = 'hidden';
   pop.style.display = 'block';
+  const popW = pop.offsetWidth || 240;
+  const popH = pop.offsetHeight || 320;
+  const pad = 12;
+  let left = Math.round(rect.left);
+  let top = Math.round(rect.bottom + 8);
+  left = Math.max(pad, Math.min(left, window.innerWidth - popW - pad));
+  if (top + popH > window.innerHeight - pad) {
+    top = Math.round(rect.top - popH - 8);
+  }
+  top = Math.max(pad, top);
+  pop.style.left = `${left}px`;
+  pop.style.top = `${top}px`;
+  pop.style.visibility = '';
 }
 
 function setTableColumnVisible(colKey, visible) {
@@ -8666,6 +8764,8 @@ function renderSongsTable() {
     const globalIdx = start + i;
     const fmtDate = t.date_added ? new Date(t.date_added * 1000).toLocaleDateString() : '';
     const bitrate = t.bitrate ? t.bitrate + ' kbps' : '';
+    const sampleRate = t.sample_rate ? `${t.sample_rate} Hz` : '';
+    const bitDepth = t.bits_per_sample ? `${t.bits_per_sample}-bit` : '';
     const playIcon = playSvg(11);
     return `
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
@@ -8692,10 +8792,14 @@ function renderSongsTable() {
       <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn')}</td>
       <td data-col="genre" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
       <td data-col="year" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.year || '')}</td>
+      <td data-col="disc_number" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.disc_number || '')}</td>
       <td data-col="album_artist" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.album_artist || '')}">${esc(t.album_artist || '')}</td>
       <td data-col="format" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.format || '')}</td>
       <td data-col="bitrate" style="color:var(--text-muted);font-size:var(--text-sm)">${bitrate}</td>
+      <td data-col="sample_rate" style="color:var(--text-muted);font-size:var(--text-sm)">${sampleRate}</td>
+      <td data-col="bit_depth" style="color:var(--text-muted);font-size:var(--text-sm)">${bitDepth}</td>
       <td data-col="date_added" style="color:var(--text-muted);font-size:var(--text-sm)">${fmtDate}</td>
+      <td data-col="filename" style="color:var(--text-muted);font-size:var(--text-sm)" title="${esc(t.filename || '')}">${esc(t.filename || '')}</td>
       <td data-col="actions"><div class="col-act-inner">
         <button class="row-ctx-btn" onclick="event.stopPropagation();App.showTrackCtxMenu(event,'${t.id}')" title="More actions">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>

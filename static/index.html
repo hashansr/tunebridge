@@ -310,7 +310,9 @@
           </div>
         </div>
         <div class="table-columns-toolbar">
-          <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)">Columns</button>
+          <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)" title="Configure columns" aria-label="Configure columns">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
+          </button>
         </div>
         <div id="tracks-table-wrap">
           <table id="tracks-table">
@@ -339,7 +341,9 @@
             <input id="songs-filter-input" type="text" placeholder="Filter songs..." oninput="App.filterSongs(this.value)" />
             <button id="songs-filter-clear" class="pl-filter-clear" onclick="App.clearSongsFilter()" style="display:none" title="Clear filter">&#10005;</button>
           </div>
-          <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)">Columns</button>
+          <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)" title="Configure columns" aria-label="Configure columns">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
+          </button>
         </div>
         <div id="songs-table-wrap" style="overflow-x:auto">
           <table id="songs-table">
@@ -352,10 +356,14 @@
               <th class="col-fav" data-col="favourite"></th>
               <th data-col="genre" data-sort="genre" onclick="App.sortSongs('genre')" style="min-width:80px">Genre <span class="sort-arrow" id="songs-sort-genre"></span></th>
               <th data-col="year" data-sort="year" onclick="App.sortSongs('year')" style="min-width:50px">Year <span class="sort-arrow" id="songs-sort-year"></span></th>
+              <th data-col="disc_number" style="min-width:70px">Disc #</th>
               <th data-col="album_artist" data-sort="album_artist" onclick="App.sortSongs('album_artist')" style="min-width:120px">Album Artist <span class="sort-arrow" id="songs-sort-album_artist"></span></th>
               <th data-col="format" data-sort="format" onclick="App.sortSongs('format')" style="min-width:60px">Format <span class="sort-arrow" id="songs-sort-format"></span></th>
               <th data-col="bitrate" data-sort="bitrate" onclick="App.sortSongs('bitrate')" style="min-width:70px">Bitrate <span class="sort-arrow" id="songs-sort-bitrate"></span></th>
+              <th data-col="sample_rate" style="min-width:90px">Sample Rate</th>
+              <th data-col="bit_depth" style="min-width:70px">Bit Depth</th>
               <th data-col="date_added" data-sort="date_added" onclick="App.sortSongs('date_added')" style="min-width:90px">Date Added <span class="sort-arrow" id="songs-sort-date_added"></span></th>
+              <th data-col="filename" style="min-width:220px">Filename</th>
               <th class="col-act" data-col="actions"></th>
             </tr></thead>
             <tbody id="songs-tbody"></tbody>
@@ -438,7 +446,9 @@
                 <button class="pl-sort-pill" data-fav-song-sort="az" onclick="App.setFavSongsSort('az')">A–Z</button>
                 <button class="pl-sort-pill" data-fav-song-sort="album" onclick="App.setFavSongsSort('album')">Album</button>
               </div>
-              <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)">Columns</button>
+              <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)" title="Configure columns" aria-label="Configure columns">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
+              </button>
             </div>
             <div id="fav-songs-orphans" class="favourites-orphan-notice" style="display:none"></div>
             <div id="fav-songs-empty" class="empty-state" style="display:none">
@@ -518,7 +528,9 @@
             <button class="pl-sort-pill" data-sort="album" onclick="App.setPlaylistInSort('album')">Album</button>
             <button class="pl-sort-pill" data-sort="year" onclick="App.setPlaylistInSort('year')">Year <span class="pl-sort-dir" id="pl-sort-year-dir"></span></button>
           </div>
-          <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)">Columns</button>
+          <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)" title="Configure columns" aria-label="Configure columns">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
+          </button>
         </div>
 
         <div id="pl-empty" class="empty-state" style="display:none">
