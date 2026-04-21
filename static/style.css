@@ -8713,8 +8713,7 @@ tr.player-active .track-title { color: var(--accent); }
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-  margin-top: 16px;
-  padding-top: 14px;
+  margin-top: 10px;
 }
 
 .tag-health-problem-btn {
@@ -10104,6 +10103,26 @@ tr.player-active .track-title { color: var(--accent); }
   white-space: nowrap;
 }
 .iemfit-reanalyse-btn:hover { color: var(--text-secondary); }
+
+/* IEM score legend */
+.iemfit-score-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.42);
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.iemfit-legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
 
 /* IEM list */
 .iemfit-iem-list { display: flex; flex-direction: column; gap: 6px; }
@@ -11917,7 +11936,10 @@ body.is-col-resizing {
   margin-bottom: 8px;
 }
 .sonic-chart-subtitle {
-  margin-bottom: 8px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.38);
+  margin: 2px 0 10px;
+  line-height: 1.4;
 }
 .sonic-stat-row {
   gap: 12px;
