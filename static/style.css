@@ -10253,18 +10253,21 @@ tr.player-active .track-title { color: var(--accent); }
 .tracks-multi-disc-container {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
 }
 .tracks-disc-block {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  padding-top: 2px;
 }
 .tracks-disc-heading {
-  margin: 0;
-  font-size: 1.05rem;
+  margin: 2px 0 0;
+  padding-left: 2px;
+  line-height: 1.2;
+  font-size: 1.18rem;
   font-weight: 700;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.015em;
   color: var(--text);
 }
 .tracks-table-disc {

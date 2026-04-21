@@ -1611,10 +1611,20 @@ function _renderTracksTable() {
       <thead><tr>
         <th class="col-num" data-col="track_number"><span class="th-sort-label">Track #</span></th>
         <th class="col-title" data-col="title"><span class="th-sort-label">Title</span></th>
+        <th class="col-artist" data-col="artist"><span class="th-sort-label">Artist</span></th>
         <th class="col-album" data-col="album"><span class="th-sort-label">Album</span></th>
-        <th class="col-genre" data-col="genre"><span class="th-sort-label">Genre</span></th>
         <th class="col-dur" data-col="duration"><span class="th-sort-label">Time</span></th>
         <th class="col-fav" data-col="favourite"></th>
+        <th class="col-genre" data-col="genre"><span class="th-sort-label">Genre</span></th>
+        <th data-col="year"><span class="th-sort-label">Year</span></th>
+        <th data-col="disc_number"><span class="th-sort-label">Disc #</span></th>
+        <th data-col="album_artist"><span class="th-sort-label">Album Artist</span></th>
+        <th data-col="format"><span class="th-sort-label">Format</span></th>
+        <th data-col="bitrate"><span class="th-sort-label">Bitrate</span></th>
+        <th data-col="sample_rate"><span class="th-sort-label">Sample Rate</span></th>
+        <th data-col="bit_depth"><span class="th-sort-label">Bit Depth</span></th>
+        <th data-col="date_added"><span class="th-sort-label">Date Added</span></th>
+        <th data-col="filename"><span class="th-sort-label">Filename</span></th>
         <th class="col-act" data-col="actions"><span class="th-sort-label">Actions</span></th>
       </tr></thead>`;
     const multi = document.createElement('div');
@@ -1695,16 +1705,11 @@ function trackRow(t, num, inPlaylist) {
 
   const checkIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>`;
   const playIcon  = playSvg(12);
-
-  return `
-    <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
-      <td class="col-num" data-col="track_number" onclick="App.toggleTrackSelection('${t.id}', ${num - 1}, event)">
-        <div class="num-cell">
-          ${dragHandle}
-          <span class="track-check-indicator">${checkIcon}</span>
-          <span class="track-num">${esc(trackNumLabel)}</span>
-        </div>
-      </td>
+  const fmtDate = t.date_added ? new Date(t.date_added * 1000).toLocaleDateString() : '';
+  const bitrate = t.bitrate ? `${t.bitrate} kbps` : '';
+  const sampleRate = t.sample_rate ? `${t.sample_rate} Hz` : '';
+  const bitDepth = t.bits_per_sample ? `${t.bits_per_sample}-bit` : '';
+  const sharedTitleCells = `
       <td data-col="title">
         <div class="title-cell">
           <div class="thumb-wrap">
@@ -1717,11 +1722,61 @@ function trackRow(t, num, inPlaylist) {
           </div>
         </div>
       </td>
-      ${inPlaylist ? `<td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>` : ''}
+  `;
+
+  if (!inPlaylist) {
+    return `
+    <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
+      <td class="col-num" data-col="track_number" onclick="App.toggleTrackSelection('${t.id}', ${num - 1}, event)">
+        <div class="num-cell">
+          <span class="track-check-indicator">${checkIcon}</span>
+          <span class="track-num">${esc(trackNumLabel)}</span>
+        </div>
+      </td>
+      ${sharedTitleCells}
+      <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
       <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
-      ${inPlaylist ? `<td data-col="genre" class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.genre || '')}</td>` : ''}
-      ${inPlaylist ? `<td data-col="year" class="col-year" style="color:var(--text-muted);font-size:var(--text-sm)">${t.year || ''}</td>` : ''}
+      <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn')}</td>
+      <td data-col="genre" class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
+      <td data-col="year" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.year || '')}</td>
+      <td data-col="disc_number" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.disc_number || '')}</td>
+      <td data-col="album_artist" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.album_artist || '')}">${esc(t.album_artist || '')}</td>
+      <td data-col="format" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.format || '')}</td>
+      <td data-col="bitrate" style="color:var(--text-muted);font-size:var(--text-sm)">${bitrate}</td>
+      <td data-col="sample_rate" style="color:var(--text-muted);font-size:var(--text-sm)">${sampleRate}</td>
+      <td data-col="bit_depth" style="color:var(--text-muted);font-size:var(--text-sm)">${bitDepth}</td>
+      <td data-col="date_added" style="color:var(--text-muted);font-size:var(--text-sm)">${fmtDate}</td>
+      <td data-col="filename" style="color:var(--text-muted);font-size:var(--text-sm)" title="${esc(t.filename || '')}">${esc(t.filename || '')}</td>
+      <td data-col="actions"><div class="col-act-inner">
+        <button class="row-ctx-btn" onclick="event.stopPropagation();App.showTrackCtxMenu(event,'${t.id}')" title="More actions">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+        </button>
+        <button class="track-edit-btn" onclick="event.stopPropagation();App.openTagEditor('${t.id}')" title="Edit tags">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="add-btn" onclick="App.showAddDropdown(event, '${t.id}')" title="Add to playlist">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div></td>
+    </tr>`;
+  }
+
+  return `
+    <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
+      <td class="col-num" data-col="track_number" onclick="App.toggleTrackSelection('${t.id}', ${num - 1}, event)">
+        <div class="num-cell">
+          ${dragHandle}
+          <span class="track-check-indicator">${checkIcon}</span>
+          <span class="track-num">${esc(trackNumLabel)}</span>
+        </div>
+      </td>
+      ${sharedTitleCells}
+      <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
+      <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
+      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
+      <td data-col="genre" class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.genre || '')}</td>
+      <td data-col="year" class="col-year" style="color:var(--text-muted);font-size:var(--text-sm)">${t.year || ''}</td>
       <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, `track-fav-btn${inPlaylist ? '' : ''}`)}</td>
       <td data-col="actions"><div class="col-act-inner">
         ${removeAction}
@@ -8748,7 +8803,7 @@ function _getColumnContextKeys(anchor) {
     return ['track_number', 'title', 'artist', 'album', 'duration', 'favourite', 'actions'];
   }
   if (anchor.closest('#view-tracks') || anchor.closest('#view-albums')) {
-    return ['track_number', 'title', 'album', 'genre', 'duration', 'favourite', 'actions'];
+    return ['track_number', 'title', 'artist', 'album', 'duration', 'favourite', 'genre', 'year', 'disc_number', 'album_artist', 'format', 'bitrate', 'sample_rate', 'bit_depth', 'date_added', 'filename', 'actions'];
   }
   return _TABLE_COLUMNS.map(c => c.key);
 }
