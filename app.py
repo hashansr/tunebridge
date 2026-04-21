@@ -795,6 +795,7 @@ def scan_file(filepath):
     filename = filepath.name
 
     try:
+        disc_num = None
         if filename.lower().endswith('.flac'):
             audio = FLAC(str(filepath))
             tags = audio.tags
@@ -805,6 +806,7 @@ def scan_file(filepath):
             album = get_flac_tag(tags, 'ALBUM')
             title = get_flac_tag(tags, 'TITLE')
             track_num = get_flac_tag(tags, 'TRACKNUMBER')
+            disc_num = get_flac_tag(tags, 'DISCNUMBER', 'DISC')
             year = get_flac_tag(tags, 'DATE', 'YEAR')
             genre = get_flac_tag(tags, 'GENRE')
 
@@ -838,6 +840,7 @@ def scan_file(filepath):
             album = mp3_tag('TALB')
             title = mp3_tag('TIT2')
             track_num = mp3_tag('TRCK')
+            disc_num = mp3_tag('TPOS')
             year = mp3_tag('TDRC') or mp3_tag('TYER')
             genre = mp3_tag('TCON')
 
@@ -878,6 +881,11 @@ def scan_file(filepath):
                 track_num = str(trkn[0])
             else:
                 track_num = None
+            disk = tags.get('disk')
+            if disk and isinstance(disk, list) and disk and isinstance(disk[0], tuple):
+                disc_num = str(disk[0][0]) if disk[0][0] else None
+            elif disk and isinstance(disk, list) and disk:
+                disc_num = str(disk[0]) if str(disk[0]).strip() else None
             year = mp4_tag('\xa9day')
             genre = mp4_tag('\xa9gen')
 
@@ -911,6 +919,7 @@ def scan_file(filepath):
             album = wav_tag('TALB')
             title = wav_tag('TIT2')
             track_num = wav_tag('TRCK')
+            disc_num = wav_tag('TPOS')
             year = wav_tag('TDRC') or wav_tag('TYER')
             genre = wav_tag('TCON')
 
@@ -941,6 +950,8 @@ def scan_file(filepath):
 
         if track_num and '/' in str(track_num):
             track_num = str(track_num).split('/')[0]
+        if disc_num and '/' in str(disc_num):
+            disc_num = str(disc_num).split('/')[0]
 
         if year:
             year = str(year)[:4]
@@ -978,6 +989,7 @@ def scan_file(filepath):
             'album_artist': album_artist,
             'album': album or 'Unknown Album',
             'track_number': track_num,
+            'disc_number': disc_num,
             'year': year,
             'genre': genre,
             'duration': duration,
