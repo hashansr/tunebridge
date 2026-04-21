@@ -1337,6 +1337,7 @@ thead tr {
 }
 
 thead th {
+  position: relative;
   padding: 8px 12px;
   text-align: left;
   font-size: var(--text-xs);
@@ -1357,13 +1358,13 @@ tbody tr:nth-child(even) { background: rgba(255,255,255,0.015); }
 tbody tr:hover { background: var(--bg-hover); }
 /* individual button opacity handled per-button below */
 
-td { padding: 8px 12px; vertical-align: middle; }
+td { padding: 8px 12px; vertical-align: middle; text-align: left; }
 
 .col-num  { width: 56px; padding-left: 8px; padding-right: 4px; }
 .col-title { min-width: 200px; }
 .col-artist { width: 180px; }
 .col-album { width: 180px; }
-.col-dur  { width: 60px; text-align: right; color: var(--text-muted); }
+.col-dur  { width: 60px; text-align: left; color: var(--text-muted); }
 .col-act  { width: 96px; }
 
 .track-num {
@@ -2149,6 +2150,13 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; backgrou
   min-width: 1280px;
   table-layout: auto;
 }
+#songs-table,
+#pl-table,
+#fav-songs-table {
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
+}
 
 #tracks-table thead th {
   padding-top: 11px;
@@ -2200,7 +2208,7 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; backgrou
 
 #tracks-table .col-dur {
   width: 84px;
-  text-align: right;
+  text-align: left;
 }
 
 #tracks-table td {
@@ -10288,6 +10296,33 @@ tr.player-active .track-title { color: var(--accent); }
   white-space: nowrap;
   background: rgba(42, 42, 42, 0.58);
   border-bottom: 1px solid rgba(173, 198, 255, 0.16);
+}
+.table-col-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 10px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 6;
+}
+.table-col-resizer::after {
+  content: '';
+  position: absolute;
+  top: 22%;
+  bottom: 22%;
+  right: 4px;
+  width: 1px;
+  background: rgba(173, 198, 255, 0.16);
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+thead th:hover .table-col-resizer::after {
+  opacity: 0.9;
+}
+body.is-col-resizing {
+  user-select: none;
+  cursor: col-resize;
 }
 .tracks-table-disc td {
   padding-top: 10px;

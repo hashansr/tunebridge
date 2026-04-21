@@ -467,18 +467,20 @@
               <p>No favourite songs yet.</p>
               <p class="muted">Click ★ on a song to add it here.</p>
             </div>
-            <table id="fav-songs-table" style="display:none">
-              <thead><tr>
-                <th class="col-num" data-col="track_number">#</th>
-                <th class="col-title" data-col="title">Title</th>
-                <th class="col-artist" data-col="artist">Artist</th>
-                <th class="col-album" data-col="album">Album</th>
-                <th class="col-dur" data-col="duration">Time</th>
-                <th class="col-fav" data-col="favourite"></th>
-                <th class="col-act" data-col="actions">Actions</th>
-              </tr></thead>
-              <tbody id="fav-songs-tbody"></tbody>
-            </table>
+            <div id="fav-songs-table-wrap" style="overflow-x:auto">
+              <table id="fav-songs-table" style="display:none">
+                <thead><tr>
+                  <th class="col-num" data-col="track_number">#</th>
+                  <th class="col-title" data-col="title">Title</th>
+                  <th class="col-artist" data-col="artist">Artist</th>
+                  <th class="col-album" data-col="album">Album</th>
+                  <th class="col-dur" data-col="duration">Time</th>
+                  <th class="col-fav" data-col="favourite"></th>
+                  <th class="col-act" data-col="actions">Actions</th>
+                </tr></thead>
+                <tbody id="fav-songs-tbody"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -550,20 +552,22 @@
           <p class="muted">Browse the library and click <strong>+</strong> to add songs.</p>
         </div>
 
-        <table id="pl-table" style="display:none">
-          <thead><tr>
-            <th class="col-num" data-col="track_number">#</th>
-            <th class="col-title" data-col="title">Title</th>
-            <th class="col-artist" data-col="artist">Artist</th>
-            <th class="col-album" data-col="album">Album</th>
-            <th class="col-dur" data-col="duration">Time</th>
-            <th class="col-genre" data-col="genre">Genre</th>
-            <th class="col-year" data-col="year">Year</th>
-            <th class="col-fav" data-col="favourite"></th>
-            <th class="col-act" data-col="actions">Actions</th>
-          </tr></thead>
-          <tbody id="pl-tbody"></tbody>
-        </table>
+        <div id="pl-table-wrap" style="overflow-x:auto">
+          <table id="pl-table" style="display:none">
+            <thead><tr>
+              <th class="col-num" data-col="track_number">#</th>
+              <th class="col-title" data-col="title">Title</th>
+              <th class="col-artist" data-col="artist">Artist</th>
+              <th class="col-album" data-col="album">Album</th>
+              <th class="col-dur" data-col="duration">Time</th>
+              <th class="col-genre" data-col="genre">Genre</th>
+              <th class="col-year" data-col="year">Year</th>
+              <th class="col-fav" data-col="favourite"></th>
+              <th class="col-act" data-col="actions">Actions</th>
+            </tr></thead>
+            <tbody id="pl-tbody"></tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Gear view (DAPs + IEMs) -->
