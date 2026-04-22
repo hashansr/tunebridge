@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.23-rc.230426-0854 · 2026-04-23
 - Add: In-app ReplayGain tagger — Settings → Library now shows tag coverage (X of Y tracks tagged) and a "Tag Missing Tracks" button that measures EBU R128 loudness and writes REPLAYGAIN_* tags directly to FLAC, MP3, and M4A files in the background; audio streams are never re-encoded
 - Add: ReplayGain tagging runs as a cancellable background task with live progress bar; tracks are grouped by album so album gain is computed accurately alongside track gain
 - Add: After a library scan completes, a toast notification appears if any tracks are missing ReplayGain tags, with a prompt to tag them in Settings
