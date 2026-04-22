@@ -696,6 +696,16 @@ async function pollScanStatus() {
       if (['artists', 'albums', 'tracks'].includes(state.view)) {
         refreshCurrentLibraryView();
       }
+      // Notify user if newly scanned tracks are missing ReplayGain tags
+      try {
+        const rgInfo = await fetch('/api/library/replaygain/info').then(r => r.json());
+        if (rgInfo.pending > 0) {
+          toast(
+            `${rgInfo.pending.toLocaleString()} track${rgInfo.pending > 1 ? 's are' : ' is'} missing ReplayGain tags — tag them in Settings.`,
+            6000
+          );
+        }
+      } catch (_) {}
     }
   }
 }
@@ -9408,6 +9418,9 @@ async function loadSettings() {
     if (batchStatus.status === 'running') _startArtistBatchPolling();
   } catch (_) {}
 
+  // Load ReplayGain tag coverage info
+  _loadRgInfo();
+
   // Display app version + channel picker
   try {
     const ver = await fetch('/api/version').then(r => r.json());
@@ -10317,6 +10330,9 @@ const App = {
   saveArtistImageSettings,
   startArtistImageBatch,
   cancelArtistImageBatch,
+  // ReplayGain tagger
+  tagReplayGain,
+  cancelRgTagging,
   // Album art
   openAlbumArtModal,
   _openAlbumArtForCard,
@@ -13232,6 +13248,111 @@ function _updateArtistBatchBanner(s) {
   } else if (s.status === 'error') {
     if (msg) msg.textContent = 'Batch job encountered an error.';
     if (startBtn) startBtn.disabled = false;
+  }
+}
+
+// ── ReplayGain auto-tagger ────────────────────────────────────────────────────
+
+let _rgPoller = null;
+
+async function _loadRgInfo() {
+  try {
+    const d = await fetch('/api/library/replaygain/info').then(r => r.json());
+    const el = document.getElementById('rg-info-text');
+    if (el) {
+      if (d.pending === 0) {
+        el.textContent = `All ${d.total.toLocaleString()} tracks tagged`;
+      } else {
+        el.textContent = `${d.tagged.toLocaleString()} of ${d.total.toLocaleString()} tracks tagged · ${d.pending.toLocaleString()} missing`;
+      }
+    }
+    // Resume polling if a job is already running
+    if (d.status === 'running' && !_rgPoller) _startRgPolling();
+  } catch (_) {}
+}
+
+async function tagReplayGain() {
+  const btn = document.getElementById('rg-tag-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const resp = await fetch('/api/library/replaygain/tag', { method: 'POST' }).then(r => r.json());
+    if (resp.already_done) {
+      toast('All tracks already have ReplayGain tags');
+      if (btn) btn.disabled = false;
+      return;
+    }
+    if (resp.error) {
+      toast('RG tagger: ' + resp.error);
+      if (btn) btn.disabled = false;
+      return;
+    }
+    _startRgPolling();
+  } catch (e) {
+    toast('Failed to start ReplayGain tagging');
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function cancelRgTagging() {
+  try {
+    await fetch('/api/library/replaygain/cancel', { method: 'POST' });
+  } catch (_) {}
+  if (_rgPoller) { clearInterval(_rgPoller); _rgPoller = null; }
+  const cancelBtn = document.getElementById('rg-cancel-btn');
+  const tagBtn    = document.getElementById('rg-tag-btn');
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  if (tagBtn)    tagBtn.disabled = false;
+}
+
+function _startRgPolling() {
+  const tagBtn    = document.getElementById('rg-tag-btn');
+  const cancelBtn = document.getElementById('rg-cancel-btn');
+  const banner    = document.getElementById('rg-banner');
+  if (tagBtn)    tagBtn.disabled = true;
+  if (cancelBtn) cancelBtn.style.display = '';
+  if (banner)    banner.style.display = '';
+  if (_rgPoller) clearInterval(_rgPoller);
+  _rgPoller = setInterval(_pollRgStatus, 1500);
+}
+
+async function _pollRgStatus() {
+  try {
+    const s = await fetch('/api/library/replaygain/status').then(r => r.json());
+    _updateRgBanner(s);
+    if (['done', 'error', 'cancelled', 'idle'].includes(s.status)) {
+      clearInterval(_rgPoller); _rgPoller = null;
+      const tagBtn    = document.getElementById('rg-tag-btn');
+      const cancelBtn = document.getElementById('rg-cancel-btn');
+      if (tagBtn)    tagBtn.disabled = false;
+      if (cancelBtn) cancelBtn.style.display = 'none';
+      if (s.status === 'done') _loadRgInfo();
+    }
+  } catch (_) {}
+}
+
+function _updateRgBanner(s) {
+  const banner  = document.getElementById('rg-banner');
+  const bar     = document.getElementById('rg-banner-bar');
+  const label   = document.getElementById('rg-banner-label');
+  const sub     = document.getElementById('rg-banner-sub');
+  if (!banner) return;
+
+  const pct     = s.total > 0 ? Math.round(s.done / s.total * 100) : 0;
+  const errNote = s.errors > 0 ? ` · ${s.errors} error${s.errors > 1 ? 's' : ''}` : '';
+  if (bar) bar.style.width = pct + '%';
+
+  if (s.status === 'running') {
+    if (label) label.textContent = 'Tagging tracks…';
+    if (sub)   sub.textContent   = `${s.done.toLocaleString()} / ${s.total.toLocaleString()} · ${pct}%${errNote}`;
+  } else if (s.status === 'done') {
+    if (label) label.textContent = 'Tagging complete';
+    if (sub)   sub.textContent   = `${s.done.toLocaleString()} tracks tagged${errNote}`;
+  } else if (s.status === 'cancelled') {
+    if (label) label.textContent = 'Tagging cancelled';
+    if (sub)   sub.textContent   = `${s.done.toLocaleString()} of ${s.total.toLocaleString()} tracks tagged`;
+  } else if (s.status === 'error') {
+    if (label) label.textContent = 'Tagging failed';
+    if (sub)   sub.textContent   = s.error || 'Unknown error';
   }
 }
 

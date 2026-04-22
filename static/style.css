@@ -481,6 +481,64 @@ nav {
 .settings-hint-block-gap {
   margin-bottom: 14px;
 }
+
+/* ReplayGain tag row in Settings → Library */
+.settings-rg-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 16px 0 14px;
+  opacity: 0.5;
+}
+.settings-rg-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.settings-rg-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.settings-rg-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.settings-rg-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.settings-rg-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.rg-banner {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface-raised, var(--surface-2, #2a2a2a));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rg-banner-text {
+  min-width: 160px;
+}
+.rg-banner-text span {
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+}
+#rg-banner-label {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+#rg-banner-sub {
+  color: var(--text-muted);
+}
 .settings-subsection-divider {
   height: 1px;
   background: rgba(255,255,255,0.06);

@@ -8483,6 +8483,19 @@ analysis_state = {
     'error':        None,
 }
 
+# ── ReplayGain tagger state ───────────────────────────────────────────────────
+_RG_TARGET_LUFS = -18.0   # ReplayGain 2.0 standard (hardware player compatible)
+
+rg_tag_state = {
+    'status':       'idle',   # idle | running | done | error | cancelled
+    'done':         0,
+    'total':        0,
+    'errors':       0,
+    'started_at':   None,
+    'completed_at': None,
+    'error':        None,
+}
+
 def _load_feature_entries():
     return _db.db_load_feature_entries()
 
@@ -8751,6 +8764,198 @@ def insights_analyse_info():
         'total': total, 'analysed': valid, 'processed': processed,
         'pending': pending, 'status': status, 'needs_upgrade': needs_upgrade,
     })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ReplayGain Auto-Tagger
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _write_rg_tags(path, fmt, track_gain, track_peak, album_gain=None, album_peak=None):
+    """Write ReplayGain tags to an audio file.
+    The audio stream (FLAC frames, MP3 frames, M4A samples) is NEVER modified —
+    only the metadata block is rewritten by mutagen.
+    """
+    tg_str = f'{track_gain:.2f} dB'
+    tp_str = f'{track_peak:.6f}'
+    ag_str = f'{album_gain:.2f} dB' if album_gain is not None else None
+    ap_str = f'{album_peak:.6f}'    if album_peak is not None else None
+
+    if fmt == 'FLAC':
+        from mutagen.flac import FLAC as MutagenFLAC
+        audio = MutagenFLAC(path)
+        audio['REPLAYGAIN_TRACK_GAIN'] = [tg_str]
+        audio['REPLAYGAIN_TRACK_PEAK'] = [tp_str]
+        if ag_str: audio['REPLAYGAIN_ALBUM_GAIN'] = [ag_str]
+        if ap_str: audio['REPLAYGAIN_ALBUM_PEAK'] = [ap_str]
+        audio.save()
+
+    elif fmt == 'MP3':
+        from mutagen.id3 import ID3, TXXX
+        try:
+            audio = ID3(path)
+        except Exception:
+            from mutagen.id3 import ID3NoHeaderError
+            from mutagen.mp3 import MP3
+            MP3(path).save()   # create ID3 header
+            audio = ID3(path)
+        for tag in ('replaygain_track_gain', 'replaygain_track_peak',
+                    'replaygain_album_gain', 'replaygain_album_peak'):
+            audio.delall(f'TXXX:{tag}')
+        audio.add(TXXX(encoding=3, desc='replaygain_track_gain', text=[tg_str]))
+        audio.add(TXXX(encoding=3, desc='replaygain_track_peak', text=[tp_str]))
+        if ag_str: audio.add(TXXX(encoding=3, desc='replaygain_album_gain', text=[ag_str]))
+        if ap_str: audio.add(TXXX(encoding=3, desc='replaygain_album_peak', text=[ap_str]))
+        audio.save()
+
+    elif fmt in ('M4A', 'AAC'):
+        from mutagen.mp4 import MP4, MP4FreeForm, AtomDataType
+        audio = MP4(path)
+        def _atom(v):
+            return [MP4FreeForm(v.encode('utf-8'), AtomDataType.UTF8)]
+        audio['----:com.apple.iTunes:REPLAYGAIN_TRACK_GAIN'] = _atom(tg_str)
+        audio['----:com.apple.iTunes:REPLAYGAIN_TRACK_PEAK'] = _atom(tp_str)
+        if ag_str: audio['----:com.apple.iTunes:REPLAYGAIN_ALBUM_GAIN'] = _atom(ag_str)
+        if ap_str: audio['----:com.apple.iTunes:REPLAYGAIN_ALBUM_PEAK'] = _atom(ap_str)
+        audio.save()
+    # WAV and other formats: no standard RG tag container — skip silently
+
+
+def _run_rg_tagger():
+    """Background thread: measure loudness with EBU R128 and write ReplayGain tags."""
+    import soundfile as sf
+    import pyloudnorm as pyln
+    import numpy as np
+    from collections import defaultdict
+    from pathlib import Path
+
+    global rg_tag_state
+    rg_tag_state['started_at'] = time.time()
+
+    try:
+        music_base = get_music_base()
+        conn = _db.get_conn()
+        all_rows = conn.execute(
+            'SELECT id, path, format, album_artist, artist, album, rg_track_gain FROM tracks'
+        ).fetchall()
+
+        # Group by (album_artist/artist, album) — need full album context for album gain
+        albums = defaultdict(list)
+        for row in all_rows:
+            key = (row['album_artist'] or row['artist'] or '', row['album'] or '')
+            albums[key].append(dict(row))
+
+        # Only process albums that have at least one untagged track
+        work_albums = {k: v for k, v in albums.items()
+                       if any(t['rg_track_gain'] is None for t in v)}
+
+        # Total = all tracks in those albums (we measure all for correct album gain)
+        total_tracks = sum(len(v) for v in work_albums.values())
+        rg_tag_state['total'] = total_tracks
+        done = 0
+
+        for _album_key, tracks in work_albums.items():
+            if rg_tag_state['status'] == 'cancelled':
+                break
+
+            measured = []   # list of (track_id, abs_path, fmt, lufs, peak)
+
+            for t in tracks:
+                if rg_tag_state['status'] == 'cancelled':
+                    break
+                abs_path = str(Path(music_base) / t['path'])
+                try:
+                    data, sr = sf.read(abs_path, dtype='float32', always_2d=True)
+                    meter = pyln.Meter(sr)
+                    lufs = meter.integrated_loudness(data)
+                    peak = float(np.max(np.abs(data)))
+                    if not np.isfinite(lufs):
+                        # Silent track — 0 dB gain leaves it as-is
+                        lufs = _RG_TARGET_LUFS
+                    measured.append((t['id'], abs_path, t['format'], lufs, peak))
+                except Exception as exc:
+                    logging.warning('RG tagger: skipping %s — %s', abs_path, exc)
+                    rg_tag_state['errors'] += 1
+                finally:
+                    done += 1
+                    rg_tag_state['done'] = done
+
+            if not measured:
+                continue
+
+            # Album gain = TARGET - mean(per-track LUFS)
+            album_lufs  = sum(x[3] for x in measured) / len(measured)
+            album_gain  = _RG_TARGET_LUFS - album_lufs
+            album_peak  = max(x[4] for x in measured)
+
+            db_updates = []
+            for track_id, abs_path, fmt, lufs, peak in measured:
+                track_gain = _RG_TARGET_LUFS - lufs
+                try:
+                    _write_rg_tags(abs_path, fmt, track_gain, peak, album_gain, album_peak)
+                except Exception as exc:
+                    logging.warning('RG tagger: tag write failed %s — %s', abs_path, exc)
+                    rg_tag_state['errors'] += 1
+                    continue
+                db_updates.append((
+                    round(track_gain, 2), round(album_gain, 2),
+                    round(peak, 6),       round(album_peak, 6),
+                    track_id,
+                ))
+
+            if db_updates:
+                _db.db_update_rg_batch(db_updates)
+                # Keep in-memory library cache consistent
+                rg_map = {tid: (tg, ag, tp, ap) for tg, ag, tp, ap, tid in db_updates}
+                with library_lock:
+                    for t in library:
+                        if t['id'] in rg_map:
+                            tg, ag, tp, ap = rg_map[t['id']]
+                            t.update({'rg_track_gain': tg, 'rg_album_gain': ag,
+                                      'rg_track_peak': tp, 'rg_album_peak': ap})
+
+        final = 'cancelled' if rg_tag_state['status'] == 'cancelled' else 'done'
+        rg_tag_state.update({'status': final, 'completed_at': time.time()})
+
+    except Exception as exc:
+        logging.exception('RG tagger crashed')
+        rg_tag_state.update({'status': 'error', 'error': str(exc),
+                              'completed_at': time.time()})
+
+
+@app.route('/api/library/replaygain/info')
+def rg_info():
+    conn = _db.get_conn()
+    total  = conn.execute('SELECT COUNT(*) FROM tracks').fetchone()[0]
+    tagged = conn.execute('SELECT COUNT(*) FROM tracks WHERE rg_track_gain IS NOT NULL').fetchone()[0]
+    return jsonify({'total': total, 'tagged': tagged, 'pending': total - tagged,
+                    'status': rg_tag_state['status']})
+
+
+@app.route('/api/library/replaygain/tag', methods=['POST'])
+def rg_tag_start():
+    if rg_tag_state['status'] == 'running':
+        return jsonify({'error': 'Already running'}), 409
+    conn = _db.get_conn()
+    pending = conn.execute('SELECT COUNT(*) FROM tracks WHERE rg_track_gain IS NULL').fetchone()[0]
+    if pending == 0:
+        return jsonify({'ok': True, 'already_done': True, 'pending': 0})
+    rg_tag_state.update({'status': 'running', 'done': 0, 'total': pending,
+                          'errors': 0, 'started_at': None, 'completed_at': None, 'error': None})
+    threading.Thread(target=_run_rg_tagger, daemon=True).start()
+    return jsonify({'ok': True, 'pending': pending})
+
+
+@app.route('/api/library/replaygain/status')
+def rg_tag_status():
+    return jsonify(rg_tag_state)
+
+
+@app.route('/api/library/replaygain/cancel', methods=['POST'])
+def rg_tag_cancel():
+    if rg_tag_state['status'] != 'running':
+        return jsonify({'error': 'Not running'}), 409
+    rg_tag_state['status'] = 'cancelled'
+    return jsonify({'ok': True})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

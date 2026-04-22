@@ -289,6 +289,7 @@ PYI_ARGS=(
   --collect-submodules sklearn
   --collect-submodules soundfile
   --collect-submodules mpv
+  --collect-submodules pyloudnorm
   --add-data "${PROJECT_DIR}/static:static"
   --add-data "${PROJECT_DIR}/version.json:."
 )

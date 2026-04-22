@@ -716,6 +716,28 @@
               <button class="btn-primary" onclick="App.saveLibraryPath()">Save</button>
               <button class="btn-secondary" onclick="App.rescan()">Rescan Library</button>
             </div>
+
+            <!-- ReplayGain tagging row -->
+            <div class="settings-rg-divider"></div>
+            <div class="settings-rg-row">
+              <div class="settings-rg-meta">
+                <span class="settings-rg-label">ReplayGain Tags</span>
+                <span id="rg-info-text" class="settings-rg-sub">Loading…</span>
+              </div>
+              <div class="settings-rg-actions">
+                <button id="rg-tag-btn" class="btn-secondary" onclick="App.tagReplayGain()">Tag Missing Tracks</button>
+                <button id="rg-cancel-btn" class="btn-secondary" onclick="App.cancelRgTagging()" style="display:none">Cancel</button>
+              </div>
+            </div>
+            <div id="rg-banner" class="rg-banner" style="display:none">
+              <div class="rg-banner-text">
+                <span id="rg-banner-label">Tagging tracks…</span>
+                <span id="rg-banner-sub"></span>
+              </div>
+              <div class="insights-analysis-bar-wrap" style="flex:1;min-width:80px">
+                <div id="rg-banner-bar" class="insights-analysis-bar" style="width:0%"></div>
+              </div>
+            </div>
           </div>
 
           <!-- Data & Backup section -->

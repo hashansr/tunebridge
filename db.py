@@ -531,6 +531,18 @@ def db_load_library():
     return [_row_to_track(r) for r in rows]
 
 
+def db_update_rg_batch(updates):
+    """Batch-update ReplayGain fields without touching the rest of the track row.
+    updates: list of (rg_track_gain, rg_album_gain, rg_track_peak, rg_album_peak, track_id)
+    """
+    conn = get_conn()
+    conn.executemany(
+        'UPDATE tracks SET rg_track_gain=?, rg_album_gain=?, rg_track_peak=?, rg_album_peak=? WHERE id=?',
+        updates
+    )
+    conn.commit()
+
+
 def db_get_track(track_id):
     """Fetch a single track by ID. Returns dict or None."""
     conn = get_conn()
