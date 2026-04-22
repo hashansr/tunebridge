@@ -1250,6 +1250,7 @@ const Player = (function () {
   /** Replace the entire queue with tracks[], start at startIdx */
   function playAll(tracks, startIdx = 0, contextLabel = '', options = {}) {
     if (!tracks || tracks.length === 0) return;
+    _resetStandbyBuffer();
     tracks.forEach(t => _registry.set(t.id, t));
     ps.queue    = [...tracks];
     ps.queueIdx = Math.max(0, Math.min(startIdx, tracks.length - 1));
@@ -1279,6 +1280,7 @@ const Player = (function () {
   /** Hero Shuffle CTA behavior: replace queue with randomized collection and start at top. */
   function playCollectionShuffled(tracks, contextLabel = '') {
     if (!tracks || tracks.length === 0) return;
+    _resetStandbyBuffer();
     tracks.forEach(t => _registry.set(t.id, t));
     const shuffled = _fisherYates([...tracks]);
     ps.queue = shuffled;
@@ -1573,6 +1575,22 @@ const Player = (function () {
     standby.dataset.preloadedId = '';
   }
 
+  function _resetStandbyBuffer() {
+    const standby = _nextAudioEl();
+    standby.dataset.preloadedId = '';
+    standby.pause();
+    standby.removeAttribute('src');
+    try { standby.load(); } catch (_) {}
+  }
+
+  function _standbyMatchesTrack(standby, track) {
+    if (!standby || !track || !track.id) return false;
+    if (String(standby.dataset.preloadedId || '') !== String(track.id)) return false;
+    const src = String(standby.currentSrc || standby.src || '');
+    // Guard against stale prebuffer from a previous queue/context.
+    return src.includes(`/api/stream/${encodeURIComponent(track.id)}`);
+  }
+
   function _onEnded() {
     if (this !== _audio) return;   // crossfade already swapped _audio before this fires
     if (_xfadeTriggered) return;   // crossfade handles advancement — don't double-advance
@@ -1586,7 +1604,7 @@ const Player = (function () {
       const standby      = _nextAudioEl();
 
       if (ps.crossfadeDuration === 0
-          && standby.dataset.preloadedId === nextTrack.id
+          && _standbyMatchesTrack(standby, nextTrack)
           && standby.readyState >= 2) {
         // Gapless: standby element already buffered — instant A/B swap, zero silence
         ps.queueIdx = nextQueueIdx;
@@ -1603,6 +1621,7 @@ const Player = (function () {
         _preloadNext();  // buffer the track after next
       } else {
         // Fallback: normal load (pre-buffer wasn't ready or crossfade > 0)
+        _resetStandbyBuffer();
         ps.queueIdx = nextQueueIdx;
         _loadTrack(currentTrack());
         _startPlay();
