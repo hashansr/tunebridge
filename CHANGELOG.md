@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.20-rc.220426-1457 · 2026-04-22
 - Fix: Insights Sonic Profile analysis banner no longer re-appears on every navigation after a successful run; it shows for 10s after completion then stays hidden until the user explicitly triggers a new analysis
 - Fix: Analysis error state now stays persistent (no auto-hide) until a successful run clears it
 
