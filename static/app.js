@@ -11118,6 +11118,7 @@ function _updateAnalysisInfo(info) {
   } else if (info.status === 'up_to_date') {
     el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--ok"></span>Analysis up to date · ${info.analysed.toLocaleString()} tracks analysed`;
     if (btn && !btn.disabled) btn.textContent = 'Re-analyse';
+    setTimeout(() => { el.innerHTML = ''; }, 5000);
   } else if (info.status === 'pending') {
     el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--warn"></span>${info.pending.toLocaleString()} song${info.pending !== 1 ? 's' : ''} pending analysis`;
     if (btn && !btn.disabled) btn.textContent = 'Analyse Library';
@@ -11225,6 +11226,8 @@ function showInsightsHelp(sectionKey, e) {
   setTimeout(() => document.addEventListener('click', _helpCloseHandler), 0);
 }
 
+let _analysisBannerHideTimer = null;
+
 function _updateAnalysisBanner(s) {
   const banner   = document.getElementById('insights-analysis-banner');
   const navDot   = document.getElementById('insights-nav-dot');
@@ -11235,6 +11238,9 @@ function _updateAnalysisBanner(s) {
   const cta        = document.getElementById('insights-analyse-btn');
   const cancelBtn  = document.getElementById('insights-cancel-btn');
   if (!banner) return;
+
+  // Cancel any pending auto-hide when the status changes
+  if (_analysisBannerHideTimer) { clearTimeout(_analysisBannerHideTimer); _analysisBannerHideTimer = null; }
 
   if (s.status === 'idle') {
     banner.style.display = 'none';
@@ -11277,6 +11283,7 @@ function _updateAnalysisBanner(s) {
     bar.style.width = '100%';
     if (cta) { cta.disabled = false; cta.innerHTML = 'Re-analyse'; }
     if (cancelBtn) cancelBtn.style.display = 'none';
+    _analysisBannerHideTimer = setTimeout(() => { banner.style.display = 'none'; _analysisBannerHideTimer = null; }, 5000);
   } else if (s.status === 'error') {
     if (navDot) navDot.style.display = 'none';
     banner.classList.add('insights-analysis-banner--error');
