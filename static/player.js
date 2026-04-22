@@ -23,6 +23,7 @@ const Player = (function () {
     repeatMode:   'off',   // 'off' | 'all' | 'one'
     volume:       1.0,
     muted:        false,
+    muteExplicit: false,
     isPlaying:    false,
     activePeqIemId:     null,
     activePeqProfileId: null,
@@ -1111,6 +1112,7 @@ const Player = (function () {
 
   function toggleMute() {
     ps.muted = !ps.muted;
+    ps.muteExplicit = true;
     _applyVolume();
     _updateVolumeUI();
     _updateBitPerfectBadge();
@@ -2454,6 +2456,7 @@ const Player = (function () {
       repeatMode:   ps.repeatMode,
       volume:       ps.volume,
       muted:        ps.muted,
+      muteExplicit: ps.muteExplicit,
       peqIem:       ps.activePeqIemId     || '',
       peqProfile:   ps.activePeqProfileId || '',
       recentContexts: Array.isArray(ps.recentContexts) ? ps.recentContexts.slice(0, 30) : [],
@@ -2480,6 +2483,7 @@ const Player = (function () {
     repeat:     'tb_repeat',
     volume:     'tb_volume',
     muted:      'tb_muted',
+    muteExplicit: 'tb_mute_explicit',
     peqIem:     'tb_peq_iem',
     peqProfile: 'tb_peq_profile',
     seekTime:   'tb_seek_time',
@@ -2494,6 +2498,7 @@ const Player = (function () {
       localStorage.setItem(_LS.repeat,     ps.repeatMode);
       localStorage.setItem(_LS.volume,     ps.volume);
       localStorage.setItem(_LS.muted,      ps.muted);
+      localStorage.setItem(_LS.muteExplicit, ps.muteExplicit);
       localStorage.setItem(_LS.peqIem,     ps.activePeqIemId     || '');
       localStorage.setItem(_LS.peqProfile, ps.activePeqProfileId || '');
       localStorage.setItem(_LS.seekTime,   _isMpvActive() ? _mpvPosition : (_audio.currentTime || 0));
@@ -2518,7 +2523,9 @@ const Player = (function () {
 
       const vol   = parseFloat(localStorage.getItem(_LS.volume));
       ps.volume   = isNaN(vol) ? 1.0 : Math.max(0, Math.min(1, vol));
-      ps.muted    = _boolFromState(localStorage.getItem(_LS.muted), false);
+      ps.muteExplicit = _boolFromState(localStorage.getItem(_LS.muteExplicit), false);
+      const restoredMuted = _boolFromState(localStorage.getItem(_LS.muted), false);
+      ps.muted = ps.muteExplicit ? restoredMuted : false;
 
       ps.activePeqIemId     = localStorage.getItem(_LS.peqIem)     || null;
       ps.activePeqProfileId = localStorage.getItem(_LS.peqProfile) || null;
@@ -2555,7 +2562,13 @@ const Player = (function () {
     if (sv.shuffleOrder)                      ps.shuffleOrder = sv.shuffleOrder;
     if (sv.repeatMode)                        ps.repeatMode   = sv.repeatMode;
     if (typeof sv.volume     !== 'undefined') ps.volume = Math.max(0, Math.min(1, sv.volume));
-    if (typeof sv.muted      !== 'undefined') ps.muted  = _boolFromState(sv.muted, false);
+    if (typeof sv.muteExplicit !== 'undefined') {
+      ps.muteExplicit = _boolFromState(sv.muteExplicit, false);
+    }
+    if (typeof sv.muted      !== 'undefined') {
+      const restoredMuted = _boolFromState(sv.muted, false);
+      ps.muted = ps.muteExplicit ? restoredMuted : false;
+    }
     ps.activePeqIemId     = sv.peqIem     || sv.activePeqIemId     || null;
     ps.activePeqProfileId = sv.peqProfile || sv.activePeqProfileId || null;
     if (Array.isArray(sv.recentContexts)) {

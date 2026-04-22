@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Startup mute restore now requires explicit user mute intent (`muteExplicit`) before applying persisted `muted=true`; stale legacy mute flags no longer force muted startup on new RC launches.
 
 ## v0.23-rc.230426-0854 · 2026-04-23
 - Add: In-app ReplayGain tagger — Settings → Library now shows tag coverage (X of Y tracks tagged) and a "Tag Missing Tracks" button that measures EBU R128 loudness and writes REPLAYGAIN_* tags directly to FLAC, MP3, and M4A files in the background; audio streams are never re-encoded
