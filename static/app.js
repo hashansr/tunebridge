@@ -10975,7 +10975,9 @@ async function startLibraryAnalysis() {
   }
   const d = await res.json().catch(() => ({}));
   if (d.already_up_to_date) {
-    showToast('Analysis is already up to date.');
+    // Re-show the done banner briefly so clicking Re-analyse has visible feedback
+    const statusRes2 = await fetch('/api/insights/analyse/status').catch(() => null);
+    if (statusRes2 && statusRes2.ok) _updateAnalysisBanner(await statusRes2.json());
     const infoRes = await fetch('/api/insights/analyse/info').catch(() => null);
     if (infoRes && infoRes.ok) _updateAnalysisInfo(await infoRes.json());
     return;
@@ -11128,7 +11130,6 @@ function _updateAnalysisInfo(info) {
   } else if (info.status === 'up_to_date') {
     el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--ok"></span>Analysis up to date · ${info.analysed.toLocaleString()} tracks analysed`;
     if (btn && !btn.disabled) btn.textContent = 'Re-analyse';
-    setTimeout(() => { el.innerHTML = ''; }, 5000);
   } else if (info.status === 'pending') {
     el.innerHTML = `<span class="analyse-status-dot analyse-status-dot--warn"></span>${info.pending.toLocaleString()} song${info.pending !== 1 ? 's' : ''} pending analysis`;
     if (btn && !btn.disabled) btn.textContent = 'Analyse Library';
