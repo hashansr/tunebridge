@@ -278,7 +278,12 @@
       "Bash(curl -v http://localhost:5001/)",
       "Bash(xargs -I{} ps -p {} -o pid,command)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5001/)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5002/)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5002/)",
+      "Bash(curl -s \"http://localhost:5001/api/library/replaygain/info\")",
+      "Bash(curl -s -X POST \"http://localhost:5001/api/restart\")",
+      "Bash(curl -s \"http://localhost:5001/api/library/replaygain/status\")",
+      "Bash(curl -s -X POST \"http://localhost:5001/api/library/replaygain/tag\")",
+      "Bash(curl -s -X POST \"http://localhost:5001/api/library/replaygain/cancel\")"
     ]
   }
 }

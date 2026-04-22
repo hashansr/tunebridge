@@ -116,6 +116,18 @@ const Player = (function () {
   const _LOSSLESS_FORMATS = new Set(['FLAC', 'ALAC', 'WAV', 'AIFF', 'AIF', 'APE', 'WV', 'DSF', 'DFF']);
   const _LOSSY_FORMATS = new Set(['MP3', 'AAC', 'M4A', 'MP4', 'OGG', 'OPUS', 'WMA']);
 
+  function _boolFromState(value, fallback = false) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    if (typeof value === 'string') {
+      const v = value.trim().toLowerCase();
+      if (!v) return false;
+      if (['true', '1', 'yes', 'on'].includes(v)) return true;
+      if (['false', '0', 'no', 'off'].includes(v)) return false;
+    }
+    return fallback;
+  }
+
   function _defaultCustomPeqState() {
     return {
       enabled: false,
@@ -2499,14 +2511,14 @@ const Player = (function () {
       if (isNaN(ps.queueIdx)) ps.queueIdx = -1;
       if (ps.queueIdx >= ps.queue.length) ps.queueIdx = ps.queue.length - 1;
 
-      ps.shuffle    = localStorage.getItem(_LS.shuffle)    === 'true';
+      ps.shuffle    = _boolFromState(localStorage.getItem(_LS.shuffle), false);
       const soRaw   = localStorage.getItem(_LS.shuffleOrd);
       ps.shuffleOrder = soRaw ? JSON.parse(soRaw) : [];
       ps.repeatMode = localStorage.getItem(_LS.repeat)  || 'off';
 
       const vol   = parseFloat(localStorage.getItem(_LS.volume));
       ps.volume   = isNaN(vol) ? 1.0 : Math.max(0, Math.min(1, vol));
-      ps.muted    = localStorage.getItem(_LS.muted) === 'true';
+      ps.muted    = _boolFromState(localStorage.getItem(_LS.muted), false);
 
       ps.activePeqIemId     = localStorage.getItem(_LS.peqIem)     || null;
       ps.activePeqProfileId = localStorage.getItem(_LS.peqProfile) || null;
@@ -2539,11 +2551,11 @@ const Player = (function () {
       ps.queueIdx     = typeof sv.queueIdx === 'number' ? sv.queueIdx : 0;
       if (ps.queueIdx >= ps.queue.length) ps.queueIdx = ps.queue.length - 1;
     }
-    if (typeof sv.shuffle    !== 'undefined') ps.shuffle    = !!sv.shuffle;
+    if (typeof sv.shuffle    !== 'undefined') ps.shuffle    = _boolFromState(sv.shuffle, false);
     if (sv.shuffleOrder)                      ps.shuffleOrder = sv.shuffleOrder;
     if (sv.repeatMode)                        ps.repeatMode   = sv.repeatMode;
     if (typeof sv.volume     !== 'undefined') ps.volume = Math.max(0, Math.min(1, sv.volume));
-    if (typeof sv.muted      !== 'undefined') ps.muted  = !!sv.muted;
+    if (typeof sv.muted      !== 'undefined') ps.muted  = _boolFromState(sv.muted, false);
     ps.activePeqIemId     = sv.peqIem     || sv.activePeqIemId     || null;
     ps.activePeqProfileId = sv.peqProfile || sv.activePeqProfileId || null;
     if (Array.isArray(sv.recentContexts)) {
