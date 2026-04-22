@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.21-rc.230426-0808 · 2026-04-23
 - Add: Gapless playback — next track is pre-buffered into the standby audio element while the current track plays; when crossfade is off, tracks transition with zero gap or silence
 - Add: ReplayGain support — reads REPLAYGAIN_TRACK_GAIN / REPLAYGAIN_ALBUM_GAIN / REPLAYGAIN_TRACK_PEAK / REPLAYGAIN_ALBUM_PEAK tags from FLAC, MP3, and M4A files during library scan
 - Add: ReplayGain mode toggle (Off / Track / Album) in the PEQ popover; gain applied via Web Audio GainNode — lossless float32 multiplication, no re-encoding; clipping guard ensures output never exceeds measured peak
