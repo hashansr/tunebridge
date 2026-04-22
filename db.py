@@ -53,7 +53,7 @@ def close_conn():
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -75,8 +75,12 @@ SCHEMA_VERSION = 3
 _MIGRATIONS: list[tuple] = [
     (3, 'Add disc_number to tracks',
         ['ALTER TABLE tracks ADD COLUMN disc_number INTEGER']),
-    # (3, 'Example: add colour to playlists',
-    #     ['ALTER TABLE playlists ADD COLUMN colour TEXT']),
+    (4, 'Add ReplayGain columns to tracks', [
+        'ALTER TABLE tracks ADD COLUMN rg_track_gain REAL',
+        'ALTER TABLE tracks ADD COLUMN rg_album_gain REAL',
+        'ALTER TABLE tracks ADD COLUMN rg_track_peak REAL',
+        'ALTER TABLE tracks ADD COLUMN rg_album_peak REAL',
+    ]),
 ]
 
 _SCHEMA_SQL = """
@@ -106,7 +110,11 @@ CREATE TABLE IF NOT EXISTS tracks (
     format          TEXT,
     sample_rate     INTEGER,
     bits_per_sample INTEGER,
-    date_added      INTEGER
+    date_added      INTEGER,
+    rg_track_gain   REAL,
+    rg_album_gain   REAL,
+    rg_track_peak   REAL,
+    rg_album_peak   REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_tracks_artist       ON tracks(artist COLLATE NOCASE);
@@ -476,8 +484,9 @@ def db_save_library(tracks):
     conn.executemany(
         """INSERT INTO tracks (id, path, filename, title, artist, album_artist,
            album, track_number, disc_number, year, genre, duration, artwork_key, bitrate,
-           format, sample_rate, bits_per_sample, date_added)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           format, sample_rate, bits_per_sample, date_added,
+           rg_track_gain, rg_album_gain, rg_track_peak, rg_album_peak)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 t['id'], t.get('path', ''), t.get('filename', ''),
@@ -489,6 +498,8 @@ def db_save_library(tracks):
                 t.get('bitrate'), t.get('format'),
                 t.get('sample_rate'), t.get('bits_per_sample'),
                 t.get('date_added'),
+                t.get('rg_track_gain'), t.get('rg_album_gain'),
+                t.get('rg_track_peak'), t.get('rg_album_peak'),
             )
             for t in tracks
         ]

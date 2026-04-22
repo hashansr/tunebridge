@@ -6850,6 +6850,36 @@ tbody tr:hover {
   text-transform: uppercase;
 }
 
+/* ReplayGain pill toggle */
+.rg-pills {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+.rg-pill {
+  flex: 1;
+  padding: 4px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  text-align: center;
+}
+.rg-pill:hover {
+  background: rgba(173,198,255,0.1);
+  color: var(--text-secondary);
+}
+.rg-pill--active {
+  background: rgba(173,198,255,0.18);
+  border-color: rgba(173,198,255,0.35);
+  color: var(--accent);
+}
+
 /* Custom crossfade slider */
 .peq-xfade-slider {
   -webkit-appearance: none;

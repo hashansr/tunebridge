@@ -77,8 +77,12 @@ const Player = (function () {
   let _fadeGainA  = null;   // GainNode — crossfade gain for A
   let _fadeGainB  = null;   // GainNode — crossfade gain for B
   let _preampNode = null;   // GainNode — PEQ preamp headroom
+  let _rgGainNode = null;   // GainNode — ReplayGain gain compensation (1.0 = passthrough)
   let _volNode    = null;   // GainNode — user volume
   let _peqNodes   = [];     // BiquadFilterNode[] — PEQ chain
+
+  // ReplayGain mode: 'off' | 'track' | 'album' — persisted to localStorage
+  let _rgMode = 'off';
 
   // Crossfade state (Web Audio path)
   let _xfadeTriggered = false;  // true while a Web Audio crossfade is in progress
@@ -173,6 +177,7 @@ const Player = (function () {
     try {
       if (_volNode)    { try { _volNode.disconnect();    } catch (_) {} }
       if (_preampNode) { try { _preampNode.disconnect(); } catch (_) {} }
+      if (_rgGainNode) { try { _rgGainNode.disconnect(); } catch (_) {} }
       if (_fadeGainA)  { try { _fadeGainA.disconnect();  } catch (_) {} }
       if (_fadeGainB)  { try { _fadeGainB.disconnect();  } catch (_) {} }
       if (_srcA)       { try { _srcA.disconnect();       } catch (_) {} }
@@ -180,7 +185,7 @@ const Player = (function () {
       _peqNodes.forEach(n => { try { n.disconnect(); } catch (_) {} });
       if (_ctx) _ctx.close().catch(() => {});
     } catch (_) {}
-    _ctx = _srcA = _srcB = _fadeGainA = _fadeGainB = _preampNode = _volNode = null;
+    _ctx = _srcA = _srcB = _fadeGainA = _fadeGainB = _rgGainNode = _preampNode = _volNode = null;
     _peqNodes = [];
   }
 
@@ -210,17 +215,21 @@ const Player = (function () {
       _srcB       = _ctx.createMediaElementSource(_audioB);
       _fadeGainA  = _ctx.createGain();
       _fadeGainB  = _ctx.createGain();
+      _rgGainNode = _ctx.createGain();
       _preampNode = _ctx.createGain();
       _volNode    = _ctx.createGain();
       _volNode.gain.value    = ps.muted ? 0 : ps.volume;
       _preampNode.gain.value = 1.0;
+      _rgGainNode.gain.value = 1.0;   // passthrough until a track with RG data is loaded
       _fadeGainA.gain.value  = 1.0;   // A starts as active
       _fadeGainB.gain.value  = 0.0;   // B starts as standby
       // Both paths feed into the shared PEQ chain
+      // Graph: srcA/B → fadeGainA/B → rgGainNode → preampNode → peqNodes[] → volNode → destination
       _srcA.connect(_fadeGainA);
       _srcB.connect(_fadeGainB);
-      _fadeGainA.connect(_preampNode);
-      _fadeGainB.connect(_preampNode);
+      _fadeGainA.connect(_rgGainNode);
+      _fadeGainB.connect(_rgGainNode);
+      _rgGainNode.connect(_preampNode);
       _preampNode.connect(_volNode);
       _volNode.connect(_ctx.destination);
       // Re-apply any stored PEQ
@@ -958,11 +967,14 @@ const Player = (function () {
     }
     _updateTrackUI(track);
     _highlightActiveRow();
+    _applyReplayGain(track);
     // Immediately bump the active playback context to the front of Jump Back In.
     // This keeps rails responsive even before a track ends or pauses.
     _pushRecentContext(track, 'start');
     _markTrackSessionStart();
     _saveState();
+    // Start buffering next track for gapless playback (no-op when crossfade > 0 or mpv active)
+    _preloadNext();
   }
 
   function _startPlay() {
@@ -1105,6 +1117,41 @@ const Player = (function () {
     }
   }
 
+  function _applyReplayGain(track) {
+    if (!_rgGainNode) return;
+    if (_rgMode === 'off' || !track) { _rgGainNode.gain.value = 1.0; return; }
+
+    const gainDb = _rgMode === 'album'
+      ? (track.rg_album_gain ?? track.rg_track_gain ?? null)
+      : (track.rg_track_gain ?? null);
+
+    if (gainDb === null || gainDb === undefined) { _rgGainNode.gain.value = 1.0; return; }
+
+    const peak = _rgMode === 'album'
+      ? (track.rg_album_peak ?? track.rg_track_peak ?? 1.0)
+      : (track.rg_track_peak ?? 1.0);
+
+    const linearGain = Math.pow(10, gainDb / 20);
+    // Clipping guard: cap so that gain × peak ≤ 1.0 (lossless — only ever attenuates)
+    const safePeak = (peak > 0 && isFinite(peak)) ? peak : 1.0;
+    _rgGainNode.gain.value = Math.min(linearGain, 1.0 / safePeak);
+  }
+
+  function setRgMode(mode) {
+    if (!['off', 'track', 'album'].includes(mode)) return;
+    _rgMode = mode;
+    try { localStorage.setItem('tb_rg_mode', mode); } catch (_) {}
+    _applyReplayGain(currentTrack());
+    _updateRgModeUI();
+    _updateBitPerfectBadge();
+  }
+
+  function _updateRgModeUI() {
+    document.querySelectorAll('.rg-pill').forEach(el => {
+      el.classList.toggle('rg-pill--active', el.dataset.mode === _rgMode);
+    });
+  }
+
   function toggleShuffle() {
     // If queue is only a single track but we have a richer active context
     // (playlist/artist/album/songs), promote that context into queue first.
@@ -1141,6 +1188,7 @@ const Player = (function () {
     _updateShuffleBtn();
     _renderQueue();
     _saveState();
+    _preloadNext();  // re-buffer with new shuffle order
   }
 
   function cycleRepeat() {
@@ -1148,6 +1196,7 @@ const Player = (function () {
     ps.repeatMode = modes[(modes.indexOf(ps.repeatMode) + 1) % modes.length];
     _updateRepeatBtn();
     _saveState();
+    _preloadNext();  // repeat mode change may change which track is next
   }
 
   /* ── Queue management ───────────────────────────────────────────────── */
@@ -1262,6 +1311,7 @@ const Player = (function () {
     }
     _renderQueue();
     _saveState();
+    _invalidatePreload();  // queue changed — pre-buffered next may no longer be correct
     const n = tracks.length;
     _toast(`Added ${n} track${n !== 1 ? 's' : ''} to queue`);
   }
@@ -1300,6 +1350,8 @@ const Player = (function () {
 
     _renderQueue();
     _saveState();
+    _invalidatePreload();  // inserted after current — pre-buffered next is now wrong
+    _preloadNext();
     _toast(n === 1 ? `"${tracks[0].title}" plays next` : `${n} tracks play next`);
   }
 
@@ -1342,6 +1394,9 @@ const Player = (function () {
       if (ps.queueIdx >= ps.queue.length) ps.queueIdx = 0;
       _loadTrack(currentTrack());
       if (wasPlaying) _startPlay();
+    } else {
+      _invalidatePreload();
+      _preloadNext();
     }
     _renderQueue();
     _saveState();
@@ -1372,6 +1427,7 @@ const Player = (function () {
     ps.queue = [keep];
     ps.queueIdx = 0;
     ps.shuffleOrder = ps.shuffle ? [0] : [];
+    _invalidatePreload();  // no next track after clear
     _highlightActiveRow();
     _renderQueue();
     _saveState();
@@ -1388,6 +1444,8 @@ const Player = (function () {
       else if (fromIdx > ps.queueIdx && toIdx <= ps.queueIdx) ps.queueIdx++;
     }
     _saveState();
+    _invalidatePreload();
+    _preloadNext();
   }
 
   /** Reorder the shuffleOrder array (used when drag/drop fires in shuffle mode) */
@@ -1483,6 +1541,38 @@ const Player = (function () {
     if (durEl) durEl.textContent = _fmtTime(_audio.duration);
   }
 
+  /* ── Gapless playback helpers ───────────────────────────────────────── */
+
+  function _peekNextTrack() {
+    if (!ps.queue.length) return null;
+    if (ps.repeatMode === 'one') return ps.queue[_realIdx(ps.queueIdx)];
+    const nextQueueIdx = (ps.queueIdx + 1) % ps.queue.length;
+    // Stop at end when repeat is off
+    if (ps.repeatMode === 'off' && nextQueueIdx === 0 && ps.queue.length > 1) return null;
+    return ps.queue[_realIdx(nextQueueIdx)];
+  }
+
+  function _preloadNext() {
+    // Only active when crossfade is off — crossfade manages its own preloading
+    if (ps.crossfadeDuration > 0 || _isMpvActive()) return;
+    const next = _peekNextTrack();
+    const standby = _nextAudioEl();
+    if (!next) {
+      standby.dataset.preloadedId = '';
+      return;
+    }
+    if (standby.dataset.preloadedId === next.id) return;  // already buffering
+    standby.src = `/api/stream/${next.id}`;
+    standby.preload = 'auto';
+    standby.load();
+    standby.dataset.preloadedId = next.id;
+  }
+
+  function _invalidatePreload() {
+    const standby = _nextAudioEl();
+    standby.dataset.preloadedId = '';
+  }
+
   function _onEnded() {
     if (this !== _audio) return;   // crossfade already swapped _audio before this fires
     if (_xfadeTriggered) return;   // crossfade handles advancement — don't double-advance
@@ -1491,10 +1581,33 @@ const Player = (function () {
       _audio.currentTime = 0;
       _startPlay();
     } else if (ps.repeatMode === 'all' || ps.queueIdx < ps.queue.length - 1) {
-      ps.queueIdx = (ps.queueIdx + 1) % ps.queue.length;
-      _loadTrack(currentTrack());
-      _startPlay();
-      if (ps.queueOpen) _renderQueue();
+      const nextQueueIdx = (ps.queueIdx + 1) % ps.queue.length;
+      const nextTrack    = ps.queue[_realIdx(nextQueueIdx)];
+      const standby      = _nextAudioEl();
+
+      if (ps.crossfadeDuration === 0
+          && standby.dataset.preloadedId === nextTrack.id
+          && standby.readyState >= 2) {
+        // Gapless: standby element already buffered — instant A/B swap, zero silence
+        ps.queueIdx = nextQueueIdx;
+        _audio = standby;
+        _fadeGainA.gain.value = (_audio === _audioA) ? 1 : 0;
+        _fadeGainB.gain.value = (_audio === _audioB) ? 1 : 0;
+        _audio.currentTime = 0;
+        _startPlay();
+        _updateTrackUI(nextTrack);
+        _applyReplayGain(nextTrack);
+        _highlightActiveRow();
+        _saveState();
+        if (ps.queueOpen) _renderQueue();
+        _preloadNext();  // buffer the track after next
+      } else {
+        // Fallback: normal load (pre-buffer wasn't ready or crossfade > 0)
+        ps.queueIdx = nextQueueIdx;
+        _loadTrack(currentTrack());
+        _startPlay();
+        if (ps.queueOpen) _renderQueue();
+      }
     } else {
       ps.isPlaying = false;
       _updatePlayBtn();
@@ -2152,6 +2265,8 @@ const Player = (function () {
     try { localStorage.setItem('tb_xfade', ps.crossfadeDuration); } catch (_) {}
     _updateXfadeUI();
     _syncBackendModeForCrossfade();
+    // When crossfade is disabled, start gapless pre-buffering; when enabled, clear standby
+    if (next === 0) { _preloadNext(); } else { _invalidatePreload(); }
   }
 
   function _updateXfadeUI() {
@@ -2386,6 +2501,9 @@ const Player = (function () {
       const xfade = parseInt(localStorage.getItem('tb_xfade') ?? '0', 10);
       ps.crossfadeDuration  = isNaN(xfade) ? 0 : Math.max(0, Math.min(12, xfade));
 
+      const storedRg = localStorage.getItem('tb_rg_mode') || 'off';
+      _rgMode = ['off', 'track', 'album'].includes(storedRg) ? storedRg : 'off';
+
       // Populate registry from restored queue
       ps.queue.forEach(t => { if (t && t.id) _registry.set(t.id, t); });
     } catch (e) {
@@ -2460,6 +2578,8 @@ const Player = (function () {
     _updateRepeatBtn();
     _updatePlayBtn();
     _updatePeqBtn();
+    _updateRgModeUI();
+    _updateXfadeUI();
 
     // 6. Restore track display (no autoplay)
     const track = currentTrack();
@@ -2841,6 +2961,9 @@ const Player = (function () {
     redrawEqCurve: _scheduleEqCurveRedraw,
     getCustomPeqState: () => _loadCustomPeqState(),
     setCustomPeqEnabled: _setCustomPeqEnabled,
+    // ReplayGain
+    setRgMode,
+    getRgMode: () => _rgMode,
     // Crossfade
     setXfade,
     // Output device popover

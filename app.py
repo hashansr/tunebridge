@@ -778,6 +778,26 @@ def _update_library_track(track_id: str, changes: dict):
                 break
 
 
+def _parse_rg(val):
+    """Parse ReplayGain dB string like '-6.32 dB' or '-6.32' → float or None."""
+    if val is None:
+        return None
+    try:
+        return float(str(val).replace(' dB', '').replace(',', '.').strip())
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_rg_peak(val):
+    """Parse ReplayGain peak string like '0.998' → float or None."""
+    if val is None:
+        return None
+    try:
+        return float(str(val).strip())
+    except (ValueError, TypeError):
+        return None
+
+
 def get_flac_tag(tags, *keys):
     if not tags:
         return None
@@ -796,6 +816,10 @@ def scan_file(filepath):
 
     try:
         disc_num = None
+        rg_track_gain = None
+        rg_album_gain = None
+        rg_track_peak = None
+        rg_album_peak = None
         if filename.lower().endswith('.flac'):
             audio = FLAC(str(filepath))
             tags = audio.tags
@@ -823,6 +847,11 @@ def scan_file(filepath):
                         artwork_key = None
                 elif not artwork_path.exists():
                     artwork_key = None
+
+            rg_track_gain = _parse_rg(get_flac_tag(tags, 'REPLAYGAIN_TRACK_GAIN'))
+            rg_album_gain = _parse_rg(get_flac_tag(tags, 'REPLAYGAIN_ALBUM_GAIN'))
+            rg_track_peak = _parse_rg_peak(get_flac_tag(tags, 'REPLAYGAIN_TRACK_PEAK'))
+            rg_album_peak = _parse_rg_peak(get_flac_tag(tags, 'REPLAYGAIN_ALBUM_PEAK'))
 
         elif filename.lower().endswith('.mp3'):
             audio = MP3(str(filepath))
@@ -858,6 +887,20 @@ def scan_file(filepath):
                             except Exception:
                                 artwork_key = None
                         break
+
+            def _mp3_rg(tag_key):
+                if not tags:
+                    return None
+                frame = tags.get(f'TXXX:{tag_key}') or tags.get(f'TXXX:{tag_key.lower()}')
+                if frame:
+                    return frame.text[0] if frame.text else None
+                return None
+
+            rg_track_gain = _parse_rg(_mp3_rg('REPLAYGAIN_TRACK_GAIN'))
+            rg_album_gain = _parse_rg(_mp3_rg('REPLAYGAIN_ALBUM_GAIN'))
+            rg_track_peak = _parse_rg_peak(_mp3_rg('REPLAYGAIN_TRACK_PEAK'))
+            rg_album_peak = _parse_rg_peak(_mp3_rg('REPLAYGAIN_ALBUM_PEAK'))
+
         elif filename.lower().endswith(('.m4a', '.aac', '.mp4')):
             audio = MP4(str(filepath))
             tags = audio.tags or {}
@@ -903,6 +946,22 @@ def scan_file(filepath):
             elif eff_artist and album:
                 k = get_artwork_key(eff_artist, album)
                 artwork_key = k if (ARTWORK_DIR / f"{k}.jpg").exists() else None
+
+            def _m4a_rg(tag_key):
+                atom = tags.get(f'----:com.apple.iTunes:{tag_key}') \
+                    or tags.get(f'----:com.apple.iTunes:{tag_key.lower()}')
+                if atom and isinstance(atom, list) and atom:
+                    try:
+                        return atom[0].decode('utf-8', errors='ignore')
+                    except (AttributeError, Exception):
+                        return str(atom[0])
+                return None
+
+            rg_track_gain = _parse_rg(_m4a_rg('REPLAYGAIN_TRACK_GAIN'))
+            rg_album_gain = _parse_rg(_m4a_rg('REPLAYGAIN_ALBUM_GAIN'))
+            rg_track_peak = _parse_rg_peak(_m4a_rg('REPLAYGAIN_TRACK_PEAK'))
+            rg_album_peak = _parse_rg_peak(_m4a_rg('REPLAYGAIN_ALBUM_PEAK'))
+
         elif filename.lower().endswith('.wav'):
             audio = WAVE(str(filepath))
             tags = audio.tags
@@ -1000,6 +1059,10 @@ def scan_file(filepath):
             'sample_rate': sample_rate,
             'bits_per_sample': bits_per_sample,
             'date_added': date_added,
+            'rg_track_gain': rg_track_gain,
+            'rg_album_gain': rg_album_gain,
+            'rg_track_peak': rg_track_peak,
+            'rg_album_peak': rg_album_peak,
         }
     except Exception as e:
         print(f"Error scanning {filepath}: {e}")

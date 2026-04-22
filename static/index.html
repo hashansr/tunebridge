@@ -1957,6 +1957,19 @@
             </div>
           </div>
 
+          <!-- ReplayGain -->
+          <div class="peq-divider"></div>
+          <div class="peq-section" id="rg-row">
+            <div class="peq-xfade-meta">
+              <span class="peq-xfade-cat">ReplayGain</span>
+            </div>
+            <div class="rg-pills">
+              <button class="rg-pill rg-pill--active" data-mode="off"   onclick="Player.setRgMode('off')">Off</button>
+              <button class="rg-pill"                 data-mode="track" onclick="Player.setRgMode('track')">Track</button>
+              <button class="rg-pill"                 data-mode="album" onclick="Player.setRgMode('album')">Album</button>
+            </div>
+          </div>
+
           <!-- Crossfade -->
           <div class="peq-divider"></div>
           <div class="peq-section" id="xfade-row">
