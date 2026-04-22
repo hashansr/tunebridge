@@ -11130,7 +11130,7 @@ function _updateAnalysisInfo(info) {
 /* ── Insights section help popovers ────────────────────────────────────── */
 const _INSIGHTS_HELP = {
   overview: {
-    title: 'Library Overview',
+    title: 'Overview',
     body: `<p>Shows the distribution of <strong>file formats</strong>, <strong>sample rates</strong>, and <strong>bit depths</strong> across your entire library.</p>
            <p><strong>How to read:</strong> Taller bars = more tracks in that category. Ideally your library is consistent. For example, mostly FLAC at 44.1 kHz / 16-bit for CD rips, or 96–192 kHz for Hi-Res downloads.</p>
            <p><strong>Example:</strong> If 95% of your tracks are FLAC at 44.1 kHz / 16-bit, your library is clean and consistent. A large MP3 slice alongside FLAC suggests rips from mixed sources.</p>`,
