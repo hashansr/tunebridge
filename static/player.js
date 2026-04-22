@@ -103,6 +103,7 @@ const Player = (function () {
   let _trackSessionStartedAt = 0;
   let _trackSessionStartPos = 0;
   let _lastPauseEventAt = 0;
+  let _startupRestoreGuardActive = true;
 
   const _CUSTOM_PEQ_KEY = 'tb_custom_peq';
   const _CUSTOM_EQ_ID = '__custom__';
@@ -998,6 +999,7 @@ const Player = (function () {
 
   /* ── Public playback controls ───────────────────────────────────────── */
   function togglePlay() {
+    _startupRestoreGuardActive = false;
     if (!currentTrack()) {
       if (ps.queue.length > 0) {
         ps.queueIdx = 0;
@@ -1014,6 +1016,7 @@ const Player = (function () {
   }
 
   function prev() {
+    _startupRestoreGuardActive = false;
     if (ps.queue.length === 0) return;
     // Restart current track if more than 3 s in
     const curPos = _isMpvActive() ? _mpvPosition : _audio.currentTime;
@@ -1033,6 +1036,7 @@ const Player = (function () {
   }
 
   function next() {
+    _startupRestoreGuardActive = false;
     if (ps.queue.length === 0) return;
     // Capture BEFORE _loadTrack — _audio.load() fires 'pause' synchronously,
     // which sets ps.isPlaying = false before we can check it.
@@ -1058,6 +1062,7 @@ const Player = (function () {
   }
 
   function seek(value) {
+    _startupRestoreGuardActive = false;
     const dur = _isMpvActive() ? _mpvDuration : _audio.duration;
     if (!currentTrack() || !isFinite(dur) || dur === 0) {
       _seekDragging = false;
@@ -1500,6 +1505,12 @@ const Player = (function () {
 
   function _onError() {
     if (this !== _audio) return;
+    if (_startupRestoreGuardActive) {
+      // Silent startup restore: avoid alarming toast/auto-skip before user intent.
+      ps.isPlaying = false;
+      _updatePlayBtn();
+      return;
+    }
     _consecutiveErrors++;
     if (_consecutiveErrors >= 3) {
       // All tracks failing — music folder likely unmounted
@@ -2485,6 +2496,15 @@ const Player = (function () {
     } else {
       _updateTrackUI(null);
     }
+
+    // Startup always begins paused; playback resumes only after explicit user action.
+    if (_isMpvActive()) {
+      await _mpvCmd('pause', { paused: true });
+    } else {
+      _audio.pause();
+    }
+    ps.isPlaying = false;
+    _updatePlayBtn();
 
     if (restoredCustom.enabled) {
       if (_isMpvActive()) {
