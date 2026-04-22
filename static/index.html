@@ -1525,7 +1525,10 @@
             <div id="sync-section-playlists" class="sync-section">
               <div class="sync-section-hdr">
                 <div class="sync-section-hdr-left">
-                  <span class="sync-section-title sync-section-title--add" id="sync-playlist-title">Playlists to Sync</span>
+                  <button class="sync-accordion-toggle" id="sync-toggle-playlists" onclick="App.toggleSyncSection('playlists')" aria-controls="sync-list-playlists" aria-expanded="false" title="Expand section">
+                    <span class="sync-accordion-chevron" aria-hidden="true"></span>
+                    <span class="sync-section-title sync-section-title--add" id="sync-playlist-title">Playlists to Sync</span>
+                  </button>
                   <span class="sync-count-pill" id="sync-playlist-count">0</span>
                 </div>
                 <label class="sync-check-all">

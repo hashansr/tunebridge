@@ -5289,7 +5289,7 @@ let _syncSelectedDapName = 'Selected device';
 let _syncScanRunId = 0;
 let _syncScanInFlight = false;
 let _syncPreviewWarningCount = 0;
-const _syncSectionCollapsed = { local: true, device: true };
+const _syncSectionCollapsed = { local: true, device: true, playlists: true };
 
 function _fmtBytes(bytes) {
   const n = Number(bytes);
@@ -5721,9 +5721,17 @@ function _syncWarningRows(items) {
 }
 
 function _syncApplySectionCollapse(section) {
-  const key = section === 'device' ? 'device' : 'local';
-  const wrapperId = key === 'local' ? 'sync-section-local' : 'sync-section-device';
-  const toggleId = key === 'local' ? 'sync-toggle-local' : 'sync-toggle-device';
+  const key = section === 'device'
+    ? 'device'
+    : (section === 'playlists' ? 'playlists' : 'local');
+  const mapping = {
+    local: { wrapperId: 'sync-section-local', toggleId: 'sync-toggle-local' },
+    device: { wrapperId: 'sync-section-device', toggleId: 'sync-toggle-device' },
+    playlists: { wrapperId: 'sync-section-playlists', toggleId: 'sync-toggle-playlists' },
+  };
+  const conf = mapping[key];
+  if (!conf) return;
+  const { wrapperId, toggleId } = conf;
   const wrapper = document.getElementById(wrapperId);
   const toggle = document.getElementById(toggleId);
   if (!wrapper || !toggle) return;
@@ -5734,7 +5742,9 @@ function _syncApplySectionCollapse(section) {
 }
 
 function toggleSyncSection(section) {
-  const key = section === 'device' ? 'device' : 'local';
+  const key = section === 'device'
+    ? 'device'
+    : (section === 'playlists' ? 'playlists' : 'local');
   _syncSectionCollapsed[key] = !_syncSectionCollapsed[key];
   _syncApplySectionCollapse(key);
 }
@@ -5772,8 +5782,10 @@ function renderSyncPreview(status) {
     playlistsOut.length ? 'block' : 'none';
   _syncSectionCollapsed.local = true;
   _syncSectionCollapsed.device = true;
+  _syncSectionCollapsed.playlists = true;
   _syncApplySectionCollapse('local');
   _syncApplySectionCollapse('device');
+  _syncApplySectionCollapse('playlists');
 
   const executeBtn = document.getElementById('sync-execute-btn');
   if (executeBtn) executeBtn.disabled = status.local_only.length === 0 && status.device_only.length === 0;

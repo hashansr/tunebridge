@@ -38,6 +38,7 @@
 - Fix: Startup restore now remains paused until user intent; restore-time file-load errors are muted (no playback-error toast / auto-skip on launch)
 - Fix: Album Detail `Track #` sort now prioritizes explicit disc tags and avoids conflicting path-based disc heuristics when disc tags are present
 - Fix: Album Detail sort logic now applies disc ordering only for true multi-disc albums; single-disc/no-disc albums sort as one flat table by the selected column/order
+- Change: Sync Music Step 3 playlists section now supports the same collapse/expand accordion behavior as track sections
 - Fix: Album Detail `Track #` sort now prioritizes explicit disc tags and avoids conflicting path-based disc heuristics when tags are present (prevents incorrect mixed ordering)
 
 ## v0.11-rc.220426-0741 · 2026-04-22
