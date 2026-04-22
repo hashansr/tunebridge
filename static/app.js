@@ -10975,9 +10975,7 @@ async function startLibraryAnalysis() {
   }
   const d = await res.json().catch(() => ({}));
   if (d.already_up_to_date) {
-    // Re-show the done banner briefly so clicking Re-analyse has visible feedback
-    const statusRes2 = await fetch('/api/insights/analyse/status').catch(() => null);
-    if (statusRes2 && statusRes2.ok) _updateAnalysisBanner(await statusRes2.json());
+    showToast('Analysis is already up to date.');
     const infoRes = await fetch('/api/insights/analyse/info').catch(() => null);
     if (infoRes && infoRes.ok) _updateAnalysisInfo(await infoRes.json());
     return;
@@ -11238,6 +11236,9 @@ function showInsightsHelp(sectionKey, e) {
 }
 
 let _analysisBannerHideTimer = null;
+// True once the success banner has auto-hidden. Prevents it re-appearing on
+// navigation until the user explicitly triggers a new analysis.
+let _analysisBannerDismissed = true;
 
 function _updateAnalysisBanner(s) {
   const banner   = document.getElementById('insights-analysis-banner');
@@ -11250,13 +11251,20 @@ function _updateAnalysisBanner(s) {
   const cancelBtn  = document.getElementById('insights-cancel-btn');
   if (!banner) return;
 
-  // Cancel any pending auto-hide when the status changes
   if (_analysisBannerHideTimer) { clearTimeout(_analysisBannerHideTimer); _analysisBannerHideTimer = null; }
 
   if (s.status === 'idle') {
     banner.style.display = 'none';
     if (navDot) navDot.style.display = 'none';
     if (cta) { cta.disabled = false; cta.innerHTML = 'Analyse Library'; }
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    return;
+  }
+
+  // Done + already dismissed: keep banner hidden, just sync button state.
+  if (s.status === 'done' && _analysisBannerDismissed) {
+    if (navDot) navDot.style.display = 'none';
+    if (cta) { cta.disabled = false; cta.innerHTML = 'Re-analyse'; }
     if (cancelBtn) cancelBtn.style.display = 'none';
     return;
   }
@@ -11269,6 +11277,7 @@ function _updateAnalysisBanner(s) {
   const _errorSvg  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
 
   if (s.status === 'running') {
+    _analysisBannerDismissed = false;
     if (navDot) navDot.style.display = 'flex';
     icon.innerHTML = _spinnerSvg;
     label.textContent = 'Analysing library…';
@@ -11294,8 +11303,13 @@ function _updateAnalysisBanner(s) {
     bar.style.width = '100%';
     if (cta) { cta.disabled = false; cta.innerHTML = 'Re-analyse'; }
     if (cancelBtn) cancelBtn.style.display = 'none';
-    _analysisBannerHideTimer = setTimeout(() => { banner.style.display = 'none'; _analysisBannerHideTimer = null; }, 5000);
+    _analysisBannerHideTimer = setTimeout(() => {
+      banner.style.display = 'none';
+      _analysisBannerDismissed = true;
+      _analysisBannerHideTimer = null;
+    }, 10000);
   } else if (s.status === 'error') {
+    _analysisBannerDismissed = false;
     if (navDot) navDot.style.display = 'none';
     banner.classList.add('insights-analysis-banner--error');
     icon.innerHTML = _errorSvg;
