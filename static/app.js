@@ -1575,6 +1575,7 @@ function _tracksSortedRows(rows) {
   const col = String(_tracksSort.col || 'track_number');
   const dir = _tracksSort.order === 'desc' ? -1 : 1;
   const out = [...(rows || [])];
+  const shouldGroupByDisc = !!(state.album && _buildAlbumDiscGroups(out).length > 1);
   const explicitDiscNums = [...new Set(out
     .map(t => _trackDiscTagValue(t))
     .filter(n => Number.isFinite(n) && n > 0)
@@ -1582,7 +1583,9 @@ function _tracksSortedRows(rows) {
   const preferExplicitDiscTags = explicitDiscNums.length > 0;
   out.sort((a, b) => {
     if (col === 'track_number') {
-      if (state.album) {
+      // Only apply disc ordering when this album is genuinely multi-disc.
+      // Single-disc (or no-disc) albums should sort as one flat table.
+      if (shouldGroupByDisc) {
         // Keep disc ordering consistent with album grouping logic:
         // when explicit disc tags exist, trust tags only and avoid path heuristics.
         const ad = preferExplicitDiscTags ? (_trackDiscTagValue(a) || 1) : _trackDiscSortValue(a);
