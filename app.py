@@ -8537,8 +8537,6 @@ analysis_state = {
 # ── ReplayGain tagger state ───────────────────────────────────────────────────
 _RG_TARGET_LUFS  = -18.0   # ReplayGain 2.0 standard (hardware player compatible)
 _rg_generation   = 0        # incremented on each new run; guards against stale threads
-_rg_io_sem       = threading.Semaphore(1)  # serialises sf.read() — prevents I/O
-                                            # contention when cancel+restart overlaps
 
 # Formats soundfile can reliably decode for loudness measurement.
 # M4A/AAC excluded — libsndfile on macOS may try CoreAudio and block indefinitely.
@@ -8929,56 +8927,28 @@ def _run_rg_tagger(my_gen):
                 if rg_tag_state['status'] == 'cancelled' or _rg_generation != my_gen:
                     break
                 abs_path = str(Path(music_base) / t['path'])
-
-                # ── Serialised file read ──────────────────────────────────────────
-                # _rg_io_sem ensures only one sf.read() runs at a time globally.
-                # Without this, a cancel+restart leaves the old thread still reading
-                # a large file, causing I/O contention that stalls the new thread.
-                _rg_io_sem.acquire()
-                # Re-check after waiting for the lock — a cancel+restart may have
-                # arrived while we were blocked here.
-                if rg_tag_state['status'] == 'cancelled' or _rg_generation != my_gen:
-                    _rg_io_sem.release()
-                    break
-
-                t0 = time.time()
                 try:
                     data, sr = sf.read(abs_path, dtype='float32', always_2d=True)
-                except Exception as exc:
-                    _rg_io_sem.release()
-                    logging.warning('RG tagger: skipping %s — %s', abs_path, exc)
-                    if _rg_generation == my_gen:
-                        rg_tag_state['errors'] += 1
-                        done += 1
-                        rg_tag_state['done'] = done
-                    continue
-                _rg_io_sem.release()
-                logging.debug('RG tagger: read %s in %.2fs', os.path.basename(abs_path),
-                              time.time() - t0)
-
-                # Post-read generation check — exit quickly if superseded while the
-                # blocking read was in progress.
-                if _rg_generation != my_gen:
-                    del data
-                    break
-
-                # ── CPU: loudness measurement ─────────────────────────────────────
-                try:
+                    # Check generation after the blocking read — exit quickly if a
+                    # cancel+restart arrived while we were reading the file.
+                    if _rg_generation != my_gen:
+                        del data
+                        break
                     meter = pyln.Meter(sr)
                     lufs  = meter.integrated_loudness(data)
                     peak  = float(np.max(np.abs(data)))
-                    del data   # free RAM — hi-res albums can be 200+ MB each
+                    del data   # free RAM promptly — hi-res albums can be 200+ MB each
                     if not np.isfinite(lufs):
                         lufs = _RG_TARGET_LUFS  # silent track → 0 dB gain
                     measured.append((t['id'], abs_path, t['format'], lufs, peak))
                 except Exception as exc:
-                    logging.warning('RG tagger: loudness failed %s — %s', abs_path, exc)
+                    logging.warning('RG tagger: skipping %s — %s', abs_path, exc)
                     if _rg_generation == my_gen:
                         rg_tag_state['errors'] += 1
-
-                if _rg_generation == my_gen:
-                    done += 1
-                    rg_tag_state['done'] = done
+                finally:
+                    if _rg_generation == my_gen:
+                        done += 1
+                        rg_tag_state['done'] = done
 
             if not measured:
                 continue

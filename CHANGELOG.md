@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: ReplayGain tagger no longer deadlocks at 0% on cancel+restart; removed the I/O semaphore that caused new threads to block indefinitely waiting for a cancelled thread still inside sf.read()
 
 ## v0.27-rc.230426-1525 · 2026-04-23
 
