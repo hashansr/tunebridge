@@ -1464,6 +1464,16 @@ def _recently_added_items(tracks, albums, playlists, limit=10):
     now = int(time.time())
     seven_days_ago = now - 7 * 86400
     track_by_id = {str(t.get('id')): t for t in tracks if t.get('id')}
+    album_first_track_id = {}
+    for t in tracks:
+        aid = str(t.get('id') or '').strip()
+        if not aid:
+            continue
+        a_artist = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').strip().lower()
+        a_album = (t.get('album') or 'Unknown Album').strip().lower()
+        akey = f"{a_artist}||{a_album}"
+        if akey not in album_first_track_id:
+            album_first_track_id[akey] = aid
     album_items = sorted(albums.values(), key=lambda a: int(a.get('date_added') or 0), reverse=True)
     album_cards = [{
         'kind': 'album',
@@ -1473,6 +1483,7 @@ def _recently_added_items(tracks, albums, playlists, limit=10):
         'subtitle': a['artist'],
         'meta': f"{a.get('track_count', 0)} songs",
         'artwork_key': a.get('artwork_key'),
+        'track_id': album_first_track_id.get(f"{(a.get('artist') or '').strip().lower()}||{(a.get('album') or '').strip().lower()}", ''),
         'date_added': int(a.get('date_added') or 0),
         'is_new': int(a.get('date_added') or 0) >= seven_days_ago,
     } for a in album_items[:max(1, limit)]]
@@ -1595,12 +1606,23 @@ def _resolve_context_item(kind, source_id, source_label, track_id, artist, album
         resolved_artist = (info or {}).get('artist') or artist or 'Unknown Artist'
         resolved_album = (info or {}).get('album') or album
         key = f"album:{resolved_artist.lower()}||{resolved_album.lower()}"
+        resolved_track_id = str(track_id or '').strip()
+        if not resolved_track_id:
+            ra = resolved_artist.strip().lower()
+            rb = resolved_album.strip().lower()
+            for tv in (track_by_id or {}).values():
+                ta = (tv.get('album_artist') or tv.get('artist') or '').strip().lower()
+                tb = (tv.get('album') or '').strip().lower()
+                if ta == ra and tb == rb:
+                    resolved_track_id = str(tv.get('id') or '').strip()
+                    if resolved_track_id:
+                        break
         return {
             '_dedup_key': key, 'kind': 'album',
             'artist': resolved_artist, 'album': resolved_album,
             'title': resolved_album, 'subtitle': resolved_artist,
             'artwork_key': (info or {}).get('artwork_key') or artwork_key,
-            'track_id': track_id,
+            'track_id': resolved_track_id,
         }
 
 
@@ -2200,6 +2222,13 @@ def _apply_tag_edit(track_id: str, changes: dict):
         for k, v in changes.items()
         if k in _EDITABLE_FIELDS and v is not None and str(v).strip() != ''
     }
+    # UX safety: if user renames Artist and Album Artist previously matched Artist,
+    # keep Album Artist aligned unless user explicitly supplied album_artist.
+    if 'artist' in clean and 'album_artist' not in clean:
+        old_artist = str(track.get('artist') or '').strip()
+        old_album_artist = str(track.get('album_artist') or '').strip()
+        if old_album_artist and old_album_artist.lower() == old_artist.lower():
+            clean['album_artist'] = clean['artist']
     if not clean:
         return track, None  # nothing to do
 
@@ -8506,7 +8535,10 @@ analysis_state = {
 }
 
 # ── ReplayGain tagger state ───────────────────────────────────────────────────
-_RG_TARGET_LUFS = -18.0   # ReplayGain 2.0 standard (hardware player compatible)
+_RG_TARGET_LUFS  = -18.0   # ReplayGain 2.0 standard (hardware player compatible)
+_rg_generation   = 0        # incremented on each new run; guards against stale threads
+_rg_io_sem       = threading.Semaphore(1)  # serialises sf.read() — prevents I/O
+                                            # contention when cancel+restart overlaps
 
 rg_tag_state = {
     'status':       'idle',   # idle | running | done | error | cancelled
@@ -8842,8 +8874,12 @@ def _write_rg_tags(path, fmt, track_gain, track_peak, album_gain=None, album_pea
     # WAV and other formats: no standard RG tag container — skip silently
 
 
-def _run_rg_tagger():
-    """Background thread: measure loudness with EBU R128 and write ReplayGain tags."""
+def _run_rg_tagger(my_gen):
+    """Background thread: measure loudness with EBU R128 and write ReplayGain tags.
+
+    my_gen: generation token from _rg_generation at thread-spawn time.
+    Old threads exit without touching rg_tag_state if a newer run has started.
+    """
     import soundfile as sf
     import pyloudnorm as pyln
     import numpy as np
@@ -8876,28 +8912,63 @@ def _run_rg_tagger():
         done = 0
 
         for _album_key, tracks in work_albums.items():
-            if rg_tag_state['status'] == 'cancelled':
+            if rg_tag_state['status'] == 'cancelled' or _rg_generation != my_gen:
                 break
 
             measured = []   # list of (track_id, abs_path, fmt, lufs, peak)
 
             for t in tracks:
-                if rg_tag_state['status'] == 'cancelled':
+                if rg_tag_state['status'] == 'cancelled' or _rg_generation != my_gen:
                     break
                 abs_path = str(Path(music_base) / t['path'])
+
+                # ── Serialised file read ──────────────────────────────────────────
+                # _rg_io_sem ensures only one sf.read() runs at a time globally.
+                # Without this, a cancel+restart leaves the old thread still reading
+                # a large file, causing I/O contention that stalls the new thread.
+                _rg_io_sem.acquire()
+                # Re-check after waiting for the lock — a cancel+restart may have
+                # arrived while we were blocked here.
+                if rg_tag_state['status'] == 'cancelled' or _rg_generation != my_gen:
+                    _rg_io_sem.release()
+                    break
+
+                t0 = time.time()
                 try:
                     data, sr = sf.read(abs_path, dtype='float32', always_2d=True)
+                except Exception as exc:
+                    _rg_io_sem.release()
+                    logging.warning('RG tagger: skipping %s — %s', abs_path, exc)
+                    if _rg_generation == my_gen:
+                        rg_tag_state['errors'] += 1
+                        done += 1
+                        rg_tag_state['done'] = done
+                    continue
+                _rg_io_sem.release()
+                logging.debug('RG tagger: read %s in %.2fs', os.path.basename(abs_path),
+                              time.time() - t0)
+
+                # Post-read generation check — exit quickly if superseded while the
+                # blocking read was in progress.
+                if _rg_generation != my_gen:
+                    del data
+                    break
+
+                # ── CPU: loudness measurement ─────────────────────────────────────
+                try:
                     meter = pyln.Meter(sr)
-                    lufs = meter.integrated_loudness(data)
-                    peak = float(np.max(np.abs(data)))
+                    lufs  = meter.integrated_loudness(data)
+                    peak  = float(np.max(np.abs(data)))
+                    del data   # free RAM — hi-res albums can be 200+ MB each
                     if not np.isfinite(lufs):
-                        # Silent track — 0 dB gain leaves it as-is
-                        lufs = _RG_TARGET_LUFS
+                        lufs = _RG_TARGET_LUFS  # silent track → 0 dB gain
                     measured.append((t['id'], abs_path, t['format'], lufs, peak))
                 except Exception as exc:
-                    logging.warning('RG tagger: skipping %s — %s', abs_path, exc)
-                    rg_tag_state['errors'] += 1
-                finally:
+                    logging.warning('RG tagger: loudness failed %s — %s', abs_path, exc)
+                    if _rg_generation == my_gen:
+                        rg_tag_state['errors'] += 1
+
+                if _rg_generation == my_gen:
                     done += 1
                     rg_tag_state['done'] = done
 
@@ -8935,13 +9006,16 @@ def _run_rg_tagger():
                             t.update({'rg_track_gain': tg, 'rg_album_gain': ag,
                                       'rg_track_peak': tp, 'rg_album_peak': ap})
 
-        final = 'cancelled' if rg_tag_state['status'] == 'cancelled' else 'done'
-        rg_tag_state.update({'status': final, 'completed_at': time.time()})
+        # Only write final state if we're still the current generation
+        if _rg_generation == my_gen:
+            final = 'cancelled' if rg_tag_state['status'] == 'cancelled' else 'done'
+            rg_tag_state.update({'status': final, 'completed_at': time.time()})
 
     except Exception as exc:
         logging.exception('RG tagger crashed')
-        rg_tag_state.update({'status': 'error', 'error': str(exc),
-                              'completed_at': time.time()})
+        if _rg_generation == my_gen:
+            rg_tag_state.update({'status': 'error', 'error': str(exc),
+                                  'completed_at': time.time()})
 
 
 @app.route('/api/library/replaygain/info')
@@ -8955,15 +9029,18 @@ def rg_info():
 
 @app.route('/api/library/replaygain/tag', methods=['POST'])
 def rg_tag_start():
+    global _rg_generation
     if rg_tag_state['status'] == 'running':
         return jsonify({'error': 'Already running'}), 409
     conn = _db.get_conn()
     pending = conn.execute('SELECT COUNT(*) FROM tracks WHERE rg_track_gain IS NULL').fetchone()[0]
     if pending == 0:
         return jsonify({'ok': True, 'already_done': True, 'pending': 0})
+    _rg_generation += 1           # invalidates any previous thread still winding down
+    my_gen = _rg_generation
     rg_tag_state.update({'status': 'running', 'done': 0, 'total': pending,
                           'errors': 0, 'started_at': None, 'completed_at': None, 'error': None})
-    threading.Thread(target=_run_rg_tagger, daemon=True).start()
+    threading.Thread(target=_run_rg_tagger, args=(my_gen,), daemon=True).start()
     return jsonify({'ok': True, 'pending': pending})
 
 

@@ -13291,8 +13291,12 @@ async function _loadRgInfo() {
         el.textContent = `${d.tagged.toLocaleString()} of ${d.total.toLocaleString()} tracks tagged · ${d.pending.toLocaleString()} missing`;
       }
     }
-    // Resume polling if a job is already running
-    if (d.status === 'running' && !_rgPoller) _startRgPolling();
+    // Resume polling and disable button if a job is already running
+    if (d.status === 'running') {
+      const tagBtn = document.getElementById('rg-tag-btn');
+      if (tagBtn) tagBtn.disabled = true;
+      if (!_rgPoller) _startRgPolling();
+    }
   } catch (_) {}
 }
 
@@ -13325,8 +13329,10 @@ async function cancelRgTagging() {
   if (_rgPoller) { clearInterval(_rgPoller); _rgPoller = null; }
   const cancelBtn = document.getElementById('rg-cancel-btn');
   const tagBtn    = document.getElementById('rg-tag-btn');
+  const banner    = document.getElementById('rg-banner');
   if (cancelBtn) cancelBtn.style.display = 'none';
   if (tagBtn)    tagBtn.disabled = false;
+  if (banner)    banner.style.display = 'none';
 }
 
 function _startRgPolling() {
@@ -13348,9 +13354,17 @@ async function _pollRgStatus() {
       clearInterval(_rgPoller); _rgPoller = null;
       const tagBtn    = document.getElementById('rg-tag-btn');
       const cancelBtn = document.getElementById('rg-cancel-btn');
+      const banner    = document.getElementById('rg-banner');
       if (tagBtn)    tagBtn.disabled = false;
       if (cancelBtn) cancelBtn.style.display = 'none';
-      if (s.status === 'done') _loadRgInfo();
+      // Hide banner immediately on cancel; keep visible briefly on done/error
+      if (s.status === 'cancelled') {
+        if (banner) banner.style.display = 'none';
+      } else if (s.status === 'done') {
+        _loadRgInfo();
+        // Auto-hide the "complete" banner after 4 s
+        setTimeout(() => { if (banner) banner.style.display = 'none'; }, 4000);
+      }
     }
   } catch (_) {}
 }
