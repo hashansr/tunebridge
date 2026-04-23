@@ -4417,59 +4417,62 @@ function _renderHomeListeningStats(data) {
   const el = document.getElementById('home-stats-content');
   if (!el) return;
   const c = (data && data.current) || {};
-  const comp = (data && data.comparison) || {};
+  const periodLabel = {
+    week: 'This Week',
+    month: 'This Month',
+    year: 'This Year',
+    all: 'All Time',
+  }[_homeCurrentPeriod] || 'This Period';
+  const minutesNum = Math.max(0, Math.round(Number(c.total_minutes || 0)));
+  const plays = Number(c.track_count || 0).toLocaleString();
+  const albums = Number(c.album_count || 0).toLocaleString();
+  const artists = Number(c.artist_count || 0).toLocaleString();
+  const daysActive = Number(c.active_days || 0).toLocaleString();
 
-  const fmtMins = m => {
-    if (!m) return '0 min';
-    if (m < 60) return `${Math.round(m)} min`;
-    const h = Math.floor(m / 60);
-    return h >= 100 ? `${h.toLocaleString()} hrs` : `${h} hr${h !== 1 ? 's' : ''}`;
-  };
-
-  const changePill = (pct) => {
-    if (pct === null || pct === undefined) return '';
-    const sign = pct >= 0 ? '+' : '';
-    const cls = pct >= 0 ? 'home-stat-change-up' : 'home-stat-change-down';
-    return `<span class="${cls}">${sign}${Math.round(pct)}%</span>`;
-  };
-
-  const metricCards = [
-    { label: 'Valid plays', value: (c.track_count || 0).toLocaleString(), change: comp.tracks_change },
-    { label: 'Albums played',  value: (c.album_count  || 0).toLocaleString() },
-    { label: 'Unique artists', value: (c.artist_count || 0).toLocaleString() },
-    { label: 'Active days',    value: (c.active_days  || 0).toLocaleString() },
-  ].map(m => `
-    <div class="home-stat-metric">
-      <div class="home-stat-value">${m.value}${m.change !== undefined ? changePill(m.change) : ''}</div>
-      <div class="home-stat-label">${m.label}</div>
-    </div>`).join('');
-
-  const topRow = [
-    { label: 'Top artist', value: c.top_artist },
-    { label: 'Top album',  value: c.top_album },
-    { label: 'Top track',  value: c.top_track },
-    { label: 'Top genre',  value: c.top_genre },
-  ].filter(r => r.value).map(r => `
-    <div class="home-stat-top-item">
-      <span class="home-stat-top-label">${r.label}</span>
-      <span class="home-stat-top-value">${esc(r.value)}</span>
-    </div>`).join('');
-
-  const minutes = fmtMins(c.total_minutes);
   el.innerHTML = `
     <div class="home-stats-shell">
-      <div class="home-stats-hero">
-        <div class="home-stats-hero-kicker">Personal retrospective</div>
+      <div class="home-stats-hero home-stats-card">
+        <div class="home-stats-hero-kicker">${esc(periodLabel)}</div>
         <div class="home-stats-hero-value">
-          ${minutes}
-          ${comp.minutes_change !== undefined ? changePill(comp.minutes_change) : ''}
+          <span class="home-stats-hero-minutes">${minutesNum.toLocaleString()}</span>
+          <span class="home-stats-hero-unit">min</span>
         </div>
         <div class="home-stats-hero-label">Total listening time</div>
       </div>
-      <div class="home-stats-right">
-        <div class="home-stat-metrics">${metricCards}</div>
-        ${topRow ? `<div class="home-stat-tops">${topRow}</div>` : ''}
-        ${!c.track_count ? '<div class="home-stat-empty">Start listening to see your stats here.</div>' : ''}
+
+      <div class="home-stat-metric home-stats-card">
+        <div class="home-stat-label">Plays</div>
+        <div class="home-stat-value">${plays}</div>
+      </div>
+      <div class="home-stat-metric home-stats-card">
+        <div class="home-stat-label">Albums</div>
+        <div class="home-stat-value">${albums}</div>
+      </div>
+      <div class="home-stat-metric home-stats-card">
+        <div class="home-stat-label">Artists</div>
+        <div class="home-stat-value">${artists}</div>
+      </div>
+
+      <div class="home-stat-top-item home-stats-card">
+        <span class="home-stat-top-label">Top Artist</span>
+        <span class="home-stat-top-value" title="${esc(c.top_artist || '—')}">${esc(c.top_artist || '—')}</span>
+      </div>
+      <div class="home-stat-top-item home-stats-card">
+        <span class="home-stat-top-label">Top Album</span>
+        <span class="home-stat-top-value" title="${esc(c.top_album || '—')}">${esc(c.top_album || '—')}</span>
+      </div>
+      <div class="home-stat-top-item home-stats-card">
+        <span class="home-stat-top-label">Top Track</span>
+        <span class="home-stat-top-value" title="${esc(c.top_track || '—')}">${esc(c.top_track || '—')}</span>
+      </div>
+
+      <div class="home-stat-bottom home-stats-card">
+        <span class="home-stat-top-label">Days Active</span>
+        <span class="home-stat-bottom-value">${daysActive}</span>
+      </div>
+      <div class="home-stat-bottom home-stat-bottom-wide home-stats-card">
+        <span class="home-stat-top-label">Top Genre</span>
+        <span class="home-stat-bottom-value">${esc(c.top_genre || '—')}</span>
       </div>
     </div>
   `;
