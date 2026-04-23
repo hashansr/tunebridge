@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.25-rc.230426-1510 · 2026-04-23
 - Fix: ReplayGain tagger "Tag Missing Tracks" button is now disabled while tagging is in progress, preventing accidental double-starts
 - Fix: Clicking Cancel during ReplayGain tagging now immediately hides the progress banner
 - Fix: ReplayGain tagger no longer stalls at "1 of N" after a cancel+restart; a global I/O semaphore serialises file reads so a still-running cancelled thread cannot starve the new thread's drive access
