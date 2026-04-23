@@ -4462,8 +4462,8 @@ function _renderHomeListeningStats(data) {
         <span class="home-stat-top-value" title="${esc(c.top_album || '—')}">${esc(c.top_album || '—')}</span>
       </div>
       <div class="home-stat-top-item home-stats-card">
-        <span class="home-stat-top-label">Top Track</span>
-        <span class="home-stat-top-value" title="${esc(c.top_track || '—')}">${esc(c.top_track || '—')}</span>
+        <span class="home-stat-top-label">Top Genre</span>
+        <span class="home-stat-top-value" title="${esc(c.top_genre || '—')}">${esc(c.top_genre || '—')}</span>
       </div>
 
       <div class="home-stat-bottom home-stats-card">
@@ -4471,8 +4471,8 @@ function _renderHomeListeningStats(data) {
         <span class="home-stat-bottom-value">${daysActive}</span>
       </div>
       <div class="home-stat-bottom home-stat-bottom-wide home-stats-card">
-        <span class="home-stat-top-label">Top Genre</span>
-        <span class="home-stat-bottom-value">${esc(c.top_genre || '—')}</span>
+        <span class="home-stat-top-label">Top Track</span>
+        <span class="home-stat-bottom-value" title="${esc(c.top_track || '—')}">${esc(c.top_track || '—')}</span>
       </div>
     </div>
   `;

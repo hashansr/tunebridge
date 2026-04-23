@@ -11410,33 +11410,33 @@ body.is-col-resizing {
 .home-stats-shell {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .home-stats-card {
   background: linear-gradient(180deg, rgba(34, 34, 36, 0.9), rgba(24, 24, 26, 0.88));
   border: 1px solid rgba(125, 148, 190, 0.16);
-  border-radius: 18px;
+  border-radius: 14px;
   min-width: 0;
 }
 
 .home-stats-hero {
   grid-column: 1;
   grid-row: 1 / span 2;
-  padding: 20px 22px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 236px;
+  min-height: 186px;
 }
 
 .home-stats-hero-kicker {
-  font-size: 29px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
+  font-size: 18px;
+  font-weight: 620;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(173, 198, 255, 0.84);
-  margin-bottom: 14px;
+  color: rgba(173, 198, 255, 0.9);
+  margin-bottom: 8px;
 }
 
 .home-stats-hero-value {
@@ -11449,71 +11449,73 @@ body.is-col-resizing {
 }
 
 .home-stats-hero-minutes {
-  font-size: clamp(2.5rem, 3.5vw, 4rem);
+  font-size: 30px;
   line-height: 1;
 }
 
 .home-stats-hero-unit {
-  font-size: clamp(1.2rem, 1.7vw, 2rem);
+  font-size: 30px;
+  font-weight: 680;
   text-transform: lowercase;
-  color: rgba(216, 226, 255, 0.86);
+  color: rgba(216, 226, 255, 0.9);
 }
 
 .home-stats-hero-label {
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 18px;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
   color: rgba(196, 198, 208, 0.86);
-  font-weight: 540;
-  margin-top: 10px;
+  font-weight: 600;
+  margin-top: 8px;
 }
 
 .home-stat-metric {
-  padding: 20px 30px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 8px;
-  min-height: 118px;
+  gap: 6px;
+  min-height: 80px;
 }
 
 .home-stat-value {
-  font-size: clamp(2rem, 2.6vw, 2.8rem);
+  font-size: 30px;
   line-height: 1.05;
-  font-weight: 730;
+  font-weight: 700;
   letter-spacing: -0.02em;
   color: rgba(236,237,243,.95);
 }
 
 .home-stat-label {
-  font-size: 12px;
+  font-size: 18px;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: .14em;
-  font-weight: 620;
+  letter-spacing: .04em;
+  font-weight: 600;
 }
 
 .home-stat-top-item {
-  padding: 18px 22px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 8px;
-  min-height: 118px;
+  gap: 6px;
+  min-height: 80px;
   min-width: 0;
 }
 
 .home-stat-top-label {
-  font-size: 12px;
+  font-size: 18px;
   text-transform: uppercase;
-  letter-spacing: .14em;
+  letter-spacing: .04em;
   color: var(--text-muted);
-  font-weight: 620;
+  font-weight: 600;
 }
 
 .home-stat-top-value {
-  font-size: clamp(1.05rem, 1.45vw, 1.95rem);
-  font-weight: 650;
+  font-size: 30px;
+  line-height: 1.05;
+  font-weight: 680;
   color: rgba(236,237,243,.94);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -11521,12 +11523,12 @@ body.is-col-resizing {
 }
 
 .home-stat-bottom {
-  min-height: 82px;
-  padding: 16px 22px;
+  min-height: 70px;
+  padding: 10px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
 }
 
 .home-stat-bottom-wide {
@@ -11534,8 +11536,9 @@ body.is-col-resizing {
 }
 
 .home-stat-bottom-value {
-  font-size: clamp(1.4rem, 1.9vw, 2.1rem);
-  font-weight: 700;
+  font-size: 30px;
+  line-height: 1.05;
+  font-weight: 680;
   color: rgba(236,237,243,.95);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -11594,7 +11597,7 @@ body.is-col-resizing {
   .home-stats-hero {
     grid-column: 1 / span 2;
     grid-row: 1;
-    min-height: 160px;
+    min-height: 148px;
   }
   .home-stats-shell > :nth-child(2) { grid-column: 1; grid-row: 2; }
   .home-stats-shell > :nth-child(3) { grid-column: 2; grid-row: 2; }
@@ -11632,6 +11635,19 @@ body.is-col-resizing {
   .home-stats-hero {
     grid-column: 1;
     grid-row: auto;
+  }
+  .home-stats-hero-kicker,
+  .home-stats-hero-label,
+  .home-stat-label,
+  .home-stat-top-label {
+    font-size: 16px;
+  }
+  .home-stats-hero-minutes,
+  .home-stats-hero-unit,
+  .home-stat-value,
+  .home-stat-top-value,
+  .home-stat-bottom-value {
+    font-size: 26px;
   }
   .home-stats-shell > :nth-child(n+2) {
     grid-column: 1 !important;
