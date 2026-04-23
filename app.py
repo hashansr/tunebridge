@@ -8540,6 +8540,11 @@ _rg_generation   = 0        # incremented on each new run; guards against stale 
 _rg_io_sem       = threading.Semaphore(1)  # serialises sf.read() — prevents I/O
                                             # contention when cancel+restart overlaps
 
+# Formats soundfile can reliably decode for loudness measurement.
+# M4A/AAC excluded — libsndfile on macOS may try CoreAudio and block indefinitely.
+_RG_SUPPORTED_FORMATS = frozenset({'FLAC', 'MP3', 'WAV', 'AIFF', 'OGG', 'OPUS'})
+_RG_FMT_SQL = ','.join(f"'{f}'" for f in _RG_SUPPORTED_FORMATS)  # for inline SQL
+
 rg_tag_state = {
     'status':       'idle',   # idle | running | done | error | cancelled
     'done':         0,
@@ -8892,8 +8897,11 @@ def _run_rg_tagger(my_gen):
     try:
         music_base = get_music_base()
         conn = _db.get_conn()
+        # Only load formats soundfile can decode — M4A/AAC excluded entirely so
+        # they never appear in the work queue or progress count.
         all_rows = conn.execute(
-            'SELECT id, path, format, album_artist, artist, album, rg_track_gain FROM tracks'
+            f'SELECT id, path, format, album_artist, artist, album, rg_track_gain '
+            f'FROM tracks WHERE format IN ({_RG_FMT_SQL})'
         ).fetchall()
 
         # Group by (album_artist/artist, album) — need full album context for album gain
@@ -8906,7 +8914,7 @@ def _run_rg_tagger(my_gen):
         work_albums = {k: v for k, v in albums.items()
                        if any(t['rg_track_gain'] is None for t in v)}
 
-        # Total = all tracks in those albums (we measure all for correct album gain)
+        # Total = taggable tracks across those albums (all used for album gain accuracy)
         total_tracks = sum(len(v) for v in work_albums.values())
         rg_tag_state['total'] = total_tracks
         done = 0
@@ -9021,9 +9029,14 @@ def _run_rg_tagger(my_gen):
 @app.route('/api/library/replaygain/info')
 def rg_info():
     conn = _db.get_conn()
-    total  = conn.execute('SELECT COUNT(*) FROM tracks').fetchone()[0]
-    tagged = conn.execute('SELECT COUNT(*) FROM tracks WHERE rg_track_gain IS NOT NULL').fetchone()[0]
-    return jsonify({'total': total, 'tagged': tagged, 'pending': total - tagged,
+    # Only count formats we can actually measure — M4A/AAC excluded
+    taggable = conn.execute(
+        f'SELECT COUNT(*) FROM tracks WHERE format IN ({_RG_FMT_SQL})'
+    ).fetchone()[0]
+    tagged = conn.execute(
+        f'SELECT COUNT(*) FROM tracks WHERE rg_track_gain IS NOT NULL AND format IN ({_RG_FMT_SQL})'
+    ).fetchone()[0]
+    return jsonify({'total': taggable, 'tagged': tagged, 'pending': taggable - tagged,
                     'status': rg_tag_state['status']})
 
 
@@ -9033,7 +9046,9 @@ def rg_tag_start():
     if rg_tag_state['status'] == 'running':
         return jsonify({'error': 'Already running'}), 409
     conn = _db.get_conn()
-    pending = conn.execute('SELECT COUNT(*) FROM tracks WHERE rg_track_gain IS NULL').fetchone()[0]
+    pending = conn.execute(
+        f'SELECT COUNT(*) FROM tracks WHERE rg_track_gain IS NULL AND format IN ({_RG_FMT_SQL})'
+    ).fetchone()[0]
     if pending == 0:
         return jsonify({'ok': True, 'already_done': True, 'pending': 0})
     _rg_generation += 1           # invalidates any previous thread still winding down
