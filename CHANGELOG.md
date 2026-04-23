@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.24-rc.230426-1441 · 2026-04-23
 - Fix: Startup mute restore now requires explicit user mute intent (`muteExplicit`) before applying persisted `muted=true`; stale legacy mute flags no longer force muted startup on new RC launches.
 - Fix: App shutdown now hard-stops playback on both window `closing` and `closed` events, with a macOS failsafe exit timer, preventing audio from continuing after the window is closed.
 - Fix: Home → Jump Back In now resolves cards against current library metadata after tag edits/renames, preventing stale artist/album values and dead/blank navigation targets.
