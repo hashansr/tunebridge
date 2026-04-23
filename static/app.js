@@ -1673,9 +1673,14 @@ function _renderTracksTable() {
     const multi = document.createElement('div');
     multi.id = 'tracks-multi-disc-container';
     multi.className = 'tracks-multi-disc-container';
+    const globalIdxById = new Map((rows || []).map((track, idx) => [String(track.id), idx]));
     multi.innerHTML = discGroups.map((group) => {
       const bodyRows = (group.rows || [])
-        .map((track, idx) => trackRow(track, idx + 1, false))
+        .map((track, idx) => {
+          const globalIdx = globalIdxById.get(String(track.id));
+          const rowNum = Number.isFinite(globalIdx) ? (globalIdx + 1) : (idx + 1);
+          return trackRow(track, rowNum, false);
+        })
         .join('');
       return `
         <section class="tracks-disc-block">
@@ -2304,12 +2309,17 @@ function updateSelectionUI() {
     };
   }
 
-  // Update row visual states across all track tables
-  ['tracks-tbody', 'search-tbody', 'songs-tbody', 'pl-tbody'].forEach(tbodyId => {
+  // Update row visual states across all track tables (including multi-disc album tables)
+  const tableBodies = new Set();
+  ['tracks-tbody', 'search-tbody', 'songs-tbody', 'pl-tbody'].forEach((tbodyId) => {
     const tbody = document.getElementById(tbodyId);
-    if (!tbody) return;
+    if (tbody) tableBodies.add(tbody);
+  });
+  document.querySelectorAll('#tracks-multi-disc-container tbody').forEach((tbody) => tableBodies.add(tbody));
+
+  tableBodies.forEach((tbody) => {
     tbody.classList.toggle('has-selection', count > 0);
-    tbody.querySelectorAll('tr[data-id]').forEach(tr => {
+    tbody.querySelectorAll('tr[data-id]').forEach((tr) => {
       tr.classList.toggle('track-selected', state.selectedTrackIds.has(tr.dataset.id));
     });
   });
