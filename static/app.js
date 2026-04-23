@@ -4257,17 +4257,19 @@ function _homeArtEl(item) {
 }
 
 function _homeOnClick(item) {
+  const tid = encodeURIComponent(item.track_id || '');
   const a = encodeURIComponent(item.artist || '');
   const al = encodeURIComponent(item.album || '');
   const pid = encodeURIComponent(item.playlist_id || '');
-  return `App.homeOpenItem('${esc(item.kind || '')}','','${a}','${al}','${pid}')`;
+  return `App.homeOpenItem('${esc(item.kind || '')}','${tid}','${a}','${al}','${pid}')`;
 }
 
 function _homeOnPlay(item, e) {
+  const tid = encodeURIComponent(item.track_id || '');
   const a = encodeURIComponent(item.artist || '');
   const al = encodeURIComponent(item.album || '');
   const pid = encodeURIComponent(item.playlist_id || '');
-  return `App.homePlayItem(event,'${esc(item.kind || '')}','${a}','${al}','${pid}')`;
+  return `App.homePlayItem(event,'${esc(item.kind || '')}','${tid}','${a}','${al}','${pid}')`;
 }
 
 const _HOME_PLAY_SVG = playSvg(16);
@@ -4649,51 +4651,74 @@ function _homeRelativeTime(ts) {
   return 'a while ago';
 }
 
-function homeOpenItem(kind, trackIdEnc = '', artistEnc = '', albumEnc = '', playlistIdEnc = '') {
+async function _homeResolveTrackById(trackId) {
+  if (!trackId) return null;
+  try { return await api(`/library/tracks/${encodeURIComponent(trackId)}`); } catch (_) { return null; }
+}
+
+async function homeOpenItem(kind, trackIdEnc = '', artistEnc = '', albumEnc = '', playlistIdEnc = '') {
   const kindNorm = String(kind || '').toLowerCase();
+  const trackId = decodeURIComponent(trackIdEnc || '');
   const artist = decodeURIComponent(artistEnc || '');
   const album  = decodeURIComponent(albumEnc  || '');
   const playlistId = decodeURIComponent(playlistIdEnc || '');
-  if (kindNorm === 'album'    && artist && album)  { showAlbum(artist, album); return; }
-  if (kindNorm === 'artist'   && artist)           { showArtist(artist); return; }
-  if (kindNorm === 'playlist' && playlistId)       { openPlaylist(playlistId); return; }
+  if (kindNorm === 'album' && artist && album)  {
+    const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`).catch(() => []);
+    if (Array.isArray(tracks) && tracks.length) { showAlbum(artist, album); return; }
+  }
+  if (kindNorm === 'artist' && artist) {
+    const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artist)}`).catch(() => []);
+    if (Array.isArray(tracks) && tracks.length) { showArtist(artist); return; }
+  }
+  if (kindNorm === 'playlist' && playlistId) { openPlaylist(playlistId); return; }
+  const t = await _homeResolveTrackById(trackId);
+  if (!t) return;
+  const liveArtist = String(t.album_artist || t.artist || '').trim();
+  const liveAlbum = String(t.album || '').trim();
+  if (liveArtist && liveAlbum) { showAlbum(liveArtist, liveAlbum); return; }
+  if (liveArtist) showArtist(liveArtist);
 }
 
-function homePlayItem(event, kind, artistEnc = '', albumEnc = '', playlistIdEnc = '') {
+async function homePlayItem(event, kind, trackIdEnc = '', artistEnc = '', albumEnc = '', playlistIdEnc = '') {
   event && event.stopPropagation();
   const kindNorm = String(kind || '').toLowerCase();
+  const trackId = decodeURIComponent(trackIdEnc || '');
   const artist = decodeURIComponent(artistEnc || '');
   const album  = decodeURIComponent(albumEnc  || '');
   const playlistId = decodeURIComponent(playlistIdEnc || '');
   if (kindNorm === 'album' && artist && album) {
-    api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`)
-      .then(tracks => {
-        if (!tracks || !tracks.length) return;
-        Player.registerTracks?.(tracks);
-        Player.setPlaybackContext?.(tracks, { sourceType: 'album', sourceId: `${artist}||${album}`, sourceLabel: `Album · ${album}` });
-        Player.playAll(tracks, 0, `Album · ${album}`);
-      });
-    return;
+    const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`).catch(() => []);
+    if (tracks && tracks.length) {
+      Player.registerTracks?.(tracks);
+      Player.setPlaybackContext?.(tracks, { sourceType: 'album', sourceId: `${artist}||${album}`, sourceLabel: `Album · ${album}` });
+      Player.playAll(tracks, 0, `Album · ${album}`);
+      return;
+    }
   }
   if (kindNorm === 'artist' && artist) {
-    api(`/library/tracks?artist=${encodeURIComponent(artist)}`)
-      .then(tracks => {
-        if (!tracks || !tracks.length) return;
-        Player.registerTracks?.(tracks);
-        Player.setPlaybackContext?.(tracks, { sourceType: 'artist', sourceId: artist, sourceLabel: `Artist · ${artist}` });
-        // Respect the current player shuffle toggle state by using standard playAll.
-        Player.playAll(tracks, 0, `Artist · ${artist}`);
-      });
-    return;
+    const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artist)}`).catch(() => []);
+    if (tracks && tracks.length) {
+      Player.registerTracks?.(tracks);
+      Player.setPlaybackContext?.(tracks, { sourceType: 'artist', sourceId: artist, sourceLabel: `Artist · ${artist}` });
+      // Respect the current player shuffle toggle state by using standard playAll.
+      Player.playAll(tracks, 0, `Artist · ${artist}`);
+      return;
+    }
   }
   if (kindNorm === 'playlist' && playlistId) {
-    api(`/playlists/${encodeURIComponent(playlistId)}`).then(pl => {
-      if (!pl || !pl.tracks || !pl.tracks.length) return;
+    const pl = await api(`/playlists/${encodeURIComponent(playlistId)}`).catch(() => null);
+    if (pl && pl.tracks && pl.tracks.length) {
       Player.registerTracks?.(pl.tracks);
       Player.setPlaybackContext?.(pl.tracks, { sourceType: 'playlist', sourceId: pl.id, sourceLabel: `Playlist · ${pl.name}` });
       Player.playAll(pl.tracks, 0, `Playlist · ${pl.name}`);
-    });
-    return;
+      return;
+    }
+  }
+  const t = await _homeResolveTrackById(trackId);
+  if (t && t.id) {
+    Player.registerTracks?.([t]);
+    Player.setPlaybackContext?.([t], { sourceType: 'songs', sourceId: '', sourceLabel: 'Songs' });
+    Player.playAll([t], 0, `Song · ${t.title || 'Track'}`);
   }
 }
 

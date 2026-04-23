@@ -1534,19 +1534,31 @@ def _resolve_context_item(kind, source_id, source_label, track_id, artist, album
                 'title': pl.get('name') or 'Playlist',
                 'subtitle': f"{len(ids)} songs",
                 'artwork_key': (first.get('artwork_key') if first else None) or artwork_key,
+                'track_id': track_id or (first.get('id') if first else ''),
             }
         title = (source_label or '').replace('Playlist · ', '').strip() or 'Playlist'
         return {
             '_dedup_key': key, 'kind': 'playlist', 'playlist_id': source_id,
-            'title': title, 'subtitle': '', 'artwork_key': artwork_key,
+            'title': title, 'subtitle': '', 'artwork_key': artwork_key, 'track_id': track_id,
         }
 
     elif kind == 'artist':
         name = source_id or artist or (source_label or '').replace('Artist · ', '').strip()
         if not name:
             return None
-        key = f"artist:{name.lower()}"
-        info = artists_map.get(name.lower(), {'artist': name, 'artwork_key': artwork_key, 'image_key': None})
+        info = artists_map.get(name.lower())
+        # Context labels can go stale after tag edits (e.g. artist rename while playing).
+        # If the saved artist no longer exists, resolve via live track metadata first.
+        if info is None and track_id and track_id in track_by_id:
+            t = track_by_id[track_id]
+            live_name = (t.get('album_artist') or t.get('artist') or '').strip()
+            if live_name:
+                name = live_name
+                artwork_key = artwork_key or t.get('artwork_key')
+                info = artists_map.get(name.lower())
+        if info is None:
+            info = {'artist': name, 'artwork_key': artwork_key, 'image_key': None}
+        key = f"artist:{(info.get('artist') or name).lower()}"
         return {
             '_dedup_key': key, 'kind': 'artist',
             'artist': info.get('artist') or name,
@@ -1554,14 +1566,19 @@ def _resolve_context_item(kind, source_id, source_label, track_id, artist, album
             'subtitle': 'Artist',
             'image_key': info.get('image_key'),
             'artwork_key': info.get('artwork_key') or artwork_key,
+            'track_id': track_id,
         }
 
     else:
         # album or unknown → resolve to album card
-        if not album and track_id and track_id in track_by_id:
+        # Always prefer current track metadata when available so renamed tags
+        # don't leave stale artist/album values in Home cards.
+        if track_id and track_id in track_by_id:
             t = track_by_id[track_id]
-            album = (t.get('album') or album or '').strip()
-            artist = (t.get('album_artist') or t.get('artist') or artist or '').strip()
+            live_album = (t.get('album') or '').strip()
+            live_artist = (t.get('album_artist') or t.get('artist') or '').strip()
+            album = live_album or (album or '').strip()
+            artist = live_artist or (artist or '').strip()
             artwork_key = artwork_key or t.get('artwork_key')
         if not album:
             return None
@@ -1583,6 +1600,7 @@ def _resolve_context_item(kind, source_id, source_label, track_id, artist, album
             'artist': resolved_artist, 'album': resolved_album,
             'title': resolved_album, 'subtitle': resolved_artist,
             'artwork_key': (info or {}).get('artwork_key') or artwork_key,
+            'track_id': track_id,
         }
 
 
@@ -2197,6 +2215,10 @@ def _apply_tag_edit(track_id: str, changes: dict):
 
     # Update in-memory library
     _update_library_track(track_id, clean)
+    # Home and metadata maps must refresh immediately after tag edits.
+    global _meta_maps_cache
+    _meta_maps_cache = None
+    _invalidate_home_cache()
 
     updated = _db.db_get_track(track_id)
     return updated, None

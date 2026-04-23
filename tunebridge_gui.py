@@ -279,7 +279,46 @@ def main():
     # Install native macOS media key bridge.
     _media_key_refs = _start_media_key_bridge(window)
 
-    window.events.closed += lambda: os._exit(0)
+    def _stop_playback_best_effort():
+        """Stop audio backends during app shutdown (no JS calls; close-safe)."""
+        try:
+            import urllib.request as _urlreq
+            import json as _json
+            for endpoint, payload in (
+                ('/api/player/crossfade_cancel', {}),
+                ('/api/player/pause', {'paused': True}),
+                ('/api/player/stop', {}),
+            ):
+                try:
+                    req = _urlreq.Request(
+                        f'http://127.0.0.1:{PORT}{endpoint}',
+                        data=_json.dumps(payload).encode('utf-8'),
+                        headers={'Content-Type': 'application/json'},
+                        method='POST',
+                    )
+                    _urlreq.urlopen(req, timeout=1.0)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _force_exit_failsafe():
+        """Fallback exit for close paths that don't trigger `closed` on macOS."""
+        def _delayed_exit():
+            time.sleep(1.5)
+            os._exit(0)
+        threading.Thread(target=_delayed_exit, daemon=True).start()
+
+    def _on_window_closing():
+        _stop_playback_best_effort()
+        _force_exit_failsafe()
+
+    def _on_window_closed():
+        _stop_playback_best_effort()
+        os._exit(0)
+
+    window.events.closing += _on_window_closing
+    window.events.closed += _on_window_closed
 
     webview.start(
         debug=False,
