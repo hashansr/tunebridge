@@ -10745,11 +10745,34 @@ body.is-col-resizing {
   line-height: 1;
 }
 .iemfit-iem-info-col { flex: 1; min-width: 0; }
+.iemfit-iem-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .iemfit-iem-name {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 3px;
+  min-width: 0;
+}
+.iemfit-with-peq-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 650;
+  color: #9ab8ff;
+  background: rgba(154, 184, 255, 0.14);
+  border: 1px solid rgba(154, 184, 255, 0.26);
+  flex-shrink: 0;
 }
 .iemfit-iem-meta { font-size: 12px; color: var(--text-muted); }
 .iemfit-chevron {
@@ -10794,6 +10817,19 @@ body.is-col-resizing {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.1em;
+}
+.iemfit-detail-avg {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(173, 198, 255, 0.12);
+  border: 1px solid rgba(173, 198, 255, 0.24);
+  color: rgba(173, 198, 255, 0.9);
+  font-size: 10px;
+  font-weight: 620;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .iemfit-detail-section-hint { font-size: 11px; color: var(--text-muted); }
 
@@ -12130,12 +12166,20 @@ body.is-col-resizing {
   border-radius: 18px;
   background: rgba(20, 20, 24, 0.92);
 }
+.iemfit-iem-item {
+  border-radius: 15px;
+}
 .iemfit-iem-card {
   border-radius: 15px;
   background: rgba(24, 24, 29, 0.92);
 }
 .iemfit-detail-panel {
-  background: rgba(12, 12, 16, 0.88);
+  background: rgba(24, 24, 29, 0.92);
+  border-radius: 0 0 15px 15px;
+  margin-top: -1px;
+}
+.iemfit-iem-card--open {
+  border-radius: 15px 15px 0 0;
 }
 
 /* Mobile */

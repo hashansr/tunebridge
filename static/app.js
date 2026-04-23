@@ -2287,12 +2287,14 @@ function updateSelectionUI() {
   const addBtn = document.getElementById('bulk-add-btn');
   const favBtn = document.getElementById('bulk-fav-btn');
   const unfavBtn = document.getElementById('bulk-unfav-btn');
+  const editTagsBtn = document.getElementById('bulk-edit-tags-btn');
 
   countEl.textContent = `${count} song${count !== 1 ? 's' : ''} selected`;
   bar.classList.toggle('visible', count > 0);
   if (removeBtn) removeBtn.style.display = state.view === 'playlist' && count > 0 ? 'inline-flex' : 'none';
   if (favBtn) favBtn.style.display = count > 0 ? 'inline-flex' : 'none';
   if (unfavBtn) unfavBtn.style.display = count > 0 ? 'inline-flex' : 'none';
+  if (editTagsBtn) editTagsBtn.style.display = count > 0 ? 'inline-flex' : 'none';
 
   // Wire add button each time (event could differ)
   if (addBtn) {
@@ -2543,6 +2545,8 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null) {
         : `Remove ${tracks.length} from Playlist`;
     }
   }
+  const editTrackItem = document.getElementById('ctx-edit-track-tags-item');
+  if (editTrackItem) editTrackItem.style.display = tracks.length === 1 ? '' : 'none';
   menu.style.display = 'block';
   menu.style.left = '-9999px';
   menu.style.top  = '-9999px';
@@ -2570,9 +2574,11 @@ function hideCtxMenu() {
   _ctxDetailMode = null;
   const editAlbumItem = document.getElementById('ctx-edit-album-tags-item');
   const editArtistItem = document.getElementById('ctx-rename-artist-item');
+  const editTrackItem = document.getElementById('ctx-edit-track-tags-item');
   const removeItem = document.getElementById('ctx-remove-from-playlist-item');
   if (editAlbumItem) editAlbumItem.style.display = 'none';
   if (editArtistItem) editArtistItem.style.display = 'none';
+  if (editTrackItem) editTrackItem.style.display = 'none';
   if (removeItem) removeItem.style.display = 'none';
 }
 
@@ -2700,6 +2706,11 @@ async function ctxToggleFavourite() {
   hideCtxMenu();
   if (!target?.type || !target?.id) return;
   await toggleFavourite(target.type, encodeURIComponent(target.id));
+}
+
+function ctxEditTrackTags() {
+  hideCtxMenu();
+  if (_ctxTracks.length === 1) openTagEditor(_ctxTracks[0].id);
 }
 
 function ctxEditAlbumTags() {
@@ -10104,6 +10115,7 @@ const App = {
   ctxAddToQueue,
   ctxCreateSmartPlaylist,
   ctxToggleFavourite,
+  ctxEditTrackTags,
   ctxEditAlbumTags,
   ctxRenameArtist,
   ctxAddToPlaylist,
@@ -10316,6 +10328,7 @@ const App = {
   toggleMissingTagSelection,
   toggleMissingTagsSelectAll,
   openMissingTagsBulkEditor,
+  openBulkTagEditor,
   closeMissingTagsBulkEditor,
   saveMissingTagsBulkEditor,
   openGenreDistributionModal,
@@ -10401,6 +10414,9 @@ async function loadInsightsView() {
   state.view = 'insights';
   setActiveNav('insights');
   showViewEl('insights');
+  const staleBanner = document.getElementById('insights-tag-stale-banner');
+  if (staleBanner) staleBanner.style.display = _pendingTagEdits > 0 ? 'block' : 'none';
+  _pendingTagEdits = 0;
 
   // Resume polling if analysis is already running + show coverage status
   const [statusRes, infoRes] = await Promise.all([
@@ -10465,6 +10481,7 @@ let _insightsMissingTagsSearch = '';
 let _insightsMissingTagsOpen = false;
 let _insightsMissingSelected = new Set();
 let _insightsMissingDrafts = {};
+let _bulkTagSelectionOverride = null; // Set when bulk edit is triggered from Songs/playlist multi-select
 
 function _missingIssuesForTrack(t) {
   const issues = [];
@@ -10940,12 +10957,31 @@ function openMissingTagsBulkEditor() {
 }
 
 function closeMissingTagsBulkEditor() {
+  _bulkTagSelectionOverride = null;
   const modal = document.getElementById('missing-tags-bulk-modal');
   if (modal) modal.style.display = 'none';
 }
 
+function openBulkTagEditor() {
+  const ids = [...state.selectedTrackIds];
+  if (!ids.length) { toast('Select at least one track'); return; }
+  _bulkTagSelectionOverride = ids;
+  const count = ids.length;
+  document.getElementById('missing-tags-bulk-warning-text').textContent =
+    `This will overwrite tags on ${count} selected file${count !== 1 ? 's' : ''} on disk. Only filled fields are applied.`;
+  ['mtb-artist', 'mtb-album-artist', 'mtb-album', 'mtb-year', 'mtb-genre'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  _hideTagError('mtb-error');
+  const btn = document.getElementById('mtb-save-btn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Save Tags'; }
+  const modal = document.getElementById('missing-tags-bulk-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
 async function saveMissingTagsBulkEditor() {
-  const ids = [..._insightsMissingSelected];
+  const ids = _bulkTagSelectionOverride ? [..._bulkTagSelectionOverride] : [..._insightsMissingSelected];
   if (!ids.length) return;
   const changes = {
     artist: document.getElementById('mtb-artist')?.value.trim() || '',
@@ -10975,13 +11011,21 @@ async function saveMissingTagsBulkEditor() {
       body: { track_ids: ids, changes: payload },
     });
     const errors = result.errors || [];
+    _pendingTagEdits += result.updated;
     if (errors.length) {
       toast(`Saved ${result.updated}/${result.total} tracks`, 4500);
     } else {
       toast(`Tags saved for ${result.updated} track${result.updated !== 1 ? 's' : ''}`);
     }
+    const wasSelectionBased = !!_bulkTagSelectionOverride;
     closeMissingTagsBulkEditor();
-    await openMissingTagsEditor();
+    if (wasSelectionBased) {
+      if (state.view === 'songs') loadSongs();
+      else if (state.view === 'tracks') loadTracks(state.artist, state.album);
+      else if (state.view === 'playlist') loadPlaylist(state.playlist.id);
+    } else {
+      await openMissingTagsEditor();
+    }
   } catch (e) {
     _showTagError('mtb-error', e.message || 'Bulk save failed.');
     if (btn) { btn.disabled = false; btn.textContent = 'Save Tags'; }
@@ -11059,6 +11103,9 @@ async function cancelLibraryAnalysis() {
 let _insightsScanPoller = null;
 
 async function insightsRescanLibrary() {
+  const staleBanner = document.getElementById('insights-tag-stale-banner');
+  if (staleBanner) staleBanner.style.display = 'none';
+  _pendingTagEdits = 0;
   const btn = document.getElementById('insights-rescan-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Scanning…'; }
 
@@ -11571,6 +11618,34 @@ let _iemFitGenreState  = {};    // iemId → selected genre key for FR overlay (
 let _iemFitSourceState = {};    // iemId → selected source id (string | null)
 let _iemFitExtraGenres = [];    // user-added heatmap genres
 let _iemFitIemSummary  = [];    // cached IEM summary list
+const _IEM_FIT_UI_STATE_KEY = 'tb.iem_fit_ui.v1';
+let _iemFitUiStateLoaded = false;
+
+function _loadIemFitUiState() {
+  if (_iemFitUiStateLoaded) return;
+  _iemFitUiStateLoaded = true;
+  try {
+    const raw = localStorage.getItem(_IEM_FIT_UI_STATE_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (!s || typeof s !== 'object') return;
+    _iemFitSelectedId = typeof s.selectedId === 'string' ? s.selectedId : null;
+    _iemFitPeqState = (s.peqState && typeof s.peqState === 'object') ? s.peqState : {};
+    _iemFitGenreState = (s.genreState && typeof s.genreState === 'object') ? s.genreState : {};
+    _iemFitSourceState = (s.sourceState && typeof s.sourceState === 'object') ? s.sourceState : {};
+  } catch (_) {}
+}
+
+function _saveIemFitUiState() {
+  try {
+    localStorage.setItem(_IEM_FIT_UI_STATE_KEY, JSON.stringify({
+      selectedId: _iemFitSelectedId || null,
+      peqState: _iemFitPeqState || {},
+      genreState: _iemFitGenreState || {},
+      sourceState: _iemFitSourceState || {},
+    }));
+  } catch (_) {}
+}
 
 // ── Band keys (12 perceptual bands) ───────────────────────────────────────────
 const _PERC_BAND_KEYS = [
@@ -11754,6 +11829,40 @@ function _matchScoreBg(s) {
   return s >= 75 ? 'rgba(83,225,111,0.15)' : s >= 55 ? 'rgba(240,180,41,0.12)' : 'rgba(255,179,181,0.15)';
 }
 
+function _computeIemAverageScore(iemId, peqScores12 = null) {
+  if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) return null;
+  const scores = _iemFitMatrixData.matrix
+    .map(row => {
+      const factoryScore = ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null;
+      const peqScore = peqScores12 ? _recomputeGenreScore(row.fingerprint || {}, peqScores12) : null;
+      return peqScore !== null ? peqScore : factoryScore;
+    })
+    .filter(v => v !== null && Number.isFinite(v));
+  if (!scores.length) return null;
+  return scores.reduce((a, b) => a + b, 0) / scores.length;
+}
+
+function _updateIemSummaryScore(iemId, peqScores12 = null) {
+  const pctEl = document.getElementById(`iemfit-score-${iemId}`);
+  const pillEl = document.getElementById(`iemfit-with-peq-${iemId}`);
+  if (pillEl) pillEl.style.display = _iemFitPeqState[iemId] ? 'inline-flex' : 'none';
+  if (!pctEl) return;
+
+  const score = _computeIemAverageScore(iemId, peqScores12);
+  if (score !== null) {
+    pctEl.textContent = `${score.toFixed(0)}%`;
+    pctEl.style.color = _matchScoreColor(score);
+    return;
+  }
+
+  const iemInfo = _iemFitIemSummary.find(i => i.iem_id === iemId);
+  const fallback = Number(iemInfo?.library_match_score);
+  if (Number.isFinite(fallback)) {
+    pctEl.textContent = `${fallback.toFixed(0)}%`;
+    pctEl.style.color = _matchScoreColor(fallback);
+  }
+}
+
 // ── Run matching analysis (fast — no audio I/O) ───────────────────────────────
 async function runMatchingAnalysis() {
   const el = document.getElementById('insights-gear-content');
@@ -11788,6 +11897,7 @@ async function changeMatchTarget(selectEl) {
 function _renderInsightsMatchOverview(d, errMsg) {
   const el = document.getElementById('insights-gear-content');
   if (!el) return;
+  _loadIemFitUiState();
 
   // Update section-header action button
   const hdrActions = document.getElementById('iemfit-header-actions');
@@ -11811,14 +11921,19 @@ function _renderInsightsMatchOverview(d, errMsg) {
     return;
   }
 
-  // Reset accordion state
+  // Keep persisted per-IEM UI state (expanded card + active PEQ/source/genre).
+  // Only reset volatile runtime caches that should refresh each render.
   _iemFitIemSummary  = d.iem_summary || [];
-  _iemFitSelectedId  = null;
   _iemFitFRCharts    = {};
-  _iemFitPeqState    = {};
   _iemFitPeqVariants = {};
-  _iemFitGenreState  = {};
-  _iemFitSourceState = {};
+  _iemFitActiveScores12 = {};
+
+  const validIemIds = new Set(_iemFitIemSummary.map(i => i.iem_id));
+  if (_iemFitSelectedId && !validIemIds.has(_iemFitSelectedId)) _iemFitSelectedId = null;
+  _iemFitPeqState = Object.fromEntries(Object.entries(_iemFitPeqState).filter(([id]) => validIemIds.has(id)));
+  _iemFitGenreState = Object.fromEntries(Object.entries(_iemFitGenreState).filter(([id]) => validIemIds.has(id)));
+  _iemFitSourceState = Object.fromEntries(Object.entries(_iemFitSourceState).filter(([id]) => validIemIds.has(id)));
+  _saveIemFitUiState();
 
   const iemListHtml = _iemFitIemSummary.length === 0
     ? `<p class="insights-empty-note">No IEMs with FR data found. Add IEMs in the Gear section.</p>`
@@ -11828,10 +11943,13 @@ function _renderInsightsMatchOverview(d, errMsg) {
           <div class="iemfit-iem-item" id="iemfit-item-${esc(iem.iem_id)}">
             <div class="iemfit-iem-card" onclick="App._toggleIemAccordion('${esc(iem.iem_id)}')">
               <div class="iemfit-iem-score-col">
-                <span class="iemfit-iem-pct" style="color:${col}">${iem.library_match_score.toFixed(0)}%</span>
+                <span class="iemfit-iem-pct" id="iemfit-score-${esc(iem.iem_id)}" style="color:${col}">${iem.library_match_score.toFixed(0)}%</span>
               </div>
               <div class="iemfit-iem-info-col">
-                <div class="iemfit-iem-name">${esc(iem.iem_name)}</div>
+                <div class="iemfit-iem-name-wrap">
+                  <div class="iemfit-iem-name">${esc(iem.iem_name)}</div>
+                  <span class="iemfit-with-peq-pill" id="iemfit-with-peq-${esc(iem.iem_id)}" style="display:none">With PEQ</span>
+                </div>
                 <div class="iemfit-iem-meta">
                   ${iem.best_genre  ? `Best for <strong>${esc(iem.best_genre)}</strong>` : ''}
                   ${iem.worst_genre ? ` · Worst for <strong>${esc(iem.worst_genre)}</strong>` : ''}
@@ -11851,9 +11969,18 @@ function _renderInsightsMatchOverview(d, errMsg) {
       <span><span class="iemfit-legend-dot" style="background:#ffb3b5"></span>Weak &lt;55%</span>
     </div>
     <div class="iemfit-iem-list">${iemListHtml}</div>`;
+
+  // Ensure summary cards immediately reflect persisted PEQ state.
+  _iemFitIemSummary.forEach(i => _updateIemSummaryScore(i.iem_id, null));
+
+  // Restore open state after rerender so the section behaves as continuous across
+  // navigation and app restarts.
+  if (_iemFitSelectedId && document.getElementById(`iemfit-detail-${_iemFitSelectedId}`)) {
+    setTimeout(() => { _toggleIemAccordion(_iemFitSelectedId, { restore: true }); }, 0);
+  }
 }
 
-async function _toggleIemAccordion(iemId) {
+async function _toggleIemAccordion(iemId, opts = {}) {
   const panel = document.getElementById(`iemfit-detail-${iemId}`);
   const card  = panel && panel.previousElementSibling;
   if (!panel) return;
@@ -11880,11 +12007,13 @@ async function _toggleIemAccordion(iemId) {
       delete _iemFitFRCharts[iemId];
     }
     _iemFitSelectedId = null;
+    _saveIemFitUiState();
     return;
   }
 
   // Expand
   _iemFitSelectedId = iemId;
+  _saveIemFitUiState();
   if (card) card.classList.add('iemfit-iem-card--open');
   panel.style.display = 'block';
   panel.innerHTML = '<div class="insights-spinner-wrap"><div class="spinner"></div></div>';
@@ -11904,7 +12033,9 @@ async function _toggleIemAccordion(iemId) {
   }
 
   _renderIemDetail(iemId, panel);
-  setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
+  if (!opts.restore) {
+    setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
+  }
 }
 
 function _renderIemDetail(iemId, container) {
@@ -11914,6 +12045,7 @@ function _renderIemDetail(iemId, container) {
         <div class="iemfit-detail-section">
           <div class="iemfit-detail-section-hdr">
             <span class="iemfit-detail-section-title">Genre Scores</span>
+            <span class="iemfit-detail-avg" id="iemfit-genre-avg-${esc(iemId)}">Avg —</span>
             <span class="iemfit-detail-section-hint">How well this IEM matches each genre in your library</span>
           </div>
           <div id="iemfit-heatmap-${esc(iemId)}" class="iemfit-heatmap-body"></div>
@@ -11921,6 +12053,7 @@ function _renderIemDetail(iemId, container) {
         <div class="iemfit-detail-section">
           <div class="iemfit-detail-section-hdr">
             <span class="iemfit-detail-section-title">Weak Genre Coverage</span>
+            <span class="iemfit-detail-avg" id="iemfit-weak-avg-${esc(iemId)}">Avg —</span>
             <span class="iemfit-detail-section-hint">Genres where this IEM is the weakest match for your library</span>
           </div>
           <div id="iemfit-bs-${esc(iemId)}" class="iemfit-bs-body"></div>
@@ -11938,7 +12071,38 @@ function _renderIemDetail(iemId, container) {
       </div>
     </div>`;
 
-  _renderIemFRPanel(iemId, null); // also drives heatmap + blindspot
+  _renderIemFRPanel(iemId); // also drives heatmap + blindspot, preserving saved PEQ
+}
+
+function _updateIemSectionAverages(iemId, peqScores12 = null) {
+  const genreAvgEl = document.getElementById(`iemfit-genre-avg-${iemId}`);
+  const weakAvgEl = document.getElementById(`iemfit-weak-avg-${iemId}`);
+  if (!genreAvgEl && !weakAvgEl) return;
+  if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) {
+    if (genreAvgEl) genreAvgEl.textContent = 'Avg —';
+    if (weakAvgEl) weakAvgEl.textContent = 'Avg —';
+    return;
+  }
+
+  const scores = _iemFitMatrixData.matrix
+    .map(row => {
+      const factoryScore = ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null;
+      const peqScore = peqScores12 ? _recomputeGenreScore(row.fingerprint || {}, peqScores12) : null;
+      return peqScore !== null ? peqScore : factoryScore;
+    })
+    .filter(v => v !== null && Number.isFinite(v));
+
+  if (!scores.length) {
+    if (genreAvgEl) genreAvgEl.textContent = 'Avg —';
+    if (weakAvgEl) weakAvgEl.textContent = 'Avg —';
+    return;
+  }
+
+  const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+  const weakSlice = [...scores].sort((a, b) => a - b).slice(0, Math.min(10, scores.length));
+  const weakAvg = weakSlice.reduce((a, b) => a + b, 0) / weakSlice.length;
+  if (genreAvgEl) genreAvgEl.textContent = `Avg ${avg.toFixed(0)}%`;
+  if (weakAvgEl) weakAvgEl.textContent = `Avg ${weakAvg.toFixed(0)}%`;
 }
 
 async function _renderIemFRPanel(iemId, activePeqId) {
@@ -11948,7 +12112,10 @@ async function _renderIemFRPanel(iemId, activePeqId) {
   if (!canvas) return;
 
   // Track active PEQ
-  if (activePeqId !== undefined) _iemFitPeqState[iemId] = activePeqId || null;
+  if (activePeqId !== undefined) {
+    _iemFitPeqState[iemId] = activePeqId || null;
+    _saveIemFitUiState();
+  }
   const peqId = _iemFitPeqState[iemId] || null;
 
   // Fetch PEQ profiles + optional 12-band scores on first open.
@@ -12059,6 +12226,7 @@ async function _renderIemFRPanel(iemId, activePeqId) {
     if (r.ok) {
       const gd = await r.json();
       if (gd.selected_source_id) _iemFitSourceState[iemId] = gd.selected_source_id;
+      if (gd.selected_source_id) _saveIemFitUiState();
       // Filter out baselines — keep only L, R, and PEQ overlay curves
       curves = (gd.curves || []).filter(c => c.id && !c.id.startsWith('baseline-'));
     }
@@ -12100,6 +12268,8 @@ async function _renderIemFRPanel(iemId, activePeqId) {
   const activePeqVariant = peqId ? peqVariants.find(v => v.peq_id === peqId) : null;
   const peqScores12 = activePeqVariant ? activePeqVariant.scores : null;
   _iemFitActiveScores12[iemId] = peqScores12 || null;
+  _updateIemSummaryScore(iemId, peqScores12 || null);
+  _updateIemSectionAverages(iemId, peqScores12 || null);
   _renderIemHeatmapPanel(iemId, peqScores12);
   _renderIemBlindspotPanel(iemId, peqScores12);
 }
@@ -12201,15 +12371,19 @@ function _renderIemBlindspotPanel(iemId, peqScores12 = null) {
 
 // Controls
 async function iemFitChangePeq(iemId, peqId) {
+  _iemFitPeqState[iemId] = peqId || null;
+  _saveIemFitUiState();
   await _renderIemFRPanel(iemId, peqId || null);
 }
 async function iemFitChangeSource(iemId, sourceId) {
   _iemFitSourceState[iemId] = sourceId || null;
+  _saveIemFitUiState();
   await _renderIemFRPanel(iemId, _iemFitPeqState[iemId] || null);
 }
 function iemFitChangeGenre() {} // legacy stub — kept for safety
 async function iemFitChangeGenreOverlay(iemId, genre) {
   _iemFitGenreState[iemId] = genre || null;
+  _saveIemFitUiState();
   await _renderIemFRPanel(iemId, _iemFitPeqState[iemId] || null);
 }
 async function iemFitAddGenreToHeatmap(iemId) {
@@ -12379,6 +12553,7 @@ function changeGearFitSort() {}
 
 let _tagEditorTrackId   = null;
 let _tagEditorOriginal  = {};
+let _pendingTagEdits    = 0; // incremented on any tag save; resets when Insights view is loaded
 let _albumTagOriginal   = {};
 let _artistRenameOriginal = '';
 
@@ -12400,6 +12575,9 @@ function _getTagEditorValues() {
     track_number: document.getElementById('te-track-number')?.value.trim() ?? '',
     year:         document.getElementById('te-year')?.value.trim()         ?? '',
     genre:        document.getElementById('te-genre')?.value.trim()        ?? '',
+    disc_number:  document.getElementById('te-disc-number')?.value.trim()  ?? '',
+    composer:     document.getElementById('te-composer')?.value.trim()     ?? '',
+    comment:      document.getElementById('te-comment')?.value.trim()      ?? '',
   };
 }
 function _tagEditorDirty() {
@@ -12449,7 +12627,7 @@ async function openTagEditor(trackId) {
   btn.textContent = 'Loading…';
 
   // Disable inputs and show modal with loading pulse
-  const inputIds = ['te-title','te-artist','te-album-artist','te-album','te-track-number','te-year','te-genre'];
+  const inputIds = ['te-title','te-artist','te-album-artist','te-album','te-track-number','te-year','te-genre','te-disc-number','te-composer','te-comment'];
   inputIds.forEach(id => { const el = document.getElementById(id); if (el) { el.value = ''; el.disabled = true; } });
   document.getElementById('tag-editor-modal').style.display = 'flex';
 
@@ -12479,6 +12657,9 @@ async function openTagEditor(trackId) {
     document.getElementById('te-track-number').value = t.track_number || '';
     document.getElementById('te-year').value         = t.year         || '';
     document.getElementById('te-genre').value        = t.genre        || '';
+    document.getElementById('te-disc-number').value  = t.disc_number  || '';
+    document.getElementById('te-composer').value     = t.composer     || '';
+    document.getElementById('te-comment').value      = t.comment      || '';
 
     _tagEditorOriginal = _getTagEditorValues();
     inputIds.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
@@ -12536,6 +12717,11 @@ async function saveTagEditor() {
     document.getElementById('te-track-number').focus();
     return;
   }
+  if (!_validateTrackNum(cur.disc_number)) {
+    _showTagError('te-error', 'Disc number must be a number or "N/M" format (e.g. 1 or 1/2).');
+    document.getElementById('te-disc-number').focus();
+    return;
+  }
 
   // Only send fields that actually changed (empty = skip, not clear)
   const changes = {};
@@ -12553,6 +12739,7 @@ async function saveTagEditor() {
 
   try {
     await api(`/library/tracks/${_tagEditorTrackId}/tags`, { method: 'PUT', body: changes });
+    _pendingTagEdits++;
     toast('Tags saved');
     document.getElementById('tag-editor-modal').style.display = 'none';
     _tagEditorTrackId = null; _tagEditorOriginal = {};
@@ -12680,6 +12867,7 @@ async function saveAlbumTags() {
       toast(`Saved ${result.updated}/${result.total} tracks`, 4000);
       btn.disabled = false; btn.textContent = 'Save Tags';
     } else {
+      _pendingTagEdits += result.updated;
       toast(`Album tags saved (${result.updated} track${result.updated !== 1 ? 's' : ''})`);
       document.getElementById('album-tag-modal').style.display = 'none';
       _albumTagOriginal = {};

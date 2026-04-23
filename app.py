@@ -1291,11 +1291,40 @@ def get_tracks():
     return jsonify(tracks)
 
 
+def _read_file_only_tags(path: Path) -> dict:
+    """Read composer and comment directly from the audio file (not stored in SQLite)."""
+    result = {'composer': '', 'comment': ''}
+    try:
+        ext = path.suffix.lower()
+        if ext == '.flac':
+            audio = FLAC(str(path))
+            tags = audio.tags or {}
+            result['composer'] = str(tags.get('COMPOSER', [''])[0])
+            result['comment']  = str(tags.get('COMMENT',  [''])[0])
+        elif ext == '.mp3':
+            from mutagen.id3 import ID3
+            tags = ID3(str(path))
+            tcom = tags.get('TCOM')
+            comm = tags.get('COMM')
+            result['composer'] = str(tcom) if tcom else ''
+            result['comment']  = comm.text[0] if comm and comm.text else ''
+        elif ext in ('.m4a', '.mp4', '.aac'):
+            audio = MP4(str(path))
+            tags = audio.tags or {}
+            result['composer'] = str(tags.get('\xa9wrt', [''])[0])
+            result['comment']  = str(tags.get('\xa9cmt', [''])[0])
+    except Exception:
+        pass
+    return result
+
+
 @app.route('/api/library/tracks/<track_id>', methods=['GET'])
 def get_track_by_id(track_id):
     t = _db.db_get_track(track_id)
     if not t:
         return jsonify({'error': 'Track not found'}), 404
+    abs_path = get_music_base() / Path(t['path'])
+    t.update(_read_file_only_tags(abs_path))
     return jsonify(t)
 
 
