@@ -1527,38 +1527,65 @@
               <div class="sync-list" id="sync-list-warnings"></div>
             </div>
 
-            <div id="sync-section-local" class="sync-section">
+            <div id="sync-section-to-device" class="sync-section">
               <div class="sync-section-hdr">
                 <div class="sync-section-hdr-left">
-                  <button class="sync-accordion-toggle" id="sync-toggle-local" onclick="App.toggleSyncSection('local')" aria-controls="sync-list-local" aria-expanded="false" title="Expand section">
+                  <button class="sync-accordion-toggle" id="sync-toggle-to-device" onclick="App.toggleSyncSection('to-device')" aria-controls="sync-list-to-device" aria-expanded="false" title="Expand section">
                     <span class="sync-accordion-chevron" aria-hidden="true"></span>
-                    <span class="sync-section-title sync-section-title--add" id="sync-local-title">Tracks to Add</span>
+                    <span class="sync-section-title sync-section-title--add" id="sync-to-device-title">New in Library → Add to DAP</span>
                   </button>
-                  <span class="sync-count-pill" id="sync-local-count">0</span>
+                  <span class="sync-count-pill" id="sync-to-device-count">0</span>
                 </div>
                 <label class="sync-check-all">
-                  <input type="checkbox" id="chk-all-local" onchange="App.syncToggleAll('local', this.checked)" checked />
+                  <input type="checkbox" id="chk-all-to-device" onchange="App.syncToggleAll('to-device', this.checked)" checked />
                   Select all
                 </label>
               </div>
-              <div class="sync-list" id="sync-list-local"></div>
+              <div class="sync-list" id="sync-list-to-device"></div>
             </div>
 
-            <div id="sync-section-device" class="sync-section">
+            <div id="sync-section-library-deleted" class="sync-section">
               <div class="sync-section-hdr">
                 <div class="sync-section-hdr-left">
-                  <button class="sync-accordion-toggle" id="sync-toggle-device" onclick="App.toggleSyncSection('device')" aria-controls="sync-list-device" aria-expanded="false" title="Expand section">
+                  <button class="sync-accordion-toggle" id="sync-toggle-library-deleted" onclick="App.toggleSyncSection('library-deleted')" aria-controls="sync-list-library-deleted" aria-expanded="false" title="Expand section">
                     <span class="sync-accordion-chevron" aria-hidden="true"></span>
-                    <span class="sync-section-title sync-section-title--remove" id="sync-device-title">Tracks to Remove</span>
+                    <span class="sync-section-title sync-section-title--remove" id="sync-library-deleted-title">Deleted from Library (on DAP)</span>
                   </button>
-                  <span class="sync-count-pill" id="sync-device-count">0</span>
+                  <span class="sync-count-pill" id="sync-library-deleted-count">0</span>
                 </div>
+                <select id="sync-bulk-action-library-deleted" class="sync-bulk-action" onchange="App.syncSectionBulkActionChanged('library-deleted', this.value)">
+                  <option value="keep_on_dap">Keep on DAP</option>
+                  <option value="delete_on_dap">Delete on DAP</option>
+                  <option value="dont_remind">Don't remind me</option>
+                </select>
                 <label class="sync-check-all">
-                  <input type="checkbox" id="chk-all-device" onchange="App.syncToggleAll('device', this.checked)" checked />
+                  <input type="checkbox" id="chk-all-library-deleted" onchange="App.syncToggleAll('library-deleted', this.checked)" checked />
                   Select all
                 </label>
               </div>
-              <div class="sync-list" id="sync-list-device"></div>
+              <div class="sync-list" id="sync-list-library-deleted"></div>
+            </div>
+
+            <div id="sync-section-device-only" class="sync-section">
+              <div class="sync-section-hdr">
+                <div class="sync-section-hdr-left">
+                  <button class="sync-accordion-toggle" id="sync-toggle-device-only" onclick="App.toggleSyncSection('device-only')" aria-controls="sync-list-device-only" aria-expanded="false" title="Expand section">
+                    <span class="sync-accordion-chevron" aria-hidden="true"></span>
+                    <span class="sync-section-title sync-section-title--remove" id="sync-device-only-title">On DAP only (not in Library)</span>
+                  </button>
+                  <span class="sync-count-pill" id="sync-device-only-count">0</span>
+                </div>
+                <select id="sync-bulk-action-device-only" class="sync-bulk-action" onchange="App.syncSectionBulkActionChanged('device-only', this.value)">
+                  <option value="copy_to_library">Copy to Library</option>
+                  <option value="delete_on_dap">Delete on DAP</option>
+                  <option value="dont_remind">Don't remind me</option>
+                </select>
+                <label class="sync-check-all">
+                  <input type="checkbox" id="chk-all-device-only" onchange="App.syncToggleAll('device-only', this.checked)" checked />
+                  Select all
+                </label>
+              </div>
+              <div class="sync-list" id="sync-list-device-only"></div>
             </div>
 
             <div id="sync-section-playlists" class="sync-section">
@@ -1576,6 +1603,28 @@
                 </label>
               </div>
               <div class="sync-list" id="sync-list-playlists"></div>
+            </div>
+
+            <div id="sync-section-ignored" class="sync-section">
+              <div class="sync-section-hdr">
+                <div class="sync-section-hdr-left">
+                  <button class="sync-accordion-toggle" id="sync-toggle-ignored" onclick="App.toggleSyncSection('ignored')" aria-controls="sync-list-ignored" aria-expanded="false" title="Expand section">
+                    <span class="sync-accordion-chevron" aria-hidden="true"></span>
+                    <span class="sync-section-title" id="sync-ignored-title">Skipped tracks (ignored)</span>
+                  </button>
+                  <span class="sync-count-pill" id="sync-ignored-count">0</span>
+                </div>
+                <label class="sync-check-all">
+                  <input type="checkbox" id="chk-all-ignored" onchange="App.syncToggleAll('ignored', this.checked)" />
+                  Un-ignore all
+                </label>
+              </div>
+              <div class="sync-list" id="sync-list-ignored"></div>
+            </div>
+
+            <div id="sync-rescan-required" class="sync-rescan-required" style="display:none">
+              <span>Some skipped tracks were un-ignored. Re-run scan to refresh active changes before syncing.</span>
+              <button class="btn-secondary" onclick="App.syncScanAgain()">Re-scan</button>
             </div>
 
             <div id="sync-space-summary" class="sync-space-summary" style="display:block"></div>

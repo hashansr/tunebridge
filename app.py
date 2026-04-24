@@ -331,6 +331,10 @@ sync_state = {
     'total': 0,
     'local_only': [],
     'device_only': [],
+    'to_device_add': [],
+    'library_deleted_on_source': [],
+    'device_only_not_in_library': [],
+    'ignored_tracks': [],
     'warnings': [],
     'errors': [],
     'current': '',
@@ -343,6 +347,9 @@ sync_state = {
     'music_out_of_sync_count': 0,
     'music_to_add_count': 0,
     'music_to_remove_count': 0,
+    'music_to_remove_library_deleted_count': 0,
+    'music_to_remove_device_only_count': 0,
+    'ignored_count': 0,
     'space_available_bytes': None,
     'space_total_bytes': None,
     'space_required_bytes': 0,
@@ -5310,6 +5317,12 @@ def export_to_device():
 # ── Music Sync ────────────────────────────────────────────────────────────────
 
 SYNC_EXTENSIONS = {'.flac', '.mp3', '.m4a', '.aac', '.mp4', '.wav', '.ogg', '.opus', '.wv', '.aiff', '.aif', '.ape', '.wma', '.alac'}
+SYNC_DISCREPANCY_LIBRARY_DELETED = 'library_deleted_on_source'
+SYNC_DISCREPANCY_DEVICE_ONLY = 'device_only_not_in_library'
+SYNC_IGNORE_TYPES = {
+    SYNC_DISCREPANCY_LIBRARY_DELETED,
+    SYNC_DISCREPANCY_DEVICE_ONLY,
+}
 SYNC_SKIP_DIR_NAMES = {
     '.fseventsd',
     '.spotlight-v100',
@@ -5323,6 +5336,63 @@ SYNC_SKIP_DIR_NAMES = {
 
 def _normalize_rel(path):
     return str(path or '').replace('\\', '/').strip('/')
+
+
+def _sync_rel_key(path):
+    return _normalize_rel(path).casefold()
+
+
+def _normalize_sync_ignore_row(row):
+    rel_path = _normalize_rel((row or {}).get('rel_path'))
+    discrepancy_type = str((row or {}).get('discrepancy_type') or '').strip()
+    if not rel_path or discrepancy_type not in SYNC_IGNORE_TYPES:
+        return None
+    out = {
+        'rel_path': rel_path,
+        'rel_key': _sync_rel_key(rel_path),
+        'discrepancy_type': discrepancy_type,
+        'note': str((row or {}).get('note') or '').strip(),
+    }
+    return out
+
+
+def _list_sync_ignored_rows(dap_id):
+    rows = _db.db_list_sync_ignored_discrepancies(dap_id)
+    out = []
+    for row in rows:
+        norm = _normalize_sync_ignore_row(row)
+        if norm:
+            out.append(norm)
+    return out
+
+
+def _sync_ignored_key_set(dap_id):
+    return {
+        (str(row.get('discrepancy_type') or ''), str(row.get('rel_key') or ''))
+        for row in _list_sync_ignored_rows(dap_id)
+    }
+
+
+def _upsert_sync_ignored_rows(dap_id, rows):
+    clean = []
+    for row in (rows or []):
+        norm = _normalize_sync_ignore_row(row)
+        if norm:
+            clean.append(norm)
+    if clean:
+        _db.db_upsert_sync_ignored_discrepancies(dap_id, clean)
+    return clean
+
+
+def _remove_sync_ignored_rows(dap_id, rows):
+    clean = []
+    for row in (rows or []):
+        norm = _normalize_sync_ignore_row(row)
+        if norm:
+            clean.append(norm)
+    if clean:
+        _db.db_remove_sync_ignored_discrepancies(dap_id, clean)
+    return clean
 
 _SYNC_APOSTROPHE_CHARS = "'’`´ʼʻ"
 _SYNC_COMPAT_TRANSLATE = str.maketrans({
@@ -5693,7 +5763,7 @@ def _stat_signature(path: Path):
         return None, None
 
 
-def _compute_sync_diff_for_dap(dap):
+def _compute_sync_diff_for_dap(dap, ignored_keys=None):
     """Compute music sync diff for a DAP profile and return summary payload."""
     if not dap:
         raise RuntimeError('DAP not found')
@@ -5715,6 +5785,7 @@ def _compute_sync_diff_for_dap(dap):
         for mk in _sync_match_keys(rel):
             device_by_match.setdefault(mk, []).append(rel.casefold())
 
+    ignored_lookup = ignored_keys if isinstance(ignored_keys, set) else _sync_ignored_key_set(dap_id)
     device_keys = set(device_map.keys())
     manifest_records = _get_dap_sync_manifest(dap_id)
     manifest_by_local = {}
@@ -5734,8 +5805,29 @@ def _compute_sync_diff_for_dap(dap):
     local_only_reasons = {}
     warnings = []
     target_collisions = set()
-    device_only = []
-    device_only_reasons = {}
+    local_live_rel_keys = {str(e.get('local_rel') or '').casefold() for e in track_entries}
+    device_only_candidates = []
+    library_deleted_on_source = []
+    library_deleted_reasons = {}
+    device_only_not_in_library = []
+    device_only_not_in_library_reasons = {}
+    ignored_tracks = []
+
+    def _sync_row(rel_path, reason, discrepancy_type, default_action, available_actions, ignored=False):
+        rel = _normalize_rel(rel_path)
+        parts = rel.split('/') if rel else []
+        filename = parts[-1] if parts else rel
+        folder = '/'.join(parts[:-1]) if len(parts) > 1 else ''
+        return {
+            'rel_path': rel,
+            'filename': filename,
+            'folder': folder,
+            'reason': str(reason or ''),
+            'discrepancy_type': discrepancy_type,
+            'default_action': default_action,
+            'available_actions': [str(a) for a in (available_actions or []) if str(a).strip()],
+            'ignored': bool(ignored),
+        }
 
     for e in track_entries:
         local_key = e['local_rel'].casefold()
@@ -5854,10 +5946,38 @@ def _compute_sync_diff_for_dap(dap):
             continue
         if any(mk in expected_match_keys for mk in _sync_match_keys(rel)):
             continue
-        device_only.append(rel)
-    device_only = sorted(set(device_only))
-    for rel in device_only:
-        device_only_reasons[rel] = 'Present on device only (not found in local library scan)'
+        device_only_candidates.append(rel)
+    device_only_candidates = sorted(set(device_only_candidates))
+    for rel in device_only_candidates:
+        rel_key = _sync_rel_key(rel)
+        manifest_entry = manifest_records.get(rel_key) or {}
+        manifest_local_rel = _normalize_rel(manifest_entry.get('local_rel'))
+        had_local_source = bool(manifest_local_rel)
+        local_still_exists = bool(manifest_local_rel) and (manifest_local_rel.casefold() in local_live_rel_keys)
+        if had_local_source and not local_still_exists:
+            discrepancy_type = SYNC_DISCREPANCY_LIBRARY_DELETED
+            reason = 'Deleted from local library but still present on device'
+            row = _sync_row(
+                rel, reason, discrepancy_type, 'keep_on_dap',
+                ['keep_on_dap', 'delete_on_dap', 'dont_remind']
+            )
+            if (discrepancy_type, rel_key) in ignored_lookup:
+                ignored_tracks.append({**row, 'ignored': True})
+            else:
+                library_deleted_on_source.append(rel)
+                library_deleted_reasons[rel] = reason
+        else:
+            discrepancy_type = SYNC_DISCREPANCY_DEVICE_ONLY
+            reason = 'Present on device only (not found in local library scan)'
+            row = _sync_row(
+                rel, reason, discrepancy_type, 'copy_to_library',
+                ['copy_to_library', 'delete_on_dap', 'dont_remind']
+            )
+            if (discrepancy_type, rel_key) in ignored_lookup:
+                ignored_tracks.append({**row, 'ignored': True})
+            else:
+                device_only_not_in_library.append(rel)
+                device_only_not_in_library_reasons[rel] = reason
 
     # Keep only current device-file keys for this DAP and refresh verified entries.
     _update_dap_sync_manifest(
@@ -5918,9 +6038,56 @@ def _compute_sync_diff_for_dap(dap):
         extra = len(warnings) - 250
         warnings = warnings[:250] + [f'...and {extra} more issue(s).']
 
+    to_device_add_rows = [
+        _sync_row(
+            rel,
+            str(local_only_reasons.get(rel) or 'Missing on device at destination path'),
+            'to_device_add',
+            'sync_to_dap',
+            ['sync_to_dap', 'skip'],
+        )
+        for rel in local_only
+    ]
+    library_deleted_rows = [
+        _sync_row(
+            rel,
+            str(library_deleted_reasons.get(rel) or 'Deleted from local library but still present on device'),
+            SYNC_DISCREPANCY_LIBRARY_DELETED,
+            'keep_on_dap',
+            ['keep_on_dap', 'delete_on_dap', 'dont_remind'],
+        )
+        for rel in sorted(library_deleted_on_source)
+    ]
+    device_only_rows = [
+        _sync_row(
+            rel,
+            str(device_only_not_in_library_reasons.get(rel) or 'Present on device only (not found in local library scan)'),
+            SYNC_DISCREPANCY_DEVICE_ONLY,
+            'copy_to_library',
+            ['copy_to_library', 'delete_on_dap', 'dont_remind'],
+        )
+        for rel in sorted(device_only_not_in_library)
+    ]
+    ignored_tracks = sorted(
+        ignored_tracks,
+        key=lambda row: (
+            str(row.get('discrepancy_type') or ''),
+            str(row.get('rel_path') or '').casefold(),
+        )
+    )
+    active_device_only_paths = sorted(library_deleted_on_source + device_only_not_in_library)
+    device_only_reasons = {}
+    device_only_reasons.update(library_deleted_reasons)
+    device_only_reasons.update(device_only_not_in_library_reasons)
+    music_out_of_sync_count = len(local_only) + len(library_deleted_on_source) + len(device_only_not_in_library)
+
     return {
         'local_only': local_only,
-        'device_only': device_only,
+        'device_only': active_device_only_paths,
+        'to_device_add': to_device_add_rows,
+        'library_deleted_on_source': library_deleted_rows,
+        'device_only_not_in_library': device_only_rows,
+        'ignored_tracks': ignored_tracks,
         'warnings': warnings,
         'local_copy_map': local_copy_map,
         'local_only_sizes': local_only_sizes,
@@ -5928,18 +6095,25 @@ def _compute_sync_diff_for_dap(dap):
         'local_only_existing_sizes': local_only_existing_sizes,
         'local_only_reasons': local_only_reasons,
         'device_only_reasons': device_only_reasons,
-        'total': len(local_only) + len(device_only),
-        'music_out_of_sync_count': len(local_only) + len(device_only),
+        'library_deleted_reasons': library_deleted_reasons,
+        'device_only_not_in_library_reasons': device_only_not_in_library_reasons,
+        'total': music_out_of_sync_count,
+        'music_out_of_sync_count': music_out_of_sync_count,
         'music_to_add_count': len(local_only),
-        'music_to_remove_count': len(device_only),
+        'music_to_remove_count': len(active_device_only_paths),
+        'music_to_remove_library_deleted_count': len(library_deleted_on_source),
+        'music_to_remove_device_only_count': len(device_only_not_in_library),
+        'ignored_count': len(ignored_tracks),
         'space_available_bytes': available_bytes,
         'space_total_bytes': total_bytes,
         'space_required_bytes': required_bytes,
         'space_shortfall_bytes': shortfall_bytes,
         'space_ok': space_ok,
         'message': (
-            f'{len(local_only)} file(s) to copy to device, '
-            f'{len(device_only)} file(s) to copy to local'
+            f'{len(local_only)} to device, '
+            f'{len(device_only_not_in_library)} device-only, '
+            f'{len(library_deleted_on_source)} deleted-from-library, '
+            f'{len(ignored_tracks)} ignored'
         ),
     }
 
@@ -6064,6 +6238,10 @@ def sync_scan():
         'total': 0,
         'local_only': [],
         'device_only': [],
+        'to_device_add': [],
+        'library_deleted_on_source': [],
+        'device_only_not_in_library': [],
+        'ignored_tracks': [],
         'warnings': [],
         'errors': [],
         'current': '',
@@ -6076,6 +6254,9 @@ def sync_scan():
         'music_out_of_sync_count': 0,
         'music_to_add_count': 0,
         'music_to_remove_count': 0,
+        'music_to_remove_library_deleted_count': 0,
+        'music_to_remove_device_only_count': 0,
+        'ignored_count': 0,
         'space_available_bytes': None,
         'space_total_bytes': None,
         'space_required_bytes': 0,
@@ -6094,7 +6275,12 @@ def sync_scan():
             if not dap:
                 raise RuntimeError('DAP not found')
             sync_state['current'] = 'Scanning device…'
-            diff = _compute_sync_diff_for_dap(dap)
+            ignored_rows = _list_sync_ignored_rows(dap_id)
+            ignored_keys = {
+                (str(r.get('discrepancy_type') or ''), str(r.get('rel_key') or ''))
+                for r in ignored_rows
+            }
+            diff = _compute_sync_diff_for_dap(dap, ignored_keys=ignored_keys)
             playlists_out = _playlist_sync_candidates_for_dap(dap)
             stale_count, never_exported = _playlist_sync_counts_for_dap(dap)
 
@@ -6102,6 +6288,10 @@ def sync_scan():
                 'status': 'ready',
                 'local_only': diff['local_only'],
                 'device_only': diff['device_only'],
+                'to_device_add': diff.get('to_device_add', []),
+                'library_deleted_on_source': diff.get('library_deleted_on_source', []),
+                'device_only_not_in_library': diff.get('device_only_not_in_library', []),
+                'ignored_tracks': diff.get('ignored_tracks', []),
                 'warnings': diff['warnings'],
                 'local_copy_map': diff['local_copy_map'],
                 'local_only_sizes': diff['local_only_sizes'],
@@ -6114,6 +6304,9 @@ def sync_scan():
                 'music_out_of_sync_count': diff['music_out_of_sync_count'],
                 'music_to_add_count': diff['music_to_add_count'],
                 'music_to_remove_count': diff['music_to_remove_count'],
+                'music_to_remove_library_deleted_count': diff.get('music_to_remove_library_deleted_count', 0),
+                'music_to_remove_device_only_count': diff.get('music_to_remove_device_only_count', 0),
+                'ignored_count': diff.get('ignored_count', 0),
                 'space_available_bytes': diff['space_available_bytes'],
                 'space_total_bytes': diff['space_total_bytes'],
                 'space_required_bytes': diff['space_required_bytes'],
@@ -6151,6 +6344,66 @@ def sync_status_route():
     return jsonify(sync_state)
 
 
+@app.route('/api/sync/ignored')
+def sync_ignored_list_route():
+    dap_id = str(request.args.get('dap_id') or '').strip()
+    if not dap_id:
+        return jsonify({'error': 'dap_id required'}), 400
+    rows = _list_sync_ignored_rows(dap_id)
+    return jsonify({'dap_id': dap_id, 'rows': rows, 'count': len(rows)})
+
+
+@app.route('/api/sync/ignored', methods=['POST'])
+def sync_ignored_upsert_route():
+    data = request.json or {}
+    dap_id = str(data.get('dap_id') or '').strip()
+    if not dap_id:
+        return jsonify({'error': 'dap_id required'}), 400
+    rows = data.get('rows') or data.get('ignore_upserts') or []
+    clean = _upsert_sync_ignored_rows(dap_id, rows)
+    return jsonify({'ok': True, 'dap_id': dap_id, 'updated': len(clean)})
+
+
+@app.route('/api/sync/ignored', methods=['DELETE'])
+def sync_ignored_delete_route():
+    data = request.json or {}
+    dap_id = str(data.get('dap_id') or '').strip()
+    if not dap_id:
+        return jsonify({'error': 'dap_id required'}), 400
+    rows = data.get('rows') or data.get('ignore_removals') or []
+    clean = _remove_sync_ignored_rows(dap_id, rows)
+    return jsonify({'ok': True, 'dap_id': dap_id, 'removed': len(clean)})
+
+
+def _path_within_root(root: Path, candidate: Path):
+    try:
+        candidate.resolve().relative_to(root.resolve())
+        return True
+    except Exception:
+        return False
+
+
+def _safe_delete_device_rel_file(device_root: Path, rel_path: str):
+    rel = _normalize_rel(rel_path)
+    if not rel:
+        raise RuntimeError('Invalid empty device path')
+    target = (device_root / rel)
+    if not _path_within_root(device_root, target):
+        raise RuntimeError(f'Refusing to delete outside device root: {rel}')
+    if target.exists():
+        if target.is_dir():
+            raise RuntimeError(f'Refusing to delete directory path: {rel}')
+        target.unlink()
+    parent = target.parent
+    root_resolved = device_root.resolve()
+    while parent.exists() and parent != root_resolved:
+        try:
+            parent.rmdir()
+        except OSError:
+            break
+        parent = parent.parent
+
+
 @app.route('/api/sync/execute', methods=['POST'])
 def sync_execute():
     global sync_state
@@ -6158,8 +6411,33 @@ def sync_execute():
         return jsonify({'error': 'Run scan first'}), 400
 
     data = request.json or {}
-    local_paths = data.get('local_paths', [])   # copy local → device (device-relative path keys)
-    device_paths = data.get('device_paths', []) # copy device → local
+    add_to_device_paths = [str(x) for x in (data.get('add_to_device_paths') or data.get('local_paths') or []) if str(x).strip()]
+    copy_to_local_paths = [str(x) for x in (data.get('copy_to_local_paths') or data.get('device_paths') or []) if str(x).strip()]
+    delete_on_device_paths = [str(x) for x in (data.get('delete_on_device_paths') or []) if str(x).strip()]
+    ignore_upserts = data.get('ignore_upserts') or []
+    ignore_removals = data.get('ignore_removals') or []
+    clean_ignore_upserts = []
+    clean_ignore_upsert_seen = set()
+    for row in ignore_upserts:
+        norm = _normalize_sync_ignore_row(row)
+        if not norm:
+            continue
+        key = (norm['discrepancy_type'], norm['rel_key'])
+        if key in clean_ignore_upsert_seen:
+            continue
+        clean_ignore_upsert_seen.add(key)
+        clean_ignore_upserts.append(norm)
+    clean_ignore_removals = []
+    clean_ignore_remove_seen = set()
+    for row in ignore_removals:
+        norm = _normalize_sync_ignore_row(row)
+        if not norm:
+            continue
+        key = (norm['discrepancy_type'], norm['rel_key'])
+        if key in clean_ignore_remove_seen:
+            continue
+        clean_ignore_remove_seen.add(key)
+        clean_ignore_removals.append(norm)
     playlist_ids = [str(x) for x in (data.get('playlist_ids') or []) if str(x).strip()]
     dap_id = sync_state['dap_id']
     device_path = get_dap_music_path(dap_id)
@@ -6167,14 +6445,21 @@ def sync_execute():
     if not device_path or not device_path.exists():
         return jsonify({'error': 'Device not mounted'}), 400
 
-    total = len(local_paths) + len(device_paths) + len(playlist_ids)
+    total = (
+        len(add_to_device_paths)
+        + len(copy_to_local_paths)
+        + len(delete_on_device_paths)
+        + len(clean_ignore_upserts)
+        + len(clean_ignore_removals)
+        + len(playlist_ids)
+    )
     if total == 0:
-        return jsonify({'error': 'No files or playlists selected'}), 400
+        return jsonify({'error': 'No operations selected'}), 400
 
     # Re-check device free space right before copy starts.
     required_selected = 0
     local_only_sizes = sync_state.get('local_only_sizes') or {}
-    for rel in local_paths:
+    for rel in add_to_device_paths:
         try:
             required_selected += int(local_only_sizes.get(rel) or 0)
         except Exception:
@@ -6197,13 +6482,18 @@ def sync_execute():
             'space_shortfall_bytes': shortfall,
         }), 400
 
+    if clean_ignore_upserts:
+        _db.db_upsert_sync_ignored_discrepancies(dap_id, clean_ignore_upserts)
+    if clean_ignore_removals:
+        _db.db_remove_sync_ignored_discrepancies(dap_id, clean_ignore_removals)
+
     sync_state.update({
         'status': 'copying',
         'progress': 0,
         'total': total,
         'errors': [],
         'current': '',
-        'message': f'Copying 0 / {total} files…',
+        'message': f'Syncing 0 / {total} items…',
     })
 
     def do_copy():
@@ -6212,13 +6502,25 @@ def sync_execute():
         progress = 0
         local_copy_map = sync_state.get('local_copy_map') or {}
 
-        for device_rel in local_paths:
+        for row in clean_ignore_upserts:
+            progress += 1
+            sync_state['progress'] = progress
+            sync_state['current'] = f'Ignore saved: {row.get("rel_path")}'
+            sync_state['message'] = f'Syncing {progress} / {total} items…'
+
+        for row in clean_ignore_removals:
+            progress += 1
+            sync_state['progress'] = progress
+            sync_state['current'] = f'Ignore removed: {row.get("rel_path")}'
+            sync_state['message'] = f'Syncing {progress} / {total} items…'
+
+        for device_rel in add_to_device_paths:
             local_rel = local_copy_map.get(device_rel)
             if not local_rel:
                 errors.append(f'{device_rel}: no local source mapping found')
                 progress += 1
                 sync_state['progress'] = progress
-                sync_state['message'] = f'Copying {progress} / {total} files…'
+                sync_state['message'] = f'Syncing {progress} / {total} items…'
                 continue
             src = get_music_base() / local_rel
             dst = device_path / device_rel
@@ -6230,9 +6532,9 @@ def sync_execute():
                 errors.append(f'{device_rel}: {e}')
             progress += 1
             sync_state['progress'] = progress
-            sync_state['message'] = f'Copying {progress} / {total} files…'
+            sync_state['message'] = f'Syncing {progress} / {total} items…'
 
-        for rel in device_paths:
+        for rel in copy_to_local_paths:
             src = device_path / rel
             dst = get_music_base() / rel
             sync_state['current'] = f'← Local: {rel}'
@@ -6243,7 +6545,17 @@ def sync_execute():
                 errors.append(f'{rel}: {e}')
             progress += 1
             sync_state['progress'] = progress
-            sync_state['message'] = f'Copying {progress} / {total} files…'
+            sync_state['message'] = f'Syncing {progress} / {total} items…'
+
+        for rel in delete_on_device_paths:
+            sync_state['current'] = f'✖ Device delete: {rel}'
+            try:
+                _safe_delete_device_rel_file(device_path, rel)
+            except Exception as e:
+                errors.append(f'{rel}: {e}')
+            progress += 1
+            sync_state['progress'] = progress
+            sync_state['message'] = f'Syncing {progress} / {total} items…'
 
         daps_cache = load_daps()
         playlists_cache = load_playlists()
@@ -6298,6 +6610,26 @@ def sync_execute():
             'status': 'done',
             'errors': errors,
             'current': '',
+            'to_device_add': (
+                post_copy_diff.get('to_device_add', [])
+                if isinstance(post_copy_diff, dict) else
+                sync_state.get('to_device_add', [])
+            ),
+            'library_deleted_on_source': (
+                post_copy_diff.get('library_deleted_on_source', [])
+                if isinstance(post_copy_diff, dict) else
+                sync_state.get('library_deleted_on_source', [])
+            ),
+            'device_only_not_in_library': (
+                post_copy_diff.get('device_only_not_in_library', [])
+                if isinstance(post_copy_diff, dict) else
+                sync_state.get('device_only_not_in_library', [])
+            ),
+            'ignored_tracks': (
+                post_copy_diff.get('ignored_tracks', [])
+                if isinstance(post_copy_diff, dict) else
+                sync_state.get('ignored_tracks', [])
+            ),
             'music_out_of_sync_count': (
                 post_copy_diff['music_out_of_sync_count']
                 if isinstance(post_copy_diff, dict) else
@@ -6313,10 +6645,35 @@ def sync_execute():
                 if isinstance(post_copy_diff, dict) else
                 sync_state.get('music_to_remove_count', 0)
             ),
+            'music_to_remove_library_deleted_count': (
+                post_copy_diff.get('music_to_remove_library_deleted_count', 0)
+                if isinstance(post_copy_diff, dict) else
+                sync_state.get('music_to_remove_library_deleted_count', 0)
+            ),
+            'music_to_remove_device_only_count': (
+                post_copy_diff.get('music_to_remove_device_only_count', 0)
+                if isinstance(post_copy_diff, dict) else
+                sync_state.get('music_to_remove_device_only_count', 0)
+            ),
+            'ignored_count': (
+                post_copy_diff.get('ignored_count', 0)
+                if isinstance(post_copy_diff, dict) else
+                sync_state.get('ignored_count', 0)
+            ),
             'playlists_out_of_sync_count': playlist_out,
             'message': (
                 f'Done — {copied} item(s) synced.'
                 + (f' {len(errors)} error(s).' if errors else '')
+                + (
+                    f' {len(clean_ignore_upserts)} ignore rule(s) saved.'
+                    if clean_ignore_upserts else
+                    ''
+                )
+                + (
+                    f' {len(clean_ignore_removals)} ignore rule(s) removed.'
+                    if clean_ignore_removals else
+                    ''
+                )
                 + (f' Could not verify final sync state ({diff_error}).' if diff_error else '')
             ),
         })
@@ -6331,6 +6688,10 @@ def sync_reset():
     sync_state = {
         'status': 'idle', 'device': None, 'message': '',
         'progress': 0, 'total': 0, 'local_only': [], 'device_only': [],
+        'to_device_add': [],
+        'library_deleted_on_source': [],
+        'device_only_not_in_library': [],
+        'ignored_tracks': [],
         'warnings': [], 'errors': [], 'current': '', 'local_copy_map': {},
         'local_only_sizes': {},
         'local_only_copy_sizes': {},
@@ -6340,6 +6701,9 @@ def sync_reset():
         'music_out_of_sync_count': 0,
         'music_to_add_count': 0,
         'music_to_remove_count': 0,
+        'music_to_remove_library_deleted_count': 0,
+        'music_to_remove_device_only_count': 0,
+        'ignored_count': 0,
         'space_available_bytes': None,
         'space_total_bytes': None,
         'space_required_bytes': 0,

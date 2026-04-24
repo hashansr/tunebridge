@@ -53,7 +53,7 @@ def close_conn():
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -81,6 +81,7 @@ _MIGRATIONS: list[tuple] = [
         'ALTER TABLE tracks ADD COLUMN rg_track_peak REAL',
         'ALTER TABLE tracks ADD COLUMN rg_album_peak REAL',
     ]),
+    (5, 'Add sync discrepancy ignore table', None),
 ]
 
 _SCHEMA_SQL = """
@@ -199,6 +200,20 @@ CREATE TABLE IF NOT EXISTS sync_manifest (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sync_manifest_dap ON sync_manifest(dap_id);
+
+-- Per-DAP ignored sync discrepancies ("Don't remind me" state)
+CREATE TABLE IF NOT EXISTS sync_ignored_discrepancies (
+    dap_id            TEXT NOT NULL REFERENCES daps(id) ON DELETE CASCADE,
+    rel_key           TEXT NOT NULL,
+    rel_path          TEXT NOT NULL,
+    discrepancy_type  TEXT NOT NULL,
+    note              TEXT DEFAULT '',
+    created_at        INTEGER NOT NULL DEFAULT 0,
+    updated_at        INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (dap_id, rel_key, discrepancy_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_ignored_dap ON sync_ignored_discrepancies(dap_id);
 
 -- IEMs
 CREATE TABLE IF NOT EXISTS iems (
@@ -1191,6 +1206,77 @@ def db_upsert_sync_manifest(dap_id, records, prune_to_keys=None):
             conn.execute("DELETE FROM sync_manifest WHERE dap_id = ?", (did,))
 
     conn.commit()
+
+
+def db_list_sync_ignored_discrepancies(dap_id):
+    """Return ignored sync discrepancies for one DAP."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT dap_id, rel_key, rel_path, discrepancy_type, note, created_at, updated_at
+           FROM sync_ignored_discrepancies
+           WHERE dap_id = ?
+           ORDER BY discrepancy_type, rel_path COLLATE NOCASE""",
+        (str(dap_id),)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def db_upsert_sync_ignored_discrepancies(dap_id, rows):
+    """
+    Upsert ignored discrepancy rows for one DAP.
+
+    rows: list[dict] with keys: rel_key, rel_path, discrepancy_type, note?
+    """
+    conn = get_conn()
+    did = str(dap_id)
+    now = int(time.time())
+    payload = []
+    for row in (rows or []):
+        rel_key = str((row or {}).get('rel_key') or '').strip()
+        rel_path = str((row or {}).get('rel_path') or '').strip()
+        discrepancy_type = str((row or {}).get('discrepancy_type') or '').strip()
+        if not rel_key or not rel_path or not discrepancy_type:
+            continue
+        note = str((row or {}).get('note') or '').strip()
+        payload.append((did, rel_key, rel_path, discrepancy_type, note, now, now))
+    if not payload:
+        return
+    conn.executemany(
+        """INSERT INTO sync_ignored_discrepancies (
+               dap_id, rel_key, rel_path, discrepancy_type, note, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(dap_id, rel_key, discrepancy_type) DO UPDATE SET
+               rel_path = excluded.rel_path,
+               note = excluded.note,
+               updated_at = excluded.updated_at""",
+        payload
+    )
+    conn.commit()
+
+
+def db_remove_sync_ignored_discrepancies(dap_id, rows):
+    """
+    Remove ignored discrepancy rows for one DAP.
+
+    rows: list[dict] with keys: rel_key, discrepancy_type
+    """
+    conn = get_conn()
+    did = str(dap_id)
+    payload = []
+    for row in (rows or []):
+        rel_key = str((row or {}).get('rel_key') or '').strip()
+        discrepancy_type = str((row or {}).get('discrepancy_type') or '').strip()
+        if not rel_key or not discrepancy_type:
+            continue
+        payload.append((did, rel_key, discrepancy_type))
+    if not payload:
+        return 0
+    conn.executemany(
+        "DELETE FROM sync_ignored_discrepancies WHERE dap_id = ? AND rel_key = ? AND discrepancy_type = ?",
+        payload
+    )
+    conn.commit()
+    return conn.total_changes
 
 
 # ---------------------------------------------------------------------------

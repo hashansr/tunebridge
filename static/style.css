@@ -3002,25 +3002,31 @@ tr.track-selected .track-check-indicator {
 
 /* Step 3: hard-disable nested scroll containers (single modal scroll only) */
 #sync-phase-preview #sync-warnings-wrap,
-#sync-phase-preview #sync-section-local,
-#sync-phase-preview #sync-section-device,
-#sync-phase-preview #sync-section-playlists {
+#sync-phase-preview #sync-section-to-device,
+#sync-phase-preview #sync-section-library-deleted,
+#sync-phase-preview #sync-section-device-only,
+#sync-phase-preview #sync-section-playlists,
+#sync-phase-preview #sync-section-ignored {
   max-height: none !important;
   overflow: visible !important;
 }
 
 #sync-phase-preview #sync-list-warnings,
-#sync-phase-preview #sync-list-local,
-#sync-phase-preview #sync-list-device,
-#sync-phase-preview #sync-list-playlists {
+#sync-phase-preview #sync-list-to-device,
+#sync-phase-preview #sync-list-library-deleted,
+#sync-phase-preview #sync-list-device-only,
+#sync-phase-preview #sync-list-playlists,
+#sync-phase-preview #sync-list-ignored {
   max-height: none !important;
   overflow: visible !important;
 }
 
 #sync-phase-preview #sync-list-warnings::-webkit-scrollbar,
-#sync-phase-preview #sync-list-local::-webkit-scrollbar,
-#sync-phase-preview #sync-list-device::-webkit-scrollbar,
-#sync-phase-preview #sync-list-playlists::-webkit-scrollbar {
+#sync-phase-preview #sync-list-to-device::-webkit-scrollbar,
+#sync-phase-preview #sync-list-library-deleted::-webkit-scrollbar,
+#sync-phase-preview #sync-list-device-only::-webkit-scrollbar,
+#sync-phase-preview #sync-list-playlists::-webkit-scrollbar,
+#sync-phase-preview #sync-list-ignored::-webkit-scrollbar {
   width: 0 !important;
   height: 0 !important;
   display: none !important;
@@ -3100,6 +3106,69 @@ tr.track-selected .track-check-indicator {
   text-transform: uppercase;
   margin-left: 8px;
   white-space: nowrap;
+}
+.sync-file-row--decision {
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+}
+.sync-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: 8px;
+}
+.sync-row-action-btn {
+  border: 1px solid rgba(173, 198, 255, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  padding: 6px 10px;
+  text-transform: capitalize;
+}
+.sync-row-action-btn:hover {
+  border-color: rgba(173, 198, 255, 0.44);
+  color: var(--text-sub);
+}
+.sync-row-action-btn.is-active {
+  border-color: rgba(173, 198, 255, 0.62);
+  background: rgba(173, 198, 255, 0.18);
+  color: #d7e3ff;
+}
+.sync-ignored-tag {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(173, 198, 255, 0.14);
+  color: #c9d9ff;
+}
+.sync-bulk-action {
+  min-width: 150px;
+  max-width: 180px;
+  border-radius: 999px;
+  border: 1px solid rgba(173, 198, 255, 0.28);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-sub);
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.sync-rescan-required {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 4px 0 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  background: rgba(45, 36, 20, 0.25);
+  color: rgba(253, 214, 121, 0.95);
+  font-size: 12px;
 }
 
 .sync-empty {

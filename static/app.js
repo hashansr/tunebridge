@@ -5348,7 +5348,14 @@ let _syncSelectedDapName = 'Selected device';
 let _syncScanRunId = 0;
 let _syncScanInFlight = false;
 let _syncPreviewWarningCount = 0;
-const _syncSectionCollapsed = { local: true, device: true, playlists: true };
+let _syncPreviewModel = null;
+const _syncSectionCollapsed = {
+  'to-device': true,
+  'library-deleted': true,
+  'device-only': true,
+  'playlists': true,
+  'ignored': true,
+};
 
 function _fmtBytes(bytes) {
   const n = Number(bytes);
@@ -5494,6 +5501,7 @@ async function showSync() {
 
   await api('/sync/reset', { method: 'POST' }).catch(() => {});
   _syncLastStatus = null;
+  _syncPreviewModel = null;
   _syncSelectedDapId = '';
   _syncSelectedDapName = 'Selected device';
   _syncScanInFlight = false;
@@ -5566,6 +5574,7 @@ function closeSyncModal() {
   _syncPollTimer = null;
   _syncScanRunId += 1;
   _syncScanInFlight = false;
+  _syncPreviewModel = null;
   _syncSelectedDapId = '';
   _syncSelectedDapName = 'Selected device';
   _syncPreviewWarningCount = 0;
@@ -5638,11 +5647,13 @@ function _syncDeviceNameLabel() {
 
 function _syncUpdatePreviewDirectionLabels() {
   const deviceLabel = _syncDeviceNameLabel();
-  const localTitle = document.getElementById('sync-local-title');
-  const deviceTitle = document.getElementById('sync-device-title');
+  const toDeviceTitle = document.getElementById('sync-to-device-title');
+  const deletedTitle = document.getElementById('sync-library-deleted-title');
+  const deviceOnlyTitle = document.getElementById('sync-device-only-title');
   const playlistTitle = document.getElementById('sync-playlist-title');
-  if (localTitle) localTitle.textContent = `Tracks to Add to ${deviceLabel}`;
-  if (deviceTitle) deviceTitle.textContent = 'Tracks to Add to Local Library';
+  if (toDeviceTitle) toDeviceTitle.textContent = `New in Library → Add to ${deviceLabel}`;
+  if (deletedTitle) deletedTitle.textContent = `Deleted from Library (on ${deviceLabel})`;
+  if (deviceOnlyTitle) deviceOnlyTitle.textContent = `On ${deviceLabel} only (not in Library)`;
   if (playlistTitle) playlistTitle.textContent = `Playlists to Sync to ${deviceLabel}`;
 }
 
@@ -6011,6 +6022,427 @@ async function executeSync() {
   }, 600);
 }
 
+function _syncSectionMapping() {
+  return {
+    'to-device': { wrapperId: 'sync-section-to-device', toggleId: 'sync-toggle-to-device' },
+    'library-deleted': { wrapperId: 'sync-section-library-deleted', toggleId: 'sync-toggle-library-deleted' },
+    'device-only': { wrapperId: 'sync-section-device-only', toggleId: 'sync-toggle-device-only' },
+    'playlists': { wrapperId: 'sync-section-playlists', toggleId: 'sync-toggle-playlists' },
+    'ignored': { wrapperId: 'sync-section-ignored', toggleId: 'sync-toggle-ignored' },
+  };
+}
+
+function _syncApplySectionCollapse(section) {
+  const conf = _syncSectionMapping()[section];
+  if (!conf) return;
+  const wrapper = document.getElementById(conf.wrapperId);
+  const toggle = document.getElementById(conf.toggleId);
+  if (!wrapper || !toggle) return;
+  const collapsed = !!_syncSectionCollapsed[section];
+  wrapper.classList.toggle('is-collapsed', collapsed);
+  toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  toggle.title = collapsed ? 'Expand section' : 'Collapse section';
+}
+
+function toggleSyncSection(section) {
+  if (!_syncSectionMapping()[section]) return;
+  _syncSectionCollapsed[section] = !_syncSectionCollapsed[section];
+  _syncApplySectionCollapse(section);
+}
+
+function _syncInitPreviewModel(status) {
+  const playlistsOut = Array.isArray(status.playlists_out_of_sync) ? status.playlists_out_of_sync : [];
+  return {
+    toDevice: (status.to_device_add || []).map((row) => ({ ...row, selected: true, action: 'sync_to_dap' })),
+    libraryDeleted: (status.library_deleted_on_source || []).map((row) => ({ ...row, selected: true, action: 'keep_on_dap' })),
+    deviceOnly: (status.device_only_not_in_library || []).map((row) => ({ ...row, selected: true, action: 'copy_to_library' })),
+    playlists: playlistsOut.map((pl) => ({
+      id: String(pl.id || ''),
+      name: String(pl.name || 'Playlist'),
+      track_count: Number(pl.track_count || 0),
+      reason: String(pl.reason || ''),
+      selected: true,
+    })),
+    ignored: (status.ignored_tracks || []).map((row) => ({ ...row, selected: false })),
+    rescanRequired: false,
+  };
+}
+
+function _syncRenderActionButtons(section, idx, action, actions) {
+  if (!Array.isArray(actions) || !actions.length) return '';
+  return `<div class="sync-row-actions" role="group" aria-label="Row action">
+    ${actions.map((name) => `
+      <button type="button" class="sync-row-action-btn${action === name ? ' is-active' : ''}" onclick="App.syncRowActionChanged('${section}', ${idx}, '${name}')">${esc(name.replaceAll('_', ' '))}</button>
+    `).join('')}
+  </div>`;
+}
+
+function _syncRenderDecisionRows(section, rows, emptyMessage) {
+  if (!rows.length) return `<div class="sync-empty">${esc(emptyMessage)}</div>`;
+  const deviceLabel = _syncDeviceNameLabel();
+  return rows.map((row, idx) => {
+    const relPath = String(row.rel_path || '');
+    const filename = String(row.filename || relPath.split('/').pop() || relPath);
+    const folder = String(row.folder || '');
+    const reason = String(row.reason || '').trim();
+    let origin = '';
+    if (section === 'to-device' || section === 'library-deleted') origin = `Local Library → ${deviceLabel}`;
+    if (section === 'device-only') origin = `${deviceLabel} → Local Library`;
+    return `<label class="sync-file-row sync-file-row--preview sync-file-row--decision">
+      <input type="checkbox" class="sync-chk sync-chk-${section}" data-index="${idx}" ${row.selected ? 'checked' : ''} onchange="App.syncRowSelectedChanged('${section}', ${idx}, this.checked)" />
+      <div class="sync-file-main">
+        <span class="sync-file-name">${esc(filename)}</span>
+        <span class="sync-file-folder">${esc(folder)}${folder ? '/' : ''}</span>
+        ${reason ? `<span class="sync-file-reason">${esc(reason)}</span>` : ''}
+        <span class="sync-file-origin">${esc(origin)}</span>
+      </div>
+      ${_syncRenderActionButtons(section, idx, String(row.action || ''), row.available_actions || [])}
+    </label>`;
+  }).join('');
+}
+
+function _syncRenderPlaylistRows(rows) {
+  if (!rows.length) return `<div class="sync-empty">No playlists need syncing.</div>`;
+  const deviceLabel = _syncDeviceNameLabel();
+  return rows.map((row, idx) => `
+    <label class="sync-file-row sync-file-row--preview">
+      <input type="checkbox" class="sync-chk sync-chk-playlists" data-index="${idx}" ${row.selected ? 'checked' : ''} onchange="App.syncRowSelectedChanged('playlists', ${idx}, this.checked)" />
+      <div class="sync-file-main">
+        <span class="sync-file-name">${esc(row.name || 'Playlist')}</span>
+        <span class="sync-file-folder">${Number(row.track_count || 0)} track${Number(row.track_count || 0) === 1 ? '' : 's'}</span>
+        ${row.reason ? `<span class="sync-file-reason">${esc(row.reason)}</span>` : ''}
+      </div>
+      <div class="sync-file-origin">Local Playlists → ${esc(deviceLabel)}</div>
+    </label>
+  `).join('');
+}
+
+function _syncRenderIgnoredRows(rows) {
+  if (!rows.length) return `<div class="sync-empty">No ignored tracks on this DAP.</div>`;
+  return rows.map((row, idx) => `
+    <label class="sync-file-row sync-file-row--preview">
+      <input type="checkbox" class="sync-chk sync-chk-ignored" data-index="${idx}" ${row.selected ? 'checked' : ''} onchange="App.syncIgnoredSelectionChanged(${idx}, this.checked)" />
+      <div class="sync-file-main">
+        <span class="sync-file-name">${esc(row.filename || row.rel_path || 'Track')}</span>
+        <span class="sync-file-folder">${esc(row.folder || '')}${row.folder ? '/' : ''}</span>
+        <span class="sync-file-reason">${esc(row.reason || 'Ignored')}</span>
+      </div>
+      <div class="sync-file-origin"><span class="sync-ignored-tag">Ignored</span></div>
+    </label>
+  `).join('');
+}
+
+function _syncBuildExecutePayload() {
+  const add_to_device_paths = [];
+  const copy_to_local_paths = [];
+  const delete_on_device_paths = [];
+  const ignore_upserts = [];
+  const ignore_removals = [];
+  const playlist_ids = [];
+  (_syncPreviewModel?.toDevice || []).forEach((row) => {
+    if (row.selected && row.action === 'sync_to_dap') add_to_device_paths.push(String(row.rel_path || ''));
+  });
+  (_syncPreviewModel?.libraryDeleted || []).forEach((row) => {
+    if (!row.selected) return;
+    if (row.action === 'delete_on_dap') delete_on_device_paths.push(String(row.rel_path || ''));
+    if (row.action === 'dont_remind') ignore_upserts.push({ rel_path: String(row.rel_path || ''), discrepancy_type: 'library_deleted_on_source' });
+  });
+  (_syncPreviewModel?.deviceOnly || []).forEach((row) => {
+    if (!row.selected) return;
+    if (row.action === 'copy_to_library') copy_to_local_paths.push(String(row.rel_path || ''));
+    if (row.action === 'delete_on_dap') delete_on_device_paths.push(String(row.rel_path || ''));
+    if (row.action === 'dont_remind') ignore_upserts.push({ rel_path: String(row.rel_path || ''), discrepancy_type: 'device_only_not_in_library' });
+  });
+  (_syncPreviewModel?.playlists || []).forEach((row) => {
+    if (row.selected && row.id) playlist_ids.push(String(row.id));
+  });
+  (_syncPreviewModel?.ignored || []).forEach((row) => {
+    if (row.selected) ignore_removals.push({ rel_path: String(row.rel_path || ''), discrepancy_type: String(row.discrepancy_type || '') });
+  });
+  return { add_to_device_paths, copy_to_local_paths, delete_on_device_paths, ignore_upserts, ignore_removals, playlist_ids };
+}
+
+function renderSyncPreview(status) {
+  _syncLastStatus = status || null;
+  _syncPreviewModel = _syncInitPreviewModel(status || {});
+  _syncUpdatePreviewDirectionLabels();
+  document.getElementById('sync-list-to-device').innerHTML =
+    _syncRenderDecisionRows('to-device', _syncPreviewModel.toDevice, 'No new local tracks to add.');
+  document.getElementById('sync-list-library-deleted').innerHTML =
+    _syncRenderDecisionRows('library-deleted', _syncPreviewModel.libraryDeleted, 'No deleted-from-library tracks found on device.');
+  document.getElementById('sync-list-device-only').innerHTML =
+    _syncRenderDecisionRows('device-only', _syncPreviewModel.deviceOnly, 'No device-only tracks found.');
+  document.getElementById('sync-list-playlists').innerHTML = _syncRenderPlaylistRows(_syncPreviewModel.playlists);
+  document.getElementById('sync-list-ignored').innerHTML = _syncRenderIgnoredRows(_syncPreviewModel.ignored);
+  document.getElementById('sync-to-device-count').textContent = _syncPreviewModel.toDevice.length;
+  document.getElementById('sync-library-deleted-count').textContent = _syncPreviewModel.libraryDeleted.length;
+  document.getElementById('sync-device-only-count').textContent = _syncPreviewModel.deviceOnly.length;
+  document.getElementById('sync-playlist-count').textContent = _syncPreviewModel.playlists.length;
+  document.getElementById('sync-ignored-count').textContent = _syncPreviewModel.ignored.length;
+
+  const warnings = Array.isArray(status.warnings) ? status.warnings : [];
+  _syncPreviewWarningCount = warnings.length;
+  document.getElementById('sync-warning-count').textContent = warnings.length;
+  document.getElementById('sync-list-warnings').innerHTML = _syncWarningRows(warnings);
+  document.getElementById('sync-warnings-wrap').style.display = 'none';
+
+  document.getElementById('sync-section-to-device').style.display = _syncPreviewModel.toDevice.length ? 'block' : 'none';
+  document.getElementById('sync-section-library-deleted').style.display = _syncPreviewModel.libraryDeleted.length ? 'block' : 'none';
+  document.getElementById('sync-section-device-only').style.display = _syncPreviewModel.deviceOnly.length ? 'block' : 'none';
+  document.getElementById('sync-section-playlists').style.display = _syncPreviewModel.playlists.length ? 'block' : 'none';
+  document.getElementById('sync-section-ignored').style.display = _syncPreviewModel.ignored.length ? 'block' : 'none';
+
+  _syncSectionCollapsed['to-device'] = true;
+  _syncSectionCollapsed['library-deleted'] = true;
+  _syncSectionCollapsed['device-only'] = true;
+  _syncSectionCollapsed['playlists'] = true;
+  _syncSectionCollapsed['ignored'] = true;
+  Object.keys(_syncSectionMapping()).forEach(_syncApplySectionCollapse);
+
+  const deletedBulk = document.getElementById('sync-bulk-action-library-deleted');
+  const deviceOnlyBulk = document.getElementById('sync-bulk-action-device-only');
+  if (deletedBulk) deletedBulk.value = 'keep_on_dap';
+  if (deviceOnlyBulk) deviceOnlyBulk.value = 'copy_to_library';
+  const allToDevice = document.getElementById('chk-all-to-device');
+  const allDeleted = document.getElementById('chk-all-library-deleted');
+  const allDeviceOnly = document.getElementById('chk-all-device-only');
+  const allPlaylists = document.getElementById('chk-all-playlists');
+  const allIgnored = document.getElementById('chk-all-ignored');
+  if (allToDevice) allToDevice.checked = true;
+  if (allDeleted) allDeleted.checked = true;
+  if (allDeviceOnly) allDeviceOnly.checked = true;
+  if (allPlaylists) allPlaylists.checked = true;
+  if (allIgnored) allIgnored.checked = false;
+  syncSelectionChanged();
+  _syncPhase('preview');
+}
+
+function syncSectionBulkActionChanged(section, action) {
+  if (!_syncPreviewModel) return;
+  const rows = section === 'library-deleted'
+    ? _syncPreviewModel.libraryDeleted
+    : (section === 'device-only' ? _syncPreviewModel.deviceOnly : []);
+  rows.forEach((row) => { row.action = action; });
+  if (section === 'library-deleted') {
+    document.getElementById('sync-list-library-deleted').innerHTML =
+      _syncRenderDecisionRows('library-deleted', _syncPreviewModel.libraryDeleted, 'No deleted-from-library tracks found on device.');
+  } else if (section === 'device-only') {
+    document.getElementById('sync-list-device-only').innerHTML =
+      _syncRenderDecisionRows('device-only', _syncPreviewModel.deviceOnly, 'No device-only tracks found.');
+  }
+  syncSelectionChanged();
+}
+
+function syncToggleAll(section, checked) {
+  if (!_syncPreviewModel) return;
+  if (section === 'to-device') {
+    _syncPreviewModel.toDevice.forEach((row) => { row.selected = checked; row.action = 'sync_to_dap'; });
+    document.getElementById('sync-list-to-device').innerHTML =
+      _syncRenderDecisionRows('to-device', _syncPreviewModel.toDevice, 'No new local tracks to add.');
+  } else if (section === 'library-deleted') {
+    const action = String(document.getElementById('sync-bulk-action-library-deleted')?.value || 'keep_on_dap');
+    _syncPreviewModel.libraryDeleted.forEach((row) => { row.selected = checked; row.action = action; });
+    document.getElementById('sync-list-library-deleted').innerHTML =
+      _syncRenderDecisionRows('library-deleted', _syncPreviewModel.libraryDeleted, 'No deleted-from-library tracks found on device.');
+  } else if (section === 'device-only') {
+    const action = String(document.getElementById('sync-bulk-action-device-only')?.value || 'copy_to_library');
+    _syncPreviewModel.deviceOnly.forEach((row) => { row.selected = checked; row.action = action; });
+    document.getElementById('sync-list-device-only').innerHTML =
+      _syncRenderDecisionRows('device-only', _syncPreviewModel.deviceOnly, 'No device-only tracks found.');
+  } else if (section === 'playlists') {
+    _syncPreviewModel.playlists.forEach((row) => { row.selected = checked; });
+    document.getElementById('sync-list-playlists').innerHTML = _syncRenderPlaylistRows(_syncPreviewModel.playlists);
+  } else if (section === 'ignored') {
+    _syncPreviewModel.ignored.forEach((row) => { row.selected = checked; });
+    document.getElementById('sync-list-ignored').innerHTML = _syncRenderIgnoredRows(_syncPreviewModel.ignored);
+  }
+  syncSelectionChanged();
+}
+
+function syncRowSelectedChanged(section, index, checked) {
+  if (!_syncPreviewModel) return;
+  const idx = Number(index);
+  if (!Number.isFinite(idx) || idx < 0) return;
+  if (section === 'to-device' && _syncPreviewModel.toDevice[idx]) _syncPreviewModel.toDevice[idx].selected = !!checked;
+  if (section === 'library-deleted' && _syncPreviewModel.libraryDeleted[idx]) _syncPreviewModel.libraryDeleted[idx].selected = !!checked;
+  if (section === 'device-only' && _syncPreviewModel.deviceOnly[idx]) _syncPreviewModel.deviceOnly[idx].selected = !!checked;
+  if (section === 'playlists' && _syncPreviewModel.playlists[idx]) _syncPreviewModel.playlists[idx].selected = !!checked;
+  syncSelectionChanged();
+}
+
+function syncRowActionChanged(section, index, action) {
+  if (!_syncPreviewModel) return;
+  const idx = Number(index);
+  if (!Number.isFinite(idx) || idx < 0) return;
+  if (section === 'to-device' && _syncPreviewModel.toDevice[idx]) _syncPreviewModel.toDevice[idx].action = action;
+  if (section === 'library-deleted' && _syncPreviewModel.libraryDeleted[idx]) _syncPreviewModel.libraryDeleted[idx].action = action;
+  if (section === 'device-only' && _syncPreviewModel.deviceOnly[idx]) _syncPreviewModel.deviceOnly[idx].action = action;
+  if (section === 'to-device') {
+    document.getElementById('sync-list-to-device').innerHTML =
+      _syncRenderDecisionRows('to-device', _syncPreviewModel.toDevice, 'No new local tracks to add.');
+  } else if (section === 'library-deleted') {
+    document.getElementById('sync-list-library-deleted').innerHTML =
+      _syncRenderDecisionRows('library-deleted', _syncPreviewModel.libraryDeleted, 'No deleted-from-library tracks found on device.');
+  } else if (section === 'device-only') {
+    document.getElementById('sync-list-device-only').innerHTML =
+      _syncRenderDecisionRows('device-only', _syncPreviewModel.deviceOnly, 'No device-only tracks found.');
+  }
+  syncSelectionChanged();
+}
+
+function syncIgnoredSelectionChanged(index, checked) {
+  if (!_syncPreviewModel) return;
+  const idx = Number(index);
+  if (!Number.isFinite(idx) || idx < 0 || !_syncPreviewModel.ignored[idx]) return;
+  _syncPreviewModel.ignored[idx].selected = !!checked;
+  syncSelectionChanged();
+}
+
+function syncSelectionChanged() {
+  const panel = document.getElementById('sync-space-summary');
+  const estTime = document.getElementById('sync-est-time');
+  const status = _syncLastStatus;
+  if (!panel || !status || !_syncPreviewModel) return;
+  const payload = _syncBuildExecutePayload();
+  const localSizes = status.local_only_sizes || {};
+  const required = payload.add_to_device_paths.reduce((sum, rel) => sum + Number(localSizes[rel] || 0), 0);
+  const available = (status.space_available_bytes === null || status.space_available_bytes === undefined)
+    ? null
+    : Number(status.space_available_bytes);
+  const shortfall = (available !== null && required > available) ? (required - available) : 0;
+  const executeBtn = document.getElementById('sync-execute-btn');
+  const unignoreCount = payload.ignore_removals.length;
+  _syncPreviewModel.rescanRequired = unignoreCount > 0;
+  const rescanReq = document.getElementById('sync-rescan-required');
+  if (rescanReq) rescanReq.style.display = _syncPreviewModel.rescanRequired ? '' : 'none';
+
+  const addCount = payload.add_to_device_paths.length;
+  const copyLocalCount = payload.copy_to_local_paths.length;
+  const deleteCount = payload.delete_on_device_paths.length;
+  const playlistCount = payload.playlist_ids.length;
+  const ignoreCount = payload.ignore_upserts.length;
+  const noSelection = addCount === 0 && copyLocalCount === 0 && deleteCount === 0 && playlistCount === 0 && ignoreCount === 0;
+  const tracksLine = noSelection
+    ? 'No operations selected.'
+    : `Selected: ${addCount} add-to-DAP • ${copyLocalCount} copy-to-library • ${deleteCount} delete-on-DAP • ${playlistCount} playlists • ${ignoreCount} ignore`;
+  let spaceLine = '';
+  let className = 'sync-space-summary';
+
+  if (available === null) {
+    spaceLine = `Space check unavailable • Required for add: ${_fmtBytes(required)}`;
+  } else if (shortfall > 0) {
+    spaceLine = `Not enough space • Need ${_fmtBytes(required)}, available ${_fmtBytes(available)} (short by ${_fmtBytes(shortfall)})`;
+    className += ' sync-space-summary--danger';
+  } else {
+    const remaining = Math.max(0, available - required);
+    spaceLine = `Available ${_fmtBytes(available)} • Required ${_fmtBytes(required)} • After sync ${_fmtBytes(remaining)} free`;
+    className += noSelection ? ' sync-space-summary--ok' : ' sync-space-summary--warn';
+  }
+
+  panel.className = className;
+  panel.innerHTML = `<div>${esc(tracksLine)}</div><div>${esc(spaceLine)}</div>`;
+  if (estTime) {
+    if (noSelection) {
+      estTime.textContent = '';
+    } else {
+      const throughputBytesPerSec = 12 * 1024 * 1024;
+      const estSeconds = Math.max(10, Math.round(required / throughputBytesPerSec));
+      const mins = Math.floor(estSeconds / 60);
+      const secs = estSeconds % 60;
+      estTime.textContent = `Est. time ~${mins}m ${secs}s`;
+    }
+  }
+  if (executeBtn) {
+    executeBtn.disabled = shortfall > 0 || _syncPreviewModel.rescanRequired || noSelection;
+    executeBtn.textContent = 'Start Sync';
+    executeBtn.title = _syncPreviewModel.rescanRequired
+      ? 'Re-run scan after un-ignoring tracks'
+      : (shortfall > 0 ? `Not enough space: short by ${_fmtBytes(shortfall)}` : '');
+  }
+}
+
+async function executeSync() {
+  if (!_syncPreviewModel) {
+    toast('Scan first.');
+    return;
+  }
+  const payload = _syncBuildExecutePayload();
+  const opCount = payload.add_to_device_paths.length
+    + payload.copy_to_local_paths.length
+    + payload.delete_on_device_paths.length
+    + payload.ignore_upserts.length
+    + payload.ignore_removals.length
+    + payload.playlist_ids.length;
+
+  if (_syncPreviewModel.rescanRequired) {
+    toast('Re-run scan after un-ignoring skipped tracks.');
+    return;
+  }
+  if (opCount === 0) {
+    toast('No operations selected.');
+    return;
+  }
+  if (payload.delete_on_device_paths.length > 0) {
+    const sample = payload.delete_on_device_paths.slice(0, 6).join('\n');
+    const more = payload.delete_on_device_paths.length > 6 ? `\n...and ${payload.delete_on_device_paths.length - 6} more` : '';
+    const ok = window.confirm(`Delete ${payload.delete_on_device_paths.length} file(s) from device?\n\n${sample}${more}`);
+    if (!ok) return;
+  }
+
+  _syncPhase('copying');
+  const copyMode = document.getElementById('sync-copying-mode');
+  if (copyMode) copyMode.textContent = 'Syncing';
+  document.getElementById('sync-copying-msg').textContent = `Preparing to sync 0 / ${opCount} items…`;
+  _syncSetCopyVisualProgress(0);
+  const copyPctEl = document.getElementById('sync-copy-percent');
+  if (copyPctEl) copyPctEl.textContent = '0%';
+  document.getElementById('sync-copying-current').textContent = '';
+
+  const execRes = await fetch('/api/sync/execute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!execRes.ok) {
+    const err = await execRes.json().catch(() => ({}));
+    if (err.space_required_bytes !== undefined) {
+      toast(`Not enough device space: need ${_fmtBytes(err.space_required_bytes)}, available ${_fmtBytes(err.space_available_bytes)}.`);
+    } else {
+      toast(err.error || 'Sync failed to start.');
+    }
+    _syncPhase('preview');
+    return;
+  }
+
+  clearInterval(_syncPollTimer);
+  _syncPollTimer = setInterval(async () => {
+    const status = await api('/sync/status').catch(() => null);
+    if (!status) return;
+
+    const pct = status.total > 0 ? Math.round((status.progress / status.total) * 100) : 0;
+    _syncSetCopyVisualProgress(pct);
+    if (copyPctEl) copyPctEl.textContent = pct + '%';
+    document.getElementById('sync-copying-msg').textContent = _formatSyncPhaseMessage(status.message, 'copy');
+    document.getElementById('sync-copying-current').textContent = status.current || '';
+
+    if (status.status === 'done') {
+      clearInterval(_syncPollTimer);
+      _showSyncDone(status);
+    } else if (status.status === 'error') {
+      clearInterval(_syncPollTimer);
+      toast('Sync failed: ' + status.message);
+    }
+  }, 600);
+}
+
+async function syncScanAgain() {
+  await api('/sync/reset', { method: 'POST' }).catch(() => {});
+  _syncScanInFlight = false;
+  _syncPreviewWarningCount = 0;
+  _syncPreviewModel = null;
+  _syncPhase('pick');
+}
+
 function _showSyncDone(status) {
   const issueCount = Array.isArray(status.errors) ? status.errors.length : 0;
   const baseDone = _formatSyncPhaseMessage(status.message, 'done') || 'Sync complete.';
@@ -6049,6 +6481,7 @@ async function syncScanAgain() {
   await api('/sync/reset', { method: 'POST' }).catch(() => {});
   _syncScanInFlight = false;
   _syncPreviewWarningCount = 0;
+  _syncPreviewModel = null;
   _syncPhase('pick');
 }
 
@@ -10221,6 +10654,10 @@ const App = {
   startSyncFromSelection,
   startSyncScan,
   syncToggleAll,
+  syncSectionBulkActionChanged,
+  syncRowSelectedChanged,
+  syncRowActionChanged,
+  syncIgnoredSelectionChanged,
   toggleSyncSection,
   syncSelectionChanged,
   executeSync,
