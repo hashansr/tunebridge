@@ -2376,39 +2376,43 @@ tr.track-selected .track-check-indicator {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  background: rgba(0, 0, 0, 0.56);
+  backdrop-filter: blur(6px);
 }
 #sync-modal .sync-modal-shell {
-  --modal-control-height: 48px;
-  --modal-section-gap: 8px;
-  --modal-section-pad-y: 10px;
+  --modal-control-height: 44px;
+  --modal-section-gap: 10px;
+  --modal-section-pad-y: 12px;
   --modal-title-size: 20px;
-  --modal-subtitle-size: 11px;
-  --modal-overline-size: 10px;
-  width: min(760px, 92vw);
-  height: clamp(500px, 70vh, 620px);
-  max-height: calc(100vh - 200px);
-  padding: 18px 18px 14px;
-  border-radius: 22px;
-  border: 1px solid rgba(173, 198, 255, 0.14);
+  --modal-subtitle-size: 13px;
+  --modal-overline-size: 11px;
+  width: min(980px, 92vw);
+  height: clamp(540px, 76vh, 760px);
+  max-height: calc(100vh - 72px);
+  padding: 20px 22px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(173, 198, 255, 0.18);
   background:
-    radial-gradient(130% 120% at 8% 0%, rgba(173, 198, 255, 0.12), transparent 56%),
-    linear-gradient(180deg, rgba(35, 35, 36, 0.78), rgba(21, 21, 22, 0.82));
-  backdrop-filter: blur(14px);
+    radial-gradient(130% 120% at 8% 0%, rgba(173, 198, 255, 0.13), transparent 58%),
+    radial-gradient(110% 140% at 95% 0%, rgba(83, 225, 111, 0.07), transparent 64%),
+    linear-gradient(160deg, rgba(38, 38, 40, 0.97), rgba(24, 24, 26, 0.98));
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(22px);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   overflow: hidden;
 }
 #sync-modal .modal-close-btn {
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   border-radius: 999px;
-  border: 1px solid rgba(173, 198, 255, 0.2);
-  background: rgba(53, 53, 52, 0.36);
+  border: 1px solid rgba(173, 198, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-sub);
 }
 #sync-modal .modal-close-btn:hover {
-  background: rgba(173, 198, 255, 0.16);
+  background: rgba(173, 198, 255, 0.14);
   color: var(--text);
 }
 
@@ -2416,35 +2420,36 @@ tr.track-selected .track-check-indicator {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
-  padding: 2px 2px 0;
+  gap: 16px;
+  padding: 0;
 }
 .sync-modal-header-left {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 14px;
   min-width: 0;
 }
 .sync-modal-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  background: rgba(53, 53, 52, 0.36);
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(173, 198, 255, 0.1);
   border: 1px solid rgba(173, 198, 255, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--accent);
   flex-shrink: 0;
+  margin-top: 1px;
 }
 .sync-modal-step-label {
   font-size: var(--modal-overline-size, 10px);
   font-weight: 800;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: rgba(173, 198, 255, 0.86);
   line-height: 1.2;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 .sync-modal-title {
   font-size: var(--modal-title-size, 20px);
@@ -2456,53 +2461,46 @@ tr.track-selected .track-check-indicator {
 .sync-modal-subtitle {
   font-size: var(--modal-subtitle-size, 11px);
   color: var(--text-muted);
-  margin-top: 4px;
-  line-height: 1.4;
+  margin-top: 6px;
+  line-height: 1.45;
 }
 
 .sync-phase-rail {
-  display: none;
+  display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
-  margin: 0;
+  margin: 2px 2px 0;
 }
 .sync-phase-step {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 26px;
+  display: block;
+  height: 6px;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(173, 198, 255, 0.12);
-  color: rgba(193, 198, 215, 0.72);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  transition: background 0.16s, border-color 0.16s, color 0.16s;
+  background: rgba(173, 198, 255, 0.2);
+  transition: background 0.16s, transform 0.16s, opacity 0.16s;
+  opacity: 0.74;
 }
 .sync-phase-step.active {
-  background: rgba(173, 198, 255, 0.18);
-  border-color: rgba(173, 198, 255, 0.34);
-  color: var(--accent);
+  background: rgba(173, 198, 255, 0.94);
+  opacity: 1;
+  transform: scaleY(1.02);
 }
 
 .sync-progress-banner {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   margin-top: 0;
-  margin-bottom: 2px;
-  min-height: 28px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 179, 181, 0.22);
-  background: rgba(109, 55, 58, 0.36);
-  color: rgba(255, 179, 181, 0.96);
-  font-size: 10px;
+  margin-bottom: 4px;
+  min-height: 34px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 179, 181, 0.2);
+  background: rgba(109, 55, 58, 0.26);
+  color: rgba(255, 179, 181, 0.94);
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  padding: 0 12px;
+  padding: 0 14px;
   width: 100%;
   justify-content: flex-start;
 }
@@ -2515,16 +2513,17 @@ tr.track-selected .track-check-indicator {
 .sync-modal-body {
   flex: 1;
   min-height: 0;
+  margin-top: 2px;
 }
 .sync-phase-panel {
   height: 100%;
   min-height: 0;
   border-radius: 0;
   border: none;
-  border-top: 1px solid rgba(173, 198, 255, 0.12);
+  border-top: 1px solid rgba(173, 198, 255, 0.14);
   background: transparent;
   box-shadow: none;
-  padding: 10px 0;
+  padding: 12px 0;
   overflow-x: hidden;
 }
 .sync-phase-panel--progress {
@@ -2552,7 +2551,7 @@ tr.track-selected .track-check-indicator {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding-right: 2px;
+  padding-right: 4px;
 }
 .sync-pick-actions {
   margin-top: 0;
@@ -2561,7 +2560,7 @@ tr.track-selected .track-check-indicator {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding-right: 2px;
+  padding-right: 4px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2573,9 +2572,9 @@ tr.track-selected .track-check-indicator {
 }
 #sync-modal .modal-actions {
   justify-content: flex-end;
-  gap: 10px;
-  border-top: 1px solid rgba(173, 198, 255, 0.1);
-  padding-top: 10px;
+  gap: 12px;
+  border-top: 1px solid rgba(173, 198, 255, 0.12);
+  padding-top: 14px;
 }
 .sync-preview-actions {
   justify-content: space-between !important;
@@ -2587,7 +2586,7 @@ tr.track-selected .track-check-indicator {
   gap: 10px;
 }
 .sync-preview-estimate {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2595,26 +2594,46 @@ tr.track-selected .track-check-indicator {
 }
 #sync-modal .modal-actions .btn-secondary,
 #sync-modal .modal-actions .btn-primary {
-  min-height: 38px;
+  min-height: 40px;
   border-radius: 9999px;
-  padding: 0 18px;
+  padding: 0 20px;
+}
+#sync-modal .modal-actions .btn-primary {
+  background: linear-gradient(135deg, rgba(173, 198, 255, 0.95), rgba(130, 168, 255, 0.9));
+  color: #00285c;
+  border: none;
+  font-weight: 650;
+}
+#sync-modal .modal-actions .btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(173, 198, 255, 0.24);
+}
+#sync-modal .modal-actions .btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(65, 71, 85, 0.3);
+  color: var(--text-sub);
+  font-weight: 560;
+}
+#sync-modal .modal-actions .btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text);
 }
 
 /* Section label (eyebrow text) */
 .sync-section-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 /* Device picker */
 .sync-device-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .sync-device-loading {
   display: inline-flex;
@@ -2640,28 +2659,28 @@ tr.track-selected .track-check-indicator {
   align-items: center;
   gap: 14px;
   justify-content: space-between;
-  padding: 12px 14px;
-  background: rgba(58, 58, 58, 0.86);
-  border: 1px solid rgba(173, 198, 255, 0.16);
+  padding: 13px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(65, 71, 85, 0.18);
   border-radius: 11px;
   color: var(--text);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, transform 0.1s, border-color 0.15s;
+  transition: background 0.15s, transform 0.1s, border-color 0.15s, box-shadow 0.15s;
   text-align: left;
   width: 100%;
 }
 .sync-device-card:hover {
-  background: rgba(66, 66, 66, 0.92);
-  border-color: rgba(173, 198, 255, 0.3);
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(173, 198, 255, 0.24);
   transform: translateY(-1px);
 }
 .sync-device-card:active { transform: scale(0.995); }
 .sync-device-card.is-selected {
-  background: rgba(66, 66, 66, 0.92);
-  border-color: rgba(173, 198, 255, 0.4);
-  box-shadow: inset 0 0 0 1px rgba(173, 198, 255, 0.18);
+  background: rgba(173, 198, 255, 0.08);
+  border-color: rgba(173, 198, 255, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(173, 198, 255, 0.22);
 }
 .sync-device-card.is-disabled,
 .sync-device-card:disabled {
@@ -2686,8 +2705,9 @@ tr.track-selected .track-check-indicator {
 .sync-device-card-icon {
   width: 34px;
   height: 34px;
-  border-radius: 10px;
-  background: rgba(255,255,255,0.06);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(65, 71, 85, 0.22);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2702,8 +2722,8 @@ tr.track-selected .track-check-indicator {
   flex: 1;
 }
 .sync-device-card-name {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text);
 }
 .sync-device-meta {
@@ -2712,9 +2732,9 @@ tr.track-selected .track-check-indicator {
   line-height: 1.25;
 }
 .sync-device-radio {
-  width: 22px;
-  height: 22px;
-  border: 1px solid rgba(142, 144, 154, 0.5);
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(142, 144, 154, 0.46);
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
@@ -2723,8 +2743,8 @@ tr.track-selected .track-check-indicator {
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 .sync-device-radio span {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: transparent;
   transition: background 0.15s;
@@ -2739,13 +2759,13 @@ tr.track-selected .track-check-indicator {
 
 /* Progress phases */
 .sync-progress-phase {
-  padding: 4px 0 2px;
+  padding: 6px 0 4px;
 }
 .sync-progress-phase--scan {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
+  gap: 16px;
   justify-content: center;
   min-height: 100%;
 }
@@ -2753,7 +2773,7 @@ tr.track-selected .track-check-indicator {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   justify-content: center;
   min-height: 100%;
 }
@@ -2766,10 +2786,10 @@ tr.track-selected .track-check-indicator {
 }
 .sync-scan-ring {
   --scan-pct: 0;
-  width: 164px;
-  height: 164px;
+  width: 160px;
+  height: 160px;
   border-radius: 50%;
-  background: conic-gradient(var(--accent) calc(var(--scan-pct) * 1%), rgba(173, 198, 255, 0.14) 0);
+  background: conic-gradient(var(--accent) calc(var(--scan-pct) * 1%), rgba(173, 198, 255, 0.12) 0);
   position: relative;
 }
 .sync-copy-ring {
@@ -2778,10 +2798,10 @@ tr.track-selected .track-check-indicator {
 .sync-scan-ring::after {
   content: '';
   position: absolute;
-  inset: 6px;
+  inset: 8px;
   border-radius: 50%;
-  background: rgba(16, 16, 18, 0.95);
-  border: 1px solid rgba(173, 198, 255, 0.15);
+  background: rgba(16, 16, 18, 0.96);
+  border: 1px solid rgba(173, 198, 255, 0.14);
 }
 .sync-scan-ring-inner {
   position: absolute;
@@ -2793,14 +2813,14 @@ tr.track-selected .track-check-indicator {
   justify-content: center;
 }
 .sync-scan-percent {
-  font-size: 38px;
+  font-size: 34px;
   font-weight: 700;
   line-height: 1;
   color: var(--text-sub);
 }
 .sync-scan-percent-sub {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -2808,7 +2828,7 @@ tr.track-selected .track-check-indicator {
 .sync-scan-msg {
   margin: 0;
   text-align: center;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-sub);
   min-height: 20px;
@@ -2862,7 +2882,7 @@ tr.track-selected .track-check-indicator {
 .sync-current-file--copy {
   margin-top: 0;
   text-align: center;
-  max-width: 88%;
+  max-width: 90%;
   min-height: 16px;
   white-space: nowrap;
   overflow: hidden;
@@ -2872,10 +2892,10 @@ tr.track-selected .track-check-indicator {
 
 /* Preview sections */
 .sync-section {
-  border: 1px solid rgba(173, 198, 255, 0.11);
-  border-radius: 11px;
-  background: rgba(28, 27, 27, 0.32);
-  padding: 10px 10px 8px;
+  border: 1px solid rgba(173, 198, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(28, 27, 27, 0.34);
+  padding: 12px 12px 10px;
   overflow: hidden;
 }
 .sync-section--warning {
@@ -2894,7 +2914,7 @@ tr.track-selected .track-check-indicator {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   min-width: 0;
 }
 .sync-section-hdr-left {
@@ -2904,9 +2924,9 @@ tr.track-selected .track-check-indicator {
   min-width: 0;
 }
 .sync-section-title {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
@@ -2942,9 +2962,9 @@ tr.track-selected .track-check-indicator {
   transform: rotate(-45deg) translateY(0);
 }
 .sync-count-pill {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 1px 7px;
+  padding: 2px 8px;
   border-radius: 99px;
   background: rgba(255,255,255,0.07);
   color: var(--text-muted);
@@ -2953,8 +2973,8 @@ tr.track-selected .track-check-indicator {
 .sync-check-all {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
+  gap: 6px;
+  font-size: 12px;
   color: var(--text-muted);
   cursor: pointer;
   white-space: nowrap;
@@ -2977,7 +2997,7 @@ tr.track-selected .track-check-indicator {
   background: transparent;
   border: 0;
   border-radius: 10px;
-  padding: 2px 4px;
+  padding: 2px 6px;
 }
 
 /* Step 3: hard-disable nested scroll containers (single modal scroll only) */
@@ -3025,7 +3045,7 @@ tr.track-selected .track-check-indicator {
   grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
-  padding: 8px 0;
+  padding: 9px 0;
   font-size: 13px;
   cursor: pointer;
   transition: opacity 0.1s;
@@ -3046,7 +3066,7 @@ tr.track-selected .track-check-indicator {
 .sync-file-row--preview {
   grid-template-columns: 18px minmax(0, 1fr) auto;
   border-bottom: 1px solid rgba(173, 198, 255, 0.08);
-  padding: 10px 0;
+  padding: 11px 0;
 }
 .sync-file-main {
   min-width: 0;
@@ -3074,9 +3094,9 @@ tr.track-selected .track-check-indicator {
   text-overflow: ellipsis;
 }
 .sync-file-origin {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   margin-left: 8px;
   white-space: nowrap;
@@ -3102,15 +3122,15 @@ tr.track-selected .track-check-indicator {
 
 .sync-space-summary {
   margin: 8px 0 2px;
-  padding: 8px 2px 2px;
-  border-radius: 10px;
-  background: transparent;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;
   display: grid;
-  gap: 3px;
-  border: 0;
+  gap: 4px;
+  border: 1px solid rgba(173, 198, 255, 0.12);
 }
 .sync-space-summary--ok {
   color: var(--text-muted);
@@ -3131,8 +3151,8 @@ tr.track-selected .track-check-indicator {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 8px 0 6px;
+  gap: 10px;
+  padding: 10px 0 8px;
   text-align: center;
   max-width: 460px;
   margin: 0 auto;
@@ -3140,8 +3160,8 @@ tr.track-selected .track-check-indicator {
   width: 100%;
 }
 .sync-done-icon {
-  width: 74px;
-  height: 74px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   background: linear-gradient(180deg, rgba(173, 198, 255, 0.96), rgba(138, 167, 228, 0.92));
   color: #24395f;
@@ -3156,7 +3176,7 @@ tr.track-selected .track-check-indicator {
 }
 .sync-done-title {
   margin: 4px 0 0;
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1.1;
   letter-spacing: -0.03em;
   font-weight: 700;
@@ -3165,14 +3185,14 @@ tr.track-selected .track-check-indicator {
 .sync-done-copy {
   margin: 2px 0 0;
   max-width: 350px;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.32;
   color: rgba(229, 226, 225, 0.9);
 }
 .sync-done-detail {
   margin: 2px 0 0;
   max-width: 440px;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.45;
   color: var(--text-muted);
 }
@@ -3210,16 +3230,12 @@ tr.track-selected .track-check-indicator {
     overflow-y: auto;
   }
   #sync-modal .sync-modal-shell {
-    width: min(760px, 94vw);
-    height: clamp(500px, 74vh, 610px);
+    width: min(820px, 94vw);
+    height: clamp(520px, 76vh, 660px);
     padding: 14px;
   }
-  .sync-phase-rail {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
   .sync-phase-step {
-    min-height: 26px;
-    font-size: 10px;
+    height: 5px;
   }
   .sync-section-hdr {
     align-items: flex-start;
@@ -3234,13 +3250,13 @@ tr.track-selected .track-check-indicator {
     height: 148px;
   }
   .sync-scan-percent {
-    font-size: 34px;
+    font-size: 30px;
   }
   .sync-done-title {
-    font-size: 24px;
+    font-size: 20px;
   }
   .sync-done-copy {
-    font-size: 14px;
+    font-size: 12px;
   }
   .sync-current-file--copy {
     max-width: 94%;
@@ -3250,15 +3266,15 @@ tr.track-selected .track-check-indicator {
 @media (max-width: 640px) {
   #sync-modal .sync-modal-shell {
     width: min(620px, 96vw);
-    height: min(74vh, 560px);
+    height: min(82vh, 640px);
     padding: 12px;
-    border-radius: 20px;
+    border-radius: 16px;
   }
   .sync-modal-title {
     font-size: 18px;
   }
   .sync-modal-subtitle {
-    font-size: 11px;
+    font-size: 12px;
   }
   .sync-done-icon {
     width: 66px;
