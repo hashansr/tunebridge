@@ -10918,6 +10918,81 @@ async function loadInsightsView() {
   if (sonicRes && sonicRes.ok)  { try { _renderInsightsSonicProfile(await sonicRes.json()); } catch (_) {} }
   if (matchRes && matchRes.ok)  { try { _renderInsightsMatchOverview(await matchRes.json()); } catch (_) { _renderInsightsMatchOverview(null); } }
   else                          _renderInsightsMatchOverview(null);  // show CTA to run analysis
+
+  loadInsightsCoverage();
+}
+
+async function loadInsightsCoverage() {
+  const el = document.getElementById('insights-coverage-content');
+  if (!el) return;
+  el.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
+  const data = await api('/insights/coverage').catch(() => null);
+  if (!data) {
+    el.innerHTML = '<p class="insights-error">Could not load coverage data.</p>';
+    return;
+  }
+
+  const pctAlbums = data.total_albums > 0
+    ? Math.round((data.heard_albums / data.total_albums) * 100) : 0;
+  const pctArtists = data.total_artists > 0
+    ? Math.round((data.heard_artists / data.total_artists) * 100) : 0;
+
+  const genreFilter = data.top_unheard_genres?.length
+    ? `<div class="coverage-genre-pills">${data.top_unheard_genres.map(g =>
+        `<button class="sr-template-btn" onclick="App._coverageFilterGenre('${esc(g)}')">${esc(g)}</button>`
+      ).join('')}</div>` : '';
+
+  const unheardCards = (data.unheard_albums_list || []).map(a => {
+    const artHtml = a.artwork_key
+      ? `<img src="/api/artwork/${a.artwork_key}" loading="lazy" onerror="this.style.display='none'" />`
+      : `<div class="coverage-art-placeholder"></div>`;
+    return `<div class="coverage-album-card" title="${esc(a.artist)} — ${esc(a.album)}">
+      <div class="coverage-art">${artHtml}</div>
+      <div class="coverage-album-name">${esc(a.album || 'Unknown Album')}</div>
+      <div class="coverage-artist-name">${esc(a.artist || '')}</div>
+      <div class="coverage-track-count">${a.total_tracks} track${a.total_tracks !== 1 ? 's' : ''}</div>
+      <button class="coverage-add-btn" onclick="App._coverageAddToPlaylist('${esc(a.artist)}','${esc(a.album)}')" title="Add all tracks to a playlist">+ Playlist</button>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="coverage-summary">
+      <div class="coverage-bar-row">
+        <span class="coverage-bar-label">Albums heard</span>
+        <div class="coverage-bar-track">
+          <div class="coverage-bar-fill" style="width:${pctAlbums}%"></div>
+        </div>
+        <span class="coverage-bar-pct">${data.heard_albums} / ${data.total_albums} (${pctAlbums}%)</span>
+      </div>
+      <div class="coverage-bar-row">
+        <span class="coverage-bar-label">Artists heard</span>
+        <div class="coverage-bar-track">
+          <div class="coverage-bar-fill" style="width:${pctArtists}%"></div>
+        </div>
+        <span class="coverage-bar-pct">${data.heard_artists} / ${data.total_artists} (${pctArtists}%)</span>
+      </div>
+    </div>
+    ${data.unheard_albums > 0 ? `
+      <div class="coverage-unheard-hdr">
+        <strong>${data.unheard_albums}</strong> unheard album${data.unheard_albums !== 1 ? 's' : ''}
+        ${genreFilter}
+      </div>
+      <div class="coverage-albums-grid">${unheardCards}</div>
+    ` : '<p class="settings-hint">You\'ve played tracks from every album in your library!</p>'}
+  `;
+}
+
+async function _coverageAddToPlaylist(artist, album) {
+  // Fetch tracks for this album then open the playlist picker
+  const res = await api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`).catch(() => null);
+  if (!res || !res.tracks || !res.tracks.length) { toast('No tracks found'); return; }
+  state._pendingTrackIds = res.tracks.map(t => t.id);
+  _showPlaylistPicker();
+}
+
+function _coverageFilterGenre(genre) {
+  // Future: filter unheard albums by genre tag
+  toast(`Filter by genre: ${genre} — coming soon`);
 }
 
 let _insightsGenreChart = null;

@@ -53,7 +53,7 @@ def close_conn():
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -82,6 +82,8 @@ _MIGRATIONS: list[tuple] = [
         'ALTER TABLE tracks ADD COLUMN rg_album_peak REAL',
     ]),
     (5, 'Add sync discrepancy ignore table', None),
+    # v6: smart_playlist_rules is a new table handled by create_schema().
+    (6, 'Add smart_playlist_rules table', None),
 ]
 
 _SCHEMA_SQL = """
@@ -370,6 +372,18 @@ CREATE TABLE IF NOT EXISTS play_events (
 CREATE INDEX IF NOT EXISTS idx_play_events_played_at ON play_events(played_at DESC);
 CREATE INDEX IF NOT EXISTS idx_play_events_track_id  ON play_events(track_id);
 CREATE INDEX IF NOT EXISTS idx_play_events_artist    ON play_events(artist COLLATE NOCASE);
+
+-- Rule-based smart playlists
+CREATE TABLE IF NOT EXISTS smart_playlist_rules (
+    playlist_id     TEXT PRIMARY KEY,
+    rules           TEXT NOT NULL DEFAULT '[]',
+    match_mode      TEXT NOT NULL DEFAULT 'all',
+    limit_count     INTEGER NOT NULL DEFAULT 50,
+    sort_field      TEXT NOT NULL DEFAULT 'date_added',
+    sort_order      TEXT NOT NULL DEFAULT 'desc',
+    refresh_on_open INTEGER NOT NULL DEFAULT 1,
+    last_refreshed  INTEGER
+);
 """
 
 # FTS5 must be created separately (can't use IF NOT EXISTS with virtual tables the same way)
@@ -1903,3 +1917,85 @@ def db_get_features_batch(track_ids):
                 d['band_energy'] = None
         result[d['track_id']] = d
     return result
+
+
+# ---------------------------------------------------------------------------
+# Play stats (for generator filters)
+# ---------------------------------------------------------------------------
+
+def db_load_play_stats():
+    """Return per-track valid-listen stats: {track_id: {count, last_played}}."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT track_id,
+                  COUNT(*) AS count,
+                  MAX(played_at) AS last_played
+           FROM play_events
+           WHERE valid_listen = 1
+           GROUP BY track_id"""
+    ).fetchall()
+    return {r['track_id']: {'count': r['count'], 'last_played': r['last_played']} for r in rows}
+
+
+# ---------------------------------------------------------------------------
+# Smart playlist rules
+# ---------------------------------------------------------------------------
+
+def db_save_smart_rules(playlist_id: str, rules: list, match_mode: str = 'all',
+                        limit_count: int = 50, sort_field: str = 'date_added',
+                        sort_order: str = 'desc', refresh_on_open: bool = True):
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO smart_playlist_rules
+               (playlist_id, rules, match_mode, limit_count, sort_field, sort_order, refresh_on_open)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(playlist_id) DO UPDATE SET
+               rules=excluded.rules,
+               match_mode=excluded.match_mode,
+               limit_count=excluded.limit_count,
+               sort_field=excluded.sort_field,
+               sort_order=excluded.sort_order,
+               refresh_on_open=excluded.refresh_on_open""",
+        (playlist_id, json.dumps(rules), match_mode, limit_count,
+         sort_field, sort_order, int(refresh_on_open))
+    )
+    conn.commit()
+
+
+def db_load_smart_rules(playlist_id: str):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM smart_playlist_rules WHERE playlist_id = ?", (playlist_id,)
+    ).fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    try:
+        d['rules'] = json.loads(d['rules'])
+    except (json.JSONDecodeError, TypeError):
+        d['rules'] = []
+    d['refresh_on_open'] = bool(d['refresh_on_open'])
+    return d
+
+
+def db_delete_smart_rules(playlist_id: str):
+    conn = get_conn()
+    conn.execute("DELETE FROM smart_playlist_rules WHERE playlist_id = ?", (playlist_id,))
+    conn.commit()
+
+
+def db_touch_smart_rules_refreshed(playlist_id: str, ts: int):
+    conn = get_conn()
+    conn.execute(
+        "UPDATE smart_playlist_rules SET last_refreshed = ? WHERE playlist_id = ?",
+        (ts, playlist_id)
+    )
+    conn.commit()
+
+
+def db_is_smart_playlist(playlist_id: str) -> bool:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT 1 FROM smart_playlist_rules WHERE playlist_id = ?", (playlist_id,)
+    ).fetchone()
+    return row is not None

@@ -2425,13 +2425,13 @@ tr.track-selected .track-check-indicator {
 }
 .sync-modal-header-left {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 14px;
   min-width: 0;
 }
 .sync-modal-icon {
-  width: 40px;
-  height: 40px;
+  width: 50px;
+  height: 50px;
   border-radius: 10px;
   background: rgba(173, 198, 255, 0.1);
   border: 1px solid rgba(173, 198, 255, 0.2);
@@ -2440,7 +2440,11 @@ tr.track-selected .track-check-indicator {
   justify-content: center;
   color: var(--accent);
   flex-shrink: 0;
-  margin-top: 1px;
+  margin-top: 0;
+}
+.sync-modal-icon svg {
+  width: 24px;
+  height: 24px;
 }
 .sync-modal-step-label {
   font-size: var(--modal-overline-size, 10px);
