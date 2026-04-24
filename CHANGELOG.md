@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.37-rc.240426-1056 · 2026-04-24
 - Change: Sync modal refined to match latest UX mock (phase-specific header icons, cleaner separators, richer step-2 scan progress with verbose status and summary counters, and new bottom dot step indicator) with no functionality changes
 
 ## v0.36-rc.240426-1028 · 2026-04-24
