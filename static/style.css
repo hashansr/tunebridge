@@ -2386,10 +2386,10 @@ tr.track-selected .track-check-indicator {
   --modal-title-size: 20px;
   --modal-subtitle-size: 13px;
   --modal-overline-size: 11px;
-  width: min(980px, 92vw);
-  height: clamp(540px, 76vh, 760px);
-  max-height: calc(100vh - 72px);
-  padding: 20px 22px 16px;
+  width: min(860px, 86vw);
+  height: clamp(500px, 70vh, 680px);
+  max-height: calc(100vh - 88px);
+  padding: 16px 18px 12px;
   border-radius: 18px;
   border: 1px solid rgba(173, 198, 255, 0.18);
   background:
@@ -2400,7 +2400,7 @@ tr.track-selected .track-check-indicator {
   backdrop-filter: blur(22px);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   overflow: hidden;
 }
 #sync-modal .modal-close-btn {
@@ -2466,23 +2466,30 @@ tr.track-selected .track-check-indicator {
 }
 
 .sync-phase-rail {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-  margin: 2px 2px 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: max-content;
+  margin: 6px auto 2px;
+  padding: 0 2px;
 }
 .sync-phase-step {
   display: block;
-  height: 6px;
+  width: 10px;
+  height: 10px;
   border-radius: 9999px;
-  background: rgba(173, 198, 255, 0.2);
-  transition: background 0.16s, transform 0.16s, opacity 0.16s;
-  opacity: 0.74;
+  background: rgba(173, 198, 255, 0.28);
+  transition: background 0.16s, transform 0.16s, opacity 0.16s, width 0.16s;
+  opacity: 0.55;
 }
 .sync-phase-step.active {
   background: rgba(173, 198, 255, 0.94);
   opacity: 1;
-  transform: scaleY(1.02);
+  width: 30px;
+  height: 10px;
+  border-radius: 999px;
+  transform: none;
 }
 
 .sync-progress-banner {
@@ -2520,7 +2527,7 @@ tr.track-selected .track-check-indicator {
   min-height: 0;
   border-radius: 0;
   border: none;
-  border-top: 1px solid rgba(173, 198, 255, 0.14);
+  border-top: none;
   background: transparent;
   box-shadow: none;
   padding: 12px 0;
@@ -2573,8 +2580,8 @@ tr.track-selected .track-check-indicator {
 #sync-modal .modal-actions {
   justify-content: flex-end;
   gap: 12px;
-  border-top: 1px solid rgba(173, 198, 255, 0.12);
-  padding-top: 14px;
+  border-top: none;
+  padding-top: 12px;
 }
 .sync-preview-actions {
   justify-content: space-between !important;
@@ -3299,12 +3306,17 @@ tr.track-selected .track-check-indicator {
     overflow-y: auto;
   }
   #sync-modal .sync-modal-shell {
-    width: min(820px, 94vw);
-    height: clamp(520px, 76vh, 660px);
+    width: min(740px, 92vw);
+    height: clamp(500px, 72vh, 620px);
     padding: 14px;
   }
   .sync-phase-step {
-    height: 5px;
+    width: 9px;
+    height: 9px;
+  }
+  .sync-phase-step.active {
+    width: 24px;
+    height: 9px;
   }
   .sync-section-hdr {
     align-items: flex-start;
@@ -3334,8 +3346,8 @@ tr.track-selected .track-check-indicator {
 
 @media (max-width: 640px) {
   #sync-modal .sync-modal-shell {
-    width: min(620px, 96vw);
-    height: min(82vh, 640px);
+    width: min(560px, 94vw);
+    height: min(80vh, 600px);
     padding: 12px;
     border-radius: 16px;
   }

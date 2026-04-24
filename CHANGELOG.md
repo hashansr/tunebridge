@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Sync modal layout refined again for tighter footprint and cleaner hierarchy: removed header/body separator lines, moved step indicator to a bottom dot/pill rail, and reduced modal width/height/padding across desktop and responsive breakpoints.
 
 ## v0.39-rc.240426-1311 · 2026-04-24
 - Add: Sync Review Changes V2 data model with persistent per-DAP ignored discrepancy state (`sync_ignored_discrepancies`) keyed by normalized rel path + discrepancy type.
