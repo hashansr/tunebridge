@@ -3217,6 +3217,7 @@ def get_playlists():
                 if len(seen) >= 4:
                     break
         p['artwork_keys'] = seen
+        p['is_smart'] = _db.db_is_smart_playlist(p['id'])
     return jsonify(result)
 
 
@@ -3248,7 +3249,10 @@ def get_playlist(pid):
         if track:
             enriched.append(track)
 
-    return jsonify({**playlist, 'tracks': enriched, 'has_artwork': has_playlist_artwork(pid)})
+    is_smart = _db.db_is_smart_playlist(pid)
+    smart_rules = _db.db_load_smart_rules(pid) if is_smart else None
+    return jsonify({**playlist, 'tracks': enriched, 'has_artwork': has_playlist_artwork(pid),
+                    'is_smart': is_smart, 'smart_rules': smart_rules})
 
 
 @app.route('/api/playlists/<pid>/artwork', methods=['POST'])
@@ -3464,6 +3468,11 @@ def _load_track_feature_map():
     return _db.db_load_feature_map()
 
 
+def _load_track_play_stats():
+    """Return {track_id: {count, last_played}} for all tracks with ≥1 valid listen."""
+    return _db.db_load_play_stats()
+
+
 def _track_numeric_features(track, feat_map):
     """Return normalized generation features with graceful fallbacks."""
     f = feat_map.get(track.get('id'), {}) if feat_map else {}
@@ -3642,9 +3651,36 @@ def _build_playlist_generation_preview(payload):
     excluded_track_ids = {str(x) for x in (payload.get('excluded_track_ids') or [])}
     excluded_artists = {_norm_text_key(x) for x in (payload.get('excluded_artists') or []) if str(x).strip()}
 
+    # Play-history filters
+    exclude_heard = bool(payload.get('exclude_heard') or payload.get('unheard_only', False))
+    exclude_heard_within_days = None
+    _ehwd = payload.get('exclude_heard_within_days')
+    if _ehwd is not None:
+        try:
+            exclude_heard_within_days = max(1, int(_ehwd))
+        except (TypeError, ValueError):
+            pass
+    min_play_count = None
+    max_play_count = None
+    _mpc = payload.get('min_play_count')
+    if _mpc is not None:
+        try:
+            min_play_count = max(0, int(_mpc))
+        except (TypeError, ValueError):
+            pass
+    _xpc = payload.get('max_play_count')
+    if _xpc is not None:
+        try:
+            max_play_count = max(0, int(_xpc))
+        except (TypeError, ValueError):
+            pass
+    _needs_play_stats = (exclude_heard or exclude_heard_within_days is not None
+                         or min_play_count is not None or max_play_count is not None)
+
     payload_seed = int(payload.get('seed', 1337))
     rng = random.Random(payload_seed if deterministic else time.time_ns())
     feat_map = _load_track_feature_map()
+    play_stats = _load_track_play_stats() if _needs_play_stats else {}
 
     # Seed centroid
     seed_vec = None
@@ -3665,6 +3701,20 @@ def _build_playlist_generation_preview(payload):
             continue
         if _norm_text_key(t.get('artist')) in excluded_artists:
             continue
+        if _needs_play_stats:
+            ps = play_stats.get(tid, {'count': 0, 'last_played': None})
+            pc = ps.get('count', 0)
+            lp = ps.get('last_played')
+            if exclude_heard and pc > 0:
+                continue
+            if exclude_heard_within_days is not None and lp is not None:
+                age_days = (time.time() - lp) / 86400.0
+                if age_days < exclude_heard_within_days:
+                    continue
+            if min_play_count is not None and pc < min_play_count:
+                continue
+            if max_play_count is not None and pc > max_play_count:
+                continue
         if year_range:
             y = _safe_float(t.get('year'))
             if y is not None and (y < year_range[0] or y > year_range[1]):
@@ -3909,6 +3959,361 @@ def playlist_generate_save():
     }
     save_playlists(playlists)
     return jsonify({'id': pid, 'name': name, 'track_count': len(clean_ids)}), 201
+
+
+# ---------------------------------------------------------------------------
+# Smart Playlist — rule evaluator
+# ---------------------------------------------------------------------------
+
+def _evaluate_smart_rules(rules, match_mode='all', limit_count=50, sort_field='date_added', sort_order='desc'):
+    """Evaluate declarative smart rules against the library. Returns {track_ids, total, unanalysed_count}."""
+    conn = _db.get_conn()
+
+    play_fields = {'play_count', 'never_played', 'last_played'}
+    sonic_fields = {'energy', 'brightness', 'has_analysis'}
+    needs_play = any(r.get('field') in play_fields for r in rules)
+    needs_sonic = any(r.get('field') in sonic_fields for r in rules)
+
+    select_parts = ['t.id', 't.title', 't.artist', 't.album', 't.genre', 't.year',
+                    't.date_added', 't.format', 't.bitrate']
+    from_clause = 'FROM tracks t'
+    joins = []
+    if needs_play:
+        joins.append("""LEFT JOIN (
+            SELECT track_id, COUNT(*) AS play_count, MAX(played_at) AS last_played
+            FROM play_events WHERE valid_listen=1 GROUP BY track_id
+        ) pe ON pe.track_id = t.id""")
+        select_parts += ['COALESCE(pe.play_count,0) AS play_count', 'pe.last_played']
+    if needs_sonic:
+        joins.append("LEFT JOIN track_features tf ON tf.track_id = t.id")
+        select_parts += ['tf.brightness', 'tf.energy', 'tf.band_energy', 'tf.analysis_version']
+
+    where_clauses = []
+    params = []
+
+    for r in rules:
+        field = r.get('field', '')
+        op = r.get('op', '')
+        val = r.get('value')
+
+        def _str_op(col):
+            if op == 'contains':
+                where_clauses.append(f"LOWER({col}) LIKE LOWER(?)")
+                params.append(f'%{val}%')
+            elif op == 'not_contains':
+                where_clauses.append(f"LOWER({col}) NOT LIKE LOWER(?)")
+                params.append(f'%{val}%')
+            elif op == 'is':
+                where_clauses.append(f"LOWER({col}) = LOWER(?)")
+                params.append(str(val))
+            elif op == 'is_not':
+                where_clauses.append(f"LOWER({col}) != LOWER(?)")
+                params.append(str(val))
+
+        def _num_op(col):
+            if op == 'equals':
+                where_clauses.append(f"{col} = ?")
+                params.append(val)
+            elif op == 'greater_than':
+                where_clauses.append(f"{col} > ?")
+                params.append(val)
+            elif op == 'less_than':
+                where_clauses.append(f"{col} < ?")
+                params.append(val)
+            elif op == 'between' and isinstance(val, list) and len(val) == 2:
+                where_clauses.append(f"{col} BETWEEN ? AND ?")
+                params.extend(val)
+
+        if field == 'genre':
+            _str_op('t.genre')
+        elif field == 'artist':
+            _str_op('t.artist')
+        elif field == 'album':
+            _str_op('t.album')
+        elif field == 'year':
+            _num_op('CAST(t.year AS INTEGER)')
+        elif field == 'format':
+            _str_op('t.format')
+        elif field == 'bitrate':
+            _num_op('CAST(t.bitrate AS INTEGER)')
+        elif field == 'date_added':
+            now_ts = int(time.time())
+            if op == 'within_days':
+                cutoff = now_ts - int(val) * 86400
+                where_clauses.append("t.date_added >= ?")
+                params.append(cutoff)
+            elif op == 'older_than_days':
+                cutoff = now_ts - int(val) * 86400
+                where_clauses.append("t.date_added <= ?")
+                params.append(cutoff)
+            elif op == 'before':
+                where_clauses.append("t.date_added < ?")
+                params.append(int(val))
+            elif op == 'after':
+                where_clauses.append("t.date_added > ?")
+                params.append(int(val))
+        elif field == 'play_count':
+            _num_op('COALESCE(pe.play_count,0)')
+        elif field == 'never_played':
+            if val:
+                where_clauses.append("COALESCE(pe.play_count,0) = 0")
+            else:
+                where_clauses.append("COALESCE(pe.play_count,0) > 0")
+        elif field == 'last_played':
+            now_ts = int(time.time())
+            if op == 'within_days':
+                cutoff = now_ts - int(val) * 86400
+                where_clauses.append("pe.last_played >= ?")
+                params.append(cutoff)
+            elif op == 'older_than_days':
+                cutoff = now_ts - int(val) * 86400
+                where_clauses.append("(pe.last_played IS NULL OR pe.last_played <= ?)")
+                params.append(cutoff)
+        elif field == 'energy':
+            _num_op('tf.energy')
+        elif field == 'brightness':
+            _num_op('tf.brightness')
+        elif field == 'has_analysis':
+            if val:
+                where_clauses.append("tf.band_energy IS NOT NULL AND tf.analysis_version = 3")
+            else:
+                where_clauses.append("(tf.band_energy IS NULL OR tf.analysis_version != 3)")
+
+    connector = ' AND ' if match_mode == 'all' else ' OR '
+    where_sql = connector.join(where_clauses) if where_clauses else '1=1'
+
+    sort_col_map = {
+        'date_added': 't.date_added',
+        'title': 't.title',
+        'artist': 't.artist',
+        'album': 't.album',
+        'year': 'CAST(t.year AS INTEGER)',
+        'play_count': 'COALESCE(pe.play_count,0)' if needs_play else 't.date_added',
+        'last_played': 'pe.last_played' if needs_play else 't.date_added',
+    }
+    sort_col = sort_col_map.get(sort_field, 't.date_added')
+    order = 'DESC' if sort_order == 'desc' else 'ASC'
+
+    sql = f"""SELECT {', '.join(select_parts)}
+              {from_clause}
+              {chr(10).join(joins)}
+              WHERE {where_sql}
+              ORDER BY {sort_col} {order}
+              LIMIT ?"""
+    params.append(limit_count)
+
+    rows = conn.execute(sql, params).fetchall()
+    track_ids = [r['id'] for r in rows]
+
+    unanalysed_count = 0
+    if needs_sonic:
+        sonic_rules = [r for r in rules if r.get('field') in sonic_fields]
+        if sonic_rules:
+            total_unanalysed = conn.execute(
+                "SELECT COUNT(*) FROM tracks t LEFT JOIN track_features tf ON tf.track_id=t.id "
+                "WHERE tf.band_energy IS NULL OR tf.analysis_version != 3"
+            ).fetchone()[0]
+            unanalysed_count = total_unanalysed
+
+    return {'track_ids': track_ids, 'total': len(track_ids), 'unanalysed_count': unanalysed_count}
+
+
+# ---------------------------------------------------------------------------
+# Smart Playlist routes
+# ---------------------------------------------------------------------------
+
+@app.route('/api/playlists/smart/preview', methods=['POST'])
+def smart_playlist_preview():
+    data = request.json or {}
+    rules = data.get('rules') or []
+    match_mode = str(data.get('match_mode', 'all'))
+    limit_count = min(int(data.get('limit_count') or 50), 500)
+    sort_field = str(data.get('sort_field', 'date_added'))
+    sort_order = str(data.get('sort_order', 'desc'))
+    result = _evaluate_smart_rules(rules, match_mode, limit_count, sort_field, sort_order)
+    with library_lock:
+        lib_map = {t['id']: t for t in library}
+    tracks_out = [lib_map[tid] for tid in result['track_ids'] if tid in lib_map]
+    return jsonify({'tracks': tracks_out, 'total': result['total'], 'unanalysed_count': result['unanalysed_count']})
+
+
+@app.route('/api/playlists/smart', methods=['POST'])
+def smart_playlist_create():
+    data = request.json or {}
+    name = str(data.get('name') or '').strip() or f"Smart Playlist {time.strftime('%Y-%m-%d %H:%M')}"
+    rules = data.get('rules') or []
+    match_mode = str(data.get('match_mode', 'all'))
+    limit_count = min(int(data.get('limit_count') or 50), 500)
+    sort_field = str(data.get('sort_field', 'date_added'))
+    sort_order = str(data.get('sort_order', 'desc'))
+    refresh_on_open = bool(data.get('refresh_on_open', True))
+
+    result = _evaluate_smart_rules(rules, match_mode, limit_count, sort_field, sort_order)
+    now = int(time.time())
+    pid = str(uuid.uuid4())
+    _db.db_create_playlist(pid, name, now, now)
+    _db.db_set_playlist_tracks(pid, result['track_ids'], now)
+    _db.db_save_smart_rules(pid, rules, match_mode, limit_count, sort_field, sort_order, refresh_on_open)
+    _db.db_touch_smart_rules_refreshed(pid, now)
+    return jsonify({'id': pid, 'name': name, 'track_count': len(result['track_ids']),
+                    'unanalysed_count': result['unanalysed_count']}), 201
+
+
+@app.route('/api/playlists/<pid>/smart', methods=['GET'])
+def smart_playlist_get_rules(pid):
+    rules_data = _db.db_load_smart_rules(pid)
+    if rules_data is None:
+        return jsonify({'error': 'Not a smart playlist'}), 404
+    return jsonify(rules_data)
+
+
+@app.route('/api/playlists/<pid>/smart', methods=['PUT'])
+def smart_playlist_update_rules(pid):
+    data = request.json or {}
+    rules = data.get('rules') or []
+    match_mode = str(data.get('match_mode', 'all'))
+    limit_count = min(int(data.get('limit_count') or 50), 500)
+    sort_field = str(data.get('sort_field', 'date_added'))
+    sort_order = str(data.get('sort_order', 'desc'))
+    refresh_on_open = bool(data.get('refresh_on_open', True))
+    _db.db_save_smart_rules(pid, rules, match_mode, limit_count, sort_field, sort_order, refresh_on_open)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/playlists/<pid>/smart/refresh', methods=['POST'])
+def smart_playlist_refresh(pid):
+    rules_data = _db.db_load_smart_rules(pid)
+    if rules_data is None:
+        return jsonify({'error': 'Not a smart playlist'}), 404
+    result = _evaluate_smart_rules(
+        rules_data['rules'], rules_data['match_mode'],
+        rules_data['limit_count'], rules_data['sort_field'], rules_data['sort_order']
+    )
+    now = int(time.time())
+    _db.db_set_playlist_tracks(pid, result['track_ids'], now)
+    _db.db_touch_smart_rules_refreshed(pid, now)
+    with library_lock:
+        lib_map = {t['id']: t for t in library}
+    tracks_out = [lib_map[tid] for tid in result['track_ids'] if tid in lib_map]
+    return jsonify({'tracks': tracks_out, 'total': result['total'],
+                    'unanalysed_count': result['unanalysed_count']})
+
+
+# ---------------------------------------------------------------------------
+# History view route
+# ---------------------------------------------------------------------------
+
+@app.route('/api/history')
+def history_view():
+    since_days = int(request.args.get('since', 30))
+    limit = min(int(request.args.get('limit', 500)), 2000)
+    valid_only = request.args.get('valid_only', 'false').lower() == 'true'
+    cutoff = int(time.time()) - since_days * 86400
+    conn = _db.get_conn()
+    valid_clause = "AND valid_listen=1" if valid_only else ""
+    rows = conn.execute(f"""
+        SELECT pe.id, pe.track_id, pe.played_at, pe.play_seconds, pe.completed, pe.valid_listen,
+               t.title, t.artist, t.album, t.duration, t.album_art_key
+        FROM play_events pe
+        LEFT JOIN tracks t ON t.id = pe.track_id
+        WHERE pe.played_at >= ? {valid_clause}
+        ORDER BY pe.played_at DESC
+        LIMIT ?
+    """, (cutoff, limit)).fetchall()
+
+    events = []
+    total_seconds = 0
+    unique_tracks = set()
+    artist_counts = {}
+    for r in rows:
+        ps = r['play_seconds'] or 0
+        total_seconds += ps
+        unique_tracks.add(r['track_id'])
+        a = r['artist'] or 'Unknown'
+        artist_counts[a] = artist_counts.get(a, 0) + 1
+        events.append({
+            'id': r['id'],
+            'track_id': r['track_id'],
+            'played_at': r['played_at'],
+            'play_seconds': ps,
+            'completed': bool(r['completed']),
+            'valid_listen': bool(r['valid_listen']),
+            'title': r['title'],
+            'artist': r['artist'],
+            'album': r['album'],
+            'duration': r['duration'],
+            'album_art_key': r['album_art_key'],
+        })
+    top_artist = max(artist_counts, key=artist_counts.get) if artist_counts else None
+    return jsonify({
+        'events': events,
+        'stats': {
+            'total_plays': len(events),
+            'total_hours': round(total_seconds / 3600, 1),
+            'unique_tracks': len(unique_tracks),
+            'top_artist': top_artist,
+        }
+    })
+
+
+# ---------------------------------------------------------------------------
+# Library Coverage route
+# ---------------------------------------------------------------------------
+
+@app.route('/api/insights/coverage')
+def insights_coverage():
+    conn = _db.get_conn()
+    heard_track_ids = {
+        r['track_id'] for r in conn.execute(
+            "SELECT DISTINCT track_id FROM play_events WHERE valid_listen=1"
+        ).fetchall()
+    }
+    with library_lock:
+        all_tracks = list(library)
+
+    album_heard = {}
+    artist_heard = {}
+    for t in all_tracks:
+        key = (t.get('artist', ''), t.get('album', ''))
+        tid = t.get('id')
+        is_heard = tid in heard_track_ids
+        if key not in album_heard:
+            album_heard[key] = False
+        if is_heard:
+            album_heard[key] = True
+        art = t.get('artist', 'Unknown')
+        if art not in artist_heard:
+            artist_heard[art] = False
+        if is_heard:
+            artist_heard[art] = True
+
+    total_albums = len(album_heard)
+    heard_albums = sum(1 for v in album_heard.values() if v)
+    total_artists = len(artist_heard)
+    heard_artists = sum(1 for v in artist_heard.values() if v)
+
+    unheard_album_list = []
+    visited = set()
+    for t in all_tracks:
+        key = (t.get('artist', ''), t.get('album', ''))
+        if not album_heard.get(key, True) and key not in visited:
+            visited.add(key)
+            unheard_album_list.append({
+                'artist': t.get('artist', ''),
+                'album': t.get('album', ''),
+                'year': t.get('year'),
+                'genre': t.get('genre'),
+                'album_art_key': t.get('album_art_key'),
+                'date_added': t.get('date_added'),
+            })
+
+    unheard_album_list.sort(key=lambda x: x.get('date_added') or 0, reverse=True)
+
+    return jsonify({
+        'albums': {'heard': heard_albums, 'total': total_albums},
+        'artists': {'heard': heard_artists, 'total': total_artists},
+        'unheard_albums': unheard_album_list[:100],
+    })
 
 
 def parse_m3u(content):

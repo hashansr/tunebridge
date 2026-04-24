@@ -2386,10 +2386,10 @@ tr.track-selected .track-check-indicator {
   --modal-title-size: 20px;
   --modal-subtitle-size: 13px;
   --modal-overline-size: 11px;
-  width: min(860px, 86vw);
-  height: clamp(500px, 70vh, 680px);
-  max-height: calc(100vh - 88px);
-  padding: 16px 18px 12px;
+  width: min(760px, 78vw);
+  height: clamp(440px, 62vh, 600px);
+  max-height: calc(100vh - 110px);
+  padding: 14px 16px 10px;
   border-radius: 18px;
   border: 1px solid rgba(173, 198, 255, 0.18);
   background:
@@ -2400,7 +2400,7 @@ tr.track-selected .track-check-indicator {
   backdrop-filter: blur(22px);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   overflow: hidden;
 }
 #sync-modal .modal-close-btn {
@@ -2420,13 +2420,13 @@ tr.track-selected .track-check-indicator {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   padding: 0;
 }
 .sync-modal-header-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 .sync-modal-icon {
@@ -2524,7 +2524,7 @@ tr.track-selected .track-check-indicator {
 .sync-modal-body {
   flex: 1;
   min-height: 0;
-  margin-top: 2px;
+  margin-top: 0;
 }
 .sync-phase-panel {
   height: 100%;
@@ -2534,7 +2534,7 @@ tr.track-selected .track-check-indicator {
   border-top: none;
   background: transparent;
   box-shadow: none;
-  padding: 12px 0;
+  padding: 8px 0;
   overflow-x: hidden;
 }
 .sync-phase-panel--progress {
@@ -2585,7 +2585,7 @@ tr.track-selected .track-check-indicator {
   justify-content: flex-end;
   gap: 12px;
   border-top: none;
-  padding-top: 12px;
+  padding-top: 10px;
 }
 .sync-preview-actions {
   justify-content: space-between !important;
@@ -3310,9 +3310,9 @@ tr.track-selected .track-check-indicator {
     overflow-y: auto;
   }
   #sync-modal .sync-modal-shell {
-    width: min(740px, 92vw);
-    height: clamp(500px, 72vh, 620px);
-    padding: 14px;
+    width: min(680px, 90vw);
+    height: clamp(440px, 66vh, 560px);
+    padding: 12px;
   }
   .sync-phase-step {
     width: 9px;
@@ -3350,9 +3350,9 @@ tr.track-selected .track-check-indicator {
 
 @media (max-width: 640px) {
   #sync-modal .sync-modal-shell {
-    width: min(560px, 94vw);
-    height: min(80vh, 600px);
-    padding: 12px;
+    width: min(520px, 92vw);
+    height: min(76vh, 520px);
+    padding: 10px;
     border-radius: 16px;
   }
   .sync-modal-title {
@@ -12683,3 +12683,78 @@ tr:hover .track-edit-btn:hover {
 }
 
 /* Album art search bar: button + hint text inline */
+
+
+/* ── Smart Rules modal ──────────────────────────────────────────────── */
+.sr-modal { max-width: 680px; }
+.sr-body { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
+.sr-match-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-primary); }
+.sr-match-row select { padding: 4px 8px; font-size: 13px; }
+.sr-rules-list { display: flex; flex-direction: column; gap: 8px; }
+.sr-rule-row { display: flex; align-items: center; gap: 8px; }
+.sr-field-sel, .sr-op-sel, .sr-val-input { padding: 6px 8px; font-size: 13px; border-radius: 8px; border: none; background: var(--surface-3); color: var(--text-primary); }
+.sr-field-sel { min-width: 130px; }
+.sr-op-sel    { min-width: 120px; }
+.sr-val-input { flex: 1; min-width: 80px; }
+.sr-remove-btn { padding: 6px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; border-radius: 6px; }
+.sr-remove-btn:hover { background: var(--surface-3); color: var(--accent-secondary); }
+.sr-add-rule-btn { align-self: flex-start; }
+.sr-unanalysed-banner {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(240, 180, 41, 0.12); border: 1px solid rgba(240, 180, 41, 0.3);
+  border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #f0b429;
+}
+.sr-footer-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.sr-preview-row { display: flex; align-items: center; gap: 12px; }
+.sr-preview-count { font-size: 13px; color: var(--text-muted); }
+.sr-templates-wrap { border-top: 1px solid var(--surface-3); padding-top: 14px; }
+.sr-templates-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 8px; }
+.sr-templates-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.sr-template-btn { padding: 6px 12px; background: var(--surface-3); color: var(--text-secondary); border: none; border-radius: 20px; cursor: pointer; font-size: 12px; }
+.sr-template-btn:hover { background: var(--accent-primary); color: #101010; }
+
+/* Smart playlist badge in playlist header */
+.pl-smart-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  background: rgba(173, 198, 255, 0.18); color: var(--accent-primary); margin-left: 8px;
+  vertical-align: middle; letter-spacing: 0.04em;
+}
+
+/* ── History view ───────────────────────────────────────────────────── */
+.history-controls { display: flex; align-items: center; gap: 16px; padding: 0 24px 12px; flex-wrap: wrap; }
+.history-period-pills { display: flex; gap: 6px; }
+.history-valid-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); cursor: pointer; }
+.history-valid-toggle input { cursor: pointer; }
+.history-stats-bar { display: flex; gap: 24px; padding: 14px 24px; background: var(--surface-2); border-bottom: 1px solid var(--surface-3); }
+.history-stat { display: flex; flex-direction: column; }
+.history-stat-val { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+.history-stat-lbl { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.history-list { padding: 16px 24px; }
+.history-date-group { margin-bottom: 24px; }
+.history-date-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--surface-3); }
+.history-event-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: default; }
+.history-event-row:hover { background: var(--surface-2); border-radius: 8px; padding-left: 8px; }
+.history-event-art { width: 40px; height: 40px; flex-shrink: 0; border-radius: 6px; overflow: hidden; background: var(--surface-3); }
+.history-event-art img { width: 100%; height: 100%; object-fit: cover; }
+.history-art-placeholder { width: 100%; height: 100%; background: var(--surface-3); }
+.history-event-info { flex: 1; min-width: 0; }
+.history-event-title { font-size: 14px; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history-event-sub   { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history-event-meta  { text-align: right; flex-shrink: 0; }
+.history-event-time  { font-size: 12px; color: var(--text-muted); }
+.history-event-dur   { font-size: 11px; color: var(--text-muted); }
+
+/* ── Library Coverage (already mostly handled inline) ───────────────── */
+.coverage-progress-rows { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+.coverage-progress-row { display: flex; flex-direction: column; gap: 4px; }
+.coverage-progress-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); }
+.coverage-progress-bar { height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.coverage-progress-fill { height: 100%; border-radius: 3px; background: var(--accent-primary); transition: width 0.4s ease; }
+.coverage-album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.coverage-album-card { background: var(--surface-2); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.coverage-album-art { width: 100%; aspect-ratio: 1; border-radius: 8px; background: var(--surface-3); overflow: hidden; object-fit: cover; }
+.coverage-album-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.coverage-album-artist { font-size: 12px; color: var(--text-muted); }
+.coverage-track-count { font-size: 11px; color: var(--text-muted); }
+.coverage-add-btn { padding: 4px 10px; font-size: 12px; background: var(--surface-3); border: none; border-radius: 14px; color: var(--text-secondary); cursor: pointer; align-self: flex-start; }
+.coverage-add-btn:hover { background: var(--accent-primary); color: #101010; }

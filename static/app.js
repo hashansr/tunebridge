@@ -1846,7 +1846,7 @@ function trackRow(t, num, inPlaylist) {
 async function openPlaylist(pid) {
   if (!_guardMlGeneratorNavigation()) return;
   _pushToNavHistory();
-  const pl = await api(`/playlists/${pid}`);
+  let pl = await api(`/playlists/${pid}`);
   state.playlist = pl;
   state.view = 'playlist';
   clearSelection();
@@ -1854,8 +1854,29 @@ async function openPlaylist(pid) {
   renderSidebarPlaylists();
   showViewEl('playlist');
 
+  // Auto-refresh smart playlist silently before rendering
+  if (pl.is_smart && pl.smart_rules?.refresh_on_open) {
+    const refreshed = await refreshSmartPlaylist(pid).catch(() => null);
+    if (refreshed) {
+      pl = await api(`/playlists/${pid}`);
+      state.playlist = pl;
+    }
+  }
 
-  document.getElementById('pl-name').textContent = pl.name;
+  // Show smart pill badge in header if applicable
+  const nameEl = document.getElementById('pl-name');
+  if (nameEl) {
+    nameEl.textContent = pl.name;
+    const existing = document.getElementById('pl-smart-badge');
+    if (existing) existing.remove();
+    if (pl.is_smart) {
+      const badge = document.createElement('span');
+      badge.id = 'pl-smart-badge';
+      badge.className = 'pl-smart-badge';
+      badge.textContent = 'Smart';
+      nameEl.insertAdjacentElement('afterend', badge);
+    }
+  }
   _applyPlaylistDetailMode(false);
 
   renderPlaylistTracks(pl.tracks);
@@ -3500,7 +3521,17 @@ function _currentMlPayload() {
     deterministic,
     allow_repeat_artists: allowRepeatArtists,
     seed: _mlPreviewSeed,
+    ..._currentMlHeardFilter(),
   };
+}
+
+function _currentMlHeardFilter() {
+  const val = document.getElementById('ml-gen-heard')?.value || '';
+  if (!val) return {};
+  if (val === 'unheard') return { exclude_heard: true };
+  const days = parseInt(val.replace('not_', ''), 10);
+  if (!isNaN(days)) return { exclude_heard_within_days: days };
+  return {};
 }
 
 function _renderMlPreviewSummary(summary = {}) {
@@ -4783,6 +4814,7 @@ function showView(viewName) {
     loadSettings();
   }
   else if (viewName === 'insights') loadInsightsView();
+  else if (viewName === 'history') loadHistoryView();
 
   if (viewName === 'home') {
     if (_homeAutoRefreshTimer) clearInterval(_homeAutoRefreshTimer);
@@ -4796,7 +4828,7 @@ function showView(viewName) {
 }
 
 function showViewEl(name) {
-  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'missing-tags'];
+  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'missing-tags', 'history'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.style.display = v === name ? (v === 'playlist' ? 'flex' : 'block') : 'none';
@@ -10484,6 +10516,269 @@ function _getOsPlatform() {
   return 'linux';
 }
 
+/* ── Smart Rules modal ──────────────────────────────────────────────── */
+const _SR_FIELDS = [
+  { value: 'genre',       label: 'Genre',        type: 'string' },
+  { value: 'artist',      label: 'Artist',       type: 'string' },
+  { value: 'album',       label: 'Album',        type: 'string' },
+  { value: 'year',        label: 'Year',         type: 'int' },
+  { value: 'format',      label: 'Format',       type: 'string' },
+  { value: 'bitrate',     label: 'Bitrate',      type: 'int' },
+  { value: 'date_added',  label: 'Date added',   type: 'date' },
+  { value: 'play_count',  label: 'Play count',   type: 'int' },
+  { value: 'never_played',label: 'Never played', type: 'bool' },
+  { value: 'last_played', label: 'Last played',  type: 'date' },
+  { value: 'energy',      label: 'Energy',       type: 'float' },
+  { value: 'brightness',  label: 'Brightness',   type: 'float' },
+  { value: 'has_analysis',label: 'Has analysis', type: 'bool' },
+];
+const _SR_OPS = {
+  string: [['contains','contains'],['not_contains','does not contain'],['is','is'],['is_not','is not']],
+  int:    [['equals','='],['greater_than','>'],['less_than','<']],
+  float:  [['greater_than','>'],['less_than','<']],
+  bool:   [['is','is']],
+  date:   [['within_days','within days'],['older_than_days','older than days']],
+};
+const _SR_TEMPLATES = {
+  unheard:    { name: 'Unheard Library',         rules: [{field:'never_played',op:'is',value:true}],                                           limit: 50, sort_field: 'date_added', sort_order: 'desc' },
+  forgotten:  { name: 'Forgotten Favorites',     rules: [{field:'play_count',op:'greater_than',value:2},{field:'last_played',op:'older_than_days',value:90}], limit: 30, sort_field: 'last_played', sort_order: 'asc' },
+  new_unheard:{ name: 'Recently Added, Unheard', rules: [{field:'date_added',op:'within_days',value:30},{field:'never_played',op:'is',value:true}],           limit: 50, sort_field: 'date_added', sort_order: 'desc' },
+  high_energy:{ name: 'High Energy Unheard',     rules: [{field:'energy',op:'greater_than',value:0.65},{field:'never_played',op:'is',value:true}],             limit: 50, sort_field: 'date_added', sort_order: 'desc' },
+  flac_only:  { name: 'FLAC Only',               rules: [{field:'format',op:'is',value:'FLAC'},{field:'never_played',op:'is',value:true}],                     limit: 50, sort_field: 'date_added', sort_order: 'desc' },
+  deep_cuts:  { name: 'Old Deep Cuts',           rules: [{field:'year',op:'less_than',value:1990},{field:'never_played',op:'is',value:true},{field:'has_analysis',op:'is',value:true}], limit: 50, sort_field: 'year', sort_order: 'asc' },
+};
+let _srRules = [];
+
+function srOpen() {
+  _srRules = [{ field: 'never_played', op: 'is', value: true }];
+  document.getElementById('sr-name').value = '';
+  document.getElementById('sr-match-mode').value = 'all';
+  document.getElementById('sr-limit').value = '50';
+  document.getElementById('sr-sort-field').value = 'date_added';
+  document.getElementById('sr-sort-order').value = 'desc';
+  _srRenderRules();
+  document.getElementById('sr-preview-count').textContent = '';
+  document.getElementById('sr-unanalysed-banner').style.display = 'none';
+  document.getElementById('sr-modal').style.display = 'flex';
+}
+
+function srClose() {
+  document.getElementById('sr-modal').style.display = 'none';
+}
+
+function srAddRule() {
+  _srRules.push({ field: 'genre', op: 'contains', value: '' });
+  _srRenderRules();
+}
+
+function srRemoveRule(idx) {
+  _srRules.splice(idx, 1);
+  _srRenderRules();
+}
+
+function srChangeField(idx, field) {
+  const fd = _SR_FIELDS.find(f => f.value === field);
+  const ops = fd ? _SR_OPS[fd.type] : _SR_OPS.string;
+  _srRules[idx] = { field, op: ops[0][0], value: fd?.type === 'bool' ? true : '' };
+  _srRenderRules();
+}
+
+function srChangeOp(idx, op) {
+  _srRules[idx].op = op;
+}
+
+function srChangeVal(idx, val) {
+  const fd = _SR_FIELDS.find(f => f.value === _srRules[idx].field);
+  if (fd?.type === 'bool') _srRules[idx].value = val === 'true';
+  else if (fd?.type === 'int' || fd?.type === 'float') _srRules[idx].value = Number(val);
+  else _srRules[idx].value = val;
+}
+
+function _srRenderRules() {
+  const list = document.getElementById('sr-rules-list');
+  if (!list) return;
+  list.innerHTML = _srRules.map((r, i) => {
+    const fd = _SR_FIELDS.find(f => f.value === r.field) || _SR_FIELDS[0];
+    const ops = _SR_OPS[fd.type] || _SR_OPS.string;
+    const fieldOpts = _SR_FIELDS.map(f => `<option value="${f.value}" ${f.value === r.field ? 'selected' : ''}>${f.label}</option>`).join('');
+    const opOpts = ops.map(([v, l]) => `<option value="${v}" ${v === r.op ? 'selected' : ''}>${l}</option>`).join('');
+    let valInput;
+    if (fd.type === 'bool') {
+      valInput = `<select class="sr-val-input" onchange="App.srChangeVal(${i},this.value)">
+        <option value="true" ${r.value === true ? 'selected' : ''}>Yes</option>
+        <option value="false" ${r.value === false ? 'selected' : ''}>No</option>
+      </select>`;
+    } else {
+      valInput = `<input class="sr-val-input" type="${fd.type === 'float' ? 'number' : 'text'}"
+        ${fd.type === 'float' ? 'min="0" max="1" step="0.05"' : ''}
+        ${fd.type === 'int' ? 'min="0" step="1"' : ''}
+        value="${r.value ?? ''}"
+        onchange="App.srChangeVal(${i},this.value)"
+        oninput="App.srChangeVal(${i},this.value)" />`;
+    }
+    return `<div class="sr-rule-row">
+      <select class="sr-field-sel" onchange="App.srChangeField(${i},this.value)">${fieldOpts}</select>
+      <select class="sr-op-sel" onchange="App.srChangeOp(${i},this.value)">${opOpts}</select>
+      ${valInput}
+      <button class="sr-remove-btn" onclick="App.srRemoveRule(${i})" title="Remove rule">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>`;
+  }).join('');
+}
+
+async function srPreview() {
+  const payload = _srBuildPayload();
+  const countEl = document.getElementById('sr-preview-count');
+  const banner = document.getElementById('sr-unanalysed-banner');
+  const msg = document.getElementById('sr-unanalysed-msg');
+  try {
+    if (countEl) countEl.textContent = 'Previewing…';
+    const res = await api('/playlists/smart/preview', { method: 'POST', body: payload });
+    if (countEl) countEl.textContent = `${res.total} track${res.total !== 1 ? 's' : ''} match`;
+    if (res.unanalysed_count > 0 && banner && msg) {
+      msg.textContent = `${res.unanalysed_count} tracks excluded — run Analyse Library to include them.`;
+      banner.style.display = 'flex';
+    } else if (banner) {
+      banner.style.display = 'none';
+    }
+  } catch (e) {
+    if (countEl) countEl.textContent = 'Preview failed';
+  }
+}
+
+function _srBuildPayload() {
+  return {
+    rules: _srRules,
+    match_mode: document.getElementById('sr-match-mode')?.value || 'all',
+    limit_count: parseInt(document.getElementById('sr-limit')?.value || '50', 10),
+    sort_field: document.getElementById('sr-sort-field')?.value || 'date_added',
+    sort_order: document.getElementById('sr-sort-order')?.value || 'desc',
+  };
+}
+
+async function srSave() {
+  const name = (document.getElementById('sr-name')?.value || '').trim() || 'Smart Playlist';
+  const payload = { ..._srBuildPayload(), name, refresh_on_open: true };
+  try {
+    const res = await api('/playlists/smart', { method: 'POST', body: payload });
+    srClose();
+    await loadPlaylists();
+    toast(`Smart playlist "${res.name}" created (${res.track_count} tracks)`);
+    if (res.unanalysed_count > 0) {
+      toast(`${res.unanalysed_count} tracks excluded — run Analyse Library to include them`, 'warn');
+    }
+    await openPlaylist(res.id);
+  } catch (e) {
+    toast('Could not create smart playlist');
+  }
+}
+
+function srLoadTemplate(key) {
+  const tmpl = _SR_TEMPLATES[key];
+  if (!tmpl) return;
+  _srRules = tmpl.rules.map(r => ({ ...r }));
+  document.getElementById('sr-name').value = tmpl.name;
+  document.getElementById('sr-limit').value = String(tmpl.limit);
+  document.getElementById('sr-sort-field').value = tmpl.sort_field;
+  document.getElementById('sr-sort-order').value = tmpl.sort_order;
+  _srRenderRules();
+  document.getElementById('sr-preview-count').textContent = '';
+}
+
+/* ── History view ───────────────────────────────────────────────────── */
+let _historyPeriod = 30;
+
+function setHistoryPeriod(days) {
+  _historyPeriod = days;
+  document.querySelectorAll('[data-period]').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.period) === days);
+  });
+  loadHistoryView();
+}
+
+async function loadHistoryView() {
+  setActiveNav('history');
+  showViewEl('history');
+  const validOnly = document.getElementById('history-valid-only')?.checked ? 'true' : 'false';
+  const listEl = document.getElementById('history-list');
+  const statsEl = document.getElementById('history-stats');
+  if (listEl) listEl.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
+  if (statsEl) statsEl.style.display = 'none';
+  try {
+    const data = await api(`/history?since=${_historyPeriod}&limit=500&valid_only=${validOnly}`);
+    const { events, stats } = data;
+    if (statsEl) {
+      statsEl.style.display = 'flex';
+      statsEl.innerHTML = `
+        <div class="history-stat"><span class="history-stat-val">${stats.total_plays}</span><span class="history-stat-lbl">plays</span></div>
+        <div class="history-stat"><span class="history-stat-val">${stats.total_hours}</span><span class="history-stat-lbl">hours</span></div>
+        <div class="history-stat"><span class="history-stat-val">${stats.unique_tracks}</span><span class="history-stat-lbl">unique tracks</span></div>
+        ${stats.top_artist ? `<div class="history-stat"><span class="history-stat-val">${stats.top_artist}</span><span class="history-stat-lbl">top artist</span></div>` : ''}
+      `;
+    }
+    if (!events.length) {
+      listEl.innerHTML = '<div class="empty-state"><p>No listening history for this period.</p></div>';
+      return;
+    }
+    // Group by date
+    const groups = {};
+    events.forEach(ev => {
+      const d = new Date(ev.played_at * 1000);
+      const label = _historyDateLabel(d);
+      if (!groups[label]) groups[label] = [];
+      groups[label].push(ev);
+    });
+    listEl.innerHTML = Object.entries(groups).map(([label, evs]) => `
+      <div class="history-date-group">
+        <div class="history-date-label">${label}</div>
+        ${evs.map(ev => `
+          <div class="history-event-row" ondblclick="Player.playTrackById('${ev.track_id}')">
+            <div class="history-event-art">${ev.album_art_key
+              ? `<img src="/api/library/artwork/${ev.album_art_key}" onerror="this.style.display='none'" />`
+              : `<div class="history-art-placeholder"></div>`}</div>
+            <div class="history-event-info">
+              <div class="history-event-title">${ev.title || 'Unknown'}</div>
+              <div class="history-event-sub">${ev.artist || ''} · ${ev.album || ''}</div>
+            </div>
+            <div class="history-event-meta">
+              <div class="history-event-time">${_historyTimeStr(ev.played_at)}</div>
+              <div class="history-event-dur">${ev.play_seconds ? _fmtDur(ev.play_seconds) : ''}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
+  } catch (e) {
+    if (listEl) listEl.innerHTML = '<div class="empty-state"><p>Could not load history.</p></div>';
+  }
+}
+
+function _historyDateLabel(d) {
+  const today = new Date();
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+}
+
+function _historyTimeStr(ts) {
+  return new Date(ts * 1000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+/* ── Smart playlist auto-refresh ────────────────────────────────────── */
+async function refreshSmartPlaylist(pid) {
+  try {
+    const res = await api(`/playlists/${pid}/smart/refresh`, { method: 'POST' });
+    if (res.unanalysed_count > 0) {
+      toast(`${res.unanalysed_count} tracks excluded — run Analyse Library to include them`, 'warn');
+    }
+    return res.tracks || [];
+  } catch (e) {
+    return null;
+  }
+}
+
 /* ── Public API ─────────────────────────────────────────────────────── */
 const App = {
   showView,
@@ -10830,6 +11125,25 @@ const App = {
   onAlbumArtFileSelected,
   saveAlbumArt,
   removeAlbumArt,
+  // Smart Rules
+  srOpen,
+  srClose,
+  srAddRule,
+  srRemoveRule,
+  srChangeField,
+  srChangeOp,
+  srChangeVal,
+  srPreview,
+  srSave,
+  srLoadTemplate,
+  refreshSmartPlaylist,
+  // History
+  loadHistoryView,
+  setHistoryPeriod,
+  // Coverage
+  loadInsightsCoverage,
+  _coverageAddToPlaylist,
+  _coverageFilterGenre,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
