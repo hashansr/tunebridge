@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.42-rc.240426-1633 · 2026-04-24
 - Add: Smart Rules playlists — declarative rule builder (genre, artist, year, play count, never played, last played, energy, brightness, and more) with AND/OR matching, limit, sort, and 6 built-in templates (Unheard Library, Forgotten Favorites, Recently Added Unheard, High Energy Unheard, FLAC Only, Old Deep Cuts)
 - Add: Smart playlists auto-refresh on open; "Smart" badge shown in playlist header
 - Add: Warning banner when sonic rules (energy/brightness) are active but some tracks lack audio analysis
