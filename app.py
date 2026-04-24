@@ -9341,14 +9341,18 @@ _rg_generation   = 0        # incremented on each new run; guards against stale 
 _RG_SUPPORTED_FORMATS = frozenset({'FLAC', 'MP3', 'WAV', 'AIFF', 'OGG', 'OPUS'})
 _RG_FMT_SQL = ','.join(f"'{f}'" for f in _RG_SUPPORTED_FORMATS)  # for inline SQL
 
+_RG_FILE_TIMEOUT = 60   # seconds before a single sf.read() is abandoned
+
 rg_tag_state = {
-    'status':       'idle',   # idle | running | done | error | cancelled
-    'done':         0,
-    'total':        0,
-    'errors':       0,
-    'started_at':   None,
-    'completed_at': None,
-    'error':        None,
+    'status':        'idle',   # idle | running | done | error | cancelled
+    'done':          0,
+    'total':         0,
+    'errors':        0,
+    'started_at':    None,
+    'completed_at':  None,
+    'error':         None,
+    'current_file':  None,     # basename of file being read right now
+    'last_activity': None,     # epoch of last done-increment (stall detection)
 }
 
 def _load_feature_entries():
@@ -9675,42 +9679,48 @@ def _write_rg_tags(path, fmt, track_gain, track_peak, album_gain=None, album_pea
     # WAV and other formats: no standard RG tag container — skip silently
 
 
+def _rg_read_file(sf_mod, path):
+    """Read an audio file into float32 array. Runs inside a timed sub-thread."""
+    return sf_mod.read(path, dtype='float32', always_2d=True)
+
+
 def _run_rg_tagger(my_gen):
     """Background thread: measure loudness with EBU R128 and write ReplayGain tags.
 
     my_gen: generation token from _rg_generation at thread-spawn time.
     Old threads exit without touching rg_tag_state if a newer run has started.
     """
-    import soundfile as sf
-    import pyloudnorm as pyln
-    import numpy as np
-    from collections import defaultdict
-    from pathlib import Path
-
     global rg_tag_state
-    rg_tag_state['started_at'] = time.time()
 
+    # ── Unconditional outer finally: status always gets written ──────────────
+    # Catches silent thread crashes (import errors, unexpected exceptions).
+    _clean_exit = False
     try:
+        rg_tag_state['started_at'] = time.time()
+
+        # Imports inside try so ImportError sets status='error' rather than
+        # leaving status='running' forever.
+        import soundfile as sf
+        import pyloudnorm as pyln
+        import numpy as np
+        from collections import defaultdict
+        from pathlib import Path
+
         music_base = get_music_base()
         conn = _db.get_conn()
-        # Only load formats soundfile can decode — M4A/AAC excluded entirely so
-        # they never appear in the work queue or progress count.
         all_rows = conn.execute(
             f'SELECT id, path, format, album_artist, artist, album, rg_track_gain '
             f'FROM tracks WHERE format IN ({_RG_FMT_SQL})'
         ).fetchall()
 
-        # Group by (album_artist/artist, album) — need full album context for album gain
         albums = defaultdict(list)
         for row in all_rows:
             key = (row['album_artist'] or row['artist'] or '', row['album'] or '')
             albums[key].append(dict(row))
 
-        # Only process albums that have at least one untagged track
         work_albums = {k: v for k, v in albums.items()
                        if any(t['rg_track_gain'] is None for t in v)}
 
-        # Total = taggable tracks across those albums (all used for album gain accuracy)
         total_tracks = sum(len(v) for v in work_albums.values())
         rg_tag_state['total'] = total_tracks
         done = 0
@@ -9719,42 +9729,82 @@ def _run_rg_tagger(my_gen):
             if rg_tag_state['status'] == 'cancelled' or _rg_generation != my_gen:
                 break
 
-            measured = []   # list of (track_id, abs_path, fmt, lufs, peak)
+            measured = []
 
             for t in tracks:
                 if rg_tag_state['status'] == 'cancelled' or _rg_generation != my_gen:
                     break
                 abs_path = str(Path(music_base) / t['path'])
+                fname    = os.path.basename(abs_path)
+                if _rg_generation == my_gen:
+                    rg_tag_state['current_file'] = fname
+
                 try:
-                    data, sr = sf.read(abs_path, dtype='float32', always_2d=True)
-                    # Check generation after the blocking read — exit quickly if a
-                    # cancel+restart arrived while we were reading the file.
+                    # ── Per-file read with timeout ────────────────────────────
+                    # sf.read() can block indefinitely on some files in daemon-
+                    # thread context (macOS I/O priority throttling).  Run it in
+                    # a sub-thread; if it takes > _RG_FILE_TIMEOUT seconds, skip.
+                    _result  = [None, None]
+                    _err     = [None]
+                    _evt     = threading.Event()
+
+                    def _do_read():
+                        try:
+                            _result[0], _result[1] = _rg_read_file(sf, abs_path)
+                        except Exception as e:
+                            _err[0] = e
+                        finally:
+                            _evt.set()
+
+                    threading.Thread(target=_do_read, daemon=True,
+                                     name=f'rg_read_{fname[:30]}').start()
+
+                    if not _evt.wait(timeout=_RG_FILE_TIMEOUT):
+                        raise TimeoutError(
+                            f'sf.read() timed out after {_RG_FILE_TIMEOUT}s — '
+                            f'file may be on a sleeping drive or corrupted')
+
+                    if _err[0] is not None:
+                        raise _err[0]   # re-raise read error in this thread
+
+                    data, sr = _result[0], _result[1]
+
+                    # Post-read generation check — exit quickly if superseded.
                     if _rg_generation != my_gen:
                         del data
                         break
+
                     meter = pyln.Meter(sr)
                     lufs  = meter.integrated_loudness(data)
                     peak  = float(np.max(np.abs(data)))
-                    del data   # free RAM promptly — hi-res albums can be 200+ MB each
+                    del data
                     if not np.isfinite(lufs):
-                        lufs = _RG_TARGET_LUFS  # silent track → 0 dB gain
+                        lufs = _RG_TARGET_LUFS
                     measured.append((t['id'], abs_path, t['format'], lufs, peak))
+
                 except Exception as exc:
-                    logging.warning('RG tagger: skipping %s — %s', abs_path, exc)
+                    logging.warning('RG tagger: skipping %s — %s', fname, exc)
                     if _rg_generation == my_gen:
                         rg_tag_state['errors'] += 1
+
                 finally:
+                    # Increment done for every track attempted (success or skip).
+                    # The _rg_generation guard also handles the case where a
+                    # 'break' inside the try fires finally — if we broke because
+                    # gen changed, == my_gen is False so done is not counted.
                     if _rg_generation == my_gen:
                         done += 1
-                        rg_tag_state['done'] = done
+                        rg_tag_state['done']          = done
+                        rg_tag_state['last_activity'] = time.time()
 
+            if _rg_generation != my_gen:
+                break
             if not measured:
                 continue
 
-            # Album gain = TARGET - mean(per-track LUFS)
-            album_lufs  = sum(x[3] for x in measured) / len(measured)
-            album_gain  = _RG_TARGET_LUFS - album_lufs
-            album_peak  = max(x[4] for x in measured)
+            album_lufs = sum(x[3] for x in measured) / len(measured)
+            album_gain = _RG_TARGET_LUFS - album_lufs
+            album_peak = max(x[4] for x in measured)
 
             db_updates = []
             for track_id, abs_path, fmt, lufs, peak in measured:
@@ -9762,8 +9812,10 @@ def _run_rg_tagger(my_gen):
                 try:
                     _write_rg_tags(abs_path, fmt, track_gain, peak, album_gain, album_peak)
                 except Exception as exc:
-                    logging.warning('RG tagger: tag write failed %s — %s', abs_path, exc)
-                    rg_tag_state['errors'] += 1
+                    logging.warning('RG tagger: tag write failed %s — %s',
+                                    os.path.basename(abs_path), exc)
+                    if _rg_generation == my_gen:
+                        rg_tag_state['errors'] += 1
                     continue
                 db_updates.append((
                     round(track_gain, 2), round(album_gain, 2),
@@ -9773,7 +9825,6 @@ def _run_rg_tagger(my_gen):
 
             if db_updates:
                 _db.db_update_rg_batch(db_updates)
-                # Keep in-memory library cache consistent
                 rg_map = {tid: (tg, ag, tp, ap) for tg, ag, tp, ap, tid in db_updates}
                 with library_lock:
                     for t in library:
@@ -9782,16 +9833,27 @@ def _run_rg_tagger(my_gen):
                             t.update({'rg_track_gain': tg, 'rg_album_gain': ag,
                                       'rg_track_peak': tp, 'rg_album_peak': ap})
 
-        # Only write final state if we're still the current generation
         if _rg_generation == my_gen:
             final = 'cancelled' if rg_tag_state['status'] == 'cancelled' else 'done'
-            rg_tag_state.update({'status': final, 'completed_at': time.time()})
+            rg_tag_state.update({'status': final, 'completed_at': time.time(),
+                                  'current_file': None})
+        _clean_exit = True
 
     except Exception as exc:
         logging.exception('RG tagger crashed')
         if _rg_generation == my_gen:
             rg_tag_state.update({'status': 'error', 'error': str(exc),
-                                  'completed_at': time.time()})
+                                  'completed_at': time.time(), 'current_file': None})
+        _clean_exit = True
+
+    finally:
+        # Safety net: if the thread exits without a clean path above (e.g. a
+        # BaseException like SystemExit), force status out of 'running'.
+        if not _clean_exit and _rg_generation == my_gen:
+            rg_tag_state.update({'status': 'error',
+                                  'error': 'Thread exited unexpectedly',
+                                  'completed_at': time.time(),
+                                  'current_file': None})
 
 
 @app.route('/api/library/replaygain/info')
@@ -9829,7 +9891,13 @@ def rg_tag_start():
 
 @app.route('/api/library/replaygain/status')
 def rg_tag_status():
-    return jsonify(rg_tag_state)
+    s = dict(rg_tag_state)
+    # Add stalled flag: running but no activity for > (timeout + 5s) grace period
+    if s['status'] == 'running' and s.get('last_activity'):
+        s['stalled'] = (time.time() - s['last_activity']) > (_RG_FILE_TIMEOUT + 5)
+    else:
+        s['stalled'] = False
+    return jsonify(s)
 
 
 @app.route('/api/library/replaygain/cancel', methods=['POST'])

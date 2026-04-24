@@ -539,6 +539,17 @@ nav {
 #rg-banner-sub {
   color: var(--text-muted);
 }
+.rg-banner-file {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+  display: block;
+  margin-top: 1px;
+}
 .settings-subsection-divider {
   height: 1px;
   background: rgba(255,255,255,0.06);
@@ -2556,13 +2567,13 @@ tr.track-selected .track-check-indicator {
 .sync-phase-panel--pick {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 .sync-pick-scroll {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding-right: 4px;
+  padding-right: 2px;
 }
 .sync-pick-actions {
   margin-top: 0;
@@ -2637,14 +2648,14 @@ tr.track-selected .track-check-indicator {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 /* Device picker */
 .sync-device-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .sync-device-loading {
   display: inline-flex;
@@ -2668,14 +2679,14 @@ tr.track-selected .track-check-indicator {
 .sync-device-card {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   justify-content: space-between;
-  padding: 13px 14px;
+  padding: 10px 12px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(65, 71, 85, 0.18);
-  border-radius: 11px;
+  border-radius: 10px;
   color: var(--text);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s, transform 0.1s, border-color 0.15s, box-shadow 0.15s;
@@ -2714,9 +2725,9 @@ tr.track-selected .track-check-indicator {
   box-shadow: none;
 }
 .sync-device-card-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(65, 71, 85, 0.22);
   display: flex;
@@ -2728,19 +2739,19 @@ tr.track-selected .track-check-indicator {
 .sync-device-card-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
   flex: 1;
 }
 .sync-device-card-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
 }
 .sync-device-meta {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
-  line-height: 1.25;
+  line-height: 1.2;
 }
 .sync-device-radio {
   width: 18px;

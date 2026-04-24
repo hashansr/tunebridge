@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Sync modal compactness pass — reduced shell dimensions and tightened Step 1 device-picker density (card spacing, sizing, and typography) for a less oversized presentation.
 
 ## v0.42-rc.240426-1633 · 2026-04-24
 - Add: Smart Rules playlists — declarative rule builder (genre, artist, year, play count, never played, last played, energy, brightness, and more) with AND/OR matching, limit, sort, and 6 built-in templates (Unheard Library, Forgotten Favorites, Recently Added Unheard, High Energy Unheard, FLAC Only, Old Deep Cuts)

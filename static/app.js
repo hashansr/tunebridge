@@ -14397,28 +14397,33 @@ async function _pollRgStatus() {
 }
 
 function _updateRgBanner(s) {
-  const banner  = document.getElementById('rg-banner');
-  const bar     = document.getElementById('rg-banner-bar');
-  const label   = document.getElementById('rg-banner-label');
-  const sub     = document.getElementById('rg-banner-sub');
+  const banner   = document.getElementById('rg-banner');
+  const bar      = document.getElementById('rg-banner-bar');
+  const label    = document.getElementById('rg-banner-label');
+  const sub      = document.getElementById('rg-banner-sub');
+  const fileLine = document.getElementById('rg-banner-file');
   if (!banner) return;
 
   const pct     = s.total > 0 ? Math.round(s.done / s.total * 100) : 0;
-  const errNote = s.errors > 0 ? ` · ${s.errors} error${s.errors > 1 ? 's' : ''}` : '';
+  const errNote = s.errors > 0 ? ` · ${s.errors} skipped` : '';
   if (bar) bar.style.width = pct + '%';
 
   if (s.status === 'running') {
-    if (label) label.textContent = 'Tagging tracks…';
+    if (label) label.textContent = s.stalled ? 'Waiting for drive…' : 'Tagging tracks…';
     if (sub)   sub.textContent   = `${s.done.toLocaleString()} / ${s.total.toLocaleString()} · ${pct}%${errNote}`;
+    if (fileLine) fileLine.textContent = s.current_file || '';
   } else if (s.status === 'done') {
     if (label) label.textContent = 'Tagging complete';
     if (sub)   sub.textContent   = `${s.done.toLocaleString()} tracks tagged${errNote}`;
+    if (fileLine) fileLine.textContent = '';
   } else if (s.status === 'cancelled') {
     if (label) label.textContent = 'Tagging cancelled';
     if (sub)   sub.textContent   = `${s.done.toLocaleString()} of ${s.total.toLocaleString()} tracks tagged`;
+    if (fileLine) fileLine.textContent = '';
   } else if (s.status === 'error') {
     if (label) label.textContent = 'Tagging failed';
     if (sub)   sub.textContent   = s.error || 'Unknown error';
+    if (fileLine) fileLine.textContent = '';
   }
 }
 

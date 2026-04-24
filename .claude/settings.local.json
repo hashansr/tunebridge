@@ -284,7 +284,9 @@
       "Bash(curl -s \"http://localhost:5001/api/library/replaygain/status\")",
       "Bash(curl -s -X POST \"http://localhost:5001/api/library/replaygain/tag\")",
       "Bash(curl -s -X POST \"http://localhost:5001/api/library/replaygain/cancel\")",
-      "Bash(curl -s http://localhost:5001/api/library/replaygain/info)"
+      "Bash(curl -s http://localhost:5001/api/library/replaygain/info)",
+      "Bash(curl -s http://localhost:5001/api/library/replaygain/status)",
+      "Bash(curl -s -X POST http://localhost:5001/api/library/replaygain/cancel)"
     ]
   }
 }
