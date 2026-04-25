@@ -1531,14 +1531,31 @@
         <!-- Phase: pick device -->
         <div id="sync-phase-pick" class="sync-phase-panel sync-phase-panel--pick">
           <div class="sync-pick-scroll">
-            <div class="sync-section-label">Select a device</div>
-            <div id="sync-device-list" class="sync-device-list">
-              <!-- Populated dynamically from DAP list in showSync() -->
+            <div class="sync-device-groups">
+              <section class="sync-device-group" id="sync-device-group-recommended">
+                <div class="sync-section-label">Recommended</div>
+                <div id="sync-device-list-recommended" class="sync-device-list">
+                  <!-- Populated dynamically from DAP list in showSync() -->
+                </div>
+              </section>
+              <section class="sync-device-group" id="sync-device-group-external" style="display:none">
+                <div class="sync-section-label">External Storage</div>
+                <div id="sync-device-list-external" class="sync-device-list">
+                  <!-- Populated dynamically from DAP list in showSync() -->
+                </div>
+              </section>
+              <button class="sync-device-connect-hint" type="button" onclick="App.openDapModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Connect new device via USB or Wi-Fi
+              </button>
             </div>
           </div>
           <div class="modal-actions sync-pick-actions">
             <button class="btn-secondary" onclick="App.closeSyncModal()">Cancel</button>
-            <button class="btn-primary" id="sync-pick-next-btn" onclick="App.startSyncFromSelection()" disabled>Next: Scan Library</button>
+            <button class="btn-primary" id="sync-pick-next-btn" onclick="App.startSyncFromSelection()" disabled>Scan</button>
           </div>
         </div>
 

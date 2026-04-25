@@ -5521,15 +5521,18 @@ async function showSync() {
   const modal = document.getElementById('sync-modal');
   if (modal) modal.style.display = 'flex';
 
-  const container = document.getElementById('sync-device-list');
-  if (container) {
-    container.innerHTML = `
+  const recommendedContainer = document.getElementById('sync-device-list-recommended');
+  const externalContainer = document.getElementById('sync-device-list-external');
+  const externalGroup = document.getElementById('sync-device-group-external');
+  const loadingHtml = `
       <div class="sync-device-loading">
         <div class="sync-device-loading-spinner" aria-hidden="true"></div>
         <span>Loading your DAPs and sync status…</span>
       </div>
     `;
-  }
+  if (recommendedContainer) recommendedContainer.innerHTML = loadingHtml;
+  if (externalContainer) externalContainer.innerHTML = '';
+  if (externalGroup) externalGroup.style.display = 'none';
 
   await api('/sync/reset', { method: 'POST' }).catch(() => {});
   _syncLastStatus = null;
@@ -5549,7 +5552,10 @@ async function showSync() {
   if (doneDetail) doneDetail.textContent = '';
 
   const daps = await api('/daps').catch(() => []);
-  if (!container) { document.getElementById('sync-modal').style.display = 'flex'; return; }
+  if (!recommendedContainer || !externalContainer) {
+    document.getElementById('sync-modal').style.display = 'flex';
+    return;
+  }
 
   const svgDevice = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>`;
 
@@ -5567,19 +5573,25 @@ async function showSync() {
   };
 
   if (!daps.length) {
-    container.innerHTML = `<p style="color:var(--text-muted);font-size:13px">No DAPs configured — add one in <strong>Gear → DAPs</strong> first.</p>`;
+    recommendedContainer.innerHTML = `<p style="color:var(--text-muted);font-size:13px">No DAPs configured — add one in <strong>Gear → DAPs</strong> first.</p>`;
+    externalContainer.innerHTML = '';
   } else {
     const firstMounted = daps.find(d => d?.mounted);
     _syncSelectedDapId = String((firstMounted || {}).id || '');
     _syncSelectedDapName = String((firstMounted || {}).name || 'Selected device');
-    container.innerHTML = daps.map(dap => {
+    const renderCard = (dap) => {
       const selectable = !!dap?.mounted;
       const selected = selectable && String(dap.id) === String(_syncSelectedDapId);
+      const storageType = String(dap?.storage_type || '').toLowerCase();
+      const statusChip = selected
+        ? 'FAST SYNC'
+        : (storageType === 'sd' ? 'STORAGE' : 'USB-C');
       return `
         <button
           class="sync-device-card${selected ? ' is-selected' : ''}${selectable ? '' : ' is-disabled'}"
           data-dap-id="${esc(dap.id)}"
           data-selectable="${selectable ? '1' : '0'}"
+          data-storage-type="${esc(storageType || '')}"
           onclick="App.selectSyncDevice('${dap.id}')"
           ${selectable ? '' : 'disabled aria-disabled="true"'}
         >
@@ -5590,11 +5602,21 @@ async function showSync() {
               ${esc(_deviceMeta(dap))}
             </span>
           </div>
-          <div class="sync-device-radio${selected ? ' is-selected' : ''}" aria-hidden="true">
-            <span></span>
+          <div class="sync-device-card-statuses">
+            <span class="sync-device-chip${selected ? ' sync-device-chip--selected' : ''}">${statusChip}</span>
+            <div class="sync-device-radio${selected ? ' is-selected' : ''}" aria-hidden="true">
+              <span></span>
+            </div>
           </div>
         </button>`;
-    }).join('');
+    };
+    const preferred = daps.filter((d) => !!d?.mounted || String(d?.storage_type || '').toLowerCase() !== 'sd');
+    const recommended = preferred.length ? preferred : daps;
+    const recommendedIds = new Set(recommended.map((d) => String(d?.id || '')));
+    const external = daps.filter((d) => String(d?.storage_type || '').toLowerCase() === 'sd' && !recommendedIds.has(String(d?.id || '')));
+    recommendedContainer.innerHTML = recommended.map(renderCard).join('');
+    externalContainer.innerHTML = external.length ? external.map(renderCard).join('') : '';
+    if (externalGroup) externalGroup.style.display = external.length ? '' : 'none';
   }
 
   syncUpdatePickNextCta();
@@ -5614,36 +5636,47 @@ function closeSyncModal() {
 }
 
 function selectSyncDevice(dapId) {
-  const container = document.getElementById('sync-device-list');
+  const containers = [
+    document.getElementById('sync-device-list-recommended'),
+    document.getElementById('sync-device-list-external'),
+  ].filter(Boolean);
   const targetId = String(dapId || '');
-  const target = container
-    ? [...container.querySelectorAll('.sync-device-card')].find((el) => String(el.getAttribute('data-dap-id') || '') === targetId)
-    : null;
+  const allCards = containers.flatMap((container) => [...container.querySelectorAll('.sync-device-card')]);
+  const target = allCards.find((el) => String(el.getAttribute('data-dap-id') || '') === targetId) || null;
   if (target?.dataset?.selectable !== '1') {
     return;
   }
   _syncSelectedDapId = targetId;
   _syncSelectedDapName = String(target.querySelector('.sync-device-card-name')?.textContent || '').trim() || 'Selected device';
-  if (container) {
-    [...container.querySelectorAll('.sync-device-card')].forEach((el) => {
-      const cardId = String(el.getAttribute('data-dap-id') || '');
-      const selectable = el.dataset.selectable === '1';
-      el.classList.toggle('is-selected', selectable && cardId === _syncSelectedDapId);
-      const radio = el.querySelector('.sync-device-radio');
-      if (radio) radio.classList.toggle('is-selected', selectable && cardId === _syncSelectedDapId);
-    });
-  }
+  allCards.forEach((el) => {
+    const cardId = String(el.getAttribute('data-dap-id') || '');
+    const selectable = el.dataset.selectable === '1';
+    const isSelected = selectable && cardId === _syncSelectedDapId;
+    el.classList.toggle('is-selected', isSelected);
+    const radio = el.querySelector('.sync-device-radio');
+    if (radio) radio.classList.toggle('is-selected', isSelected);
+    const chip = el.querySelector('.sync-device-chip');
+      if (chip) {
+        chip.classList.toggle('sync-device-chip--selected', isSelected);
+        if (isSelected) chip.textContent = 'FAST SYNC';
+        else {
+        const storageType = String(el.getAttribute('data-storage-type') || '').toLowerCase();
+        chip.textContent = storageType === 'sd' ? 'STORAGE' : 'USB-C';
+        }
+      }
+  });
   syncUpdatePickNextCta();
 }
 
 function syncUpdatePickNextCta() {
   const nextBtn = document.getElementById('sync-pick-next-btn');
   if (!nextBtn) return;
-  const container = document.getElementById('sync-device-list');
   const selectedId = String(_syncSelectedDapId || '');
-  const selected = container
-    ? [...container.querySelectorAll('.sync-device-card')].find((el) => String(el.getAttribute('data-dap-id') || '') === selectedId)
-    : null;
+  const allCards = [
+    ...((document.getElementById('sync-device-list-recommended')?.querySelectorAll('.sync-device-card')) || []),
+    ...((document.getElementById('sync-device-list-external')?.querySelectorAll('.sync-device-card')) || []),
+  ];
+  const selected = allCards.find((el) => String(el.getAttribute('data-dap-id') || '') === selectedId) || null;
   const canContinue = !!_syncSelectedDapId && selected?.dataset?.selectable === '1';
   nextBtn.disabled = !canContinue;
 }

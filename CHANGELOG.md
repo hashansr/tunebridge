@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Sync modal Step 1 (device selection) now aligns to the Stitch mock with grouped device sections (`Recommended` / `External Storage`), refined card density and status chips, updated dashed connect row, and Scan-first footer CTA styling.
 
 ## v0.47-rc.250426-1316 · 2026-04-25
 - Change: Completed modal migration pass for insight/media/utility families by standardizing modal root overlays (`tb-modal-overlay`) and shared shell tiers (`tb-modal-shell` + size classes) across remaining non-onboarding modals.

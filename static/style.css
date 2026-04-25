@@ -2615,9 +2615,10 @@ tr.track-selected .track-check-indicator {
   --modal-title-size: 20px;
   --modal-subtitle-size: 13px;
   --modal-overline-size: 11px;
-  width: min(700px, 72vw);
-  height: clamp(420px, 58vh, 540px);
-  max-height: calc(100vh - 120px);
+  width: min(760px, 90vw);
+  height: auto;
+  min-height: 560px;
+  max-height: min(84vh, 760px);
   padding: 0;
   border-radius: var(--tb-radius-xl);
   border: 1px solid var(--tb-border-soft);
@@ -2629,70 +2630,72 @@ tr.track-selected .track-check-indicator {
   flex-direction: column;
   gap: 0;
   overflow: hidden;
+  position: relative;
 }
 #sync-modal .modal-close-btn {
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border-radius: 999px;
-  border: 1px solid rgba(173, 198, 255, 0.16);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(173, 198, 255, 0.2);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text-sub);
 }
 #sync-modal .modal-close-btn:hover {
-  background: rgba(173, 198, 255, 0.14);
+  background: rgba(68, 89, 126, 0.26);
   color: var(--text);
 }
 
 .sync-modal-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: 18px 22px 10px;
+  gap: 16px;
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid rgba(173, 198, 255, 0.18);
 }
 .sync-modal-header-left {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  align-items: flex-start;
+  gap: 16px;
   min-width: 0;
 }
 .sync-modal-icon {
-  width: 58px;
-  height: 58px;
+  width: 56px;
+  height: 56px;
   border-radius: var(--tb-radius-lg);
-  background: rgba(173, 198, 255, 0.12);
+  background: rgba(173, 198, 255, 0.92);
   border: 1px solid var(--tb-border-strong);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--tb-accent);
+  color: #385283;
   flex-shrink: 0;
 }
 .sync-modal-icon svg {
-  width: 29px;
-  height: 29px;
+  width: 28px;
+  height: 28px;
 }
 .sync-modal-step-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--tb-accent);
-  line-height: 1.2;
-  margin-bottom: 5px;
+  line-height: 1.15;
+  margin-bottom: 4px;
 }
 .sync-modal-title {
-  font-size: clamp(24px, 1.6vw, 30px);
+  font-size: 26px;
   font-weight: 760;
   color: var(--tb-text-primary);
-  line-height: 1.08;
-  letter-spacing: -0.022em;
+  line-height: 1.15;
+  letter-spacing: -0.016em;
 }
 .sync-modal-subtitle {
-  font-size: 13px;
-  color: var(--tb-text-secondary);
-  margin-top: 4px;
-  line-height: 1.28;
+  font-size: 18px;
+  color: #7e89a8;
+  margin-top: 2px;
+  line-height: 1.35;
 }
 
 .sync-phase-rail {
@@ -2750,7 +2753,7 @@ tr.track-selected .track-check-indicator {
   flex: 1;
   min-height: 0;
   margin-top: 0;
-  padding: 0 22px;
+  padding: 0 24px;
 }
 .sync-phase-panel {
   height: 100%;
@@ -2782,16 +2785,22 @@ tr.track-selected .track-check-indicator {
 .sync-phase-panel--pick {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
+  padding-top: 16px;
 }
 .sync-pick-scroll {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
   padding-right: 2px;
+  padding-bottom: 8px;
 }
 .sync-pick-actions {
   margin-top: 0;
+  padding: 14px 0 20px !important;
+  border-top: 1px solid rgba(173, 198, 255, 0.16);
+  justify-content: flex-end !important;
+  gap: 12px !important;
 }
 .sync-preview-scroll {
   min-height: 0;
@@ -2839,38 +2848,63 @@ tr.track-selected .track-check-indicator {
   background: linear-gradient(135deg, rgba(173, 198, 255, 0.95), rgba(130, 168, 255, 0.9));
   color: #00285c;
   border: none;
-  font-weight: 650;
+  font-weight: 700;
+  min-width: 118px;
 }
 #sync-modal .modal-actions .btn-primary:hover {
   transform: translateY(-1px);
   box-shadow: 0 8px 20px rgba(173, 198, 255, 0.24);
 }
 #sync-modal .modal-actions .btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(65, 71, 85, 0.3);
-  color: var(--text-sub);
+  background: transparent;
+  border: 1px solid transparent;
+  color: rgba(233, 238, 249, 0.92);
   font-weight: 560;
 }
 #sync-modal .modal-actions .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.09);
-  color: var(--text);
+  background: rgba(68, 89, 126, 0.26);
+  border-color: rgba(173, 198, 255, 0.14);
+  color: var(--tb-text-primary);
+}
+
+#sync-modal[data-phase="pick"] .sync-phase-rail {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  margin: 0;
+  z-index: 3;
+}
+#sync-modal[data-phase="pick"] .sync-phase-panel--pick {
+  padding-bottom: 56px;
 }
 
 /* Section label (eyebrow text) */
 .sync-section-label {
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 8px;
+  color: #7e89a8;
+  margin-bottom: 10px;
+  padding-left: 2px;
+}
+
+.sync-device-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sync-device-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 /* Device picker */
 .sync-device-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 .sync-device-loading {
   display: inline-flex;
@@ -2894,30 +2928,30 @@ tr.track-selected .track-check-indicator {
 .sync-device-card {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   justify-content: space-between;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 14px 16px;
+  background: rgba(20, 26, 40, 0.78);
   border: 1px solid rgba(65, 71, 85, 0.18);
-  border-radius: 10px;
+  border-radius: 14px;
   color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 500;
   cursor: pointer;
   transition: background 0.15s, transform 0.1s, border-color 0.15s, box-shadow 0.15s;
   text-align: left;
   width: 100%;
 }
 .sync-device-card:hover {
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(30, 38, 56, 0.78);
   border-color: rgba(173, 198, 255, 0.24);
   transform: translateY(-1px);
 }
 .sync-device-card:active { transform: scale(0.995); }
 .sync-device-card.is-selected {
-  background: rgba(173, 198, 255, 0.08);
-  border-color: rgba(173, 198, 255, 0.34);
-  box-shadow: inset 0 0 0 1px rgba(173, 198, 255, 0.22);
+  background: rgba(43, 56, 82, 0.72);
+  border-color: rgba(173, 198, 255, 0.38);
+  box-shadow: inset 0 0 0 1px rgba(173, 198, 255, 0.18);
 }
 .sync-device-card.is-disabled,
 .sync-device-card:disabled {
@@ -2940,9 +2974,9 @@ tr.track-selected .track-check-indicator {
   box-shadow: none;
 }
 .sync-device-card-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 7px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(65, 71, 85, 0.22);
   display: flex;
@@ -2951,26 +2985,56 @@ tr.track-selected .track-check-indicator {
   color: var(--text-muted);
   flex-shrink: 0;
 }
+.sync-device-card-icon svg {
+  width: 22px;
+  height: 22px;
+}
 .sync-device-card-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
   flex: 1;
 }
 .sync-device-card-name {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
-  color: var(--text);
-}
-.sync-device-meta {
-  font-size: 11px;
-  color: var(--text-muted);
+  color: #e9eef9;
   line-height: 1.2;
 }
+.sync-device-meta {
+  font-size: 12px;
+  color: #7e89a8;
+  line-height: 1.3;
+}
+.sync-device-card-statuses {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.sync-device-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: rgba(52, 53, 56, 0.82);
+  color: rgba(196, 198, 208, 0.9);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid rgba(142, 144, 154, 0.24);
+}
+.sync-device-chip--selected {
+  background: rgba(28, 68, 139, 0.56);
+  color: #94b4ff;
+  border-color: rgba(148, 180, 255, 0.28);
+}
 .sync-device-radio {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border: 2px solid rgba(142, 144, 154, 0.46);
   border-radius: 50%;
   display: inline-flex;
@@ -2980,18 +3044,39 @@ tr.track-selected .track-check-indicator {
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 .sync-device-radio span {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: transparent;
   transition: background 0.15s;
 }
 .sync-device-radio.is-selected {
-  border-color: rgba(173, 198, 255, 0.76);
-  box-shadow: 0 0 0 3px rgba(173, 198, 255, 0.16);
+  border-color: rgba(173, 198, 255, 0.88);
+  box-shadow: 0 0 0 3px rgba(173, 198, 255, 0.18);
 }
 .sync-device-radio.is-selected span {
   background: var(--accent);
+}
+.sync-device-connect-hint {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 12px;
+  border: 1.5px dashed rgba(173, 198, 255, 0.22);
+  background: rgba(255, 255, 255, 0.01);
+  color: #7e89a8;
+  font-size: 14px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+.sync-device-connect-hint:hover {
+  border-color: rgba(173, 198, 255, 0.42);
+  background: rgba(255, 255, 255, 0.03);
+  color: #aeb9d3;
 }
 
 /* Progress phases */
@@ -3536,8 +3621,9 @@ tr.track-selected .track-check-indicator {
     overflow-y: auto;
   }
   #sync-modal .sync-modal-shell {
-    width: min(640px, 90vw);
-    height: clamp(420px, 66vh, 540px);
+    width: min(700px, 92vw);
+    min-height: 520px;
+    max-height: min(86vh, 720px);
   }
   .sync-phase-step {
     width: 9px;
@@ -3575,21 +3661,22 @@ tr.track-selected .track-check-indicator {
 
 @media (max-width: 640px) {
   #sync-modal .sync-modal-shell {
-    width: min(500px, 92vw);
-    height: min(76vh, 500px);
+    width: min(560px, 94vw);
+    min-height: 460px;
+    max-height: min(88vh, 620px);
     border-radius: 16px;
   }
   .sync-modal-title {
-    font-size: 21px;
+    font-size: 22px;
   }
   .sync-modal-subtitle {
-    font-size: 12px;
+    font-size: 14px;
   }
   .sync-modal-header {
-    padding: 14px 14px 8px;
+    padding: 16px 16px 10px;
   }
   .sync-modal-body {
-    padding: 0 14px;
+    padding: 0 16px;
   }
   .sync-progress-banner {
     margin: 0 14px 6px;
@@ -3607,6 +3694,10 @@ tr.track-selected .track-check-indicator {
   .sync-done-actions.modal-actions--stack .btn-primary,
   .sync-done-actions.modal-actions--stack .btn-secondary {
     min-height: 40px !important;
+  }
+  #sync-modal[data-phase="pick"] .sync-phase-rail {
+    left: 16px;
+    bottom: 18px;
   }
 }
 
