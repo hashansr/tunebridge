@@ -4,31 +4,31 @@ Status legend: `done`, `in-progress`, `pending`, `exception`
 
 | Modal ID | Family | Status | Notes |
 |---|---|---|---|
-| sync-modal | sync | in-progress | Migrated to shared shell + tokenized styling; advanced discrepancy actions preserved |
-| confirm-modal | confirm | in-progress | shared shell tier adopted; full token cleanup pending |
-| settings-modal | form | in-progress | shared shell tier adopted; inline style cleanup pending |
-| dap-modal | form | in-progress | shared shell tier adopted; dense form tokens pending |
-| iem-modal | form | in-progress | shared shell tier adopted; dense form tokens pending |
-| peq-modal | form | in-progress | shared shell tier adopted; control token cleanup pending |
-| tag-editor-modal | form | in-progress | shared shell tier adopted; per-field token cleanup pending |
-| album-tag-modal | form | in-progress | shared shell tier adopted; per-field token cleanup pending |
-| artist-rename-modal | form | in-progress | shared shell tier adopted; token cleanup pending |
-| create-playlist-modal | action | in-progress | shared shell tier adopted; action-row token cleanup pending |
+| sync-modal | sync | done | Shared shell, tokenized visuals, bottom step rail, and advanced discrepancy workflows preserved |
+| confirm-modal | confirm | done | Shared shell + size tier standardized |
+| settings-modal | form | done | Shared shell + size tier standardized |
+| dap-modal | form | done | Shared shell + size tier standardized |
+| iem-modal | form | done | Shared shell + size tier standardized |
+| peq-modal | form | done | Shared shell + size tier standardized |
+| tag-editor-modal | form | done | Shared shell + size tier standardized |
+| album-tag-modal | form | done | Shared shell + size tier standardized |
+| artist-rename-modal | form | done | Shared shell + size tier standardized |
+| create-playlist-modal | action | done | Shared shell + size tier standardized |
 | onboarding-modal | onboarding | exception | full-screen exception by design |
-| iem-compare-modal | utility | pending | pass 2 |
-| problem-tracks-modal | insights | pending | pass 2 |
-| genre-distribution-modal | insights | pending | pass 2 |
-| iem-blindspot-modal | insights | pending | pass 2 |
-| missing-tags-bulk-modal | insights | pending | pass 2 |
-| dup-modal | utility | pending | pass 2 |
-| import-modal | utility | pending | pass 2 |
-| help-modal | utility | pending | pass 2 |
-| rename-modal | utility | pending | pass 2 |
-| ml-gen-modal | utility | pending | pass 2 |
-| sr-modal | utility | pending | pass 2 |
-| ml-ref-modal | utility | pending | pass 2 |
-| album-art-modal | media | pending | pass 2 |
-| artist-image-modal | media | pending | pass 2 |
+| iem-compare-modal | utility | exception | custom compare dialog layout retained; root overlay standardized |
+| problem-tracks-modal | insights | done | Shared shell + size tier standardized |
+| genre-distribution-modal | insights | done | Shared shell + size tier standardized |
+| iem-blindspot-modal | insights | done | Shared shell + size tier standardized |
+| missing-tags-bulk-modal | insights | done | Shared shell + size tier standardized |
+| dup-modal | utility | done | Shared shell + size tier standardized |
+| import-modal | utility | done | Shared shell + size tier standardized |
+| help-modal | utility | done | Shared shell + size tier standardized |
+| rename-modal | utility | done | Shared shell + size tier standardized |
+| ml-gen-modal | utility | done | Shared shell + size tier standardized |
+| sr-modal | utility | done | Shared shell + size tier standardized |
+| ml-ref-modal | utility | done | Shared shell + size tier standardized |
+| album-art-modal | media | done | Shared shell + size tier standardized |
+| artist-image-modal | media | done | Shared shell + size tier standardized |
 
 ## Review Workflow
 1. Migrate modal to primitives/tokens.
