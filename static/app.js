@@ -5571,6 +5571,16 @@ async function showSync() {
     }
     return dap?.mounted ? 'Connected' : 'Not connected';
   };
+  const _deviceSyncStatus = (dap) => {
+    const summary = dap?.sync_summary || {};
+    const addCount = Number(summary.music_to_add_count || 0);
+    const removeCount = Number(summary.music_to_remove_count || 0);
+    const musicOut = Number(summary.music_out_of_sync_count || (addCount + removeCount));
+    const playlistsOut = Number(summary.playlist_out_of_sync_count || 0);
+    const summaryInSync = summary?.in_sync === true || summary?.is_in_sync === true;
+    const inSync = !!dap?.mounted && (summaryInSync || (musicOut <= 0 && playlistsOut <= 0));
+    return inSync ? 'in' : 'out';
+  };
 
   if (!daps.length) {
     recommendedContainer.innerHTML = `<p style="color:var(--text-muted);font-size:13px">No DAPs configured — add one in <strong>Gear → DAPs</strong> first.</p>`;
@@ -5583,15 +5593,14 @@ async function showSync() {
       const selectable = !!dap?.mounted;
       const selected = selectable && String(dap.id) === String(_syncSelectedDapId);
       const storageType = String(dap?.storage_type || '').toLowerCase();
-      const statusChip = selected
-        ? 'FAST SYNC'
-        : (storageType === 'sd' ? 'STORAGE' : 'USB-C');
+      const syncStatus = _deviceSyncStatus(dap);
+      const statusChip = syncStatus === 'in' ? 'IN SYNC' : 'OUT OF SYNC';
       return `
         <button
           class="sync-device-card${selected ? ' is-selected' : ''}${selectable ? '' : ' is-disabled'}"
           data-dap-id="${esc(dap.id)}"
           data-selectable="${selectable ? '1' : '0'}"
-          data-storage-type="${esc(storageType || '')}"
+          data-sync-status="${syncStatus}"
           onclick="App.selectSyncDevice('${dap.id}')"
           ${selectable ? '' : 'disabled aria-disabled="true"'}
         >
@@ -5603,7 +5612,7 @@ async function showSync() {
             </span>
           </div>
           <div class="sync-device-card-statuses">
-            <span class="sync-device-chip${selected ? ' sync-device-chip--selected' : ''}">${statusChip}</span>
+            <span class="sync-device-chip sync-device-chip--${syncStatus}">${statusChip}</span>
             <div class="sync-device-radio${selected ? ' is-selected' : ''}" aria-hidden="true">
               <span></span>
             </div>
@@ -5656,14 +5665,12 @@ function selectSyncDevice(dapId) {
     const radio = el.querySelector('.sync-device-radio');
     if (radio) radio.classList.toggle('is-selected', isSelected);
     const chip = el.querySelector('.sync-device-chip');
-      if (chip) {
-        chip.classList.toggle('sync-device-chip--selected', isSelected);
-        if (isSelected) chip.textContent = 'FAST SYNC';
-        else {
-        const storageType = String(el.getAttribute('data-storage-type') || '').toLowerCase();
-        chip.textContent = storageType === 'sd' ? 'STORAGE' : 'USB-C';
-        }
-      }
+    if (chip) {
+      const status = String(el.getAttribute('data-sync-status') || 'out').toLowerCase();
+      chip.classList.remove('sync-device-chip--in', 'sync-device-chip--out');
+      chip.classList.add(status === 'in' ? 'sync-device-chip--in' : 'sync-device-chip--out');
+      chip.textContent = status === 'in' ? 'IN SYNC' : 'OUT OF SYNC';
+    }
   });
   syncUpdatePickNextCta();
 }
