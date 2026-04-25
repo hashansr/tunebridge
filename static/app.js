@@ -5573,13 +5573,27 @@ async function showSync() {
   };
   const _deviceSyncStatus = (dap) => {
     const summary = dap?.sync_summary || {};
-    const addCount = Number(summary.music_to_add_count || 0);
-    const removeCount = Number(summary.music_to_remove_count || 0);
-    const musicOut = Number(summary.music_out_of_sync_count || (addCount + removeCount));
-    const playlistsOut = Number(summary.playlist_out_of_sync_count || 0);
-    const summaryInSync = summary?.in_sync === true || summary?.is_in_sync === true;
-    const inSync = !!dap?.mounted && (summaryInSync || (musicOut <= 0 && playlistsOut <= 0));
-    return inSync ? 'in' : 'out';
+    if (!dap?.mounted) return 'unknown';
+
+    const hasBooleanStatus = typeof summary?.in_sync === 'boolean' || typeof summary?.is_in_sync === 'boolean';
+    const hasKnownCount = (key) => summary?.[key] !== null && summary?.[key] !== undefined && Number.isFinite(Number(summary?.[key]));
+    const hasCountStatus =
+      hasKnownCount('music_out_of_sync_count') ||
+      hasKnownCount('playlist_out_of_sync_count') ||
+      hasKnownCount('music_to_add_count') ||
+      hasKnownCount('music_to_remove_count');
+
+    if (!hasBooleanStatus && !hasCountStatus) return 'unknown';
+
+    if (summary?.in_sync === true || summary?.is_in_sync === true) return 'in';
+    if (summary?.in_sync === false || summary?.is_in_sync === false) return 'out';
+
+    const addCount = Number(summary?.music_to_add_count ?? 0);
+    const removeCount = Number(summary?.music_to_remove_count ?? 0);
+    const hasMusicOutCount = hasKnownCount('music_out_of_sync_count');
+    const musicOut = hasMusicOutCount ? Number(summary.music_out_of_sync_count) : (addCount + removeCount);
+    const playlistsOut = hasKnownCount('playlist_out_of_sync_count') ? Number(summary.playlist_out_of_sync_count) : 0;
+    return (musicOut <= 0 && playlistsOut <= 0) ? 'in' : 'out';
   };
 
   if (!daps.length) {
@@ -5592,9 +5606,10 @@ async function showSync() {
     const renderCard = (dap) => {
       const selectable = !!dap?.mounted;
       const selected = selectable && String(dap.id) === String(_syncSelectedDapId);
-      const storageType = String(dap?.storage_type || '').toLowerCase();
       const syncStatus = _deviceSyncStatus(dap);
-      const statusChip = syncStatus === 'in' ? 'IN SYNC' : 'OUT OF SYNC';
+      const statusChip = syncStatus === 'in'
+        ? 'IN SYNC'
+        : (syncStatus === 'out' ? 'OUT OF SYNC' : 'CHECK STATUS');
       return `
         <button
           class="sync-device-card${selected ? ' is-selected' : ''}${selectable ? '' : ' is-disabled'}"
@@ -5619,13 +5634,13 @@ async function showSync() {
           </div>
         </button>`;
     };
-    const preferred = daps.filter((d) => !!d?.mounted || String(d?.storage_type || '').toLowerCase() !== 'sd');
-    const recommended = preferred.length ? preferred : daps;
-    const recommendedIds = new Set(recommended.map((d) => String(d?.id || '')));
-    const external = daps.filter((d) => String(d?.storage_type || '').toLowerCase() === 'sd' && !recommendedIds.has(String(d?.id || '')));
-    recommendedContainer.innerHTML = recommended.map(renderCard).join('');
-    externalContainer.innerHTML = external.length ? external.map(renderCard).join('') : '';
-    if (externalGroup) externalGroup.style.display = external.length ? '' : 'none';
+    const connected = daps.filter((d) => !!d?.mounted);
+    const notConnected = daps.filter((d) => !d?.mounted);
+    recommendedContainer.innerHTML = connected.length
+      ? connected.map(renderCard).join('')
+      : `<p style="color:var(--text-muted);font-size:12px;padding:6px 2px">No connected devices detected.</p>`;
+    externalContainer.innerHTML = notConnected.length ? notConnected.map(renderCard).join('') : '';
+    if (externalGroup) externalGroup.style.display = notConnected.length ? '' : 'none';
   }
 
   syncUpdatePickNextCta();
@@ -5666,10 +5681,16 @@ function selectSyncDevice(dapId) {
     if (radio) radio.classList.toggle('is-selected', isSelected);
     const chip = el.querySelector('.sync-device-chip');
     if (chip) {
-      const status = String(el.getAttribute('data-sync-status') || 'out').toLowerCase();
-      chip.classList.remove('sync-device-chip--in', 'sync-device-chip--out');
-      chip.classList.add(status === 'in' ? 'sync-device-chip--in' : 'sync-device-chip--out');
-      chip.textContent = status === 'in' ? 'IN SYNC' : 'OUT OF SYNC';
+      const status = String(el.getAttribute('data-sync-status') || 'unknown').toLowerCase();
+      chip.classList.remove('sync-device-chip--in', 'sync-device-chip--out', 'sync-device-chip--unknown');
+      chip.classList.add(
+        status === 'in'
+          ? 'sync-device-chip--in'
+          : (status === 'out' ? 'sync-device-chip--out' : 'sync-device-chip--unknown')
+      );
+      chip.textContent = status === 'in'
+        ? 'IN SYNC'
+        : (status === 'out' ? 'OUT OF SYNC' : 'CHECK STATUS');
     }
   });
   syncUpdatePickNextCta();
