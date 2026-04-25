@@ -196,6 +196,14 @@ if [ "$(uname -m)" != "arm64" ]; then
   exit 1
 fi
 
+# ── Design-system guardrail ──────────────────────────────────────────────────
+_phase "🎨 Modal Design Guardrail"
+if ! python3 "${PROJECT_DIR}/scripts/check_modal_design_system.py"; then
+  _err "Modal design-system guardrail failed. Fix violations before building."
+  exit 1
+fi
+_ok "Modal design-system guardrail passed"
+
 # ── Find Python 3.10+ ─────────────────────────────────────────────────────────
 _phase "🔍 Environment"
 

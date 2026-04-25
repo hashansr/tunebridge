@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error-container": "#93000a",
+                        "text-primary": "#E9EEF9",
+                        "on-secondary-fixed": "#001944",
+                        "secondary-fixed": "#d9e2ff",
+                        "surface-container-low": "#1a1b1f",
+                        "bg-deep": "#070A10",
+                        "surface-container-high": "#292a2d",
+                        "on-secondary": "#002d6d",
+                        "success": "#4ADE80",
+                        "surface-variant": "#343538",
+                        "surface-2": "rgba(30, 38, 56, 0.78)",
+                        "secondary": "#afc6ff",
+                        "on-tertiary-fixed-variant": "#5d4200",
+                        "inverse-surface": "#e3e2e7",
+                        "surface-bright": "#38393d",
+                        "inverse-on-surface": "#2f3034",
+                        "primary-fixed": "#d8e2ff",
+                        "tertiary-container": "#ebc06e",
+                        "surface-container-highest": "#343538",
+                        "surface-tint": "#adc6ff",
+                        "surface-hover": "rgba(68, 89, 126, 0.26)",
+                        "danger": "#F87171",
+                        "error": "#ffb4ab",
+                        "on-surface": "#e3e2e7",
+                        "tertiary": "#ffdea4",
+                        "on-error": "#690005",
+                        "on-primary-fixed-variant": "#2c4677",
+                        "secondary-fixed-dim": "#afc6ff",
+                        "primary-fixed-dim": "#adc6ff",
+                        "surface-dim": "#121317",
+                        "on-primary": "#122f5f",
+                        "background": "#121317",
+                        "surface": "#121317",
+                        "primary": "#d8e2ff",
+                        "modal-gradient": "linear-gradient(135deg, rgba(34,40,56,0.92) 0%, rgba(23,28,42,0.90) 48%, rgba(24,45,34,0.86) 100%)",
+                        "on-background": "#e3e2e7",
+                        "border-strong": "rgba(173, 198, 255, 0.38)",
+                        "text-inverse": "#0F172A",
+                        "on-error-container": "#ffdad6",
+                        "bg-base": "#0D121C",
+                        "inverse-primary": "#455e90",
+                        "on-surface-variant": "#c4c6d0",
+                        "on-tertiary-fixed": "#261900",
+                        "border-soft": "rgba(173, 198, 255, 0.18)",
+                        "on-tertiary-container": "#6c4d01",
+                        "on-primary-fixed": "#001a42",
+                        "outline-variant": "#44474f",
+                        "secondary-container": "#1c448b",
+                        "on-primary-container": "#385283",
+                        "surface-3": "rgba(43, 56, 82, 0.72)",
+                        "on-secondary-container": "#94b4ff",
+                        "surface-container-lowest": "#0d0e11",
+                        "tertiary-fixed": "#ffdea5",
+                        "primary-container": "#adc6ff",
+                        "text-muted": "#7E89A8",
+                        "surface-container": "#1e1f23",
+                        "text-secondary": "#AEB9D3",
+                        "tertiary-fixed-dim": "#ebc06e",
+                        "outline": "#8e909a",
+                        "surface-1": "rgba(20, 26, 40, 0.78)",
+                        "on-secondary-fixed-variant": "#1c448b",
+                        "warning": "#FBBF24",
+                        "on-tertiary": "#412d00"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .custom-glass {
+            background: linear-gradient(135deg, rgba(34,40,56,0.92) 0%, rgba(23,28,42,0.90) 48%, rgba(24,45,34,0.86) 100%);
+            backdrop-filter: blur(20px);
+        }
+    </style>
+</head>
+<body class="bg-bg-deep font-body text-text-primary min-h-screen flex items-center justify-center p-4">
+<!-- Sync Modal Shell: Large Tier (920px) -->
+<div class="w-full max-w-[920px] custom-glass rounded-xl shadow-2xl shadow-black/45 border border-border-soft overflow-hidden flex flex-col">
+<!-- Header Section -->
+<header class="p-[20px_24px_12px] flex items-center gap-6 border-b border-border-soft">
+<div class="w-14 h-14 bg-surface-2 rounded-lg flex items-center justify-center border border-border-strong">
+<span class="material-symbols-outlined text-secondary text-3xl" data-icon="library_music">library_music</span>
+</div>
+<div class="flex flex-col">
+<span class="font-modal-step-eyebrow text-modal-step-eyebrow text-secondary uppercase">Step 3 of 5</span>
+<h1 class="font-h-modal-title text-h-modal-title text-text-primary">Review Changes</h1>
+<p class="font-h-modal-subtitle text-h-modal-subtitle text-text-secondary">Choose exactly what to sync.</p>
+</div>
+</header>
+<!-- Body Section (Scrollable) -->
+<main class="p-[24px_24px] max-h-[614px] overflow-y-auto space-y-4">
+<!-- Accordion 1: Expanded (New in Library) -->
+<div class="bg-surface-1 rounded-xl border border-border-strong overflow-hidden">
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-hover transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-success" data-icon="add_circle">add_circle</span>
+<span class="font-stat-label text-body font-bold text-text-primary">New in Library -&gt; Add to DAP</span>
+<span class="bg-primary/20 text-primary px-2 py-0.5 rounded text-xs font-bold uppercase tracking-widest">124 tracks</span>
+</div>
+<span class="material-symbols-outlined text-text-muted" data-icon="expand_less">expand_less</span>
+</button>
+<div class="px-4 pb-4 space-y-2">
+<div class="flex items-center justify-between p-3 bg-surface-2/50 rounded-lg border border-border-soft">
+<div class="flex items-center gap-4">
+<img class="w-10 h-10 rounded shadow-lg" data-alt="album art showing abstract geometric shapes in cool neon blue and violet tones" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAm6QjIa-tYN5m0C27-anz01uSD_I8trvKLJAZfcsxlfRMN2IWR8cEXpc4dmQCoVuSqWf2WJSir-FViLFxsHMrUtLAMo2ZiK6A34PtWpgy2GPS6JcX_2Mt52D_Nf2-8pu8CfITzJaYCCv4TtBxLW3_D4ki5mjZcb71ZeW2mzObCHt4bXYqXHxNKpTmjrYiKC-e1QCerkNH67zn-Sg3s-YnuiJGy0uCDN5TVDuomaa3NepgC4n70fmcv1phcK-dTEWTz9XhRlXef2A"/>
+<div>
+<p class="text-body-sm font-bold text-text-primary">Neon Dreams</p>
+<p class="text-caption text-text-muted">Synthetic Horizon</p>
+</div>
+</div>
+<input checked="" class="w-5 h-5 rounded border-border-soft bg-surface-3 text-secondary focus:ring-secondary" type="checkbox"/>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-2/50 rounded-lg border border-border-soft">
+<div class="flex items-center gap-4">
+<img class="w-10 h-10 rounded shadow-lg" data-alt="minimalist vinyl record sleeve with warm orange and deep amber circular gradients" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDgp1YFCXcU-UHdJBNK-lHm5x7Tsz07LygMMLgRBLcfqvSpUKYPVdxjeGip9PUoAG4O8gEcN1Y74Kxc4YwFHY-GSee-b2OWBtNTpX9l3oC4w-Jlwvj6bIK7o3Xy3B1xK8AiNRC9M4EZoKu_5hiuFFXjNeDwJFgK6kamx8wnGnH10gHjnL69RtA1cP21fk7tiWbmhnLDP7rgImniwonWK_xefpPeN3U0LuaB5y_IeX2zPzddDJYHMjvTBBJHOuVu7mBAh4CCDydIkg"/>
+<div>
+<p class="text-body-sm font-bold text-text-primary">Analog Heart</p>
+<p class="text-caption text-text-muted">The Reverb Collective</p>
+</div>
+</div>
+<input checked="" class="w-5 h-5 rounded border-border-soft bg-surface-3 text-secondary focus:ring-secondary" type="checkbox"/>
+</div>
+</div>
+</div>
+<!-- Accordion 2: Warning (Deleted from Library) -->
+<div class="bg-surface-1 rounded-xl border border-border-soft overflow-hidden">
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-hover transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-warning" data-icon="warning">warning</span>
+<span class="font-stat-label text-body font-bold text-text-primary">Deleted from Library (on DAP)</span>
+<span class="bg-warning/10 text-warning px-2 py-0.5 rounded text-xs font-bold uppercase tracking-widest">8 tracks</span>
+</div>
+<span class="material-symbols-outlined text-text-muted" data-icon="expand_more">expand_more</span>
+</button>
+</div>
+<!-- Accordion 3: On DAP only -->
+<div class="bg-surface-1 rounded-xl border border-border-soft overflow-hidden">
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-hover transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="devices">devices</span>
+<span class="font-stat-label text-body font-bold text-text-primary">On DAP only (not in Library)</span>
+<span class="bg-surface-variant text-text-muted px-2 py-0.5 rounded text-xs font-bold uppercase tracking-widest">32 tracks</span>
+</div>
+<span class="material-symbols-outlined text-text-muted" data-icon="expand_more">expand_more</span>
+</button>
+</div>
+<!-- Accordion 4: Playlists -->
+<div class="bg-surface-1 rounded-xl border border-border-soft overflow-hidden">
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-hover transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="playlist_add_check">playlist_add_check</span>
+<span class="font-stat-label text-body font-bold text-text-primary">Playlists to Sync</span>
+<span class="bg-secondary/20 text-secondary px-2 py-0.5 rounded text-xs font-bold uppercase tracking-widest">4 changes</span>
+</div>
+<span class="material-symbols-outlined text-text-muted" data-icon="expand_more">expand_more</span>
+</button>
+</div>
+<!-- Accordion 5: Skipped -->
+<div class="bg-surface-1/50 rounded-xl border border-border-soft overflow-hidden opacity-60">
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-hover transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-text-muted" data-icon="block">block</span>
+<span class="font-stat-label text-body font-bold text-text-muted">Skipped tracks</span>
+<span class="bg-surface-variant text-text-muted px-2 py-0.5 rounded text-xs font-bold uppercase tracking-widest">15 tracks</span>
+</div>
+<span class="material-symbols-outlined text-text-muted" data-icon="expand_more">expand_more</span>
+</button>
+</div>
+</main>
+<!-- Footer Section -->
+<footer class="p-[14px_24px_20px] flex items-center justify-between border-t border-border-soft bg-surface-container-lowest/50">
+<!-- Step Rail Indicator -->
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-secondary/30"></div>
+<div class="w-2 h-2 rounded-full bg-secondary/30"></div>
+<div class="w-6 h-2 rounded-full bg-secondary shadow-[0_0_8px_rgba(173,198,255,0.6)]"></div>
+<div class="w-2 h-2 rounded-full bg-secondary/30"></div>
+<div class="w-2 h-2 rounded-full bg-secondary/30"></div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-3">
+<button class="px-6 py-2.5 rounded-full border border-border-strong bg-surface-2 text-text-primary font-bold hover:bg-surface-hover transition-all active:scale-95">
+                    Back
+                </button>
+<button class="px-8 py-2.5 rounded-full bg-secondary text-on-secondary-fixed font-extrabold shadow-lg shadow-secondary/20 hover:brightness-110 transition-all active:scale-95 flex items-center gap-2">
+                    Start Sync
+                    <span class="material-symbols-outlined text-[18px]" data-icon="sync" data-weight="fill">sync</span>
+</button>
+</div>
+</footer>
+</div>
+</body></html>

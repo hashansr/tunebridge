@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "error-container": "#93000a",
+                      "text-primary": "#E9EEF9",
+                      "on-secondary-fixed": "#001944",
+                      "secondary-fixed": "#d9e2ff",
+                      "surface-container-low": "#1a1b1f",
+                      "bg-deep": "#070A10",
+                      "surface-container-high": "#292a2d",
+                      "on-secondary": "#002d6d",
+                      "success": "#4ADE80",
+                      "surface-variant": "#343538",
+                      "surface-2": "rgba(30, 38, 56, 0.78)",
+                      "secondary": "#afc6ff",
+                      "on-tertiary-fixed-variant": "#5d4200",
+                      "inverse-surface": "#e3e2e7",
+                      "surface-bright": "#38393d",
+                      "inverse-on-surface": "#2f3034",
+                      "primary-fixed": "#d8e2ff",
+                      "tertiary-container": "#ebc06e",
+                      "surface-container-highest": "#343538",
+                      "surface-tint": "#adc6ff",
+                      "surface-hover": "rgba(68, 89, 126, 0.26)",
+                      "danger": "#F87171",
+                      "error": "#ffb4ab",
+                      "on-surface": "#e3e2e7",
+                      "tertiary": "#ffdea4",
+                      "on-error": "#690005",
+                      "on-primary-fixed-variant": "#2c4677",
+                      "secondary-fixed-dim": "#afc6ff",
+                      "primary-fixed-dim": "#adc6ff",
+                      "surface-dim": "#121317",
+                      "on-primary": "#122f5f",
+                      "background": "#121317",
+                      "surface": "#121317",
+                      "primary": "#d8e2ff",
+                      "modal-gradient": "linear-gradient(135deg, rgba(34,40,56,0.92) 0%, rgba(23,28,42,0.90) 48%, rgba(24,45,34,0.86) 100%)",
+                      "on-background": "#e3e2e7",
+                      "border-strong": "rgba(173, 198, 255, 0.38)",
+                      "text-inverse": "#0F172A",
+                      "on-error-container": "#ffdad6",
+                      "bg-base": "#0D121C",
+                      "inverse-primary": "#455e90",
+                      "on-surface-variant": "#c4c6d0",
+                      "on-tertiary-fixed": "#261900",
+                      "border-soft": "rgba(173, 198, 255, 0.18)",
+                      "on-tertiary-container": "#6c4d01",
+                      "on-primary-fixed": "#001a42",
+                      "outline-variant": "#44474f",
+                      "secondary-container": "#1c448b",
+                      "on-primary-container": "#385283",
+                      "surface-3": "rgba(43, 56, 82, 0.72)",
+                      "on-secondary-container": "#94b4ff",
+                      "surface-container-lowest": "#0d0e11",
+                      "tertiary-fixed": "#ffdea5",
+                      "primary-container": "#adc6ff",
+                      "text-muted": "#7E89A8",
+                      "surface-container": "#1e1f23",
+                      "text-secondary": "#AEB9D3",
+                      "tertiary-fixed-dim": "#ebc06e",
+                      "outline": "#8e909a",
+                      "surface-1": "rgba(20, 26, 40, 0.78)",
+                      "on-secondary-fixed-variant": "#1c448b",
+                      "warning": "#FBBF24",
+                      "on-tertiary": "#412d00"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "modal-header-p": "20px 24px 12px",
+                      "3xl": "28px",
+                      "lg": "16px",
+                      "modal-footer-p": "14px 24px 20px",
+                      "2xl": "24px",
+                      "4xl": "32px",
+                      "sm": "8px",
+                      "modal-body-p": "0 24px",
+                      "xs": "4px",
+                      "xl": "20px",
+                      "md": "12px"
+              },
+              "fontFamily": {
+                      "stat-label": ["Manrope"],
+                      "body": ["Manrope"],
+                      "caption": ["Manrope"],
+                      "modal-step-eyebrow": ["Manrope"],
+                      "h-modal-subtitle": ["Manrope"],
+                      "stat-number": ["Manrope"],
+                      "h-modal-title": ["Manrope"],
+                      "body-sm": ["Manrope"],
+                      "section-label": ["Manrope"]
+              },
+              "fontSize": {
+                      "stat-label": ["18px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                      "body": ["16px", {"lineHeight": "1.5", "fontWeight": "500"}],
+                      "caption": ["12px", {"lineHeight": "1.4", "fontWeight": "500"}],
+                      "modal-step-eyebrow": ["13px", {"letterSpacing": "0.12em", "fontWeight": "700"}],
+                      "h-modal-subtitle": ["18px", {"lineHeight": "1.4", "fontWeight": "500"}],
+                      "stat-number": ["30px", {"lineHeight": "1.1", "fontWeight": "800"}],
+                      "h-modal-title": ["26px", {"lineHeight": "1.2", "fontWeight": "750"}],
+                      "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "500"}],
+                      "section-label": ["12px", {"letterSpacing": "0.1em", "fontWeight": "700"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        body {
+            background-color: #070A10;
+            color: #E9EEF9;
+            font-family: 'Manrope', sans-serif;
+        }
+        .glass-shell {
+            background: linear-gradient(135deg, rgba(34,40,56,0.92) 0%, rgba(23,28,42,0.90) 48%, rgba(24,45,34,0.86) 100%);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+<div class="flex flex-1">
+<main class="flex-1 p-8 max-w-7xl mx-auto w-full">
+<div class="mb-10">
+<span class="font-modal-step-eyebrow text-modal-step-eyebrow text-secondary uppercase">Technical Documentation</span>
+<h1 class="font-h-modal-title text-h-modal-title text-text-primary mt-1">Design System Tokens</h1>
+<p class="font-h-modal-subtitle text-h-modal-subtitle text-text-muted max-w-2xl mt-2">Visual foundations for the compact glass aesthetic, optimized for high-density professional workflows.</p>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<section class="lg:col-span-8 glass-shell border border-border-soft rounded-xl p-6 shadow-2xl">
+<div class="flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-secondary">layers</span>
+<h3 class="font-stat-label text-stat-label text-text-primary">Surface Hierarchy</h3>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div class="bg-surface-1 border border-border-soft p-4 rounded-lg flex flex-col gap-4">
+<div class="flex justify-between items-start">
+<span class="font-section-label text-section-label text-text-muted">SURFACE-1</span>
+<span class="text-[10px] font-mono text-secondary">rgba(20, 26, 40, 0.78)</span>
+</div>
+<div class="h-20 w-full bg-surface-1 rounded-md border border-white/5"></div>
+<p class="text-xs text-text-muted">Primary background for content panes.</p>
+</div>
+<div class="bg-surface-2 border border-border-soft p-4 rounded-lg flex flex-col gap-4">
+<div class="flex justify-between items-start">
+<span class="font-section-label text-section-label text-text-muted">SURFACE-2</span>
+<span class="text-[10px] font-mono text-secondary">rgba(30, 38, 56, 0.78)</span>
+</div>
+<div class="h-20 w-full bg-surface-2 rounded-md border border-white/5"></div>
+<p class="text-xs text-text-muted">Elevated cards and modal sub-containers.</p>
+</div>
+<div class="bg-surface-3 border border-border-soft p-4 rounded-lg flex flex-col gap-4">
+<div class="flex justify-between items-start">
+<span class="font-section-label text-section-label text-text-muted">SURFACE-3</span>
+<span class="text-[10px] font-mono text-secondary">rgba(43, 56, 82, 0.72)</span>
+</div>
+<div class="h-20 w-full bg-surface-3 rounded-md border border-white/5"></div>
+<p class="text-xs text-text-muted">Highest elevation for interactive states.</p>
+</div>
+<div class="bg-surface-hover border border-border-strong p-4 rounded-lg flex flex-col gap-4 shadow-lg shadow-primary/5">
+<div class="flex justify-between items-start">
+<span class="font-section-label text-section-label text-secondary">SURFACE-HOVER</span>
+<span class="text-[10px] font-mono text-secondary">rgba(68, 89, 126, 0.26)</span>
+</div>
+<div class="h-20 w-full bg-surface-hover rounded-md border border-border-strong"></div>
+<p class="text-xs text-text-muted">Luminous hover state with inset glow.</p>
+</div>
+</div>
+</section>
+<section class="lg:col-span-4 flex flex-col gap-6">
+<div class="glass-shell border border-border-soft rounded-xl p-6 flex-1">
+<div class="flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-secondary">palette</span>
+<h3 class="font-stat-label text-stat-label text-text-primary">Semantic Colors</h3>
+</div>
+<div class="space-y-3">
+<div class="flex items-center justify-between bg-white/5 p-3 rounded-lg border border-white/5">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-full bg-success shadow-[0_0_12px_rgba(74,222,128,0.4)]"></div>
+<span class="font-body-sm text-body-sm text-text-primary">Success</span>
+</div>
+<span class="font-mono text-[10px] text-success">#4ADE80</span>
+</div>
+<div class="flex items-center justify-between bg-white/5 p-3 rounded-lg border border-white/5">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-full bg-warning shadow-[0_0_12px_rgba(251,191,36,0.4)]"></div>
+<span class="font-body-sm text-body-sm text-text-primary">Warning</span>
+</div>
+<span class="font-mono text-[10px] text-warning">#FBBF24</span>
+</div>
+<div class="flex items-center justify-between bg-white/5 p-3 rounded-lg border border-white/5">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-full bg-danger shadow-[0_0_12px_rgba(248,113,113,0.4)]"></div>
+<span class="font-body-sm text-body-sm text-text-primary">Danger</span>
+</div>
+<span class="font-mono text-[10px] text-danger">#F87171</span>
+</div>
+<div class="flex items-center justify-between bg-white/5 p-3 rounded-lg border border-white/5">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-full bg-secondary shadow-[0_0_12px_rgba(173,198,255,0.4)]"></div>
+<span class="font-body-sm text-body-sm text-text-primary">Accent</span>
+</div>
+<span class="font-mono text-[10px] text-secondary">#ADC6FF</span>
+</div>
+</div>
+</div>
+<div class="glass-shell border border-border-soft rounded-xl p-6">
+<div class="flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-secondary">grid_on</span>
+<h3 class="font-stat-label text-stat-label text-text-primary">Spacing &amp; Radius</h3>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="space-y-2">
+<p class="font-section-label text-[10px] text-text-muted uppercase">Radius Scale</p>
+<div class="flex gap-2">
+<div class="w-8 h-8 bg-surface-3 rounded border border-white/10 flex items-center justify-center text-[10px]">sm</div>
+<div class="w-8 h-8 bg-surface-3 rounded-lg border border-white/10 flex items-center justify-center text-[10px]">lg</div>
+<div class="w-8 h-8 bg-surface-3 rounded-xl border border-white/10 flex items-center justify-center text-[10px]">xl</div>
+</div>
+</div>
+<div class="space-y-2">
+<p class="font-section-label text-[10px] text-text-muted uppercase">Spacing Base</p>
+<div class="flex items-end gap-1 h-8">
+<div class="w-2 bg-secondary h-1 rounded-t"></div>
+<div class="w-2 bg-secondary h-2 rounded-t"></div>
+<div class="w-2 bg-secondary h-4 rounded-t"></div>
+<div class="w-2 bg-secondary h-6 rounded-t"></div>
+<div class="w-2 bg-secondary h-8 rounded-t"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="lg:col-span-12 glass-shell border border-border-soft rounded-xl p-6 overflow-x-auto">
+<div class="flex items-center gap-3 mb-8">
+<span class="material-symbols-outlined text-secondary">text_fields</span>
+<h3 class="font-stat-label text-stat-label text-text-primary">Typography Scale</h3>
+</div>
+<table class="w-full text-left border-collapse min-w-[800px]">
+<thead>
+<tr class="border-b border-border-soft">
+<th class="pb-4 font-section-label text-section-label text-text-muted px-2">TOKEN</th>
+<th class="pb-4 font-section-label text-section-label text-text-muted px-2">PROPERTIES</th>
+<th class="pb-4 font-section-label text-section-label text-text-muted px-2">EXAMPLE</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-white/5">
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="py-6 px-2 align-middle">
+<p class="font-mono text-xs text-secondary">h-modal-title</p>
+</td>
+<td class="py-6 px-2 align-middle">
+<p class="text-[11px] text-text-muted">26px / Bold (750) / 1.2lh</p>
+</td>
+<td class="py-6 px-2">
+<span class="font-h-modal-title text-h-modal-title text-text-primary">The Main Headline Text</span>
+</td>
+</tr>
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="py-6 px-2 align-middle">
+<p class="font-mono text-xs text-secondary">h-modal-subtitle</p>
+</td>
+<td class="py-6 px-2 align-middle">
+<p class="text-[11px] text-text-muted">18px / Medium (500) / 1.4lh</p>
+</td>
+<td class="py-6 px-2">
+<span class="font-h-modal-subtitle text-h-modal-subtitle text-text-secondary">Sub-header context and descriptions</span>
+</td>
+</tr>
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="py-6 px-2 align-middle">
+<p class="font-mono text-xs text-secondary">stat-label</p>
+</td>
+<td class="py-6 px-2 align-middle">
+<p class="text-[11px] text-text-muted">18px / Semibold (600) / 1.2lh</p>
+</td>
+<td class="py-6 px-2">
+<span class="font-stat-label text-stat-label text-text-primary uppercase tracking-tight">Active Sync Nodes</span>
+</td>
+</tr>
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="py-6 px-2 align-middle">
+<p class="font-mono text-xs text-secondary">body</p>
+</td>
+<td class="py-6 px-2 align-middle">
+<p class="text-[11px] text-text-muted">16px / Medium (500) / 1.5lh</p>
+</td>
+<td class="py-6 px-2">
+<span class="font-body text-body text-text-secondary">Standard body text for information and interactive labels.</span>
+</td>
+</tr>
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="py-6 px-2 align-middle">
+<p class="font-mono text-xs text-secondary">modal-step-eyebrow</p>
+</td>
+<td class="py-6 px-2 align-middle">
+<p class="text-[11px] text-text-muted">13px / Bold (700) / 0.12ls</p>
+</td>
+<td class="py-6 px-2">
+<span class="font-modal-step-eyebrow text-modal-step-eyebrow text-secondary uppercase">Step 02 of 05: Configure</span>
+</td>
+</tr>
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="py-6 px-2 align-middle">
+<p class="font-mono text-xs text-secondary">caption</p>
+</td>
+<td class="py-6 px-2 align-middle">
+<p class="text-[11px] text-text-muted">12px / Medium (500) / 1.4lh</p>
+</td>
+<td class="py-6 px-2">
+<span class="font-caption text-caption text-text-muted">Copyright 2024 TuneBridge Engine v4.2</span>
+</td>
+</tr>
+</tbody>
+</table>
+</section>
+</div>
+</main>
+</div>
+</body></html>

@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error-container": "#93000a",
+                        "text-primary": "#E9EEF9",
+                        "on-secondary-fixed": "#001944",
+                        "secondary-fixed": "#d9e2ff",
+                        "surface-container-low": "#1a1b1f",
+                        "bg-deep": "#070A10",
+                        "surface-container-high": "#292a2d",
+                        "on-secondary": "#002d6d",
+                        "success": "#4ADE80",
+                        "surface-variant": "#343538",
+                        "surface-2": "rgba(30, 38, 56, 0.78)",
+                        "secondary": "#afc6ff",
+                        "on-tertiary-fixed-variant": "#5d4200",
+                        "inverse-surface": "#e3e2e7",
+                        "surface-bright": "#38393d",
+                        "inverse-on-surface": "#2f3034",
+                        "primary-fixed": "#d8e2ff",
+                        "tertiary-container": "#ebc06e",
+                        "surface-container-highest": "#343538",
+                        "surface-tint": "#adc6ff",
+                        "surface-hover": "rgba(68, 89, 126, 0.26)",
+                        "danger": "#F87171",
+                        "error": "#ffb4ab",
+                        "on-surface": "#e3e2e7",
+                        "tertiary": "#ffdea4",
+                        "on-error": "#690005",
+                        "on-primary-fixed-variant": "#2c4677",
+                        "secondary-fixed-dim": "#afc6ff",
+                        "primary-fixed-dim": "#adc6ff",
+                        "surface-dim": "#121317",
+                        "on-primary": "#122f5f",
+                        "background": "#121317",
+                        "surface": "#121317",
+                        "primary": "#d8e2ff",
+                        "modal-gradient": "linear-gradient(135deg, rgba(34,40,56,0.92) 0%, rgba(23,28,42,0.90) 48%, rgba(24,45,34,0.86) 100%)",
+                        "on-background": "#e3e2e7",
+                        "border-strong": "rgba(173, 198, 255, 0.38)",
+                        "text-inverse": "#0F172A",
+                        "on-error-container": "#ffdad6",
+                        "bg-base": "#0D121C",
+                        "inverse-primary": "#455e90",
+                        "on-surface-variant": "#c4c6d0",
+                        "on-tertiary-fixed": "#261900",
+                        "border-soft": "rgba(173, 198, 255, 0.18)",
+                        "on-tertiary-container": "#6c4d01",
+                        "on-primary-fixed": "#001a42",
+                        "outline-variant": "#44474f",
+                        "secondary-container": "#1c448b",
+                        "on-primary-container": "#385283",
+                        "surface-3": "rgba(43, 56, 82, 0.72)",
+                        "on-secondary-container": "#94b4ff",
+                        "surface-container-lowest": "#0d0e11",
+                        "tertiary-fixed": "#ffdea5",
+                        "primary-container": "#adc6ff",
+                        "text-muted": "#7E89A8",
+                        "surface-container": "#1e1f23",
+                        "text-secondary": "#AEB9D3",
+                        "tertiary-fixed-dim": "#ebc06e",
+                        "outline": "#8e909a",
+                        "surface-1": "rgba(20, 26, 40, 0.78)",
+                        "on-secondary-fixed-variant": "#1c448b",
+                        "warning": "#FBBF24",
+                        "on-tertiary": "#412d00"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "modal-header-p": "20px 24px 12px",
+                        "3xl": "28px",
+                        "lg": "16px",
+                        "modal-footer-p": "14px 24px 20px",
+                        "2xl": "24px",
+                        "4xl": "32px",
+                        "sm": "8px",
+                        "modal-body-p": "0 24px",
+                        "xs": "4px",
+                        "xl": "20px",
+                        "md": "12px"
+                    },
+                    "fontFamily": {
+                        "stat-label": ["Manrope"],
+                        "body": ["Manrope"],
+                        "caption": ["Manrope"],
+                        "modal-step-eyebrow": ["Manrope"],
+                        "h-modal-subtitle": ["Manrope"],
+                        "stat-number": ["Manrope"],
+                        "h-modal-title": ["Manrope"],
+                        "body-sm": ["Manrope"],
+                        "section-label": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "stat-label": ["18px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                        "body": ["16px", {"lineHeight": "1.5", "fontWeight": "500"}],
+                        "caption": ["12px", {"lineHeight": "1.4", "fontWeight": "500"}],
+                        "modal-step-eyebrow": ["13px", {"letterSpacing": "0.12em", "fontWeight": "700"}],
+                        "h-modal-subtitle": ["18px", {"lineHeight": "1.4", "fontWeight": "500"}],
+                        "stat-number": ["30px", {"lineHeight": "1.1", "fontWeight": "800"}],
+                        "h-modal-title": ["26px", {"lineHeight": "1.2", "fontWeight": "750"}],
+                        "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "500"}],
+                        "section-label": ["12px", {"letterSpacing": "0.1em", "fontWeight": "700"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: #070A10; }
+        .glass-modal {
+            background: linear-gradient(135deg, rgba(34,40,56,0.92) 0%, rgba(23,28,42,0.90) 48%, rgba(24,34,45,0.86) 100%);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(173, 198, 255, 0.12);
+            box-shadow: 0 40px 100px -20px rgba(0,0,0,0.6);
+        }
+        .step-dot { height: 6px; border-radius: 999px; background: rgba(173, 198, 255, 0.2); transition: all 0.3s ease; }
+        .step-dot.active { width: 24px; background: #ADC6FF; }
+        .step-dot.inactive { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(173, 198, 255, 0.2); border-radius: 10px; }
+    </style>
+</head>
+<body class="font-body text-text-primary min-h-screen pb-32">
+<!-- TOP APP BAR (Shared Component) -->
+<main class="max-w-[1400px] mx-auto px-8 py-16 space-y-32">
+<!-- INTRO SECTION -->
+<section class="max-w-2xl">
+<h1 class="font-h-modal-title text-h-modal-title text-text-primary mb-4">Modal Tier Showcase</h1>
+<p class="font-body text-text-secondary">A comprehensive gallery of standardized modal containers for the MusicSync Pro ecosystem, ranging from small utility dialogs to extra-large configuration canvas views.</p>
+</section>
+<!-- TIER 1: SMALL (560px) -->
+<div class="flex flex-col items-center gap-8">
+<div class="w-full max-w-[560px] glass-modal rounded-xl overflow-hidden flex flex-col">
+<!-- Header -->
+<div class="p-modal-header-p flex items-start gap-4">
+<div class="w-14 h-14 bg-surface-2 rounded-xl flex items-center justify-center border border-border-soft">
+<span class="material-symbols-outlined text-primary text-3xl">delete_forever</span>
+</div>
+<div class="flex-1">
+<span class="font-modal-step-eyebrow text-modal-step-eyebrow text-primary block mb-1">DANGER ZONE</span>
+<h2 class="font-h-modal-title text-h-modal-title text-text-primary">Delete Library?</h2>
+<p class="font-h-modal-subtitle text-body-sm text-text-secondary">This action cannot be undone.</p>
+</div>
+<button class="text-text-muted hover:text-text-primary transition-colors">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Body -->
+<div class="p-modal-body-p py-6">
+<div class="bg-error-container/20 border border-error/20 p-4 rounded-lg flex gap-3">
+<span class="material-symbols-outlined text-danger">warning</span>
+<p class="font-body-sm text-on-error-container">Deleting your "Late Night Beats" library will permanently remove 142 synced tracks and all associated metadata across 4 devices.</p>
+</div>
+</div>
+<!-- Footer -->
+<div class="p-modal-footer-p flex items-center justify-between border-t border-border-soft">
+<div class="flex gap-2">
+<div class="step-dot active"></div>
+<div class="step-dot inactive"></div>
+</div>
+<div class="flex gap-3">
+<button class="px-6 py-2.5 rounded-full font-body-sm bg-surface-2 text-text-primary border border-border-soft hover:bg-surface-3 transition-colors">Cancel</button>
+<button class="px-6 py-2.5 rounded-full font-body-sm bg-danger text-text-inverse font-bold hover:opacity-90 transition-opacity">Confirm Delete</button>
+</div>
+</div>
+</div>
+<span class="font-section-label text-section-label text-text-muted">TIER: SMALL (560PX)</span>
+</div>
+<!-- TIER 2: MEDIUM (760px) -->
+<div class="flex flex-col items-center gap-8">
+<div class="w-full max-w-[760px] glass-modal rounded-xl overflow-hidden flex flex-col">
+<!-- Header -->
+<div class="p-modal-header-p flex items-start gap-4">
+<div class="w-14 h-14 bg-surface-2 rounded-xl flex items-center justify-center border border-border-soft">
+<span class="material-symbols-outlined text-primary text-3xl">sync_alt</span>
+</div>
+<div class="flex-1">
+<span class="font-modal-step-eyebrow text-modal-step-eyebrow text-primary block mb-1">STEP 02 OF 04</span>
+<h2 class="font-h-modal-title text-h-modal-title text-text-primary">Sync Source Selection</h2>
+<p class="font-h-modal-subtitle text-body-sm text-text-secondary">Choose where you want to fetch your music assets from.</p>
+</div>
+<button class="text-text-muted hover:text-text-primary transition-colors">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Body -->
+<div class="p-modal-body-p py-6 grid grid-cols-2 gap-4">
+<div class="p-4 rounded-xl bg-surface-1 border border-border-strong flex flex-col gap-4 cursor-pointer hover:bg-surface-2 transition-all">
+<div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">cloud_download</span>
+</div>
+<div>
+<h4 class="font-body text-text-primary">Cloud Library</h4>
+<p class="font-body-sm text-text-muted">Sync from Spotify, Apple Music, or Tidal accounts.</p>
+</div>
+</div>
+<div class="p-4 rounded-xl bg-surface-1 border border-border-soft flex flex-col gap-4 cursor-pointer hover:border-border-strong transition-all">
+<div class="w-10 h-10 bg-secondary/10 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary">hard_drive</span>
+</div>
+<div>
+<h4 class="font-body text-text-primary">Local Storage</h4>
+<p class="font-body-sm text-text-muted">Import FLAC, MP3, or WAV files directly from disk.</p>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<div class="p-modal-footer-p flex items-center justify-between border-t border-border-soft">
+<div class="flex gap-2">
+<div class="step-dot inactive"></div>
+<div class="step-dot active"></div>
+<div class="step-dot inactive"></div>
+<div class="step-dot inactive"></div>
+</div>
+<div class="flex gap-3">
+<button class="px-6 py-2.5 rounded-full font-body-sm bg-surface-2 text-text-primary border border-border-soft hover:bg-surface-3 transition-colors">Previous</button>
+<button class="px-6 py-2.5 rounded-full font-body-sm bg-primary text-text-inverse font-bold hover:opacity-90 transition-opacity">Continue</button>
+</div>
+</div>
+</div>
+<span class="font-section-label text-section-label text-text-muted">TIER: MEDIUM (760PX)</span>
+</div>
+<!-- TIER 3: LARGE (920px) -->
+<div class="flex flex-col items-center gap-8">
+<div class="w-full max-w-[920px] glass-modal rounded-xl overflow-hidden flex flex-col">
+<!-- Header -->
+<div class="p-modal-header-p flex items-start gap-4">
+<div class="w-14 h-14 bg-surface-2 rounded-xl flex items-center justify-center border border-border-soft">
+<span class="material-symbols-outlined text-primary text-3xl">analytics</span>
+</div>
+<div class="flex-1">
+<span class="font-modal-step-eyebrow text-modal-step-eyebrow text-primary block mb-1">SYSTEM INSIGHTS</span>
+<h2 class="font-h-modal-title text-h-modal-title text-text-primary">Performance Analytics</h2>
+<p class="font-h-modal-subtitle text-body-sm text-text-secondary">Monitoring sync latency and network throughput.</p>
+</div>
+<button class="text-text-muted hover:text-text-primary transition-colors">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Body -->
+<div class="p-modal-body-p py-6 space-y-6">
+<div class="grid grid-cols-3 gap-6">
+<div class="p-6 rounded-2xl bg-surface-container-low border border-border-soft">
+<span class="font-stat-label text-stat-label text-text-muted block mb-2">Throughput</span>
+<span class="font-stat-number text-stat-number text-primary">1.2 GB/s</span>
+</div>
+<div class="p-6 rounded-2xl bg-surface-container-low border border-border-soft">
+<span class="font-stat-label text-stat-label text-text-muted block mb-2">Latency</span>
+<span class="font-stat-number text-stat-number text-success">14 ms</span>
+</div>
+<div class="p-6 rounded-2xl bg-surface-container-low border border-border-soft">
+<span class="font-stat-label text-stat-label text-text-muted block mb-2">Active Peers</span>
+<span class="font-stat-number text-stat-number text-warning">842</span>
+</div>
+</div>
+<div class="h-48 rounded-2xl bg-surface-container-lowest border border-border-soft relative overflow-hidden">
+<div class="absolute inset-0 opacity-20" style="background-image: linear-gradient(90deg, rgba(173,198,255,0.1) 1px, transparent 1px), linear-gradient(rgba(173,198,255,0.1) 1px, transparent 1px); background-size: 20px 20px;"></div>
+<div class="absolute bottom-0 left-0 w-full h-24 bg-gradient-to-t from-primary/10 to-transparent"></div>
+<div class="p-4 relative">
+<div class="flex items-center gap-2 mb-4">
+<div class="w-2 h-2 rounded-full bg-success animate-pulse"></div>
+<span class="font-caption text-caption text-success">Live Network Status</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<div class="p-modal-footer-p flex items-center justify-between border-t border-border-soft">
+<div class="flex gap-2">
+<div class="step-dot active"></div>
+</div>
+<div class="flex gap-3">
+<button class="px-6 py-2.5 rounded-full font-body-sm bg-surface-2 text-text-primary border border-border-soft hover:bg-surface-3 transition-colors">Export CSV</button>
+<button class="px-6 py-2.5 rounded-full font-body-sm bg-primary text-text-inverse font-bold hover:opacity-90 transition-opacity">Close Dashboard</button>
+</div>
+</div>
+</div>
+<span class="font-section-label text-section-label text-text-muted">TIER: LARGE (920PX)</span>
+</div>
+<!-- TIER 4: EXTRA LARGE (1080px) -->
+<div class="flex flex-col items-center gap-8">
+<div class="w-full max-w-[1080px] glass-modal rounded-xl overflow-hidden flex flex-col">
+<!-- Header -->
+<div class="p-modal-header-p flex items-start gap-4">
+<div class="w-14 h-14 bg-surface-2 rounded-xl flex items-center justify-center border border-border-soft">
+<span class="material-symbols-outlined text-primary text-3xl">playlist_add_check</span>
+</div>
+<div class="flex-1">
+<span class="font-modal-step-eyebrow text-modal-step-eyebrow text-primary block mb-1">CONFIGURATION</span>
+<h2 class="font-h-modal-title text-h-modal-title text-text-primary">Advanced Sync Rules</h2>
+<p class="font-h-modal-subtitle text-body-sm text-text-secondary">Define complex filtering and sorting logic for automated synchronization.</p>
+</div>
+<button class="text-text-muted hover:text-text-primary transition-colors">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Body -->
+<div class="p-modal-body-p py-6 flex gap-8">
+<div class="w-64 flex flex-col gap-2">
+<div class="p-3 bg-white/10 text-primary rounded-lg font-body-sm flex items-center gap-3">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+                            Filter Rules
+                        </div>
+<div class="p-3 text-text-muted hover:bg-white/5 rounded-lg font-body-sm flex items-center gap-3 transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">folder_copy</span>
+                            Destination Paths
+                        </div>
+<div class="p-3 text-text-muted hover:bg-white/5 rounded-lg font-body-sm flex items-center gap-3 transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">history</span>
+                            Conflict History
+                        </div>
+<div class="p-3 text-text-muted hover:bg-white/5 rounded-lg font-body-sm flex items-center gap-3 transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">security</span>
+                            Permission Keys
+                        </div>
+</div>
+<div class="flex-1 space-y-6">
+<div class="space-y-4">
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl border border-border-soft">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-text-muted">music_note</span>
+<div>
+<h4 class="font-body-sm text-text-primary">Exclude Low Bitrate</h4>
+<p class="font-caption text-text-muted">Ignore tracks with &lt; 320kbps quality.</p>
+</div>
+</div>
+<div class="w-12 h-6 bg-primary-container rounded-full relative flex items-center px-1">
+<div class="w-4 h-4 bg-on-primary-container rounded-full ml-auto"></div>
+</div>
+</div>
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl border border-border-soft opacity-60">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-text-muted">timer</span>
+<div>
+<h4 class="font-body-sm text-text-primary">Length Restriction</h4>
+<p class="font-caption text-text-muted">Only sync tracks between 2-10 minutes.</p>
+</div>
+</div>
+<div class="w-12 h-6 bg-surface-3 rounded-full relative flex items-center px-1">
+<div class="w-4 h-4 bg-text-muted rounded-full"></div>
+</div>
+</div>
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl border border-border-soft">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-text-muted">album</span>
+<div>
+<h4 class="font-body-sm text-text-primary">Metadata Enrichment</h4>
+<p class="font-caption text-text-muted">Auto-fetch missing album artwork from Discogs.</p>
+</div>
+</div>
+<div class="w-12 h-6 bg-primary-container rounded-full relative flex items-center px-1">
+<div class="w-4 h-4 bg-on-primary-container rounded-full ml-auto"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<div class="p-modal-footer-p flex items-center justify-between border-t border-border-soft">
+<div class="flex gap-2">
+<div class="step-dot active"></div>
+<div class="step-dot inactive"></div>
+<div class="step-dot inactive"></div>
+</div>
+<div class="flex gap-3">
+<button class="px-6 py-2.5 rounded-full font-body-sm bg-surface-2 text-text-primary border border-border-soft hover:bg-surface-3 transition-colors">Restore Defaults</button>
+<button class="px-6 py-2.5 rounded-full font-body-sm bg-primary text-text-inverse font-bold hover:opacity-90 transition-opacity">Save Configurations</button>
+</div>
+</div>
+</div>
+<span class="font-section-label text-section-label text-text-muted">TIER: EXTRA LARGE (1080PX)</span>
+</div>
+<!-- TIER 5: CONTENT FOCUS (920px) -->
+<div class="flex flex-col items-center gap-8">
+<div class="w-full max-w-[920px] glass-modal rounded-xl overflow-hidden flex flex-col">
+<!-- Header -->
+<div class="p-modal-header-p flex items-start gap-4">
+<div class="w-14 h-14 bg-surface-2 rounded-xl flex items-center justify-center border border-border-soft">
+<span class="material-symbols-outlined text-primary text-3xl">library_music</span>
+</div>
+<div class="flex-1">
+<span class="font-modal-step-eyebrow text-modal-step-eyebrow text-primary block mb-1">BROWSE LIBRARY</span>
+<h2 class="font-h-modal-title text-h-modal-title text-text-primary">Recently Synced</h2>
+<p class="font-h-modal-subtitle text-body-sm text-text-secondary">View and manage your latest acquisitions.</p>
+</div>
+<div class="flex items-center gap-2">
+<button class="w-10 h-10 bg-surface-2 rounded-lg flex items-center justify-center border border-border-soft hover:bg-surface-3 transition-colors">
+<span class="material-symbols-outlined text-primary">search</span>
+</button>
+<button class="text-text-muted hover:text-text-primary transition-colors">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+</div>
+<!-- Body -->
+<div class="p-modal-body-p py-6 custom-scrollbar max-h-[400px] overflow-y-auto">
+<table class="w-full text-left">
+<thead class="sticky top-0 bg-[#171c2a] z-10">
+<tr class="border-b border-border-soft">
+<th class="pb-4 font-section-label text-text-muted">TRACK NAME</th>
+<th class="pb-4 font-section-label text-text-muted">ARTIST</th>
+<th class="pb-4 font-section-label text-text-muted">QUALITY</th>
+<th class="pb-4 font-section-label text-text-muted">STATUS</th>
+<th class="pb-4 text-right font-section-label text-text-muted">ACTION</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-soft/50">
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-md bg-slate-800 bg-cover bg-center" data-alt="vibrant abstract album cover with electric blue and purple neon geometric shapes on dark background" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuATsIMqV74Q6eHqISkouiutYZqO_yY5CtGDOeGCEwTG1cvX9jQ0arU2cBF2m20MMs9qQ3R5ZaPLouW4LF8ufSbuXah6EQpvI6JKfjaMyMKJkLF-a2qiEbh_OxKxJqqKi-SKbBunsPQsYGls5nY-Gi9SysdeX90nKvyrQe7QhpNTXMlI0BiuPXYdHb1bIgfg3kojA-EhhRmrftPhw0eAbxlmEfCyvktO3nJoiRQ20cKQBP-VC1QUECrsfwCdaE8PG8P64e7jkonH0g')"></div>
+<span class="font-body-sm text-text-primary">Neon Horizon</span>
+</div>
+</td>
+<td class="py-4 font-body-sm text-text-secondary">Solaris Collective</td>
+<td class="py-4"><span class="px-2 py-1 bg-surface-2 border border-border-soft rounded text-[10px] text-primary">FLAC</span></td>
+<td class="py-4"><span class="flex items-center gap-1.5 text-success font-caption"><span class="w-1.5 h-1.5 rounded-full bg-success"></span> Synced</span></td>
+<td class="py-4 text-right">
+<button class="p-2 hover:bg-primary/20 hover:text-primary rounded-lg transition-colors"><span class="material-symbols-outlined">more_vert</span></button>
+</td>
+</tr>
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-md bg-slate-800 bg-cover bg-center" data-alt="dreamy aesthetic album art with soft blurred lights and warm orange sunset tones" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCNl2DWM3qCAWu80u6R4Y9HaLrUQPeUsTk-VSUJ4qBgG4ZLYHYNSRIlA_obQcCPMZMTRszGMWVxXhkMVLlzVAVSV_uNXVFGQ1F5gJjC0Fh-_jwYcIu9MLlqlt7OYsuyOSguTtRilfqwmNq4NGTmEEUwcAULXgzTYZK1iVGwCu8M5evs3Dzo7HYWvJX5q3p1L8z_S9gYU7-RpIdXlCQuYk6whlowIVvHWjWfvCyGil8XlrKjCjK3rsYsgSPNw5ug4Q6HOQkI9KJ72Q')"></div>
+<span class="font-body-sm text-text-primary">Echoes of Time</span>
+</div>
+</td>
+<td class="py-4 font-body-sm text-text-secondary">Luna Ray</td>
+<td class="py-4"><span class="px-2 py-1 bg-surface-2 border border-border-soft rounded text-[10px] text-primary">320KBPS</span></td>
+<td class="py-4"><span class="flex items-center gap-1.5 text-warning font-caption"><span class="w-1.5 h-1.5 rounded-full bg-warning"></span> Pending</span></td>
+<td class="py-4 text-right">
+<button class="p-2 hover:bg-primary/20 hover:text-primary rounded-lg transition-colors"><span class="material-symbols-outlined">more_vert</span></button>
+</td>
+</tr>
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-md bg-slate-800 bg-cover bg-center" data-alt="minimalist album cover with sharp white typography on a stark black textured background" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDseEwKwE_2-KcaiMYrlBhBB6UUAOVf9-B6hFGxtbiiLFTlu6vXOORFKFfDRLk6Ay_bYjPHBmjxQz0PzeAm1vcCdhldn4_v9ENXayrWOZcLquMRV7aRu-04WTeO27UG6dQRPJTsVPxBMtsDe_iOKkh6NDi3_-hZN77oUgsLxopSOtmrpLIKE39Eq8W7bL4pZraWtgMHNXzx6Tic4AGcHe1A43JnIJUUd_GjOrI6Up9A-Y9TGKgdO_x9hQ0ayX7uwfLMRijyqTOQug')"></div>
+<span class="font-body-sm text-text-primary">Deep Grid</span>
+</div>
+</td>
+<td class="py-4 font-body-sm text-text-secondary">Sub-Zero</td>
+<td class="py-4"><span class="px-2 py-1 bg-surface-2 border border-border-soft rounded text-[10px] text-primary">FLAC</span></td>
+<td class="py-4"><span class="flex items-center gap-1.5 text-success font-caption"><span class="w-1.5 h-1.5 rounded-full bg-success"></span> Synced</span></td>
+<td class="py-4 text-right">
+<button class="p-2 hover:bg-primary/20 hover:text-primary rounded-lg transition-colors"><span class="material-symbols-outlined">more_vert</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Footer -->
+<div class="p-modal-footer-p flex items-center justify-between border-t border-border-soft">
+<div class="flex items-center gap-4">
+<span class="font-caption text-text-muted">3 Tracks Selected</span>
+<div class="flex gap-2">
+<div class="step-dot active"></div>
+</div>
+</div>
+<div class="flex gap-3">
+<button class="px-6 py-2.5 rounded-full font-body-sm bg-surface-2 text-text-primary border border-border-soft hover:bg-surface-3 transition-colors">Clear Selection</button>
+<button class="px-6 py-2.5 rounded-full font-body-sm bg-primary text-text-inverse font-bold hover:opacity-90 transition-opacity">Process Batch</button>
+</div>
+</div>
+</div>
+<span class="font-section-label text-section-label text-text-muted">TIER: LARGE (CONTENT VARIANT)</span>
+</div>
+</main>
+<!-- FOOTER (Shared Component) -->
+</body></html>

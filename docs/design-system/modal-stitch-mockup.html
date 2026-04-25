@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TuneBridge Modal Design System Mockup</title>
+  <style>
+    :root{
+      --tb-bg-0:#070A10;
+      --tb-bg-1:#0D121C;
+      --tb-surface-1:rgba(20,26,40,.78);
+      --tb-surface-2:rgba(30,38,56,.78);
+      --tb-surface-3:rgba(43,56,82,.72);
+      --tb-surface-hover:rgba(68,89,126,.26);
+      --tb-border-soft:rgba(173,198,255,.18);
+      --tb-border-strong:rgba(173,198,255,.38);
+
+      --tb-text-primary:#E9EEF9;
+      --tb-text-secondary:#AEB9D3;
+      --tb-text-muted:#7E89A8;
+      --tb-text-inverse:#0F172A;
+
+      --tb-accent:#ADC6FF;
+      --tb-accent-strong:#8FB1FF;
+      --tb-success:#4ADE80;
+      --tb-warning:#FBBF24;
+      --tb-danger:#F87171;
+
+      --radius-sm:12px;
+      --radius-md:14px;
+      --radius-lg:16px;
+      --radius-xl:22px;
+      --radius-pill:999px;
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      color:var(--tb-text-primary);
+      background:
+        radial-gradient(1200px 700px at 75% 15%, rgba(50,110,75,.25), transparent 50%),
+        radial-gradient(900px 600px at 30% 70%, rgba(60,70,120,.28), transparent 55%),
+        linear-gradient(145deg,var(--tb-bg-0),var(--tb-bg-1));
+      min-height:100vh;
+      padding:24px;
+    }
+
+    .layout{
+      max-width:1360px;
+      margin:0 auto;
+      display:grid;
+      grid-template-columns:320px 1fr;
+      gap:20px;
+    }
+
+    .panel{
+      background:rgba(18,23,35,.72);
+      border:1px solid var(--tb-border-soft);
+      border-radius:20px;
+      box-shadow:0 16px 40px rgba(0,0,0,.35);
+      backdrop-filter:blur(14px);
+      -webkit-backdrop-filter:blur(14px);
+    }
+
+    .tokens{padding:18px}
+    .tokens h2{margin:0 0 14px;font-size:18px}
+    .token-group{margin-bottom:16px}
+    .token-label{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--tb-text-muted);margin-bottom:8px}
+    .swatches{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .swatch{
+      border-radius:12px;
+      border:1px solid var(--tb-border-soft);
+      padding:8px;
+      font-size:11px;
+      color:var(--tb-text-secondary);
+      min-height:48px;
+    }
+    .swatch b{display:block;color:var(--tb-text-primary);font-size:12px;margin-bottom:2px}
+
+    .content{display:flex;flex-direction:column;gap:20px}
+    .section{padding:16px 18px}
+    .section h3{margin:0 0 12px;font-size:16px}
+    .component-row{display:flex;flex-wrap:wrap;gap:10px}
+
+    .tb-btn{
+      border:none;
+      border-radius:var(--radius-pill);
+      height:44px;
+      padding:0 18px;
+      font-weight:700;
+      font-size:14px;
+      cursor:pointer;
+    }
+    .tb-btn-primary{background:var(--tb-accent);color:var(--tb-text-inverse)}
+    .tb-btn-secondary{
+      background:linear-gradient(135deg,rgba(50,58,74,.78),rgba(33,38,49,.74));
+      color:var(--tb-text-primary);
+      border:1px solid var(--tb-border-soft);
+    }
+    .tb-btn-danger{background:rgba(248,113,113,.2);color:#ffd3d3;border:1px solid rgba(248,113,113,.4)}
+    .tb-btn-ghost{
+      width:42px;height:42px;padding:0;border-radius:50%;
+      background:rgba(31,38,54,.55);color:var(--tb-text-secondary);
+      border:1px solid var(--tb-border-soft)
+    }
+
+    .tb-input,.tb-select{
+      height:48px; border-radius:12px; border:1px solid var(--tb-border-soft);
+      background:rgba(25,32,46,.72); color:var(--tb-text-primary);
+      padding:0 14px; font-size:14px; min-width:220px;
+    }
+
+    .tb-chip{
+      display:inline-flex;align-items:center;gap:6px;
+      height:30px;padding:0 12px;border-radius:999px;
+      font-size:12px;font-weight:700;letter-spacing:.04em;
+      border:1px solid var(--tb-border-soft);
+      color:var(--tb-text-secondary); background:rgba(40,49,69,.5);
+    }
+    .tb-chip.success{color:#a7f3bd;background:rgba(74,222,128,.15);border-color:rgba(74,222,128,.35)}
+    .tb-chip.warn{color:#fde68a;background:rgba(251,191,36,.15);border-color:rgba(251,191,36,.35)}
+    .tb-chip.danger{color:#fecaca;background:rgba(248,113,113,.15);border-color:rgba(248,113,113,.35)}
+
+    .gallery{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:16px;
+    }
+
+    .tb-modal{
+      position:relative;
+      border-radius:var(--radius-xl);
+      border:1px solid var(--tb-border-soft);
+      background:linear-gradient(135deg,rgba(34,40,56,.92) 0%,rgba(23,28,42,.90) 48%,rgba(24,45,34,.86) 100%);
+      box-shadow:0 24px 60px rgba(0,0,0,.45);
+      backdrop-filter:blur(18px);
+      -webkit-backdrop-filter:blur(18px);
+      overflow:hidden;
+    }
+
+    .tb-modal.sm{max-width:560px}
+    .tb-modal.md{max-width:760px}
+    .tb-modal.lg{max-width:920px}
+    .tb-modal.xl{max-width:1080px}
+
+    .tb-modal-header{
+      display:flex;justify-content:space-between;align-items:flex-start;
+      padding:20px 24px 12px;
+    }
+
+    .tb-modal-head-left{display:flex;gap:14px;align-items:center}
+    .tb-icon-tile{
+      width:56px;height:56px;border-radius:16px;
+      border:1px solid var(--tb-border-strong);
+      background:rgba(60,76,112,.3);
+      display:grid;place-items:center;
+      color:var(--tb-accent);font-size:28px;font-weight:700;
+    }
+
+    .tb-step{
+      font-size:13px;font-weight:700;letter-spacing:.12em;
+      text-transform:uppercase;color:var(--tb-accent);
+      margin:0 0 4px;
+    }
+    .tb-title{font-size:26px;line-height:1.12;font-weight:800;margin:0 0 6px}
+    .tb-subtitle{font-size:18px;line-height:1.3;color:var(--tb-text-secondary);margin:0}
+
+    .tb-close{
+      width:48px;height:48px;border-radius:50%;border:1px solid var(--tb-border-soft);
+      background:rgba(31,38,54,.55);color:var(--tb-text-secondary);
+      display:grid;place-items:center;font-size:22px;
+    }
+
+    .tb-modal-body{padding:0 24px 10px}
+    .tb-modal-footer{
+      padding:12px 24px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+    }
+
+    .tb-step-rail{display:flex;gap:8px;align-items:center}
+    .tb-dot{
+      width:12px;height:12px;border-radius:999px;background:rgba(173,198,255,.25)
+    }
+    .tb-dot.active{
+      width:34px;border-radius:999px;background:var(--tb-accent)
+    }
+
+    .tb-actions{display:flex;gap:10px}
+
+    .tb-list{
+      display:flex;flex-direction:column;gap:10px;
+      max-height:240px;overflow:auto;padding-right:4px;
+    }
+    .tb-row{
+      border:1px solid var(--tb-border-soft);
+      background:rgba(24,30,42,.62);
+      border-radius:14px;padding:12px;
+      display:flex;justify-content:space-between;align-items:center;gap:12px;
+    }
+    .tb-row .meta{display:flex;flex-direction:column;gap:4px}
+    .tb-row .title{font-size:18px;font-weight:700}
+    .tb-row .sub{font-size:14px;color:var(--tb-text-muted)}
+
+    .tb-progress-panel{
+      border:1px solid rgba(74,222,128,.3);
+      background:rgba(25,54,37,.3);
+      border-radius:16px;padding:14px;
+    }
+    .tb-scan-grid{
+      display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:center;
+    }
+    .ring{
+      width:200px;height:200px;border-radius:50%;
+      border:12px solid var(--tb-success);
+      display:grid;place-items:center;margin:auto;
+      color:var(--tb-text-primary);font-weight:800;font-size:20px;
+    }
+    .scan-lines{display:flex;flex-direction:column;gap:8px}
+    .scan-line{display:flex;justify-content:space-between;color:#a7f3bd;font-size:18px}
+    .stats{
+      margin-top:12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;
+    }
+    .stat{
+      border:1px solid rgba(74,222,128,.35);
+      border-radius:12px;padding:10px;background:rgba(22,46,32,.45);
+    }
+    .stat .n{font-size:30px;font-weight:800}
+    .stat .l{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--tb-text-secondary)}
+
+    .tb-table{
+      width:100%;border-collapse:collapse;min-width:780px
+    }
+    .tb-table-wrap{overflow:auto;border:1px solid var(--tb-border-soft);border-radius:14px}
+    .tb-table th,.tb-table td{
+      padding:12px 14px;text-align:left;white-space:nowrap;border-bottom:1px solid rgba(173,198,255,.08)
+    }
+    .tb-table th{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--tb-text-muted)}
+    .tb-table td{font-size:14px;color:var(--tb-text-secondary)}
+
+    .tb-accordion{
+      border:1px solid var(--tb-border-soft);border-radius:14px;overflow:hidden
+    }
+    .tb-acc-head{
+      padding:12px 14px;background:rgba(34,40,56,.75);font-weight:700;display:flex;justify-content:space-between
+    }
+    .tb-acc-body{padding:12px 14px;background:rgba(22,28,40,.65)}
+
+    @media (max-width:1200px){
+      .layout{grid-template-columns:1fr}
+      .gallery{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="panel tokens">
+      <h2>Token Preview</h2>
+
+      <div class="token-group">
+        <div class="token-label">Surfaces</div>
+        <div class="swatches">
+          <div class="swatch" style="background:var(--tb-surface-1)"><b>surface-1</b>rgba(20,26,40,.78)</div>
+          <div class="swatch" style="background:var(--tb-surface-2)"><b>surface-2</b>rgba(30,38,56,.78)</div>
+          <div class="swatch" style="background:var(--tb-surface-3)"><b>surface-3</b>rgba(43,56,82,.72)</div>
+          <div class="swatch" style="background:var(--tb-surface-hover)"><b>surface-hover</b>rgba(68,89,126,.26)</div>
+        </div>
+      </div>
+
+      <div class="token-group">
+        <div class="token-label">Text</div>
+        <div class="swatches">
+          <div class="swatch"><b style="color:var(--tb-text-primary)">text-primary</b>#E9EEF9</div>
+          <div class="swatch"><b style="color:var(--tb-text-secondary)">text-secondary</b>#AEB9D3</div>
+          <div class="swatch"><b style="color:var(--tb-text-muted)">text-muted</b>#7E89A8</div>
+          <div class="swatch"><b style="color:var(--tb-accent)">accent</b>#ADC6FF</div>
+        </div>
+      </div>
+
+      <div class="token-group">
+        <div class="token-label">Semantic</div>
+        <div class="component-row">
+          <span class="tb-chip success">Success</span>
+          <span class="tb-chip warn">Warning</span>
+          <span class="tb-chip danger">Danger</span>
+        </div>
+      </div>
+
+      <div class="token-group">
+        <div class="token-label">Type</div>
+        <div style="font-size:26px;font-weight:800">Modal Title 26</div>
+        <div style="font-size:18px;color:var(--tb-text-secondary)">Subtitle 18</div>
+        <div style="font-size:16px">Body 16</div>
+        <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--tb-text-muted)">Section Label 12</div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <section class="panel section">
+        <h3>Components</h3>
+        <div class="component-row" style="margin-bottom:10px">
+          <button class="tb-btn tb-btn-primary">Primary</button>
+          <button class="tb-btn tb-btn-secondary">Secondary</button>
+          <button class="tb-btn tb-btn-danger">Delete</button>
+          <button class="tb-btn tb-btn-ghost">⋯</button>
+        </div>
+        <div class="component-row" style="margin-bottom:10px">
+          <input class="tb-input" placeholder="Input field" />
+          <select class="tb-select"><option>Select field</option></select>
+        </div>
+        <div class="component-row">
+          <span class="tb-chip">Neutral</span>
+          <span class="tb-chip success">In Sync</span>
+          <span class="tb-chip warn">Needs Review</span>
+          <span class="tb-chip danger">Destructive</span>
+        </div>
+      </section>
+
+      <section class="gallery">
+        <article class="tb-modal md">
+          <header class="tb-modal-header">
+            <div class="tb-modal-head-left">
+              <div class="tb-icon-tile">↻</div>
+              <div>
+                <p class="tb-step">Step 1 of 5</p>
+                <h4 class="tb-title">Sync Music</h4>
+                <p class="tb-subtitle">Choose a connected device to start syncing.</p>
+              </div>
+            </div>
+            <button class="tb-close">×</button>
+          </header>
+          <div class="tb-modal-body">
+            <div class="tb-list">
+              <div class="tb-row"><div class="meta"><div class="title">AP80 Pro Max</div><div class="sub">7.1 GB free</div></div><span class="tb-chip success">Connected</span></div>
+              <div class="tb-row"><div class="meta"><div class="title">Fiio M21</div><div class="sub">/Volumes/FIIO M21</div></div><span class="tb-chip">Disconnected</span></div>
+            </div>
+          </div>
+          <footer class="tb-modal-footer">
+            <div class="tb-step-rail"><span class="tb-dot active"></span><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-dot"></span></div>
+            <div class="tb-actions">
+              <button class="tb-btn tb-btn-secondary">Cancel</button>
+              <button class="tb-btn tb-btn-primary">Next: Scan</button>
+            </div>
+          </footer>
+        </article>
+
+        <article class="tb-modal md">
+          <header class="tb-modal-header">
+            <div class="tb-modal-head-left">
+              <div class="tb-icon-tile">⌕</div>
+              <div>
+                <p class="tb-step">Step 2 of 5</p>
+                <h4 class="tb-title">Scanning Library</h4>
+                <p class="tb-subtitle">Comparing local library and selected device.</p>
+              </div>
+            </div>
+            <button class="tb-close">×</button>
+          </header>
+          <div class="tb-modal-body">
+            <div class="tb-progress-panel">
+              <div class="tb-scan-grid">
+                <div class="ring">100%</div>
+                <div>
+                  <div class="scan-lines">
+                    <div class="scan-line"><span>Scanning library...</span><span>✓</span></div>
+                    <div class="scan-line"><span>Scanning device...</span><span>✓</span></div>
+                    <div class="scan-line"><span>Building diff...</span><span>✓</span></div>
+                  </div>
+                  <div class="stats">
+                    <div class="stat"><div class="n" style="color:var(--tb-success)">326</div><div class="l">To Device</div></div>
+                    <div class="stat"><div class="n" style="color:var(--tb-accent)">3</div><div class="l">To Local</div></div>
+                    <div class="stat"><div class="n" style="color:var(--tb-warning)">2</div><div class="l">Playlists</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <footer class="tb-modal-footer">
+            <div class="tb-step-rail"><span class="tb-dot"></span><span class="tb-dot active"></span><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-dot"></span></div>
+            <div class="tb-actions">
+              <button class="tb-btn tb-btn-secondary">Back</button>
+              <button class="tb-btn tb-btn-primary">Review Changes</button>
+            </div>
+          </footer>
+        </article>
+      </section>
+
+      <section class="gallery">
+        <article class="tb-modal lg">
+          <header class="tb-modal-header">
+            <div class="tb-modal-head-left">
+              <div class="tb-icon-tile">☰</div>
+              <div>
+                <p class="tb-step">Step 3 of 5</p>
+                <h4 class="tb-title">Review Changes</h4>
+                <p class="tb-subtitle">Choose exactly what to sync.</p>
+              </div>
+            </div>
+            <button class="tb-close">×</button>
+          </header>
+          <div class="tb-modal-body">
+            <div class="tb-accordion" style="margin-bottom:10px">
+              <div class="tb-acc-head">New in Library → Add to DAP <span class="tb-chip">2052</span></div>
+              <div class="tb-acc-body">Section list placeholder</div>
+            </div>
+            <div class="tb-accordion" style="margin-bottom:10px">
+              <div class="tb-acc-head">Deleted from Library (on DAP) <span class="tb-chip warn">42</span></div>
+              <div class="tb-acc-body">Actions: Keep on DAP / Delete on DAP / Don’t remind</div>
+            </div>
+            <div class="tb-accordion">
+              <div class="tb-acc-head">Skipped Tracks (Ignored) <span class="tb-chip">18</span></div>
+              <div class="tb-acc-body">Collapsed by default in real UI</div>
+            </div>
+          </div>
+          <footer class="tb-modal-footer">
+            <div class="tb-step-rail"><span class="tb-dot"></span><span class="tb-dot"></span><span class="tb-dot active"></span><span class="tb-dot"></span><span class="tb-dot"></span></div>
+            <div class="tb-actions">
+              <button class="tb-btn tb-btn-secondary">Back</button>
+              <button class="tb-btn tb-btn-primary">Start Sync</button>
+            </div>
+          </footer>
+        </article>
+
+        <article class="tb-modal sm">
+          <header class="tb-modal-header">
+            <div class="tb-modal-head-left">
+              <div class="tb-icon-tile">!</div>
+              <div>
+                <p class="tb-step">Confirm</p>
+                <h4 class="tb-title">Delete from Device?</h4>
+                <p class="tb-subtitle">This action removes selected tracks from AP80 Pro Max.</p>
+              </div>
+            </div>
+            <button class="tb-close">×</button>
+          </header>
+          <div class="tb-modal-body">
+            <div class="tb-chip danger">Destructive action</div>
+          </div>
+          <footer class="tb-modal-footer">
+            <div></div>
+            <div class="tb-actions">
+              <button class="tb-btn tb-btn-secondary">Cancel</button>
+              <button class="tb-btn tb-btn-danger">Delete</button>
+            </div>
+          </footer>
+        </article>
+      </section>
+
+      <section class="panel section">
+        <h3>Table Primitive (Modal)</h3>
+        <div class="tb-table-wrap">
+          <table class="tb-table">
+            <thead>
+              <tr>
+                <th>Track #</th><th>Title</th><th>Artist</th><th>Album</th><th>Time</th><th>Genre</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>1</td><td>What Are You Worth [Demo]</td><td>Linkin Park</td><td>Unplugged (Live)</td><td>3:08</td><td>Nu Metal</td><td>⋯ ✎ +</td></tr>
+              <tr><td>2</td><td>QWERTY (Live)</td><td>Linkin Park</td><td>LP Underground</td><td>3:54</td><td>Nu Metal</td><td>⋯ ✎ +</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

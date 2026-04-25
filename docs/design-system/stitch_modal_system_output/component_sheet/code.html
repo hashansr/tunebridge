@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error-container": "#93000a",
+                        "text-primary": "#E9EEF9",
+                        "on-secondary-fixed": "#001944",
+                        "secondary-fixed": "#d9e2ff",
+                        "surface-container-low": "#1a1b1f",
+                        "bg-deep": "#070A10",
+                        "surface-container-high": "#292a2d",
+                        "on-secondary": "#002d6d",
+                        "success": "#4ADE80",
+                        "surface-variant": "#343538",
+                        "surface-2": "rgba(30, 38, 56, 0.78)",
+                        "secondary": "#afc6ff",
+                        "on-tertiary-fixed-variant": "#5d4200",
+                        "inverse-surface": "#e3e2e7",
+                        "surface-bright": "#38393d",
+                        "inverse-on-surface": "#2f3034",
+                        "primary-fixed": "#d8e2ff",
+                        "tertiary-container": "#ebc06e",
+                        "surface-container-highest": "#343538",
+                        "surface-tint": "#adc6ff",
+                        "surface-hover": "rgba(68, 89, 126, 0.26)",
+                        "danger": "#F87171",
+                        "error": "#ffb4ab",
+                        "on-surface": "#e3e2e7",
+                        "tertiary": "#ffdea4",
+                        "on-error": "#690005",
+                        "on-primary-fixed-variant": "#2c4677",
+                        "secondary-fixed-dim": "#afc6ff",
+                        "primary-fixed-dim": "#adc6ff",
+                        "surface-dim": "#121317",
+                        "on-primary": "#122f5f",
+                        "background": "#121317",
+                        "surface": "#121317",
+                        "primary": "#d8e2ff",
+                        "modal-gradient": "linear-gradient(135deg, rgba(34,40,56,0.92) 0%, rgba(23,28,42,0.90) 48%, rgba(24,45,34,0.86) 100%)",
+                        "on-background": "#e3e2e7",
+                        "border-strong": "rgba(173, 198, 255, 0.38)",
+                        "text-inverse": "#0F172A",
+                        "on-error-container": "#ffdad6",
+                        "bg-base": "#0D121C",
+                        "inverse-primary": "#455e90",
+                        "on-surface-variant": "#c4c6d0",
+                        "on-tertiary-fixed": "#261900",
+                        "border-soft": "rgba(173, 198, 255, 0.18)",
+                        "on-tertiary-container": "#6c4d01",
+                        "on-primary-fixed": "#001a42",
+                        "outline-variant": "#44474f",
+                        "secondary-container": "#1c448b",
+                        "on-primary-container": "#385283",
+                        "surface-3": "rgba(43, 56, 82, 0.72)",
+                        "on-secondary-container": "#94b4ff",
+                        "surface-container-lowest": "#0d0e11",
+                        "tertiary-fixed": "#ffdea5",
+                        "primary-container": "#adc6ff",
+                        "text-muted": "#7E89A8",
+                        "surface-container": "#1e1f23",
+                        "text-secondary": "#AEB9D3",
+                        "tertiary-fixed-dim": "#ebc06e",
+                        "outline": "#8e909a",
+                        "surface-1": "rgba(20, 26, 40, 0.78)",
+                        "on-secondary-fixed-variant": "#1c448b",
+                        "warning": "#FBBF24",
+                        "on-tertiary": "#412d00"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "stat-label": ["Manrope"],
+                        "body": ["Manrope"],
+                        "caption": ["Manrope"],
+                        "modal-step-eyebrow": ["Manrope"],
+                        "h-modal-subtitle": ["Manrope"],
+                        "stat-number": ["Manrope"],
+                        "h-modal-title": ["Manrope"],
+                        "body-sm": ["Manrope"],
+                        "section-label": ["Manrope"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .glass-shell {
+            background: linear-gradient(135deg, rgba(34,40,56,0.92) 0%, rgba(23,28,42,0.90) 48%, rgba(24,45,34,0.86) 100%);
+            backdrop-filter: blur(24px);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(173, 198, 255, 0.2);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="bg-bg-deep min-h-screen text-text-primary font-body overflow-x-hidden p-8 flex flex-col items-center">
+<main class="max-w-[1080px] w-full mt-8 mb-8 space-y-12">
+<section class="space-y-4">
+<h1 class="font-h-modal-title text-h-modal-title text-text-primary">TuneBridge Design System</h1>
+<p class="font-h-modal-subtitle text-h-modal-subtitle text-text-secondary max-w-2xl">A high-fidelity component sheet showcasing the luminous, dark-mode visual tokens and compact density of the MusicSync Pro ecosystem.</p>
+</section>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<div class="lg:col-span-7 space-y-6">
+<div class="glass-shell rounded-xl p-6 border border-border-soft shadow-2xl">
+<h2 class="font-section-label text-section-label uppercase mb-6 text-primary">Buttons &amp; Actions</h2>
+<div class="flex flex-wrap gap-4 items-center">
+<button class="bg-primary text-text-inverse px-6 h-10 rounded-full font-body-sm text-body-sm font-bold active:scale-95 transition-transform">Primary Action</button>
+<button class="bg-surface-1 text-primary border border-border-strong px-6 h-10 rounded-full font-body-sm text-body-sm active:scale-95 transition-transform hover:bg-surface-hover">Secondary</button>
+<button class="bg-error-container/20 text-danger border border-danger/30 px-6 h-10 rounded-full font-body-sm text-body-sm active:scale-95 transition-transform hover:bg-error-container/40">Danger Action</button>
+<button class="w-10 h-10 rounded-lg flex items-center justify-center text-text-secondary hover:bg-white/5 transition-colors">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+</div>
+<div class="glass-shell rounded-xl border border-border-soft shadow-2xl overflow-hidden">
+<div class="p-4 bg-white/5 border-b border-border-soft flex justify-between items-center">
+<h2 class="font-section-label text-section-label uppercase text-primary">Table Primitive</h2>
+<span class="text-caption text-text-muted">4 Active Entities</span>
+</div>
+<div class="overflow-x-auto custom-scrollbar">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-dim/80 backdrop-blur sticky top-0 z-10 border-b border-border-soft">
+<tr>
+<th class="px-6 py-4 font-section-label text-section-label text-text-muted">Track Name</th>
+<th class="px-6 py-4 font-section-label text-section-label text-text-muted">Status</th>
+<th class="px-6 py-4 font-section-label text-section-label text-text-muted">Bitrate</th>
+<th class="px-6 py-4 font-section-label text-section-label text-text-muted text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-soft/50">
+<tr class="hover:bg-white/5 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-surface-3 flex-shrink-0 flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="vibrant abstract album cover with neon lights and glitch effects on dark background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCb79WBgZbpSmeemIAj0Yz7Dk09bssSSASIfnqVMCHNQ_0Wky2D6qCBbPGOO5Gy0o3ydtBm4svwJmLlpzVjv7CeJq6bEdM66LP15MT-2eBd_nDlIvUeMLbphXHZgv2f_1Sj76AoW0NnHCX-a05MyO6_2rweU01zb3UhhkcU9iIYMEiwupd_KcNotIRBc1JDQR-Wl5rqdPcYHXat3Sy8lQq_ilYJ8J7gLXJveuRn0qna9vvvqVwR1KgSCftcUVfs4CaY08I47W6rVg"/>
+</div>
+<div>
+<div class="font-body-sm text-body-sm text-text-primary">Neon Sunset</div>
+<div class="text-[10px] uppercase tracking-wider text-text-muted">Synthwave</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-success/10 text-success text-[11px] font-bold uppercase tracking-wider">
+                                            Synced
+                                        </span>
+</td>
+<td class="px-6 py-4 font-body-sm text-body-sm text-text-secondary">320kbps</td>
+<td class="px-6 py-4 text-right">
+<button class="p-1.5 text-text-muted hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="download">download</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-white/5 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-surface-3 flex-shrink-0 flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="professional dj mixer in dark studio with selective focus on knobs and blue ambient lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBriiX5Wh4f_rK9pVzJ90lA7X3J2zMid7c0FfJstBU-vIYQpncu_aA7FrmaxD9FlGP0va-1OJ1XkCOpuTwZErLlO6SOpTZgCgezekoY4W4nVz6LDLwoJ8exoFRHSrlRBRSxdbT1zQXV49ECqqv9AO7bpQvt-xlW0-rQJ8Ul62DtZgh8ZlI9JzRWI_GrAograNg11SXXvivAfF85t7g1QheWTam2opU6Tijfi5o2U6jo0L9fh6OmWZcH4-fBiW6yt4rZ6-26904RYg"/>
+</div>
+<div>
+<div class="font-body-sm text-body-sm text-text-primary">Deep Horizon</div>
+<div class="text-[10px] uppercase tracking-wider text-text-muted">Melodic Techno</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-warning/10 text-warning text-[11px] font-bold uppercase tracking-wider">
+                                            Pending
+                                        </span>
+</td>
+<td class="px-6 py-4 font-body-sm text-body-sm text-text-secondary">256kbps</td>
+<td class="px-6 py-4 text-right">
+<button class="p-1.5 text-text-muted hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="sync">sync</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="space-y-1">
+<div class="glass-shell border border-border-soft rounded-t-xl overflow-hidden">
+<button class="w-full flex items-center justify-between p-5 text-left hover:bg-white/5 transition-colors">
+<span class="font-body font-bold text-text-primary flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="tune">tune</span>
+                                Advanced Audio Processing
+                            </span>
+<span class="material-symbols-outlined text-text-muted" data-icon="expand_more">expand_more</span>
+</button>
+</div>
+<div class="glass-shell border border-border-soft p-6 border-t-0 rounded-b-xl">
+<p class="font-body-sm text-body-sm text-text-secondary leading-relaxed mb-4">Customize the synchronization algorithm to prioritize latency or high-fidelity audio reproduction across your linked devices.</p>
+<div class="grid grid-cols-2 gap-4">
+<div class="p-3 rounded-lg bg-surface-1 border border-border-soft">
+<div class="text-[10px] uppercase tracking-widest text-text-muted mb-1">Current Profile</div>
+<div class="text-body-sm font-bold">Lossless Compression</div>
+</div>
+<div class="p-3 rounded-lg bg-surface-1 border border-border-soft">
+<div class="text-[10px] uppercase tracking-widest text-text-muted mb-1">Est. Jitter</div>
+<div class="text-body-sm font-bold text-success">2ms</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="lg:col-span-5 space-y-6">
+<div class="glass-shell rounded-xl p-6 border border-border-soft shadow-2xl space-y-6">
+<h2 class="font-section-label text-section-label uppercase text-primary">Form Controls</h2>
+<div class="space-y-4">
+<div class="space-y-1.5">
+<label class="font-caption text-caption text-text-muted px-1">Library Display Name</label>
+<input class="w-full h-12 bg-surface-1 border border-border-soft rounded-xl px-4 text-text-primary placeholder:text-text-muted focus:border-primary focus:ring-0 transition-colors" placeholder="e.g. Studio Main" type="text"/>
+</div>
+<div class="space-y-1.5">
+<label class="font-caption text-caption text-text-muted px-1">Sync Frequency</label>
+<div class="relative">
+<select class="w-full h-12 bg-surface-1 border border-border-soft rounded-xl px-4 text-text-primary appearance-none focus:border-primary focus:ring-0 transition-colors">
+<option>Real-time updates</option>
+<option>Every 15 minutes</option>
+<option>Daily at midnight</option>
+</select>
+<span class="material-symbols-outlined absolute right-4 top-3 text-text-muted pointer-events-none" data-icon="unfold_more">unfold_more</span>
+</div>
+</div>
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-hover/20">
+<div>
+<div class="font-body-sm text-body-sm font-bold">Auto-Sync Library</div>
+<div class="text-[11px] text-text-muted">Changes reflect on all devices</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-3 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<label class="flex items-center gap-3 p-3 rounded-xl bg-surface-1 border border-border-soft cursor-pointer hover:border-primary/50 transition-colors">
+<input class="w-4 h-4 text-primary bg-surface-3 border-border-soft focus:ring-0" name="plan" type="radio"/>
+<span class="text-body-sm font-medium">Standard</span>
+</label>
+<label class="flex items-center gap-3 p-3 rounded-xl bg-surface-1 border border-primary/50 cursor-pointer">
+<input checked="" class="w-4 h-4 text-primary bg-surface-3 border-border-soft focus:ring-0" name="plan" type="radio"/>
+<span class="text-body-sm font-medium">Premium</span>
+</label>
+</div>
+</div>
+</div>
+<div class="glass-shell rounded-xl p-6 border border-border-soft shadow-2xl">
+<h2 class="font-section-label text-section-label uppercase mb-6 text-primary">UI Elements &amp; Status</h2>
+<div class="space-y-6">
+<div class="flex flex-wrap gap-2">
+<span class="px-3 py-1 rounded-full bg-primary/20 border border-primary/30 text-primary font-caption text-caption">Active Session</span>
+<span class="px-3 py-1 rounded-full bg-surface-3 border border-border-soft text-text-secondary font-caption text-caption">v2.4.0-stable</span>
+<span class="px-3 py-1 rounded-full bg-error-container/10 border border-danger/20 text-danger font-caption text-caption">Sync Failed</span>
+</div>
+<div class="flex gap-2">
+<div class="h-8 px-4 rounded-lg bg-surface-1 border border-border-soft flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-success"></div>
+<span class="text-[11px] font-bold uppercase tracking-wider">Online</span>
+</div>
+<div class="h-8 px-4 rounded-lg bg-surface-1 border border-border-soft flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-primary" data-icon="verified">verified</span>
+<span class="text-[11px] font-bold uppercase tracking-wider">Premium Account</span>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between font-caption text-caption">
+<span class="text-text-muted">Storage Utilization</span>
+<span class="text-text-primary">82%</span>
+</div>
+<div class="w-full h-1.5 bg-surface-3 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[82%] rounded-full"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>
