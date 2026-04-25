@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.47-rc.250426-1316 · 2026-04-25
 - Change: Completed modal migration pass for insight/media/utility families by standardizing modal root overlays (`tb-modal-overlay`) and shared shell tiers (`tb-modal-shell` + size classes) across remaining non-onboarding modals.
 - Add: Modal guardrail enforcement expanded from sync-only to app-wide modal contract checks (overlay class + shell tier validation, with explicit documented exceptions) in `scripts/check_modal_design_system.py`.
 - Change: Design-system migration policy and audit matrix updated to mark Pass 1 + Pass 2 complete, with exceptions tracked for onboarding full-screen and custom IEM compare dialog shell.
