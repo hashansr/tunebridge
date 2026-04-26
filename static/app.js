@@ -5801,8 +5801,8 @@ function _syncUpdatePreviewDirectionLabels() {
   const deviceOnlyTitle = document.getElementById('sync-device-only-title');
   const playlistTitle = document.getElementById('sync-playlist-title');
   if (toDeviceTitle) toDeviceTitle.textContent = `New in Library → Add to ${deviceLabel}`;
-  if (deletedTitle) deletedTitle.textContent = `Deleted from Library (on ${deviceLabel})`;
-  if (deviceOnlyTitle) deviceOnlyTitle.textContent = `On ${deviceLabel} only (not in Library)`;
+  if (deletedTitle) deletedTitle.textContent = `Deleted from Library (still on ${deviceLabel})`;
+  if (deviceOnlyTitle) deviceOnlyTitle.textContent = `Available on ${deviceLabel} only (not in Library)`;
   if (playlistTitle) playlistTitle.textContent = `Playlists to Sync to ${deviceLabel}`;
 }
 
@@ -6221,9 +6221,19 @@ function _syncInitPreviewModel(status) {
 
 function _syncRenderActionButtons(section, idx, action, actions) {
   if (!Array.isArray(actions) || !actions.length) return '';
+  const actionLabel = (name) => {
+    const map = {
+      sync_to_dap: 'Sync',
+      keep_on_dap: 'Skip',
+      delete_on_dap: 'Delete from Device',
+      copy_to_library: 'Sync',
+      dont_remind: 'Skip',
+    };
+    return map[name] || String(name || '').replaceAll('_', ' ');
+  };
   return `<div class="sync-row-actions" role="group" aria-label="Row action">
     ${actions.map((name) => `
-      <button type="button" class="sync-row-action-btn${action === name ? ' is-active' : ''}" onclick="App.syncRowActionChanged('${section}', ${idx}, '${name}')">${esc(name.replaceAll('_', ' '))}</button>
+      <button type="button" class="sync-row-action-btn sync-row-action-btn--${esc(name)}${action === name ? ' is-active' : ''}" onclick="App.syncRowActionChanged('${section}', ${idx}, '${name}')">${esc(actionLabel(name))}</button>
     `).join('')}
   </div>`;
 }
@@ -6240,14 +6250,14 @@ function _syncRenderDecisionRows(section, rows, emptyMessage) {
     if (section === 'to-device' || section === 'library-deleted') origin = `Local Library → ${deviceLabel}`;
     if (section === 'device-only') origin = `${deviceLabel} → Local Library`;
     return `<label class="sync-file-row sync-file-row--preview sync-file-row--decision">
-      <input type="checkbox" class="sync-chk sync-chk-${section}" data-index="${idx}" ${row.selected ? 'checked' : ''} onchange="App.syncRowSelectedChanged('${section}', ${idx}, this.checked)" />
       <div class="sync-file-main">
+        <span class="sync-file-thumb" aria-hidden="true"></span>
         <span class="sync-file-name">${esc(filename)}</span>
         <span class="sync-file-folder">${esc(folder)}${folder ? '/' : ''}</span>
         ${reason ? `<span class="sync-file-reason">${esc(reason)}</span>` : ''}
-        <span class="sync-file-origin">${esc(origin)}</span>
       </div>
       ${_syncRenderActionButtons(section, idx, String(row.action || ''), row.available_actions || [])}
+      <input type="checkbox" class="sync-chk sync-chk-${section}" data-index="${idx}" ${row.selected ? 'checked' : ''} onchange="App.syncRowSelectedChanged('${section}', ${idx}, this.checked)" />
     </label>`;
   }).join('');
 }
@@ -6257,13 +6267,14 @@ function _syncRenderPlaylistRows(rows) {
   const deviceLabel = _syncDeviceNameLabel();
   return rows.map((row, idx) => `
     <label class="sync-file-row sync-file-row--preview">
-      <input type="checkbox" class="sync-chk sync-chk-playlists" data-index="${idx}" ${row.selected ? 'checked' : ''} onchange="App.syncRowSelectedChanged('playlists', ${idx}, this.checked)" />
       <div class="sync-file-main">
+        <span class="sync-file-thumb" aria-hidden="true"></span>
         <span class="sync-file-name">${esc(row.name || 'Playlist')}</span>
         <span class="sync-file-folder">${Number(row.track_count || 0)} track${Number(row.track_count || 0) === 1 ? '' : 's'}</span>
         ${row.reason ? `<span class="sync-file-reason">${esc(row.reason)}</span>` : ''}
       </div>
       <div class="sync-file-origin">Local Playlists → ${esc(deviceLabel)}</div>
+      <input type="checkbox" class="sync-chk sync-chk-playlists" data-index="${idx}" ${row.selected ? 'checked' : ''} onchange="App.syncRowSelectedChanged('playlists', ${idx}, this.checked)" />
     </label>
   `).join('');
 }
@@ -6272,13 +6283,14 @@ function _syncRenderIgnoredRows(rows) {
   if (!rows.length) return `<div class="sync-empty">No ignored tracks on this DAP.</div>`;
   return rows.map((row, idx) => `
     <label class="sync-file-row sync-file-row--preview">
-      <input type="checkbox" class="sync-chk sync-chk-ignored" data-index="${idx}" ${row.selected ? 'checked' : ''} onchange="App.syncIgnoredSelectionChanged(${idx}, this.checked)" />
       <div class="sync-file-main">
+        <span class="sync-file-thumb" aria-hidden="true"></span>
         <span class="sync-file-name">${esc(row.filename || row.rel_path || 'Track')}</span>
         <span class="sync-file-folder">${esc(row.folder || '')}${row.folder ? '/' : ''}</span>
         <span class="sync-file-reason">${esc(row.reason || 'Ignored')}</span>
       </div>
       <div class="sync-file-origin"><span class="sync-ignored-tag">Ignored</span></div>
+      <input type="checkbox" class="sync-chk sync-chk-ignored" data-index="${idx}" ${row.selected ? 'checked' : ''} onchange="App.syncIgnoredSelectionChanged(${idx}, this.checked)" />
     </label>
   `).join('');
 }
@@ -6325,11 +6337,12 @@ function renderSyncPreview(status) {
     _syncRenderDecisionRows('device-only', _syncPreviewModel.deviceOnly, 'No device-only tracks found.');
   document.getElementById('sync-list-playlists').innerHTML = _syncRenderPlaylistRows(_syncPreviewModel.playlists);
   document.getElementById('sync-list-ignored').innerHTML = _syncRenderIgnoredRows(_syncPreviewModel.ignored);
-  document.getElementById('sync-to-device-count').textContent = _syncPreviewModel.toDevice.length;
-  document.getElementById('sync-library-deleted-count').textContent = _syncPreviewModel.libraryDeleted.length;
-  document.getElementById('sync-device-only-count').textContent = _syncPreviewModel.deviceOnly.length;
-  document.getElementById('sync-playlist-count').textContent = _syncPreviewModel.playlists.length;
-  document.getElementById('sync-ignored-count').textContent = _syncPreviewModel.ignored.length;
+  const fmtCount = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+  document.getElementById('sync-to-device-count').textContent = fmtCount(_syncPreviewModel.toDevice.length, 'track');
+  document.getElementById('sync-library-deleted-count').textContent = fmtCount(_syncPreviewModel.libraryDeleted.length, 'track');
+  document.getElementById('sync-device-only-count').textContent = fmtCount(_syncPreviewModel.deviceOnly.length, 'track');
+  document.getElementById('sync-playlist-count').textContent = fmtCount(_syncPreviewModel.playlists.length, 'change');
+  document.getElementById('sync-ignored-count').textContent = fmtCount(_syncPreviewModel.ignored.length, 'track');
 
   const warnings = Array.isArray(status.warnings) ? status.warnings : [];
   _syncPreviewWarningCount = warnings.length;
@@ -6343,8 +6356,8 @@ function renderSyncPreview(status) {
   document.getElementById('sync-section-playlists').style.display = _syncPreviewModel.playlists.length ? 'block' : 'none';
   document.getElementById('sync-section-ignored').style.display = _syncPreviewModel.ignored.length ? 'block' : 'none';
 
-  _syncSectionCollapsed['to-device'] = true;
-  _syncSectionCollapsed['library-deleted'] = true;
+  _syncSectionCollapsed['to-device'] = !(_syncPreviewModel.toDevice.length > 0);
+  _syncSectionCollapsed['library-deleted'] = !(_syncPreviewModel.libraryDeleted.length > 0);
   _syncSectionCollapsed['device-only'] = true;
   _syncSectionCollapsed['playlists'] = true;
   _syncSectionCollapsed['ignored'] = true;

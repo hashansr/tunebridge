@@ -1627,14 +1627,15 @@
               <div class="sync-section-hdr">
                 <div class="sync-section-hdr-left">
                   <button class="sync-accordion-toggle" id="sync-toggle-to-device" onclick="App.toggleSyncSection('to-device')" aria-controls="sync-list-to-device" aria-expanded="false" title="Expand section">
+                    <span class="sync-section-icon sync-section-icon--add" aria-hidden="true">+</span>
                     <span class="sync-accordion-chevron" aria-hidden="true"></span>
                     <span class="sync-section-title sync-section-title--add" id="sync-to-device-title">New in Library → Add to DAP</span>
                   </button>
                   <span class="sync-count-pill" id="sync-to-device-count">0</span>
                 </div>
                 <label class="sync-check-all">
-                  <input type="checkbox" id="chk-all-to-device" onchange="App.syncToggleAll('to-device', this.checked)" checked />
                   Select all
+                  <input type="checkbox" id="chk-all-to-device" onchange="App.syncToggleAll('to-device', this.checked)" checked />
                 </label>
               </div>
               <div class="sync-list" id="sync-list-to-device"></div>
@@ -1644,6 +1645,7 @@
               <div class="sync-section-hdr">
                 <div class="sync-section-hdr-left">
                   <button class="sync-accordion-toggle" id="sync-toggle-library-deleted" onclick="App.toggleSyncSection('library-deleted')" aria-controls="sync-list-library-deleted" aria-expanded="false" title="Expand section">
+                    <span class="sync-section-icon sync-section-icon--warn" aria-hidden="true">!</span>
                     <span class="sync-accordion-chevron" aria-hidden="true"></span>
                     <span class="sync-section-title sync-section-title--remove" id="sync-library-deleted-title">Deleted from Library (on DAP)</span>
                   </button>
@@ -1655,8 +1657,8 @@
                   <option value="dont_remind">Don't remind me</option>
                 </select>
                 <label class="sync-check-all">
-                  <input type="checkbox" id="chk-all-library-deleted" onchange="App.syncToggleAll('library-deleted', this.checked)" checked />
                   Select all
+                  <input type="checkbox" id="chk-all-library-deleted" onchange="App.syncToggleAll('library-deleted', this.checked)" checked />
                 </label>
               </div>
               <div class="sync-list" id="sync-list-library-deleted"></div>
@@ -1666,6 +1668,7 @@
               <div class="sync-section-hdr">
                 <div class="sync-section-hdr-left">
                   <button class="sync-accordion-toggle" id="sync-toggle-device-only" onclick="App.toggleSyncSection('device-only')" aria-controls="sync-list-device-only" aria-expanded="false" title="Expand section">
+                    <span class="sync-section-icon sync-section-icon--device" aria-hidden="true">↔</span>
                     <span class="sync-accordion-chevron" aria-hidden="true"></span>
                     <span class="sync-section-title sync-section-title--remove" id="sync-device-only-title">On DAP only (not in Library)</span>
                   </button>
@@ -1677,8 +1680,8 @@
                   <option value="dont_remind">Don't remind me</option>
                 </select>
                 <label class="sync-check-all">
-                  <input type="checkbox" id="chk-all-device-only" onchange="App.syncToggleAll('device-only', this.checked)" checked />
                   Select all
+                  <input type="checkbox" id="chk-all-device-only" onchange="App.syncToggleAll('device-only', this.checked)" checked />
                 </label>
               </div>
               <div class="sync-list" id="sync-list-device-only"></div>
@@ -1688,14 +1691,15 @@
               <div class="sync-section-hdr">
                 <div class="sync-section-hdr-left">
                   <button class="sync-accordion-toggle" id="sync-toggle-playlists" onclick="App.toggleSyncSection('playlists')" aria-controls="sync-list-playlists" aria-expanded="false" title="Expand section">
+                    <span class="sync-section-icon sync-section-icon--playlist" aria-hidden="true">≡</span>
                     <span class="sync-accordion-chevron" aria-hidden="true"></span>
                     <span class="sync-section-title sync-section-title--add" id="sync-playlist-title">Playlists to Sync</span>
                   </button>
                   <span class="sync-count-pill" id="sync-playlist-count">0</span>
                 </div>
                 <label class="sync-check-all">
-                  <input type="checkbox" id="chk-all-playlists" onchange="App.syncToggleAll('playlists', this.checked)" checked />
                   Select all
+                  <input type="checkbox" id="chk-all-playlists" onchange="App.syncToggleAll('playlists', this.checked)" checked />
                 </label>
               </div>
               <div class="sync-list" id="sync-list-playlists"></div>
@@ -1705,14 +1709,15 @@
               <div class="sync-section-hdr">
                 <div class="sync-section-hdr-left">
                   <button class="sync-accordion-toggle" id="sync-toggle-ignored" onclick="App.toggleSyncSection('ignored')" aria-controls="sync-list-ignored" aria-expanded="false" title="Expand section">
+                    <span class="sync-section-icon sync-section-icon--ignored" aria-hidden="true">○</span>
                     <span class="sync-accordion-chevron" aria-hidden="true"></span>
                     <span class="sync-section-title" id="sync-ignored-title">Skipped tracks (ignored)</span>
                   </button>
                   <span class="sync-count-pill" id="sync-ignored-count">0</span>
                 </div>
                 <label class="sync-check-all">
-                  <input type="checkbox" id="chk-all-ignored" onchange="App.syncToggleAll('ignored', this.checked)" />
                   Un-ignore all
+                  <input type="checkbox" id="chk-all-ignored" onchange="App.syncToggleAll('ignored', this.checked)" />
                 </label>
               </div>
               <div class="sync-list" id="sync-list-ignored"></div>
@@ -1729,7 +1734,7 @@
           <div class="modal-actions sync-preview-actions">
             <div class="sync-preview-estimate" id="sync-est-time"></div>
             <div class="sync-preview-buttons">
-              <button class="btn-secondary" onclick="App.closeSyncModal()">Cancel</button>
+              <button class="btn-secondary" onclick="App.syncScanAgain()">Back</button>
               <button class="btn-primary" id="sync-execute-btn" onclick="App.executeSync()">Start Sync</button>
             </div>
           </div>
