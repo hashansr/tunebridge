@@ -6247,12 +6247,18 @@ function _syncBaseNameNoExt(path) {
   return raw.replace(/\.[^/.]+$/, '');
 }
 
+function _syncNormalizeTrackDisplayName(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  return raw.replace(/^unknown\s+track\s*-\s*/i, '').trim();
+}
+
 function _syncDisplayTrackName(row, section, relPath) {
-  const explicitTitle = String(row.title || row.track_title || row.track || '').trim();
+  const explicitTitle = _syncNormalizeTrackDisplayName(row.title || row.track_title || row.track);
   if (explicitTitle) return explicitTitle;
-  const filename = String(row.filename || '').trim();
-  const baseNoExt = _syncBaseNameNoExt(filename || relPath);
-  const candidate = filename || baseNoExt || relPath || 'Track';
+  const filename = _syncNormalizeTrackDisplayName(row.filename || '');
+  const baseNoExt = _syncNormalizeTrackDisplayName(_syncBaseNameNoExt(filename || relPath));
+  const candidate = _syncNormalizeTrackDisplayName(filename || baseNoExt || relPath || 'Track');
   const unknownish = /^(unknown(\s+track)?|track)$/i.test(candidate.trim());
   if (section === 'device-only' && baseNoExt) return baseNoExt;
   if (unknownish && baseNoExt) return baseNoExt;
@@ -6526,19 +6532,19 @@ function syncSelectionChanged() {
   const ignoreCount = payload.ignore_upserts.length;
   const noSelection = addCount === 0 && copyLocalCount === 0 && deleteCount === 0 && playlistCount === 0 && ignoreCount === 0;
   const tracksLine = noSelection
-    ? 'No operations selected.'
-    : `Selected: ${addCount} add-to-DAP • ${copyLocalCount} copy-to-library • ${deleteCount} delete-on-DAP • ${playlistCount} playlists • ${ignoreCount} ignore`;
+    ? 'No sync actions selected yet.'
+    : `Actions selected: Add to DAP ${addCount}, Copy to library ${copyLocalCount}, Delete from DAP ${deleteCount}, Sync playlists ${playlistCount}, Ignore reminders ${ignoreCount}.`;
   let spaceLine = '';
   let className = 'sync-space-summary';
 
   if (available === null) {
-    spaceLine = `Space check unavailable • Required for add: ${_fmtBytes(required)}`;
+    spaceLine = `Storage check unavailable. Required for additions: ${_fmtBytes(required)}.`;
   } else if (shortfall > 0) {
-    spaceLine = `Not enough space • Need ${_fmtBytes(required)}, available ${_fmtBytes(available)} (short by ${_fmtBytes(shortfall)})`;
+    spaceLine = `Not enough space. Required ${_fmtBytes(required)}, available ${_fmtBytes(available)}, short by ${_fmtBytes(shortfall)}.`;
     className += ' sync-space-summary--danger';
   } else {
     const remaining = Math.max(0, available - required);
-    spaceLine = `Available ${_fmtBytes(available)} • Required ${_fmtBytes(required)} • After sync ${_fmtBytes(remaining)} free`;
+    spaceLine = `Storage: available ${_fmtBytes(available)}, required ${_fmtBytes(required)}, free after sync ${_fmtBytes(remaining)}.`;
     className += noSelection ? ' sync-space-summary--ok' : ' sync-space-summary--warn';
   }
 

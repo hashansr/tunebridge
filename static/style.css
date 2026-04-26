@@ -3386,7 +3386,7 @@ tr.track-selected .track-check-indicator {
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: 6px;
   border: 0;
   background: transparent;
   padding: 0;
@@ -3397,6 +3397,9 @@ tr.track-selected .track-check-indicator {
   text-align: left;
   color: inherit;
   cursor: pointer;
+}
+.sync-accordion-toggle .sync-section-icon {
+  display: none !important;
 }
 .sync-accordion-toggle:hover .sync-section-title {
   filter: brightness(1.08);
@@ -3536,6 +3539,11 @@ tr.track-selected .track-check-indicator {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   padding-bottom: 6px;
+}
+
+/* Ensure Step 3 remains scrollable when multiple accordion sections are expanded */
+#sync-modal[data-phase="preview"] .sync-modal-body {
+  overflow-y: auto;
 }
 
 .sync-file-row {
