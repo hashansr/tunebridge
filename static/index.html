@@ -1550,13 +1550,6 @@
             </div>
           </div>
           <div class="modal-actions sync-pick-actions">
-            <div class="sync-phase-rail sync-phase-rail--pick" aria-hidden="true">
-              <span class="sync-phase-step" data-step="pick"></span>
-              <span class="sync-phase-step" data-step="scanning"></span>
-              <span class="sync-phase-step" data-step="preview"></span>
-              <span class="sync-phase-step" data-step="copying"></span>
-              <span class="sync-phase-step" data-step="done"></span>
-            </div>
             <button class="btn-secondary" onclick="App.closeSyncModal()">Cancel</button>
             <button class="btn-primary" id="sync-pick-next-btn" onclick="App.startSyncFromSelection()" disabled>Scan</button>
           </div>
@@ -1597,13 +1590,6 @@
             </div>
           </div>
           <div class="modal-actions sync-scan-actions">
-            <div class="sync-phase-rail sync-phase-rail--scanning" aria-hidden="true">
-              <span class="sync-phase-step" data-step="pick"></span>
-              <span class="sync-phase-step" data-step="scanning"></span>
-              <span class="sync-phase-step" data-step="preview"></span>
-              <span class="sync-phase-step" data-step="copying"></span>
-              <span class="sync-phase-step" data-step="done"></span>
-            </div>
             <button class="btn-secondary" onclick="App.syncBackToPick()">Back</button>
             <button class="btn-primary" id="sync-scan-review-btn" onclick="App.syncGoToPreview()">Review Changes</button>
           </div>
@@ -1728,14 +1714,16 @@
               <button class="btn-secondary" onclick="App.syncScanAgain()">Re-scan</button>
             </div>
 
-            <div id="sync-space-summary" class="sync-space-summary" style="display:block"></div>
           </div>
 
           <div class="modal-actions sync-preview-actions">
-            <div class="sync-preview-estimate" id="sync-est-time"></div>
-            <div class="sync-preview-buttons">
-              <button class="btn-secondary" onclick="App.syncScanAgain()">Back</button>
-              <button class="btn-primary" id="sync-execute-btn" onclick="App.executeSync()">Start Sync</button>
+            <div id="sync-space-summary" class="sync-space-summary" style="display:block"></div>
+            <div class="sync-preview-actions-row">
+              <div class="sync-preview-estimate" id="sync-est-time"></div>
+              <div class="sync-preview-buttons">
+                <button class="btn-secondary" onclick="App.syncScanAgain()">Back</button>
+                <button class="btn-primary" id="sync-execute-btn" onclick="App.executeSync()">Start Sync</button>
+              </div>
             </div>
           </div>
         </div>

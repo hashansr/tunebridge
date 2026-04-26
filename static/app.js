@@ -5590,7 +5590,16 @@ async function showSync() {
   if (externalContainer) externalContainer.innerHTML = '';
   if (externalGroup) externalGroup.style.display = 'none';
 
-  await api('/sync/reset', { method: 'POST' }).catch(() => {});
+  try {
+    await api('/sync/reset', { method: 'POST' });
+  } catch (e) {
+    const msg = String(e?.message || '');
+    if (/in progress/i.test(msg)) {
+      toast('Sync is already in progress. Please wait for it to finish before starting a new scan.');
+      return;
+    }
+    // Non-blocking fallback for transient reset failures.
+  }
   _syncLastStatus = null;
   _syncPreviewModel = null;
   _syncSelectedDapId = '';
@@ -6401,8 +6410,8 @@ function renderSyncPreview(status) {
   document.getElementById('sync-section-playlists').style.display = _syncPreviewModel.playlists.length ? 'block' : 'none';
   document.getElementById('sync-section-ignored').style.display = _syncPreviewModel.ignored.length ? 'block' : 'none';
 
-  _syncSectionCollapsed['to-device'] = !(_syncPreviewModel.toDevice.length > 0);
-  _syncSectionCollapsed['library-deleted'] = !(_syncPreviewModel.libraryDeleted.length > 0);
+  _syncSectionCollapsed['to-device'] = true;
+  _syncSectionCollapsed['library-deleted'] = true;
   _syncSectionCollapsed['device-only'] = true;
   _syncSectionCollapsed['playlists'] = true;
   _syncSectionCollapsed['ignored'] = true;

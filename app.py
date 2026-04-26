@@ -7090,6 +7090,13 @@ def sync_execute():
 @app.route('/api/sync/reset', methods=['POST'])
 def sync_reset():
     global sync_state
+    if sync_state.get('status') in ('scanning', 'copying'):
+        return jsonify({
+            'error': 'Cannot reset while sync is in progress',
+            'status': sync_state.get('status'),
+            'dap_id': sync_state.get('dap_id'),
+            'message': sync_state.get('message') or '',
+        }), 409
     sync_state = {
         'status': 'idle', 'device': None, 'message': '',
         'progress': 0, 'total': 0, 'local_only': [], 'device_only': [],
