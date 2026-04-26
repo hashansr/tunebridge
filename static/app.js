@@ -6238,20 +6238,34 @@ function _syncRenderActionButtons(section, idx, action, actions) {
   </div>`;
 }
 
+function _syncBaseNameNoExt(path) {
+  const raw = String(path || '').split('/').pop() || '';
+  if (!raw) return '';
+  return raw.replace(/\.[^/.]+$/, '');
+}
+
+function _syncDisplayTrackName(row, section, relPath) {
+  const explicitTitle = String(row.title || row.track_title || row.track || '').trim();
+  if (explicitTitle) return explicitTitle;
+  const filename = String(row.filename || '').trim();
+  const baseNoExt = _syncBaseNameNoExt(filename || relPath);
+  const candidate = filename || baseNoExt || relPath || 'Track';
+  const unknownish = /^(unknown(\s+track)?|track)$/i.test(candidate.trim());
+  if (section === 'device-only' && baseNoExt) return baseNoExt;
+  if (unknownish && baseNoExt) return baseNoExt;
+  return candidate;
+}
+
 function _syncRenderDecisionRows(section, rows, emptyMessage) {
   if (!rows.length) return `<div class="sync-empty">${esc(emptyMessage)}</div>`;
-  const deviceLabel = _syncDeviceNameLabel();
   return rows.map((row, idx) => {
     const relPath = String(row.rel_path || '');
-    const filename = String(row.filename || relPath.split('/').pop() || relPath);
+    const filename = _syncDisplayTrackName(row, section, relPath);
     const folder = String(row.folder || '');
     const reason = String(row.reason || '').trim();
-    let origin = '';
-    if (section === 'to-device' || section === 'library-deleted') origin = `Local Library → ${deviceLabel}`;
-    if (section === 'device-only') origin = `${deviceLabel} → Local Library`;
     return `<label class="sync-file-row sync-file-row--preview sync-file-row--decision">
       <div class="sync-file-main">
-        <span class="sync-file-thumb" aria-hidden="true"></span>
+        <span class="sync-file-thumb" aria-hidden="true"><img src="/icons/empty-song.svg" alt="" aria-hidden="true" loading="lazy" /></span>
         <span class="sync-file-name">${esc(filename)}</span>
         <span class="sync-file-folder">${esc(folder)}${folder ? '/' : ''}</span>
         ${reason ? `<span class="sync-file-reason">${esc(reason)}</span>` : ''}
@@ -6268,7 +6282,7 @@ function _syncRenderPlaylistRows(rows) {
   return rows.map((row, idx) => `
     <label class="sync-file-row sync-file-row--preview">
       <div class="sync-file-main">
-        <span class="sync-file-thumb" aria-hidden="true"></span>
+        <span class="sync-file-thumb" aria-hidden="true"><img src="/icons/empty-song.svg" alt="" aria-hidden="true" loading="lazy" /></span>
         <span class="sync-file-name">${esc(row.name || 'Playlist')}</span>
         <span class="sync-file-folder">${Number(row.track_count || 0)} track${Number(row.track_count || 0) === 1 ? '' : 's'}</span>
         ${row.reason ? `<span class="sync-file-reason">${esc(row.reason)}</span>` : ''}
@@ -6284,8 +6298,8 @@ function _syncRenderIgnoredRows(rows) {
   return rows.map((row, idx) => `
     <label class="sync-file-row sync-file-row--preview">
       <div class="sync-file-main">
-        <span class="sync-file-thumb" aria-hidden="true"></span>
-        <span class="sync-file-name">${esc(row.filename || row.rel_path || 'Track')}</span>
+        <span class="sync-file-thumb" aria-hidden="true"><img src="/icons/empty-song.svg" alt="" aria-hidden="true" loading="lazy" /></span>
+        <span class="sync-file-name">${esc(_syncDisplayTrackName(row, 'ignored', String(row.rel_path || '')))}</span>
         <span class="sync-file-folder">${esc(row.folder || '')}${row.folder ? '/' : ''}</span>
         <span class="sync-file-reason">${esc(row.reason || 'Ignored')}</span>
       </div>
