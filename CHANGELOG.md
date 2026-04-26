@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.56-rc.260426-1847 · 2026-04-26
 - Change: Sync Music Step 3 review rows refined — section headers now use normal-scale typography and left alignment, row paths now show full available file paths, `Skip` button labeling is standardized, size-mismatch copy is reduced to `Size difference` only, and expanded accordion content now scrolls reliably within the modal.
 
 ## v0.55-rc.260426-1735 · 2026-04-26
