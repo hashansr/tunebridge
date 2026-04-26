@@ -5721,7 +5721,7 @@ def export_to_device():
 
 # ── Music Sync ────────────────────────────────────────────────────────────────
 
-SYNC_EXTENSIONS = {'.flac', '.mp3', '.m4a', '.aac', '.mp4', '.wav', '.ogg', '.opus', '.wv', '.aiff', '.aif', '.ape', '.wma', '.alac'}
+SYNC_EXTENSIONS = {'.flac', '.mp3', '.m4a', '.aac', '.mp4', '.wav', '.ogg', '.opus', '.wv', '.aiff', '.aif', '.ape', '.wma', '.alac', '.lrc'}
 SYNC_DISCREPANCY_LIBRARY_DELETED = 'library_deleted_on_source'
 SYNC_DISCREPANCY_DEVICE_ONLY = 'device_only_not_in_library'
 SYNC_IGNORE_TYPES = {
