@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Sync Music Step 2 scan screen refined for cleaner focus — removed `To Device`/`To Local`/`Playlists` summary cards, centered the scan loader layout, and reduced `Scanning library data...` text size.
 
 ## v0.54-rc.260426-1644 · 2026-04-26
 - Change: Sync Music Step 3 (Review Changes) now follows the new mock styling with card-based discrepancy rows, refined section headers/icons/count pills, corrected text/action alignment, clearer action labels (`Sync`, `Skip`, `Delete from Device`), and updated footer CTA flow (`Back` + `Start Sync`) while preserving existing sync decision logic.
