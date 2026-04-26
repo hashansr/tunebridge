@@ -6322,7 +6322,7 @@ function _syncRenderPlaylistRows(rows) {
   return rows.map((row, idx) => `
     <label class="sync-file-row sync-file-row--preview">
       <div class="sync-file-main">
-        <span class="sync-file-thumb" aria-hidden="true"><img src="/icons/empty-song.svg" alt="" aria-hidden="true" loading="lazy" /></span>
+        <span class="sync-file-thumb sync-file-thumb--playlist" aria-hidden="true"><img src="/icons/playlist-svgrepo-com.svg" alt="" aria-hidden="true" loading="lazy" /></span>
         <span class="sync-file-name">${esc(row.name || 'Playlist')}</span>
         <span class="sync-file-folder">${Number(row.track_count || 0)} track${Number(row.track_count || 0) === 1 ? '' : 's'}</span>
         ${row.reason ? `<span class="sync-file-reason">${esc(row.reason)}</span>` : ''}

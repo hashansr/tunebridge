@@ -2673,20 +2673,20 @@ tr.track-selected .track-check-indicator {
   text-transform: uppercase;
   color: var(--tb-accent);
   line-height: 1.15;
-  margin-bottom: 3px;
+  margin-bottom: 5px;
 }
 .sync-modal-title {
   font-size: 15px;
   font-weight: 760;
   color: var(--tb-text-primary);
-  line-height: 1.2;
+  line-height: 1.26;
   letter-spacing: -0.01em;
 }
 .sync-modal-subtitle {
   font-size: 11px;
   color: #7e89a8;
-  margin-top: 1px;
-  line-height: 1.3;
+  margin-top: 4px;
+  line-height: 1.34;
 }
 
 .sync-phase-rail {
@@ -3514,6 +3514,13 @@ tr.track-selected .track-check-indicator {
 .sync-section.is-collapsed .sync-list {
   display: none;
 }
+.sync-section.is-collapsed .sync-section-hdr {
+  margin-bottom: 0;
+  min-height: 40px;
+}
+.sync-section.is-collapsed .sync-accordion-toggle {
+  align-items: center;
+}
 
 #sync-phase-preview {
   display: flex;
@@ -3572,32 +3579,38 @@ tr.track-selected .track-check-indicator {
 .sync-file-main {
   min-width: 0;
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   column-gap: 10px;
   row-gap: 1px;
   align-items: center;
 }
 .sync-file-thumb {
   grid-row: 1 / span 3;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  border: 1px solid rgba(151, 175, 238, 0.2);
-  background:
-    radial-gradient(100% 100% at 70% 20%, rgba(173, 198, 255, 0.26), transparent 65%),
-    linear-gradient(145deg, rgba(27, 41, 74, 0.88), rgba(14, 23, 45, 0.95));
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .sync-file-thumb img {
-  width: 78%;
-  height: 78%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  opacity: 0.88;
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  filter: brightness(1.03);
+  opacity: 0.92;
+  position: static;
+  inset: auto;
+  margin: 0;
+  filter: none;
+}
+.sync-file-thumb--playlist img {
+  width: 88%;
+  height: 88%;
+  opacity: 0.9;
 }
 .sync-file-row--preview .sync-file-name {
   color: #dfe8fb;
