@@ -6225,11 +6225,14 @@ function _syncRenderActionButtons(section, idx, action, actions) {
     const map = {
       sync_to_dap: 'Sync',
       keep_on_dap: 'Skip',
+      skip: 'Skip',
       delete_on_dap: 'Delete from Device',
       copy_to_library: 'Sync',
       dont_remind: 'Skip',
     };
-    return map[name] || String(name || '').replaceAll('_', ' ');
+    if (map[name]) return map[name];
+    const raw = String(name || '').replaceAll('_', ' ').trim();
+    return raw ? `${raw.charAt(0).toUpperCase()}${raw.slice(1)}` : '';
   };
   return `<div class="sync-row-actions" role="group" aria-label="Row action">
     ${actions.map((name) => `
@@ -6256,18 +6259,40 @@ function _syncDisplayTrackName(row, section, relPath) {
   return candidate;
 }
 
+function _syncFormatReason(reason) {
+  const raw = String(reason || '').trim();
+  if (!raw) return '';
+  const mismatch = raw.match(/size mismatch:\s*local\s*(\d+)\s*bytes,\s*device\s*(\d+)\s*bytes/i);
+  if (mismatch) {
+    const local = Number(mismatch[1] || 0);
+    const device = Number(mismatch[2] || 0);
+    const diff = Math.abs(local - device);
+    return `Size difference: ${_fmtBytes(diff)}`;
+  }
+  return raw;
+}
+
 function _syncRenderDecisionRows(section, rows, emptyMessage) {
   if (!rows.length) return `<div class="sync-empty">${esc(emptyMessage)}</div>`;
   return rows.map((row, idx) => {
     const relPath = String(row.rel_path || '');
     const filename = _syncDisplayTrackName(row, section, relPath);
-    const folder = String(row.folder || '');
-    const reason = String(row.reason || '').trim();
+    const pathDisplay = String(
+      row.full_path
+      || row.path
+      || row.abs_path
+      || row.local_path
+      || row.device_path
+      || relPath
+      || row.folder
+      || ''
+    );
+    const reason = _syncFormatReason(row.reason || '');
     return `<label class="sync-file-row sync-file-row--preview sync-file-row--decision">
       <div class="sync-file-main">
         <span class="sync-file-thumb" aria-hidden="true"><img src="/icons/empty-song.svg" alt="" aria-hidden="true" loading="lazy" /></span>
         <span class="sync-file-name">${esc(filename)}</span>
-        <span class="sync-file-folder">${esc(folder)}${folder ? '/' : ''}</span>
+        <span class="sync-file-path" title="${esc(pathDisplay)}">${esc(pathDisplay)}</span>
         ${reason ? `<span class="sync-file-reason">${esc(reason)}</span>` : ''}
       </div>
       ${_syncRenderActionButtons(section, idx, String(row.action || ''), row.available_actions || [])}
@@ -6300,8 +6325,8 @@ function _syncRenderIgnoredRows(rows) {
       <div class="sync-file-main">
         <span class="sync-file-thumb" aria-hidden="true"><img src="/icons/empty-song.svg" alt="" aria-hidden="true" loading="lazy" /></span>
         <span class="sync-file-name">${esc(_syncDisplayTrackName(row, 'ignored', String(row.rel_path || '')))}</span>
-        <span class="sync-file-folder">${esc(row.folder || '')}${row.folder ? '/' : ''}</span>
-        <span class="sync-file-reason">${esc(row.reason || 'Ignored')}</span>
+        <span class="sync-file-path" title="${esc(String(row.full_path || row.path || row.abs_path || row.local_path || row.device_path || row.rel_path || ''))}">${esc(String(row.full_path || row.path || row.abs_path || row.local_path || row.device_path || row.rel_path || ''))}</span>
+        <span class="sync-file-reason">${esc(_syncFormatReason(row.reason || 'Ignored'))}</span>
       </div>
       <div class="sync-file-origin"><span class="sync-ignored-tag">Ignored</span></div>
       <input type="checkbox" class="sync-chk sync-chk-ignored" data-index="${idx}" ${row.selected ? 'checked' : ''} onchange="App.syncIgnoredSelectionChanged(${idx}, this.checked)" />

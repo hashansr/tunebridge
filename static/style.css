@@ -3363,13 +3363,17 @@ tr.track-selected .track-check-indicator {
   display: flex;
   align-items: center;
   gap: 8px;
+  justify-content: flex-start;
+  flex: 1 1 auto;
   min-width: 0;
 }
 .sync-section-title {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 500;
   letter-spacing: -0.005em;
   text-transform: none;
+  text-align: left;
+  display: block;
   color: var(--tb-text-primary);
 }
 .sync-section-title--add {
@@ -3381,11 +3385,16 @@ tr.track-selected .track-check-indicator {
 .sync-accordion-toggle {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   border: 0;
   background: transparent;
   padding: 0;
   margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
+  text-align: left;
   color: inherit;
   cursor: pointer;
 }
@@ -3513,14 +3522,20 @@ tr.track-selected .track-check-indicator {
 }
 
 #sync-phase-preview {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   overflow: hidden;
 }
 
 #sync-phase-preview .sync-preview-scroll {
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto !important;
   overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 6px;
 }
 
 .sync-file-row {
@@ -3602,13 +3617,23 @@ tr.track-selected .track-check-indicator {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.sync-file-path {
+  grid-column: 2;
+  font-size: 11px;
+  color: #8fa0c6;
+  line-height: 1.24;
+  white-space: normal;
+  overflow: visible;
+  word-break: break-all;
+}
 .sync-file-reason {
   grid-column: 2;
   font-size: 11px;
   color: rgba(253, 214, 121, 0.95);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: initial;
+  word-break: break-word;
 }
 .sync-file-origin {
   font-size: 12px;
