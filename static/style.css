@@ -2632,19 +2632,6 @@ tr.track-selected .track-check-indicator {
   overflow: hidden;
   position: relative;
 }
-#sync-modal .modal-close-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 999px;
-  border: 1px solid rgba(173, 198, 255, 0.2);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-sub);
-}
-#sync-modal .modal-close-btn:hover {
-  background: rgba(68, 89, 126, 0.26);
-  color: var(--text);
-}
-
 .sync-modal-header {
   display: flex;
   align-items: flex-start;
@@ -3071,12 +3058,6 @@ tr.track-selected .track-check-indicator {
   background: var(--accent);
 }
 
-#sync-modal[data-phase="pick"] .sync-modal-shell {
-  width: min(548px, 76vw);
-  min-height: 368px;
-  max-height: min(64vh, 490px);
-  border-radius: 20px;
-}
 #sync-modal[data-phase="pick"] .sync-modal-header {
   padding: 12px 16px 10px;
 }
@@ -3121,19 +3102,6 @@ tr.track-selected .track-check-indicator {
   width: 24px;
   height: 8px;
 }
-#sync-modal[data-phase="pick"] .modal-close-btn {
-  width: 26px;
-  height: 26px;
-  border: none;
-  background: transparent;
-  color: rgba(173, 198, 255, 0.68);
-  box-shadow: none;
-}
-#sync-modal[data-phase="pick"] .modal-close-btn:hover {
-  background: rgba(173, 198, 255, 0.08);
-  color: rgba(205, 221, 255, 0.94);
-}
-
 /* Progress phases */
 .sync-progress-phase {
   padding: 6px 0 4px;
@@ -3680,11 +3648,6 @@ tr.track-selected .track-check-indicator {
     min-height: 410px;
     max-height: min(76vh, 560px);
   }
-  #sync-modal[data-phase="pick"] .sync-modal-shell {
-    width: min(540px, 86vw);
-    min-height: 360px;
-    max-height: min(66vh, 470px);
-  }
   .sync-phase-step {
     width: 9px;
     height: 9px;
@@ -3725,11 +3688,6 @@ tr.track-selected .track-check-indicator {
     min-height: 400px;
     max-height: min(78vh, 520px);
     border-radius: 16px;
-  }
-  #sync-modal[data-phase="pick"] .sync-modal-shell {
-    width: min(500px, 92vw);
-    min-height: 350px;
-    max-height: min(70vh, 455px);
   }
   .sync-modal-title { font-size: 15px; }
   .sync-modal-subtitle { font-size: 11px; }
