@@ -2714,26 +2714,42 @@ tr.track-selected .track-check-indicator {
 
 .sync-progress-banner {
   display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 0 22px 6px;
-  min-height: 34px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 179, 181, 0.2);
-  background: rgba(109, 55, 58, 0.26);
-  color: rgba(255, 179, 181, 0.94);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  padding: 0 14px;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 16px 8px;
+  min-height: 56px;
+  border-radius: 14px;
+  border: 1px solid rgba(236, 125, 125, 0.35);
+  background: linear-gradient(135deg, rgba(96, 28, 44, 0.82), rgba(70, 22, 42, 0.8));
+  color: #f6b6b6;
+  padding: 12px 16px;
   width: auto;
   justify-content: flex-start;
 }
 .sync-progress-banner.is-warning {
-  border-color: rgba(251, 191, 36, 0.22);
-  background: rgba(70, 52, 20, 0.34);
-  color: rgba(251, 191, 36, 0.94);
+  border-color: rgba(251, 191, 36, 0.34);
+  background: linear-gradient(135deg, rgba(70, 52, 20, 0.52), rgba(54, 42, 14, 0.56));
+  color: rgba(251, 212, 128, 0.95);
+}
+.sync-progress-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sync-progress-banner-copy strong {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+.sync-progress-banner-copy span {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.3;
 }
 
 .sync-modal-body {
@@ -2865,6 +2881,16 @@ tr.track-selected .track-check-indicator {
   margin-right: auto;
 }
 #sync-modal[data-phase="pick"] > .sync-modal-shell > .sync-phase-rail:not(.sync-phase-rail--pick) {
+  display: none;
+}
+#sync-modal .sync-phase-rail--scanning {
+  display: none;
+}
+#sync-modal[data-phase="scanning"] .sync-phase-rail--scanning {
+  display: inline-flex;
+  margin-right: auto;
+}
+#sync-modal[data-phase="scanning"] > .sync-modal-shell > .sync-phase-rail:not(.sync-phase-rail--scanning) {
   display: none;
 }
 
@@ -3109,10 +3135,28 @@ tr.track-selected .track-check-indicator {
 .sync-progress-phase--scan {
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  justify-content: flex-start;
+  min-height: 0;
+}
+.sync-scan-panel {
+  width: 100%;
+  border: 1px solid rgba(173, 198, 255, 0.24);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(33, 43, 63, 0.52), rgba(23, 33, 43, 0.52));
+  padding: 18px 16px 14px;
+}
+.sync-scan-panel-grid {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
   align-items: center;
-  gap: 16px;
-  justify-content: center;
-  min-height: 100%;
+}
+.sync-scan-panel-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
 }
 .sync-progress-phase--copy {
   display: flex;
@@ -3131,10 +3175,10 @@ tr.track-selected .track-check-indicator {
 }
 .sync-scan-ring {
   --scan-pct: 0;
-  width: 160px;
-  height: 160px;
+  width: 220px;
+  height: 220px;
   border-radius: 50%;
-  background: conic-gradient(var(--accent) calc(var(--scan-pct) * 1%), rgba(173, 198, 255, 0.12) 0);
+  background: conic-gradient(rgba(173, 198, 255, 0.96) calc(var(--scan-pct) * 1%), rgba(173, 198, 255, 0.18) 0);
   position: relative;
 }
 .sync-copy-ring {
@@ -3143,7 +3187,7 @@ tr.track-selected .track-check-indicator {
 .sync-scan-ring::after {
   content: '';
   position: absolute;
-  inset: 8px;
+  inset: 12px;
   border-radius: 50%;
   background: rgba(16, 16, 18, 0.96);
   border: 1px solid rgba(173, 198, 255, 0.14);
@@ -3158,29 +3202,73 @@ tr.track-selected .track-check-indicator {
   justify-content: center;
 }
 .sync-scan-percent {
-  font-size: 34px;
+  font-size: 58px;
   font-weight: 700;
   line-height: 1;
-  color: var(--text-sub);
+  color: #e9eef9;
 }
 .sync-scan-percent-sub {
-  margin-top: 4px;
-  font-size: 10px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  margin-top: 6px;
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #adc6ff;
+  font-weight: 600;
+  line-height: 1.2;
 }
 .sync-scan-msg {
   margin: 0;
-  text-align: center;
-  font-size: 13px;
+  text-align: left;
+  align-self: flex-start;
+  font-size: 16px;
   font-weight: 500;
-  color: var(--text-sub);
+  color: rgba(213, 223, 247, 0.9);
   min-height: 20px;
-  line-height: 1.35;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
 }
 .sync-phase-panel--copying .sync-scan-msg {
   min-height: 38px;
+}
+.sync-scan-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.sync-scan-stat-card {
+  border: 1px solid rgba(173, 198, 255, 0.24);
+  border-radius: 14px;
+  padding: 12px 12px 10px;
+  background: linear-gradient(135deg, rgba(23, 30, 47, 0.74), rgba(16, 21, 35, 0.72));
+  min-height: 116px;
+}
+.sync-scan-stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8694b7;
+}
+.sync-scan-stat-value {
+  margin-top: 8px;
+  font-size: 40px;
+  font-weight: 760;
+  line-height: 1;
+  color: #e9eef9;
+}
+.sync-scan-stat-note {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #91a0c2;
+}
+.sync-scan-actions {
+  margin-top: 0;
+  padding: 8px 0 10px !important;
+  border-top: 1px solid rgba(173, 198, 255, 0.16);
+  justify-content: flex-end !important;
+  align-items: center !important;
+  gap: 12px !important;
 }
 .sync-phase-label {
   font-size: 13px;
@@ -3665,11 +3753,30 @@ tr.track-selected .track-check-indicator {
     flex-wrap: wrap;
   }
   .sync-scan-ring {
-    width: 148px;
-    height: 148px;
+    width: 186px;
+    height: 186px;
   }
   .sync-scan-percent {
-    font-size: 30px;
+    font-size: 44px;
+  }
+  .sync-scan-percent-sub {
+    font-size: 13px;
+  }
+  .sync-scan-panel-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .sync-scan-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .sync-scan-msg {
+    font-size: 15px;
+  }
+  .sync-scan-stat-value {
+    font-size: 32px;
+  }
+  .sync-scan-stat-note {
+    font-size: 11px;
   }
   .sync-done-title {
     font-size: 20px;
@@ -3698,7 +3805,29 @@ tr.track-selected .track-check-indicator {
     padding: 0 14px;
   }
   .sync-progress-banner {
-    margin: 0 14px 6px;
+    margin: 6px 12px 6px;
+    min-height: 50px;
+    padding: 10px 12px;
+  }
+  .sync-progress-banner-copy strong { font-size: 10px; }
+  .sync-progress-banner-copy span { font-size: 10px; }
+  .sync-scan-panel {
+    padding: 14px 12px 10px;
+  }
+  .sync-scan-summary {
+    grid-template-columns: 1fr;
+  }
+  .sync-scan-stat-card {
+    min-height: 80px;
+  }
+  .sync-scan-msg {
+    font-size: 14px;
+  }
+  .sync-scan-stat-value {
+    font-size: 28px;
+  }
+  .sync-scan-stat-note {
+    font-size: 11px;
   }
   .sync-done-icon {
     width: 66px;

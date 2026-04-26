@@ -1509,7 +1509,7 @@
       <!-- Header -->
       <div class="sync-modal-header tb-modal-header">
         <div class="sync-modal-header-left tb-modal-header-left">
-          <div class="sync-modal-icon tb-modal-icon-tile">
+          <div class="sync-modal-icon tb-modal-icon-tile" id="sync-modal-phase-icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
           </div>
           <div>
@@ -1524,7 +1524,10 @@
       </div>
       <div class="sync-progress-banner" id="sync-progress-banner" style="display:none">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
-        <span id="sync-progress-banner-text">Sync in progress. Please keep this modal open.</span>
+        <span class="sync-progress-banner-copy">
+          <strong id="sync-progress-banner-title">Scan in progress</strong>
+          <span id="sync-progress-banner-text">Do not dismiss. Closing this window may result in data inconsistency.</span>
+        </span>
       </div>
 
       <div class="sync-modal-body">
@@ -1562,15 +1565,47 @@
         <!-- Phase: scanning -->
         <div id="sync-phase-scanning" class="sync-phase-panel sync-phase-panel--progress sync-phase-panel--scan" style="display:none">
           <div class="sync-progress-phase sync-progress-phase--scan">
-            <div class="sync-scan-center">
-              <div class="sync-scan-ring" id="sync-scan-ring" style="--scan-pct: 0;">
-                <div class="sync-scan-ring-inner">
-                  <div class="sync-scan-percent" id="sync-scan-percent">0%</div>
-                  <div class="sync-scan-percent-sub" id="sync-scan-mode">Scanning</div>
+            <div class="sync-scan-panel">
+              <div class="sync-scan-panel-grid">
+                <div class="sync-scan-panel-left">
+                  <div class="sync-scan-ring" id="sync-scan-ring" style="--scan-pct: 0;">
+                    <div class="sync-scan-ring-inner">
+                      <div class="sync-scan-percent" id="sync-scan-percent">0%</div>
+                      <div class="sync-scan-percent-sub" id="sync-scan-mode">In Progress</div>
+                    </div>
+                  </div>
+                  <p class="sync-scan-msg" id="sync-scanning-msg">Scanning library data...</p>
+                </div>
+                <div class="sync-scan-summary" id="sync-scan-summary">
+                  <article class="sync-scan-stat-card">
+                    <div class="sync-scan-stat-label">To Device</div>
+                    <div class="sync-scan-stat-value" id="sync-scan-to-device">0</div>
+                    <div class="sync-scan-stat-note">New tracks to sync</div>
+                  </article>
+                  <article class="sync-scan-stat-card">
+                    <div class="sync-scan-stat-label">To Local</div>
+                    <div class="sync-scan-stat-value" id="sync-scan-to-local">0</div>
+                    <div class="sync-scan-stat-note">Missing locally</div>
+                  </article>
+                  <article class="sync-scan-stat-card">
+                    <div class="sync-scan-stat-label">Playlists</div>
+                    <div class="sync-scan-stat-value" id="sync-scan-playlists">0</div>
+                    <div class="sync-scan-stat-note">Updated metadata</div>
+                  </article>
                 </div>
               </div>
-              <p class="sync-scan-msg" id="sync-scanning-msg">Scanning your library files…</p>
             </div>
+          </div>
+          <div class="modal-actions sync-scan-actions">
+            <div class="sync-phase-rail sync-phase-rail--scanning" aria-hidden="true">
+              <span class="sync-phase-step" data-step="pick"></span>
+              <span class="sync-phase-step" data-step="scanning"></span>
+              <span class="sync-phase-step" data-step="preview"></span>
+              <span class="sync-phase-step" data-step="copying"></span>
+              <span class="sync-phase-step" data-step="done"></span>
+            </div>
+            <button class="btn-secondary" onclick="App.syncBackToPick()">Back</button>
+            <button class="btn-primary" id="sync-scan-review-btn" onclick="App.syncGoToPreview()">Review Changes</button>
           </div>
         </div>
 

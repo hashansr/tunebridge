@@ -5450,6 +5450,13 @@ function _syncDeviceStatusPills(dap) {
 }
 
 function _syncPhase(name) {
+  const phaseIcons = {
+    pick: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
+    scanning: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`,
+    preview: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18"></path><path d="M3 12h18"></path><path d="M3 19h12"></path></svg>`,
+    copying: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="M7 10l5 5 5-5"></path><path d="M5 21h14"></path></svg>`,
+    done: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+  };
   const phaseMeta = {
     pick: {
       step: 'Step 1 of 5',
@@ -5487,8 +5494,11 @@ function _syncPhase(name) {
     if (titleEl) titleEl.textContent = meta.title;
     if (subtitleEl) subtitleEl.textContent = meta.subtitle;
   }
+  const iconHost = document.getElementById('sync-modal-phase-icon');
+  if (iconHost && phaseIcons[name]) iconHost.innerHTML = phaseIcons[name];
 
   const progressBanner = document.getElementById('sync-progress-banner');
+  const progressBannerTitle = document.getElementById('sync-progress-banner-title');
   const progressBannerText = document.getElementById('sync-progress-banner-text');
   const showBusyBanner = name === 'scanning' || name === 'copying';
   const showWarningBanner = name === 'preview' && _syncPreviewWarningCount > 0;
@@ -5498,11 +5508,17 @@ function _syncPhase(name) {
   }
   if (progressBannerText) {
     if (showBusyBanner) {
+      if (progressBannerTitle) {
+        progressBannerTitle.textContent = name === 'copying' ? 'Sync in Progress' : 'Scan in Progress';
+      }
       progressBannerText.textContent = name === 'copying'
-        ? 'Sync in progress. Copying files now.'
-        : 'Sync in progress - do not dismiss.';
+        ? 'Do not dismiss. Closing this window may result in data inconsistency.'
+        : 'Do not dismiss. Closing this window may result in data inconsistency.';
     } else if (showWarningBanner) {
+      if (progressBannerTitle) progressBannerTitle.textContent = 'Warnings Detected';
       progressBannerText.textContent = `Warnings detected: ${_syncPreviewWarningCount} item${_syncPreviewWarningCount === 1 ? '' : 's'}. Review before syncing.`;
+    } else if (progressBannerTitle) {
+      progressBannerTitle.textContent = 'Scan in Progress';
     }
   }
 
@@ -5515,6 +5531,46 @@ function _syncPhase(name) {
     const el = document.getElementById(`sync-phase-${p}`);
     if (el) el.style.display = p === name ? '' : 'none';
   });
+}
+
+function _syncReadStatusCount(status, directKey, fallbackKeys = []) {
+  const tryKeys = [directKey, ...fallbackKeys];
+  for (const key of tryKeys) {
+    const value = status?.[key];
+    if (Number.isFinite(Number(value))) return Math.max(0, Number(value));
+  }
+  const summary = status?.summary || status?.counts || {};
+  for (const key of tryKeys) {
+    const value = summary?.[key];
+    if (Number.isFinite(Number(value))) return Math.max(0, Number(value));
+  }
+  return 0;
+}
+
+function _syncUpdateScanSummary(status) {
+  const toDevice = _syncReadStatusCount(status, 'music_to_add_count', ['to_device_count', 'add_to_device_count']);
+  const toLocal = _syncReadStatusCount(status, 'device_only_count', ['to_local_count', 'copy_to_local_count', 'music_to_local_count']);
+  const playlists = _syncReadStatusCount(status, 'playlist_out_of_sync_count', ['playlists_count', 'playlist_count']);
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = Number(value || 0).toLocaleString();
+  };
+  setText('sync-scan-to-device', toDevice);
+  setText('sync-scan-to-local', toLocal);
+  setText('sync-scan-playlists', playlists);
+}
+
+function syncBackToPick() {
+  if (_syncScanInFlight) return;
+  _syncPhase('pick');
+}
+
+function syncGoToPreview() {
+  if (_syncLastStatus?.status === 'ready') {
+    renderSyncPreview(_syncLastStatus);
+    return;
+  }
+  toast('Scan still in progress.');
 }
 
 async function showSync() {
@@ -5756,9 +5812,10 @@ async function startSyncScan(dapId) {
   const runId = ++_syncScanRunId;
   _syncPhase('scanning');
   const scanMode = document.getElementById('sync-scan-mode');
-  if (scanMode) scanMode.textContent = 'Scanning';
+  if (scanMode) scanMode.textContent = 'In Progress';
   _syncSetScanningVisualProgress(0);
-  document.getElementById('sync-scanning-msg').textContent = 'Scanning device…';
+  _syncUpdateScanSummary(null);
+  document.getElementById('sync-scanning-msg').textContent = 'Scanning library data...';
   const scanStartedAt = Date.now();
   let visualPct = 0;
   const setVisualPct = (nextPct, force = false) => {
@@ -5811,6 +5868,7 @@ async function startSyncScan(dapId) {
 
     document.getElementById('sync-scanning-msg').textContent =
       _formatSyncPhaseMessage(status.current || status.message, 'scan');
+    _syncUpdateScanSummary(status);
 
     if (status.status === 'ready') {
       finished = true;
@@ -11009,6 +11067,8 @@ const App = {
   syncUpdatePickNextCta,
   startSyncFromSelection,
   startSyncScan,
+  syncBackToPick,
+  syncGoToPreview,
   syncToggleAll,
   syncSectionBulkActionChanged,
   syncRowSelectedChanged,
