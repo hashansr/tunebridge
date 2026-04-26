@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.57-rc.260426-1917 · 2026-04-26
 - Change: Sync Music Step 3 polish pass — removed `Unknown track -` prefixes from DAP-only titles, removed section header icons for cleaner accordion headings, improved Step 3 scroll behavior with expanded sections, and rewrote the bottom summary copy for clearer readability.
 
 ## v0.56-rc.260426-1847 · 2026-04-26
