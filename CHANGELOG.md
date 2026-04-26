@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.63-rc.270426-0945 · 2026-04-27
 - Change: Sync modal Step 2 now runs as a pure scanning phase with no `Back` / `Review Changes` action buttons; it advances to preview when scan reaches ready state.
 - Change: Sync modal header typography spacing was loosened (step label, title, subtitle) for cleaner readability across all sync steps.
 - Change: Sync Step 3 collapsed section headers now keep title/caret content vertically centered for more consistent accordion alignment.
