@@ -2836,16 +2836,15 @@ tr.track-selected .track-check-indicator {
   align-items: stretch;
   gap: 8px;
   justify-content: flex-start !important;
-  position: sticky;
-  bottom: 0;
-  z-index: 3;
-  background: linear-gradient(180deg, rgba(16, 23, 40, 0) 0%, rgba(16, 23, 40, 0.96) 22%);
-  padding-top: 12px !important;
+  position: static;
+  z-index: 1;
+  background: transparent;
+  padding-top: 4px !important;
 }
 .sync-preview-actions-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
 }
 .sync-preview-buttons {
@@ -3770,7 +3769,7 @@ tr.track-selected .track-check-indicator {
   margin: 0;
   padding: 10px 12px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: transparent;
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;

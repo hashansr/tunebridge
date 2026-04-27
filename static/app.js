@@ -6535,25 +6535,22 @@ function syncSelectionChanged() {
   if (rescanReq) rescanReq.style.display = _syncPreviewModel.rescanRequired ? '' : 'none';
 
   const addCount = payload.add_to_device_paths.length;
-  const copyLocalCount = payload.copy_to_local_paths.length;
   const deleteCount = payload.delete_on_device_paths.length;
   const playlistCount = payload.playlist_ids.length;
   const ignoreCount = payload.ignore_upserts.length;
-  const noSelection = addCount === 0 && copyLocalCount === 0 && deleteCount === 0 && playlistCount === 0 && ignoreCount === 0;
-  const tracksLine = noSelection
-    ? 'No sync actions selected yet.'
-    : `Actions selected: Add to DAP ${addCount}, Copy to library ${copyLocalCount}, Delete from DAP ${deleteCount}, Sync playlists ${playlistCount}, Ignore reminders ${ignoreCount}.`;
+  const noSelection = addCount === 0 && deleteCount === 0 && playlistCount === 0 && ignoreCount === 0;
+  const tracksLine = `Tracks: ${addCount} to add • ${deleteCount} to remove • ${ignoreCount} skipped • ${playlistCount} playlists synced`;
   let spaceLine = '';
   let className = 'sync-space-summary';
 
   if (available === null) {
-    spaceLine = `Storage check unavailable. Required for additions: ${_fmtBytes(required)}.`;
+    spaceLine = `Space: -- available • ${_fmtBytes(required)} needed • -- available after sync`;
   } else if (shortfall > 0) {
-    spaceLine = `Not enough space. Required ${_fmtBytes(required)}, available ${_fmtBytes(available)}, short by ${_fmtBytes(shortfall)}.`;
+    spaceLine = `Space: ${_fmtBytes(available)} available • ${_fmtBytes(required)} needed • 0 B available after sync`;
     className += ' sync-space-summary--danger';
   } else {
     const remaining = Math.max(0, available - required);
-    spaceLine = `Storage: available ${_fmtBytes(available)}, required ${_fmtBytes(required)}, free after sync ${_fmtBytes(remaining)}.`;
+    spaceLine = `Space: ${_fmtBytes(available)} available • ${_fmtBytes(required)} needed • ${_fmtBytes(remaining)} available after sync`;
     className += noSelection ? ' sync-space-summary--ok' : ' sync-space-summary--warn';
   }
 
