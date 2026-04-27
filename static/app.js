@@ -11002,6 +11002,7 @@ async function loadDuplicatesView() {
   } else {
     await _startDapDupScan();
   }
+  if (_dupScope === 'library') _loadDupSkipped();
 }
 
 async function _fetchLibraryDuplicates() {
@@ -11099,6 +11100,9 @@ function _renderDupGroupCard(g) {
     const path = isDap ? (t.rel_path || t.path || '') : (t.path || '');
     const pathShort = path.length > 60 ? '…' + path.slice(-57) : path;
     const tid = isDap ? encodeURIComponent(path) : esc(t.id);
+    const notDupBtn = !isDap
+      ? `<button class="dup-not-dup-btn" title="Mark as not a duplicate — exclude from this group" onclick="App._dupMarkNotDuplicate('${esc(g.key)}','${tid}',this)">Not a duplicate</button>`
+      : '';
     return `<tr class="dup-track-row" data-idx="${i}">
       <td class="dup-cell-radio"><input type="radio" name="dup-keep-${esc(g.key)}" data-id="${tid}" /></td>
       <td class="dup-cell-check"><input type="checkbox" name="dup-del-${esc(g.key)}" data-id="${tid}" /></td>
@@ -11107,6 +11111,7 @@ function _renderDupGroupCard(g) {
       <td class="dup-cell-dur">${dur}</td>
       <td class="dup-cell-size">${size}</td>
       <td class="dup-cell-path" title="${esc(path)}">${esc(pathShort)}</td>
+      <td class="dup-cell-notdup">${notDupBtn}</td>
     </tr>`;
   }).join('');
 
@@ -11132,6 +11137,7 @@ function _renderDupGroupCard(g) {
         <th title="Keep (Consolidate)">Keep</th>
         <th title="Select for removal">Del</th>
         <th>Format</th><th>Bitrate</th><th>Duration</th><th>Size</th><th>Path</th>
+        ${!isDap ? '<th></th>' : ''}
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -11147,15 +11153,21 @@ function _fmtDuration(secs) {
 }
 
 async function _dupIgnore(key) {
+  // Find group metadata from in-memory list for storage
+  const g = _dupGroups.find(x => x.key === key) || {};
   try {
-    await api('/library/duplicates/ignore', { method: 'POST', body: JSON.stringify({ group_key: key }) });
+    await api('/library/duplicates/ignore', {
+      method: 'POST',
+      body: JSON.stringify({ group_key: key, title: g.title, artist: g.artist, album: g.album })
+    });
     document.getElementById(`dup-group-${key}`)?.remove();
-    // Recount
+    _dupGroups = _dupGroups.filter(x => x.key !== key);
     const remaining = document.querySelectorAll('.dup-group-card').length;
     if (remaining === 0) {
       document.getElementById('dup-empty').style.display = 'flex';
       document.getElementById('dup-summary-bar').style.display = 'none';
     }
+    _loadDupSkipped();
   } catch(e) { showToast('Failed to ignore group', 'error'); }
 }
 
@@ -11227,6 +11239,7 @@ async function _dupDelete(key) {
     } else {
       await _fetchLibraryDuplicates();
     }
+    _showEmptyFolderCleanup(res.empty_dirs || []);
   } catch(e) { showToast('Delete failed', 'error'); }
 }
 
@@ -11248,6 +11261,7 @@ async function _dupConsolidate(key) {
     });
     showToast(`Consolidated · updated ${res.playlists_updated} playlist${res.playlists_updated !== 1 ? 's' : ''}`);
     _removeDupGroupFromDom(key);
+    _showEmptyFolderCleanup(res.empty_dirs || []);
   } catch(e) { showToast('Consolidate failed', 'error'); }
 }
 
@@ -11286,6 +11300,135 @@ function onDupDapChange() {
 function rescanDuplicates() {
   if (_dupScope === 'library') _fetchLibraryDuplicates();
   else _startDapDupScan();
+}
+
+// ── Duplicate improvements ───────────────────────────────────────────
+
+async function _dupMarkNotDuplicate(groupKey, trackId, btnEl) {
+  try {
+    await api('/library/duplicates/not-duplicate', {
+      method: 'POST',
+      body: JSON.stringify({ group_key: groupKey, track_id: trackId })
+    });
+    // Remove the row from the card
+    const row = btnEl?.closest('tr');
+    const card = document.getElementById(`dup-group-${groupKey}`);
+    if (row) row.remove();
+    // If fewer than 2 rows remain, remove the whole card
+    const remaining = card?.querySelectorAll('tbody tr').length || 0;
+    if (remaining < 2) _removeDupGroupFromDom(groupKey);
+    showToast('Marked as not a duplicate');
+    _loadDupSkipped();
+  } catch(e) { showToast('Failed to mark track', 'error'); }
+}
+
+async function _dupUndoNotDuplicate(groupKey, trackId) {
+  try {
+    await api('/library/duplicates/not-duplicate', {
+      method: 'DELETE',
+      body: JSON.stringify({ group_key: groupKey, track_id: trackId })
+    });
+    showToast('Restored — rescan to see updated groups');
+    _loadDupSkipped();
+  } catch(e) { showToast('Failed to undo', 'error'); }
+}
+
+async function _dupUndoIgnore(groupKey) {
+  try {
+    await api('/library/duplicates/unignore', {
+      method: 'POST',
+      body: JSON.stringify({ group_key: groupKey })
+    });
+    showToast('Group restored — rescan to see it again');
+    _loadDupSkipped();
+  } catch(e) { showToast('Failed to restore group', 'error'); }
+}
+
+async function _loadDupSkipped() {
+  try {
+    const data = await api('/library/duplicates/skipped');
+    const total = (data.ignored_groups?.length || 0) + (data.not_duplicate_tracks?.length || 0);
+    const section = document.getElementById('dup-skipped-section');
+    const countEl = document.getElementById('dup-skipped-count');
+    if (!total) { if (section) section.style.display = 'none'; return; }
+    if (section) section.style.display = 'block';
+    if (countEl) countEl.textContent = total;
+    _renderDupSkippedIgnored(data.ignored_groups || []);
+    _renderDupSkippedNotDup(data.not_duplicate_tracks || []);
+  } catch(e) { /* silently fail */ }
+}
+
+function _renderDupSkippedIgnored(groups) {
+  const el = document.getElementById('dup-skipped-ignored');
+  if (!el) return;
+  if (!groups.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<p class="dup-skipped-label">Ignored groups</p>` +
+    groups.map(g => {
+      const name = g.title ? `${esc(g.title)} — ${esc(g.artist || '')}` : `Group ${g.group_key.slice(0,8)}…`;
+      return `<div class="dup-skipped-row">
+        <span class="dup-skipped-name">${name}</span>
+        ${g.album ? `<span class="dup-skipped-sub">${esc(g.album)}</span>` : ''}
+        <button class="dup-undo-btn" onclick="App._dupUndoIgnore('${esc(g.group_key)}')">Restore</button>
+      </div>`;
+    }).join('');
+}
+
+function _renderDupSkippedNotDup(tracks) {
+  const el = document.getElementById('dup-skipped-notdup');
+  if (!el) return;
+  if (!tracks.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<p class="dup-skipped-label">Not duplicates</p>` +
+    tracks.map(t => {
+      const name = t.title ? `${esc(t.title)} — ${esc(t.artist || '')}` : esc(t.path || t.track_id);
+      return `<div class="dup-skipped-row">
+        <span class="dup-skipped-name">${name}</span>
+        ${t.album ? `<span class="dup-skipped-sub">${esc(t.album)}</span>` : ''}
+        <button class="dup-undo-btn" onclick="App._dupUndoNotDuplicate('${esc(t.group_key)}','${esc(t.track_id)}')">Undo</button>
+      </div>`;
+    }).join('');
+}
+
+function _toggleSkippedSection() {
+  const body = document.getElementById('dup-skipped-body');
+  const chevron = document.getElementById('dup-skipped-chevron');
+  if (!body) return;
+  const open = body.style.display === 'block';
+  body.style.display = open ? 'none' : 'block';
+  if (chevron) chevron.style.transform = open ? '' : 'rotate(180deg)';
+}
+
+// ── Empty folder cleanup ─────────────────────────────────────────────
+
+let _pendingEmptyDirs = [];
+
+function _showEmptyFolderCleanup(dirs) {
+  _pendingEmptyDirs = dirs || [];
+  const section = document.getElementById('dup-empty-folders-section');
+  const listEl = document.getElementById('dup-empty-folders-list');
+  if (!section || !listEl) return;
+  if (!_pendingEmptyDirs.length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  listEl.innerHTML = _pendingEmptyDirs.map(d =>
+    `<label class="dup-folder-row">
+      <input type="checkbox" class="dup-folder-check" value="${esc(d)}" checked />
+      <span class="dup-folder-path">${esc(d)}</span>
+    </label>`
+  ).join('');
+}
+
+async function _deleteEmptyFolders() {
+  const checks = document.querySelectorAll('.dup-folder-check:checked');
+  const dirs = Array.from(checks).map(c => c.value);
+  if (!dirs.length) { showToast('No folders selected', 'error'); return; }
+  try {
+    const res = await api('/library/duplicates/delete-folders', {
+      method: 'POST',
+      body: JSON.stringify({ rel_dirs: dirs })
+    });
+    showToast(`Removed ${res.deleted} empty folder${res.deleted !== 1 ? 's' : ''}`);
+    document.getElementById('dup-empty-folders-section').style.display = 'none';
+    _pendingEmptyDirs = [];
+  } catch(e) { showToast('Failed to remove folders', 'error'); }
 }
 
 /* ── Public API ─────────────────────────────────────────────────────── */
@@ -11668,6 +11811,11 @@ const App = {
   _onDupActionChange,
   _browseDupMoveFolder,
   _confirmDupAction,
+  _dupMarkNotDuplicate,
+  _dupUndoNotDuplicate,
+  _dupUndoIgnore,
+  _toggleSkippedSection,
+  _deleteEmptyFolders,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════

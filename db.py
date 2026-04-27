@@ -53,7 +53,7 @@ def close_conn():
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -84,6 +84,13 @@ _MIGRATIONS: list[tuple] = [
     (5, 'Add sync discrepancy ignore table', None),
     # v6: smart_playlist_rules is a new table handled by create_schema().
     (6, 'Add smart_playlist_rules table', None),
+    # v7: duplicate detection improvements — new columns on duplicate_ignores,
+    #     new tables (not_duplicate_tracks, deleted_tracks) handled by create_schema().
+    (7, 'Add title/artist/album to duplicate_ignores; add not_duplicate_tracks and deleted_tracks tables', [
+        'ALTER TABLE duplicate_ignores ADD COLUMN title TEXT',
+        'ALTER TABLE duplicate_ignores ADD COLUMN artist TEXT',
+        'ALTER TABLE duplicate_ignores ADD COLUMN album TEXT',
+    ]),
 ]
 
 _SCHEMA_SQL = """
@@ -388,8 +395,21 @@ CREATE TABLE IF NOT EXISTS smart_playlist_rules (
 -- Duplicate detection: ignored groups (user said "don't show me these again")
 CREATE TABLE IF NOT EXISTS duplicate_ignores (
     group_key  TEXT PRIMARY KEY,
+    title      TEXT,
+    artist     TEXT,
+    album      TEXT,
     created_at INTEGER NOT NULL DEFAULT 0
 );
+
+-- Tracks the user has flagged as "not a duplicate" within a group
+CREATE TABLE IF NOT EXISTS not_duplicate_tracks (
+    group_key   TEXT NOT NULL,
+    track_id    TEXT NOT NULL,
+    created_at  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (group_key, track_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_not_dup_group ON not_duplicate_tracks(group_key);
 
 -- Deleted tracks audit log (used by sync to avoid re-copying deleted files)
 CREATE TABLE IF NOT EXISTS deleted_tracks (

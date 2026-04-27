@@ -10702,6 +10702,40 @@ def _dup_group_key(title, artist, album):
     return hashlib.md5(raw.encode()).hexdigest()
 
 
+def _find_sidecar_files(abs_path):
+    """Return list of existing sidecar file Paths associated with a music file.
+    Covers: .lrc lyric files and macOS AppleDouble resource forks (._filename)."""
+    abs_path = Path(abs_path)
+    parent = abs_path.parent
+    sidecars = []
+    lrc = parent / f"{abs_path.stem}.lrc"
+    if lrc.exists():
+        sidecars.append(lrc)
+    apple = parent / f"._{abs_path.name}"
+    if apple.exists():
+        sidecars.append(apple)
+    return sidecars
+
+
+def _find_empty_dirs_after_deletion(deleted_rel_paths, music_base):
+    """Return relative paths of directories that are now empty, deepest first."""
+    music_base = Path(music_base)
+    candidates = set()
+    for rel in deleted_rel_paths:
+        p = (music_base / rel).parent
+        while p != music_base and str(p).startswith(str(music_base)):
+            candidates.add(p)
+            p = p.parent
+    empty = []
+    for d in sorted(candidates, key=lambda x: len(x.parts), reverse=True):
+        try:
+            if d.exists() and not any(d.iterdir()):
+                empty.append(str(d.relative_to(music_base)))
+        except Exception:
+            pass
+    return empty
+
+
 def _track_abs_path(rel_path):
     return get_music_base() / rel_path
 
@@ -10733,7 +10767,7 @@ def _auto_ignore_deleted_in_sync(conn, rel_path):
 
 
 def _delete_tracks_from_library(track_ids, action, move_folder=None):
-    """Delete or move tracks by ID. Returns (deleted_count, errors)."""
+    """Delete or move tracks by ID. Returns (deleted_count, errors, empty_dirs)."""
     try:
         import send2trash
     except ImportError:
@@ -10743,6 +10777,7 @@ def _delete_tracks_from_library(track_ids, action, move_folder=None):
     music_base = get_music_base()
     deleted = 0
     errors = []
+    deleted_rel_paths = []
 
     for tid in track_ids:
         row = conn.execute(
@@ -10752,20 +10787,30 @@ def _delete_tracks_from_library(track_ids, action, move_folder=None):
             continue
         track = dict(row)
         abs_path = music_base / track['path']
+        sidecars = _find_sidecar_files(abs_path)
 
         try:
             if action == 'trash':
                 if send2trash is None:
                     raise RuntimeError('send2trash not installed')
                 send2trash.send2trash(str(abs_path))
+                for s in sidecars:
+                    try:
+                        send2trash.send2trash(str(s))
+                    except Exception:
+                        pass
             elif action == 'move' and move_folder:
                 dest_dir = Path(move_folder) / (track['artist'] or 'Unknown Artist') / (track['album'] or 'Unknown Album')
                 dest_dir.mkdir(parents=True, exist_ok=True)
                 dest = dest_dir / abs_path.name
                 if dest.exists():
-                    # Avoid clobbering: append track id suffix
                     dest = dest_dir / f"{abs_path.stem}__{tid[:6]}{abs_path.suffix}"
                 shutil.move(str(abs_path), str(dest))
+                for s in sidecars:
+                    try:
+                        shutil.move(str(s), str(dest_dir / s.name))
+                    except Exception:
+                        pass
             else:
                 raise ValueError(f"Unknown action: {action}")
         except Exception as e:
@@ -10776,6 +10821,7 @@ def _delete_tracks_from_library(track_ids, action, move_folder=None):
         conn.execute("DELETE FROM playlist_tracks WHERE track_id = ?", (tid,))
         _record_deleted_track(conn, track)
         _auto_ignore_deleted_in_sync(conn, track['path'])
+        deleted_rel_paths.append(track['path'])
         deleted += 1
 
     conn.commit()
@@ -10785,13 +10831,19 @@ def _delete_tracks_from_library(track_ids, action, move_folder=None):
         global library
         library = [t for t in library if t.get('id') not in set(track_ids)]
 
-    return deleted, errors
+    empty_dirs = _find_empty_dirs_after_deletion(deleted_rel_paths, music_base)
+    return deleted, errors, empty_dirs
 
 
 @app.route('/api/library/duplicates')
 def library_duplicates():
     conn = _db.get_conn()
     ignored = {r[0] for r in conn.execute("SELECT group_key FROM duplicate_ignores").fetchall()}
+    # Per-group sets of track IDs the user flagged as "not a duplicate"
+    not_dup_rows = conn.execute("SELECT group_key, track_id FROM not_duplicate_tracks").fetchall()
+    not_dup_map = {}
+    for gk, tid in not_dup_rows:
+        not_dup_map.setdefault(gk, set()).add(tid)
 
     rows = conn.execute("""
         SELECT title, artist, album, COUNT(*) as cnt
@@ -10802,6 +10854,7 @@ def library_duplicates():
         ORDER BY lower(artist), lower(album), lower(title)
     """).fetchall()
 
+    music_base = get_music_base()
     groups = []
     for row in rows:
         title, artist, album, _ = row
@@ -10813,11 +10866,16 @@ def library_duplicates():
             (title, artist, album)
         ).fetchall()
         track_list = [dict(t) for t in tracks]
+
+        # Filter out tracks flagged as "not a duplicate" in this group
+        excluded = not_dup_map.get(key, set())
+        track_list = [t for t in track_list if t['id'] not in excluded]
+        if len(track_list) < 2:
+            continue
+
         durations = [t['duration'] or 0 for t in track_list]
         duration_warning = (max(durations) - min(durations)) > 5 if len(durations) > 1 else False
 
-        # Add file size for each track
-        music_base = get_music_base()
         for t in track_list:
             try:
                 t['file_size'] = (music_base / t['path']).stat().st_size
@@ -10842,10 +10900,13 @@ def library_duplicates_ignore():
     key = data.get('group_key', '').strip()
     if not key:
         return jsonify({'error': 'group_key required'}), 400
+    title = data.get('title') or None
+    artist = data.get('artist') or None
+    album = data.get('album') or None
     conn = _db.get_conn()
     conn.execute(
-        "INSERT OR IGNORE INTO duplicate_ignores (group_key, created_at) VALUES (?,?)",
-        (key, int(time.time()))
+        "INSERT OR REPLACE INTO duplicate_ignores (group_key, title, artist, album, created_at) VALUES (?,?,?,?,?)",
+        (key, title, artist, album, int(time.time()))
     )
     conn.commit()
     return jsonify({'ok': True})
@@ -10857,9 +10918,105 @@ def library_duplicates_unignore():
     key = data.get('group_key', '').strip()
     if not key:
         return jsonify({'error': 'group_key required'}), 400
-    _db.get_conn().execute("DELETE FROM duplicate_ignores WHERE group_key = ?", (key,))
-    _db.get_conn().commit()
+    conn = _db.get_conn()
+    conn.execute("DELETE FROM duplicate_ignores WHERE group_key = ?", (key,))
+    conn.commit()
     return jsonify({'ok': True})
+
+
+@app.route('/api/library/duplicates/not-duplicate', methods=['POST'])
+def library_duplicates_mark_not_dup():
+    data = request.get_json() or {}
+    key = data.get('group_key', '').strip()
+    track_id = data.get('track_id', '').strip()
+    if not key or not track_id:
+        return jsonify({'error': 'group_key and track_id required'}), 400
+    conn = _db.get_conn()
+    conn.execute(
+        "INSERT OR IGNORE INTO not_duplicate_tracks (group_key, track_id, created_at) VALUES (?,?,?)",
+        (key, track_id, int(time.time()))
+    )
+    conn.commit()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/library/duplicates/not-duplicate', methods=['DELETE'])
+def library_duplicates_unmark_not_dup():
+    data = request.get_json() or {}
+    key = data.get('group_key', '').strip()
+    track_id = data.get('track_id', '').strip()
+    if not key or not track_id:
+        return jsonify({'error': 'group_key and track_id required'}), 400
+    conn = _db.get_conn()
+    conn.execute("DELETE FROM not_duplicate_tracks WHERE group_key=? AND track_id=?", (key, track_id))
+    conn.commit()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/library/duplicates/skipped')
+def library_duplicates_skipped():
+    conn = _db.get_conn()
+
+    # Ignored groups
+    ig_rows = conn.execute(
+        "SELECT group_key, title, artist, album, created_at FROM duplicate_ignores ORDER BY created_at DESC"
+    ).fetchall()
+    ignored_groups = []
+    for gk, title, artist, album, created_at in ig_rows:
+        # If metadata wasn't stored, try to recover from tracks table
+        if not title:
+            track_row = conn.execute(
+                "SELECT title, artist, album FROM tracks LIMIT 1"  # fallback: can't reverse hash
+            ).fetchone()
+            title, artist, album = None, None, None
+        ignored_groups.append({
+            'group_key': gk,
+            'title': title,
+            'artist': artist,
+            'album': album,
+            'created_at': created_at,
+        })
+
+    # Not-duplicate tracks (join with tracks for display)
+    nd_rows = conn.execute("""
+        SELECT nd.group_key, nd.track_id, nd.created_at,
+               t.title, t.artist, t.album, t.path, t.format, t.bitrate
+        FROM not_duplicate_tracks nd
+        LEFT JOIN tracks t ON t.id = nd.track_id
+        ORDER BY nd.created_at DESC
+    """).fetchall()
+    not_dup_tracks = [{
+        'group_key': r[0], 'track_id': r[1], 'created_at': r[2],
+        'title': r[3], 'artist': r[4], 'album': r[5],
+        'path': r[6], 'format': r[7], 'bitrate': r[8],
+    } for r in nd_rows]
+
+    return jsonify({'ignored_groups': ignored_groups, 'not_duplicate_tracks': not_dup_tracks})
+
+
+@app.route('/api/library/duplicates/delete-folders', methods=['POST'])
+def library_duplicates_delete_folders():
+    data = request.get_json() or {}
+    rel_dirs = data.get('rel_dirs', [])
+    if not rel_dirs:
+        return jsonify({'error': 'rel_dirs required'}), 400
+    music_base = get_music_base()
+    deleted = 0
+    errors = []
+    # Sort deepest first so child dirs are removed before parents
+    for rel in sorted(rel_dirs, key=lambda p: p.count(os.sep), reverse=True):
+        abs_dir = music_base / rel
+        try:
+            if abs_dir.exists() and not any(abs_dir.iterdir()):
+                abs_dir.rmdir()
+                deleted += 1
+            elif not abs_dir.exists():
+                deleted += 1  # already gone
+            else:
+                errors.append({'dir': rel, 'error': 'Directory is not empty'})
+        except Exception as e:
+            errors.append({'dir': rel, 'error': str(e)})
+    return jsonify({'deleted': deleted, 'errors': errors})
 
 
 @app.route('/api/library/duplicates/delete', methods=['POST'])
@@ -10876,8 +11033,8 @@ def library_duplicates_delete():
     if action == 'move' and not move_folder:
         return jsonify({'error': 'move_folder required for action=move'}), 400
 
-    deleted, errors = _delete_tracks_from_library(track_ids, action, move_folder)
-    return jsonify({'deleted': deleted, 'errors': errors})
+    deleted, errors, empty_dirs = _delete_tracks_from_library(track_ids, action, move_folder)
+    return jsonify({'deleted': deleted, 'errors': errors, 'empty_dirs': empty_dirs})
 
 
 @app.route('/api/library/duplicates/consolidate', methods=['POST'])
@@ -10925,8 +11082,8 @@ def library_duplicates_consolidate():
 
     conn.commit()
 
-    deleted, errors = _delete_tracks_from_library(delete_ids, action, move_folder)
-    return jsonify({'kept_id': keep_id, 'deleted': deleted, 'playlists_updated': len(playlists_updated), 'errors': errors})
+    deleted, errors, empty_dirs = _delete_tracks_from_library(delete_ids, action, move_folder)
+    return jsonify({'kept_id': keep_id, 'deleted': deleted, 'playlists_updated': len(playlists_updated), 'errors': errors, 'empty_dirs': empty_dirs})
 
 
 # DAP duplicate detection (background scan with polling)

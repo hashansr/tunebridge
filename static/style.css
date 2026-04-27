@@ -13442,3 +13442,32 @@ tr:hover .track-edit-btn:hover {
 
 .dup-move-folder-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
 .dup-move-folder-row input { flex: 1; font-size: 12px; }
+
+/* ── Duplicate improvements ─────────────────────────────────────────── */
+.dup-cell-notdup { width: 120px; text-align: right; padding-right: 4px; }
+.dup-not-dup-btn { font-size: 11px; padding: 3px 8px; background: transparent; border: 1px solid var(--surface-3); border-radius: 12px; color: var(--text-muted); cursor: pointer; white-space: nowrap; }
+.dup-not-dup-btn:hover { border-color: var(--accent-secondary); color: var(--accent-secondary); }
+
+/* Section divider and skipped section */
+.dup-section-divider { height: 1px; background: var(--surface-3); margin: 24px 0 20px; }
+.dup-section-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.dup-section-sub { font-size: 12px; color: var(--text-muted); margin-left: 10px; }
+
+.dup-skipped-header { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 4px 0; user-select: none; }
+.dup-skipped-header:hover .dup-section-title { color: var(--accent-primary); }
+.dup-chevron { color: var(--text-muted); transition: transform 0.2s; flex-shrink: 0; }
+
+.dup-skipped-subsection { margin-bottom: 16px; }
+.dup-skipped-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 12px 0 6px; }
+.dup-skipped-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: var(--surface-2); border-radius: 7px; margin-bottom: 4px; }
+.dup-skipped-name { flex: 1; font-size: 13px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dup-skipped-sub { font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+.dup-undo-btn { font-size: 12px; padding: 3px 10px; background: transparent; border: 1px solid var(--surface-3); border-radius: 12px; color: var(--text-muted); cursor: pointer; flex-shrink: 0; }
+.dup-undo-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+
+/* Empty folders cleanup */
+.dup-empty-folders-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.dup-empty-folders-list { display: flex; flex-direction: column; gap: 4px; }
+.dup-folder-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; background: var(--surface-2); border-radius: 7px; cursor: pointer; }
+.dup-folder-row:hover { background: var(--surface-3); }
+.dup-folder-path { font-size: 12px; color: var(--text-secondary); font-family: monospace; }
