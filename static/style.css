@@ -2840,18 +2840,23 @@ tr.track-selected .track-check-indicator {
   z-index: 1;
   background: transparent;
   padding-top: 4px !important;
+  width: 100%;
+  align-self: stretch;
+  margin-top: auto;
+  box-shadow: none !important;
 }
 .sync-preview-actions-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 10px;
+  width: 100%;
 }
 .sync-preview-buttons {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  margin-left: auto;
+  margin-left: 0;
 }
 .sync-preview-estimate {
   font-size: 11px;
@@ -2859,6 +2864,7 @@ tr.track-selected .track-check-indicator {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   min-height: 16px;
+  margin-right: auto;
 }
 #sync-modal .modal-actions .btn-secondary,
 #sync-modal .modal-actions .btn-primary {
@@ -3776,6 +3782,8 @@ tr.track-selected .track-check-indicator {
   display: grid;
   gap: 4px;
   border: 1px solid rgba(173, 198, 255, 0.12);
+  width: 100%;
+  align-self: stretch;
 }
 .sync-space-summary--ok {
   color: var(--text-muted);
