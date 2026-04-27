@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.67-rc.270426-2021 · 2026-04-27
 - Add: "Not a duplicate" button per track row in the Duplicates view — marks a track as excluded from its group; excluded tracks are remembered and no longer counted when determining duplicates.
 - Add: Skipped & Not Duplicates section at the bottom of the Duplicates view — shows all ignored groups and individually excluded tracks with Restore/Undo buttons to reverse either action.
 - Add: Sidecar file cleanup — when a music file is deleted or moved, associated `.lrc` lyric files and macOS `._filename` AppleDouble resource forks are automatically removed alongside it.
