@@ -6372,17 +6372,38 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
                 library_deleted_on_source.append(rel)
                 library_deleted_reasons[rel] = reason
         else:
-            discrepancy_type = SYNC_DISCREPANCY_DEVICE_ONLY
-            reason = 'Present on device only (not found in local library scan)'
-            row = _sync_row(
-                rel, reason, discrepancy_type, 'copy_to_library',
-                ['copy_to_library', 'delete_on_dap', 'dont_remind']
-            )
-            if (discrepancy_type, rel_key) in ignored_lookup:
-                ignored_tracks.append({**row, 'ignored': True})
+            # Check if this file was deleted from the local library via TuneBridge's
+            # duplicate-resolution tools. If so, treat it as LIBRARY_DELETED rather
+            # than DEVICE_ONLY so the user isn't prompted to copy it back.
+            rel_norm = _normalize_rel(rel) or rel
+            deleted_row = _db.get_conn().execute(
+                "SELECT 1 FROM deleted_tracks WHERE path = ? LIMIT 1",
+                (rel_norm,)
+            ).fetchone()
+            if deleted_row:
+                discrepancy_type = SYNC_DISCREPANCY_LIBRARY_DELETED
+                reason = 'Deleted from local library (duplicate resolved) but still present on device'
+                row = _sync_row(
+                    rel, reason, discrepancy_type, 'keep_on_dap',
+                    ['keep_on_dap', 'delete_on_dap', 'dont_remind']
+                )
+                if (discrepancy_type, rel_key) in ignored_lookup:
+                    ignored_tracks.append({**row, 'ignored': True})
+                else:
+                    library_deleted_on_source.append(rel)
+                    library_deleted_reasons[rel] = reason
             else:
-                device_only_not_in_library.append(rel)
-                device_only_not_in_library_reasons[rel] = reason
+                discrepancy_type = SYNC_DISCREPANCY_DEVICE_ONLY
+                reason = 'Present on device only (not found in local library scan)'
+                row = _sync_row(
+                    rel, reason, discrepancy_type, 'copy_to_library',
+                    ['copy_to_library', 'delete_on_dap', 'dont_remind']
+                )
+                if (discrepancy_type, rel_key) in ignored_lookup:
+                    ignored_tracks.append({**row, 'ignored': True})
+                else:
+                    device_only_not_in_library.append(rel)
+                    device_only_not_in_library_reasons[rel] = reason
 
     # Keep only current device-file keys for this DAP and refresh verified entries.
     _update_dap_sync_manifest(
@@ -10672,6 +10693,369 @@ def set_heatmap_genres():
     cfg['heatmap_extra_genres'] = canonical
     save_insights_config(cfg)
     return jsonify({'extra_genres': canonical})
+
+
+# ── Duplicate track detection ─────────────────────────────────────────────────
+
+def _dup_group_key(title, artist, album):
+    raw = f"{(title or '').lower()}|{(artist or '').lower()}|{(album or '').lower()}"
+    return hashlib.md5(raw.encode()).hexdigest()
+
+
+def _track_abs_path(rel_path):
+    return get_music_base() / rel_path
+
+
+def _record_deleted_track(conn, track):
+    conn.execute(
+        "INSERT OR REPLACE INTO deleted_tracks (path, title, artist, album, deleted_at) VALUES (?,?,?,?,?)",
+        (track.get('path', ''), track.get('title'), track.get('artist'), track.get('album'), int(time.time()))
+    )
+
+
+def _auto_ignore_deleted_in_sync(conn, rel_path):
+    """For every DAP that has seen this path in sync_manifest, add a LIBRARY_DELETED
+    ignore entry so the sync engine won't prompt the user to copy it back."""
+    dap_rows = conn.execute(
+        "SELECT DISTINCT dap_id FROM sync_manifest WHERE local_rel = ? OR target_rel = ?",
+        (rel_path, rel_path)
+    ).fetchall()
+    now = int(time.time())
+    for (dap_id,) in dap_rows:
+        rel_key = _sync_rel_key(rel_path)
+        conn.execute(
+            """INSERT OR IGNORE INTO sync_ignored_discrepancies
+               (dap_id, rel_key, rel_path, discrepancy_type, note, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (dap_id, rel_key, rel_path, SYNC_DISCREPANCY_LIBRARY_DELETED,
+             'Auto-ignored: deleted via duplicate resolution', now, now)
+        )
+
+
+def _delete_tracks_from_library(track_ids, action, move_folder=None):
+    """Delete or move tracks by ID. Returns (deleted_count, errors)."""
+    try:
+        import send2trash
+    except ImportError:
+        send2trash = None
+
+    conn = _db.get_conn()
+    music_base = get_music_base()
+    deleted = 0
+    errors = []
+
+    for tid in track_ids:
+        row = conn.execute(
+            "SELECT id, path, title, artist, album FROM tracks WHERE id = ?", (tid,)
+        ).fetchone()
+        if not row:
+            continue
+        track = dict(row)
+        abs_path = music_base / track['path']
+
+        try:
+            if action == 'trash':
+                if send2trash is None:
+                    raise RuntimeError('send2trash not installed')
+                send2trash.send2trash(str(abs_path))
+            elif action == 'move' and move_folder:
+                dest_dir = Path(move_folder) / (track['artist'] or 'Unknown Artist') / (track['album'] or 'Unknown Album')
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                dest = dest_dir / abs_path.name
+                if dest.exists():
+                    # Avoid clobbering: append track id suffix
+                    dest = dest_dir / f"{abs_path.stem}__{tid[:6]}{abs_path.suffix}"
+                shutil.move(str(abs_path), str(dest))
+            else:
+                raise ValueError(f"Unknown action: {action}")
+        except Exception as e:
+            errors.append({'track_id': tid, 'path': track['path'], 'error': str(e)})
+            continue
+
+        conn.execute("DELETE FROM tracks WHERE id = ?", (tid,))
+        conn.execute("DELETE FROM playlist_tracks WHERE track_id = ?", (tid,))
+        _record_deleted_track(conn, track)
+        _auto_ignore_deleted_in_sync(conn, track['path'])
+        deleted += 1
+
+    conn.commit()
+
+    # Refresh in-memory library
+    with library_lock:
+        global library
+        library = [t for t in library if t.get('id') not in set(track_ids)]
+
+    return deleted, errors
+
+
+@app.route('/api/library/duplicates')
+def library_duplicates():
+    conn = _db.get_conn()
+    ignored = {r[0] for r in conn.execute("SELECT group_key FROM duplicate_ignores").fetchall()}
+
+    rows = conn.execute("""
+        SELECT title, artist, album, COUNT(*) as cnt
+        FROM tracks
+        WHERE title IS NOT NULL AND title != ''
+        GROUP BY lower(title), lower(artist), lower(album)
+        HAVING cnt > 1
+        ORDER BY lower(artist), lower(album), lower(title)
+    """).fetchall()
+
+    groups = []
+    for row in rows:
+        title, artist, album, _ = row
+        key = _dup_group_key(title, artist, album)
+        if key in ignored:
+            continue
+        tracks = conn.execute(
+            "SELECT * FROM tracks WHERE lower(title)=lower(?) AND lower(artist)=lower(?) AND lower(album)=lower(?) ORDER BY path",
+            (title, artist, album)
+        ).fetchall()
+        track_list = [dict(t) for t in tracks]
+        durations = [t['duration'] or 0 for t in track_list]
+        duration_warning = (max(durations) - min(durations)) > 5 if len(durations) > 1 else False
+
+        # Add file size for each track
+        music_base = get_music_base()
+        for t in track_list:
+            try:
+                t['file_size'] = (music_base / t['path']).stat().st_size
+            except Exception:
+                t['file_size'] = 0
+
+        groups.append({
+            'key': key,
+            'title': title,
+            'artist': artist,
+            'album': album,
+            'tracks': track_list,
+            'duration_warning': duration_warning,
+        })
+
+    return jsonify(groups)
+
+
+@app.route('/api/library/duplicates/ignore', methods=['POST'])
+def library_duplicates_ignore():
+    data = request.get_json() or {}
+    key = data.get('group_key', '').strip()
+    if not key:
+        return jsonify({'error': 'group_key required'}), 400
+    conn = _db.get_conn()
+    conn.execute(
+        "INSERT OR IGNORE INTO duplicate_ignores (group_key, created_at) VALUES (?,?)",
+        (key, int(time.time()))
+    )
+    conn.commit()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/library/duplicates/unignore', methods=['POST'])
+def library_duplicates_unignore():
+    data = request.get_json() or {}
+    key = data.get('group_key', '').strip()
+    if not key:
+        return jsonify({'error': 'group_key required'}), 400
+    _db.get_conn().execute("DELETE FROM duplicate_ignores WHERE group_key = ?", (key,))
+    _db.get_conn().commit()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/library/duplicates/delete', methods=['POST'])
+def library_duplicates_delete():
+    data = request.get_json() or {}
+    track_ids = data.get('track_ids', [])
+    action = data.get('action', 'trash')
+    move_folder = data.get('move_folder')
+
+    if not track_ids:
+        return jsonify({'error': 'track_ids required'}), 400
+    if action not in ('trash', 'move'):
+        return jsonify({'error': 'action must be trash or move'}), 400
+    if action == 'move' and not move_folder:
+        return jsonify({'error': 'move_folder required for action=move'}), 400
+
+    deleted, errors = _delete_tracks_from_library(track_ids, action, move_folder)
+    return jsonify({'deleted': deleted, 'errors': errors})
+
+
+@app.route('/api/library/duplicates/consolidate', methods=['POST'])
+def library_duplicates_consolidate():
+    data = request.get_json() or {}
+    keep_id = data.get('keep_id')
+    delete_ids = data.get('delete_ids', [])
+    action = data.get('action', 'trash')
+    move_folder = data.get('move_folder')
+
+    if not keep_id or not delete_ids:
+        return jsonify({'error': 'keep_id and delete_ids required'}), 400
+    if action not in ('trash', 'move'):
+        return jsonify({'error': 'action must be trash or move'}), 400
+    if action == 'move' and not move_folder:
+        return jsonify({'error': 'move_folder required for action=move'}), 400
+
+    conn = _db.get_conn()
+    playlists_updated = set()
+
+    # Remap playlist_tracks: replace delete_id references with keep_id
+    for del_id in delete_ids:
+        affected = conn.execute(
+            "SELECT playlist_id, position FROM playlist_tracks WHERE track_id = ?", (del_id,)
+        ).fetchall()
+        for (pl_id, pos) in affected:
+            # Only insert if keep_id isn't already at this position in the playlist
+            exists = conn.execute(
+                "SELECT 1 FROM playlist_tracks WHERE playlist_id = ? AND track_id = ? LIMIT 1",
+                (pl_id, keep_id)
+            ).fetchone()
+            if not exists:
+                conn.execute(
+                    "UPDATE playlist_tracks SET track_id = ? WHERE playlist_id = ? AND track_id = ?",
+                    (keep_id, pl_id, del_id)
+                )
+                playlists_updated.add(pl_id)
+            else:
+                # keep_id already in playlist; just remove the duplicate row
+                conn.execute(
+                    "DELETE FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?",
+                    (pl_id, del_id)
+                )
+                playlists_updated.add(pl_id)
+
+    conn.commit()
+
+    deleted, errors = _delete_tracks_from_library(delete_ids, action, move_folder)
+    return jsonify({'kept_id': keep_id, 'deleted': deleted, 'playlists_updated': len(playlists_updated), 'errors': errors})
+
+
+# DAP duplicate detection (background scan with polling)
+_dap_dup_state = {}  # dap_id -> {status, groups, error}
+_dap_dup_lock = threading.Lock()
+
+
+@app.route('/api/daps/<did>/duplicates')
+def dap_duplicates(did):
+    daps = load_daps()
+    dap = next((d for d in daps if d['id'] == did), None)
+    if not dap:
+        return jsonify({'error': 'Not found'}), 404
+
+    with _dap_dup_lock:
+        state = _dap_dup_state.get(did, {})
+
+    if state.get('status') == 'scanning':
+        return jsonify({'status': 'scanning'})
+    if state.get('status') == 'done':
+        return jsonify({'status': 'done', 'groups': state.get('groups', [])})
+
+    # Start background scan
+    with _dap_dup_lock:
+        _dap_dup_state[did] = {'status': 'scanning', 'groups': [], 'error': None}
+
+    def _do_dap_scan():
+        try:
+            mounts = _discover_mount_points(include_identity=False)
+            resolved_mount, _ = _resolve_dap_mount(dap, mounts)
+            if not resolved_mount or not resolved_mount.exists():
+                with _dap_dup_lock:
+                    _dap_dup_state[did] = {'status': 'error', 'groups': [], 'error': 'DAP not mounted'}
+                return
+
+            music_root_rel = dap.get('music_root') or 'Music'
+            device_music_root = resolved_mount / music_root_rel
+            files = walk_music_files(device_music_root)
+
+            by_key = {}
+            for rel in files:
+                abs_path = device_music_root / rel
+                try:
+                    info = scan_file(abs_path)
+                    if not info:
+                        continue
+                    gkey = _dup_group_key(info.get('title'), info.get('artist'), info.get('album'))
+                    by_key.setdefault(gkey, []).append({'rel': rel, 'info': info})
+                except Exception:
+                    continue
+
+            groups = []
+            for gkey, items in by_key.items():
+                if len(items) < 2:
+                    continue
+                track_list = []
+                for item in items:
+                    t = item['info']
+                    t['rel_path'] = item['rel']
+                    try:
+                        t['file_size'] = (device_music_root / item['rel']).stat().st_size
+                    except Exception:
+                        t['file_size'] = 0
+                    track_list.append(t)
+                durations = [t.get('duration') or 0 for t in track_list]
+                duration_warning = (max(durations) - min(durations)) > 5 if len(durations) > 1 else False
+                first = track_list[0]
+                groups.append({
+                    'key': gkey,
+                    'title': first.get('title'),
+                    'artist': first.get('artist'),
+                    'album': first.get('album'),
+                    'tracks': track_list,
+                    'duration_warning': duration_warning,
+                })
+
+            with _dap_dup_lock:
+                _dap_dup_state[did] = {'status': 'done', 'groups': groups, 'error': None}
+        except Exception as e:
+            with _dap_dup_lock:
+                _dap_dup_state[did] = {'status': 'error', 'groups': [], 'error': str(e)}
+
+    t = threading.Thread(target=_do_dap_scan, daemon=True)
+    t.start()
+    return jsonify({'status': 'scanning'})
+
+
+@app.route('/api/daps/<did>/duplicates/reset', methods=['POST'])
+def dap_duplicates_reset(did):
+    with _dap_dup_lock:
+        _dap_dup_state.pop(did, None)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/daps/<did>/duplicates/delete', methods=['POST'])
+def dap_duplicates_delete(did):
+    daps = load_daps()
+    dap = next((d for d in daps if d['id'] == did), None)
+    if not dap:
+        return jsonify({'error': 'Not found'}), 404
+
+    data = request.get_json() or {}
+    rel_paths = data.get('rel_paths', [])
+    if not rel_paths:
+        return jsonify({'error': 'rel_paths required'}), 400
+
+    mounts = _discover_mount_points(include_identity=False)
+    resolved_mount, _ = _resolve_dap_mount(dap, mounts)
+    if not resolved_mount or not resolved_mount.exists():
+        return jsonify({'error': 'DAP not mounted'}), 400
+
+    music_root_rel = dap.get('music_root') or 'Music'
+    device_music_root = resolved_mount / music_root_rel
+
+    deleted = 0
+    errors = []
+    for rel in rel_paths:
+        abs_path = device_music_root / rel
+        try:
+            abs_path.unlink()
+            deleted += 1
+        except Exception as e:
+            errors.append({'rel_path': rel, 'error': str(e)})
+
+    # Invalidate cached scan result so next open re-scans
+    with _dap_dup_lock:
+        _dap_dup_state.pop(did, None)
+
+    return jsonify({'deleted': deleted, 'errors': errors})
 
 
 # ── SQLite initialization ─────────────────────────────────────────────────────

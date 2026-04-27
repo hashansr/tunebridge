@@ -384,6 +384,23 @@ CREATE TABLE IF NOT EXISTS smart_playlist_rules (
     refresh_on_open INTEGER NOT NULL DEFAULT 1,
     last_refreshed  INTEGER
 );
+
+-- Duplicate detection: ignored groups (user said "don't show me these again")
+CREATE TABLE IF NOT EXISTS duplicate_ignores (
+    group_key  TEXT PRIMARY KEY,
+    created_at INTEGER NOT NULL DEFAULT 0
+);
+
+-- Deleted tracks audit log (used by sync to avoid re-copying deleted files)
+CREATE TABLE IF NOT EXISTS deleted_tracks (
+    path       TEXT PRIMARY KEY,
+    title      TEXT,
+    artist     TEXT,
+    album      TEXT,
+    deleted_at INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_deleted_tracks_deleted_at ON deleted_tracks(deleted_at DESC);
 """
 
 # FTS5 must be created separately (can't use IF NOT EXISTS with virtual tables the same way)

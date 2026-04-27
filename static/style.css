@@ -13387,3 +13387,58 @@ tr:hover .track-edit-btn:hover {
 .coverage-track-count { font-size: 11px; color: var(--text-muted); }
 .coverage-add-btn { padding: 4px 10px; font-size: 12px; background: var(--surface-3); border: none; border-radius: 14px; color: var(--text-secondary); cursor: pointer; align-self: flex-start; }
 .coverage-add-btn:hover { background: var(--accent-primary); color: #101010; }
+
+/* ── Duplicate Tracks View ──────────────────────────────────────────── */
+#view-duplicates .view-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+.view-header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.dup-scope-tabs { display: flex; background: var(--surface-2); border-radius: 20px; padding: 3px; gap: 2px; }
+.dup-tab-btn { padding: 5px 14px; border-radius: 16px; border: none; background: transparent; color: var(--text-muted); font-size: 13px; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.dup-tab-btn.active { background: var(--surface-3); color: var(--text-primary); }
+
+.dup-dap-select { background: var(--surface-2); border: none; border-radius: 8px; color: var(--text-primary); font-size: 13px; padding: 6px 10px; cursor: pointer; }
+
+.dup-summary-bar { background: var(--surface-2); border-radius: 8px; padding: 10px 16px; font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
+
+.dup-scanning-state { text-align: center; padding: 48px 0; }
+
+.dup-group-card { background: var(--surface-2); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
+.dup-group-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.dup-group-title { display: flex; flex-direction: column; gap: 3px; }
+.dup-group-name { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.dup-group-meta { font-size: 12px; color: var(--text-muted); }
+.dup-group-actions-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.dup-count-badge { font-size: 11px; background: var(--surface-3); border-radius: 10px; padding: 2px 8px; color: var(--text-muted); }
+.dup-ignore-btn { font-size: 12px; padding: 4px 10px; background: transparent; border: 1px solid var(--surface-3); border-radius: 14px; color: var(--text-muted); cursor: pointer; white-space: nowrap; }
+.dup-ignore-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
+
+.dup-duration-warn { font-size: 11px; background: rgba(240, 180, 41, 0.15); color: #f0b429; border-radius: 8px; padding: 2px 8px; align-self: flex-start; }
+
+.dup-group-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px; }
+.dup-group-table th { text-align: left; font-size: 11px; color: var(--text-muted); font-weight: 500; padding: 4px 8px 6px; border-bottom: 1px solid var(--surface-3); }
+.dup-group-table td { padding: 6px 8px; color: var(--text-secondary); border-bottom: 1px solid rgba(255,255,255,0.03); }
+.dup-track-row:hover td { background: var(--surface-3); }
+.dup-track-row:last-child td { border-bottom: none; }
+
+.dup-cell-radio, .dup-cell-check { width: 28px; text-align: center; }
+.dup-cell-fmt { width: 60px; }
+.dup-cell-bitrate { width: 80px; }
+.dup-cell-dur { width: 60px; }
+.dup-cell-size { width: 70px; }
+.dup-cell-path { color: var(--text-muted); font-size: 11px; word-break: break-all; }
+
+.dup-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.dup-btn { font-size: 12px; padding: 5px 12px; }
+
+/* Duplicate action modal */
+.dup-action-options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.dup-action-option { display: flex; align-items: flex-start; gap: 10px; background: var(--surface-2); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
+.dup-action-option:hover { background: var(--surface-3); }
+.dup-action-option input[type="radio"] { margin-top: 2px; flex-shrink: 0; accent-color: var(--accent-primary); }
+.dup-action-option-body { display: flex; flex-direction: column; gap: 2px; }
+.dup-action-option-title { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.dup-action-option-desc { font-size: 12px; color: var(--text-muted); }
+
+.dup-move-folder-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.dup-move-folder-row input { flex: 1; font-size: 12px; }

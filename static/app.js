@@ -4815,6 +4815,7 @@ function showView(viewName) {
   }
   else if (viewName === 'insights') loadInsightsView();
   else if (viewName === 'history') loadHistoryView();
+  else if (viewName === 'duplicates') loadDuplicatesView();
 
   if (viewName === 'home') {
     if (_homeAutoRefreshTimer) clearInterval(_homeAutoRefreshTimer);
@@ -4828,7 +4829,7 @@ function showView(viewName) {
 }
 
 function showViewEl(name) {
-  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'missing-tags', 'history'];
+  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'missing-tags', 'history', 'duplicates'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.style.display = v === name ? (v === 'playlist' ? 'flex' : 'block') : 'none';
@@ -10962,6 +10963,331 @@ async function refreshSmartPlaylist(pid) {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Duplicate Track Detection
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+let _dupScope = 'library';      // 'library' | 'dap'
+let _dupGroups = [];
+let _dupDapId = null;
+let _dupPollTimer = null;
+let _dupActionResolve = null;   // Promise resolver for the action modal
+
+function _formatBytes(bytes) {
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  let v = bytes;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+async function loadDuplicatesView() {
+  setActiveNav('settings');
+  showViewEl('duplicates');
+  document.getElementById('dup-groups-list').innerHTML = '';
+  document.getElementById('dup-empty').style.display = 'none';
+  document.getElementById('dup-summary-bar').style.display = 'none';
+
+  // Populate DAP picker
+  try {
+    const daps = await api('/daps');
+    const sel = document.getElementById('dup-dap-select');
+    sel.innerHTML = daps.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+    if (!_dupDapId && daps.length) _dupDapId = daps[0].id;
+  } catch (e) { /* no daps */ }
+
+  if (_dupScope === 'library') {
+    await _fetchLibraryDuplicates();
+  } else {
+    await _startDapDupScan();
+  }
+}
+
+async function _fetchLibraryDuplicates() {
+  _showDupScanning(true);
+  try {
+    const groups = await api('/library/duplicates');
+    _dupGroups = groups;
+    _renderDupGroups(groups);
+  } catch (e) {
+    _showDupScanning(false);
+    showToast('Failed to load duplicates', 'error');
+  }
+}
+
+async function _startDapDupScan() {
+  const sel = document.getElementById('dup-dap-select');
+  _dupDapId = sel.value;
+  if (!_dupDapId) return;
+
+  _showDupScanning(true);
+  if (_dupPollTimer) clearInterval(_dupPollTimer);
+
+  // Reset prior scan so backend starts fresh
+  try { await api(`/daps/${_dupDapId}/duplicates/reset`, {method:'POST'}); } catch(e) {}
+
+  const poll = async () => {
+    try {
+      const res = await api(`/daps/${_dupDapId}/duplicates`);
+      if (res.status === 'done') {
+        clearInterval(_dupPollTimer);
+        _dupPollTimer = null;
+        _dupGroups = res.groups || [];
+        _renderDupGroups(_dupGroups);
+      } else if (res.status === 'error') {
+        clearInterval(_dupPollTimer);
+        _dupPollTimer = null;
+        _showDupScanning(false);
+        showToast(res.error || 'DAP scan failed', 'error');
+      }
+      // else still scanning — keep polling
+    } catch(e) {
+      clearInterval(_dupPollTimer);
+      _dupPollTimer = null;
+      _showDupScanning(false);
+    }
+  };
+  poll();
+  _dupPollTimer = setInterval(poll, 1500);
+}
+
+function _showDupScanning(show) {
+  document.getElementById('dup-scanning').style.display = show ? 'block' : 'none';
+  if (show) {
+    document.getElementById('dup-groups-list').innerHTML = '';
+    document.getElementById('dup-empty').style.display = 'none';
+    document.getElementById('dup-summary-bar').style.display = 'none';
+  }
+}
+
+function _renderDupGroups(groups) {
+  _showDupScanning(false);
+  const list = document.getElementById('dup-groups-list');
+  const empty = document.getElementById('dup-empty');
+  const bar = document.getElementById('dup-summary-bar');
+
+  if (!groups || !groups.length) {
+    list.innerHTML = '';
+    empty.style.display = 'flex';
+    bar.style.display = 'none';
+    return;
+  }
+
+  empty.style.display = 'none';
+
+  // Summary bar
+  const totalWasted = groups.reduce((sum, g) => {
+    const sizes = (g.tracks || []).map(t => t.file_size || 0).sort((a,b) => b - a);
+    return sum + sizes.slice(1).reduce((s,v) => s + v, 0);
+  }, 0);
+  bar.style.display = 'block';
+  bar.innerHTML = `<span>${groups.length} duplicate group${groups.length !== 1 ? 's' : ''} · ~${_formatBytes(totalWasted)} recoverable</span>`;
+
+  list.innerHTML = groups.map(g => _renderDupGroupCard(g)).join('');
+}
+
+function _renderDupGroupCard(g) {
+  const isDap = _dupScope === 'dap';
+  const warn = g.duration_warning
+    ? `<span class="dup-duration-warn" title="Duration differs by more than 5 seconds — may be different versions">⚠ Duration mismatch</span>`
+    : '';
+
+  const rows = (g.tracks || []).map((t, i) => {
+    const size = _formatBytes(t.file_size || 0);
+    const dur = t.duration ? _fmtDuration(t.duration) : '—';
+    const path = isDap ? (t.rel_path || t.path || '') : (t.path || '');
+    const pathShort = path.length > 60 ? '…' + path.slice(-57) : path;
+    const tid = isDap ? encodeURIComponent(path) : esc(t.id);
+    return `<tr class="dup-track-row" data-idx="${i}">
+      <td class="dup-cell-radio"><input type="radio" name="dup-keep-${esc(g.key)}" data-id="${tid}" /></td>
+      <td class="dup-cell-check"><input type="checkbox" name="dup-del-${esc(g.key)}" data-id="${tid}" /></td>
+      <td class="dup-cell-fmt">${esc(t.format || '—')}</td>
+      <td class="dup-cell-bitrate">${t.bitrate ? t.bitrate + ' kbps' : '—'}</td>
+      <td class="dup-cell-dur">${dur}</td>
+      <td class="dup-cell-size">${size}</td>
+      <td class="dup-cell-path" title="${esc(path)}">${esc(pathShort)}</td>
+    </tr>`;
+  }).join('');
+
+  const actionsHtml = isDap
+    ? `<button class="btn-secondary dup-btn" onclick="App._dupDapDelete('${esc(g.key)}')">Delete selected from DAP</button>`
+    : `<button class="btn-secondary dup-btn" onclick="App._dupDelete('${esc(g.key)}')">Remove selected</button>
+       <button class="btn-secondary dup-btn" onclick="App._dupConsolidate('${esc(g.key)}')">Consolidate (keep selected)</button>`;
+
+  return `<div class="dup-group-card" id="dup-group-${esc(g.key)}">
+    <div class="dup-group-header">
+      <div class="dup-group-title">
+        <span class="dup-group-name">${esc(g.title || '—')}</span>
+        <span class="dup-group-meta">${esc(g.artist || '')}${g.album ? ' · ' + esc(g.album) : ''}</span>
+        ${warn}
+      </div>
+      <div class="dup-group-actions-right">
+        <span class="dup-count-badge">${(g.tracks || []).length} copies</span>
+        <button class="dup-ignore-btn" onclick="App._dupIgnore('${esc(g.key)}')">Ignore</button>
+      </div>
+    </div>
+    <table class="dup-group-table">
+      <thead><tr>
+        <th title="Keep (Consolidate)">Keep</th>
+        <th title="Select for removal">Del</th>
+        <th>Format</th><th>Bitrate</th><th>Duration</th><th>Size</th><th>Path</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="dup-actions">${actionsHtml}</div>
+  </div>`;
+}
+
+function _fmtDuration(secs) {
+  if (!secs) return '0:00';
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+async function _dupIgnore(key) {
+  try {
+    await api('/library/duplicates/ignore', { method: 'POST', body: JSON.stringify({ group_key: key }) });
+    document.getElementById(`dup-group-${key}`)?.remove();
+    // Recount
+    const remaining = document.querySelectorAll('.dup-group-card').length;
+    if (remaining === 0) {
+      document.getElementById('dup-empty').style.display = 'flex';
+      document.getElementById('dup-summary-bar').style.display = 'none';
+    }
+  } catch(e) { showToast('Failed to ignore group', 'error'); }
+}
+
+function _getDupSelectedIds(key, inputName) {
+  const inputs = document.querySelectorAll(`input[name="${inputName}"]`);
+  return Array.from(inputs).filter(i => i.checked).map(i => decodeURIComponent(i.dataset.id));
+}
+
+async function _showDupActionModal(title, desc) {
+  // Reset state
+  document.getElementById('dup-action-modal-title').textContent = title;
+  document.getElementById('dup-action-modal-desc').textContent = desc;
+  document.querySelectorAll('input[name="dup-action"]').forEach(r => { r.checked = r.value === 'trash'; });
+  document.getElementById('dup-move-folder-row').style.display = 'none';
+  document.getElementById('dup-move-folder-input').value = '';
+  document.getElementById('dup-action-modal').style.display = 'flex';
+  return new Promise(resolve => { _dupActionResolve = resolve; });
+}
+
+function _closeDupActionModal(result) {
+  document.getElementById('dup-action-modal').style.display = 'none';
+  if (_dupActionResolve) { _dupActionResolve(result || null); _dupActionResolve = null; }
+}
+
+function _onDupActionChange(val) {
+  document.getElementById('dup-move-folder-row').style.display = val === 'move' ? 'flex' : 'none';
+}
+
+async function _browseDupMoveFolder() {
+  try {
+    const res = await api('/browse/folder', { method: 'POST' });
+    if (res && res.path) document.getElementById('dup-move-folder-input').value = res.path;
+  } catch(e) { showToast('Folder picker unavailable', 'error'); }
+}
+
+function _confirmDupAction() {
+  const action = document.querySelector('input[name="dup-action"]:checked')?.value || 'trash';
+  const moveFolder = action === 'move' ? document.getElementById('dup-move-folder-input').value.trim() : null;
+  if (action === 'move' && !moveFolder) { showToast('Please select a destination folder', 'error'); return; }
+  _closeDupActionModal({ action, moveFolder });
+}
+
+function _removeDupGroupFromDom(key) {
+  document.getElementById(`dup-group-${key}`)?.remove();
+  const remaining = document.querySelectorAll('.dup-group-card').length;
+  if (remaining === 0) {
+    document.getElementById('dup-empty').style.display = 'flex';
+    document.getElementById('dup-summary-bar').style.display = 'none';
+  }
+}
+
+async function _dupDelete(key) {
+  const ids = _getDupSelectedIds(key, `dup-del-${key}`);
+  if (!ids.length) { showToast('Select tracks to remove', 'error'); return; }
+
+  const result = await _showDupActionModal('Remove Tracks', `Remove ${ids.length} track${ids.length !== 1 ? 's' : ''} from your library?`);
+  if (!result) return;
+
+  try {
+    const res = await api('/library/duplicates/delete', {
+      method: 'POST',
+      body: JSON.stringify({ track_ids: ids, action: result.action, move_folder: result.moveFolder })
+    });
+    showToast(result.action === 'trash'
+      ? `Moved ${res.deleted} track${res.deleted !== 1 ? 's' : ''} to Trash`
+      : `Moved ${res.deleted} track${res.deleted !== 1 ? 's' : ''} to folder`);
+    if (ids.length >= (document.querySelectorAll(`#dup-group-${key} tbody tr`).length)) {
+      _removeDupGroupFromDom(key);
+    } else {
+      await _fetchLibraryDuplicates();
+    }
+  } catch(e) { showToast('Delete failed', 'error'); }
+}
+
+async function _dupConsolidate(key) {
+  const keepRadio = document.querySelector(`input[name="dup-keep-${key}"]:checked`);
+  if (!keepRadio) { showToast('Select a track to keep (use the radio button)', 'error'); return; }
+  const keepId = keepRadio.dataset.id;
+  const allRadios = document.querySelectorAll(`input[name="dup-keep-${key}"]`);
+  const deleteIds = Array.from(allRadios).filter(r => r.dataset.id !== keepId).map(r => r.dataset.id);
+  if (!deleteIds.length) { showToast('Nothing to remove — only one track', 'error'); return; }
+
+  const result = await _showDupActionModal('Consolidate Tracks', `Keep selected track and remove ${deleteIds.length} other${deleteIds.length !== 1 ? 's' : ''}? Playlist references will be updated.`);
+  if (!result) return;
+
+  try {
+    const res = await api('/library/duplicates/consolidate', {
+      method: 'POST',
+      body: JSON.stringify({ keep_id: keepId, delete_ids: deleteIds, action: result.action, move_folder: result.moveFolder })
+    });
+    showToast(`Consolidated · updated ${res.playlists_updated} playlist${res.playlists_updated !== 1 ? 's' : ''}`);
+    _removeDupGroupFromDom(key);
+  } catch(e) { showToast('Consolidate failed', 'error'); }
+}
+
+async function _dupDapDelete(key) {
+  const card = document.getElementById(`dup-group-${key}`);
+  const checked = card ? card.querySelectorAll(`input[name="dup-del-${key}"]:checked`) : [];
+  const relPaths = Array.from(checked).map(i => decodeURIComponent(i.dataset.id));
+  if (!relPaths.length) { showToast('Select tracks to delete', 'error'); return; }
+  if (!confirm(`Delete ${relPaths.length} file${relPaths.length !== 1 ? 's' : ''} from the DAP? This cannot be undone.`)) return;
+  try {
+    const res = await api(`/daps/${_dupDapId}/duplicates/delete`, {
+      method: 'POST',
+      body: JSON.stringify({ rel_paths: relPaths })
+    });
+    showToast(`Deleted ${res.deleted} file${res.deleted !== 1 ? 's' : ''} from DAP`);
+    // Rescan
+    await _startDapDupScan();
+  } catch(e) { showToast('Delete failed', 'error'); }
+}
+
+function switchDupScope(scope) {
+  _dupScope = scope;
+  document.getElementById('dup-tab-library').classList.toggle('active', scope === 'library');
+  document.getElementById('dup-tab-dap').classList.toggle('active', scope === 'dap');
+  document.getElementById('dup-dap-select').style.display = scope === 'dap' ? 'inline-block' : 'none';
+  if (scope === 'library') _fetchLibraryDuplicates();
+  else _startDapDupScan();
+}
+
+function onDupDapChange() {
+  const sel = document.getElementById('dup-dap-select');
+  _dupDapId = sel.value;
+  _startDapDupScan();
+}
+
+function rescanDuplicates() {
+  if (_dupScope === 'library') _fetchLibraryDuplicates();
+  else _startDapDupScan();
+}
+
 /* ── Public API ─────────────────────────────────────────────────────── */
 const App = {
   showView,
@@ -11329,6 +11655,19 @@ const App = {
   loadInsightsCoverage,
   _coverageAddToPlaylist,
   _coverageFilterGenre,
+  // Duplicates
+  loadDuplicatesView,
+  switchDupScope,
+  onDupDapChange,
+  rescanDuplicates,
+  _dupIgnore,
+  _dupDelete,
+  _dupConsolidate,
+  _dupDapDelete,
+  _closeDupActionModal,
+  _onDupActionChange,
+  _browseDupMoveFolder,
+  _confirmDupAction,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
