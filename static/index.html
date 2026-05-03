@@ -1294,12 +1294,12 @@
 
       <!-- Duplicate action modal (trash vs move) -->
       <div id="dup-action-modal" class="modal-overlay tb-modal-overlay" style="display:none" onclick="if(event.target===this)App._closeDupActionModal()">
-        <div class="modal tb-modal-shell tb-modal--sm" onclick="event.stopPropagation()">
-          <div class="modal-head">
+        <div class="tb-modal-shell tb-modal--sm" onclick="event.stopPropagation()">
+          <div class="modal-head" style="padding:20px 24px 0">
             <h3 class="modal-title-sm" id="dup-action-modal-title">Remove Tracks</h3>
             <button class="modal-x-btn" onclick="App._closeDupActionModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
-          <div class="modal-body" style="padding:20px 24px 24px">
+          <div class="modal-body" style="padding:16px 24px 24px">
             <p id="dup-action-modal-desc" class="muted" style="margin-bottom:18px;font-size:13px"></p>
             <div class="dup-action-options">
               <label class="dup-action-option">
