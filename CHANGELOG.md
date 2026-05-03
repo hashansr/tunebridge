@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.68-rc.030526-1401 · 2026-05-03
+
 ## v0.67-rc.270426-2021 · 2026-04-27
 - Change: Duplicates view track selection redesigned — each row now has a unified Keep / Remove pill selector instead of separate radio and checkbox columns, preventing a track from being simultaneously marked as both keep and remove.
 - Add: "Open in Finder" button on each duplicate track row — reveals the file in macOS Finder without leaving the app.
