@@ -4271,48 +4271,130 @@ def insights_coverage():
     with library_lock:
         all_tracks = list(library)
 
-    album_heard = {}
-    artist_heard = {}
+    albums = {}
+    artists = {}
+    heard_library_track_ids = set()
+
     for t in all_tracks:
-        key = (t.get('artist', ''), t.get('album', ''))
-        tid = t.get('id')
+        tid = str(t.get('id') or '')
         is_heard = tid in heard_track_ids
-        if key not in album_heard:
-            album_heard[key] = False
         if is_heard:
-            album_heard[key] = True
-        art = t.get('artist', 'Unknown')
-        if art not in artist_heard:
-            artist_heard[art] = False
-        if is_heard:
-            artist_heard[art] = True
+            heard_library_track_ids.add(tid)
 
-    total_albums = len(album_heard)
-    heard_albums = sum(1 for v in album_heard.values() if v)
-    total_artists = len(artist_heard)
-    heard_artists = sum(1 for v in artist_heard.values() if v)
-
-    unheard_album_list = []
-    visited = set()
-    for t in all_tracks:
-        key = (t.get('artist', ''), t.get('album', ''))
-        if not album_heard.get(key, True) and key not in visited:
-            visited.add(key)
-            unheard_album_list.append({
-                'artist': t.get('artist', ''),
-                'album': t.get('album', ''),
+        artist = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').strip() or 'Unknown Artist'
+        album = (t.get('album') or 'Unknown Album').strip() or 'Unknown Album'
+        album_key = f"{artist.lower()}||{album.lower()}"
+        slot = albums.get(album_key)
+        if slot is None:
+            slot = {
+                'artist': artist,
+                'album': album,
                 'year': t.get('year'),
-                'genre': t.get('genre'),
-                'album_art_key': t.get('album_art_key'),
-                'date_added': t.get('date_added'),
-            })
+                'genre': t.get('genre') or '',
+                'track_count': 0,
+                'heard_track_count': 0,
+                'artwork_key': t.get('artwork_key'),
+                'date_added': int(t.get('date_added') or 0),
+            }
+            albums[album_key] = slot
+        slot['track_count'] += 1
+        if is_heard:
+            slot['heard_track_count'] += 1
+        if not slot.get('artwork_key') and t.get('artwork_key'):
+            slot['artwork_key'] = t.get('artwork_key')
+        if not slot.get('genre') and t.get('genre'):
+            slot['genre'] = t.get('genre')
+        if not slot.get('year') and t.get('year'):
+            slot['year'] = t.get('year')
+        slot['date_added'] = max(slot.get('date_added') or 0, int(t.get('date_added') or 0))
 
+        artist_key = artist.lower()
+        artist_slot = artists.get(artist_key)
+        if artist_slot is None:
+            artist_slot = {'artist': artist, 'track_count': 0, 'heard_track_count': 0}
+            artists[artist_key] = artist_slot
+        artist_slot['track_count'] += 1
+        if is_heard:
+            artist_slot['heard_track_count'] += 1
+
+    total_tracks = len(all_tracks)
+    heard_tracks = len(heard_library_track_ids)
+    total_albums = len(albums)
+    heard_albums = sum(1 for a in albums.values() if a.get('heard_track_count', 0) > 0)
+    total_artists = len(artists)
+    heard_artists = sum(1 for a in artists.values() if a.get('heard_track_count', 0) > 0)
+
+    def _pct(heard, total):
+        return round((heard / total) * 100, 1) if total else 0
+
+    unheard_album_list = [
+        {
+            'artist': a.get('artist') or 'Unknown Artist',
+            'album': a.get('album') or 'Unknown Album',
+            'year': str(a.get('year')) if a.get('year') else None,
+            'genre': a.get('genre') or '',
+            'track_count': int(a.get('track_count') or 0),
+            'artwork_key': a.get('artwork_key'),
+            'date_added': int(a.get('date_added') or 0),
+        }
+        for a in albums.values()
+        if int(a.get('heard_track_count') or 0) == 0
+    ]
     unheard_album_list.sort(key=lambda x: x.get('date_added') or 0, reverse=True)
 
+    genre_counts = {}
+    artist_counts = {}
+    for a in unheard_album_list:
+        genre = (a.get('genre') or '').strip()
+        if genre:
+            genre_counts[genre] = genre_counts.get(genre, 0) + 1
+        artist = (a.get('artist') or 'Unknown Artist').strip() or 'Unknown Artist'
+        artist_counts[artist] = artist_counts.get(artist, 0) + 1
+
+    top_unheard_genres = [
+        {'name': name, 'album_count': count}
+        for name, count in sorted(genre_counts.items(), key=lambda kv: (-kv[1], kv[0].lower()))[:8]
+    ]
+    top_unheard_artists = [
+        {'name': name, 'album_count': count}
+        for name, count in sorted(artist_counts.items(), key=lambda kv: (-kv[1], kv[0].lower()))[:8]
+    ]
+
+    album_summary = {
+        'heard': heard_albums,
+        'unheard': max(total_albums - heard_albums, 0),
+        'total': total_albums,
+        'pct': _pct(heard_albums, total_albums),
+    }
+    artist_summary = {
+        'heard': heard_artists,
+        'unheard': max(total_artists - heard_artists, 0),
+        'total': total_artists,
+        'pct': _pct(heard_artists, total_artists),
+    }
+    track_summary = {
+        'heard': heard_tracks,
+        'unheard': max(total_tracks - heard_tracks, 0),
+        'total': total_tracks,
+        'pct': _pct(heard_tracks, total_tracks),
+    }
+
     return jsonify({
-        'albums': {'heard': heard_albums, 'total': total_albums},
-        'artists': {'heard': heard_artists, 'total': total_artists},
-        'unheard_albums': unheard_album_list[:100],
+        'summary': {
+            'albums': album_summary,
+            'artists': artist_summary,
+            'tracks': track_summary,
+        },
+        'top_unheard_genres': top_unheard_genres,
+        'top_unheard_artists': top_unheard_artists,
+        'unheard_albums': unheard_album_list[:500],
+        'unheard_albums_total': len(unheard_album_list),
+        # Legacy flat fields kept for older frontend calls.
+        'heard_albums': heard_albums,
+        'total_albums': total_albums,
+        'heard_artists': heard_artists,
+        'total_artists': total_artists,
+        'unheard_albums_list': unheard_album_list[:500],
     })
 
 
@@ -10941,6 +11023,7 @@ def library_duplicates_mark_not_dup():
 
 
 @app.route('/api/library/duplicates/not-duplicate', methods=['DELETE'])
+@app.route('/api/library/duplicates/not-duplicate/undo', methods=['POST'])
 def library_duplicates_unmark_not_dup():
     data = request.get_json() or {}
     key = data.get('group_key', '').strip()

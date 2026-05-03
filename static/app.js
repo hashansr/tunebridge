@@ -11442,8 +11442,8 @@ async function _dupMarkNotDuplicate(groupKey, trackId, btnEl) {
 
 async function _dupUndoNotDuplicate(groupKey, trackId) {
   try {
-    await api('/library/duplicates/not-duplicate', {
-      method: 'DELETE',
+    await api('/library/duplicates/not-duplicate/undo', {
+      method: 'POST',
       body: { group_key: groupKey, track_id: trackId }
     });
     showToast('Restored — rescan to see updated groups');
@@ -11940,6 +11940,13 @@ const App = {
   setHistoryPeriod,
   // Coverage
   loadInsightsCoverage,
+  coverageSetFilter,
+  coverageSetSort,
+  coverageShowMore,
+  _coverageOpenAlbum,
+  _coveragePlayAlbum,
+  _coverageAddAlbumToPlaylist,
+  _coverageAddVisibleToPlaylist,
   _coverageAddToPlaylist,
   _coverageFilterGenre,
   // Duplicates
@@ -12054,77 +12061,283 @@ async function loadInsightsView() {
   loadInsightsCoverage();
 }
 
-async function loadInsightsCoverage() {
-  const el = document.getElementById('insights-coverage-content');
-  if (!el) return;
-  el.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
-  const data = await api('/insights/coverage').catch(() => null);
-  if (!data) {
-    el.innerHTML = '<p class="insights-error">Could not load coverage data.</p>';
-    return;
-  }
+const _coverageState = {
+  data: null,
+  filterType: 'all',
+  filterValue: '',
+  sort: 'recent',
+  visibleCount: 24,
+  pageSize: 24,
+};
 
-  const pctAlbums = data.total_albums > 0
-    ? Math.round((data.heard_albums / data.total_albums) * 100) : 0;
-  const pctArtists = data.total_artists > 0
-    ? Math.round((data.heard_artists / data.total_artists) * 100) : 0;
+function _coverageSummaryMetric(summary, key) {
+  return (summary && summary[key]) || { heard: 0, unheard: 0, total: 0, pct: 0 };
+}
 
-  const genreFilter = data.top_unheard_genres?.length
-    ? `<div class="coverage-genre-pills">${data.top_unheard_genres.map(g =>
-        `<button class="sr-template-btn" onclick="App._coverageFilterGenre('${esc(g)}')">${esc(g)}</button>`
-      ).join('')}</div>` : '';
+function _coveragePctText(v) {
+  const n = Number(v || 0);
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, '');
+}
 
-  const unheardCards = (data.unheard_albums_list || []).map(a => {
-    const artHtml = a.artwork_key
-      ? `<img src="/api/artwork/${a.artwork_key}" loading="lazy" onerror="this.style.display='none'" />`
-      : `<div class="coverage-art-placeholder"></div>`;
-    return `<div class="coverage-album-card" title="${esc(a.artist)} — ${esc(a.album)}">
-      <div class="coverage-art">${artHtml}</div>
+function _coverageDateLabel(ts) {
+  const raw = Number(ts || 0);
+  if (!raw) return '';
+  const days = Math.max(0, Math.floor((Date.now() / 1000 - raw) / 86400));
+  if (days < 1) return 'Added today';
+  if (days < 30) return `Added ${days}d ago`;
+  if (days < 365) return `Added ${Math.floor(days / 30)}mo ago`;
+  return `Added ${Math.floor(days / 365)}y ago`;
+}
+
+function _coverageAlbumRows() {
+  const rows = [...((_coverageState.data && _coverageState.data.unheard_albums) || [])];
+  const filterValue = String(_coverageState.filterValue || '').toLowerCase();
+  const filtered = rows.filter(a => {
+    if (_coverageState.filterType === 'genre') return String(a.genre || '').toLowerCase() === filterValue;
+    if (_coverageState.filterType === 'artist') return String(a.artist || '').toLowerCase() === filterValue;
+    return true;
+  });
+  const key = (v) => _nameSortKey(v || '');
+  filtered.sort((a, b) => {
+    if (_coverageState.sort === 'oldest') return Number(a.date_added || 0) - Number(b.date_added || 0);
+    if (_coverageState.sort === 'artist') return key(a.artist).localeCompare(key(b.artist)) || key(a.album).localeCompare(key(b.album));
+    if (_coverageState.sort === 'album') return key(a.album).localeCompare(key(b.album)) || key(a.artist).localeCompare(key(b.artist));
+    return Number(b.date_added || 0) - Number(a.date_added || 0);
+  });
+  return filtered;
+}
+
+function _coverageInsightLine(data) {
+  const summary = data.summary || {};
+  const albums = _coverageSummaryMetric(summary, 'albums');
+  const tracks = _coverageSummaryMetric(summary, 'tracks');
+  const genres = (data.top_unheard_genres || []).slice(0, 2).map(g => g.name).filter(Boolean);
+  if (!tracks.total) return 'Scan your music folder to start measuring what you have explored.';
+  if (!tracks.heard) return 'Start listening to build coverage. A valid listen marks tracks, albums, and artists as explored.';
+  if (!albums.unheard) return 'Every album has at least one valid listen. Refresh after adding new music to keep coverage current.';
+  const genreText = genres.length ? `, mostly ${genres.join(' and ')}` : '';
+  return `You have ${albums.unheard} album${albums.unheard === 1 ? '' : 's'} you have never played${genreText}.`;
+}
+
+function _coverageRenderFilterChip(type, value, label, count = null) {
+  const active = _coverageState.filterType === type && String(_coverageState.filterValue || '') === String(value || '');
+  return `<button class="coverage-filter-chip${active ? ' active' : ''}" data-filter-type="${esc(type)}" data-filter-value="${esc(value || '')}" onclick="App.coverageSetFilter(this.dataset.filterType,this.dataset.filterValue)">
+    <span>${esc(label)}</span>${count != null ? `<b>${count}</b>` : ''}
+  </button>`;
+}
+
+function _coverageRenderCard(a) {
+  const meta = [a.year, a.genre].filter(Boolean).join(' · ');
+  const dateLabel = _coverageDateLabel(a.date_added);
+  const artHtml = a.artwork_key
+    ? `<img src="/api/artwork/${esc(a.artwork_key)}" loading="lazy" onerror="this.style.display='none'" />`
+    : coverPlaceholder('album', 96, '8px', true);
+  return `<div class="coverage-album-card" data-artist="${esc(a.artist)}" data-album="${esc(a.album)}" onclick="App._coverageOpenAlbum(this)" title="${esc(a.artist)} — ${esc(a.album)}">
+    <div class="coverage-album-art">${artHtml}</div>
+    <div class="coverage-album-body">
       <div class="coverage-album-name">${esc(a.album || 'Unknown Album')}</div>
-      <div class="coverage-artist-name">${esc(a.artist || '')}</div>
-      <div class="coverage-track-count">${a.total_tracks} track${a.total_tracks !== 1 ? 's' : ''}</div>
-      <button class="coverage-add-btn" onclick="App._coverageAddToPlaylist('${esc(a.artist)}','${esc(a.album)}')" title="Add all tracks to a playlist">+ Playlist</button>
-    </div>`;
-  }).join('');
+      <div class="coverage-album-artist">${esc(a.artist || 'Unknown Artist')}</div>
+      <div class="coverage-album-meta">${esc(meta || 'Unknown year · Untagged')}</div>
+      <div class="coverage-track-count">${Number(a.track_count || 0)} track${Number(a.track_count || 0) === 1 ? '' : 's'}${dateLabel ? ` · ${esc(dateLabel)}` : ''}</div>
+    </div>
+    <div class="coverage-card-actions">
+      <button class="coverage-icon-btn coverage-play-btn" onclick="App._coveragePlayAlbum(this.closest('.coverage-album-card'),event)" title="Play album" aria-label="Play album">${playSvg(13)}</button>
+      <button class="coverage-add-btn" onclick="App._coverageAddAlbumToPlaylist(this.closest('.coverage-album-card'),event)" title="Add album to playlist">+ Playlist</button>
+      <button class="coverage-open-btn" onclick="App._coverageOpenAlbum(this.closest('.coverage-album-card'),event)" title="Open album">Open</button>
+    </div>
+  </div>`;
+}
+
+function _renderInsightsCoverage() {
+  const el = document.getElementById('insights-coverage-content');
+  const data = _coverageState.data;
+  if (!el || !data) return;
+
+  const summary = data.summary || {};
+  const albums = _coverageSummaryMetric(summary, 'albums');
+  const artists = _coverageSummaryMetric(summary, 'artists');
+  const tracks = _coverageSummaryMetric(summary, 'tracks');
+  const rows = _coverageAlbumRows();
+  const visibleRows = rows.slice(0, _coverageState.visibleCount);
+  const hasMore = rows.length > visibleRows.length;
+
+  const genreChips = (data.top_unheard_genres || []).map(g =>
+    _coverageRenderFilterChip('genre', g.name, g.name, g.album_count)
+  ).join('');
+  const artistChips = (data.top_unheard_artists || []).map(a =>
+    _coverageRenderFilterChip('artist', a.name, a.name, a.album_count)
+  ).join('');
+
+  const cards = visibleRows.map(_coverageRenderCard).join('');
+  const emptyBody = !tracks.total
+    ? `<div class="coverage-empty-state">
+         ${coverPlaceholder('album', 52, '10px')}
+         <strong>Your library is empty</strong>
+         <span>Scan your music folder to start measuring coverage.</span>
+       </div>`
+    : (!tracks.heard
+      ? `<div class="coverage-empty-state">
+           ${coverPlaceholder('song', 52, '10px')}
+           <strong>No listening history yet</strong>
+           <span>Play music in TuneBridge to build coverage. Only valid listens count.</span>
+         </div>`
+      : (!albums.unheard
+        ? `<div class="coverage-empty-state">
+             ${coverPlaceholder('album', 52, '10px')}
+             <strong>Full album coverage</strong>
+             <span>You have played something from every album. Refresh after importing new music.</span>
+           </div>`
+        : `<div class="coverage-empty-state">
+             ${coverPlaceholder('album', 52, '10px')}
+             <strong>No albums match this filter</strong>
+             <span>Try All or a different genre/artist chip.</span>
+           </div>`));
 
   el.innerHTML = `
-    <div class="coverage-summary">
-      <div class="coverage-bar-row">
-        <span class="coverage-bar-label">Albums heard</span>
-        <div class="coverage-bar-track">
-          <div class="coverage-bar-fill" style="width:${pctAlbums}%"></div>
+    <div class="coverage-hub">
+      <div class="coverage-insight-line">${esc(_coverageInsightLine(data))}</div>
+      <div class="coverage-summary-grid">
+        <div class="coverage-summary-card">
+          <span>Albums explored</span>
+          <strong>${_coveragePctText(albums.pct)}%</strong>
+          <em>${albums.heard} / ${albums.total}</em>
         </div>
-        <span class="coverage-bar-pct">${data.heard_albums} / ${data.total_albums} (${pctAlbums}%)</span>
-      </div>
-      <div class="coverage-bar-row">
-        <span class="coverage-bar-label">Artists heard</span>
-        <div class="coverage-bar-track">
-          <div class="coverage-bar-fill" style="width:${pctArtists}%"></div>
+        <div class="coverage-summary-card">
+          <span>Artists explored</span>
+          <strong>${_coveragePctText(artists.pct)}%</strong>
+          <em>${artists.heard} / ${artists.total}</em>
         </div>
-        <span class="coverage-bar-pct">${data.heard_artists} / ${data.total_artists} (${pctArtists}%)</span>
+        <div class="coverage-summary-card">
+          <span>Tracks heard</span>
+          <strong>${_coveragePctText(tracks.pct)}%</strong>
+          <em>${tracks.heard} / ${tracks.total}</em>
+        </div>
+        <div class="coverage-summary-card coverage-summary-card--accent">
+          <span>Unheard albums</span>
+          <strong>${albums.unheard}</strong>
+          <em>${data.unheard_albums_total || albums.unheard} available</em>
+        </div>
       </div>
+
+      ${albums.unheard ? `
+        <div class="coverage-toolbar">
+          <div class="coverage-filter-row">
+            ${_coverageRenderFilterChip('all', '', 'All', data.unheard_albums_total || albums.unheard)}
+            ${genreChips}
+            ${artistChips}
+          </div>
+          <div class="coverage-toolbar-actions">
+            <select class="coverage-sort-select" onchange="App.coverageSetSort(this.value)" title="Sort unheard albums">
+              <option value="recent"${_coverageState.sort === 'recent' ? ' selected' : ''}>Recently added</option>
+              <option value="oldest"${_coverageState.sort === 'oldest' ? ' selected' : ''}>Oldest in library</option>
+              <option value="artist"${_coverageState.sort === 'artist' ? ' selected' : ''}>Artist A-Z</option>
+              <option value="album"${_coverageState.sort === 'album' ? ' selected' : ''}>Album A-Z</option>
+            </select>
+            <button class="btn-secondary coverage-visible-add-btn" onclick="App._coverageAddVisibleToPlaylist(event)" ${visibleRows.length ? '' : 'disabled'}>Add Visible to Playlist</button>
+          </div>
+        </div>
+        <div class="coverage-results-meta">${visibleRows.length ? `Showing ${visibleRows.length} of ${rows.length} unheard album${rows.length === 1 ? '' : 's'}` : 'No albums match this filter'}</div>
+        ${visibleRows.length ? `<div class="coverage-album-grid">${cards}</div>` : emptyBody}
+        ${hasMore ? `<button class="coverage-show-more-btn" onclick="App.coverageShowMore()">Show more</button>` : ''}
+      ` : emptyBody}
     </div>
-    ${data.unheard_albums > 0 ? `
-      <div class="coverage-unheard-hdr">
-        <strong>${data.unheard_albums}</strong> unheard album${data.unheard_albums !== 1 ? 's' : ''}
-        ${genreFilter}
-      </div>
-      <div class="coverage-albums-grid">${unheardCards}</div>
-    ` : '<p class="settings-hint">You\'ve played tracks from every album in your library!</p>'}
   `;
 }
 
-async function _coverageAddToPlaylist(artist, album) {
-  // Fetch tracks for this album then open the playlist picker
+async function loadInsightsCoverage() {
+  const el = document.getElementById('insights-coverage-content');
+  if (!el) return;
+  el.innerHTML = '<div class="insights-spinner-wrap"><div class="spinner"></div></div>';
+  const data = await api('/insights/coverage').catch(() => null);
+  if (!data) {
+    el.innerHTML = `<div class="coverage-error-state">
+      <p class="insights-error">Could not load coverage data.</p>
+      <button class="btn-secondary" onclick="App.loadInsightsCoverage()">Retry</button>
+    </div>`;
+    return;
+  }
+  _coverageState.data = data;
+  _coverageState.filterType = 'all';
+  _coverageState.filterValue = '';
+  _coverageState.sort = 'recent';
+  _coverageState.visibleCount = _coverageState.pageSize;
+  _renderInsightsCoverage();
+}
+
+function coverageSetFilter(type, value = '') {
+  _coverageState.filterType = type || 'all';
+  _coverageState.filterValue = value || '';
+  _coverageState.visibleCount = _coverageState.pageSize;
+  _renderInsightsCoverage();
+}
+
+function coverageSetSort(sort) {
+  _coverageState.sort = sort || 'recent';
+  _coverageState.visibleCount = _coverageState.pageSize;
+  _renderInsightsCoverage();
+}
+
+function coverageShowMore() {
+  _coverageState.visibleCount += _coverageState.pageSize;
+  _renderInsightsCoverage();
+}
+
+function _coverageAlbumFromEl(el) {
+  return {
+    artist: el?.dataset?.artist || '',
+    album: el?.dataset?.album || '',
+  };
+}
+
+function _coverageOpenAlbum(el, event = null) {
+  if (event) event.stopPropagation();
+  const { artist, album } = _coverageAlbumFromEl(el);
+  if (artist && album) showAlbum(artist, album);
+}
+
+async function _coveragePlayAlbum(el, event = null) {
+  if (event) event.stopPropagation();
+  const { artist, album } = _coverageAlbumFromEl(el);
+  if (artist && album) await playAlbum(artist, album);
+}
+
+async function _coverageAlbumTrackIds(artist, album) {
   const res = await api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`).catch(() => null);
-  if (!res || !res.tracks || !res.tracks.length) { toast('No tracks found'); return; }
-  state._pendingTrackIds = res.tracks.map(t => t.id);
-  _showPlaylistPicker();
+  const tracks = Array.isArray(res) ? res : (res?.tracks || []);
+  return tracks.map(t => t.id).filter(Boolean);
+}
+
+async function _coverageAddAlbumToPlaylist(el, event = null) {
+  if (event) event.stopPropagation();
+  const { artist, album } = _coverageAlbumFromEl(el);
+  if (!artist || !album) return;
+  const ids = await _coverageAlbumTrackIds(artist, album);
+  if (!ids.length) { toast('No tracks found'); return; }
+  showPlaylistPicker(event?.currentTarget || el, ids);
+}
+
+async function _coverageAddVisibleToPlaylist(event = null) {
+  const rows = _coverageAlbumRows().slice(0, _coverageState.visibleCount);
+  if (!rows.length) { toast('No visible albums to add'); return; }
+  const groups = await Promise.all(rows.map(a => _coverageAlbumTrackIds(a.artist, a.album)));
+  const seen = new Set();
+  const ids = groups.flat().filter(id => {
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  if (!ids.length) { toast('No tracks found'); return; }
+  showPlaylistPicker(event?.currentTarget || document.getElementById('insights-coverage-content'), ids);
+}
+
+async function _coverageAddToPlaylist(artist, album) {
+  const ids = await _coverageAlbumTrackIds(artist, album);
+  if (!ids.length) { toast('No tracks found'); return; }
+  showPlaylistPicker(document.getElementById('insights-coverage-content'), ids);
 }
 
 function _coverageFilterGenre(genre) {
-  // Future: filter unheard albums by genre tag
-  toast(`Filter by genre: ${genre} — coming soon`);
+  coverageSetFilter('genre', genre);
 }
 
 let _insightsGenreChart = null;
@@ -12931,6 +13144,13 @@ const _INSIGHTS_HELP = {
            <p><strong>Band bars:</strong> deviation from the target at 0 dB centre. Left = recessed vs target; right = boosted vs target.</p>
            <p><strong>Collection Coverage:</strong> across all your IEMs, how well is each band covered by at least one IEM close to the target?</p>
            <p><strong>Example:</strong> Scoring against Harman IEM 2019 instead of flat will favour IEMs with a slight bass shelf and ear-gain peak, penalising overly neutral-sounding IEMs that most listeners find thin.</p>`,
+  },
+  coverage: {
+    title: 'Library Coverage',
+    body: `<p>Shows how much of your local collection you have actually explored through valid listens.</p>
+           <p><strong>How to read:</strong> A track is heard after at least one valid listen is recorded in local playback history. An album or artist counts as explored once any track from it has a valid listen.</p>
+           <p><strong>Use it for:</strong> finding forgotten albums, filtering unheard records by genre or artist, playing them immediately, or adding rediscovery batches to a playlist.</p>
+           <p><strong>Note:</strong> Fresh installs, cleared history, or disabled listening tracking will show low coverage until you listen in TuneBridge. Tracking is controlled in Settings → Playback.</p>`,
   },
 };
 
