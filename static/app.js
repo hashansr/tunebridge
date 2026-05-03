@@ -11102,44 +11102,57 @@ function _renderDupGroupCard(g) {
     const size = _formatBytes(t.file_size || 0);
     const dur = t.duration ? _fmtDuration(t.duration) : '—';
     const path = isDap ? (t.rel_path || t.path || '') : (t.path || '');
-    const pathShort = path.length > 60 ? '…' + path.slice(-57) : path;
+    // tid = track ID for library (used for DB operations), path for DAP
     const tid = isDap ? encodeURIComponent(path) : esc(t.id);
-    const notDupBtn = !isDap
-      ? `<button class="dup-not-dup-btn" title="Mark as not a duplicate — exclude from this group" onclick="App._dupMarkNotDuplicate('${esc(g.key)}','${tid}',this)">Not a duplicate</button>`
+    // finderPath = always the file path (not ID) for the OS reveal call
+    const finderPath = encodeURIComponent(path);
+
+    // 3-way action pill: Keep | Remove | Unique
+    // "Unique" fires immediately; Keep/Remove are deferred selections
+    const uniqueTitle = isDap
+      ? ''
+      : `title="This is a unique version (e.g. live recording or different mix with same tags) — exclude it from this group permanently"`;
+    const uniqueBtn = !isDap
+      ? `<button class="dup-action-btn unique" ${uniqueTitle} onclick="App._dupMarkNotDuplicate('${esc(g.key)}','${tid}',this)">Unique</button>`
       : '';
-    // Action pill: Keep | Remove (mutually exclusive per row; Keep exclusive across group)
     const actionPills = `<div class="dup-row-action-group" data-group="${esc(g.key)}" data-id="${tid}">
-      <button class="dup-action-btn keep" onclick="App._dupRowAction(this,'keep')" title="Keep this track (use with Consolidate)">Keep</button>
-      <button class="dup-action-btn remove" onclick="App._dupRowAction(this,'remove')" title="Mark for removal">Remove</button>
+      <button class="dup-action-btn keep" onclick="App._dupRowAction(this,'keep')" title="Keep this copy — use with Consolidate to update playlists">Keep</button>
+      <button class="dup-action-btn remove" onclick="App._dupRowAction(this,'remove')" title="Mark this copy for deletion">Remove</button>
+      ${uniqueBtn}
     </div>`;
-    // Finder button — library tracks have a rel path; DAP tracks have abs path via mount
-    const finderBtn = `<button class="dup-finder-btn" title="Reveal in Finder"
-      onclick="App._dupOpenFinder('${tid}','${isDap ? 'dap' : 'library'}')"
-      >
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+
+    // Finder icon-only button (tooltip has full label)
+    const finderBtn = `<button class="dup-finder-btn" title="Open in Finder"
+      onclick="App._dupOpenFinder('${finderPath}','${isDap ? 'dap' : 'library'}')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
         <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.4"/>
         <path d="M1 6h14" stroke="currentColor" stroke-width="1.4"/>
         <circle cx="3.5" cy="4.5" r=".7" fill="currentColor"/>
         <circle cx="5.5" cy="4.5" r=".7" fill="currentColor"/>
         <circle cx="7.5" cy="4.5" r=".7" fill="currentColor"/>
       </svg>
-      Finder</button>`;
+      <span>Open in Finder</span>
+    </button>`;
+
     return `<tr class="dup-track-row" data-idx="${i}">
       <td class="dup-cell-action">${actionPills}</td>
       <td class="dup-cell-fmt">${esc(t.format || '—')}</td>
       <td class="dup-cell-bitrate">${t.bitrate ? t.bitrate + ' kbps' : '—'}</td>
       <td class="dup-cell-dur">${dur}</td>
       <td class="dup-cell-size">${size}</td>
-      <td class="dup-cell-path" title="${esc(path)}">${esc(pathShort)}</td>
+      <td class="dup-cell-path"><span class="dup-path-text" title="${esc(path)}">${esc(path)}</span></td>
       <td class="dup-cell-finder">${finderBtn}</td>
-      ${!isDap ? `<td class="dup-cell-notdup">${notDupBtn}</td>` : ''}
     </tr>`;
   }).join('');
 
   const actionsHtml = isDap
     ? `<button class="btn-secondary dup-btn" onclick="App._dupDapDelete('${esc(g.key)}')">Delete marked from DAP</button>`
-    : `<button class="btn-secondary dup-btn" onclick="App._dupDelete('${esc(g.key)}')">Remove marked</button>
-       <button class="btn-secondary dup-btn" onclick="App._dupConsolidate('${esc(g.key)}')">Consolidate</button>`;
+    : `<button class="btn-secondary dup-btn"
+         title="Delete all tracks marked Remove — choose Trash or move to a folder"
+         onclick="App._dupDelete('${esc(g.key)}')">Delete marked</button>
+       <button class="btn-secondary dup-btn"
+         title="Keep the track marked Keep and delete all others — also updates playlist references so you don't lose any songs"
+         onclick="App._dupConsolidate('${esc(g.key)}')">Consolidate &amp; fix playlists</button>`;
 
   return `<div class="dup-group-card" id="dup-group-${esc(g.key)}">
     <div class="dup-group-header">
@@ -11150,15 +11163,24 @@ function _renderDupGroupCard(g) {
       </div>
       <div class="dup-group-actions-right">
         <span class="dup-count-badge">${(g.tracks || []).length} copies</span>
-        <button class="dup-ignore-btn" onclick="App._dupIgnore('${esc(g.key)}')">Ignore group</button>
+        <button class="dup-ignore-btn" title="Hide this group — the files stay, but this group won't appear in future scans" onclick="App._dupIgnore('${esc(g.key)}')">Ignore group</button>
       </div>
     </div>
     <table class="dup-group-table">
+      <colgroup>
+        <col class="dup-col-action">
+        <col class="dup-col-fmt">
+        <col class="dup-col-bitrate">
+        <col class="dup-col-dur">
+        <col class="dup-col-size">
+        <col class="dup-col-path">
+        <col class="dup-col-finder">
+      </colgroup>
       <thead><tr>
-        <th title="Mark each track: Keep or Remove">Action</th>
-        <th>Format</th><th>Bitrate</th><th>Duration</th><th>Size</th><th>Path</th>
+        <th>Action</th>
+        <th>Format</th><th>Bitrate</th><th>Duration</th><th>Size</th>
+        <th>Path</th>
         <th></th>
-        ${!isDap ? '<th></th>' : ''}
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -11169,13 +11191,18 @@ function _renderDupGroupCard(g) {
   </div>`;
 }
 
-/** Toggle Keep/Remove pill for a track row. Keep is exclusive across the group. */
+/**
+ * Toggle Keep/Remove pill for a track row.
+ * Keep is exclusive across the whole group (only one track can be "kept").
+ * Remove is independent per row.
+ * Clicking an already-active pill toggles it off.
+ */
 function _dupRowAction(btn, action) {
   const group = btn.closest('.dup-row-action-group');
   const groupKey = group.dataset.group;
   const isActive = btn.classList.contains('active');
 
-  // Deactivate both pills in this row first
+  // Deactivate all pills in this row first
   group.querySelectorAll('.dup-action-btn').forEach(b => b.classList.remove('active'));
 
   if (isActive) return; // toggle off — done
@@ -11199,12 +11226,17 @@ function _getDupRowActions(key) {
   };
 }
 
-/** Open a track's parent folder in macOS Finder. */
-async function _dupOpenFinder(tid, scope) {
+/**
+ * Open a track's parent folder in macOS Finder.
+ * @param {string} encodedPath - URI-encoded relative path (library) or relative path (DAP)
+ * @param {string} scope - 'library' | 'dap'
+ */
+async function _dupOpenFinder(encodedPath, scope) {
+  const path = decodeURIComponent(encodedPath);
   try {
     const body = scope === 'dap'
-      ? { abs_path: _dupDapMountPath ? _dupDapMountPath + '/' + decodeURIComponent(tid) : '' }
-      : { path: decodeURIComponent(tid) };
+      ? { abs_path: _dupDapMountPath ? _dupDapMountPath + '/' + path : path }
+      : { path };
     await api('/open-in-finder', { method: 'POST', body: JSON.stringify(body) });
   } catch(e) { showToast('Could not open Finder', 'error'); }
 }

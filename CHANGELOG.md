@@ -3,6 +3,10 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: "Open in Finder" button now correctly reveals the file — previously passed the track ID instead of the file path to the backend.
+- Change: Duplicate view action column is now a 3-way pill per row — Keep, Remove, and Unique (was separate radio + checkbox + standalone "Not a duplicate" button). Selecting Unique immediately removes the track from the group; Keep/Remove are applied when clicking Delete marked or Consolidate.
+- Change: "Remove marked" renamed to "Delete marked"; "Consolidate" renamed to "Consolidate &amp; fix playlists" — both buttons now carry descriptive tooltips explaining their behaviour.
+- Change: Duplicate group table uses fixed-width columns so the path cell truncates with an ellipsis instead of expanding the table; full path visible on hover.
 
 ## v0.68-rc.030526-1401 · 2026-05-03
 
