@@ -10973,6 +10973,7 @@ let _dupDapId = null;
 let _dupDapMountPath = null;    // Absolute mount/music path of selected DAP (for Finder reveal)
 let _dupPollTimer = null;
 let _dupActionResolve = null;   // Promise resolver for the action modal
+let _dupLastMoveFolder = localStorage.getItem('tb_dup_move_folder') || '';  // remembered destination
 
 function _formatBytes(bytes) {
   if (!bytes) return '0 B';
@@ -11274,12 +11275,15 @@ function _getDupSelectedIds(key, inputName) {
 }
 
 async function _showDupActionModal(title, desc) {
-  // Reset state
   document.getElementById('dup-action-modal-title').textContent = title;
   document.getElementById('dup-action-modal-desc').textContent = desc;
-  document.querySelectorAll('input[name="dup-action"]').forEach(r => { r.checked = r.value === 'trash'; });
-  document.getElementById('dup-move-folder-row').style.display = 'none';
-  document.getElementById('dup-move-folder-input').value = '';
+  // Pre-select "Move to folder" and populate path if a folder was previously chosen
+  const hasFolder = !!_dupLastMoveFolder;
+  document.querySelectorAll('input[name="dup-action"]').forEach(r => {
+    r.checked = hasFolder ? r.value === 'move' : r.value === 'trash';
+  });
+  document.getElementById('dup-move-folder-input').value = _dupLastMoveFolder;
+  document.getElementById('dup-move-folder-row').style.display = hasFolder ? 'flex' : 'none';
   document.getElementById('dup-action-modal').style.display = 'flex';
   return new Promise(resolve => { _dupActionResolve = resolve; });
 }
@@ -11296,7 +11300,11 @@ function _onDupActionChange(val) {
 async function _browseDupMoveFolder() {
   try {
     const res = await api('/browse/folder', { method: 'POST' });
-    if (res && res.path) document.getElementById('dup-move-folder-input').value = res.path;
+    if (res && res.path) {
+      document.getElementById('dup-move-folder-input').value = res.path;
+      _dupLastMoveFolder = res.path;
+      localStorage.setItem('tb_dup_move_folder', res.path);
+    }
   } catch(e) { showToast('Folder picker unavailable', 'error'); }
 }
 
@@ -11304,6 +11312,11 @@ function _confirmDupAction() {
   const action = document.querySelector('input[name="dup-action"]:checked')?.value || 'trash';
   const moveFolder = action === 'move' ? document.getElementById('dup-move-folder-input').value.trim() : null;
   if (action === 'move' && !moveFolder) { showToast('Please select a destination folder', 'error'); return; }
+  // Persist chosen folder so next open pre-populates it
+  if (action === 'move' && moveFolder) {
+    _dupLastMoveFolder = moveFolder;
+    localStorage.setItem('tb_dup_move_folder', moveFolder);
+  }
   _closeDupActionModal({ action, moveFolder });
 }
 
