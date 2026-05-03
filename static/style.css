@@ -13481,6 +13481,10 @@ tr:hover .track-edit-btn:hover {
 .dup-skipped-tbl tbody tr:last-child { border-bottom: none; }
 .dup-skipped-tbl tbody tr:hover { background: var(--surface-2); }
 .dup-skipped-tbl td { padding: 8px 10px; vertical-align: middle; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Type cell just holds a short badge — no clipping needed */
+.dup-skipped-tbl td:first-child { overflow: visible; text-overflow: clip; }
+/* Action cell holds a button — no clipping needed */
+.dup-skipped-tbl td:last-child  { overflow: visible; text-overflow: clip; text-align: right; }
 .dup-skipped-cell-title { color: var(--text-primary); font-size: 13px; }
 .dup-skipped-cell-muted { color: var(--text-muted); font-size: 12px; }
 .dup-skip-badge { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 10px; text-transform: uppercase; }
