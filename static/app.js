@@ -11465,45 +11465,71 @@ async function _dupUndoIgnore(groupKey) {
 async function _loadDupSkipped() {
   try {
     const data = await api('/library/duplicates/skipped');
-    const total = (data.ignored_groups?.length || 0) + (data.not_duplicate_tracks?.length || 0);
+    const ignored = data.ignored_groups || [];
+    const notDup  = data.not_duplicate_tracks || [];
+    const total = ignored.length + notDup.length;
     const section = document.getElementById('dup-skipped-section');
     const countEl = document.getElementById('dup-skipped-count');
     if (!total) { if (section) section.style.display = 'none'; return; }
     if (section) section.style.display = 'block';
     if (countEl) countEl.textContent = total;
-    _renderDupSkippedIgnored(data.ignored_groups || []);
-    _renderDupSkippedNotDup(data.not_duplicate_tracks || []);
+    _renderDupSkippedTable(ignored, notDup);
   } catch(e) { /* silently fail */ }
 }
 
-function _renderDupSkippedIgnored(groups) {
-  const el = document.getElementById('dup-skipped-ignored');
+function _renderDupSkippedTable(ignored, notDup) {
+  const el = document.getElementById('dup-skipped-table');
   if (!el) return;
-  if (!groups.length) { el.innerHTML = ''; return; }
-  el.innerHTML = `<p class="dup-skipped-label">Ignored groups</p>` +
-    groups.map(g => {
-      const name = g.title ? `${esc(g.title)} — ${esc(g.artist || '')}` : `Group ${g.group_key.slice(0,8)}…`;
-      return `<div class="dup-skipped-row">
-        <span class="dup-skipped-name">${name}</span>
-        ${g.album ? `<span class="dup-skipped-sub">${esc(g.album)}</span>` : ''}
-        <button class="dup-undo-btn" onclick="App._dupUndoIgnore('${esc(g.group_key)}')">Restore</button>
-      </div>`;
-    }).join('');
-}
 
-function _renderDupSkippedNotDup(tracks) {
-  const el = document.getElementById('dup-skipped-notdup');
-  if (!el) return;
-  if (!tracks.length) { el.innerHTML = ''; return; }
-  el.innerHTML = `<p class="dup-skipped-label">Not duplicates</p>` +
-    tracks.map(t => {
-      const name = t.title ? `${esc(t.title)} — ${esc(t.artist || '')}` : esc(t.path || t.track_id);
-      return `<div class="dup-skipped-row">
-        <span class="dup-skipped-name">${name}</span>
-        ${t.album ? `<span class="dup-skipped-sub">${esc(t.album)}</span>` : ''}
-        <button class="dup-undo-btn" onclick="App._dupUndoNotDuplicate('${esc(t.group_key)}','${esc(t.track_id)}')">Undo</button>
-      </div>`;
-    }).join('');
+  // Build a unified row list: ignored groups first, then not-duplicate tracks
+  const rows = [
+    ...ignored.map(g => ({
+      type: 'ignored',
+      title:  g.title  || '',
+      artist: g.artist || '',
+      album:  g.album  || '',
+      action: `App._dupUndoIgnore('${esc(g.group_key)}')`,
+      actionLabel: 'Restore',
+    })),
+    ...notDup.map(t => ({
+      type: 'unique',
+      title:  t.title  || t.path || t.track_id || '',
+      artist: t.artist || '',
+      album:  t.album  || '',
+      action: `App._dupUndoNotDuplicate('${esc(t.group_key)}','${esc(t.track_id)}')`,
+      actionLabel: 'Undo',
+    })),
+  ];
+
+  el.innerHTML = `
+    <table class="dup-skipped-tbl">
+      <colgroup>
+        <col style="width:76px">
+        <col>
+        <col style="width:22%">
+        <col style="width:26%">
+        <col style="width:72px">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Title</th>
+          <th>Artist</th>
+          <th>Album</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td><span class="dup-skip-badge dup-skip-badge--${r.type}">${r.type === 'ignored' ? 'Ignored' : 'Unique'}</span></td>
+            <td class="dup-skipped-cell-title" title="${esc(r.title)}">${esc(r.title)}</td>
+            <td class="dup-skipped-cell-muted" title="${esc(r.artist)}">${esc(r.artist)}</td>
+            <td class="dup-skipped-cell-muted" title="${esc(r.album)}">${esc(r.album)}</td>
+            <td><button class="dup-undo-btn" onclick="${r.action}">${r.actionLabel}</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
 }
 
 function _toggleSkippedSection() {

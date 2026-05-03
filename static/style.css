@@ -1065,7 +1065,7 @@ h4.settings-subsection-title {
 #main-nav-bar {
   position: sticky;
   top: 0;
-  z-index: 34;
+  z-index: 2400;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1092,6 +1092,8 @@ h4.settings-subsection-title {
 }
 
 #nav-back-btn {
+  position: relative;
+  z-index: 1;
   width: var(--main-nav-btn-size);
   height: var(--main-nav-btn-size);
   border-radius: 50%;
@@ -13472,11 +13474,18 @@ tr:hover .track-edit-btn:hover {
 .dup-skipped-header:hover .dup-section-title { color: var(--accent-primary); }
 .dup-chevron { color: var(--text-muted); transition: transform 0.2s; flex-shrink: 0; }
 
-.dup-skipped-subsection { margin-bottom: 16px; }
-.dup-skipped-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 12px 0 6px; }
-.dup-skipped-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: var(--surface-2); border-radius: 7px; margin-bottom: 4px; }
-.dup-skipped-name { flex: 1; font-size: 13px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dup-skipped-sub { font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+/* Skipped & Not Duplicates — unified table */
+.dup-skipped-tbl { table-layout: fixed; width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
+.dup-skipped-tbl thead th { font-size: 11px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; padding: 0 10px 8px; text-align: left; border-bottom: 1px solid var(--surface-3); white-space: nowrap; }
+.dup-skipped-tbl tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); }
+.dup-skipped-tbl tbody tr:last-child { border-bottom: none; }
+.dup-skipped-tbl tbody tr:hover { background: var(--surface-2); }
+.dup-skipped-tbl td { padding: 8px 10px; vertical-align: middle; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.dup-skipped-cell-title { color: var(--text-primary); font-size: 13px; }
+.dup-skipped-cell-muted { color: var(--text-muted); font-size: 12px; }
+.dup-skip-badge { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 10px; text-transform: uppercase; }
+.dup-skip-badge--ignored { background: rgba(255,179,181,0.12); color: #ffb3b5; }
+.dup-skip-badge--unique  { background: rgba(255,199,82,0.12);  color: #ffc752; }
 .dup-undo-btn { font-size: 12px; padding: 3px 10px; background: transparent; border: 1px solid var(--surface-3); border-radius: 12px; color: var(--text-muted); cursor: pointer; flex-shrink: 0; }
 .dup-undo-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
 
