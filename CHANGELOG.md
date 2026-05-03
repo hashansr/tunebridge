@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.73-rc.030526-1529 · 2026-05-03
 - Change: "Move to folder" destination in the Duplicates action modal is now remembered across uses — the last chosen path is pre-populated and "Move to folder" is pre-selected next time the modal opens.
 
 ## v0.72-rc.030526-1519 · 2026-05-03
