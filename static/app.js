@@ -10970,6 +10970,7 @@ async function refreshSmartPlaylist(pid) {
 let _dupScope = 'library';      // 'library' | 'dap'
 let _dupGroups = [];
 let _dupDapId = null;
+let _dupDapMountPath = null;    // Absolute mount/music path of selected DAP (for Finder reveal)
 let _dupPollTimer = null;
 let _dupActionResolve = null;   // Promise resolver for the action modal
 
@@ -10989,12 +10990,15 @@ async function loadDuplicatesView() {
   document.getElementById('dup-empty').style.display = 'none';
   document.getElementById('dup-summary-bar').style.display = 'none';
 
-  // Populate DAP picker
+  // Populate DAP picker; cache mount path for Open in Finder
   try {
     const daps = await api('/daps');
     const sel = document.getElementById('dup-dap-select');
     sel.innerHTML = daps.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
     if (!_dupDapId && daps.length) _dupDapId = daps[0].id;
+    // Cache mount path of the initially selected DAP
+    const selectedDap = daps.find(d => d.id === _dupDapId) || daps[0];
+    if (selectedDap) _dupDapMountPath = (selectedDap.music_path || selectedDap.mount || '').replace(/\/$/, '');
   } catch (e) { /* no daps */ }
 
   if (_dupScope === 'library') {
@@ -11103,22 +11107,39 @@ function _renderDupGroupCard(g) {
     const notDupBtn = !isDap
       ? `<button class="dup-not-dup-btn" title="Mark as not a duplicate — exclude from this group" onclick="App._dupMarkNotDuplicate('${esc(g.key)}','${tid}',this)">Not a duplicate</button>`
       : '';
+    // Action pill: Keep | Remove (mutually exclusive per row; Keep exclusive across group)
+    const actionPills = `<div class="dup-row-action-group" data-group="${esc(g.key)}" data-id="${tid}">
+      <button class="dup-action-btn keep" onclick="App._dupRowAction(this,'keep')" title="Keep this track (use with Consolidate)">Keep</button>
+      <button class="dup-action-btn remove" onclick="App._dupRowAction(this,'remove')" title="Mark for removal">Remove</button>
+    </div>`;
+    // Finder button — library tracks have a rel path; DAP tracks have abs path via mount
+    const finderBtn = `<button class="dup-finder-btn" title="Reveal in Finder"
+      onclick="App._dupOpenFinder('${tid}','${isDap ? 'dap' : 'library'}')"
+      >
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M1 6h14" stroke="currentColor" stroke-width="1.4"/>
+        <circle cx="3.5" cy="4.5" r=".7" fill="currentColor"/>
+        <circle cx="5.5" cy="4.5" r=".7" fill="currentColor"/>
+        <circle cx="7.5" cy="4.5" r=".7" fill="currentColor"/>
+      </svg>
+      Finder</button>`;
     return `<tr class="dup-track-row" data-idx="${i}">
-      <td class="dup-cell-radio"><input type="radio" name="dup-keep-${esc(g.key)}" data-id="${tid}" /></td>
-      <td class="dup-cell-check"><input type="checkbox" name="dup-del-${esc(g.key)}" data-id="${tid}" /></td>
+      <td class="dup-cell-action">${actionPills}</td>
       <td class="dup-cell-fmt">${esc(t.format || '—')}</td>
       <td class="dup-cell-bitrate">${t.bitrate ? t.bitrate + ' kbps' : '—'}</td>
       <td class="dup-cell-dur">${dur}</td>
       <td class="dup-cell-size">${size}</td>
       <td class="dup-cell-path" title="${esc(path)}">${esc(pathShort)}</td>
-      <td class="dup-cell-notdup">${notDupBtn}</td>
+      <td class="dup-cell-finder">${finderBtn}</td>
+      ${!isDap ? `<td class="dup-cell-notdup">${notDupBtn}</td>` : ''}
     </tr>`;
   }).join('');
 
   const actionsHtml = isDap
-    ? `<button class="btn-secondary dup-btn" onclick="App._dupDapDelete('${esc(g.key)}')">Delete selected from DAP</button>`
-    : `<button class="btn-secondary dup-btn" onclick="App._dupDelete('${esc(g.key)}')">Remove selected</button>
-       <button class="btn-secondary dup-btn" onclick="App._dupConsolidate('${esc(g.key)}')">Consolidate (keep selected)</button>`;
+    ? `<button class="btn-secondary dup-btn" onclick="App._dupDapDelete('${esc(g.key)}')">Delete marked from DAP</button>`
+    : `<button class="btn-secondary dup-btn" onclick="App._dupDelete('${esc(g.key)}')">Remove marked</button>
+       <button class="btn-secondary dup-btn" onclick="App._dupConsolidate('${esc(g.key)}')">Consolidate</button>`;
 
   return `<div class="dup-group-card" id="dup-group-${esc(g.key)}">
     <div class="dup-group-header">
@@ -11129,20 +11150,63 @@ function _renderDupGroupCard(g) {
       </div>
       <div class="dup-group-actions-right">
         <span class="dup-count-badge">${(g.tracks || []).length} copies</span>
-        <button class="dup-ignore-btn" onclick="App._dupIgnore('${esc(g.key)}')">Ignore</button>
+        <button class="dup-ignore-btn" onclick="App._dupIgnore('${esc(g.key)}')">Ignore group</button>
       </div>
     </div>
     <table class="dup-group-table">
       <thead><tr>
-        <th title="Keep (Consolidate)">Keep</th>
-        <th title="Select for removal">Del</th>
+        <th title="Mark each track: Keep or Remove">Action</th>
         <th>Format</th><th>Bitrate</th><th>Duration</th><th>Size</th><th>Path</th>
+        <th></th>
         ${!isDap ? '<th></th>' : ''}
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="dup-actions">${actionsHtml}</div>
+    <div class="dup-actions">
+      <span class="dup-actions-hint">Mark tracks above, then:</span>
+      ${actionsHtml}
+    </div>
   </div>`;
+}
+
+/** Toggle Keep/Remove pill for a track row. Keep is exclusive across the group. */
+function _dupRowAction(btn, action) {
+  const group = btn.closest('.dup-row-action-group');
+  const groupKey = group.dataset.group;
+  const isActive = btn.classList.contains('active');
+
+  // Deactivate both pills in this row first
+  group.querySelectorAll('.dup-action-btn').forEach(b => b.classList.remove('active'));
+
+  if (isActive) return; // toggle off — done
+
+  // If selecting Keep, clear any other row's Keep in this group
+  if (action === 'keep') {
+    document.querySelectorAll(`.dup-row-action-group[data-group="${groupKey}"] .dup-action-btn.keep.active`)
+      .forEach(b => b.classList.remove('active'));
+  }
+
+  btn.classList.add('active');
+}
+
+/** Read selected actions for a group. Returns {keepId, removeIds}. */
+function _getDupRowActions(key) {
+  const keepEl = document.querySelector(`.dup-row-action-group[data-group="${key}"] .dup-action-btn.keep.active`);
+  const removeEls = document.querySelectorAll(`.dup-row-action-group[data-group="${key}"] .dup-action-btn.remove.active`);
+  return {
+    keepId: keepEl ? keepEl.closest('.dup-row-action-group').dataset.id : null,
+    removeIds: Array.from(removeEls).map(b => b.closest('.dup-row-action-group').dataset.id),
+  };
+}
+
+/** Open a track's parent folder in macOS Finder. */
+async function _dupOpenFinder(tid, scope) {
+  try {
+    const body = scope === 'dap'
+      ? { abs_path: _dupDapMountPath ? _dupDapMountPath + '/' + decodeURIComponent(tid) : '' }
+      : { path: decodeURIComponent(tid) };
+    await api('/open-in-finder', { method: 'POST', body: JSON.stringify(body) });
+  } catch(e) { showToast('Could not open Finder', 'error'); }
 }
 
 function _fmtDuration(secs) {
@@ -11220,8 +11284,8 @@ function _removeDupGroupFromDom(key) {
 }
 
 async function _dupDelete(key) {
-  const ids = _getDupSelectedIds(key, `dup-del-${key}`);
-  if (!ids.length) { showToast('Select tracks to remove', 'error'); return; }
+  const { removeIds: ids } = _getDupRowActions(key);
+  if (!ids.length) { showToast('Mark at least one track as Remove', 'error'); return; }
 
   const result = await _showDupActionModal('Remove Tracks', `Remove ${ids.length} track${ids.length !== 1 ? 's' : ''} from your library?`);
   if (!result) return;
@@ -11244,11 +11308,15 @@ async function _dupDelete(key) {
 }
 
 async function _dupConsolidate(key) {
-  const keepRadio = document.querySelector(`input[name="dup-keep-${key}"]:checked`);
-  if (!keepRadio) { showToast('Select a track to keep (use the radio button)', 'error'); return; }
-  const keepId = keepRadio.dataset.id;
-  const allRadios = document.querySelectorAll(`input[name="dup-keep-${key}"]`);
-  const deleteIds = Array.from(allRadios).filter(r => r.dataset.id !== keepId).map(r => r.dataset.id);
+  const { keepId, removeIds } = _getDupRowActions(key);
+  if (!keepId) { showToast('Mark one track as Keep first', 'error'); return; }
+  // Delete IDs = those explicitly marked Remove; if none marked Remove, default to all-except-keep
+  let deleteIds = removeIds.length > 0 ? removeIds : [];
+  if (!deleteIds.length) {
+    // Fall back: remove all except the kept track
+    const allGroups = document.querySelectorAll(`.dup-row-action-group[data-group="${key}"]`);
+    deleteIds = Array.from(allGroups).map(g => g.dataset.id).filter(id => id !== keepId);
+  }
   if (!deleteIds.length) { showToast('Nothing to remove — only one track', 'error'); return; }
 
   const result = await _showDupActionModal('Consolidate Tracks', `Keep selected track and remove ${deleteIds.length} other${deleteIds.length !== 1 ? 's' : ''}? Playlist references will be updated.`);
@@ -11266,10 +11334,9 @@ async function _dupConsolidate(key) {
 }
 
 async function _dupDapDelete(key) {
-  const card = document.getElementById(`dup-group-${key}`);
-  const checked = card ? card.querySelectorAll(`input[name="dup-del-${key}"]:checked`) : [];
-  const relPaths = Array.from(checked).map(i => decodeURIComponent(i.dataset.id));
-  if (!relPaths.length) { showToast('Select tracks to delete', 'error'); return; }
+  const { removeIds } = _getDupRowActions(key);
+  const relPaths = removeIds.map(id => decodeURIComponent(id));
+  if (!relPaths.length) { showToast('Mark at least one track as Remove', 'error'); return; }
   if (!confirm(`Delete ${relPaths.length} file${relPaths.length !== 1 ? 's' : ''} from the DAP? This cannot be undone.`)) return;
   try {
     const res = await api(`/daps/${_dupDapId}/duplicates/delete`, {
@@ -11291,9 +11358,14 @@ function switchDupScope(scope) {
   else _startDapDupScan();
 }
 
-function onDupDapChange() {
+async function onDupDapChange() {
   const sel = document.getElementById('dup-dap-select');
   _dupDapId = sel.value;
+  // Update cached mount path for the newly selected DAP
+  try {
+    const dap = await api(`/daps/${_dupDapId}`);
+    _dupDapMountPath = (dap.music_path || dap.mount || '').replace(/\/$/, '');
+  } catch(e) { _dupDapMountPath = null; }
   _startDapDupScan();
 }
 
@@ -11816,6 +11888,8 @@ const App = {
   _dupUndoIgnore,
   _toggleSkippedSection,
   _deleteEmptyFolders,
+  _dupRowAction,
+  _dupOpenFinder,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════

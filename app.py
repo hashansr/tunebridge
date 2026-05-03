@@ -11019,6 +11019,34 @@ def library_duplicates_delete_folders():
     return jsonify({'deleted': deleted, 'errors': errors})
 
 
+@app.route('/api/open-in-finder', methods=['POST'])
+def open_in_finder():
+    """Reveal a file or directory in macOS Finder (open -R)."""
+    data = request.get_json() or {}
+    rel_path = data.get('path', '').strip()
+    dap_abs = data.get('abs_path', '').strip()  # pre-resolved absolute path for DAP files
+
+    if dap_abs:
+        abs_path = Path(dap_abs)
+    elif rel_path:
+        abs_path = get_music_base() / rel_path
+    else:
+        return jsonify({'error': 'path required'}), 400
+
+    # Security: path must exist
+    if not abs_path.exists():
+        # Still try to reveal the parent if the file is gone
+        abs_path = abs_path.parent
+        if not abs_path.exists():
+            return jsonify({'error': 'Path not found'}), 404
+
+    try:
+        subprocess.Popen(['open', '-R', str(abs_path)])
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/library/duplicates/delete', methods=['POST'])
 def library_duplicates_delete():
     data = request.get_json() or {}
