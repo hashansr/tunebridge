@@ -11374,8 +11374,8 @@ async function _dupConsolidate(key) {
       body: { keep_id: keepId, delete_ids: deleteIds, action: result.action, move_folder: result.moveFolder }
     });
     showToast(`Consolidated · updated ${res.playlists_updated} playlist${res.playlists_updated !== 1 ? 's' : ''}`);
-    _removeDupGroupFromDom(key);
     _showEmptyFolderCleanup(res.empty_dirs || []);
+    await _fetchLibraryDuplicates();
   } catch(e) { showToast('Consolidate failed', 'error'); }
 }
 
