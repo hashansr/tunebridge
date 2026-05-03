@@ -11238,7 +11238,7 @@ async function _dupOpenFinder(btn) {
     const body = scope === 'dap'
       ? { abs_path: _dupDapMountPath ? _dupDapMountPath + '/' + path : path }
       : { path };
-    await api('/open-in-finder', { method: 'POST', body: JSON.stringify(body) });
+    await api('/open-in-finder', { method: 'POST', body });
   } catch(e) { showToast('Could not open in Finder', 'error'); }
 }
 
@@ -11255,7 +11255,7 @@ async function _dupIgnore(key) {
   try {
     await api('/library/duplicates/ignore', {
       method: 'POST',
-      body: JSON.stringify({ group_key: key, title: g.title, artist: g.artist, album: g.album })
+      body: { group_key: key, title: g.title, artist: g.artist, album: g.album }
     });
     document.getElementById(`dup-group-${key}`)?.remove();
     _dupGroups = _dupGroups.filter(x => x.key !== key);
@@ -11326,7 +11326,7 @@ async function _dupDelete(key) {
   try {
     const res = await api('/library/duplicates/delete', {
       method: 'POST',
-      body: JSON.stringify({ track_ids: ids, action: result.action, move_folder: result.moveFolder })
+      body: { track_ids: ids, action: result.action, move_folder: result.moveFolder }
     });
     showToast(result.action === 'trash'
       ? `Moved ${res.deleted} track${res.deleted !== 1 ? 's' : ''} to Trash`
@@ -11358,7 +11358,7 @@ async function _dupConsolidate(key) {
   try {
     const res = await api('/library/duplicates/consolidate', {
       method: 'POST',
-      body: JSON.stringify({ keep_id: keepId, delete_ids: deleteIds, action: result.action, move_folder: result.moveFolder })
+      body: { keep_id: keepId, delete_ids: deleteIds, action: result.action, move_folder: result.moveFolder }
     });
     showToast(`Consolidated · updated ${res.playlists_updated} playlist${res.playlists_updated !== 1 ? 's' : ''}`);
     _removeDupGroupFromDom(key);
@@ -11374,7 +11374,7 @@ async function _dupDapDelete(key) {
   try {
     const res = await api(`/daps/${_dupDapId}/duplicates/delete`, {
       method: 'POST',
-      body: JSON.stringify({ rel_paths: relPaths })
+      body: { rel_paths: relPaths }
     });
     showToast(`Deleted ${res.deleted} file${res.deleted !== 1 ? 's' : ''} from DAP`);
     // Rescan
@@ -11413,7 +11413,7 @@ async function _dupMarkNotDuplicate(groupKey, trackId, btnEl) {
   try {
     await api('/library/duplicates/not-duplicate', {
       method: 'POST',
-      body: JSON.stringify({ group_key: groupKey, track_id: trackId })
+      body: { group_key: groupKey, track_id: trackId }
     });
     // Remove the row from the card
     const row = btnEl?.closest('tr');
@@ -11431,7 +11431,7 @@ async function _dupUndoNotDuplicate(groupKey, trackId) {
   try {
     await api('/library/duplicates/not-duplicate', {
       method: 'DELETE',
-      body: JSON.stringify({ group_key: groupKey, track_id: trackId })
+      body: { group_key: groupKey, track_id: trackId }
     });
     showToast('Restored — rescan to see updated groups');
     _loadDupSkipped();
@@ -11442,7 +11442,7 @@ async function _dupUndoIgnore(groupKey) {
   try {
     await api('/library/duplicates/unignore', {
       method: 'POST',
-      body: JSON.stringify({ group_key: groupKey })
+      body: { group_key: groupKey }
     });
     showToast('Group restored — rescan to see it again');
     _loadDupSkipped();
@@ -11528,7 +11528,7 @@ async function _deleteEmptyFolders() {
   try {
     const res = await api('/library/duplicates/delete-folders', {
       method: 'POST',
-      body: JSON.stringify({ rel_dirs: dirs })
+      body: { rel_dirs: dirs }
     });
     showToast(`Removed ${res.deleted} empty folder${res.deleted !== 1 ? 's' : ''}`);
     document.getElementById('dup-empty-folders-section').style.display = 'none';
