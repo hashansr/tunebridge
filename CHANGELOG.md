@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.72-rc.030526-1519 · 2026-05-03
 - Fix: Consolidate/Remove action modal radio labels and descriptions no longer overflow and get clipped — removed conflicting `.modal` class from the shell element (it set a narrow 360px width and double-padding that overrode the 560px shell width), and gave the option body `flex:1` so it fills available space correctly.
 
 ## v0.71-rc.030526-1505 · 2026-05-03
