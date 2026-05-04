@@ -170,6 +170,10 @@ function playSvg(size = 14) {
   return `<svg class="icon-play-svg" style="--play-icon-size:${Number(size) || 14}px" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg>`;
 }
 
+function nowPlayingSvg(size = 11) {
+  return `<svg class="track-now-playing-icon" width="${size}" height="${size}" viewBox="0 0 11 11" aria-hidden="true" focusable="false"><rect x="1" y="2" width="2.5" height="7" rx="1" fill="currentColor" opacity="0.92"><animate attributeName="height" values="7;3;7" dur="0.9s" repeatCount="indefinite"></animate><animate attributeName="y" values="2;4;2" dur="0.9s" repeatCount="indefinite"></animate></rect><rect x="7.5" y="2" width="2.5" height="7" rx="1" fill="currentColor" opacity="0.92"><animate attributeName="height" values="7;5;7" dur="0.7s" repeatCount="indefinite"></animate><animate attributeName="y" values="2;3;2" dur="0.7s" repeatCount="indefinite"></animate></rect></svg>`;
+}
+
 function esc(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -1778,6 +1782,7 @@ function trackRow(t, num, inPlaylist) {
     : '';
 
   const checkIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+  const nowPlayingIcon = nowPlayingSvg(11);
   const playIcon  = playSvg(12);
   const fmtDate = t.date_added ? new Date(t.date_added * 1000).toLocaleDateString() : '';
   const bitrate = t.bitrate ? `${t.bitrate} kbps` : '';
@@ -1804,6 +1809,7 @@ function trackRow(t, num, inPlaylist) {
       <td class="col-num" data-col="track_number" onclick="App.toggleTrackSelection('${t.id}', ${num - 1}, event)">
         <div class="num-cell">
           <span class="track-check-indicator">${checkIcon}</span>
+          <span class="track-now-playing">${nowPlayingIcon}</span>
           <span class="track-num">${esc(trackNumLabel)}</span>
         </div>
       </td>
@@ -1845,6 +1851,7 @@ function trackRow(t, num, inPlaylist) {
         <div class="num-cell">
           ${dragHandle}
           <span class="track-check-indicator">${checkIcon}</span>
+          <span class="track-now-playing">${nowPlayingIcon}</span>
           <span class="track-num">${esc(trackNumLabel)}</span>
         </div>
       </td>
@@ -4062,6 +4069,7 @@ function setFavAlbumsSort(mode) {
 }
 
 function _favSongRow(t, idx) {
+  const nowPlayingIcon = nowPlayingSvg(11);
   const playIcon = playSvg(12);
   return `
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
@@ -4070,6 +4078,7 @@ function _favSongRow(t, idx) {
           <div class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="9" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg>
           </div>
+          <span class="track-now-playing">${nowPlayingIcon}</span>
           <span class="track-num">${idx + 1}</span>
         </div>
       </td>
@@ -4608,7 +4617,8 @@ function _homeApplyData(data, force) {
     if (summary.artists) parts.push(`${summary.artists.toLocaleString()} artists`);
     if (summary.albums)  parts.push(`${summary.albums.toLocaleString()} albums`);
     if (summary.tracks)  parts.push(`${summary.tracks.toLocaleString()} tracks`);
-    summaryEl.textContent = parts.join(' · ');
+    const DOT = '<span class="home-meta-dot" aria-hidden="true"></span>';
+    summaryEl.innerHTML = parts.map(p => `<span>${p}</span>`).join(DOT);
   }
   const scanEl = document.getElementById('home-last-scan');
   if (scanEl && data.last_scan) {
@@ -9982,11 +9992,13 @@ function renderSongsTable() {
     const sampleRate = t.sample_rate ? `${t.sample_rate} Hz` : '';
     const bitDepth = t.bits_per_sample ? `${t.bits_per_sample}-bit` : '';
     const playIcon = playSvg(11);
+    const nowPlayingIcon = nowPlayingSvg(11);
     return `
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
       <td class="col-num" data-col="track_number" onclick="App.toggleTrackSelection('${t.id}', ${globalIdx}, event)">
         <div class="num-cell">
           <span class="track-check-indicator"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <span class="track-now-playing">${nowPlayingIcon}</span>
           <span class="track-num">${t.track_number || (globalIdx + 1)}</span>
         </div>
       </td>

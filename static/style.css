@@ -1719,6 +1719,20 @@ td { padding: 8px 12px; vertical-align: middle; text-align: left; }
   display: flex; align-items: center; justify-content: center;
   min-width: 20px;
 }
+
+.track-now-playing {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 11px;
+  min-width: 11px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.track-now-playing-icon {
+  display: block;
+}
 /* Hide track number in playlist rows (drag handle takes its place) */
 #pl-tbody .track-num { display: none; }
 #tracks-tbody .drag-handle,
@@ -8904,17 +8918,9 @@ tr:hover .thumb-play-btn  { opacity: 1; }
 tr.player-active .thumb-play-btn { opacity: 1; background: rgba(0,0,0,0.35); }
 
 /* Active track row highlight */
-tr.player-active > td:first-child {
-  position: relative;
-}
-tr.player-active > td:first-child::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 2px;
-  background: var(--accent);
-  border-radius: 0 2px 2px 0;
-}
+tr.player-active .track-now-playing { display: inline-flex; }
+tr.player-active .track-num,
+tr.player-active .track-check-indicator { display: none; }
 tr.player-active .track-title { color: var(--accent); }
 
 /* "Play All" button (used in favourites panels, album cards, etc.) */
