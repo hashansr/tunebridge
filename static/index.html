@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=43" />
+  <link rel="stylesheet" href="/style.css?v=44" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -50,10 +50,6 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2.8 15.1 9 22 9.9 17 14.6 18.2 21.2 12 18 5.8 21.2 7 14.6 2 9.9 8.9 9"/></svg>
           Favourites
         </button>
-        <button class="nav-item" data-view="history" onclick="App.showView('history')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
-          History
-        </button>
         <button class="nav-item" data-view="playlists" onclick="App.showView('playlists')">
           <span class="nav-mask-icon nav-mask-icon-playlist" aria-hidden="true"></span>
           Playlists
@@ -69,6 +65,10 @@
           Insights
           <span id="insights-nav-dot" class="insights-nav-dot" style="display:none"></span>
         </button>
+        <button class="nav-item" data-view="history" onclick="App.showView('history')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+          History
+        </button>
       </nav>
 
       <button id="sync-nav-btn" onclick="App.showSync()">
@@ -83,11 +83,11 @@
         <span id="scan-msg"></span>
         <div id="rescan-wrap" style="position:relative">
           <button id="rescan-btn" onclick="App.toggleRescanMenu(event)" title="Rescan Library">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            <span class="tb-icon tb-icon-refresh tb-icon-refresh-sidebar" aria-hidden="true"></span>
           </button>
           <div id="rescan-menu" style="display:none;position:absolute;bottom:calc(100% + 6px);right:0;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;min-width:170px;box-shadow:0 8px 24px rgba(0,0,0,.6);overflow:hidden;z-index:200">
             <button class="rescan-menu-item" onclick="App.rescan();App.closeRescanMenu()">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              <span class="tb-icon tb-icon-refresh tb-icon-menu" aria-hidden="true"></span>
               Rescan Library
             </button>
             <button class="rescan-menu-item rescan-menu-clean" onclick="App.rescanClean();App.closeRescanMenu()">
@@ -576,28 +576,35 @@
 
       <!-- History view -->
       <div id="view-history" class="view" style="display:none">
-        <div class="view-header">
-          <h2>Listening History</h2>
-        </div>
-        <div class="history-controls">
-          <div class="history-period-pills">
-            <button class="pl-sort-pill active" data-period="7" onclick="App.setHistoryPeriod(7)">7 days</button>
-            <button class="pl-sort-pill" data-period="30" onclick="App.setHistoryPeriod(30)">30 days</button>
-            <button class="pl-sort-pill" data-period="90" onclick="App.setHistoryPeriod(90)">90 days</button>
-            <button class="pl-sort-pill" data-period="365" onclick="App.setHistoryPeriod(365)">All time</button>
-          </div>
-          <label class="history-valid-toggle">
-            <input type="checkbox" id="history-valid-only" onchange="App.loadHistoryView()" />
-            Valid listens only
-          </label>
-          <div class="history-clear-wrap">
-            <button class="btn-ghost history-clear-btn" onclick="App.toggleHistoryClearMenu(event)">Clear ▾</button>
-            <div id="history-clear-menu" class="history-clear-menu" style="display:none">
-              <button onclick="App.clearHistoryPeriod(7)">Last 7 days</button>
-              <button onclick="App.clearHistoryPeriod(30)">Last 30 days</button>
-              <button onclick="App.clearHistoryPeriod(90)">Last 90 days</button>
-              <button onclick="App.clearHistoryPeriod(0)" class="danger">Clear all history</button>
+        <div class="history-hero">
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px">
+            <h2 style="margin:0; font-size:22px; font-weight:700">Listening History</h2>
+            <div class="history-clear-wrap" style="margin-left:auto">
+              <button class="btn-ghost history-clear-btn" onclick="App.toggleHistoryClearMenu(event)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                Delete history
+              </button>
+              <div id="history-clear-menu" class="history-clear-menu" style="display:none">
+                <div class="history-clear-menu-label">Delete entries from…</div>
+                <button onclick="App.clearHistoryPeriod(7)">Last 7 days</button>
+                <button onclick="App.clearHistoryPeriod(30)">Last 30 days</button>
+                <button onclick="App.clearHistoryPeriod(90)">Last 90 days</button>
+                <div class="history-clear-menu-sep"></div>
+                <button onclick="App.clearHistoryPeriod(0)" class="danger">Delete all history</button>
+              </div>
             </div>
+          </div>
+          <div class="history-controls">
+            <div class="history-period-pills">
+              <button class="pl-sort-pill active" data-period="7" onclick="App.setHistoryPeriod(7)">7 days</button>
+              <button class="pl-sort-pill" data-period="30" onclick="App.setHistoryPeriod(30)">30 days</button>
+              <button class="pl-sort-pill" data-period="90" onclick="App.setHistoryPeriod(90)">90 days</button>
+              <button class="pl-sort-pill" data-period="365" onclick="App.setHistoryPeriod(365)">All time</button>
+            </div>
+            <label class="history-valid-toggle">
+              <input type="checkbox" id="history-valid-only" onchange="App.loadHistoryView()" />
+              Valid listens only
+            </label>
           </div>
         </div>
         <div id="history-stats" class="history-stats-bar" style="display:none"></div>
@@ -759,7 +766,7 @@
             <p class="settings-hint">The folder containing your music files. Structure: <code>Artist/Album/Track.flac</code></p>
             <div class="settings-inline-actions">
               <button class="btn-primary" onclick="App.saveLibraryPath()">Save</button>
-              <button class="btn-secondary" onclick="App.rescan()">Rescan Library</button>
+              <button class="btn-secondary btn-with-icon" onclick="App.rescan()"><span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>Rescan Library</button>
             </div>
 
             <!-- Duplicate tracks tool -->
@@ -1073,7 +1080,7 @@
         <div class="insights-hero">
           <div class="insights-hero-row">
             <h2>Library Insights</h2>
-            <button class="insights-rescan-btn insights-rescan-btn--hero" id="insights-rescan-btn" onclick="App.insightsRescanLibrary()" title="Re-read all file tags from disk">Rescan</button>
+            <button class="insights-rescan-btn insights-rescan-btn--hero" id="insights-rescan-btn" onclick="App.insightsRescanLibrary()" title="Re-read all file tags from disk"><span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>Rescan</button>
           </div>
         </div>
 
@@ -1236,7 +1243,7 @@
           </div>
           <div class="view-header-actions">
             <button class="btn-secondary btn-icon-only" onclick="App.loadInsightsCoverage()" title="Refresh unplayed albums" aria-label="Refresh unplayed albums">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.6 6.1"/><path d="M3 12a9 9 0 0 1 15.6-6.1"/><path d="M3 18v-5h5"/><path d="M21 6v5h-5"/></svg>
+              <span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>
             </button>
           </div>
         </div>
@@ -1285,7 +1292,7 @@
               <button id="dup-tab-dap" class="dup-tab-btn" onclick="App.switchDupScope('dap')">DAP</button>
             </div>
             <select id="dup-dap-select" class="dup-dap-select" style="display:none" onchange="App.onDupDapChange()"></select>
-            <button class="btn-secondary" onclick="App.rescanDuplicates()">Rescan</button>
+            <button class="btn-secondary btn-with-icon" onclick="App.rescanDuplicates()"><span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>Rescan</button>
           </div>
         </div>
 
@@ -1854,7 +1861,7 @@
 
             <div id="sync-rescan-required" class="sync-rescan-required" style="display:none">
               <span>Some skipped tracks were un-ignored. Re-run scan to refresh active changes before syncing.</span>
-              <button class="btn-secondary" onclick="App.syncScanAgain()">Re-scan</button>
+              <button class="btn-secondary btn-with-icon" onclick="App.syncScanAgain()"><span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>Re-scan</button>
             </div>
 
           </div>
@@ -1903,7 +1910,7 @@
           </div>
           <div class="modal-actions modal-actions--stack sync-done-actions">
             <button class="btn-primary sync-done-finish-btn" onclick="App.closeSyncModal()">Finish</button>
-            <button class="btn-secondary sync-done-repeat-btn" onclick="App.syncScanAgain()">Run Another Scan</button>
+            <button class="btn-secondary btn-with-icon sync-done-repeat-btn" onclick="App.syncScanAgain()"><span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>Run Another Scan</button>
           </div>
         </div>
       </div>
@@ -3191,6 +3198,6 @@
   </div>
 
   <script src="/player.js?v=36"></script>
-  <script src="/app.js?v=40"></script>
+  <script src="/app.js?v=41"></script>
 </body>
 </html>

@@ -10924,10 +10924,10 @@ async function loadHistoryView() {
     if (statsEl) {
       statsEl.style.display = 'flex';
       statsEl.innerHTML = `
-        <div class="history-stat"><span class="history-stat-val">${stats.total_plays}</span><span class="history-stat-lbl">plays</span></div>
-        <div class="history-stat"><span class="history-stat-val">${stats.total_hours}</span><span class="history-stat-lbl">hours</span></div>
-        <div class="history-stat"><span class="history-stat-val">${stats.unique_tracks}</span><span class="history-stat-lbl">unique tracks</span></div>
-        ${stats.top_artist ? `<div class="history-stat"><span class="history-stat-val">${esc(stats.top_artist)}</span><span class="history-stat-lbl">top artist</span></div>` : ''}
+        <div class="history-stat"><span class="history-stat-val">${stats.total_plays}</span><span class="history-stat-lbl">Plays</span></div>
+        <div class="history-stat"><span class="history-stat-val">${stats.total_hours}</span><span class="history-stat-lbl">Hours</span></div>
+        <div class="history-stat"><span class="history-stat-val">${stats.unique_tracks}</span><span class="history-stat-lbl">Tracks</span></div>
+        ${stats.top_artist ? `<div class="history-stat history-stat--wide"><span class="history-stat-val">${esc(stats.top_artist)}</span><span class="history-stat-lbl">Top artist</span></div>` : ''}
       `;
     }
     _renderHistoryCharts(validOnly);
@@ -13097,6 +13097,10 @@ async function cancelLibraryAnalysis() {
 /* ── Insights: rescan library tags ──────────────────────────────────────── */
 let _insightsScanPoller = null;
 
+function _refreshButtonLabel(label) {
+  return `<span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>${esc(label)}`;
+}
+
 async function insightsRescanLibrary() {
   const staleBanner = document.getElementById('insights-tag-stale-banner');
   if (staleBanner) staleBanner.style.display = 'none';
@@ -13107,7 +13111,7 @@ async function insightsRescanLibrary() {
   const res = await fetch('/api/library/scan', { method: 'POST' }).catch(() => null);
   if (!res || !res.ok) {
     showToast('Could not start rescan.');
-    if (btn) { btn.disabled = false; btn.textContent = 'Rescan tags'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = _refreshButtonLabel('Rescan'); }
     return;
   }
 
@@ -13150,7 +13154,7 @@ async function _pollInsightsScan() {
   // Hide banner and restore button
   _hideInsightsScanBanner();
   const btn = document.getElementById('insights-rescan-btn');
-  if (btn) { btn.disabled = false; btn.textContent = 'Rescan tags'; }
+  if (btn) { btn.disabled = false; btn.innerHTML = _refreshButtonLabel('Rescan'); }
 
   // Reload overview + tag health so updated tags are reflected
     if (state.view === 'insights') {

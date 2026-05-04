@@ -3,6 +3,10 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: History moved from Library section to Insights section in the sidebar
+- Fix: History event rows no longer shift text on hover — delete button now uses visibility:hidden so it always reserves space without affecting layout
+- Change: History view UI refreshed — stats rendered as individual cards, header integrated with controls, consistent padding and spacing with the rest of the app
+- Change: "Clear ▾" button renamed to "Delete history" with trash icon; dropdown now shows a label ("Delete entries from…") and a separator before the destructive "Delete all history" option
 
 ## v0.85-rc.040526-1128 · 2026-05-04
 - Fix: Listening History "Could not load history" error — undefined `_fmtDur` helper caused a silent ReferenceError in the event row template
