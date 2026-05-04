@@ -3,6 +3,9 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.86-rc.040526-1153 · 2026-05-04
+- Change: Sync Music is now presented as a standalone promoted sidebar CTA above library scan status, separate from Library, Gear, and Insights navigation
 - Change: History moved from Library section to Insights section in the sidebar
 - Fix: History event rows no longer shift text on hover — delete button now uses visibility:hidden so it always reserves space without affecting layout
 - Change: History view UI refreshed — stats rendered as individual cards, header integrated with controls, consistent padding and spacing with the rest of the app
