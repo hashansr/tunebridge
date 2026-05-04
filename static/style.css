@@ -11278,17 +11278,17 @@ tr.player-active .track-title { color: var(--accent); }
   margin-bottom: var(--tb-page-header-margin-bottom);
 }
 #view-songs .songs-toolbar {
-  margin-bottom: 10px;
-  padding: 8px 10px;
-  border-radius: 9999px;
-  background: rgba(28, 27, 27, 0.8);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  margin-bottom: 0;
+  padding: 4px 0 6px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 #view-songs #songs-table-wrap {
-  border-radius: 1rem;
+  border-radius: 10px;
   overflow: hidden;
-  background: var(--surface-table-gradient);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.24);
+  background: transparent;
+  box-shadow: none;
 }
 #songs-table thead th {
   background: rgba(42, 42, 42, 0.64);
@@ -11317,22 +11317,17 @@ tr.player-active .track-title { color: var(--accent); }
   height: 34px;
   min-width: 34px;
   padding: 0;
-  border-radius: 9999px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(173, 198, 255, 0.22);
-  background:
-    radial-gradient(120% 120% at 30% 20%, rgba(173, 198, 255, 0.15), rgba(173, 198, 255, 0.03) 58%),
-    rgba(42, 42, 42, 0.66);
+  border: none;
+  background: rgba(255, 255, 255, 0.02);
   color: var(--text-muted);
 }
 .table-columns-btn:hover {
   color: var(--text);
-  border-color: rgba(173, 198, 255, 0.36);
-  background:
-    radial-gradient(120% 120% at 30% 20%, rgba(173, 198, 255, 0.24), rgba(173, 198, 255, 0.07) 58%),
-    rgba(53, 53, 52, 0.76);
+  background: rgba(173, 198, 255, 0.07);
 }
 .table-columns-btn svg {
   display: block;
@@ -12275,26 +12270,18 @@ body.is-col-resizing {
   position: absolute;
   top: 0;
   bottom: 10px;
-  width: 100px;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.16s ease;
   z-index: 3;
 }
+/* Left fade: never shown — content to the left is always fully readable */
 .home-rail-fade-left {
-  left: 0;
-  background: linear-gradient(to right, var(--bg) 20%, transparent 100%);
+  display: none;
 }
+/* Right fade: always visible to hide the peeking next-card's dark background */
 .home-rail-fade-right {
   right: 0;
-  /* always show a gentle right fade so the peeking card blends into the bg */
-  background: linear-gradient(to left, var(--bg) 20%, transparent 100%);
-  opacity: 0.7;
-}
-.home-rail-shell.can-scroll-left .home-rail-fade-left {
-  opacity: 1;
-}
-.home-rail-shell.can-scroll-right .home-rail-fade-right {
+  width: 120px;
+  background: linear-gradient(to left, var(--bg) 35%, transparent 100%);
   opacity: 1;
 }
 
@@ -14633,6 +14620,7 @@ tr:hover .track-edit-btn:hover {
 }
 
 .tb-table .col-dur,
+.tb-table [data-col="plays"],
 .tb-table [data-col="year"],
 .tb-table [data-col="disc_number"],
 .tb-table [data-col="bitrate"],
@@ -14798,9 +14786,11 @@ thead th:hover .table-col-resizer::after {
 
 .tb-table-toolbar-inside .pl-filter-wrap {
   min-width: 280px;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.01);
   border: none;
   box-shadow: none;
+  border-radius: 10px;
+  padding: 0;
 }
 
 .tb-table-toolbar-inside .pl-filter-wrap svg {
@@ -14810,7 +14800,7 @@ thead th:hover .table-col-resizer::after {
 }
 
 .tb-table-toolbar-inside .pl-filter-wrap:focus-within {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.018);
   box-shadow: none;
 }
 
@@ -14819,7 +14809,7 @@ thead th:hover .table-col-resizer::after {
   padding: 0 28px 0 30px;
   border-radius: 10px;
   border: none;
-  background: rgba(255, 255, 255, 0.028);
+  background: transparent;
   color: rgba(233, 238, 249, 0.78);
   box-shadow: none;
 }
@@ -14829,7 +14819,7 @@ thead th:hover .table-col-resizer::after {
 }
 
 .tb-table-toolbar-inside .pl-filter-wrap input:focus {
-  background: rgba(255, 255, 255, 0.038);
+  background: transparent;
   outline: none;
 }
 
@@ -14844,13 +14834,13 @@ thead th:hover .table-col-resizer::after {
   padding: 0 16px;
   gap: 8px;
   border: none;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.022);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.012);
   color: rgba(233, 238, 249, 0.68);
 }
 
 .tb-table-toolbar-inside .table-columns-btn:hover {
-  background: rgba(173, 198, 255, 0.08);
+  background: rgba(173, 198, 255, 0.06);
   color: var(--text);
 }
 

@@ -9489,6 +9489,7 @@ const _TABLE_COLUMNS = [
   { key: 'track_number', label: '#' },
   { key: 'title', label: 'Title' },
   { key: 'duration', label: 'Time' },
+  { key: 'plays', label: 'Plays' },
   { key: 'artist', label: 'Artist' },
   { key: 'album', label: 'Album' },
   { key: 'album_artist', label: 'Album Artist' },
@@ -9508,6 +9509,7 @@ const _TABLE_COL_DEFAULTS = {
   track_number: true,
   title: true,
   duration: true,
+  plays: true,
   artist: true,
   album: true,
   album_artist: true,
@@ -9826,7 +9828,7 @@ function _renderTableColumnsPopover() {
 function _getColumnContextKeys(anchor) {
   if (!anchor) return _TABLE_COLUMNS.map(c => c.key);
   if (anchor.closest('#view-songs')) {
-    return ['track_number', 'title', 'artist', 'album', 'duration', 'favourite', 'genre', 'year', 'disc_number', 'album_artist', 'format', 'bitrate', 'sample_rate', 'bit_depth', 'date_added', 'filename', 'actions'];
+    return ['track_number', 'title', 'artist', 'album', 'duration', 'plays', 'favourite', 'genre', 'year', 'disc_number', 'album_artist', 'format', 'bitrate', 'sample_rate', 'bit_depth', 'date_added', 'filename', 'actions'];
   }
   if (anchor.closest('#view-playlist')) {
     return ['track_number', 'title', 'artist', 'album', 'duration', 'genre', 'year', 'favourite', 'actions'];
@@ -9906,13 +9908,23 @@ function _getSongsFilteredTracks() {
       ((t.title || '') + ' ' + (t.artist || '') + ' ' + (t.album || '')).toLowerCase().includes(q)
     );
   }
+  if (_songsSort.col === 'plays') {
+    const dir = _songsSort.order === 'desc' ? -1 : 1;
+    tracks = [...tracks].sort((a, b) => {
+      const aPlays = Number(_playStats?.[a.id]?.count || 0);
+      const bPlays = Number(_playStats?.[b.id]?.count || 0);
+      if (aPlays !== bPlays) return (aPlays - bPlays) * dir;
+      return String(a?.title || '').localeCompare(String(b?.title || ''));
+    });
+  }
   return tracks;
 }
 
 async function loadSongsView() {
   _ensurePlayStats();
   try {
-    _songsData = await api(`/library/songs?sort=${_songsSort.col}&order=${_songsSort.order}`);
+    const apiSortCol = _songsSort.col === 'plays' ? 'title' : _songsSort.col;
+    _songsData = await api(`/library/songs?sort=${apiSortCol}&order=${_songsSort.order}`);
   } catch (e) {
     _songsData = [];
     const wrap = document.getElementById('songs-table-wrap');
@@ -9929,8 +9941,10 @@ function renderSongsTable() {
   const total = tracks.length;
   const songsWrap = document.getElementById('songs-table-wrap');
   const songsEmpty = document.getElementById('songs-empty');
+  const scrollArea = songsWrap?.querySelector('.tb-table-scroll-area');
   if (!total) {
-    if (songsWrap) songsWrap.style.display = 'none';
+    if (songsWrap) songsWrap.style.display = '';
+    if (scrollArea) scrollArea.style.display = 'none';
     if (songsEmpty) songsEmpty.style.display = 'flex';
     const count = document.getElementById('songs-count');
     if (count) count.textContent = '0 songs';
@@ -9939,6 +9953,7 @@ function renderSongsTable() {
     return;
   }
   if (songsWrap) songsWrap.style.display = '';
+  if (scrollArea) scrollArea.style.display = '';
   if (songsEmpty) songsEmpty.style.display = 'none';
 
   const totalPages = Math.ceil(total / SONGS_PER_PAGE);
@@ -10011,10 +10026,8 @@ function renderSongsTable() {
       </td>
       <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
-      <td data-col="duration" class="col-dur">
-        ${esc(t.duration_fmt || '')}
-        ${_playStats[t.id]?.count ? `<span class="track-play-badge" title="Last played ${new Date(_playStats[t.id].last_played * 1000).toLocaleDateString()}">${_playStats[t.id].count}×</span>` : ''}
-      </td>
+      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
+      <td data-col="plays" title="${_playStats[t.id]?.last_played ? `Last played ${new Date(_playStats[t.id].last_played * 1000).toLocaleDateString()}` : 'No plays yet'}">${Number(_playStats[t.id]?.count || 0).toLocaleString()}</td>
       <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn')}</td>
       <td data-col="genre" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
       <td data-col="year" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.year || '')}</td>
