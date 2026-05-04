@@ -321,7 +321,7 @@
         <div id="tracks-table-wrap">
           <table id="tracks-table">
             <thead><tr>
-              <th class="col-num" data-col="track_number" data-sort="track_number" onclick="App.sortTracks('track_number')"><span class="th-sort-label">Track&nbsp;# <span class="sort-arrow" id="tracks-sort-track_number"></span></span></th>
+              <th class="col-num" data-col="track_number" data-sort="track_number" onclick="App.sortTracks('track_number')"><span class="th-sort-label"># <span class="sort-arrow" id="tracks-sort-track_number"></span></span></th>
               <th class="col-title" data-col="title" data-sort="title" onclick="App.sortTracks('title')"><span class="th-sort-label">Title <span class="sort-arrow" id="tracks-sort-title"></span></span></th>
               <th class="col-artist" data-col="artist"><span class="th-sort-label">Artist</span></th>
               <th class="col-album" data-col="album" data-sort="album" onclick="App.sortTracks('album')"><span class="th-sort-label">Album <span class="sort-arrow" id="tracks-sort-album"></span></span></th>
@@ -1222,10 +1222,9 @@
           <div>
             <div class="coverage-page-overline">Rediscovery</div>
             <h2>Library Coverage</h2>
-            <p>See what you own but have not explored, then turn forgotten albums into a listening queue or playlist.</p>
+            <p>Pick a forgotten album from your library, play it now, or save a filtered batch for later listening.</p>
           </div>
           <div class="view-header-actions">
-            <button class="btn-secondary" onclick="App.showView('insights')">Insights</button>
             <button class="btn-secondary" onclick="App.loadInsightsCoverage()">Refresh</button>
           </div>
         </div>

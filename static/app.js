@@ -1652,7 +1652,7 @@ function _renderTracksTable() {
 
     const headerHtml = `
       <thead><tr>
-        <th class="col-num" data-col="track_number"><span class="th-sort-label">Track #</span></th>
+        <th class="col-num" data-col="track_number"><span class="th-sort-label">#</span></th>
         <th class="col-title" data-col="title"><span class="th-sort-label">Title</span></th>
         <th class="col-artist" data-col="artist"><span class="th-sort-label">Artist</span></th>
         <th class="col-album" data-col="album"><span class="th-sort-label">Album</span></th>
@@ -9445,7 +9445,7 @@ const SONGS_PER_PAGE = 100;
 const _TABLE_COLUMNS_STORAGE_KEY = 'tb.table_columns.v1';
 const _TABLE_WIDTHS_STORAGE_KEY = 'tb.table_widths.v1';
 const _TABLE_COLUMNS = [
-  { key: 'track_number', label: 'Track #' },
+  { key: 'track_number', label: '#' },
   { key: 'title', label: 'Title' },
   { key: 'duration', label: 'Time' },
   { key: 'artist', label: 'Artist' },
@@ -12148,8 +12148,8 @@ function _coverageRenderCard(a) {
     </div>
     <div class="coverage-card-actions">
       <button class="coverage-icon-btn coverage-play-btn" onclick="App._coveragePlayAlbum(this.closest('.coverage-album-card'),event)" title="Play album" aria-label="Play album">${playSvg(13)}</button>
-      <button class="coverage-add-btn" onclick="App._coverageAddAlbumToPlaylist(this.closest('.coverage-album-card'),event)" title="Add album to playlist">+ Playlist</button>
-      <button class="coverage-open-btn" onclick="App._coverageOpenAlbum(this.closest('.coverage-album-card'),event)" title="Open album">Open</button>
+      <button class="btn-secondary coverage-card-btn" onclick="App._coverageAddAlbumToPlaylist(this.closest('.coverage-album-card'),event)" title="Add album to playlist">+ Playlist</button>
+      <button class="btn-secondary coverage-card-btn" onclick="App._coverageOpenAlbum(this.closest('.coverage-album-card'),event)" title="Open album">Open</button>
     </div>
   </div>`;
 }
@@ -12169,10 +12169,10 @@ function _renderInsightsCoverage() {
   const loadedAlbumCount = ((_coverageState.data && _coverageState.data.unheard_albums) || []).length;
   const totalUnheardAlbums = data.unheard_albums_total || albums.unheard || loadedAlbumCount;
 
-  const genreChips = (data.top_unheard_genres || []).map(g =>
+  const genreChips = (data.top_unheard_genres || []).slice(0, 5).map(g =>
     _coverageRenderFilterChip('genre', g.name, g.name, g.album_count)
   ).join('');
-  const artistChips = (data.top_unheard_artists || []).map(a =>
+  const artistChips = (data.top_unheard_artists || []).slice(0, 4).map(a =>
     _coverageRenderFilterChip('artist', a.name, a.name, a.album_count)
   ).join('');
 
@@ -12203,50 +12203,33 @@ function _renderInsightsCoverage() {
 
   el.innerHTML = `
     <div class="coverage-hub">
-      <div class="coverage-insight-line">${esc(_coverageInsightLine(data))}</div>
-      <div class="coverage-summary-grid">
-        <div class="coverage-summary-card">
-          <span>Albums explored</span>
-          <strong>${_coveragePctText(albums.pct)}%</strong>
-          <em>${albums.heard} / ${albums.total}</em>
+      <div class="coverage-focus-panel">
+        <div class="coverage-focus-copy">
+          <span class="coverage-focus-label">What to revisit</span>
+          <strong>${esc(_coverageInsightLine(data))}</strong>
+          <p>Filter the unheard shelf, then play an album or add the visible picks to a playlist.</p>
         </div>
-        <div class="coverage-summary-card">
-          <span>Artists explored</span>
-          <strong>${_coveragePctText(artists.pct)}%</strong>
-          <em>${artists.heard} / ${artists.total}</em>
-        </div>
-        <div class="coverage-summary-card">
-          <span>Tracks heard</span>
-          <strong>${_coveragePctText(tracks.pct)}%</strong>
-          <em>${tracks.heard} / ${tracks.total}</em>
-        </div>
-        <div class="coverage-summary-card coverage-summary-card--accent">
-          <span>Unheard albums</span>
-          <strong>${albums.unheard}</strong>
-          <em>${totalUnheardAlbums} available</em>
-        </div>
-      </div>
-      <div class="coverage-workflow-row">
-        <div>
-          <strong>1. Find gaps</strong>
-          <span>Use genre and artist chips to narrow the unheard shelf.</span>
-        </div>
-        <div>
-          <strong>2. Audition fast</strong>
-          <span>Play an album or open the detail view before committing.</span>
-        </div>
-        <div>
-          <strong>3. Build a session</strong>
-          <span>Add visible picks to a playlist for focused rediscovery.</span>
+        <div class="coverage-focus-stats">
+          <div>
+            <span>Unheard albums</span>
+            <strong>${albums.unheard}</strong>
+          </div>
+          <div>
+            <span>Albums explored</span>
+            <strong>${_coveragePctText(albums.pct)}%</strong>
+          </div>
         </div>
       </div>
 
       ${albums.unheard ? `
         <div class="coverage-toolbar">
-          <div class="coverage-filter-row">
-            ${_coverageRenderFilterChip('all', '', 'All', loadedAlbumCount)}
-            ${genreChips}
-            ${artistChips}
+          <div class="coverage-toolbar-main">
+            <div class="coverage-control-label">Narrow the shelf</div>
+            <div class="coverage-filter-row">
+              ${_coverageRenderFilterChip('all', '', 'All', loadedAlbumCount)}
+              ${genreChips}
+              ${artistChips}
+            </div>
           </div>
           <div class="coverage-toolbar-actions">
             <select class="coverage-sort-select" onchange="App.coverageSetSort(this.value)" title="Sort unheard albums">
