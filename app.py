@@ -320,6 +320,9 @@ scan_state = {
     'status': 'idle',
     'progress': 0,
     'total': 0,
+    'new_tracks': 0,
+    'added_tracks': 0,
+    'removed_tracks': 0,
     'message': '',
 }
 
@@ -1080,7 +1083,16 @@ def do_scan():
     global library, scan_state
 
     prev_count = len(library)
-    scan_state.update({'status': 'scanning', 'message': 'Finding music files...', 'progress': 0, 'total': 0, 'new_tracks': 0})
+    prev_ids = {t.get('id') for t in library if t.get('id')}
+    scan_state.update({
+        'status': 'scanning',
+        'message': 'Finding music files...',
+        'progress': 0,
+        'total': 0,
+        'new_tracks': 0,
+        'added_tracks': 0,
+        'removed_tracks': 0,
+    })
 
     music_base = get_music_base()
     if not music_base.exists():
@@ -1114,9 +1126,21 @@ def do_scan():
     except Exception as e:
         print(f"Error saving library cache: {e}")
 
+    next_ids = {t.get('id') for t in tracks if t.get('id')}
+    added_count = len(next_ids - prev_ids)
+    removed_count = len(prev_ids - next_ids)
     new_count = len(tracks) - prev_count
-    scan_state.update({'status': 'done', 'message': f'Library ready — {len(tracks)} tracks', 'progress': len(files), 'total': len(files), 'new_tracks': new_count, 'total_tracks': len(tracks)})
-    print(f"Scan complete: {len(tracks)} tracks ({new_count:+d} new)")
+    scan_state.update({
+        'status': 'done',
+        'message': f'Library ready — {len(tracks)} tracks',
+        'progress': len(files),
+        'total': len(files),
+        'new_tracks': new_count,
+        'added_tracks': added_count,
+        'removed_tracks': removed_count,
+        'total_tracks': len(tracks),
+    })
+    print(f"Scan complete: {len(tracks)} tracks (+{added_count} / -{removed_count})")
     _invalidate_home_cache()
     global _meta_maps_cache, _stream_track_cache
     _meta_maps_cache = None
@@ -1130,7 +1154,16 @@ def load_library():
         if data:
             with library_lock:
                 library = data
-            scan_state.update({'status': 'done', 'message': f'Library ready — {len(data)} tracks', 'total': len(data), 'progress': len(data), 'new_tracks': 0, 'total_tracks': len(data)})
+            scan_state.update({
+                'status': 'done',
+                'message': f'Library ready — {len(data)} tracks',
+                'total': len(data),
+                'progress': len(data),
+                'new_tracks': 0,
+                'added_tracks': 0,
+                'removed_tracks': 0,
+                'total_tracks': len(data),
+            })
             print(f"Loaded {len(data)} tracks from SQLite")
             return
     except Exception as e:

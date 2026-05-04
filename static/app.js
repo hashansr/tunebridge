@@ -670,9 +670,17 @@ async function refreshSidebarSyncIndicator(daps = null) {
 }
 
 function _sidebarScanDeltaHtml(status) {
+  const added = Number(status?.added_tracks || 0);
+  const removed = Number(status?.removed_tracks || 0);
+  if (added > 0 || removed > 0) {
+    const parts = [];
+    if (added > 0) parts.push(`<span class="scan-new">+ ${added.toLocaleString()}</span>`);
+    if (removed > 0) parts.push(`<span class="scan-removed">- ${removed.toLocaleString()}</span>`);
+    return parts.join(`<span class="scan-separator">&bull;</span>`);
+  }
   const delta = Number(status?.new_tracks || 0);
-  if (delta > 0) return `<span class="scan-new">+${delta.toLocaleString()} new</span>`;
-  if (delta < 0) return `<span class="scan-removed">${delta.toLocaleString()} removed</span>`;
+  if (delta > 0) return `<span class="scan-new">+ ${delta.toLocaleString()}</span>`;
+  if (delta < 0) return `<span class="scan-removed">- ${Math.abs(delta).toLocaleString()}</span>`;
   return `<span class="scan-unchanged">No changes</span>`;
 }
 
@@ -698,9 +706,9 @@ function _renderSidebarScanStatus(status) {
     msg.innerHTML = `
       <span class="scan-stats">
         <span class="scan-stat"><span class="scan-stat-number">${Number(status.progress || 0).toLocaleString()}</span><span class="scan-stat-label">scanned</span></span>
+        <span class="scan-separator">&bull;</span>
         <span class="scan-stat"><span class="scan-stat-number">${Number(status.total || 0).toLocaleString()}</span><span class="scan-stat-label">total</span></span>
       </span>
-      <span class="scan-unchanged">Scanning library…</span>
     `;
     msg.classList.add('scanning-pulse');
     if (rescanBtn) rescanBtn.classList.add('is-scanning');
@@ -717,8 +725,9 @@ function _renderSidebarScanStatus(status) {
     msg.innerHTML = `
       <span class="scan-stats">
         <span class="scan-stat"><span class="scan-stat-number">${Number(status.total_tracks || 0).toLocaleString()}</span><span class="scan-stat-label">tracks</span></span>
+        <span class="scan-separator">&bull;</span>
+        ${_sidebarScanDeltaHtml(status)}
       </span>
-      ${_sidebarScanDeltaHtml(status)}
     `;
   } else if (status?.status === 'error') {
     setState('Library Issue', 'is-error');
