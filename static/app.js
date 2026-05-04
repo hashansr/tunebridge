@@ -9920,7 +9920,10 @@ function renderSongsTable() {
       </td>
       <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
-      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
+      <td data-col="duration" class="col-dur">
+        ${esc(t.duration_fmt || '')}
+        ${_playStats[t.id]?.count ? `<span class="track-play-badge" title="Last played ${new Date(_playStats[t.id].last_played * 1000).toLocaleDateString()}">${_playStats[t.id].count}×</span>` : ''}
+      </td>
       <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn')}</td>
       <td data-col="genre" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
       <td data-col="year" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.year || '')}</td>
@@ -12238,11 +12241,11 @@ function _coverageInsightLine(data) {
   const albums = _coverageSummaryMetric(summary, 'albums');
   const tracks = _coverageSummaryMetric(summary, 'tracks');
   const genres = (data.top_unheard_genres || []).slice(0, 2).map(g => g.name).filter(Boolean);
-  if (!tracks.total) return 'Scan your music folder to start measuring what you have explored.';
-  if (!tracks.heard) return 'Start listening to build coverage. A valid listen marks tracks, albums, and artists as explored.';
-  if (!albums.unheard) return 'Every album has at least one valid listen. Refresh after adding new music to keep coverage current.';
-  const genreText = genres.length ? `, mostly ${genres.join(' and ')}` : '';
-  return `You have ${albums.unheard} album${albums.unheard === 1 ? '' : 's'} you have never played${genreText}.`;
+  if (!tracks.total) return 'Scan your music folder and this page will show albums you have not played yet.';
+  if (!tracks.heard) return 'No plays have been counted yet. Once you listen in TuneBridge, this page will show what is still untouched.';
+  if (!albums.unheard) return 'You have played something from every album in your library.';
+  const genreText = genres.length ? ` The biggest pockets are ${genres.join(' and ')}.` : '';
+  return `${albums.unheard.toLocaleString()} album${albums.unheard === 1 ? '' : 's'} in your library have no plays yet.${genreText}`;
 }
 
 function _coverageRenderFilterChip(type, value, label, count = null) {
@@ -12300,42 +12303,42 @@ function _renderInsightsCoverage() {
   const emptyBody = !tracks.total
     ? `<div class="coverage-empty-state">
          ${coverPlaceholder('album', 52, '10px')}
-         <strong>Your library is empty</strong>
-         <span>Scan your music folder to start measuring coverage.</span>
+         <strong>No library scanned yet</strong>
+         <span>Scan your music folder and TuneBridge will show albums you have not played.</span>
        </div>`
     : (!tracks.heard
       ? `<div class="coverage-empty-state">
            ${coverPlaceholder('song', 52, '10px')}
            <strong>No listening history yet</strong>
-           <span>Play music in TuneBridge to build coverage. Only valid listens count.</span>
+           <span>Play a few albums in TuneBridge. Albums move out of this list once a play is long enough to count.</span>
          </div>`
       : (!albums.unheard
         ? `<div class="coverage-empty-state">
              ${coverPlaceholder('album', 52, '10px')}
-             <strong>Full album coverage</strong>
-             <span>You have played something from every album. Refresh after importing new music.</span>
+             <strong>You have tried every album</strong>
+             <span>Every album has at least one play. Refresh this page after importing new music.</span>
            </div>`
         : `<div class="coverage-empty-state">
              ${coverPlaceholder('album', 52, '10px')}
              <strong>No albums match this filter</strong>
-             <span>Try All or a different genre/artist chip.</span>
+             <span>Try All, or choose a different genre or artist.</span>
            </div>`));
 
   el.innerHTML = `
     <div class="coverage-hub">
       <div class="coverage-focus-panel">
         <div class="coverage-focus-copy">
-          <span class="coverage-focus-label">What to revisit</span>
+          <span class="coverage-focus-label">Unplayed in TuneBridge</span>
           <strong>${esc(_coverageInsightLine(data))}</strong>
-          <p>Filter the unheard shelf, then play an album or add the visible picks to a playlist.</p>
+          <p>Choose an album to play now, or filter by mood and add the shown albums to a playlist for later.</p>
         </div>
         <div class="coverage-focus-stats">
           <div>
-            <span>Unheard albums</span>
+            <span>Unplayed</span>
             <strong>${albums.unheard}</strong>
           </div>
           <div>
-            <span>Albums explored</span>
+            <span>Albums tried</span>
             <strong>${_coveragePctText(albums.pct)}%</strong>
           </div>
         </div>
@@ -12344,7 +12347,7 @@ function _renderInsightsCoverage() {
       ${albums.unheard ? `
         <div class="coverage-toolbar">
           <div class="coverage-toolbar-main">
-            <div class="coverage-control-label">Narrow the shelf</div>
+            <div class="coverage-control-label">Filter by genre or artist</div>
             <div class="coverage-filter-row">
               ${_coverageRenderFilterChip('all', '', 'All', loadedAlbumCount)}
               ${genreChips}
@@ -12352,16 +12355,16 @@ function _renderInsightsCoverage() {
             </div>
           </div>
           <div class="coverage-toolbar-actions">
-            <select class="coverage-sort-select" onchange="App.coverageSetSort(this.value)" title="Sort unheard albums">
-              <option value="recent"${_coverageState.sort === 'recent' ? ' selected' : ''}>Recently added</option>
-              <option value="oldest"${_coverageState.sort === 'oldest' ? ' selected' : ''}>Oldest in library</option>
+            <select class="coverage-sort-select" onchange="App.coverageSetSort(this.value)" title="Sort unplayed albums">
+              <option value="recent"${_coverageState.sort === 'recent' ? ' selected' : ''}>Newest added</option>
+              <option value="oldest"${_coverageState.sort === 'oldest' ? ' selected' : ''}>Oldest added</option>
               <option value="artist"${_coverageState.sort === 'artist' ? ' selected' : ''}>Artist A-Z</option>
               <option value="album"${_coverageState.sort === 'album' ? ' selected' : ''}>Album A-Z</option>
             </select>
-            <button class="btn-secondary coverage-visible-add-btn" onclick="App._coverageAddVisibleToPlaylist(event)" ${visibleRows.length ? '' : 'disabled'}>Add Visible to Playlist</button>
+            <button class="btn-secondary coverage-visible-add-btn" onclick="App._coverageAddVisibleToPlaylist(event)" ${visibleRows.length ? '' : 'disabled'}>Add Shown to Playlist</button>
           </div>
         </div>
-        <div class="coverage-results-meta">${visibleRows.length ? `Showing ${visibleRows.length} of ${rows.length} rediscovery pick${rows.length === 1 ? '' : 's'}${totalUnheardAlbums > loadedAlbumCount ? ` (${totalUnheardAlbums} total)` : ''}` : 'No albums match this filter'}</div>
+        <div class="coverage-results-meta">${visibleRows.length ? `Showing ${visibleRows.length} of ${rows.length} unplayed album${rows.length === 1 ? '' : 's'}${totalUnheardAlbums > loadedAlbumCount ? ` (${totalUnheardAlbums.toLocaleString()} total)` : ''}` : 'No albums match this filter'}</div>
         ${visibleRows.length ? `<div class="coverage-album-grid">${cards}</div>` : emptyBody}
         ${hasMore ? `<button class="coverage-show-more-btn" onclick="App.coverageShowMore()">Show more</button>` : ''}
       ` : emptyBody}
@@ -13271,11 +13274,11 @@ const _INSIGHTS_HELP = {
            <p><strong>Example:</strong> Scoring against Harman IEM 2019 instead of flat will favour IEMs with a slight bass shelf and ear-gain peak, penalising overly neutral-sounding IEMs that most listeners find thin.</p>`,
   },
   coverage: {
-    title: 'Library Coverage',
-    body: `<p>Shows how much of your local collection you have actually explored through valid listens.</p>
-           <p><strong>How to read:</strong> A track is heard after at least one valid listen is recorded in local playback history. An album or artist counts as explored once any track from it has a valid listen.</p>
-           <p><strong>Use it for:</strong> finding forgotten albums, filtering unheard records by genre or artist, playing them immediately, or adding rediscovery batches to a playlist.</p>
-           <p><strong>Note:</strong> Fresh installs, cleared history, or disabled listening tracking will show low coverage until you listen in TuneBridge. Tracking is controlled in Settings → Playback.</p>`,
+    title: 'Unplayed Albums',
+    body: `<p>This page shows albums in your library that do not have a counted play in TuneBridge yet.</p>
+           <p><strong>What counts:</strong> an album leaves this list after you play one of its tracks long enough to count in local listening history.</p>
+           <p><strong>How to use it:</strong> filter by genre or artist, play anything that catches your eye, or add the shown albums to a playlist for later.</p>
+           <p><strong>Good to know:</strong> fresh installs, cleared history, or disabled listening tracking will make more albums appear here. Tracking is controlled in Settings → Playback.</p>`,
   },
 };
 

@@ -724,7 +724,7 @@
             </button>
             <button class="btn-secondary" onclick="App.showView('library-coverage')">
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3" width="9" height="10" rx="2"/><circle cx="6.5" cy="8" r="1.7"/><path d="M12 4v5"/></svg>
-              Coverage
+              Unplayed
             </button>
             <button class="btn-primary" onclick="App.createPlaylist()">+ New Playlist</button>
           </div>
@@ -1204,11 +1204,11 @@
               <div class="insights-section insights-coverage-teaser-section" id="insights-coverage-section">
                 <div class="insights-section-hdr">
                   <div class="insights-section-hdr-text">
-                    <h3 class="insights-section-title">Library Coverage</h3>
-                    <p class="insights-section-desc">A focused rediscovery workspace for albums and artists you own but have never played.</p>
+                    <h3 class="insights-section-title">Unplayed Albums</h3>
+                    <p class="insights-section-desc">See albums in your library that do not have a counted play in TuneBridge yet.</p>
                   </div>
                   <div class="insights-section-hdr-actions">
-                    <button class="btn-secondary" style="font-size:12px;padding:5px 12px" onclick="App.showView('library-coverage')">Open Coverage</button>
+                    <button class="btn-secondary" style="font-size:12px;padding:5px 12px" onclick="App.showView('library-coverage')">Open</button>
                   </div>
                 </div>
                 <div class="coverage-teaser">
@@ -1216,8 +1216,8 @@
                     <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="9" height="10" rx="2"/><circle cx="6.5" cy="8" r="1.7"/><path d="M12 4v5"/></svg>
                   </div>
                   <div>
-                    <strong>Find what your library has been hiding.</strong>
-                    <span>Filter unheard albums by genre or artist, play one immediately, or batch them into a playlist.</span>
+                    <strong>Find albums you have not played yet.</strong>
+                    <span>Open the full page to filter unplayed albums, start one now, or save a few to a playlist.</span>
                   </div>
                 </div>
               </div>
@@ -1231,11 +1231,11 @@
         <div class="library-coverage-page-header">
           <div>
             <div class="coverage-page-overline">Rediscovery</div>
-            <h2>Library Coverage</h2>
-            <p>Pick a forgotten album from your library, play it now, or save a filtered batch for later listening.</p>
+            <h2>Unplayed Albums</h2>
+            <p>Albums in your library with no counted plays yet. Pick one to play now, or save a filtered set to a playlist.</p>
           </div>
           <div class="view-header-actions">
-            <button class="btn-secondary btn-icon-only" onclick="App.loadInsightsCoverage()" title="Refresh" aria-label="Refresh">
+            <button class="btn-secondary btn-icon-only" onclick="App.loadInsightsCoverage()" title="Refresh unplayed albums" aria-label="Refresh unplayed albums">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.6 6.1"/><path d="M3 12a9 9 0 0 1 15.6-6.1"/><path d="M3 18v-5h5"/><path d="M21 6v5h-5"/></svg>
             </button>
           </div>

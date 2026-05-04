@@ -13384,6 +13384,60 @@ tr:hover .track-edit-btn:hover {
 .history-event-time  { font-size: 12px; color: var(--text-muted); }
 .history-event-dur   { font-size: 11px; color: var(--text-muted); }
 
+/* History: nav links */
+.history-nav-link { cursor: pointer; }
+.history-nav-link:hover { color: var(--accent-primary); text-decoration: underline; }
+
+/* History: per-row delete button */
+.history-delete-btn {
+  opacity: 0; background: none; border: none; color: var(--text-muted);
+  cursor: pointer; padding: 4px 6px; font-size: 12px; line-height: 1;
+  transition: opacity .15s, color .15s; flex-shrink: 0;
+}
+.history-event-row:hover .history-delete-btn { opacity: 1; }
+.history-delete-btn:hover { color: rgba(255,179,181,0.9); }
+
+/* History: clear dropdown */
+.history-clear-wrap { position: relative; margin-left: auto; }
+.history-clear-btn { font-size: 12px; padding: 5px 10px; border-radius: 20px; }
+.history-clear-menu {
+  position: absolute; right: 0; top: calc(100% + 6px);
+  background: var(--surface-3); border-radius: 10px; padding: 4px 0;
+  min-width: 160px; z-index: 300; box-shadow: 0 8px 28px rgba(0,0,0,.55);
+}
+.history-clear-menu button {
+  display: block; width: 100%; padding: 9px 14px; text-align: left;
+  background: none; border: none; color: var(--text-sub); cursor: pointer; font-size: 13px;
+}
+.history-clear-menu button:hover { background: rgba(255,255,255,.06); color: var(--text-primary); }
+.history-clear-menu button.danger { color: rgba(255,179,181,0.85); }
+
+/* History: charts row */
+.history-charts-row {
+  display: flex; gap: 16px; padding: 0 24px 16px; flex-wrap: wrap;
+}
+.history-chart-card {
+  background: var(--surface-2); border-radius: 12px; padding: 16px;
+  flex: 1; min-width: 200px;
+}
+.history-chart-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--text-muted); margin-bottom: 12px;
+}
+.history-top-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 13px;
+}
+.history-top-row:last-child { border-bottom: none; }
+.history-top-count { color: var(--text-muted); font-size: 12px; flex-shrink: 0; margin-left: 8px; }
+
+/* Track play count badge */
+.track-play-badge {
+  font-size: 10px; color: var(--text-muted); background: rgba(255,255,255,.06);
+  border-radius: 4px; padding: 1px 5px; margin-left: 4px;
+  white-space: nowrap; vertical-align: middle; cursor: default;
+}
+
 /* ── Library Coverage ───────────────────────────────────────────────── */
 .library-coverage-view { background: var(--app-page-gradient); padding-bottom: 90px; }
 .library-coverage-page-header {
