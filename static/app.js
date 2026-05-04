@@ -12430,7 +12430,7 @@ async function loadInsightsCoverage() {
   if (!data) {
     el.innerHTML = `<div class="coverage-error-state">
       <p class="insights-error">Could not load coverage data.</p>
-      <button class="btn-secondary" onclick="App.loadInsightsCoverage()">Retry</button>
+      <button class="btn-secondary btn-with-icon" onclick="App.loadInsightsCoverage()"><span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>Retry</button>
     </div>`;
     return;
   }
