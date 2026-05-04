@@ -325,13 +325,13 @@
             </div>
           </div>
         </div>
-        <div class="table-columns-toolbar">
+        <div class="table-columns-toolbar tb-table-toolbar">
           <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)" title="Configure columns" aria-label="Configure columns">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
           </button>
         </div>
-        <div id="tracks-table-wrap">
-          <table id="tracks-table">
+        <div id="tracks-table-wrap" class="tb-table-shell" data-table-context="tracks">
+          <table id="tracks-table" class="tb-table tb-table-density-default" data-table-context="tracks">
             <thead><tr>
               <th class="col-num" data-col="track_number" data-sort="track_number" onclick="App.sortTracks('track_number')"><span class="th-sort-label"># <span class="sort-arrow" id="tracks-sort-track_number"></span></span></th>
               <th class="col-title" data-col="title" data-sort="title" onclick="App.sortTracks('title')"><span class="th-sort-label">Title <span class="sort-arrow" id="tracks-sort-title"></span></span></th>
@@ -362,7 +362,7 @@
           <h2 class="tb-page-title">Songs</h2>
           <div class="view-count" id="songs-count"></div>
         </div>
-        <div class="songs-toolbar">
+        <div class="songs-toolbar tb-table-toolbar">
           <div class="pl-filter-wrap">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input id="songs-filter-input" type="text" placeholder="Filter songs..." oninput="App.filterSongs(this.value)" />
@@ -372,8 +372,8 @@
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
           </button>
         </div>
-        <div id="songs-table-wrap" style="overflow-x:auto">
-          <table id="songs-table">
+        <div id="songs-table-wrap" class="tb-table-shell" data-table-context="songs">
+          <table id="songs-table" class="tb-table tb-table-density-compact" data-table-context="songs">
             <thead><tr>
               <th class="col-num" data-col="track_number" data-sort="track_number">#</th>
               <th class="col-title" data-col="title" data-sort="title" onclick="App.sortSongs('title')">Title <span class="sort-arrow" id="songs-sort-title"></span></th>
@@ -465,7 +465,7 @@
                 <button id="fav-songs-copy-btn" class="btn-secondary" onclick="App.copyFavSongsToConnectedDap()">Copy to Connected DAP</button>
               </div>
             </div>
-            <div class="pl-controls">
+            <div class="pl-controls tb-table-toolbar">
               <div class="pl-sort-pills">
                 <span class="pl-sort-label">Sort:</span>
                 <button class="pl-sort-pill active" data-fav-song-sort="my" onclick="App.setFavSongsSort('my')">My Order</button>
@@ -483,8 +483,8 @@
               <p>No favourite songs yet.</p>
               <p class="muted">Click ★ on a song to add it here.</p>
             </div>
-            <div id="fav-songs-table-wrap" style="overflow-x:auto">
-              <table id="fav-songs-table" style="display:none">
+            <div id="fav-songs-table-wrap" class="tb-table-shell" data-table-context="fav_songs">
+              <table id="fav-songs-table" class="tb-table tb-table-density-default" data-table-context="fav_songs" style="display:none">
                 <thead><tr>
                   <th class="col-num" data-col="track_number">#</th>
                   <th class="col-title" data-col="title">Title</th>
@@ -544,7 +544,7 @@
           </div>
         </div>
 
-        <div class="pl-controls" id="pl-controls">
+        <div class="pl-controls tb-table-toolbar" id="pl-controls">
           <div class="pl-filter-wrap">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input id="pl-filter-input" type="text" placeholder="Filter songs…" oninput="App.filterPlaylist(this.value)" />
@@ -568,8 +568,8 @@
           <p class="muted">Browse the library and click <strong>+</strong> to add songs.</p>
         </div>
 
-        <div id="pl-table-wrap" style="overflow-x:auto">
-          <table id="pl-table" style="display:none">
+        <div id="pl-table-wrap" class="tb-table-shell" data-table-context="playlist">
+          <table id="pl-table" class="tb-table tb-table-density-default" data-table-context="playlist" style="display:none">
             <thead><tr>
               <th class="col-num" data-col="track_number">#</th>
               <th class="col-title" data-col="title">Title</th>

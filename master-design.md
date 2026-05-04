@@ -164,9 +164,15 @@ Card construction:
 - Prefer sharp or subtle radii for instrument-like readability.
 
 ### 6.5 Tables
-- Keep row heights consistent regardless of item count.
-- Header should not overlap filter/sort controls.
-- Actions and favorite controls should have explicit columns where needed.
+- Web/macOS tables use the shared `.tb-table-shell` + `.tb-table` pattern.
+- The canonical row heights are `52px` default and `44px` compact; use compact for analytics, PEQ, DAP status, and duplicate utility tables.
+- Table shells use a tonal dark surface, subtle accent border, restrained shadow, horizontal overflow, and clipped rounded corners.
+- Headers are uppercase, compact, sortable where applicable, and separated from body rows by the shared table separator token.
+- Row states are standardized: subtle even-row tint, blue-accent hover wash, selected row tint, and playing row tint.
+- Column resize handles reveal only on header hover or while resizing.
+- Table controls use `.tb-table-toolbar`; filter fields, sort pills, pagination, and column picker buttons should sit in that toolbar rhythm.
+- Actions and favorite controls should have explicit columns where needed and should reveal consistently on row hover.
+- Specialized tables may keep fixed column layout or compact numeric cells, but must inherit the shared table shell/header/row state vocabulary.
 
 ### 6.6 Input Fields
 - Input backgrounds should use low/elevated tonal surfaces.

@@ -1743,7 +1743,7 @@ function _renderTracksTable() {
         <section class="tracks-disc-block">
           <h3 class="tracks-disc-heading">${esc(group.label)}</h3>
           <div class="tracks-disc-table-wrap">
-            <table class="tracks-table-disc">
+            <table class="tracks-table-disc tb-table tb-table-density-default" data-table-context="tracks">
               ${headerHtml}
               <tbody>${bodyRows}</tbody>
             </table>
@@ -1755,6 +1755,7 @@ function _renderTracksTable() {
 
     document.querySelectorAll('#tracks-table .sort-arrow').forEach(el => { el.textContent = ''; });
   }
+  _syncTableSortState('tracks-table', _tracksSort);
   _applyTableColumnVisibility();
 }
 
@@ -3626,7 +3627,8 @@ function _renderMlPreviewTracks(tracks = [], explanations = []) {
   }
   const explainById = new Map((explanations || []).map(e => [e.track_id, e]));
   el.innerHTML = `
-    <table class="insights-table" style="width:100%;min-width:640px">
+    <div class="tb-table-shell">
+    <table class="insights-table tb-table tb-table-density-compact" style="width:100%;min-width:640px">
       <thead>
         <tr>
           <th style="width:44px">#</th>
@@ -3650,7 +3652,9 @@ function _renderMlPreviewTracks(tracks = [], explanations = []) {
         }).join('')}
       </tbody>
     </table>
+    </div>
   `;
+  _enhanceTableSystem(el);
 }
 
 async function openMlPlaylistGenerator(context = 'global', options = {}) {
@@ -7329,15 +7333,16 @@ async function showDapDetail(id) {
       <div class="dap-config-field"><label>Required for add</label><span>${_fmtBytes(Number(summary.space_required_bytes || 0))}${Number(summary.space_shortfall_bytes || 0) > 0 ? ` <span class="gear-sync-badge gear-sync-stale">Short ${_fmtBytes(Number(summary.space_shortfall_bytes || 0))}</span>` : ''}</span></div>
     </div>
     <div class="dap-section-title tb-section-title">Playlist Sync Status</div>
-    <div class="dap-table-shell">
-      <table class="dap-pl-table">
+    <div class="dap-table-shell tb-table-shell" data-table-context="dap_playlists">
+      <table class="dap-pl-table tb-table tb-table-density-compact" data-table-context="dap_playlists">
         <thead><tr>
           <th>Playlist</th><th>Tracks</th><th>Status</th><th></th>
         </tr></thead>
-        <tbody>${plRows || '<tr><td colspan="4" class="dap-pl-empty-row">No playlists yet</td></tr>'}</tbody>
+        <tbody>${plRows || '<tr><td colspan="4" class="dap-pl-empty-row tb-table-empty-row">No playlists yet</td></tr>'}</tbody>
       </table>
     </div>
   `;
+  _enhanceTableSystem(document.getElementById('dap-detail-content'));
 }
 
 async function dapExportPlaylist(dapId, plId, btn) {
@@ -8126,7 +8131,7 @@ function _renderPeqList(profiles) {
     }).join('');
 
     const tableHtml = filterRows
-      ? `<table class="peq-filter-table">
+      ? `<table class="peq-filter-table tb-table tb-table-density-compact">
            <thead><tr><th>Type</th><th>Freq</th><th>Gain</th><th>Q</th></tr></thead>
            <tbody>${filterRows}</tbody>
          </table>`
@@ -9546,6 +9551,12 @@ const _TABLE_COL_DEFAULTS = {
   actions: true,
 };
 const _TABLE_COL_CONTEXTS = ['songs', 'tracks', 'playlist', 'fav_songs'];
+const _TB_TABLE_REGISTRY = {
+  songs:     { tableId: 'songs-table',    wrapId: 'songs-table-wrap',    density: 'compact' },
+  tracks:    { tableId: 'tracks-table',   wrapId: 'tracks-table-wrap',   density: 'default' },
+  playlist:  { tableId: 'pl-table',       wrapId: 'pl-table-wrap',       density: 'default' },
+  fav_songs: { tableId: 'fav-songs-table', wrapId: 'fav-songs-table-wrap', density: 'default' },
+};
 const _TRACKS_TABLE_COL_DEFAULTS = {
   ..._TABLE_COL_DEFAULTS,
   duration: false,
@@ -9576,6 +9587,51 @@ let _tableColsPopoverEl = null;
 let _tableColsContextKeys = _TABLE_COLUMNS.map(c => c.key);
 let _tableColsContext = 'songs';
 let _tableColWidths = {};
+
+function _enhanceTableSystem(root = document) {
+  if (!root) root = document;
+  Object.entries(_TB_TABLE_REGISTRY).forEach(([context, cfg]) => {
+    const wrap = document.getElementById(cfg.wrapId);
+    const table = document.getElementById(cfg.tableId);
+    if (wrap) {
+      wrap.classList.add('tb-table-shell');
+      wrap.dataset.tableContext = context;
+      wrap.style.overflowX = '';
+    }
+    if (table) {
+      table.classList.add('tb-table', `tb-table-density-${cfg.density || 'default'}`);
+      table.dataset.tableContext = context;
+    }
+  });
+
+  root.querySelectorAll?.('table.tracks-table-disc').forEach(table => {
+    table.classList.add('tb-table', 'tb-table-density-default');
+    table.dataset.tableContext = 'tracks';
+  });
+
+  root.querySelectorAll?.('.tracks-disc-table-wrap, .insights-missing-tags-wrap, .dap-table-shell').forEach(wrap => {
+    wrap.classList.add('tb-table-shell');
+  });
+
+  root.querySelectorAll?.('table.insights-table, table.insights-missing-tags-table, table.dap-pl-table, table.peq-filter-table, table.dup-group-table, table.dup-skipped-tbl').forEach(table => {
+    table.classList.add('tb-table', 'tb-table-density-compact');
+  });
+
+  root.querySelectorAll?.('tr').forEach(row => {
+    if (row.classList.contains('track-selected')) row.classList.add('tb-table-row-selected');
+    if (row.classList.contains('player-active')) row.classList.add('tb-table-row-playing');
+  });
+}
+
+function _syncTableSortState(tableId, sortState) {
+  const table = document.getElementById(tableId);
+  if (!table || !sortState) return;
+  table.querySelectorAll('thead th[data-sort]').forEach(th => {
+    const isSorted = th.getAttribute('data-sort') === sortState.col;
+    th.classList.toggle('is-sorted', isSorted);
+    th.setAttribute('aria-sort', isSorted ? (sortState.order === 'asc' ? 'ascending' : 'descending') : 'none');
+  });
+}
 
 function _loadTableColumnPrefs() {
   try {
@@ -9752,6 +9808,7 @@ function _isTableColVisible(colKey, context = 'songs') {
 }
 
 function _applyTableColumnVisibility() {
+  _enhanceTableSystem();
   ['songs-table', 'tracks-table', 'pl-table', 'fav-songs-table'].forEach(id => {
     const table = document.getElementById(id);
     if (!table) return;
@@ -9947,6 +10004,7 @@ function renderSongsTable() {
   document.querySelectorAll('#songs-table .sort-arrow').forEach(el => el.textContent = '');
   const arrow = document.getElementById(`songs-sort-${_songsSort.col}`);
   if (arrow) arrow.textContent = _songsSort.order === 'asc' ? '\u25B2' : '\u25BC';
+  _syncTableSortState('songs-table', _songsSort);
 
   Player.registerTracks(page);
   Player.setPlaybackContext(tracks, { sourceType: 'songs', sourceId: '', sourceLabel: 'Songs' });
@@ -11352,7 +11410,7 @@ function _renderDupGroupCard(g) {
         <button class="dup-ignore-btn" title="Hide this group — the files stay, but this group won't appear in future scans" onclick="App._dupIgnore('${esc(g.key)}')">Ignore group</button>
       </div>
     </div>
-    <table class="dup-group-table">
+    <table class="dup-group-table tb-table tb-table-density-compact">
       <colgroup>
         <col style="width:190px">
         <col style="width:54px">
@@ -11688,7 +11746,7 @@ function _renderDupSkippedTable(ignored, notDup) {
   ];
 
   el.innerHTML = `
-    <table class="dup-skipped-tbl">
+    <table class="dup-skipped-tbl tb-table tb-table-density-compact">
       <colgroup>
         <col style="width:76px">
         <col>
@@ -12840,8 +12898,8 @@ function _renderMissingTagsTable() {
     _syncMissingTagsActions();
     return;
   }
-  wrap.innerHTML = `<div class="insights-missing-tags-wrap">
-    <table class="insights-missing-tags-table">
+  wrap.innerHTML = `<div class="insights-missing-tags-wrap tb-table-shell">
+    <table class="insights-missing-tags-table tb-table tb-table-density-compact">
       <thead>
         <tr>
           <th style="width:44px"></th>
@@ -12870,6 +12928,7 @@ function _renderMissingTagsTable() {
       </tbody>
     </table>
   </div>`;
+  _enhanceTableSystem(wrap);
   _syncMissingTagsActions();
 }
 
@@ -15739,6 +15798,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const settings = await loadSettings();
   await loadFavourites();
   await loadPlaylists();
+  _enhanceTableSystem();
   refreshSidebarSyncIndicator();
   pollScanStatus();
   showView('home');
