@@ -1000,12 +1000,20 @@ const Player = (function () {
         return;
       }
       _mpvCmd('pause', { paused: false });
+      // Reset session start to current position so elapsed time is measured from
+      // the moment the user pressed play, not from position 0 (which is the default
+      // when the track was restored from a previous session without calling _loadTrack).
+      _markTrackSessionStart();
       ps.isPlaying = true;
       _updatePlayBtn();
       return;
     }
     _initAudioContext();
     if (_ctx && _ctx.state === 'suspended') _ctx.resume();
+    // Reset session start to current position. Without this, a track restored mid-way
+    // (e.g. at 2:30) would record elapsed from 0, inflating the listen duration by the
+    // restored seek offset on the first play after app load.
+    _markTrackSessionStart();
     const promise = _audio.play();
     if (promise) promise.catch(e => console.warn('Player: play() rejected', e));
     ps.isPlaying = true;
