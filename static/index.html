@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=41" />
+  <link rel="stylesheet" href="/style.css?v=42" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -712,6 +712,10 @@
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
               Smart Rules
             </button>
+            <button class="btn-secondary" onclick="App.showView('library-coverage')">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3" width="9" height="10" rx="2"/><circle cx="6.5" cy="8" r="1.7"/><path d="M12 4v5"/></svg>
+              Coverage
+            </button>
             <button class="btn-primary" onclick="App.createPlaylist()">+ New Playlist</button>
           </div>
         </div>
@@ -1187,24 +1191,48 @@
               </div>
 
               <!-- Library Coverage -->
-              <div class="insights-section" id="insights-coverage-section">
+              <div class="insights-section insights-coverage-teaser-section" id="insights-coverage-section">
                 <div class="insights-section-hdr">
                   <div class="insights-section-hdr-text">
                     <h3 class="insights-section-title">Library Coverage</h3>
-                    <p class="insights-section-desc">Albums and artists you own but have never played. Discover music you've forgotten you have.</p>
+                    <p class="insights-section-desc">A focused rediscovery workspace for albums and artists you own but have never played.</p>
                   </div>
                   <div class="insights-section-hdr-actions">
-                    <button class="btn-secondary" style="font-size:12px;padding:5px 12px" onclick="App.loadInsightsCoverage()">Refresh</button>
+                    <button class="btn-secondary" style="font-size:12px;padding:5px 12px" onclick="App.showView('library-coverage')">Open Coverage</button>
                   </div>
                 </div>
-                <div id="insights-coverage-content">
-                  <div class="insights-locked-state">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>
-                    <span>Loading coverage data…</span>
+                <div class="coverage-teaser">
+                  <div class="coverage-teaser-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="9" height="10" rx="2"/><circle cx="6.5" cy="8" r="1.7"/><path d="M12 4v5"/></svg>
+                  </div>
+                  <div>
+                    <strong>Find what your library has been hiding.</strong>
+                    <span>Filter unheard albums by genre or artist, play one immediately, or batch them into a playlist.</span>
                   </div>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Library Coverage Page -->
+      <div id="view-library-coverage" class="view library-coverage-view" style="display:none">
+        <div class="library-coverage-page-header">
+          <div>
+            <div class="coverage-page-overline">Rediscovery</div>
+            <h2>Library Coverage</h2>
+            <p>See what you own but have not explored, then turn forgotten albums into a listening queue or playlist.</p>
+          </div>
+          <div class="view-header-actions">
+            <button class="btn-secondary" onclick="App.showView('insights')">Insights</button>
+            <button class="btn-secondary" onclick="App.loadInsightsCoverage()">Refresh</button>
+          </div>
+        </div>
+        <div id="insights-coverage-content">
+          <div class="insights-locked-state">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>
+            <span>Loading coverage data…</span>
           </div>
         </div>
       </div>

@@ -4809,6 +4809,7 @@ function showView(viewName) {
   else if (viewName === 'fav-songs') openFavouriteSongsPlaylist();
   else if (viewName === 'gear') loadGearView();
   else if (viewName === 'playlists') loadPlaylistsView();
+  else if (viewName === 'library-coverage') loadInsightsCoverage();
   else if (viewName === 'settings') {
     setHealthSectionExpanded(false);
     loadSettings();
@@ -4829,7 +4830,7 @@ function showView(viewName) {
 }
 
 function showViewEl(name) {
-  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'missing-tags', 'history', 'duplicates'];
+  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.style.display = v === name ? (v === 'playlist' ? 'flex' : 'block') : 'none';
@@ -4856,6 +4857,7 @@ function setActiveNav(view) {
     'fav-albums': 'favourites',
     'fav-songs': 'favourites',
     'missing-tags': 'insights',
+    'library-coverage': 'insights',
   };
   const navView = NAV_MAP[view] || view;
   document.querySelectorAll('.nav-item').forEach(el => {
@@ -4969,6 +4971,11 @@ async function _restoreNavSnapshot(snap) {
       state.view = 'playlists'; state.playlist = null; clearSelection();
       setActiveNav('playlists'); renderSidebarPlaylists(); showViewEl('playlists');
       await loadPlaylistsView();
+      break;
+    case 'library-coverage':
+      state.view = 'library-coverage'; state.playlist = null; clearSelection();
+      setActiveNav('library-coverage'); renderSidebarPlaylists(); showViewEl('library-coverage');
+      await loadInsightsCoverage();
       break;
     case 'gear':
       state.view = 'gear'; state.playlist = null; clearSelection();
@@ -12058,7 +12065,6 @@ async function loadInsightsView() {
   if (matchRes && matchRes.ok)  { try { _renderInsightsMatchOverview(await matchRes.json()); } catch (_) { _renderInsightsMatchOverview(null); } }
   else                          _renderInsightsMatchOverview(null);  // show CTA to run analysis
 
-  loadInsightsCoverage();
 }
 
 const _coverageState = {
@@ -12160,6 +12166,8 @@ function _renderInsightsCoverage() {
   const rows = _coverageAlbumRows();
   const visibleRows = rows.slice(0, _coverageState.visibleCount);
   const hasMore = rows.length > visibleRows.length;
+  const loadedAlbumCount = ((_coverageState.data && _coverageState.data.unheard_albums) || []).length;
+  const totalUnheardAlbums = data.unheard_albums_total || albums.unheard || loadedAlbumCount;
 
   const genreChips = (data.top_unheard_genres || []).map(g =>
     _coverageRenderFilterChip('genre', g.name, g.name, g.album_count)
@@ -12215,14 +12223,28 @@ function _renderInsightsCoverage() {
         <div class="coverage-summary-card coverage-summary-card--accent">
           <span>Unheard albums</span>
           <strong>${albums.unheard}</strong>
-          <em>${data.unheard_albums_total || albums.unheard} available</em>
+          <em>${totalUnheardAlbums} available</em>
+        </div>
+      </div>
+      <div class="coverage-workflow-row">
+        <div>
+          <strong>1. Find gaps</strong>
+          <span>Use genre and artist chips to narrow the unheard shelf.</span>
+        </div>
+        <div>
+          <strong>2. Audition fast</strong>
+          <span>Play an album or open the detail view before committing.</span>
+        </div>
+        <div>
+          <strong>3. Build a session</strong>
+          <span>Add visible picks to a playlist for focused rediscovery.</span>
         </div>
       </div>
 
       ${albums.unheard ? `
         <div class="coverage-toolbar">
           <div class="coverage-filter-row">
-            ${_coverageRenderFilterChip('all', '', 'All', data.unheard_albums_total || albums.unheard)}
+            ${_coverageRenderFilterChip('all', '', 'All', loadedAlbumCount)}
             ${genreChips}
             ${artistChips}
           </div>
@@ -12236,7 +12258,7 @@ function _renderInsightsCoverage() {
             <button class="btn-secondary coverage-visible-add-btn" onclick="App._coverageAddVisibleToPlaylist(event)" ${visibleRows.length ? '' : 'disabled'}>Add Visible to Playlist</button>
           </div>
         </div>
-        <div class="coverage-results-meta">${visibleRows.length ? `Showing ${visibleRows.length} of ${rows.length} unheard album${rows.length === 1 ? '' : 's'}` : 'No albums match this filter'}</div>
+        <div class="coverage-results-meta">${visibleRows.length ? `Showing ${visibleRows.length} of ${rows.length} rediscovery pick${rows.length === 1 ? '' : 's'}${totalUnheardAlbums > loadedAlbumCount ? ` (${totalUnheardAlbums} total)` : ''}` : 'No albums match this filter'}</div>
         ${visibleRows.length ? `<div class="coverage-album-grid">${cards}</div>` : emptyBody}
         ${hasMore ? `<button class="coverage-show-more-btn" onclick="App.coverageShowMore()">Show more</button>` : ''}
       ` : emptyBody}
