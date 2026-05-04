@@ -658,39 +658,75 @@ function _refreshFavouritesViewsAfterToggle(type) {
 }
 
 /* ── Scan status ────────────────────────────────────────────────────── */
+function _sidebarScanDeltaHtml(status) {
+  const delta = Number(status?.new_tracks || 0);
+  if (delta > 0) return `<span class="scan-new">+${delta.toLocaleString()} new</span>`;
+  if (delta < 0) return `<span class="scan-removed">${delta.toLocaleString()} removed</span>`;
+  return `<span class="scan-unchanged">No changes</span>`;
+}
+
+function _renderSidebarScanStatus(status) {
+  const msg = document.getElementById('scan-msg');
+  const bar = document.getElementById('scan-bar');
+  const barWrap = document.getElementById('scan-bar-wrap');
+  const stateEl = document.querySelector('#scan-status .scan-state');
+  const stateLabel = document.getElementById('scan-state-label');
+  const rescanBtn = document.getElementById('rescan-btn');
+  if (!msg || !bar || !barWrap) return;
+
+  const setState = (label, className = '') => {
+    if (stateLabel) stateLabel.textContent = label;
+    if (stateEl) stateEl.className = `scan-state${className ? ' ' + className : ''}`;
+  };
+
+  if (status?.status === 'scanning') {
+    const pct = status.total > 0 ? Math.round((status.progress / status.total) * 100) : 0;
+    setState('Scanning', 'is-scanning');
+    barWrap.style.display = 'block';
+    bar.style.width = pct + '%';
+    msg.innerHTML = `
+      <span class="scan-stats">
+        <span class="scan-stat"><span class="scan-stat-number">${Number(status.progress || 0).toLocaleString()}</span><span class="scan-stat-label">scanned</span></span>
+        <span class="scan-stat"><span class="scan-stat-number">${Number(status.total || 0).toLocaleString()}</span><span class="scan-stat-label">total</span></span>
+      </span>
+      <span class="scan-unchanged">Scanning library…</span>
+    `;
+    msg.classList.add('scanning-pulse');
+    if (rescanBtn) rescanBtn.classList.add('is-scanning');
+    return;
+  }
+
+  barWrap.style.display = 'none';
+  bar.style.width = '100%';
+  msg.classList.remove('scanning-pulse');
+  if (rescanBtn) rescanBtn.classList.remove('is-scanning');
+
+  if (status?.status === 'done' && status.total_tracks != null) {
+    setState('Library Ready');
+    msg.innerHTML = `
+      <span class="scan-stats">
+        <span class="scan-stat"><span class="scan-stat-number">${Number(status.total_tracks || 0).toLocaleString()}</span><span class="scan-stat-label">tracks</span></span>
+      </span>
+      ${_sidebarScanDeltaHtml(status)}
+    `;
+  } else if (status?.status === 'error') {
+    setState('Library Issue', 'is-error');
+    msg.innerHTML = `<span class="scan-error">${esc(status.message || 'Library error')}</span>`;
+  } else {
+    setState('Library');
+    msg.textContent = status?.message || '';
+  }
+}
+
 async function pollScanStatus() {
   const status = await api('/library/status').catch(() => null);
   if (!status) return;
   state.scanStatus = status;
-
-  const msg = document.getElementById('scan-msg');
-  const bar = document.getElementById('scan-bar');
-  const barWrap = document.getElementById('scan-bar-wrap');
+  _renderSidebarScanStatus(status);
 
   if (status.status === 'scanning') {
-    barWrap.style.display = 'block';
-    const pct = status.total > 0 ? Math.round((status.progress / status.total) * 100) : 0;
-    bar.style.width = pct + '%';
-    msg.textContent = `Scanning… ${status.progress}/${status.total}`;
-    msg.classList.add('scanning-pulse');
     setTimeout(pollScanStatus, 800);
   } else {
-    barWrap.style.display = 'none';
-    bar.style.width = '100%';
-    msg.classList.remove('scanning-pulse');
-    if (status.status === 'done' && status.total_tracks != null) {
-      const newLine = status.new_tracks > 0
-        ? `<span class="scan-new">+${status.new_tracks} new</span>`
-        : status.new_tracks < 0
-          ? `<span class="scan-removed">${status.new_tracks} removed</span>`
-          : `<span class="scan-unchanged">No changes</span>`;
-      msg.innerHTML = `<span class="scan-ready">Library ready</span><span class="scan-total">${status.total_tracks.toLocaleString()} tracks</span>${newLine}`;
-    } else if (status.status === 'error') {
-      msg.innerHTML = `<span class="scan-error">⚠ ${esc(status.message || 'Library error')}</span>`;
-    } else {
-      msg.textContent = status.message;
-    }
-
     if (status.status === 'done') {
       // Refresh current view if it's a library view
       if (['artists', 'albums', 'tracks'].includes(state.view)) {
@@ -13124,17 +13160,10 @@ async function _pollInsightsScan() {
   const status = await fetch('/api/library/status').then(r => r.json()).catch(() => null);
   if (!status) return;
 
-  // Also update the sidebar scan display
-  const msg = document.getElementById('scan-msg');
-  const bar = document.getElementById('scan-bar');
-  const barWrap = document.getElementById('scan-bar-wrap');
-
   if (status.status === 'scanning') {
     const pct = status.total > 0 ? Math.round(status.progress / status.total * 100) : 0;
     _showInsightsScanBanner(`Scanning… ${status.progress} / ${status.total} tracks`, pct);
-    if (msg) msg.textContent = `Scanning… ${status.progress}/${status.total}`;
-    if (barWrap) barWrap.style.display = 'block';
-    if (bar) bar.style.width = pct + '%';
+    _renderSidebarScanStatus(status);
     return;
   }
 
@@ -13143,13 +13172,7 @@ async function _pollInsightsScan() {
   _insightsScanPoller = null;
 
   // Update sidebar
-  if (barWrap) barWrap.style.display = 'none';
-  if (status.status === 'done' && status.total_tracks != null) {
-    const newLine = status.new_tracks > 0 ? `<span class="scan-new">+${status.new_tracks} new</span>`
-      : status.new_tracks < 0 ? `<span class="scan-removed">${status.new_tracks} removed</span>`
-      : `<span class="scan-unchanged">No changes</span>`;
-    if (msg) msg.innerHTML = `<span class="scan-ready">Library ready</span><span class="scan-total">${status.total_tracks.toLocaleString()} tracks</span>${newLine}`;
-  }
+  _renderSidebarScanStatus(status);
 
   // Hide banner and restore button
   _hideInsightsScanBanner();

@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=45" />
+  <link rel="stylesheet" href="/style.css?v=46" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -28,8 +28,7 @@
         </div>
       </div>
 
-      <nav>
-        <div class="nav-section-label nav-section-sticky">Library</div>
+      <nav aria-label="Primary navigation">
         <button class="nav-item" data-view="home" onclick="App.showView('home')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/><polyline points="9 21 9 12 15 12 15 21"/></svg>
           Home
@@ -39,7 +38,7 @@
           Artists
         </button>
         <button class="nav-item" data-view="albums" onclick="App.showView('albums')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="3" x2="12" y2="9"/></svg>
+          <span class="nav-mask-icon nav-mask-icon-player" aria-hidden="true"></span>
           Albums
         </button>
         <button class="nav-item" data-view="songs" onclick="App.showView('songs')">
@@ -47,21 +46,21 @@
           Songs
         </button>
         <button class="nav-item" data-view="favourites" onclick="App.showView('favourites')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2.8 15.1 9 22 9.9 17 14.6 18.2 21.2 12 18 5.8 21.2 7 14.6 2 9.9 8.9 9"/></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg>
           Favourites
         </button>
         <button class="nav-item" data-view="playlists" onclick="App.showView('playlists')">
           <span class="nav-mask-icon nav-mask-icon-playlist" aria-hidden="true"></span>
           Playlists
         </button>
-        <div class="nav-section-label nav-section-sticky" style="margin-top:10px">Gear</div>
+        <div class="nav-spacer" aria-hidden="true"></div>
         <button class="nav-item" data-view="gear" onclick="App.showView('gear')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3v5z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3v5z"/></svg>
           Gear
         </button>
-        <div class="nav-section-label nav-section-sticky" style="margin-top:10px">Insights</div>
+        <div class="nav-spacer" aria-hidden="true"></div>
         <button class="nav-item" data-view="insights" onclick="App.showView('insights')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
           Insights
           <span id="insights-nav-dot" class="insights-nav-dot" style="display:none"></span>
         </button>
@@ -80,29 +79,37 @@
             <span class="sync-nav-title">Sync Music</span>
             <span class="sync-nav-subtitle">Update connected players</span>
           </span>
+          <span class="sync-nav-ready-dot" aria-hidden="true"></span>
         </button>
       </div>
 
       <div id="scan-status">
+        <div class="scan-status-row">
+          <div class="scan-state">
+            <span id="scan-state-dot" class="scan-state-dot" aria-hidden="true"></span>
+            <span id="scan-state-label">Library Ready</span>
+          </div>
+          <div id="rescan-wrap" style="position:relative">
+            <button id="rescan-btn" onclick="App.toggleRescanMenu(event)" title="Scan for new or removed files">
+              <span class="tb-icon tb-icon-refresh tb-icon-refresh-sidebar" aria-hidden="true"></span>
+              <span>Scan</span>
+            </button>
+            <div id="rescan-menu" style="display:none;position:absolute;bottom:calc(100% + 6px);right:0;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;min-width:170px;box-shadow:0 8px 24px rgba(0,0,0,.6);overflow:hidden;z-index:200">
+              <button class="rescan-menu-item" onclick="App.rescan();App.closeRescanMenu()">
+                <span class="tb-icon tb-icon-refresh tb-icon-menu" aria-hidden="true"></span>
+                Rescan Library
+              </button>
+              <button class="rescan-menu-item rescan-menu-clean" onclick="App.rescanClean();App.closeRescanMenu()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                Clean Rescan
+              </button>
+            </div>
+          </div>
+        </div>
         <div id="scan-bar-wrap" style="display:none">
           <div id="scan-bar"></div>
         </div>
         <span id="scan-msg"></span>
-        <div id="rescan-wrap" style="position:relative">
-          <button id="rescan-btn" onclick="App.toggleRescanMenu(event)" title="Rescan Library">
-            <span class="tb-icon tb-icon-refresh tb-icon-refresh-sidebar" aria-hidden="true"></span>
-          </button>
-          <div id="rescan-menu" style="display:none;position:absolute;bottom:calc(100% + 6px);right:0;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;min-width:170px;box-shadow:0 8px 24px rgba(0,0,0,.6);overflow:hidden;z-index:200">
-            <button class="rescan-menu-item" onclick="App.rescan();App.closeRescanMenu()">
-              <span class="tb-icon tb-icon-refresh tb-icon-menu" aria-hidden="true"></span>
-              Rescan Library
-            </button>
-            <button class="rescan-menu-item rescan-menu-clean" onclick="App.rescanClean();App.closeRescanMenu()">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-              Clean Rescan
-            </button>
-          </div>
-        </div>
       </div>
     </aside>
 
