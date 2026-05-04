@@ -12122,19 +12122,20 @@ body.is-col-resizing {
 }
 
 .home-data-health {
-  margin-top: 2px;
-  padding: 10px 14px;
-  border-radius: 999px;
-  font-size: 11px;
+  margin: -2px 0 2px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  line-height: 1.4;
   color: rgba(236, 237, 243, 0.9);
   background: rgba(62, 74, 96, 0.28);
+  border: 1px solid rgba(125, 148, 190, 0.14);
 }
 .home-data-health.warn {
   background: rgba(127, 61, 71, 0.32);
   color: rgba(255, 211, 218, 0.95);
+  border-color: rgba(255, 179, 181, 0.18);
 }
 .home-data-health.info {
   background: rgba(62, 74, 96, 0.24);

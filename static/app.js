@@ -4457,7 +4457,7 @@ function _renderHomeDataHealth(data) {
     const ago = latest ? _homeRelativeTime(latest) : 'a while ago';
     el.style.display = '';
     el.className = 'home-data-health warn';
-    el.textContent = `Listening history looks stale (last event ${ago}). Keep listening to refresh recommendations.`;
+    el.textContent = `Listening history looks out of date (last event ${ago}). Keep listening to refresh recommendations.`;
     return;
   }
   if (valid <= 0) {
