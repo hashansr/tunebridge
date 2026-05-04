@@ -1920,6 +1920,24 @@ def db_clear_play_events():
     conn.commit()
 
 
+def db_delete_play_event(event_id: int):
+    """Delete a single play event by id."""
+    conn = get_conn()
+    conn.execute("DELETE FROM play_events WHERE id = ?", (int(event_id),))
+    conn.commit()
+
+
+def db_clear_play_events_last_days(days: int):
+    """Delete events from the last N days. days=0 clears all."""
+    conn = get_conn()
+    if days <= 0:
+        conn.execute("DELETE FROM play_events")
+    else:
+        cutoff = int(time.time()) - days * 86400
+        conn.execute("DELETE FROM play_events WHERE played_at >= ?", (cutoff,))
+    conn.commit()
+
+
 def db_load_play_events_since(since_ts: int, limit: int = 20000):
     """Return playback events from since_ts (descending by played_at)."""
     conn = get_conn()

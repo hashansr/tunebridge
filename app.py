@@ -5489,6 +5489,76 @@ def clear_player_events():
     return jsonify({'ok': True})
 
 
+@app.route('/api/history/<int:event_id>', methods=['DELETE'])
+def history_delete_event(event_id):
+    _db.db_delete_play_event(event_id)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/history/clear', methods=['POST'])
+def history_clear():
+    days = int((request.get_json(force=True) or {}).get('days', 0))
+    _db.db_clear_play_events_last_days(days)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/history/charts')
+def history_charts():
+    since_days = int(request.args.get('since', 30))
+    valid_only = request.args.get('valid_only', 'false').lower() == 'true'
+    cutoff = int(time.time()) - since_days * 86400
+    conn = _db.get_conn()
+    valid_clause = "AND valid_listen=1" if valid_only else ""
+
+    rows = conn.execute(f"""
+        SELECT date(played_at, 'unixepoch', 'localtime') as day, COUNT(*) as count
+        FROM play_events
+        WHERE played_at >= ? {valid_clause}
+        GROUP BY day ORDER BY day
+    """, (cutoff,)).fetchall()
+    daily_plays = [{'date': r['day'], 'count': r['count']} for r in rows]
+
+    rows = conn.execute(f"""
+        SELECT COALESCE(t.artist, pe.artist, 'Unknown') as artist,
+               COUNT(*) as count,
+               ROUND(SUM(pe.play_seconds) / 3600.0, 1) as hours
+        FROM play_events pe
+        LEFT JOIN tracks t ON t.id = pe.track_id
+        WHERE pe.played_at >= ? {valid_clause}
+        GROUP BY artist ORDER BY count DESC LIMIT 5
+    """, (cutoff,)).fetchall()
+    top_artists = [{'artist': r['artist'], 'count': r['count'], 'hours': r['hours']} for r in rows]
+
+    rows = conn.execute(f"""
+        SELECT pe.track_id,
+               COALESCE(t.title, pe.title, 'Unknown') as title,
+               COALESCE(t.artist, pe.artist, '') as artist,
+               COUNT(*) as count,
+               MAX(pe.played_at) as last_played,
+               t.album_art_key
+        FROM play_events pe
+        LEFT JOIN tracks t ON t.id = pe.track_id
+        WHERE pe.played_at >= ? {valid_clause}
+        GROUP BY pe.track_id ORDER BY count DESC LIMIT 5
+    """, (cutoff,)).fetchall()
+    top_tracks = [{'track_id': r['track_id'], 'title': r['title'], 'artist': r['artist'],
+                   'count': r['count'], 'last_played': r['last_played'],
+                   'album_art_key': r['album_art_key']} for r in rows]
+
+    return jsonify({'daily_plays': daily_plays, 'top_artists': top_artists, 'top_tracks': top_tracks})
+
+
+@app.route('/api/library/play-stats')
+def library_play_stats():
+    conn = _db.get_conn()
+    rows = conn.execute("""
+        SELECT track_id, COUNT(*) as count, MAX(played_at) as last_played
+        FROM play_events WHERE valid_listen=1
+        GROUP BY track_id
+    """).fetchall()
+    return jsonify({r['track_id']: {'count': r['count'], 'last_played': r['last_played']} for r in rows})
+
+
 @app.route('/api/health/status')
 def health_status():
     import time as _time

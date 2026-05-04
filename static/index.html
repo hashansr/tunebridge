@@ -590,8 +590,18 @@
             <input type="checkbox" id="history-valid-only" onchange="App.loadHistoryView()" />
             Valid listens only
           </label>
+          <div class="history-clear-wrap">
+            <button class="btn-ghost history-clear-btn" onclick="App.toggleHistoryClearMenu(event)">Clear ▾</button>
+            <div id="history-clear-menu" class="history-clear-menu" style="display:none">
+              <button onclick="App.clearHistoryPeriod(7)">Last 7 days</button>
+              <button onclick="App.clearHistoryPeriod(30)">Last 30 days</button>
+              <button onclick="App.clearHistoryPeriod(90)">Last 90 days</button>
+              <button onclick="App.clearHistoryPeriod(0)" class="danger">Clear all history</button>
+            </div>
+          </div>
         </div>
         <div id="history-stats" class="history-stats-bar" style="display:none"></div>
+        <div id="history-charts" class="history-charts-row" style="display:none"></div>
         <div id="history-list" class="history-list">
           <div class="spinner-wrap"><div class="spinner"></div></div>
         </div>
@@ -1225,7 +1235,9 @@
             <p>Pick a forgotten album from your library, play it now, or save a filtered batch for later listening.</p>
           </div>
           <div class="view-header-actions">
-            <button class="btn-secondary" onclick="App.loadInsightsCoverage()">Refresh</button>
+            <button class="btn-secondary btn-icon-only" onclick="App.loadInsightsCoverage()" title="Refresh" aria-label="Refresh">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.6 6.1"/><path d="M3 12a9 9 0 0 1 15.6-6.1"/><path d="M3 18v-5h5"/><path d="M21 6v5h-5"/></svg>
+            </button>
           </div>
         </div>
         <div id="insights-coverage-content">

@@ -2023,6 +2023,15 @@ tbody tr:hover .remove-btn { opacity: 1; }
 .btn-secondary:hover  { background: rgba(255,255,255,0.12); color: var(--text); }
 .btn-secondary:active { background: rgba(255,255,255,0.05); }
 .btn-secondary:disabled, .btn-secondary[disabled] { opacity: 0.38; cursor: not-allowed; pointer-events: none; }
+.btn-icon-only {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-icon-only svg { flex-shrink: 0; }
 
 /* ── Toast System — glassmorphism, stackable ─────────────────────────── */
 #toast-container {

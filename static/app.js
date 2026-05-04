@@ -1324,6 +1324,7 @@ async function loadAlbums(artistFilter = null) {
 
 /* ── Tracks view ────────────────────────────────────────────────────── */
 async function loadTracks(artist = null, album = null) {
+  _ensurePlayStats();
   let q = [];
   if (artist) q.push(`artist=${encodeURIComponent(artist)}`);
   if (album) q.push(`album=${encodeURIComponent(album)}`);
@@ -1786,7 +1787,10 @@ function trackRow(t, num, inPlaylist) {
       ${sharedTitleCells}
       <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
-      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
+      <td data-col="duration" class="col-dur">
+        ${esc(t.duration_fmt || '')}
+        ${_playStats[t.id]?.count ? `<span class="track-play-badge" title="Last played ${new Date(_playStats[t.id].last_played * 1000).toLocaleDateString()}">${_playStats[t.id].count}×</span>` : ''}
+      </td>
       <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn')}</td>
       <td data-col="genre" class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
       <td data-col="year" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.year || '')}</td>
@@ -9817,6 +9821,7 @@ function _getSongsFilteredTracks() {
 }
 
 async function loadSongsView() {
+  _ensurePlayStats();
   try {
     _songsData = await api(`/library/songs?sort=${_songsSort.col}&order=${_songsSort.order}`);
   } catch (e) {
@@ -10161,8 +10166,9 @@ async function clearListeningHistory() {
   });
   if (!ok) return;
   try {
-    await fetch('/api/player/events/clear', { method: 'POST' });
+    await api('/history/clear', { method: 'POST', body: JSON.stringify({ days: 0 }) });
     toast('Listening history cleared');
+    _playStatsLoaded = false;
     if (state.view === 'home') loadHome();
   } catch (e) {
     toast('Could not clear listening history');
@@ -10878,7 +10884,18 @@ function srLoadTemplate(key) {
 }
 
 /* ── History view ───────────────────────────────────────────────────── */
-let _historyPeriod = 30;
+let _historyPeriod = 7;
+let _historyChart = null;
+let _playStats = {};       // track_id → {count, last_played}
+let _playStatsLoaded = false;
+
+async function _ensurePlayStats() {
+  if (_playStatsLoaded) return;
+  try {
+    _playStats = await api('/library/play-stats');
+    _playStatsLoaded = true;
+  } catch (_) {}
+}
 
 function setHistoryPeriod(days) {
   _historyPeriod = days;
@@ -10894,8 +10911,10 @@ async function loadHistoryView() {
   const validOnly = document.getElementById('history-valid-only')?.checked ? 'true' : 'false';
   const listEl = document.getElementById('history-list');
   const statsEl = document.getElementById('history-stats');
+  const chartsEl = document.getElementById('history-charts');
   if (listEl) listEl.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
   if (statsEl) statsEl.style.display = 'none';
+  if (chartsEl) chartsEl.style.display = 'none';
   try {
     const data = await api(`/history?since=${_historyPeriod}&limit=500&valid_only=${validOnly}`);
     const { events, stats } = data;
@@ -10905,9 +10924,10 @@ async function loadHistoryView() {
         <div class="history-stat"><span class="history-stat-val">${stats.total_plays}</span><span class="history-stat-lbl">plays</span></div>
         <div class="history-stat"><span class="history-stat-val">${stats.total_hours}</span><span class="history-stat-lbl">hours</span></div>
         <div class="history-stat"><span class="history-stat-val">${stats.unique_tracks}</span><span class="history-stat-lbl">unique tracks</span></div>
-        ${stats.top_artist ? `<div class="history-stat"><span class="history-stat-val">${stats.top_artist}</span><span class="history-stat-lbl">top artist</span></div>` : ''}
+        ${stats.top_artist ? `<div class="history-stat"><span class="history-stat-val">${esc(stats.top_artist)}</span><span class="history-stat-lbl">top artist</span></div>` : ''}
       `;
     }
+    _renderHistoryCharts(validOnly);
     if (!events.length) {
       listEl.innerHTML = '<div class="empty-state"><p>No listening history for this period.</p></div>';
       return;
@@ -10929,19 +10949,116 @@ async function loadHistoryView() {
               ? `<img src="/api/library/artwork/${ev.album_art_key}" onerror="this.style.display='none'" />`
               : `<div class="history-art-placeholder"></div>`}</div>
             <div class="history-event-info">
-              <div class="history-event-title">${ev.title || 'Unknown'}</div>
-              <div class="history-event-sub">${ev.artist || ''} · ${ev.album || ''}</div>
+              <div class="history-event-title">${esc(ev.title || 'Unknown')}</div>
+              <div class="history-event-sub">
+                ${ev.artist ? `<span class="history-nav-link" onclick="event.stopPropagation();App.showArtist('${esc(ev.artist)}')">${esc(ev.artist)}</span>` : ''}
+                ${ev.artist && ev.album ? ' · ' : ''}
+                ${ev.album ? `<span class="history-nav-link" onclick="event.stopPropagation();App.showAlbum('${esc(ev.artist || '')}','${esc(ev.album)}')">${esc(ev.album)}</span>` : ''}
+              </div>
             </div>
             <div class="history-event-meta">
               <div class="history-event-time">${_historyTimeStr(ev.played_at)}</div>
-              <div class="history-event-dur">${ev.play_seconds ? _fmtDur(ev.play_seconds) : ''}</div>
+              <div class="history-event-dur">${ev.play_seconds ? _fmtDuration(ev.play_seconds) : ''}</div>
             </div>
+            <button class="history-delete-btn" onclick="event.stopPropagation();App.deleteHistoryEvent(${ev.id})" title="Remove from history">✕</button>
           </div>
         `).join('')}
       </div>
     `).join('');
   } catch (e) {
     if (listEl) listEl.innerHTML = '<div class="empty-state"><p>Could not load history.</p></div>';
+  }
+}
+
+async function _renderHistoryCharts(validOnly) {
+  const container = document.getElementById('history-charts');
+  if (!container) return;
+  try {
+    const d = await api(`/history/charts?since=${_historyPeriod}&valid_only=${validOnly}`);
+    container.style.display = 'flex';
+    container.innerHTML = `
+      <div class="history-chart-card">
+        <div class="history-chart-title">Plays per day</div>
+        <canvas id="history-day-chart" height="120"></canvas>
+      </div>
+      <div class="history-chart-card">
+        <div class="history-chart-title">Top artists</div>
+        ${d.top_artists.length
+          ? d.top_artists.map(a => `
+              <div class="history-top-row">
+                <span class="history-nav-link" onclick="App.showArtist('${esc(a.artist)}')">${esc(a.artist)}</span>
+                <span class="history-top-count">${a.count} plays · ${a.hours}h</span>
+              </div>`).join('')
+          : '<div class="empty-state" style="padding:12px 0"><p>No data</p></div>'}
+      </div>
+    `;
+    if (_historyChart) { _historyChart.destroy(); _historyChart = null; }
+    const ctx = document.getElementById('history-day-chart');
+    if (ctx && d.daily_plays.length) {
+      _historyChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: d.daily_plays.map(r => {
+            const dt = new Date(r.date + 'T00:00:00');
+            return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+          }),
+          datasets: [{
+            data: d.daily_plays.map(r => r.count),
+            backgroundColor: 'rgba(173,198,255,0.5)',
+            borderColor: '#adc6ff',
+            borderWidth: 1,
+            borderRadius: 3,
+          }],
+        },
+        options: {
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888', maxTicksLimit: 10 } },
+            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888', stepSize: 1 }, beginAtZero: true },
+          },
+        },
+      });
+    }
+  } catch (_) {
+    container.style.display = 'none';
+  }
+}
+
+function toggleHistoryClearMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('history-clear-menu');
+  if (!menu) return;
+  const isOpen = menu.style.display !== 'none';
+  menu.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) {
+    const close = () => { menu.style.display = 'none'; document.removeEventListener('click', close); };
+    setTimeout(() => document.addEventListener('click', close), 0);
+  }
+}
+
+async function clearHistoryPeriod(days) {
+  document.getElementById('history-clear-menu').style.display = 'none';
+  const label = days === 0 ? 'all listening history' : `the last ${days} days of history`;
+  const ok = await _showConfirm({ title: 'Clear History', message: `Delete ${label}?`, okText: 'Clear', danger: true });
+  if (!ok) return;
+  try {
+    await api('/history/clear', { method: 'POST', body: JSON.stringify({ days }) });
+    toast('History cleared');
+    _playStatsLoaded = false;
+    loadHistoryView();
+    if (state.view === 'home') loadHome();
+  } catch (_) {
+    toast('Could not clear history');
+  }
+}
+
+async function deleteHistoryEvent(eventId) {
+  try {
+    await api(`/history/${eventId}`, { method: 'DELETE' });
+    _playStatsLoaded = false;
+    loadHistoryView();
+  } catch (_) {
+    toast('Could not remove entry');
   }
 }
 
@@ -11945,6 +12062,9 @@ const App = {
   // History
   loadHistoryView,
   setHistoryPeriod,
+  toggleHistoryClearMenu,
+  clearHistoryPeriod,
+  deleteHistoryEvent,
   // Coverage
   loadInsightsCoverage,
   coverageSetFilter,
