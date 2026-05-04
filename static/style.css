@@ -2153,6 +2153,11 @@ tbody tr:hover .remove-btn { opacity: 1; }
   align-items: center;
   gap: 7px;
 }
+.btn-with-icon .tb-icon,
+.btn-icon-only .tb-icon {
+  flex-shrink: 0;
+  pointer-events: none;
+}
 .btn-icon-only {
   width: 34px;
   height: 34px;
@@ -2160,6 +2165,19 @@ tbody tr:hover .remove-btn { opacity: 1; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: 8px;
+  border: 1px solid rgba(173, 198, 255, 0.12);
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.06);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn-icon-only:hover {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-color: rgba(173, 198, 255, 0.22);
+}
+.btn-icon-only:active {
+  background: rgba(255,255,255,0.05);
 }
 .btn-icon-only svg { flex-shrink: 0; }
 
@@ -9053,24 +9071,42 @@ tr.player-active .track-title { color: var(--accent); }
 /* ── Insights rescan button ────────────────────────────────────────────── */
 .insights-rescan-btn {
   margin-left: auto;
-  padding: 6px 16px;
+  height: 32px;
+  padding: 0 12px;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: 0.6875rem;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--accent);
-  background: rgba(173,198,255,0.1);
-  border: none;
-  border-radius: 9999px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-sub);
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(173, 198, 255, 0.12);
+  border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
   flex-shrink: 0;
 }
-.insights-rescan-btn:hover:not(:disabled) { background: var(--surface-3); color: var(--text-primary); }
-.insights-rescan-btn:disabled { opacity: 0.5; cursor: default; }
+.insights-rescan-btn .tb-icon {
+  pointer-events: none;
+}
+.insights-rescan-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(173, 198, 255, 0.22);
+  color: var(--text);
+}
+.insights-rescan-btn:active:not(:disabled) {
+  background: rgba(255,255,255,0.05);
+}
+.insights-rescan-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.insights-rescan-btn:disabled .tb-icon {
+  animation: spin 1s linear infinite;
+}
 
 /* ── Insights inline scan progress banner ──────────────────────────────── */
 .insights-scan-banner {
@@ -12000,23 +12036,20 @@ body.is-col-resizing {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  background:
-    radial-gradient(120% 120% at 30% 20%, rgba(173, 198, 255, 0.16), rgba(173, 198, 255, 0.03) 62%),
-    rgba(42, 42, 42, 0.58);
-  border: 1px solid rgba(173, 198, 255, 0.16);
-  backdrop-filter: blur(18px);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(173, 198, 255, 0.12);
   color: var(--text-muted);
   cursor: pointer;
-  transition: background .15s, color .15s, border-color .15s, transform .15s;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.home-refresh-btn .tb-icon {
+  pointer-events: none;
 }
 .home-refresh-btn:hover {
-  background:
-    radial-gradient(120% 120% at 30% 20%, rgba(173, 198, 255, 0.24), rgba(173, 198, 255, 0.05) 62%),
-    rgba(53, 53, 52, 0.72);
-  border-color: rgba(173, 198, 255, 0.32);
-  color: var(--text);
-  transform: translateY(-1px);
+  background: var(--accent-dim);
+  border-color: rgba(173, 198, 255, 0.22);
+  color: var(--accent);
 }
 
 /* Section layout */
@@ -12636,16 +12669,6 @@ body.is-col-resizing {
     max-width: 100%;
   }
 }
-.insights-rescan-btn--hero {
-  border-radius: 9999px;
-  padding: 8px 18px;
-  background: linear-gradient(180deg, #d8e2ff, #adc6ff);
-  color: #001c44;
-  border: none;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
 .insights-shell {
   display: block;
 }
@@ -13086,10 +13109,6 @@ body.is-col-resizing {
   }
   .tag-health-bars {
     grid-template-columns: 1fr;
-  }
-  .insights-rescan-btn--hero {
-    padding: 7px 12px;
-    font-size: 11px;
   }
 }
 @media (max-width: 980px) {

@@ -13156,7 +13156,7 @@ async function insightsRescanLibrary() {
   if (staleBanner) staleBanner.style.display = 'none';
   _pendingTagEdits = 0;
   const btn = document.getElementById('insights-rescan-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Scanning…'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = _refreshButtonLabel('Scanning…'); }
 
   const res = await fetch('/api/library/scan', { method: 'POST' }).catch(() => null);
   if (!res || !res.ok) {
