@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=44" />
+  <link rel="stylesheet" href="/style.css?v=45" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -71,10 +71,17 @@
         </button>
       </nav>
 
-      <button id="sync-nav-btn" onclick="App.showSync()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-        Sync Music
-      </button>
+      <div id="sync-cta-zone" aria-label="Music sync actions">
+        <button id="sync-nav-btn" onclick="App.showSync()">
+          <span class="sync-nav-icon" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+          </span>
+          <span class="sync-nav-copy">
+            <span class="sync-nav-title">Sync Music</span>
+            <span class="sync-nav-subtitle">Update connected players</span>
+          </span>
+        </button>
+      </div>
 
       <div id="scan-status">
         <div id="scan-bar-wrap" style="display:none">
