@@ -4213,7 +4213,9 @@ def history_view():
     valid_clause = "AND valid_listen=1" if valid_only else ""
     rows = conn.execute(f"""
         SELECT pe.id, pe.track_id, pe.played_at, pe.play_seconds, pe.completed, pe.valid_listen,
-               t.title, t.artist, t.album, t.duration, t.album_art_key
+               COALESCE(t.title, pe.title) as title,
+               COALESCE(t.artist, pe.artist) as artist,
+               t.album, t.duration, t.artwork_key
         FROM play_events pe
         LEFT JOIN tracks t ON t.id = pe.track_id
         WHERE pe.played_at >= ? {valid_clause}
@@ -4242,7 +4244,7 @@ def history_view():
             'artist': r['artist'],
             'album': r['album'],
             'duration': r['duration'],
-            'album_art_key': r['album_art_key'],
+            'album_art_key': r['artwork_key'],
         })
     top_artist = max(artist_counts, key=artist_counts.get) if artist_counts else None
     return jsonify({
@@ -5525,7 +5527,7 @@ def history_charts():
         FROM play_events pe
         LEFT JOIN tracks t ON t.id = pe.track_id
         WHERE pe.played_at >= ? {valid_clause}
-        GROUP BY artist ORDER BY count DESC LIMIT 5
+        GROUP BY 1 ORDER BY count DESC LIMIT 5
     """, (cutoff,)).fetchall()
     top_artists = [{'artist': r['artist'], 'count': r['count'], 'hours': r['hours']} for r in rows]
 
@@ -5535,7 +5537,7 @@ def history_charts():
                COALESCE(t.artist, pe.artist, '') as artist,
                COUNT(*) as count,
                MAX(pe.played_at) as last_played,
-               t.album_art_key
+               t.artwork_key
         FROM play_events pe
         LEFT JOIN tracks t ON t.id = pe.track_id
         WHERE pe.played_at >= ? {valid_clause}
@@ -5543,7 +5545,7 @@ def history_charts():
     """, (cutoff,)).fetchall()
     top_tracks = [{'track_id': r['track_id'], 'title': r['title'], 'artist': r['artist'],
                    'count': r['count'], 'last_played': r['last_played'],
-                   'album_art_key': r['album_art_key']} for r in rows]
+                   'album_art_key': r['artwork_key']} for r in rows]
 
     return jsonify({'daily_plays': daily_plays, 'top_artists': top_artists, 'top_tracks': top_tracks})
 
