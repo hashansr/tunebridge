@@ -658,6 +658,17 @@ function _refreshFavouritesViewsAfterToggle(type) {
 }
 
 /* ── Scan status ────────────────────────────────────────────────────── */
+function _setSidebarSyncConnected(connected) {
+  const btn = document.getElementById('sync-nav-btn');
+  if (!btn) return;
+  btn.classList.toggle('has-connected-dap', !!connected);
+}
+
+async function refreshSidebarSyncIndicator(daps = null) {
+  const rows = Array.isArray(daps) ? daps : await api('/daps').catch(() => []);
+  _setSidebarSyncConnected(rows.some(d => !!d?.mounted));
+}
+
 function _sidebarScanDeltaHtml(status) {
   const delta = Number(status?.new_tracks || 0);
   if (delta > 0) return `<span class="scan-new">+${delta.toLocaleString()} new</span>`;
@@ -6847,6 +6858,7 @@ function _gearStatusPillHtml(iconSvg, className, text) {
 async function loadDapsView() {
   document.getElementById('daps-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
   const daps = await api('/daps').catch(() => []);
+  refreshSidebarSyncIndicator(daps);
   const grid  = document.getElementById('daps-grid');
   const empty = document.getElementById('daps-empty');
   if (!daps.length) { grid.innerHTML = ''; empty.style.display = 'flex'; return; }
@@ -7941,6 +7953,7 @@ async function saveDap() {
       await api('/daps', { method: 'POST', body });
     }
     closeDapModal();
+    refreshSidebarSyncIndicator();
     if (state.view === 'dap-detail' && id) {
       showDapDetail(id);
     } else {
@@ -7959,6 +7972,7 @@ async function deleteDap(id) {
   });
   if (!ok) return;
   await api(`/daps/${id}`, { method: 'DELETE' });
+  refreshSidebarSyncIndicator();
   showView('gear');
 }
 
@@ -15716,6 +15730,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const settings = await loadSettings();
   await loadFavourites();
   await loadPlaylists();
+  refreshSidebarSyncIndicator();
   pollScanStatus();
   showView('home');
   refreshPlayerFavouriteButton();
