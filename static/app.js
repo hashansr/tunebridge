@@ -1793,7 +1793,7 @@ function trackRow(t, num, inPlaylist) {
         <div class="title-cell">
           <div class="thumb-wrap">
             <div class="thumb">${thumbImg(t.artwork_key, 38, '4px')}</div>
-            <button class="thumb-play-btn" onclick="event.stopPropagation();Player.playTrackById('${t.id}')" title="Play">${playIcon}</button>
+            <button class="thumb-play-btn" onclick="event.stopPropagation();Player.playTrackById('${t.id}')" title="Play"><span class="thumb-play-icon">${playIcon}</span><span class="thumb-now-playing">${nowPlayingIcon}</span></button>
           </div>
           <div class="track-info">
             <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
@@ -1809,7 +1809,6 @@ function trackRow(t, num, inPlaylist) {
       <td class="col-num" data-col="track_number" onclick="App.toggleTrackSelection('${t.id}', ${num - 1}, event)">
         <div class="num-cell">
           <span class="track-check-indicator">${checkIcon}</span>
-          <span class="track-now-playing">${nowPlayingIcon}</span>
           <span class="track-num">${esc(trackNumLabel)}</span>
         </div>
       </td>
@@ -1851,7 +1850,6 @@ function trackRow(t, num, inPlaylist) {
         <div class="num-cell">
           ${dragHandle}
           <span class="track-check-indicator">${checkIcon}</span>
-          <span class="track-now-playing">${nowPlayingIcon}</span>
           <span class="track-num">${esc(trackNumLabel)}</span>
         </div>
       </td>
@@ -4078,7 +4076,6 @@ function _favSongRow(t, idx) {
           <div class="drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="9" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg>
           </div>
-          <span class="track-now-playing">${nowPlayingIcon}</span>
           <span class="track-num">${idx + 1}</span>
         </div>
       </td>
@@ -4086,7 +4083,7 @@ function _favSongRow(t, idx) {
         <div class="title-cell">
           <div class="thumb-wrap">
             <div class="thumb">${thumbImg(t.artwork_key, 38, '4px')}</div>
-            <button class="thumb-play-btn" onclick="event.stopPropagation();Player.playTrackById('${t.id}')" title="Play">${playIcon}</button>
+            <button class="thumb-play-btn" onclick="event.stopPropagation();Player.playTrackById('${t.id}')" title="Play"><span class="thumb-play-icon">${playIcon}</span><span class="thumb-now-playing">${nowPlayingIcon}</span></button>
           </div>
           <div class="track-info">
             <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
@@ -9998,7 +9995,6 @@ function renderSongsTable() {
       <td class="col-num" data-col="track_number" onclick="App.toggleTrackSelection('${t.id}', ${globalIdx}, event)">
         <div class="num-cell">
           <span class="track-check-indicator"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg></span>
-          <span class="track-now-playing">${nowPlayingIcon}</span>
           <span class="track-num">${t.track_number || (globalIdx + 1)}</span>
         </div>
       </td>
@@ -10006,7 +10002,7 @@ function renderSongsTable() {
         <div class="title-cell">
           <div class="thumb-wrap" style="width:34px;height:34px">
             <div class="thumb">${thumbImg(t.artwork_key, 34, '4px')}</div>
-            <button class="thumb-play-btn" onclick="event.stopPropagation();Player.playTrackById('${t.id}')" title="Play">${playIcon}</button>
+            <button class="thumb-play-btn" onclick="event.stopPropagation();Player.playTrackById('${t.id}')" title="Play"><span class="thumb-play-icon">${playIcon}</span><span class="thumb-now-playing">${nowPlayingIcon}</span></button>
           </div>
           <div class="track-info">
             <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
