@@ -7290,7 +7290,7 @@ async function showDapDetail(id) {
     <div class="dap-detail-header">
       <div class="dap-detail-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg></div>
       <div>
-        <div class="dap-detail-title">${esc(dap.name)}</div>
+        <div class="dap-detail-title tb-object-title">${esc(dap.name)}</div>
         <div class="dap-detail-sub">
           <span class="gear-badge ${dap.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected'}">
             ${dap.mounted ? '● Connected' : '○ Not connected'}
@@ -7328,7 +7328,7 @@ async function showDapDetail(id) {
       <div class="dap-config-field"><label>Device space</label><span>${summary.space_available_bytes === null || summary.space_available_bytes === undefined ? 'Unavailable' : _fmtBytes(summary.space_available_bytes)}</span></div>
       <div class="dap-config-field"><label>Required for add</label><span>${_fmtBytes(Number(summary.space_required_bytes || 0))}${Number(summary.space_shortfall_bytes || 0) > 0 ? ` <span class="gear-sync-badge gear-sync-stale">Short ${_fmtBytes(Number(summary.space_shortfall_bytes || 0))}</span>` : ''}</span></div>
     </div>
-    <div class="dap-section-title">Playlist Sync Status</div>
+    <div class="dap-section-title tb-section-title">Playlist Sync Status</div>
     <div class="dap-table-shell">
       <table class="dap-pl-table">
         <thead><tr>
@@ -8045,7 +8045,7 @@ async function showIemDetail(id) {
         ${detailIcon}
       </div>
       <div>
-        <div class="iem-detail-title">${esc(iem.name)}</div>
+        <div class="iem-detail-title tb-object-title">${esc(iem.name)}</div>
         <div class="iem-detail-sub">
           <span class="gear-badge ${typeBadge}">${esc(iem.type || 'IEM')}</span>
           ${sourceLink && sourceLink.url ? `<a href="${esc(sourceLink.url)}" target="_blank" style="font-size:var(--text-xs);color:var(--accent);text-decoration:none">squig.link ↗</a>` : ''}
@@ -8083,7 +8083,7 @@ async function showIemDetail(id) {
     </div>
 
     <div class="peq-section-hdr">
-      <div class="peq-section-title">PEQ Profiles</div>
+      <div class="peq-section-title tb-section-title">PEQ Profiles</div>
       <button class="btn-secondary" onclick="App.showPeqModal()">+ Upload PEQ</button>
     </div>
     <div class="peq-list" id="peq-list">
@@ -14096,7 +14096,7 @@ function _renderIemDetail(iemId, container) {
       <div class="iemfit-detail-top-grid">
         <div class="iemfit-detail-section">
           <div class="iemfit-detail-section-hdr">
-            <span class="iemfit-detail-section-title">Genre Scores</span>
+            <span class="iemfit-detail-section-title tb-section-title">Genre Scores</span>
             <span class="iemfit-detail-avg" id="iemfit-genre-avg-${esc(iemId)}">Avg —</span>
             <span class="iemfit-detail-section-hint">How well this IEM matches each genre in your library</span>
           </div>
@@ -14104,7 +14104,7 @@ function _renderIemDetail(iemId, container) {
         </div>
         <div class="iemfit-detail-section">
           <div class="iemfit-detail-section-hdr">
-            <span class="iemfit-detail-section-title">Weak Genre Coverage</span>
+            <span class="iemfit-detail-section-title tb-section-title">Weak Genre Coverage</span>
             <span class="iemfit-detail-avg" id="iemfit-weak-avg-${esc(iemId)}">Avg —</span>
             <span class="iemfit-detail-section-hint">Genres where this IEM is the weakest match for your library</span>
           </div>
@@ -14113,7 +14113,7 @@ function _renderIemDetail(iemId, container) {
       </div>
       <div class="iemfit-detail-section">
         <div class="iemfit-detail-section-hdr">
-          <span class="iemfit-detail-section-title">Frequency Response</span>
+          <span class="iemfit-detail-section-title tb-section-title">Frequency Response</span>
           <div class="iemfit-fr-controls" id="iemfit-fr-controls-${esc(iemId)}"></div>
         </div>
         <div class="iemfit-fr-wrap">

@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Page title typography and spacing now use shared TuneBridge title tokens across the web/macOS app for more consistent headers.
 
 ## v0.93-rc.040526-1404 · 2026-05-04
 

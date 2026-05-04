@@ -77,7 +77,6 @@
           </span>
           <span class="sync-nav-copy">
             <span class="sync-nav-title">Sync Music</span>
-            <span class="sync-nav-subtitle">Update connected players</span>
           </span>
           <span class="sync-nav-ready-dot" aria-hidden="true"></span>
         </button>
@@ -124,9 +123,9 @@
       <div id="view-home" class="view" style="display:none">
 
         <!-- Header / Welcome Strip -->
-        <div class="home-header">
+        <div class="home-header tb-page-header">
           <div class="home-header-left">
-            <h2 class="home-title">Home</h2>
+            <h2 class="home-title tb-page-title">Home</h2>
             <div class="home-meta-row">
               <span id="home-library-summary" class="home-meta-chip"></span>
               <span id="home-last-scan" class="home-meta-chip home-meta-scan"></span>
@@ -235,7 +234,7 @@
 
       <div id="view-artists" class="view">
         <div class="view-header">
-          <h2>Artists</h2>
+          <h2 class="tb-page-title">Artists</h2>
           <div class="view-count" id="artists-count"></div>
           <div class="library-toolbar library-toolbar-inline">
             <div class="pl-filter-wrap library-filter-wrap">
@@ -256,7 +255,7 @@
 
       <div id="view-albums" class="view" style="display:none">
         <div class="view-header">
-          <h2>Albums</h2>
+          <h2 class="tb-page-title">Albums</h2>
           <div class="view-count" id="albums-count"></div>
           <div class="library-toolbar library-toolbar-inline">
             <div class="pl-filter-wrap library-filter-wrap">
@@ -271,7 +270,7 @@
           <div class="hero-art-sq" id="artist-hero-art"></div>
           <div class="hero-info">
             <div class="hero-title-row">
-              <div class="hero-title" id="artist-hero-name"></div>
+              <div class="hero-title tb-object-title" id="artist-hero-name"></div>
             </div>
             <div class="hero-meta" id="artist-hero-meta"></div>
             <div class="hero-actions">
@@ -305,7 +304,7 @@
           <div class="hero-art-sq" id="album-hero-art"></div>
           <div class="hero-info">
             <div class="hero-title-row">
-              <div class="hero-title" id="album-hero-name"></div>
+              <div class="hero-title tb-object-title" id="album-hero-name"></div>
             </div>
             <div class="hero-sub" id="album-hero-artist"></div>
             <div class="hero-meta" id="album-hero-meta"></div>
@@ -360,7 +359,7 @@
       <!-- Songs view (all library songs) -->
       <div id="view-songs" class="view view-songs" style="display:none">
         <div class="view-header">
-          <h2>Songs</h2>
+          <h2 class="tb-page-title">Songs</h2>
           <div class="view-count" id="songs-count"></div>
         </div>
         <div class="songs-toolbar">
@@ -407,7 +406,7 @@
       <!-- Favourites -->
       <div id="view-favourites" class="view" style="display:none">
         <div class="view-header">
-          <h2>Favourites</h2>
+          <h2 class="tb-page-title">Favourites</h2>
         </div>
         <div id="favourites-empty" class="empty-state" style="display:none">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><polygon points="12 2.8 15.1 9 22 9.9 17 14.6 18.2 21.2 12 18 5.8 21.2 7 14.6 2 9.9 8.9 9"/></svg>
@@ -590,9 +589,9 @@
       <!-- History view -->
       <div id="view-history" class="view" style="display:none">
         <div class="history-hero">
-          <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px">
-            <h2 style="margin:0; font-size:22px; font-weight:700">Listening History</h2>
-            <div class="history-clear-wrap" style="margin-left:auto">
+          <div class="tb-page-header">
+            <h2 class="tb-page-title">Listening History</h2>
+            <div class="history-clear-wrap">
               <button class="btn-ghost history-clear-btn" onclick="App.toggleHistoryClearMenu(event)">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
                 Delete history
@@ -630,10 +629,10 @@
       <!-- Gear view (DAPs + IEMs) -->
       <div id="view-gear" class="view" style="display:none">
         <!-- DAPs section -->
-        <div class="gear-section-header">
+        <div class="gear-section-header tb-page-header">
           <div>
-            <div class="gear-section-overline">Export &amp; Sync</div>
-            <h2>Digital Audio Players</h2>
+            <div class="gear-section-overline tb-page-overline">Export &amp; Sync</div>
+            <h2 class="tb-page-title">Digital Audio Players</h2>
           </div>
           <div class="gear-section-actions">
             <button id="gear-check-sync-btn" class="btn-secondary" onclick="App.checkAllDapSyncStatus()">Check Sync Status</button>
@@ -651,10 +650,10 @@
         </div>
 
         <!-- IEMs section -->
-        <div class="gear-section-header gear-section-header--secondary">
+        <div class="gear-section-header gear-section-header--secondary tb-page-header">
           <div>
-            <div class="gear-section-overline">Listening Gear</div>
-            <h2>IEMs &amp; Headphones</h2>
+            <div class="gear-section-overline tb-page-overline">Listening Gear</div>
+            <h2 class="tb-page-title">IEMs &amp; Headphones</h2>
           </div>
           <div class="gear-section-actions">
             <button id="iems-create-peq-btn" class="gear-compare-toggle" onclick="App.openPeqEditor({ mode: 'create' })">Create PEQ</button>
@@ -711,7 +710,7 @@
       <!-- Playlists view -->
       <div id="view-playlists" class="view" style="display:none">
         <div class="view-header">
-          <h2>Playlists</h2>
+          <h2 class="tb-page-title">Playlists</h2>
           <div class="view-header-actions">
             <div style="position:relative">
               <button class="btn-secondary" id="pl-view-sort-btn" onclick="App.togglePlViewSort(event)" title="Sort playlists">
@@ -762,13 +761,13 @@
       <!-- Settings view -->
       <div id="view-settings" class="view" style="display:none">
         <div class="view-header">
-          <h2>Settings</h2>
+          <h2 class="tb-page-title">Settings</h2>
         </div>
         <div class="settings-content">
 
           <!-- Library section -->
           <div class="settings-section" id="settings-library-section">
-            <h3 class="settings-section-title">Library</h3>
+            <h3 class="settings-section-title tb-section-title">Library</h3>
             <div class="settings-row">
               <label>Music library path</label>
               <div class="input-browse-group">
@@ -820,7 +819,7 @@
 
           <!-- Data & Backup section -->
           <div class="settings-section" id="settings-data-backup-section">
-            <h3 class="settings-section-title">Data Backup</h3>
+            <h3 class="settings-section-title tb-section-title">Data Backup</h3>
             <p class="settings-data-dir-label">Data location: <code id="settings-data-dir">~/Library/Application Support/TuneBridge</code></p>
             <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
               Your playlists, DAPs, IEMs and settings are preserved here across app updates.
@@ -841,7 +840,7 @@
 
           <!-- Artist Images section -->
           <div class="settings-section" id="settings-image-search-section">
-            <h3 class="settings-section-title">Image Search</h3>
+            <h3 class="settings-section-title tb-section-title">Image Search</h3>
             <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
               Search for both artist portraits and album covers from an online service. Choose a service and optionally add an API key for better results.
             </p>
@@ -897,7 +896,7 @@
 
           <!-- Frequency Response Baselines section -->
           <div class="settings-section" id="settings-baselines-section">
-            <h3 class="settings-section-title">Frequency Response Baselines</h3>
+            <h3 class="settings-section-title tb-section-title">Frequency Response Baselines</h3>
             <p class="settings-baseline-intro">
               Add tuning targets from <a href="https://squig.link" target="_blank" style="color:var(--accent)">squig.link</a>. They appear as reference lines on all IEM &amp; headphone frequency response graphs.
             </p>
@@ -922,7 +921,7 @@
 
           <!-- System Status section -->
           <div class="settings-section" id="settings-system-status-section">
-            <h3 class="settings-section-title">System Status</h3>
+            <h3 class="settings-section-title tb-section-title">System Status</h3>
             <div id="health-grid" class="health-grid" style="display:none">
               <!-- populated by runHealthCheck() -->
               <div class="health-item">
@@ -968,7 +967,7 @@
           </div>
 
           <div class="settings-section" id="settings-peq-section">
-            <h3 class="settings-section-title">Parametric EQ</h3>
+            <h3 class="settings-section-title tb-section-title">Parametric EQ</h3>
             <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
               Open Custom PEQ workspace to tune EQ while keeping player controls available.
             </p>
@@ -979,7 +978,7 @@
 
           <!-- Playback section -->
           <div class="settings-section" id="settings-playback-section">
-            <h3 class="settings-section-title">Playback</h3>
+            <h3 class="settings-section-title tb-section-title">Playback</h3>
 
             <!-- Audio output device -->
             <div class="settings-app-row" id="audio-device-row">
@@ -1042,7 +1041,7 @@
 
           <!-- App section -->
           <div class="settings-section" id="settings-app-restart-section">
-            <h3 class="settings-section-title">App</h3>
+            <h3 class="settings-section-title tb-section-title">App</h3>
 
             <!-- Version + channel — compact single row -->
             <div class="settings-app-row settings-version-row">
@@ -1091,8 +1090,8 @@
       <!-- ── Insights View ───────────────────────────────────────────── -->
       <div id="view-insights" class="view insights-view" style="display:none">
         <div class="insights-hero">
-          <div class="insights-hero-row">
-            <h2>Library Insights</h2>
+          <div class="insights-hero-row tb-page-header">
+            <h2 class="tb-page-title">Library Insights</h2>
             <button class="insights-rescan-btn" id="insights-rescan-btn" onclick="App.insightsRescanLibrary()" title="Re-read all file tags from disk"><span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>Rescan</button>
           </div>
         </div>
@@ -1122,7 +1121,7 @@
               <div class="insights-section" id="insights-overview-section">
                 <div class="insights-section-hdr">
                   <div class="insights-section-hdr-text">
-                    <h3 class="insights-section-title">Overview</h3>
+                    <h3 class="insights-section-title tb-section-title">Overview</h3>
                   </div>
                   <div class="insights-section-hdr-actions">
                     <button class="insights-help-btn" onclick="App.showInsightsHelp('overview', event)" title="What is this?">?</button>
@@ -1138,7 +1137,7 @@
                 <div class="insights-section" id="insights-tag-health-section">
                   <div class="insights-section-hdr">
                     <div class="insights-section-hdr-text">
-                      <h3 class="insights-section-title">Tag Health</h3>
+                      <h3 class="insights-section-title tb-section-title">Tag Health</h3>
                       <p class="insights-section-desc">Metadata completeness and consistency across your library.</p>
                     </div>
                     <button class="insights-help-btn" onclick="App.showInsightsHelp('tag-health', event)" title="What is this?">?</button>
@@ -1152,7 +1151,7 @@
                 <div class="insights-section" id="insights-genre-section">
                   <div class="insights-section-hdr">
                     <div class="insights-section-hdr-text">
-                      <h3 class="insights-section-title">Genre Distribution</h3>
+                      <h3 class="insights-section-title tb-section-title">Genre Distribution</h3>
                       <p class="insights-section-desc">Top genres in your library by track count.</p>
                     </div>
                     <button class="insights-help-btn" onclick="App.showInsightsHelp('genre', event)" title="What is this?">?</button>
@@ -1167,7 +1166,7 @@
               <div class="insights-section" id="insights-sonic-section">
                 <div class="insights-section-hdr">
                   <div class="insights-section-hdr-text">
-                    <h3 class="insights-section-title">Sonic Profile Analysis</h3>
+                    <h3 class="insights-section-title tb-section-title">Sonic Profile Analysis</h3>
                     <p class="insights-section-desc">Spectral characteristics derived from audio analysis of your FLAC library.</p>
                   </div>
                   <button class="insights-help-btn" onclick="App.showInsightsHelp('sonic', event)" title="What is this?">?</button>
@@ -1206,7 +1205,7 @@
               <div class="insights-section" id="insights-gear-section">
                 <div class="insights-section-hdr">
                   <div class="insights-section-hdr-text">
-                    <h3 class="insights-section-title">Gear Compatibility Analysis</h3>
+                    <h3 class="insights-section-title tb-section-title">Gear Compatibility Analysis</h3>
                     <p class="insights-section-desc">Match scores show how well each IEM's frequency response suits your library's tonal demands across genres. Scores are band-weighted by genre character — strong fit means the IEM delivers where your music needs it most.</p>
                   </div>
                   <div class="insights-section-hdr-actions" id="iemfit-header-actions"></div>
@@ -1224,7 +1223,7 @@
               <div class="insights-section insights-coverage-teaser-section" id="insights-coverage-section">
                 <div class="insights-section-hdr">
                   <div class="insights-section-hdr-text">
-                    <h3 class="insights-section-title">Unplayed Albums</h3>
+                    <h3 class="insights-section-title tb-section-title">Unplayed Albums</h3>
                     <p class="insights-section-desc">See albums in your library that do not have a counted play in TuneBridge yet.</p>
                   </div>
                   <div class="insights-section-hdr-actions">
@@ -1250,9 +1249,9 @@
       <div id="view-library-coverage" class="view library-coverage-view" style="display:none">
         <div class="library-coverage-page-header">
           <div>
-            <div class="coverage-page-overline">Rediscovery</div>
-            <h2>Unplayed Albums</h2>
-            <p>Albums in your library with no counted plays yet. Pick one to play now, or save a filtered set to a playlist.</p>
+            <div class="coverage-page-overline tb-page-overline">Rediscovery</div>
+            <h2 class="tb-page-title">Unplayed Albums</h2>
+            <p class="tb-page-subtitle">Albums in your library with no counted plays yet. Pick one to play now, or save a filtered set to a playlist.</p>
           </div>
           <div class="view-header-actions">
             <button class="btn-secondary btn-icon-only" onclick="App.loadInsightsCoverage()" title="Refresh unplayed albums" aria-label="Refresh unplayed albums">
@@ -1272,8 +1271,8 @@
       <div id="view-missing-tags" class="view" style="display:none">
         <div class="view-header">
           <div>
-            <h2>Edit Missing Tags</h2>
-            <p class="muted">Fix incomplete metadata quickly with single or bulk edits.</p>
+            <h2 class="tb-page-title">Edit Missing Tags</h2>
+            <p class="muted tb-page-subtitle">Fix incomplete metadata quickly with single or bulk edits.</p>
           </div>
         </div>
         <div class="insights-missing-tags-controls">
@@ -1296,8 +1295,8 @@
       <div id="view-duplicates" class="view" style="display:none">
         <div class="view-header">
           <div>
-            <h2>Duplicate Tracks</h2>
-            <p class="muted">Tracks sharing the same title, artist and album tag.</p>
+            <h2 class="tb-page-title">Duplicate Tracks</h2>
+            <p class="muted tb-page-subtitle">Tracks sharing the same title, artist and album tag.</p>
           </div>
           <div class="view-header-right">
             <div class="dup-scope-tabs">
@@ -1328,7 +1327,7 @@
           <div class="dup-section-divider"></div>
           <div class="dup-empty-folders-header">
             <div>
-              <span class="dup-section-title">Empty Folders</span>
+              <span class="dup-section-title tb-section-title">Empty Folders</span>
               <span class="dup-section-sub">These folders were left empty after the deletion. You can safely remove them.</span>
             </div>
             <button class="btn-secondary dup-btn" onclick="App._deleteEmptyFolders()">Remove Empty Folders</button>
@@ -1340,7 +1339,7 @@
         <div id="dup-skipped-section" style="display:none">
           <div class="dup-section-divider"></div>
           <div class="dup-skipped-header" onclick="App._toggleSkippedSection()">
-            <span class="dup-section-title">Skipped &amp; Not Duplicates</span>
+            <span class="dup-section-title tb-section-title">Skipped &amp; Not Duplicates</span>
             <span id="dup-skipped-count" class="dup-count-badge"></span>
             <svg id="dup-skipped-chevron" class="dup-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
           </div>
@@ -2382,7 +2381,7 @@
         </button>
         <div class="peq-workspace-title-block">
           <div class="peq-workspace-overline">Tune for immersion</div>
-          <h2>Custom PEQ</h2>
+          <h2 class="tb-page-title">Custom PEQ</h2>
           <div class="peq-workspace-subtitle">Sculpt your acoustic signature while playback controls stay active.</div>
         </div>
       </div>
