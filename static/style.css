@@ -12275,7 +12275,7 @@ body.is-col-resizing {
   position: absolute;
   top: 0;
   bottom: 10px;
-  width: 52px;
+  width: 100px;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.16s ease;
@@ -12283,13 +12283,17 @@ body.is-col-resizing {
 }
 .home-rail-fade-left {
   left: 0;
-  background: linear-gradient(to right, var(--bg) 10%, transparent 100%);
+  background: linear-gradient(to right, var(--bg) 20%, transparent 100%);
 }
 .home-rail-fade-right {
   right: 0;
-  background: linear-gradient(to left, var(--bg) 10%, transparent 100%);
+  /* always show a gentle right fade so the peeking card blends into the bg */
+  background: linear-gradient(to left, var(--bg) 20%, transparent 100%);
+  opacity: 0.7;
 }
-.home-rail-shell.can-scroll-left .home-rail-fade-left,
+.home-rail-shell.can-scroll-left .home-rail-fade-left {
+  opacity: 1;
+}
 .home-rail-shell.can-scroll-right .home-rail-fade-right {
   opacity: 1;
 }
