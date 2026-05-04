@@ -325,34 +325,36 @@
             </div>
           </div>
         </div>
-        <div class="table-columns-toolbar tb-table-toolbar">
-          <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)" title="Configure columns" aria-label="Configure columns">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
-          </button>
-        </div>
         <div id="tracks-table-wrap" class="tb-table-shell" data-table-context="tracks">
-          <table id="tracks-table" class="tb-table tb-table-density-default" data-table-context="tracks">
-            <thead><tr>
-              <th class="col-num" data-col="track_number" data-sort="track_number" onclick="App.sortTracks('track_number')"><span class="th-sort-label"># <span class="sort-arrow" id="tracks-sort-track_number"></span></span></th>
-              <th class="col-title" data-col="title" data-sort="title" onclick="App.sortTracks('title')"><span class="th-sort-label">Title <span class="sort-arrow" id="tracks-sort-title"></span></span></th>
-              <th class="col-artist" data-col="artist"><span class="th-sort-label">Artist</span></th>
-              <th class="col-album" data-col="album" data-sort="album" onclick="App.sortTracks('album')"><span class="th-sort-label">Album <span class="sort-arrow" id="tracks-sort-album"></span></span></th>
-              <th class="col-dur" data-col="duration" data-sort="duration" onclick="App.sortTracks('duration')"><span class="th-sort-label">Time <span class="sort-arrow" id="tracks-sort-duration"></span></span></th>
-              <th class="col-fav" data-col="favourite"></th>
-              <th class="col-genre" data-col="genre"><span class="th-sort-label">Genre</span></th>
-              <th data-col="year"><span class="th-sort-label">Year</span></th>
-              <th data-col="disc_number"><span class="th-sort-label">Disc #</span></th>
-              <th data-col="album_artist"><span class="th-sort-label">Album Artist</span></th>
-              <th data-col="format"><span class="th-sort-label">Format</span></th>
-              <th data-col="bitrate"><span class="th-sort-label">Bitrate</span></th>
-              <th data-col="sample_rate"><span class="th-sort-label">Sample Rate</span></th>
-              <th data-col="bit_depth"><span class="th-sort-label">Bit Depth</span></th>
-              <th data-col="date_added"><span class="th-sort-label">Date Added</span></th>
-              <th data-col="filename"><span class="th-sort-label">Filename</span></th>
-              <th class="col-act" data-col="actions">Actions</th>
-            </tr></thead>
-            <tbody id="tracks-tbody"></tbody>
-          </table>
+          <div class="tb-table-toolbar-inside tb-table-toolbar-align-end">
+            <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)" title="Configure columns" aria-label="Configure columns">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
+            </button>
+          </div>
+          <div class="tb-table-scroll-area">
+            <table id="tracks-table" class="tb-table tb-table-density-default" data-table-context="tracks">
+              <thead><tr>
+                <th class="col-num" data-col="track_number" data-sort="track_number" onclick="App.sortTracks('track_number')"><span class="th-sort-label"># <span class="sort-arrow" id="tracks-sort-track_number"></span></span></th>
+                <th class="col-title" data-col="title" data-sort="title" onclick="App.sortTracks('title')"><span class="th-sort-label">Title <span class="sort-arrow" id="tracks-sort-title"></span></span></th>
+                <th class="col-artist" data-col="artist"><span class="th-sort-label">Artist</span></th>
+                <th class="col-album" data-col="album" data-sort="album" onclick="App.sortTracks('album')"><span class="th-sort-label">Album <span class="sort-arrow" id="tracks-sort-album"></span></span></th>
+                <th class="col-dur" data-col="duration" data-sort="duration" onclick="App.sortTracks('duration')"><span class="th-sort-label">Time <span class="sort-arrow" id="tracks-sort-duration"></span></span></th>
+                <th class="col-fav" data-col="favourite"></th>
+                <th class="col-genre" data-col="genre"><span class="th-sort-label">Genre</span></th>
+                <th data-col="year"><span class="th-sort-label">Year</span></th>
+                <th data-col="disc_number"><span class="th-sort-label">Disc #</span></th>
+                <th data-col="album_artist"><span class="th-sort-label">Album Artist</span></th>
+                <th data-col="format"><span class="th-sort-label">Format</span></th>
+                <th data-col="bitrate"><span class="th-sort-label">Bitrate</span></th>
+                <th data-col="sample_rate"><span class="th-sort-label">Sample Rate</span></th>
+                <th data-col="bit_depth"><span class="th-sort-label">Bit Depth</span></th>
+                <th data-col="date_added"><span class="th-sort-label">Date Added</span></th>
+                <th data-col="filename"><span class="th-sort-label">Filename</span></th>
+                <th class="col-act" data-col="actions">Actions</th>
+              </tr></thead>
+              <tbody id="tracks-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -362,39 +364,42 @@
           <h2 class="tb-page-title">Songs</h2>
           <div class="view-count" id="songs-count"></div>
         </div>
-        <div class="songs-toolbar tb-table-toolbar">
-          <div class="pl-filter-wrap">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input id="songs-filter-input" type="text" placeholder="Filter songs..." oninput="App.filterSongs(this.value)" />
-            <button id="songs-filter-clear" class="pl-filter-clear" onclick="App.clearSongsFilter()" style="display:none" title="Clear filter">&#10005;</button>
-          </div>
-          <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)" title="Configure columns" aria-label="Configure columns">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
-          </button>
-        </div>
         <div id="songs-table-wrap" class="tb-table-shell" data-table-context="songs">
-          <table id="songs-table" class="tb-table tb-table-density-compact" data-table-context="songs">
-            <thead><tr>
-              <th class="col-num" data-col="track_number" data-sort="track_number">#</th>
-              <th class="col-title" data-col="title" data-sort="title" onclick="App.sortSongs('title')">Title <span class="sort-arrow" id="songs-sort-title"></span></th>
-              <th class="col-artist" data-col="artist" data-sort="artist" onclick="App.sortSongs('artist')">Artist <span class="sort-arrow" id="songs-sort-artist"></span></th>
-              <th class="col-album" data-col="album" data-sort="album" onclick="App.sortSongs('album')">Album <span class="sort-arrow" id="songs-sort-album"></span></th>
-              <th class="col-dur" data-col="duration" data-sort="duration" onclick="App.sortSongs('duration')">Time <span class="sort-arrow" id="songs-sort-duration"></span></th>
-              <th class="col-fav" data-col="favourite"></th>
-              <th data-col="genre" data-sort="genre" onclick="App.sortSongs('genre')" style="min-width:80px">Genre <span class="sort-arrow" id="songs-sort-genre"></span></th>
-              <th data-col="year" data-sort="year" onclick="App.sortSongs('year')" style="min-width:50px">Year <span class="sort-arrow" id="songs-sort-year"></span></th>
-              <th data-col="disc_number" style="min-width:70px">Disc #</th>
-              <th data-col="album_artist" data-sort="album_artist" onclick="App.sortSongs('album_artist')" style="min-width:120px">Album Artist <span class="sort-arrow" id="songs-sort-album_artist"></span></th>
-              <th data-col="format" data-sort="format" onclick="App.sortSongs('format')" style="min-width:60px">Format <span class="sort-arrow" id="songs-sort-format"></span></th>
-              <th data-col="bitrate" data-sort="bitrate" onclick="App.sortSongs('bitrate')" style="min-width:70px">Bitrate <span class="sort-arrow" id="songs-sort-bitrate"></span></th>
-              <th data-col="sample_rate" style="min-width:90px">Sample Rate</th>
-              <th data-col="bit_depth" style="min-width:70px">Bit Depth</th>
-              <th data-col="date_added" data-sort="date_added" onclick="App.sortSongs('date_added')" style="min-width:90px">Date Added <span class="sort-arrow" id="songs-sort-date_added"></span></th>
-              <th data-col="filename" style="min-width:220px">Filename</th>
-              <th class="col-act" data-col="actions">Actions</th>
-            </tr></thead>
-            <tbody id="songs-tbody"></tbody>
-          </table>
+          <div class="songs-toolbar tb-table-toolbar-inside">
+            <div class="pl-filter-wrap">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input id="songs-filter-input" type="text" placeholder="Filter songs..." oninput="App.filterSongs(this.value)" />
+              <button id="songs-filter-clear" class="pl-filter-clear" onclick="App.clearSongsFilter()" style="display:none" title="Clear filter">&#10005;</button>
+            </div>
+            <div class="tb-table-toolbar-spacer"></div>
+            <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)" title="Configure columns" aria-label="Configure columns">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
+            </button>
+          </div>
+          <div class="tb-table-scroll-area">
+            <table id="songs-table" class="tb-table tb-table-density-compact" data-table-context="songs">
+              <thead><tr>
+                <th class="col-num" data-col="track_number" data-sort="track_number">#</th>
+                <th class="col-title" data-col="title" data-sort="title" onclick="App.sortSongs('title')">Title <span class="sort-arrow" id="songs-sort-title"></span></th>
+                <th class="col-artist" data-col="artist" data-sort="artist" onclick="App.sortSongs('artist')">Artist <span class="sort-arrow" id="songs-sort-artist"></span></th>
+                <th class="col-album" data-col="album" data-sort="album" onclick="App.sortSongs('album')">Album <span class="sort-arrow" id="songs-sort-album"></span></th>
+                <th class="col-dur" data-col="duration" data-sort="duration" onclick="App.sortSongs('duration')">Time <span class="sort-arrow" id="songs-sort-duration"></span></th>
+                <th class="col-fav" data-col="favourite"></th>
+                <th data-col="genre" data-sort="genre" onclick="App.sortSongs('genre')" style="min-width:80px">Genre <span class="sort-arrow" id="songs-sort-genre"></span></th>
+                <th data-col="year" data-sort="year" onclick="App.sortSongs('year')" style="min-width:50px">Year <span class="sort-arrow" id="songs-sort-year"></span></th>
+                <th data-col="disc_number" style="min-width:70px">Disc #</th>
+                <th data-col="album_artist" data-sort="album_artist" onclick="App.sortSongs('album_artist')" style="min-width:120px">Album Artist <span class="sort-arrow" id="songs-sort-album_artist"></span></th>
+                <th data-col="format" data-sort="format" onclick="App.sortSongs('format')" style="min-width:60px">Format <span class="sort-arrow" id="songs-sort-format"></span></th>
+                <th data-col="bitrate" data-sort="bitrate" onclick="App.sortSongs('bitrate')" style="min-width:70px">Bitrate <span class="sort-arrow" id="songs-sort-bitrate"></span></th>
+                <th data-col="sample_rate" style="min-width:90px">Sample Rate</th>
+                <th data-col="bit_depth" style="min-width:70px">Bit Depth</th>
+                <th data-col="date_added" data-sort="date_added" onclick="App.sortSongs('date_added')" style="min-width:90px">Date Added <span class="sort-arrow" id="songs-sort-date_added"></span></th>
+                <th data-col="filename" style="min-width:220px">Filename</th>
+                <th class="col-act" data-col="actions">Actions</th>
+              </tr></thead>
+              <tbody id="songs-tbody"></tbody>
+            </table>
+          </div>
         </div>
         <div id="songs-empty" class="empty-state" style="display:none">
           <img class="empty-state-art" src="/icons/empty-song.svg" alt="" aria-hidden="true">
@@ -465,18 +470,6 @@
                 <button id="fav-songs-copy-btn" class="btn-secondary" onclick="App.copyFavSongsToConnectedDap()">Copy to Connected DAP</button>
               </div>
             </div>
-            <div class="pl-controls tb-table-toolbar">
-              <div class="pl-sort-pills">
-                <span class="pl-sort-label">Sort:</span>
-                <button class="pl-sort-pill active" data-fav-song-sort="my" onclick="App.setFavSongsSort('my')">My Order</button>
-                <button class="pl-sort-pill" data-fav-song-sort="recent" onclick="App.setFavSongsSort('recent')">Recently Added</button>
-                <button class="pl-sort-pill" data-fav-song-sort="az" onclick="App.setFavSongsSort('az')">A–Z</button>
-                <button class="pl-sort-pill" data-fav-song-sort="album" onclick="App.setFavSongsSort('album')">Album</button>
-              </div>
-              <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)" title="Configure columns" aria-label="Configure columns">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
-              </button>
-            </div>
             <div id="fav-songs-orphans" class="favourites-orphan-notice" style="display:none"></div>
             <div id="fav-songs-empty" class="empty-state" style="display:none">
               <span class="empty-mask-icon empty-mask-icon-player-fill" aria-hidden="true"></span>
@@ -484,18 +477,33 @@
               <p class="muted">Click ★ on a song to add it here.</p>
             </div>
             <div id="fav-songs-table-wrap" class="tb-table-shell" data-table-context="fav_songs">
-              <table id="fav-songs-table" class="tb-table tb-table-density-default" data-table-context="fav_songs" style="display:none">
-                <thead><tr>
-                  <th class="col-num" data-col="track_number">#</th>
-                  <th class="col-title" data-col="title">Title</th>
-                  <th class="col-artist" data-col="artist">Artist</th>
-                  <th class="col-album" data-col="album">Album</th>
-                  <th class="col-dur" data-col="duration">Time</th>
-                  <th class="col-fav" data-col="favourite"></th>
-                  <th class="col-act" data-col="actions">Actions</th>
-                </tr></thead>
-                <tbody id="fav-songs-tbody"></tbody>
-              </table>
+              <div class="pl-controls tb-table-toolbar-inside">
+                <div class="pl-sort-pills">
+                  <span class="pl-sort-label">Sort:</span>
+                  <button class="pl-sort-pill active" data-fav-song-sort="my" onclick="App.setFavSongsSort('my')">My Order</button>
+                  <button class="pl-sort-pill" data-fav-song-sort="recent" onclick="App.setFavSongsSort('recent')">Recently Added</button>
+                  <button class="pl-sort-pill" data-fav-song-sort="az" onclick="App.setFavSongsSort('az')">A–Z</button>
+                  <button class="pl-sort-pill" data-fav-song-sort="album" onclick="App.setFavSongsSort('album')">Album</button>
+                </div>
+                <div class="tb-table-toolbar-spacer"></div>
+                <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)" title="Configure columns" aria-label="Configure columns">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
+                </button>
+              </div>
+              <div class="tb-table-scroll-area">
+                <table id="fav-songs-table" class="tb-table tb-table-density-default" data-table-context="fav_songs" style="display:none">
+                  <thead><tr>
+                    <th class="col-num" data-col="track_number">#</th>
+                    <th class="col-title" data-col="title">Title</th>
+                    <th class="col-artist" data-col="artist">Artist</th>
+                    <th class="col-album" data-col="album">Album</th>
+                    <th class="col-dur" data-col="duration">Time</th>
+                    <th class="col-fav" data-col="favourite"></th>
+                    <th class="col-act" data-col="actions">Actions</th>
+                  </tr></thead>
+                  <tbody id="fav-songs-tbody"></tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -544,24 +552,6 @@
           </div>
         </div>
 
-        <div class="pl-controls tb-table-toolbar" id="pl-controls">
-          <div class="pl-filter-wrap">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input id="pl-filter-input" type="text" placeholder="Filter songs…" oninput="App.filterPlaylist(this.value)" />
-            <button id="pl-filter-clear" class="pl-filter-clear" onclick="App.clearPlaylistFilter()" style="display:none" title="Clear filter">✕</button>
-          </div>
-          <div class="pl-sort-pills">
-            <span class="pl-sort-label">Sort:</span>
-            <button class="pl-sort-pill active" data-sort="original" onclick="App.setPlaylistInSort('original')">Original</button>
-            <button class="pl-sort-pill" data-sort="az" onclick="App.setPlaylistInSort('az')">A–Z</button>
-            <button class="pl-sort-pill" data-sort="album" onclick="App.setPlaylistInSort('album')">Album</button>
-            <button class="pl-sort-pill" data-sort="year" onclick="App.setPlaylistInSort('year')">Year <span class="pl-sort-dir" id="pl-sort-year-dir"></span></button>
-          </div>
-          <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)" title="Configure columns" aria-label="Configure columns">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
-          </button>
-        </div>
-
         <div id="pl-empty" class="empty-state" style="display:none">
           <span class="empty-mask-icon empty-mask-icon-player-fill" aria-hidden="true"></span>
           <p>This playlist is empty.</p>
@@ -569,20 +559,40 @@
         </div>
 
         <div id="pl-table-wrap" class="tb-table-shell" data-table-context="playlist">
-          <table id="pl-table" class="tb-table tb-table-density-default" data-table-context="playlist" style="display:none">
-            <thead><tr>
-              <th class="col-num" data-col="track_number">#</th>
-              <th class="col-title" data-col="title">Title</th>
-              <th class="col-artist" data-col="artist">Artist</th>
-              <th class="col-album" data-col="album">Album</th>
-              <th class="col-dur" data-col="duration">Time</th>
-              <th class="col-genre" data-col="genre">Genre</th>
-              <th class="col-year" data-col="year">Year</th>
-              <th class="col-fav" data-col="favourite"></th>
-              <th class="col-act" data-col="actions">Actions</th>
-            </tr></thead>
-            <tbody id="pl-tbody"></tbody>
-          </table>
+          <div class="pl-controls tb-table-toolbar-inside" id="pl-controls">
+            <div class="pl-filter-wrap">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input id="pl-filter-input" type="text" placeholder="Filter songs…" oninput="App.filterPlaylist(this.value)" />
+              <button id="pl-filter-clear" class="pl-filter-clear" onclick="App.clearPlaylistFilter()" style="display:none" title="Clear filter">✕</button>
+            </div>
+            <div class="tb-table-toolbar-spacer"></div>
+            <div class="pl-sort-pills">
+              <span class="pl-sort-label">Sort:</span>
+              <button class="pl-sort-pill active" data-sort="original" onclick="App.setPlaylistInSort('original')">Original</button>
+              <button class="pl-sort-pill" data-sort="az" onclick="App.setPlaylistInSort('az')">A–Z</button>
+              <button class="pl-sort-pill" data-sort="album" onclick="App.setPlaylistInSort('album')">Album</button>
+              <button class="pl-sort-pill" data-sort="year" onclick="App.setPlaylistInSort('year')">Year <span class="pl-sort-dir" id="pl-sort-year-dir"></span></button>
+            </div>
+            <button class="btn-secondary table-columns-btn" type="button" onclick="App.toggleTableColumnsPopover(event)" title="Configure columns" aria-label="Configure columns">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="11" cy="18" r="2"/></svg>
+            </button>
+          </div>
+          <div class="tb-table-scroll-area">
+            <table id="pl-table" class="tb-table tb-table-density-default" data-table-context="playlist" style="display:none">
+              <thead><tr>
+                <th class="col-num" data-col="track_number">#</th>
+                <th class="col-title" data-col="title">Title</th>
+                <th class="col-artist" data-col="artist">Artist</th>
+                <th class="col-album" data-col="album">Album</th>
+                <th class="col-dur" data-col="duration">Time</th>
+                <th class="col-genre" data-col="genre">Genre</th>
+                <th class="col-year" data-col="year">Year</th>
+                <th class="col-fav" data-col="favourite"></th>
+                <th class="col-act" data-col="actions">Actions</th>
+              </tr></thead>
+              <tbody id="pl-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -1275,20 +1285,26 @@
             <p class="muted tb-page-subtitle">Fix incomplete metadata quickly with single or bulk edits.</p>
           </div>
         </div>
-        <div class="insights-missing-tags-controls">
-          <input id="insights-missing-tags-search" type="text" placeholder="Filter tracks..." oninput="App.setMissingTagsSearch(this.value)" />
-          <select id="insights-missing-tags-filter" onchange="App.setMissingTagsFilter(this.value)">
-            <option value="all">All missing tags</option>
-            <option value="title">Missing title</option>
-            <option value="artist">Missing artist</option>
-            <option value="album">Missing album</option>
-            <option value="year">Missing year</option>
-            <option value="genre">Missing genre</option>
-          </select>
-          <button id="missing-tags-select-all-btn" class="btn-secondary" type="button" onclick="App.toggleMissingTagsSelectAll()">Select all</button>
-          <button id="missing-tags-bulk-edit-btn" class="btn-primary" type="button" onclick="App.openMissingTagsBulkEditor()" disabled>Edit selected</button>
+        <div class="tb-table-shell insights-missing-tags-shell">
+          <div class="tb-table-toolbar-inside insights-missing-tags-controls">
+            <div class="tb-filter-wrap">
+              <span class="tb-filter-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+              <input id="insights-missing-tags-search" class="tb-filter-input" type="text" placeholder="Filter tracks…" oninput="App.setMissingTagsSearch(this.value)" />
+            </div>
+            <select id="insights-missing-tags-filter" class="tb-filter-select" onchange="App.setMissingTagsFilter(this.value)">
+              <option value="all">All missing tags</option>
+              <option value="title">Missing title</option>
+              <option value="artist">Missing artist</option>
+              <option value="album">Missing album</option>
+              <option value="year">Missing year</option>
+              <option value="genre">Missing genre</option>
+            </select>
+            <div style="flex:1;min-width:0"></div>
+            <button id="missing-tags-select-all-btn" class="tb-col-config-btn" type="button" onclick="App.toggleMissingTagsSelectAll()">Select all</button>
+            <button id="missing-tags-bulk-edit-btn" class="btn-primary btn-sm" type="button" onclick="App.openMissingTagsBulkEditor()" disabled>Edit selected</button>
+          </div>
+          <div id="insights-missing-tags-content"></div>
         </div>
-        <div id="insights-missing-tags-content"></div>
       </div>
 
       <!-- Duplicate Tracks view -->

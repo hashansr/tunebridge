@@ -1691,47 +1691,24 @@ function _renderTracksTable() {
   const baseTable = document.getElementById('tracks-table');
   const tbody = document.getElementById('tracks-tbody');
   if (!wrap || !baseTable || !tbody) return;
-  const existingMulti = document.getElementById('tracks-multi-disc-container');
 
   const discGroups = _buildAlbumDiscGroups(rows);
   const shouldGroupByDisc = !!(state.album && discGroups.length > 1);
+  const columnCount = baseTable.querySelectorAll('thead th').length || 1;
   if (!shouldGroupByDisc) {
-    if (existingMulti) existingMulti.remove();
     baseTable.style.display = 'table';
     tbody.innerHTML = rows.map((t, i) => trackRow(t, i + 1, false)).join('');
     document.querySelectorAll('#tracks-table .sort-arrow').forEach(el => { el.textContent = ''; });
     const arrow = document.getElementById(`tracks-sort-${_tracksSort.col}`);
     if (arrow) arrow.textContent = _tracksSort.order === 'asc' ? '▲' : '▼';
   } else {
-    baseTable.style.display = 'none';
-    tbody.innerHTML = '';
-    if (existingMulti) existingMulti.remove();
-
-    const headerHtml = `
-      <thead><tr>
-        <th class="col-num" data-col="track_number"><span class="th-sort-label">#</span></th>
-        <th class="col-title" data-col="title"><span class="th-sort-label">Title</span></th>
-        <th class="col-artist" data-col="artist"><span class="th-sort-label">Artist</span></th>
-        <th class="col-album" data-col="album"><span class="th-sort-label">Album</span></th>
-        <th class="col-dur" data-col="duration"><span class="th-sort-label">Time</span></th>
-        <th class="col-fav" data-col="favourite"></th>
-        <th class="col-genre" data-col="genre"><span class="th-sort-label">Genre</span></th>
-        <th data-col="year"><span class="th-sort-label">Year</span></th>
-        <th data-col="disc_number"><span class="th-sort-label">Disc #</span></th>
-        <th data-col="album_artist"><span class="th-sort-label">Album Artist</span></th>
-        <th data-col="format"><span class="th-sort-label">Format</span></th>
-        <th data-col="bitrate"><span class="th-sort-label">Bitrate</span></th>
-        <th data-col="sample_rate"><span class="th-sort-label">Sample Rate</span></th>
-        <th data-col="bit_depth"><span class="th-sort-label">Bit Depth</span></th>
-        <th data-col="date_added"><span class="th-sort-label">Date Added</span></th>
-        <th data-col="filename"><span class="th-sort-label">Filename</span></th>
-        <th class="col-act" data-col="actions"><span class="th-sort-label">Actions</span></th>
-      </tr></thead>`;
-    const multi = document.createElement('div');
-    multi.id = 'tracks-multi-disc-container';
-    multi.className = 'tracks-multi-disc-container';
+    baseTable.style.display = 'table';
     const globalIdxById = new Map((rows || []).map((track, idx) => [String(track.id), idx]));
-    multi.innerHTML = discGroups.map((group) => {
+    tbody.innerHTML = discGroups.map((group) => {
+      const sectionRow = `
+        <tr class="tb-section-row">
+          <td colspan="${columnCount}">${esc(group.label)}</td>
+        </tr>`;
       const bodyRows = (group.rows || [])
         .map((track, idx) => {
           const globalIdx = globalIdxById.get(String(track.id));
@@ -1739,19 +1716,8 @@ function _renderTracksTable() {
           return trackRow(track, rowNum, false);
         })
         .join('');
-      return `
-        <section class="tracks-disc-block">
-          <h3 class="tracks-disc-heading">${esc(group.label)}</h3>
-          <div class="tracks-disc-table-wrap">
-            <table class="tracks-table-disc tb-table tb-table-density-default" data-table-context="tracks">
-              ${headerHtml}
-              <tbody>${bodyRows}</tbody>
-            </table>
-          </div>
-        </section>
-      `;
+      return `${sectionRow}${bodyRows}`;
     }).join('');
-    wrap.appendChild(multi);
 
     document.querySelectorAll('#tracks-table .sort-arrow').forEach(el => { el.textContent = ''; });
   }
@@ -12898,7 +12864,7 @@ function _renderMissingTagsTable() {
     _syncMissingTagsActions();
     return;
   }
-  wrap.innerHTML = `<div class="insights-missing-tags-wrap tb-table-shell">
+  wrap.innerHTML = `<div class="tb-table-scroll-area">
     <table class="insights-missing-tags-table tb-table tb-table-density-compact">
       <thead>
         <tr>

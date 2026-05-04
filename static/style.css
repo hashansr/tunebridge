@@ -9818,20 +9818,18 @@ tr.player-active .track-title { color: var(--accent); }
   flex-wrap: wrap;
   margin: 4px 0 12px;
 }
-
-.insights-missing-tags-controls input,
-.insights-missing-tags-controls select {
-  background: var(--surface-2);
-  color: var(--text-primary);
-  border: 1px solid var(--line-soft);
-  border-radius: 10px;
-  padding: 9px 11px;
-  font-size: 13px;
+/* When inside the tb-table-shell, override standalone pill styles */
+.tb-table-shell .insights-missing-tags-controls {
+  margin: 0;
 }
-
 .insights-missing-tags-controls input {
   flex: 1;
   min-width: 220px;
+}
+/* tb-filter-input overrides the above when the new class is applied */
+.insights-missing-tags-controls .tb-filter-input {
+  flex: none;
+  min-width: 0;
 }
 
 .insights-missing-tags-wrap {
@@ -14168,15 +14166,169 @@ tr:hover .track-edit-btn:hover {
   box-shadow: none;
 }
 
+/* ── Inside-toolbar design system ──────────────────────────────────────── */
+
+/* Toolbar rendered flush inside the shell with a border-bottom separator */
+.tb-table-toolbar-inside {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--tb-table-separator);
+  background: transparent;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.tb-table-toolbar-spacer {
+  flex: 1 1 auto;
+  min-width: 12px;
+}
+
+.tb-table-toolbar-align-end {
+  justify-content: flex-end;
+}
+
+/* Shells with an inside toolbar need overflow:hidden to clip border-radius */
+.tb-table-shell:has(.tb-table-toolbar-inside) {
+  overflow: hidden;
+}
+
+/* Horizontal scroll area sits inside the shell below the toolbar */
+.tb-table-scroll-area {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Sort chips */
+.tb-sort-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 11px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.tb-sort-chip:hover { background: rgba(173, 198, 255, 0.08); color: var(--text); }
+.tb-sort-chip.active { background: var(--accent); color: #00285c; }
+
+/* Filter input inside toolbar */
+.tb-filter-wrap {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.tb-filter-icon {
+  position: absolute;
+  left: 9px;
+  color: var(--text-muted);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+.tb-filter-input {
+  background: rgba(173, 198, 255, 0.05);
+  border: 1px solid rgba(173, 198, 255, 0.1);
+  border-radius: 8px;
+  padding: 5px 28px 5px 30px;
+  width: 180px;
+  font-size: 12px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s, width 0.2s;
+}
+.tb-filter-input::placeholder { color: var(--text-muted); }
+.tb-filter-input:focus { border-color: var(--accent); width: 220px; }
+
+.tb-filter-clear {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  display: none;
+}
+.tb-filter-clear.visible { display: block; }
+
+/* Compact select in toolbar (tag-type filter, etc.) */
+.tb-filter-select {
+  background: rgba(173, 198, 255, 0.05);
+  border: 1px solid rgba(173, 198, 255, 0.1);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+}
+.tb-filter-select:focus { border-color: var(--accent); }
+
+/* Columns button inside toolbar */
+.tb-col-config-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.tb-col-config-btn:hover { background: rgba(173, 198, 255, 0.08); color: var(--text); }
+
+/* Inline disc / section header rows */
+.tb-table .tb-section-row { background: transparent !important; cursor: default; }
+.tb-table .tb-section-row:hover { background: transparent !important; }
+.tb-table .tb-section-row td {
+  padding: 18px 16px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  height: auto !important;
+  border-bottom: none;
+}
+
+.tb-table .tb-section-row + tr td {
+  border-top: 1px solid rgba(173, 198, 255, 0.06);
+}
+
+/* Empty state inside a shell — strip the card styling */
+.tb-table-shell .empty-state {
+  padding: 40px 24px;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
 .tb-table-shell {
   width: 100%;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid rgba(173, 198, 255, 0.14);
-  border-radius: var(--tb-table-shell-radius);
-  background: var(--tb-table-shell-bg);
-  box-shadow:
-    0 18px 38px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  border-radius: 18px;
+  background: transparent;
+  box-shadow: none;
 }
 
 #tracks-table-wrap.tb-table-shell,
@@ -14186,13 +14338,11 @@ tr:hover .track-edit-btn:hover {
 #favourites-panel-songs #fav-songs-table-wrap.tb-table-shell,
 .dap-table-shell.tb-table-shell,
 .insights-missing-tags-wrap.tb-table-shell {
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid rgba(173, 198, 255, 0.14);
-  border-radius: var(--tb-table-shell-radius);
-  background: var(--tb-table-shell-bg);
-  box-shadow:
-    0 18px 38px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  border-radius: 18px;
+  background: transparent;
+  box-shadow: none;
 }
 
 .tb-table {
@@ -14236,7 +14386,7 @@ tr:hover .track-edit-btn:hover {
 .tracks-table-disc.tb-table thead th {
   height: var(--tb-table-header-height);
   padding: 0 12px;
-  background: var(--tb-table-header-bg);
+  background: rgba(255, 255, 255, 0.015);
   border-bottom: 1px solid var(--tb-table-separator);
   color: var(--text-muted);
 }
@@ -14280,7 +14430,7 @@ tr:hover .track-edit-btn:hover {
 }
 
 .tb-table tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.016);
+  background: rgba(255, 255, 255, 0.01);
 }
 
 .tb-table tbody tr:hover {
@@ -14450,6 +14600,17 @@ thead th:hover .table-col-resizer::after {
   border: 1px solid rgba(173, 198, 255, 0.1);
   border-radius: 12px;
   background: rgba(16, 16, 18, 0.2);
+}
+
+.tb-table-shell > .songs-toolbar.tb-table-toolbar-inside,
+.tb-table-shell > .pl-controls.tb-table-toolbar-inside,
+.tb-table-shell > .table-columns-toolbar.tb-table-toolbar-inside {
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--tb-table-separator);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .table-columns-popover {
