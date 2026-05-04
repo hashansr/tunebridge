@@ -12066,8 +12066,15 @@ body.is-col-resizing {
   padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) - 4px) var(--page-content-inset) 132px;
   display: flex;
   flex-direction: column;
-  gap: var(--tb-page-header-margin-bottom);
+  gap: 0;
   background: var(--app-page-gradient);
+}
+
+/* Home-specific title override — larger than any in-page section title */
+#view-home .home-title {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
 }
 
 #main.main-home-active #view-home {
@@ -12095,7 +12102,7 @@ body.is-col-resizing {
   justify-content: space-between;
   gap: var(--tb-page-header-gap);
   padding: 0;
-  margin-bottom: 0;
+  margin-bottom: 28px;
 }
 
 .home-header-left {
@@ -12172,7 +12179,7 @@ body.is-col-resizing {
 }
 
 .home-section + .home-section {
-  margin-top: 36px;
+  margin-top: 24px;
 }
 
 .home-section-hdr {
@@ -12185,7 +12192,7 @@ body.is-col-resizing {
 
 .home-section-title {
   margin: 0;
-  font-size: 17px;
+  font-size: 19px;
   font-weight: 700;
   letter-spacing: -0.022em;
   color: var(--text);
@@ -12213,7 +12220,7 @@ body.is-col-resizing {
   display: flex;
   gap: 14px;
   overflow-x: auto;
-  padding: 4px 0 24px 0;
+  padding: 6px 0 24px 8px;
   scrollbar-width: none;
   scroll-snap-type: x proximity;
   -webkit-overflow-scrolling: touch;
@@ -12276,11 +12283,11 @@ body.is-col-resizing {
 }
 .home-rail-fade-left {
   left: 0;
-  background: linear-gradient(90deg, rgba(19, 19, 19, 0.94) 0%, rgba(19, 19, 19, 0) 100%);
+  background: linear-gradient(to right, var(--bg) 10%, transparent 100%);
 }
 .home-rail-fade-right {
   right: 0;
-  background: linear-gradient(270deg, rgba(19, 19, 19, 0.94) 0%, rgba(19, 19, 19, 0) 100%);
+  background: linear-gradient(to left, var(--bg) 10%, transparent 100%);
 }
 .home-rail-shell.can-scroll-left .home-rail-fade-left,
 .home-rail-shell.can-scroll-right .home-rail-fade-right {
@@ -14303,7 +14310,7 @@ tr:hover .track-edit-btn:hover {
   gap: 10px;
   flex-wrap: nowrap;
   padding: 6px 0 8px;
-  border-bottom: 1px solid var(--tb-table-separator);
+  border-bottom: none;
   background: transparent;
   flex-shrink: 0;
   min-width: 0;
@@ -14454,7 +14461,7 @@ tr:hover .track-edit-btn:hover {
   width: 100%;
   overflow: hidden;
   border: none;
-  border-radius: 18px;
+  border-radius: 12px;
   background: transparent;
   box-shadow: none;
 }
@@ -14468,7 +14475,7 @@ tr:hover .track-edit-btn:hover {
 .insights-missing-tags-wrap.tb-table-shell {
   overflow: hidden;
   border: none;
-  border-radius: 18px;
+  border-radius: 12px;
   background: transparent;
   box-shadow: none;
 }
@@ -14735,7 +14742,6 @@ thead th:hover .table-col-resizer::after {
 .tb-table-shell > .table-columns-toolbar.tb-table-toolbar-inside {
   margin: 0;
   border: 0;
-  border-bottom: 1px solid var(--tb-table-separator);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -14758,7 +14764,7 @@ thead th:hover .table-col-resizer::after {
 .sort-chip {
   min-height: 34px;
   padding: 0 16px;
-  border-radius: 9999px;
+  border-radius: 12px;
   background: transparent;
   color: rgba(233, 238, 249, 0.68);
   transition: background var(--tb-motion-fast), color var(--tb-motion-fast), border-color var(--tb-motion-fast);
@@ -14809,7 +14815,7 @@ thead th:hover .table-col-resizer::after {
   padding: 0 28px 0 30px;
   border-radius: 10px;
   border: none;
-  background: rgba(255, 255, 255, 0.015);
+  background: rgba(255, 255, 255, 0.028);
   color: rgba(233, 238, 249, 0.78);
   box-shadow: none;
 }
@@ -14819,7 +14825,7 @@ thead th:hover .table-col-resizer::after {
 }
 
 .tb-table-toolbar-inside .pl-filter-wrap input:focus {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.038);
   outline: none;
 }
 
@@ -14834,7 +14840,8 @@ thead th:hover .table-col-resizer::after {
   padding: 0 16px;
   gap: 8px;
   border: none;
-  background: rgba(255, 255, 255, 0.015);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.022);
   color: rgba(233, 238, 249, 0.68);
 }
 
