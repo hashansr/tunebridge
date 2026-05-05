@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.110-rc.050526-1509 · 2026-05-05
 - Fix: Sync manifest no longer updated at scan time for files queued for copy — prevents failed copies from being silently marked as synced on the next scan
 - Fix: Device→local copy now skips files where a different local file already exists at the destination path, with a clear error instead of a silent overwrite
 - Fix: Path collision warnings now name all colliding local tracks and the winning track's reason notes the collision, instead of a generic warning with no track info
