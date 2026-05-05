@@ -6591,7 +6591,7 @@ function syncSelectionChanged() {
   if (available === null) {
     spaceLine = `Space: -- available • ${_fmtBytes(required)} needed • -- available after sync`;
   } else if (shortfall > 0) {
-    spaceLine = `Space: ${_fmtBytes(available)} available • ${_fmtBytes(required)} needed • 0 B available after sync`;
+    spaceLine = `Blocked: not enough device space. ${_fmtBytes(available)} available • ${_fmtBytes(required)} needed • free ${_fmtBytes(shortfall)} or deselect tracks.`;
     className += ' sync-space-summary--danger';
   } else {
     const remaining = Math.max(0, available - required);
@@ -6613,11 +6613,25 @@ function syncSelectionChanged() {
     }
   }
   if (executeBtn) {
-    executeBtn.disabled = shortfall > 0 || _syncPreviewModel.rescanRequired || noSelection;
-    executeBtn.textContent = 'Start Sync';
-    executeBtn.title = _syncPreviewModel.rescanRequired
-      ? 'Re-run scan after un-ignoring tracks'
-      : (shortfall > 0 ? `Not enough space: short by ${_fmtBytes(shortfall)}` : '');
+    executeBtn.classList.toggle('is-blocked', shortfall > 0 || _syncPreviewModel.rescanRequired || noSelection);
+    executeBtn.disabled = false;
+    if (_syncPreviewModel.rescanRequired) {
+      executeBtn.textContent = 'Re-scan Required';
+      executeBtn.title = 'Re-run scan after un-ignoring tracks';
+      executeBtn.onclick = () => App.syncScanAgain();
+    } else if (shortfall > 0) {
+      executeBtn.textContent = `Free ${_fmtBytes(shortfall)}`;
+      executeBtn.title = `Not enough device space: short by ${_fmtBytes(shortfall)}`;
+      executeBtn.onclick = () => toast(`Sync is blocked: free ${_fmtBytes(shortfall)} on the device or deselect tracks.`);
+    } else if (noSelection) {
+      executeBtn.textContent = 'Nothing Selected';
+      executeBtn.title = 'Select at least one change to sync';
+      executeBtn.onclick = () => toast('Select at least one change to sync.');
+    } else {
+      executeBtn.textContent = 'Start Sync';
+      executeBtn.title = '';
+      executeBtn.onclick = () => App.executeSync();
+    }
   }
 }
 

@@ -2223,6 +2223,13 @@ tbody tr:hover .remove-btn { opacity: 1; }
 }
 .btn-primary:hover  { filter: brightness(1.12); transform: translateY(-1px); }
 .btn-primary:active { transform: scale(0.98); filter: brightness(0.95); }
+.btn-primary:disabled,
+.btn-primary[disabled] {
+  opacity: 0.46;
+  cursor: not-allowed;
+  filter: grayscale(0.25);
+  transform: none;
+}
 
 .btn-secondary {
   padding: 7px 14px;
@@ -3180,6 +3187,15 @@ tr.track-selected .track-check-indicator {
   border: none;
   font-weight: 700;
   min-width: 96px;
+}
+#sync-modal .modal-actions .btn-primary.is-blocked {
+  background: rgba(255, 179, 181, 0.12);
+  color: rgba(255, 205, 207, 0.96);
+  border: 1px solid rgba(255, 179, 181, 0.28);
+}
+#sync-modal .modal-actions .btn-primary.is-blocked:hover {
+  filter: brightness(1.05);
+  transform: none;
 }
 #sync-modal .modal-actions .btn-secondary {
   background: transparent;
