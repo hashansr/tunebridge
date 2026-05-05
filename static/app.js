@@ -4449,6 +4449,7 @@ let _homeCurrentPeriod = 'month';
 let _homeStatsLoading = false;
 let _homeLastData = null;
 let _homeLastStatsData = {}; // keyed by period
+let _homeRailResizeObserver = null;
 
 function _homeSectionVisible(id, visible) {
   const el = document.getElementById(id);
@@ -4534,16 +4535,24 @@ function _homePickCardHtml(item) {
 function _renderHomeRailSection(sectionId, railId, items, emptyMsg) {
   const rail = document.getElementById(railId);
   if (!rail) return false;
+  _homeSectionVisible(sectionId, true);
   if (!Array.isArray(items) || !items.length) {
     rail.innerHTML = `<div class="home-rail-empty">${esc(emptyMsg)}</div>`;
     _homeBindRailUX(railId);
-    _homeSectionVisible(sectionId, true);
     return false;
   }
   rail.innerHTML = items.map(_homeRailCardHtml).join('');
   _homeBindRailUX(railId);
-  _homeSectionVisible(sectionId, true);
   return true;
+}
+
+function _homeSetRailButtonVisible(btn, visible) {
+  if (!btn) return;
+  btn.hidden = !visible;
+  btn.disabled = !visible;
+  btn.tabIndex = visible ? 0 : -1;
+  btn.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  btn.classList.toggle('is-visible', visible);
 }
 
 function _homeUpdateRailAffordance(railId) {
@@ -4553,16 +4562,24 @@ function _homeUpdateRailAffordance(railId) {
   const leftBtn = shell.querySelector('.home-rail-nav-left');
   const rightBtn = shell.querySelector('.home-rail-nav-right');
 
+  if (rail.clientWidth <= 0) {
+    shell.classList.remove('can-scroll-left', 'can-scroll-right');
+    _homeSetRailButtonVisible(leftBtn, false);
+    _homeSetRailButtonVisible(rightBtn, false);
+    return;
+  }
+
   const maxScroll = Math.max(0, rail.scrollWidth - rail.clientWidth);
   const canScroll = maxScroll > 2;
-  const atStart = rail.scrollLeft <= 2;
-  const atEnd = rail.scrollLeft >= maxScroll - 2;
+  const scrollLeft = Math.max(0, rail.scrollLeft);
+  const atStart = scrollLeft <= 2;
+  const atEnd = maxScroll - scrollLeft <= 2;
 
   shell.classList.toggle('can-scroll-left', canScroll && !atStart);
   shell.classList.toggle('can-scroll-right', canScroll && !atEnd);
 
-  if (leftBtn) leftBtn.classList.toggle('is-visible', canScroll && !atStart);
-  if (rightBtn) rightBtn.classList.toggle('is-visible', canScroll && !atEnd);
+  _homeSetRailButtonVisible(leftBtn, canScroll && !atStart);
+  _homeSetRailButtonVisible(rightBtn, canScroll && !atEnd);
 }
 
 function _homeBindRailUX(railId) {
@@ -4571,8 +4588,20 @@ function _homeBindRailUX(railId) {
   if (!rail.dataset.uxBound) {
     rail.dataset.uxBound = '1';
     rail.addEventListener('scroll', () => _homeUpdateRailAffordance(railId), { passive: true });
+    rail.addEventListener('scrollend', () => _homeUpdateRailAffordance(railId));
+    if (window.ResizeObserver) {
+      if (!_homeRailResizeObserver) {
+        _homeRailResizeObserver = new ResizeObserver((entries) => {
+          entries.forEach((entry) => {
+            const id = entry.target?.id;
+            if (id) _homeUpdateRailAffordance(id);
+          });
+        });
+      }
+      _homeRailResizeObserver.observe(rail);
+    }
   }
-  _homeUpdateRailAffordance(railId);
+  window.requestAnimationFrame(() => _homeUpdateRailAffordance(railId));
 }
 
 function _homeRefreshRailAffordances() {
@@ -4584,8 +4613,12 @@ function homeRailStep(railId, direction = 1) {
   if (!rail) return;
   const dir = Number(direction) < 0 ? -1 : 1;
   const step = Math.max(Math.round(rail.clientWidth * 0.86), 240);
-  rail.scrollBy({ left: dir * step, behavior: 'smooth' });
-  setTimeout(() => _homeUpdateRailAffordance(railId), 220);
+  const maxScroll = Math.max(0, rail.scrollWidth - rail.clientWidth);
+  const nextLeft = Math.max(0, Math.min(maxScroll, rail.scrollLeft + (dir * step)));
+  rail.scrollTo({ left: nextLeft, behavior: 'smooth' });
+  [120, 260, 460].forEach((delay) => {
+    setTimeout(() => _homeUpdateRailAffordance(railId), delay);
+  });
 }
 
 function _renderHomeTopPicks(items) {
