@@ -8130,12 +8130,20 @@ def _export_playlist_to_dap(did, pid, daps=None, playlists=None, save_after=True
     m3u_encoding = _m3u_write_encoding_for_dap(dap)
 
     out_dir = device_root / dap.get('export_folder', 'Playlists')
+    art_copied = False
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
         content = generate_m3u(export_tracks, playlist['name'], path_prefix=prefix)
         safe_name = playlist['name'].replace('/', '-').replace(':', '-')
         with open(out_dir / f"{safe_name}.m3u", 'w', encoding=m3u_encoding) as f:
             f.write(content)
+
+        art_src = PLAYLIST_ARTWORK_DIR / f'{pid}.jpg'
+        if art_src.exists():
+            pics_dir = device_root / 'Pictures'
+            pics_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(art_src, pics_dir / f"{safe_name}.jpg")
+            art_copied = True
     except OSError as e:
         import errno as _errno
         if e.errno == _errno.EROFS:
@@ -8152,6 +8160,7 @@ def _export_playlist_to_dap(did, pid, daps=None, playlists=None, save_after=True
         'track_count': len(export_tracks),
         'missing_on_device_count': len(missing_on_device),
         'missing_on_device_sample': missing_on_device[:8],
+        'artwork_copied': art_copied,
     }
 
 
