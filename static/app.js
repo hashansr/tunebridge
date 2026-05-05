@@ -11069,7 +11069,7 @@ async function _renderHistoryCharts(validOnly) {
     container.innerHTML = `
       <div class="history-chart-card">
         <div class="history-chart-title">Plays per day</div>
-        <canvas id="history-day-chart" height="120"></canvas>
+        <div class="history-chart-wrap"><canvas id="history-day-chart"></canvas></div>
       </div>
       <div class="history-chart-card">
         <div class="history-chart-title">Top artists</div>

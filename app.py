@@ -4269,6 +4269,51 @@ def smart_playlist_refresh(pid):
 # History view route
 # ---------------------------------------------------------------------------
 
+HISTORY_SESSION_GAP_SECONDS = 120
+
+def _collapse_history_sessions(rows):
+    """Merge adjacent same-track progress chunks into one user-visible listen."""
+    sessions = []
+    for r in rows:
+        track_id = str(r['track_id'] or '')
+        played_at = int(r['played_at'] or 0)
+        play_seconds = float(r['play_seconds'] or 0.0)
+        duration = float(r['duration'] or r['track_duration_seconds'] or 0.0)
+
+        current = sessions[-1] if sessions else None
+        if (
+            current
+            and current['track_id'] == track_id
+            and abs(int(current['oldest_played_at']) - played_at) <= HISTORY_SESSION_GAP_SECONDS
+        ):
+            current['oldest_played_at'] = min(int(current['oldest_played_at']), played_at)
+            current['play_seconds'] += play_seconds
+            current['completed'] = bool(current['completed'] or r['completed'])
+            current['skipped'] = bool(current.get('skipped') and r['skipped'])
+            current['valid_listen'] = (
+                current['play_seconds'] >= VALID_LISTEN_SECONDS
+                or (duration > 0 and (current['play_seconds'] / duration) >= VALID_LISTEN_RATIO)
+            )
+            continue
+
+        sessions.append({
+            'id': r['id'],
+            'track_id': track_id,
+            'played_at': played_at,
+            'oldest_played_at': played_at,
+            'play_seconds': play_seconds,
+            'track_duration_seconds': duration,
+            'completed': bool(r['completed']),
+            'skipped': bool(r['skipped']),
+            'valid_listen': bool(r['valid_listen']),
+            'title': r['title'],
+            'artist': r['artist'],
+            'album': r['album'],
+            'duration': r['duration'],
+            'album_art_key': r['artwork_key'],
+        })
+    return sessions
+
 @app.route('/api/history')
 def history_view():
     since_days = int(request.args.get('since', 30))
@@ -4277,8 +4322,10 @@ def history_view():
     cutoff = int(time.time()) - since_days * 86400
     conn = _db.get_conn()
     valid_clause = "AND valid_listen=1" if valid_only else ""
+    fetch_limit = min(limit * 5, 8000)
     rows = conn.execute(f"""
         SELECT pe.id, pe.track_id, pe.played_at, pe.play_seconds, pe.completed, pe.valid_listen,
+               pe.skipped, pe.track_duration_seconds,
                COALESCE(t.title, pe.title) as title,
                COALESCE(t.artist, pe.artist) as artist,
                t.album, t.duration, t.artwork_key
@@ -4287,13 +4334,14 @@ def history_view():
         WHERE pe.played_at >= ? {valid_clause}
         ORDER BY pe.played_at DESC
         LIMIT ?
-    """, (cutoff, limit)).fetchall()
+    """, (cutoff, fetch_limit)).fetchall()
 
+    sessions = _collapse_history_sessions(rows)[:limit]
     events = []
     total_seconds = 0
     unique_tracks = set()
     artist_counts = {}
-    for r in rows:
+    for r in sessions:
         ps = r['play_seconds'] or 0
         total_seconds += ps
         unique_tracks.add(r['track_id'])
@@ -4310,7 +4358,7 @@ def history_view():
             'artist': r['artist'],
             'album': r['album'],
             'duration': r['duration'],
-            'album_art_key': r['artwork_key'],
+            'album_art_key': r['album_art_key'],
         })
     top_artist = max(artist_counts, key=artist_counts.get) if artist_counts else None
     return jsonify({
@@ -5579,39 +5627,48 @@ def history_charts():
     valid_clause = "AND valid_listen=1" if valid_only else ""
 
     rows = conn.execute(f"""
-        SELECT date(played_at, 'unixepoch', 'localtime') as day, COUNT(*) as count
-        FROM play_events
-        WHERE played_at >= ? {valid_clause}
-        GROUP BY day ORDER BY day
-    """, (cutoff,)).fetchall()
-    daily_plays = [{'date': r['day'], 'count': r['count']} for r in rows]
-
-    rows = conn.execute(f"""
-        SELECT COALESCE(t.artist, pe.artist, 'Unknown') as artist,
-               COUNT(*) as count,
-               ROUND(SUM(pe.play_seconds) / 3600.0, 1) as hours
+        SELECT pe.id, pe.track_id, pe.played_at, pe.play_seconds, pe.completed, pe.valid_listen,
+               pe.skipped, pe.track_duration_seconds,
+               COALESCE(t.title, pe.title) as title,
+               COALESCE(t.artist, pe.artist) as artist,
+               t.album, t.duration, t.artwork_key
         FROM play_events pe
         LEFT JOIN tracks t ON t.id = pe.track_id
         WHERE pe.played_at >= ? {valid_clause}
-        GROUP BY 1 ORDER BY count DESC LIMIT 5
+        ORDER BY pe.played_at DESC
     """, (cutoff,)).fetchall()
-    top_artists = [{'artist': r['artist'], 'count': r['count'], 'hours': r['hours']} for r in rows]
+    sessions = _collapse_history_sessions(rows)
 
-    rows = conn.execute(f"""
-        SELECT pe.track_id,
-               COALESCE(t.title, pe.title, 'Unknown') as title,
-               COALESCE(t.artist, pe.artist, '') as artist,
-               COUNT(*) as count,
-               MAX(pe.played_at) as last_played,
-               t.artwork_key
-        FROM play_events pe
-        LEFT JOIN tracks t ON t.id = pe.track_id
-        WHERE pe.played_at >= ? {valid_clause}
-        GROUP BY pe.track_id ORDER BY count DESC LIMIT 5
-    """, (cutoff,)).fetchall()
-    top_tracks = [{'track_id': r['track_id'], 'title': r['title'], 'artist': r['artist'],
-                   'count': r['count'], 'last_played': r['last_played'],
-                   'album_art_key': r['artwork_key']} for r in rows]
+    daily_counts = {}
+    artist_stats = {}
+    track_stats = {}
+    for s in sessions:
+        day = time.strftime('%Y-%m-%d', time.localtime(int(s['played_at'] or 0)))
+        daily_counts[day] = daily_counts.get(day, 0) + 1
+
+        artist = s['artist'] or 'Unknown'
+        artist_slot = artist_stats.setdefault(artist, {'artist': artist, 'count': 0, 'seconds': 0.0})
+        artist_slot['count'] += 1
+        artist_slot['seconds'] += float(s['play_seconds'] or 0.0)
+
+        track_id = s['track_id']
+        track_slot = track_stats.setdefault(track_id, {
+            'track_id': track_id,
+            'title': s['title'] or 'Unknown',
+            'artist': s['artist'] or '',
+            'count': 0,
+            'last_played': 0,
+            'album_art_key': s['album_art_key'],
+        })
+        track_slot['count'] += 1
+        track_slot['last_played'] = max(int(track_slot['last_played'] or 0), int(s['played_at'] or 0))
+
+    daily_plays = [{'date': day, 'count': daily_counts[day]} for day in sorted(daily_counts)]
+    top_artists = [
+        {'artist': a['artist'], 'count': a['count'], 'hours': round(a['seconds'] / 3600.0, 1)}
+        for a in sorted(artist_stats.values(), key=lambda x: x['count'], reverse=True)[:5]
+    ]
+    top_tracks = sorted(track_stats.values(), key=lambda x: x['count'], reverse=True)[:5]
 
     return jsonify({'daily_plays': daily_plays, 'top_artists': top_artists, 'top_tracks': top_tracks})
 
@@ -5620,11 +5677,22 @@ def history_charts():
 def library_play_stats():
     conn = _db.get_conn()
     rows = conn.execute("""
-        SELECT track_id, COUNT(*) as count, MAX(played_at) as last_played
-        FROM play_events WHERE valid_listen=1
-        GROUP BY track_id
+        SELECT pe.id, pe.track_id, pe.played_at, pe.play_seconds, pe.completed, pe.valid_listen,
+               pe.skipped, pe.track_duration_seconds,
+               COALESCE(t.title, pe.title) as title,
+               COALESCE(t.artist, pe.artist) as artist,
+               t.album, t.duration, t.artwork_key
+        FROM play_events pe
+        LEFT JOIN tracks t ON t.id = pe.track_id
+        WHERE pe.valid_listen=1
+        ORDER BY pe.played_at DESC
     """).fetchall()
-    return jsonify({r['track_id']: {'count': r['count'], 'last_played': r['last_played']} for r in rows})
+    stats = {}
+    for s in _collapse_history_sessions(rows):
+        slot = stats.setdefault(s['track_id'], {'count': 0, 'last_played': 0})
+        slot['count'] += 1
+        slot['last_played'] = max(int(slot['last_played'] or 0), int(s['played_at'] or 0))
+    return jsonify(stats)
 
 
 @app.route('/api/health/status')

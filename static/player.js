@@ -2744,10 +2744,8 @@ const Player = (function () {
     // - flush play events during long sessions (so Home/stats update without track switches)
     setInterval(() => {
       _saveStateToServer();
-      if (ps.isPlaying && currentTrack()) {
-        // Flush less frequently and only when segment can qualify as a valid listen.
-        _flushCurrentTrackEvent('progress', { minElapsed: 30, contextMinElapsed: 999999 });
-      } else if (_pendingPlaybackEvents.length > 0) {
+      // Do not flush while a track is still playing: one listen should become one history row.
+      if ((!ps.isPlaying || !currentTrack()) && _pendingPlaybackEvents.length > 0) {
         _postPlaybackEvents([]);
       }
     }, 10000);
