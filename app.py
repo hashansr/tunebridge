@@ -5671,6 +5671,8 @@ def history_charts():
         })
         track_slot['count'] += 1
         track_slot['last_played'] = max(int(track_slot['last_played'] or 0), int(s['played_at'] or 0))
+        if not track_slot.get('album_art_key') and s.get('album_art_key'):
+            track_slot['album_art_key'] = s.get('album_art_key')
 
     daily_plays = [{'date': day, 'count': daily_counts[day]} for day in sorted(daily_counts)]
     top_artists = [

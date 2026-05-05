@@ -11006,13 +11006,25 @@ function _historyDayKey(d) {
 
 function _historyThumbHtml(item, kind = 'track') {
   const name = item?.artist || item?.title || '';
+  const artKey = item?.artwork_key || item?.album_art_key || '';
+  const fallbackSrc = artKey ? `/api/artwork/${esc(artKey)}` : '';
+  const initials = String(name || '?')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(part => part[0] || '')
+    .join('')
+    .toUpperCase() || '?';
   if (kind === 'artist' && item?.image_key) {
-    return `<img src="/api/artists/${esc(item.image_key)}/image" alt="${esc(name)}" loading="lazy" onerror="this.style.display='none'" />`;
+    const fallback = fallbackSrc
+      ? `this.onerror=null;this.src='${fallbackSrc}'`
+      : `this.style.display='none';this.nextElementSibling.style.display='flex'`;
+    return `<img src="/api/artists/${esc(item.image_key)}/image" alt="${esc(name)}" loading="lazy" onerror="${fallback}" /><div class="history-top-thumb-placeholder" style="display:none">${esc(initials)}</div>`;
   }
-  if (item?.artwork_key || item?.album_art_key) {
-    return `<img src="/api/artwork/${esc(item.artwork_key || item.album_art_key)}" alt="${esc(name)}" loading="lazy" onerror="this.style.display='none'" />`;
+  if (fallbackSrc) {
+    return `<img src="${fallbackSrc}" alt="${esc(name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div class="history-top-thumb-placeholder" style="display:none">${esc(initials)}</div>`;
   }
-  return `<div class="history-top-thumb-placeholder"></div>`;
+  return `<div class="history-top-thumb-placeholder">${esc(initials)}</div>`;
 }
 
 function _historyRankRows(rows, kind) {
@@ -11020,8 +11032,8 @@ function _historyRankRows(rows, kind) {
   return rows.map((row, idx) => {
     const title = kind === 'artist' ? row.artist : row.title;
     const subtitle = kind === 'artist'
-      ? `${row.count} plays · ${row.hours}h`
-      : `${row.artist || 'Unknown Artist'} · ${row.count} plays`;
+      ? `<span class="history-top-metric">${Number(row.count || 0).toLocaleString()} plays</span><span class="history-top-dot">·</span><span>${esc(row.hours)}h</span>`
+      : `<span>${esc(row.artist || 'Unknown Artist')}</span><span class="history-top-dot">·</span><span class="history-top-metric">${Number(row.count || 0).toLocaleString()} plays</span>`;
     const navAttrs = kind === 'artist'
       ? `data-artist="${esc(row.artist)}" onclick="App.showArtist(this.dataset.artist)"`
       : `data-track-id="${esc(row.track_id)}" ondblclick="Player.playTrackById(this.dataset.trackId)"`;
@@ -11031,7 +11043,7 @@ function _historyRankRows(rows, kind) {
         <div class="history-top-thumb">${_historyThumbHtml(row, kind)}</div>
         <div class="history-top-main">
           <div class="history-top-title">${esc(title || 'Unknown')}</div>
-          <div class="history-top-sub">${esc(subtitle)}</div>
+          <div class="history-top-sub">${subtitle}</div>
         </div>
       </div>`;
   }).join('');
