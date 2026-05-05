@@ -11009,7 +11009,7 @@ async function loadHistoryView() {
     const data = await api(`/history?since=${_historyPeriod}&limit=500&valid_only=${validOnly}`);
     const { events, stats } = data;
     if (statsEl) {
-      statsEl.style.display = 'flex';
+      statsEl.style.display = 'grid';
       statsEl.innerHTML = `
         <div class="history-stat"><span class="history-stat-val">${stats.total_plays}</span><span class="history-stat-lbl">Plays</span></div>
         <div class="history-stat"><span class="history-stat-val">${stats.total_hours}</span><span class="history-stat-lbl">Hours</span></div>
@@ -11065,7 +11065,7 @@ async function _renderHistoryCharts(validOnly) {
   if (!container) return;
   try {
     const d = await api(`/history/charts?since=${_historyPeriod}&valid_only=${validOnly}`);
-    container.style.display = 'flex';
+    container.style.display = 'grid';
     container.innerHTML = `
       <div class="history-chart-card">
         <div class="history-chart-title">Plays per day</div>
@@ -11094,17 +11094,28 @@ async function _renderHistoryCharts(validOnly) {
           }),
           datasets: [{
             data: d.daily_plays.map(r => r.count),
-            backgroundColor: 'rgba(173,198,255,0.5)',
-            borderColor: '#adc6ff',
+            backgroundColor: 'rgba(173,198,255,0.65)',
+            borderColor: 'rgba(173,198,255,0.9)',
             borderWidth: 1,
             borderRadius: 3,
           }],
         },
         options: {
-          plugins: { legend: { display: false } },
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() },
           scales: {
-            x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888', maxTicksLimit: 10 } },
-            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888', stepSize: 1 }, beginAtZero: true },
+            x: {
+              grid: { color: 'rgba(173,198,255,0.05)' },
+              border: { color: 'transparent' },
+              ticks: { color: '#6b6b7b', font: { size: 10 }, maxTicksLimit: 10 },
+            },
+            y: {
+              grid: { color: 'rgba(173,198,255,0.06)' },
+              border: { color: 'transparent' },
+              ticks: { color: '#6b6b7b', font: { size: 9 }, stepSize: 1 },
+              beginAtZero: true,
+            },
           },
         },
       });
