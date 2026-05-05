@@ -105,9 +105,11 @@ const Player = (function () {
   let _peqCloseTimer        = null; // delayed hide timer for animated popover close
   let _peqCurveRaf          = null;
   let _customPeqState       = null;
+  let _activeHistoryTrack    = null;
   let _trackSessionStartedAt = 0;
   let _trackSessionStartPos = 0;
   let _lastPauseEventAt = 0;
+  let _suppressPauseFlush = false;
   let _startupRestoreGuardActive = true;
 
   const _CUSTOM_PEQ_KEY = 'tb_custom_peq';
@@ -962,9 +964,9 @@ const Player = (function () {
   /* ── Playback core ──────────────────────────────────────────────────── */
   function _loadTrack(track) {
     if (!track) return;
-    const prev = currentTrack();
+    const prev = _activeHistoryTrack || currentTrack();
     if (prev && prev.id && prev.id !== track.id) {
-      _flushCurrentTrackEvent('switch');
+      _flushTrackEvent(prev, 'switch');
     }
     _seekRestored = false;
     if (_isMpvActive()) {
@@ -975,9 +977,12 @@ const Player = (function () {
       _cancelCrossfade();
       // Pass sample rate so the AudioContext is created (or recreated) at source rate
       _initAudioContext(track.sample_rate);
+      _suppressPauseFlush = true;
       _audio.src = `/api/stream/${track.id}`;
       _audio.load();
+      setTimeout(() => { _suppressPauseFlush = false; }, 0);
     }
+    _activeHistoryTrack = track;
     _updateTrackUI(track);
     _highlightActiveRow();
     _applyReplayGain(track);
@@ -1688,6 +1693,11 @@ const Player = (function () {
   }
   function _onPause() {
     if (this !== _audio) return;
+    if (_suppressPauseFlush) {
+      ps.isPlaying = false;
+      _updatePlayBtn();
+      return;
+    }
     const now = Date.now();
     if (now - _lastPauseEventAt > 12000) {
       _flushCurrentTrackEvent('pause', { minElapsed: 5 });
@@ -2753,7 +2763,7 @@ const Player = (function () {
     // Final save on page close
     window.addEventListener('beforeunload', () => {
       try {
-        const t = currentTrack();
+        const t = _activeHistoryTrack || currentTrack();
         if (t) {
           const { pos, elapsed } = _capturePlaybackSeconds();
           if (elapsed >= 3) {
@@ -2932,7 +2942,11 @@ const Player = (function () {
   }
 
   function _flushCurrentTrackEvent(reason = 'switch', opts = {}) {
-    const t = currentTrack();
+    const t = _activeHistoryTrack || currentTrack();
+    _flushTrackEvent(t, reason, opts);
+  }
+
+  function _flushTrackEvent(t, reason = 'switch', opts = {}) {
     if (!t) return;
     const { pos, elapsed } = _capturePlaybackSeconds();
     const contextMinElapsed = typeof opts.contextMinElapsed === 'number' ? opts.contextMinElapsed : 1;
