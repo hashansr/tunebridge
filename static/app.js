@@ -11004,6 +11004,59 @@ function _historyDayKey(d) {
   return `${y}-${m}-${day}`;
 }
 
+function _historyMonthKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function _historyWeekStart(d) {
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = start.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  start.setDate(start.getDate() + diff);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function _historyBucketMode(events) {
+  if (_historyPeriod === 7) return 'day';
+  if (_historyPeriod === 30) return 'week';
+  if (_historyPeriod === 90) return 'month';
+  if (_historyPeriod === 0 && events.length) {
+    const times = events.map(ev => Number(ev.played_at || 0)).filter(Boolean);
+    if (times.length) {
+      const spanDays = (Math.max(...times) - Math.min(...times)) / 86400;
+      return spanDays > 366 ? 'year' : 'month';
+    }
+  }
+  return 'month';
+}
+
+function _historyBucketForEvent(ev, mode) {
+  const d = new Date(ev.played_at * 1000);
+  if (mode === 'day') {
+    return { key: _historyDayKey(d), label: _historyDateLabel(d), sort: d.getTime() };
+  }
+  if (mode === 'week') {
+    const start = _historyWeekStart(d);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    const sameYear = start.getFullYear() === end.getFullYear();
+    const label = sameYear
+      ? `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+      : `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} - ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    return { key: `week-${_historyDayKey(start)}`, label, sort: start.getTime() };
+  }
+  if (mode === 'year') {
+    const year = d.getFullYear();
+    return { key: `year-${year}`, label: String(year), sort: new Date(year, 0, 1).getTime() };
+  }
+  return {
+    key: `month-${_historyMonthKey(d)}`,
+    label: d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
+    sort: new Date(d.getFullYear(), d.getMonth(), 1).getTime(),
+  };
+}
+
 function _historyThumbHtml(item, kind = 'track') {
   const name = item?.artist || item?.title || '';
   const artKey = item?.artwork_key || item?.album_art_key || '';
@@ -11076,16 +11129,17 @@ async function loadHistoryView() {
       listEl.innerHTML = '<div class="empty-state"><p>No listening history for this period.</p></div>';
       return;
     }
-    // Group by date
+    // Group by the period granularity: day, week, month, or year.
+    const bucketMode = _historyBucketMode(events);
     const groups = {};
     events.forEach(ev => {
-      const d = new Date(ev.played_at * 1000);
-      const label = _historyDateLabel(d);
-      const key = _historyDayKey(d);
-      if (!groups[key]) groups[key] = { label, events: [] };
+      const { key, label, sort } = _historyBucketForEvent(ev, bucketMode);
+      if (!groups[key]) groups[key] = { label, sort, events: [] };
       groups[key].events.push(ev);
     });
-    listEl.innerHTML = Object.entries(groups).map(([key, group]) => {
+    listEl.innerHTML = Object.entries(groups)
+      .sort((a, b) => b[1].sort - a[1].sort)
+      .map(([key, group]) => {
       const evs = group.events;
       const isOpen = _historyOpenDays.has(key);
       const totalSeconds = evs.reduce((acc, ev) => acc + Number(ev.play_seconds || 0), 0);
