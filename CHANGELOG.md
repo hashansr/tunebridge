@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.113-rc.050526-1528 · 2026-05-05
 - Fix: Sync modal no longer stalls at Step 2 (scanning) — `_syncScannedAt` was used but never declared, causing a ReferenceError that prevented the preview phase from loading
 
 ## v0.112-rc.050526-1524 · 2026-05-05
