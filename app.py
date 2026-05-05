@@ -5642,14 +5642,22 @@ def history_charts():
     daily_counts = {}
     artist_stats = {}
     track_stats = {}
+    artist_image_keys = _db.db_get_all_artist_image_keys()
     for s in sessions:
         day = time.strftime('%Y-%m-%d', time.localtime(int(s['played_at'] or 0)))
         daily_counts[day] = daily_counts.get(day, 0) + 1
 
         artist = s['artist'] or 'Unknown'
-        artist_slot = artist_stats.setdefault(artist, {'artist': artist, 'count': 0, 'seconds': 0.0})
+        artist_slot = artist_stats.setdefault(artist, {
+            'artist': artist,
+            'count': 0,
+            'seconds': 0.0,
+            'artwork_key': s.get('album_art_key'),
+        })
         artist_slot['count'] += 1
         artist_slot['seconds'] += float(s['play_seconds'] or 0.0)
+        if not artist_slot.get('artwork_key') and s.get('album_art_key'):
+            artist_slot['artwork_key'] = s.get('album_art_key')
 
         track_id = s['track_id']
         track_slot = track_stats.setdefault(track_id, {
@@ -5665,7 +5673,16 @@ def history_charts():
 
     daily_plays = [{'date': day, 'count': daily_counts[day]} for day in sorted(daily_counts)]
     top_artists = [
-        {'artist': a['artist'], 'count': a['count'], 'hours': round(a['seconds'] / 3600.0, 1)}
+        {
+            'artist': a['artist'],
+            'count': a['count'],
+            'hours': round(a['seconds'] / 3600.0, 1),
+            'artwork_key': a.get('artwork_key'),
+            'image_key': (
+                get_artist_image_key(a['artist'])
+                if get_artist_image_key(a['artist']) in artist_image_keys else None
+            ),
+        }
         for a in sorted(artist_stats.values(), key=lambda x: x['count'], reverse=True)[:5]
     ]
     top_tracks = sorted(track_stats.values(), key=lambda x: x['count'], reverse=True)[:5]

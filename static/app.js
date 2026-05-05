@@ -10976,6 +10976,7 @@ function srLoadTemplate(key) {
 /* ── History view ───────────────────────────────────────────────────── */
 let _historyPeriod = 7;
 let _historyChart = null;
+let _historyOpenDays = new Set();
 let _playStats = {};       // track_id → {count, last_played}
 let _playStatsLoaded = false;
 
@@ -10989,10 +10990,51 @@ async function _ensurePlayStats() {
 
 function setHistoryPeriod(days) {
   _historyPeriod = days;
+  _historyOpenDays = new Set();
   document.querySelectorAll('[data-period]').forEach(btn => {
     btn.classList.toggle('active', parseInt(btn.dataset.period) === days);
   });
   loadHistoryView();
+}
+
+function _historyDayKey(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function _historyThumbHtml(item, kind = 'track') {
+  const name = item?.artist || item?.title || '';
+  if (kind === 'artist' && item?.image_key) {
+    return `<img src="/api/artists/${esc(item.image_key)}/image" alt="${esc(name)}" loading="lazy" onerror="this.style.display='none'" />`;
+  }
+  if (item?.artwork_key || item?.album_art_key) {
+    return `<img src="/api/library/artwork/${esc(item.artwork_key || item.album_art_key)}" alt="${esc(name)}" loading="lazy" onerror="this.style.display='none'" />`;
+  }
+  return `<div class="history-top-thumb-placeholder"></div>`;
+}
+
+function _historyRankRows(rows, kind) {
+  if (!rows || !rows.length) return '<div class="empty-state" style="padding:12px 0"><p>No data</p></div>';
+  return rows.map((row, idx) => {
+    const title = kind === 'artist' ? row.artist : row.title;
+    const subtitle = kind === 'artist'
+      ? `${row.count} plays · ${row.hours}h`
+      : `${row.artist || 'Unknown Artist'} · ${row.count} plays`;
+    const navAttrs = kind === 'artist'
+      ? `data-artist="${esc(row.artist)}" onclick="App.showArtist(this.dataset.artist)"`
+      : `data-track-id="${esc(row.track_id)}" ondblclick="Player.playTrackById(this.dataset.trackId)"`;
+    return `
+      <div class="history-top-row history-top-row--media" ${navAttrs}>
+        <div class="history-top-rank">${idx + 1}</div>
+        <div class="history-top-thumb">${_historyThumbHtml(row, kind)}</div>
+        <div class="history-top-main">
+          <div class="history-top-title">${esc(title || 'Unknown')}</div>
+          <div class="history-top-sub">${esc(subtitle)}</div>
+        </div>
+      </div>`;
+  }).join('');
 }
 
 async function loadHistoryView() {
@@ -11027,23 +11069,34 @@ async function loadHistoryView() {
     events.forEach(ev => {
       const d = new Date(ev.played_at * 1000);
       const label = _historyDateLabel(d);
-      if (!groups[label]) groups[label] = [];
-      groups[label].push(ev);
+      const key = _historyDayKey(d);
+      if (!groups[key]) groups[key] = { label, events: [] };
+      groups[key].events.push(ev);
     });
-    listEl.innerHTML = Object.entries(groups).map(([label, evs]) => `
-      <div class="history-date-group">
-        <div class="history-date-label">${label}</div>
+    listEl.innerHTML = Object.entries(groups).map(([key, group]) => {
+      const evs = group.events;
+      const isOpen = _historyOpenDays.has(key);
+      const totalSeconds = evs.reduce((acc, ev) => acc + Number(ev.play_seconds || 0), 0);
+      const uniqueTracks = new Set(evs.map(ev => ev.track_id).filter(Boolean)).size;
+      return `
+      <div class="history-date-group${isOpen ? ' is-open' : ''}" data-day-key="${esc(key)}">
+        <button class="history-date-toggle" onclick="App.toggleHistoryDay('${esc(key)}')" aria-expanded="${isOpen ? 'true' : 'false'}">
+          <span class="history-date-label">${esc(group.label)}</span>
+          <span class="history-date-summary">${evs.length} plays · ${uniqueTracks} tracks · ${_fmtDuration(totalSeconds)}</span>
+          <span class="history-date-chevron">›</span>
+        </button>
+        <div class="history-date-events" style="display:${isOpen ? 'block' : 'none'}">
         ${evs.map(ev => `
-          <div class="history-event-row" ondblclick="Player.playTrackById('${ev.track_id}')">
+          <div class="history-event-row" ondblclick="Player.playTrackById('${esc(ev.track_id)}')">
             <div class="history-event-art">${ev.album_art_key
-              ? `<img src="/api/library/artwork/${ev.album_art_key}" onerror="this.style.display='none'" />`
+              ? `<img src="/api/library/artwork/${esc(ev.album_art_key)}" onerror="this.style.display='none'" />`
               : `<div class="history-art-placeholder"></div>`}</div>
             <div class="history-event-info">
               <div class="history-event-title">${esc(ev.title || 'Unknown')}</div>
               <div class="history-event-sub">
-                ${ev.artist ? `<span class="history-nav-link" onclick="event.stopPropagation();App.showArtist('${esc(ev.artist)}')">${esc(ev.artist)}</span>` : ''}
+                ${ev.artist ? `<span class="history-nav-link" data-artist="${esc(ev.artist)}" onclick="event.stopPropagation();App.showArtist(this.dataset.artist)">${esc(ev.artist)}</span>` : ''}
                 ${ev.artist && ev.album ? ' · ' : ''}
-                ${ev.album ? `<span class="history-nav-link" onclick="event.stopPropagation();App.showAlbum('${esc(ev.artist || '')}','${esc(ev.album)}')">${esc(ev.album)}</span>` : ''}
+                ${ev.album ? `<span class="history-nav-link" data-artist="${esc(ev.artist || '')}" data-album="${esc(ev.album)}" onclick="event.stopPropagation();App.showAlbum(this.dataset.artist,this.dataset.album)">${esc(ev.album)}</span>` : ''}
               </div>
             </div>
             <div class="history-event-meta">
@@ -11053,8 +11106,9 @@ async function loadHistoryView() {
             <button class="history-delete-btn" onclick="event.stopPropagation();App.deleteHistoryEvent(${ev.id})" title="Remove from history">✕</button>
           </div>
         `).join('')}
+        </div>
       </div>
-    `).join('');
+    `; }).join('');
   } catch (e) {
     if (listEl) listEl.innerHTML = '<div class="empty-state"><p>Could not load history.</p></div>';
   }
@@ -11067,19 +11121,19 @@ async function _renderHistoryCharts(validOnly) {
     const d = await api(`/history/charts?since=${_historyPeriod}&valid_only=${validOnly}`);
     container.style.display = 'grid';
     container.innerHTML = `
-      <div class="history-chart-card">
+      <div class="history-chart-card history-chart-card--plays">
         <div class="history-chart-title">Plays per day</div>
         <div class="history-chart-wrap"><canvas id="history-day-chart"></canvas></div>
       </div>
-      <div class="history-chart-card">
-        <div class="history-chart-title">Top artists</div>
-        ${d.top_artists.length
-          ? d.top_artists.map(a => `
-              <div class="history-top-row">
-                <span class="history-nav-link" onclick="App.showArtist('${esc(a.artist)}')">${esc(a.artist)}</span>
-                <span class="history-top-count">${a.count} plays · ${a.hours}h</span>
-              </div>`).join('')
-          : '<div class="empty-state" style="padding:12px 0"><p>No data</p></div>'}
+      <div class="history-top-stack">
+        <div class="history-chart-card history-rank-card">
+          <div class="history-chart-title">Top artists</div>
+          ${_historyRankRows(d.top_artists, 'artist')}
+        </div>
+        <div class="history-chart-card history-rank-card">
+          <div class="history-chart-title">Top songs</div>
+          ${_historyRankRows(d.top_tracks, 'track')}
+        </div>
       </div>
     `;
     if (_historyChart) { _historyChart.destroy(); _historyChart = null; }
@@ -11123,6 +11177,19 @@ async function _renderHistoryCharts(validOnly) {
   } catch (_) {
     container.style.display = 'none';
   }
+}
+
+function toggleHistoryDay(dayKey) {
+  if (_historyOpenDays.has(dayKey)) _historyOpenDays.delete(dayKey);
+  else _historyOpenDays.add(dayKey);
+  const group = document.querySelector(`.history-date-group[data-day-key="${CSS.escape(dayKey)}"]`);
+  if (!group) return;
+  const isOpen = _historyOpenDays.has(dayKey);
+  group.classList.toggle('is-open', isOpen);
+  const body = group.querySelector('.history-date-events');
+  const btn = group.querySelector('.history-date-toggle');
+  if (body) body.style.display = isOpen ? 'block' : 'none';
+  if (btn) btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
 }
 
 function toggleHistoryClearMenu(e) {
@@ -12163,6 +12230,7 @@ const App = {
   // History
   loadHistoryView,
   setHistoryPeriod,
+  toggleHistoryDay,
   toggleHistoryClearMenu,
   clearHistoryPeriod,
   deleteHistoryEvent,
