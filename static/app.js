@@ -1,4 +1,13 @@
 /* ── State ──────────────────────────────────────────────────────────── */
+const _CONTENT_SORT_DEFAULTS = {
+  playlistSortMode: 'created',
+  playlistTracks: { mode: 'original', dir: 'asc' },
+  libraryTracks: { col: 'track_number', order: 'asc' },
+  songs: { col: 'title', order: 'asc' },
+  favourites: { songs: 'my', artists: 'recent', albums: 'recent' },
+  coverage: { sort: 'recent' },
+};
+
 const state = {
   view: 'artists',         // artists | albums | tracks | playlist
   artist: null,
@@ -16,9 +25,9 @@ const state = {
   _pendingTrackIds: [],     // track IDs queued for a picker selection
   selectedTrackIds: new Set(),
   lastSelectedIdx: null,
-  playlistSortMode: localStorage.getItem('sidebarSort') || 'created',
-  plSortMode: 'original',
-  plSortDir: 'asc',
+  playlistSortMode: localStorage.getItem('sidebarSort') || _CONTENT_SORT_DEFAULTS.playlistSortMode,
+  plSortMode: _CONTENT_SORT_DEFAULTS.playlistTracks.mode,
+  plSortDir: _CONTENT_SORT_DEFAULTS.playlistTracks.dir,
   plFilter: '',
   favourites: {
     songs: new Set(),
@@ -32,9 +41,9 @@ const state = {
     dap_exports: {},
   },
   favSongsData: [],
-  favSongsSort: 'my',
-  favArtistsSort: 'recent',
-  favAlbumsSort: 'recent',
+  favSongsSort: _CONTENT_SORT_DEFAULTS.favourites.songs,
+  favArtistsSort: _CONTENT_SORT_DEFAULTS.favourites.artists,
+  favAlbumsSort: _CONTENT_SORT_DEFAULTS.favourites.albums,
   favPanel: 'artists',
   artistSearch: '',
   artistAlpha: '',
@@ -70,6 +79,130 @@ async function api(path, opts = {}) {
   }
   if (res.status === 204) return null;
   return res.json();
+}
+
+let _contentSortPrefs = _cloneContentSortDefaults();
+let _contentSortPrefsHydrated = false;
+let _contentSortSaveTimer = null;
+
+function _cloneContentSortDefaults() {
+  return JSON.parse(JSON.stringify(_CONTENT_SORT_DEFAULTS));
+}
+
+function _pickAllowed(value, allowed, fallback) {
+  const s = String(value || '').trim();
+  return allowed.includes(s) ? s : fallback;
+}
+
+function _normalizeSortState(value, allowedCols, fallback) {
+  const source = (value && typeof value === 'object') ? value : {};
+  return {
+    col: _pickAllowed(source.col, allowedCols, fallback.col),
+    order: _pickAllowed(source.order, ['asc', 'desc'], fallback.order),
+  };
+}
+
+function _normalizeContentSortPrefs(raw = {}) {
+  const defaults = _cloneContentSortDefaults();
+  const source = (raw && typeof raw === 'object') ? raw : {};
+  const favourites = (source.favourites && typeof source.favourites === 'object') ? source.favourites : {};
+  const playlistTracks = (source.playlistTracks && typeof source.playlistTracks === 'object') ? source.playlistTracks : {};
+  const coverage = (source.coverage && typeof source.coverage === 'object') ? source.coverage : {};
+  return {
+    playlistSortMode: _pickAllowed(source.playlistSortMode, ['alpha', 'created', 'updated'], defaults.playlistSortMode),
+    playlistTracks: {
+      mode: _pickAllowed(playlistTracks.mode, ['original', 'az', 'album', 'year'], defaults.playlistTracks.mode),
+      dir: _pickAllowed(playlistTracks.dir, ['asc', 'desc'], defaults.playlistTracks.dir),
+    },
+    libraryTracks: _normalizeSortState(source.libraryTracks, ['track_number', 'title', 'album', 'duration'], defaults.libraryTracks),
+    songs: _normalizeSortState(source.songs, ['title', 'artist', 'album', 'duration', 'plays', 'genre', 'year', 'album_artist', 'format', 'bitrate', 'date_added'], defaults.songs),
+    favourites: {
+      songs: _pickAllowed(favourites.songs, ['my', 'recent', 'az', 'album'], defaults.favourites.songs),
+      artists: _pickAllowed(favourites.artists, ['recent', 'az'], defaults.favourites.artists),
+      albums: _pickAllowed(favourites.albums, ['recent', 'az'], defaults.favourites.albums),
+    },
+    coverage: {
+      sort: _pickAllowed(coverage.sort, ['recent', 'oldest', 'artist', 'album'], defaults.coverage.sort),
+    },
+  };
+}
+
+function _snapshotContentSortPrefs() {
+  return _normalizeContentSortPrefs({
+    playlistSortMode: state.playlistSortMode,
+    playlistTracks: { mode: state.plSortMode, dir: state.plSortDir },
+    libraryTracks: _tracksSort,
+    songs: _songsSort,
+    favourites: {
+      songs: state.favSongsSort,
+      artists: state.favArtistsSort,
+      albums: state.favAlbumsSort,
+    },
+    coverage: { sort: _coverageState?.sort || _CONTENT_SORT_DEFAULTS.coverage.sort },
+  });
+}
+
+function _applyContentSortPrefs(settings = {}) {
+  const saved = settings.content_sort_order;
+  const prefs = _normalizeContentSortPrefs(saved);
+  const shouldPersistNormalizedPrefs = !saved || typeof saved !== 'object' || !saved.playlistSortMode;
+  if (shouldPersistNormalizedPrefs) {
+    const legacySidebarSort = localStorage.getItem('sidebarSort');
+    prefs.playlistSortMode = _pickAllowed(legacySidebarSort, ['alpha', 'created', 'updated'], prefs.playlistSortMode);
+  }
+  _contentSortPrefs = prefs;
+  _contentSortPrefsHydrated = true;
+
+  state.playlistSortMode = prefs.playlistSortMode;
+  state.plSortMode = prefs.playlistTracks.mode;
+  state.plSortDir = prefs.playlistTracks.dir;
+  _tracksSort = { ...prefs.libraryTracks };
+  _songsSort = { ...prefs.songs };
+  state.favSongsSort = prefs.favourites.songs;
+  state.favArtistsSort = prefs.favourites.artists;
+  state.favAlbumsSort = prefs.favourites.albums;
+  if (typeof _coverageState === 'object' && _coverageState) _coverageState.sort = prefs.coverage.sort;
+  _syncSortControls();
+  if (shouldPersistNormalizedPrefs) _queueSaveContentSortPrefs();
+}
+
+function _syncSortControls() {
+  document.querySelectorAll('.pl-sort-pill[data-sort]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sort === state.plSortMode);
+  });
+  const dirEl = document.getElementById('pl-sort-year-dir');
+  if (dirEl) dirEl.textContent = state.plSortMode === 'year' ? (state.plSortDir === 'asc' ? '↑' : '↓') : '';
+  document.querySelectorAll('[data-fav-song-sort]').forEach(b => b.classList.toggle('active', b.dataset.favSongSort === state.favSongsSort));
+  document.querySelectorAll('[data-fav-artist-sort]').forEach(b => b.classList.toggle('active', b.dataset.favArtistSort === state.favArtistsSort));
+  document.querySelectorAll('[data-fav-album-sort]').forEach(b => b.classList.toggle('active', b.dataset.favAlbumSort === state.favAlbumsSort));
+  ['alpha','created','updated'].forEach(m => {
+    [document.getElementById(`pl-view-sort-check-${m}`), document.getElementById(`sidebar-sort-check-${m}`)].forEach(el => {
+      if (el) el.style.opacity = (m === state.playlistSortMode) ? '1' : '0';
+    });
+  });
+}
+
+function _queueSaveContentSortPrefs() {
+  if (!_contentSortPrefsHydrated) return;
+  _contentSortPrefs = _snapshotContentSortPrefs();
+  clearTimeout(_contentSortSaveTimer);
+  _contentSortSaveTimer = setTimeout(() => {
+    api('/settings', { method: 'PUT', body: { content_sort_order: _contentSortPrefs } }).catch(() => {});
+  }, 120);
+}
+
+function _flushContentSortPrefs() {
+  if (!_contentSortPrefsHydrated) return;
+  clearTimeout(_contentSortSaveTimer);
+  _contentSortPrefs = _snapshotContentSortPrefs();
+  try {
+    fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_sort_order: _contentSortPrefs }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (_) {}
 }
 
 /* ── Toast System ───────────────────────────────────────────────────── */
@@ -870,14 +1003,15 @@ function toggleSidebarSort(event) {
 }
 
 function setSidebarSort(mode) {
-  state.playlistSortMode = mode;
-  localStorage.setItem('sidebarSort', mode);
+  state.playlistSortMode = _pickAllowed(mode, ['alpha', 'created', 'updated'], _CONTENT_SORT_DEFAULTS.playlistSortMode);
+  localStorage.setItem('sidebarSort', state.playlistSortMode);
   const dd = document.getElementById('pl-view-sort-dd');
   if (dd) dd.style.display = 'none';
   ['alpha','created','updated'].forEach(m => {
     const el = document.getElementById(`pl-view-sort-check-${m}`);
-    if (el) el.style.opacity = (m === mode) ? '1' : '0';
+    if (el) el.style.opacity = (m === state.playlistSortMode) ? '1' : '0';
   });
+  _queueSaveContentSortPrefs();
   renderSidebarPlaylists();
 }
 
@@ -1456,7 +1590,7 @@ async function loadTracks(artist = null, album = null) {
     albumHero.style.display = 'none';
   }
 
-  if (album) _tracksSort = { col: 'track_number', order: 'asc' };
+  if (album && !_contentSortPrefsHydrated) _tracksSort = { col: 'track_number', order: 'asc' };
   state.tracks = _tracksSortedRows(tracks);
   _renderTracksTable();
   Player.registerTracks(state.tracks);
@@ -1497,7 +1631,7 @@ function fmtDuration(totalSecs) {
   return `${m} min`;
 }
 
-let _tracksSort = { col: 'track_number', order: 'asc' };
+let _tracksSort = { ..._CONTENT_SORT_DEFAULTS.libraryTracks };
 
 function _trackNumberSortValue(track) {
   const raw = String(track?.track_number || '').trim();
@@ -1738,6 +1872,7 @@ function sortTracks(col) {
     _tracksSort.col = key;
     _tracksSort.order = 'asc';
   }
+  _queueSaveContentSortPrefs();
   state.tracks = _tracksSortedRows(state.tracks || []);
   _renderTracksTable();
   Player.registerTracks(state.tracks);
@@ -2282,20 +2417,16 @@ function clearPlaylistFilter() {
 }
 
 function setPlaylistInSort(mode) {
-  if (mode === 'year' && state.plSortMode === 'year') {
+  const nextMode = _pickAllowed(mode, ['original', 'az', 'album', 'year'], _CONTENT_SORT_DEFAULTS.playlistTracks.mode);
+  if (nextMode === 'year' && state.plSortMode === 'year') {
     // Toggle direction on second click
     state.plSortDir = state.plSortDir === 'asc' ? 'desc' : 'asc';
   } else {
     state.plSortDir = 'asc';
   }
-  state.plSortMode = mode;
-  // Update pill active state
-  document.querySelectorAll('.pl-sort-pill').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.sort === mode);
-  });
-  // Update year direction indicator
-  const dirEl = document.getElementById('pl-sort-year-dir');
-  if (dirEl) dirEl.textContent = mode === 'year' ? (state.plSortDir === 'asc' ? '↑' : '↓') : '';
+  state.plSortMode = nextMode;
+  _syncSortControls();
+  _queueSaveContentSortPrefs();
   renderPlaylistTracks(state.playlist?.tracks || []);
 }
 
@@ -4001,8 +4132,9 @@ async function loadFavArtists() {
 }
 
 function setFavArtistsSort(mode) {
-  state.favArtistsSort = mode;
-  document.querySelectorAll('[data-fav-artist-sort]').forEach(b => b.classList.toggle('active', b.dataset.favArtistSort === mode));
+  state.favArtistsSort = _pickAllowed(mode, ['recent', 'az'], _CONTENT_SORT_DEFAULTS.favourites.artists);
+  _syncSortControls();
+  _queueSaveContentSortPrefs();
   loadFavArtists();
 }
 
@@ -4061,8 +4193,9 @@ async function loadFavAlbums() {
 }
 
 function setFavAlbumsSort(mode) {
-  state.favAlbumsSort = mode;
-  document.querySelectorAll('[data-fav-album-sort]').forEach(b => b.classList.toggle('active', b.dataset.favAlbumSort === mode));
+  state.favAlbumsSort = _pickAllowed(mode, ['recent', 'az'], _CONTENT_SORT_DEFAULTS.favourites.albums);
+  _syncSortControls();
+  _queueSaveContentSortPrefs();
   loadFavAlbums();
 }
 
@@ -4250,8 +4383,9 @@ async function playAllFavouriteSongs() {
 }
 
 function setFavSongsSort(mode) {
-  state.favSongsSort = mode;
-  document.querySelectorAll('[data-fav-song-sort]').forEach(b => b.classList.toggle('active', b.dataset.favSongSort === mode));
+  state.favSongsSort = _pickAllowed(mode, ['my', 'recent', 'az', 'album'], _CONTENT_SORT_DEFAULTS.favourites.songs);
+  _syncSortControls();
+  _queueSaveContentSortPrefs();
   loadFavSongs();
 }
 
@@ -5995,238 +6129,6 @@ function _syncWarningRows(items) {
   return items.map(msg => `<div class="sync-warning-row">${esc(msg)}</div>`).join('');
 }
 
-function _syncApplySectionCollapse(section) {
-  const key = section === 'device'
-    ? 'device'
-    : (section === 'playlists' ? 'playlists' : 'local');
-  const mapping = {
-    local: { wrapperId: 'sync-section-local', toggleId: 'sync-toggle-local' },
-    device: { wrapperId: 'sync-section-device', toggleId: 'sync-toggle-device' },
-    playlists: { wrapperId: 'sync-section-playlists', toggleId: 'sync-toggle-playlists' },
-  };
-  const conf = mapping[key];
-  if (!conf) return;
-  const { wrapperId, toggleId } = conf;
-  const wrapper = document.getElementById(wrapperId);
-  const toggle = document.getElementById(toggleId);
-  if (!wrapper || !toggle) return;
-  const collapsed = !!_syncSectionCollapsed[key];
-  wrapper.classList.toggle('is-collapsed', collapsed);
-  toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-  toggle.title = collapsed ? 'Expand section' : 'Collapse section';
-}
-
-function toggleSyncSection(section) {
-  const key = section === 'device'
-    ? 'device'
-    : (section === 'playlists' ? 'playlists' : 'local');
-  _syncSectionCollapsed[key] = !_syncSectionCollapsed[key];
-  _syncApplySectionCollapse(key);
-}
-
-function renderSyncPreview(status) {
-  _syncLastStatus = status || null;
-  _syncUpdatePreviewDirectionLabels();
-  document.getElementById('sync-local-count').textContent = status.local_only.length;
-  document.getElementById('sync-device-count').textContent = status.device_only.length;
-  const playlistsOut = Array.isArray(status.playlists_out_of_sync) ? status.playlists_out_of_sync : [];
-  document.getElementById('sync-playlist-count').textContent = playlistsOut.length;
-  document.getElementById('sync-list-local').innerHTML = _syncFileRows(
-    status.local_only,
-    'local',
-    status.local_only_reasons || {}
-  );
-  document.getElementById('sync-list-device').innerHTML = _syncFileRows(
-    status.device_only,
-    'device',
-    status.device_only_reasons || {}
-  );
-  document.getElementById('sync-list-playlists').innerHTML = _syncPlaylistRows(playlistsOut);
-  const warnings = Array.isArray(status.warnings) ? status.warnings : [];
-  _syncPreviewWarningCount = warnings.length;
-  document.getElementById('sync-warning-count').textContent = warnings.length;
-  document.getElementById('sync-list-warnings').innerHTML = _syncWarningRows(warnings);
-  document.getElementById('sync-warnings-wrap').style.display = 'none';
-
-  // Hide "copy to device" section if nothing to copy
-  document.getElementById('sync-section-local').style.display =
-    status.local_only.length ? 'block' : 'none';
-  document.getElementById('sync-section-device').style.display =
-    status.device_only.length ? 'block' : 'none';
-  document.getElementById('sync-section-playlists').style.display =
-    playlistsOut.length ? 'block' : 'none';
-  _syncSectionCollapsed.local = true;
-  _syncSectionCollapsed.device = true;
-  _syncSectionCollapsed.playlists = true;
-  _syncApplySectionCollapse('local');
-  _syncApplySectionCollapse('device');
-  _syncApplySectionCollapse('playlists');
-
-  const executeBtn = document.getElementById('sync-execute-btn');
-  if (executeBtn) executeBtn.disabled = status.local_only.length === 0 && status.device_only.length === 0;
-
-  // Reset select-all checkboxes
-  const allLocal = document.getElementById('chk-all-local');
-  const allDevice = document.getElementById('chk-all-device');
-  const allPlaylists = document.getElementById('chk-all-playlists');
-  if (allLocal) allLocal.checked = true;
-  if (allDevice) allDevice.checked = true;
-  if (allPlaylists) allPlaylists.checked = true;
-  syncSelectionChanged();
-
-  _syncPhase('preview');
-}
-
-function syncToggleAll(side, checked) {
-  document.querySelectorAll(`.sync-chk-${side}`).forEach(cb => cb.checked = checked);
-  syncSelectionChanged();
-}
-
-function syncSelectionChanged() {
-  const panel = document.getElementById('sync-space-summary');
-  const estTime = document.getElementById('sync-est-time');
-  const status = _syncLastStatus;
-  if (!panel || !status) return;
-  const selectedLocal = [...document.querySelectorAll('.sync-chk-local:checked')].map(cb => cb.dataset.path);
-  const selectedPlaylists = [...document.querySelectorAll('.sync-chk-playlists:checked')].map(cb => cb.dataset.plid);
-  const localSizes = status.local_only_sizes || {};
-  const required = selectedLocal.reduce((sum, rel) => sum + Number(localSizes[rel] || 0), 0);
-  const available = (status.space_available_bytes === null || status.space_available_bytes === undefined)
-    ? null
-    : Number(status.space_available_bytes);
-  const shortfall = (available !== null && required > available) ? (required - available) : 0;
-  const executeBtn = document.getElementById('sync-execute-btn');
-
-  const addCount = selectedLocal.length;
-  const removeCount = [...document.querySelectorAll('.sync-chk-device:checked')].length;
-  const playlistCount = selectedPlaylists.length;
-  const noSelection = addCount === 0 && removeCount === 0 && playlistCount === 0;
-  const tracksLine = noSelection
-    ? 'All synced and sounding great. Nothing to copy right now.'
-    : `Selected: ${addCount} track${addCount === 1 ? '' : 's'} to device • ${removeCount} track${removeCount === 1 ? '' : 's'} to local • ${playlistCount} playlist${playlistCount === 1 ? '' : 's'} to sync`;
-  let spaceLine = '';
-  let className = 'sync-space-summary';
-
-  if (available === null) {
-    spaceLine = `Space check unavailable • Required for add: ${_fmtBytes(required)}`;
-  } else if (shortfall > 0) {
-    spaceLine = `Not enough space • Need ${_fmtBytes(required)}, available ${_fmtBytes(available)} (short by ${_fmtBytes(shortfall)})`;
-    className += ' sync-space-summary--danger';
-  } else if (noSelection) {
-    const remaining = Math.max(0, available - required);
-    spaceLine = `Available ${_fmtBytes(available)} • Required ${_fmtBytes(required)} • After sync ${_fmtBytes(remaining)} free`;
-    className += ' sync-space-summary--ok';
-  } else {
-    const remaining = Math.max(0, available - required);
-    spaceLine = `Available ${_fmtBytes(available)} • Required ${_fmtBytes(required)} • After sync ${_fmtBytes(remaining)} free`;
-    if (remaining < (0.1 * (Number(status.space_total_bytes || 0)))) className += ' sync-space-summary--warn';
-    else className += ' sync-space-summary--ok';
-  }
-
-  panel.className = className;
-  panel.innerHTML = `<div>${esc(tracksLine)}</div><div>${esc(spaceLine)}</div>`;
-  if (estTime) {
-    if (noSelection) {
-      estTime.textContent = '';
-    } else {
-      const throughputBytesPerSec = 12 * 1024 * 1024;
-      const estSeconds = Math.max(10, Math.round(required / throughputBytesPerSec));
-      const mins = Math.floor(estSeconds / 60);
-      const secs = estSeconds % 60;
-      estTime.textContent = `Est. time ~${mins}m ${secs}s`;
-    }
-  }
-  if (executeBtn) {
-    if (noSelection) {
-      executeBtn.disabled = false;
-      executeBtn.textContent = 'Done';
-      executeBtn.title = '';
-      executeBtn.onclick = () => App.closeSyncModal();
-    } else {
-      executeBtn.disabled = false;
-      if (shortfall > 0) {
-        executeBtn.textContent = `Need ${_fmtBytes(shortfall)} More Space`;
-        executeBtn.title = `Not enough space: short by ${_fmtBytes(shortfall)}`;
-        executeBtn.onclick = () => {
-          toast(`Not enough device space. Short by ${_fmtBytes(shortfall)}.`);
-        };
-      } else {
-        executeBtn.textContent = 'Start Sync';
-        executeBtn.title = '';
-        executeBtn.onclick = () => App.executeSync();
-      }
-    }
-  }
-}
-
-async function executeSync() {
-  const local_paths = [...document.querySelectorAll('.sync-chk-local:checked')].map(cb => cb.dataset.path);
-  const device_paths = [...document.querySelectorAll('.sync-chk-device:checked')].map(cb => cb.dataset.path);
-  const playlist_ids = [...document.querySelectorAll('.sync-chk-playlists:checked')].map(cb => cb.dataset.plid);
-
-  if (!local_paths.length && !device_paths.length && !playlist_ids.length) {
-    toast('Select at least one file or playlist to sync.');
-    return;
-  }
-
-  _syncPhase('copying');
-  const copyMode = document.getElementById('sync-copying-mode');
-  if (copyMode) {
-    if (playlist_ids.length > 0 && local_paths.length === 0 && device_paths.length === 0) copyMode.textContent = 'Syncing Playlists';
-    else if (local_paths.length > 0 && device_paths.length > 0) copyMode.textContent = 'Syncing';
-    else if (device_paths.length > 0) copyMode.textContent = 'Removing';
-    else copyMode.textContent = 'Copying';
-  }
-  document.getElementById('sync-copying-msg').textContent = `Preparing to sync 0 / ${local_paths.length + device_paths.length + playlist_ids.length} items…`;
-  _syncSetCopyVisualProgress(0);
-  const copyPctEl = document.getElementById('sync-copy-percent');
-  if (copyPctEl) copyPctEl.textContent = '0%';
-  document.getElementById('sync-copying-current').textContent = '';
-
-  const execRes = await fetch('/api/sync/execute', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ local_paths, device_paths, playlist_ids }),
-  });
-  if (!execRes.ok) {
-    const err = await execRes.json().catch(() => ({}));
-    if (err.space_required_bytes !== undefined) {
-      toast(`Not enough device space: need ${_fmtBytes(err.space_required_bytes)}, available ${_fmtBytes(err.space_available_bytes)}.`);
-    } else {
-      toast(err.error || 'Sync failed to start.');
-    }
-    _syncPhase('preview');
-    return;
-  }
-
-  clearInterval(_syncPollTimer);
-  _syncPollTimer = setInterval(async () => {
-    const status = await api('/sync/status').catch(() => null);
-    if (!status) return;
-
-    const pct = status.total > 0 ? Math.round((status.progress / status.total) * 100) : 0;
-    _syncSetCopyVisualProgress(pct);
-    if (copyPctEl) copyPctEl.textContent = pct + '%';
-    document.getElementById('sync-copying-msg').textContent =
-      _formatSyncPhaseMessage(status.message, 'copy');
-    document.getElementById('sync-copying-current').textContent = status.current || '';
-    if (copyMode) {
-      const modeText = `${status.message || ''} ${status.current || ''}`.toLowerCase();
-      if (modeText.includes('remove') || modeText.includes('delet')) copyMode.textContent = 'Removing';
-      else if (modeText.includes('copy') || modeText.includes('write')) copyMode.textContent = 'Copying';
-      else copyMode.textContent = 'Syncing';
-    }
-
-    if (status.status === 'done') {
-      clearInterval(_syncPollTimer);
-      _showSyncDone(status);
-    } else if (status.status === 'error') {
-      clearInterval(_syncPollTimer);
-      toast('Sync failed: ' + status.message);
-    }
-  }, 600);
-}
-
 function _syncSectionMapping() {
   return {
     'to-device': { wrapperId: 'sync-section-to-device', toggleId: 'sync-toggle-to-device' },
@@ -6421,7 +6323,7 @@ function _syncBuildExecutePayload() {
   (_syncPreviewModel?.ignored || []).forEach((row) => {
     if (row.selected) ignore_removals.push({ rel_path: String(row.rel_path || ''), discrepancy_type: String(row.discrepancy_type || '') });
   });
-  return { add_to_device_paths, copy_to_local_paths, delete_on_device_paths, ignore_upserts, ignore_removals, playlist_ids };
+  return { dap_id: _syncSelectedDapId, add_to_device_paths, copy_to_local_paths, delete_on_device_paths, ignore_upserts, ignore_removals, playlist_ids };
 }
 
 function renderSyncPreview(status) {
@@ -6579,50 +6481,86 @@ function syncSelectionChanged() {
   const rescanReq = document.getElementById('sync-rescan-required');
   if (rescanReq) rescanReq.style.display = _syncPreviewModel.rescanRequired ? '' : 'none';
 
+  // Local disk space for device→local direction.
+  const deviceOnlySizes = status.device_only_sizes || {};
+  const localRequired = payload.copy_to_local_paths.reduce((sum, rel) => sum + Number(deviceOnlySizes[rel] || 0), 0);
+  const localFree = (status.local_free_bytes === null || status.local_free_bytes === undefined)
+    ? null : Number(status.local_free_bytes);
+  const localShortfall = (localFree !== null && localRequired > localFree) ? (localRequired - localFree) : 0;
+
+  const elapsedSec = _syncScannedAt ? Math.floor((Date.now() - _syncScannedAt) / 1000) : 0;
+  const stalenessHint = elapsedSec >= 60
+    ? ` (checked ${elapsedSec < 3600 ? `${Math.floor(elapsedSec / 60)}m` : `${Math.floor(elapsedSec / 3600)}h`} ago)`
+    : '';
+
   const addCount = payload.add_to_device_paths.length;
+  const copyToLocalCount = payload.copy_to_local_paths.length;
   const deleteCount = payload.delete_on_device_paths.length;
   const playlistCount = payload.playlist_ids.length;
   const ignoreCount = payload.ignore_upserts.length;
-  const noSelection = addCount === 0 && deleteCount === 0 && playlistCount === 0 && ignoreCount === 0;
-  const tracksLine = `Tracks: ${addCount} to add • ${deleteCount} to remove • ${ignoreCount} skipped • ${playlistCount} playlists synced`;
-  let spaceLine = '';
+  const noSelection = addCount === 0 && copyToLocalCount === 0 && deleteCount === 0 && playlistCount === 0 && ignoreCount === 0;
+  const tracksLine = `Tracks: ${addCount} to add • ${copyToLocalCount} to import • ${deleteCount} to remove • ${ignoreCount} skipped • ${playlistCount} playlists synced`;
+  const spaceLines = [];
   let className = 'sync-space-summary';
+  let blocked = false;
 
-  if (available === null) {
-    spaceLine = `Space: -- available • ${_fmtBytes(required)} needed • -- available after sync`;
-  } else if (shortfall > 0) {
-    spaceLine = `Blocked: not enough device space. ${_fmtBytes(available)} available • ${_fmtBytes(required)} needed • free ${_fmtBytes(shortfall)} or deselect tracks.`;
-    className += ' sync-space-summary--danger';
+  if (noSelection) {
+    if (available !== null) {
+      spaceLines.push(`Device has ${_fmtBytes(available)} free${stalenessHint}`);
+      className += ' sync-space-summary--ok';
+    }
   } else {
-    const remaining = Math.max(0, available - required);
-    spaceLine = `Space: ${_fmtBytes(available)} available • ${_fmtBytes(required)} needed • ${_fmtBytes(remaining)} available after sync`;
-    className += noSelection ? ' sync-space-summary--ok' : ' sync-space-summary--warn';
+    if (available === null) {
+      if (addCount) spaceLines.push(`Device space: unavailable • ${_fmtBytes(required)} needed`);
+    } else if (shortfall > 0) {
+      spaceLines.push(`Device: not enough space — ${_fmtBytes(available)} free, ${_fmtBytes(required)} needed (short ${_fmtBytes(shortfall)})${stalenessHint}`);
+      className += ' sync-space-summary--danger';
+      blocked = true;
+    } else if (addCount > 0) {
+      const remaining = Math.max(0, available - required);
+      const lowSpace = remaining < 0.1 * Number(status.space_total_bytes || 0);
+      className += lowSpace ? ' sync-space-summary--warn' : ' sync-space-summary--ok';
+      spaceLines.push(`Device: ${_fmtBytes(available)} free • ${_fmtBytes(required)} needed • ${_fmtBytes(remaining)} after sync${stalenessHint}`);
+    }
+    if (copyToLocalCount > 0) {
+      if (localFree === null) {
+        spaceLines.push(`Local: space unavailable${localRequired ? ` • ${_fmtBytes(localRequired)} needed` : ''}`);
+      } else if (localShortfall > 0) {
+        spaceLines.push(`Local: not enough space — ${_fmtBytes(localFree)} free, ${_fmtBytes(localRequired)} needed (short ${_fmtBytes(localShortfall)})`);
+        if (!className.includes('danger')) className += ' sync-space-summary--danger';
+        blocked = true;
+      } else {
+        spaceLines.push(`Local: ${_fmtBytes(localFree)} free • ${_fmtBytes(localRequired)} needed`);
+      }
+    }
   }
 
   panel.className = className;
-  panel.innerHTML = `<div>${esc(tracksLine)}</div><div>${esc(spaceLine)}</div>`;
+  panel.innerHTML = `<div>${esc(tracksLine)}</div>${spaceLines.map(l => `<div>${esc(l)}</div>`).join('')}`;
   if (estTime) {
-    if (noSelection) {
+    const totalBytes = required + localRequired;
+    if (noSelection || totalBytes === 0) {
       estTime.textContent = '';
     } else {
       const throughputBytesPerSec = 12 * 1024 * 1024;
-      const estSeconds = Math.max(10, Math.round(required / throughputBytesPerSec));
+      const estSeconds = Math.max(10, Math.round(totalBytes / throughputBytesPerSec));
       const mins = Math.floor(estSeconds / 60);
       const secs = estSeconds % 60;
       estTime.textContent = `Est. time ~${mins}m ${secs}s`;
     }
   }
   if (executeBtn) {
-    executeBtn.classList.toggle('is-blocked', shortfall > 0 || _syncPreviewModel.rescanRequired || noSelection);
+    executeBtn.classList.toggle('is-blocked', blocked || _syncPreviewModel.rescanRequired || noSelection);
     executeBtn.disabled = false;
     if (_syncPreviewModel.rescanRequired) {
       executeBtn.textContent = 'Re-scan Required';
       executeBtn.title = 'Re-run scan after un-ignoring tracks';
       executeBtn.onclick = () => App.syncScanAgain();
-    } else if (shortfall > 0) {
-      executeBtn.textContent = `Free ${_fmtBytes(shortfall)}`;
-      executeBtn.title = `Not enough device space: short by ${_fmtBytes(shortfall)}`;
-      executeBtn.onclick = () => toast(`Sync is blocked: free ${_fmtBytes(shortfall)} on the device or deselect tracks.`);
+    } else if (blocked) {
+      const shortAmt = shortfall > 0 ? shortfall : localShortfall;
+      executeBtn.textContent = `Free ${_fmtBytes(shortAmt)}`;
+      executeBtn.title = `Not enough space: short by ${_fmtBytes(shortAmt)}`;
+      executeBtn.onclick = () => toast(`Sync is blocked: not enough space. Free ${_fmtBytes(shortAmt)} or deselect tracks.`);
     } else if (noSelection) {
       executeBtn.textContent = 'Nothing Selected';
       executeBtn.title = 'Select at least one change to sync';
@@ -6704,17 +6642,10 @@ async function executeSync() {
       _showSyncDone(status);
     } else if (status.status === 'error') {
       clearInterval(_syncPollTimer);
+      _syncScanInFlight = false;
       toast('Sync failed: ' + status.message);
     }
   }, 600);
-}
-
-async function syncScanAgain() {
-  await api('/sync/reset', { method: 'POST' }).catch(() => {});
-  _syncScanInFlight = false;
-  _syncPreviewWarningCount = 0;
-  _syncPreviewModel = null;
-  _syncPhase('pick');
 }
 
 function _showSyncDone(status) {
@@ -9493,7 +9424,7 @@ async function deletePeq(peqId) {
 
 /* ── Songs view ─────────────────────────────────────────────────────── */
 let _songsData = [];
-let _songsSort = { col: 'title', order: 'asc' };
+let _songsSort = { ..._CONTENT_SORT_DEFAULTS.songs };
 let _songsFilter = '';
 let _songsPage = 0;
 const SONGS_PER_PAGE = 100;
@@ -10070,13 +10001,15 @@ function renderSongsTable() {
 }
 
 function sortSongs(col) {
-  if (_songsSort.col === col) {
+  const key = _pickAllowed(col, ['title', 'artist', 'album', 'duration', 'plays', 'genre', 'year', 'album_artist', 'format', 'bitrate', 'date_added'], _CONTENT_SORT_DEFAULTS.songs.col);
+  if (_songsSort.col === key) {
     _songsSort.order = _songsSort.order === 'asc' ? 'desc' : 'asc';
   } else {
-    _songsSort.col = col;
+    _songsSort.col = key;
     _songsSort.order = 'asc';
   }
   _songsPage = 0;
+  _queueSaveContentSortPrefs();
   loadSongsView();
 }
 
@@ -10164,6 +10097,7 @@ async function loadSettings() {
     fetch('/api/player/capabilities').then(r => r.json()).catch(() => ({})),
     loadBaselines(),
   ]);
+  if (!_contentSortPrefsHydrated) _applyContentSortPrefs(settings);
   if (typeof Player !== 'undefined' && Player.updateCapabilities) {
     Player.updateCapabilities(cap || {});
   }
@@ -12312,7 +12246,7 @@ const _coverageState = {
   data: null,
   filterType: 'all',
   filterValue: '',
-  sort: 'recent',
+  sort: _CONTENT_SORT_DEFAULTS.coverage.sort,
   visibleCount: 24,
   pageSize: 24,
 };
@@ -12505,7 +12439,7 @@ async function loadInsightsCoverage() {
   _coverageState.data = data;
   _coverageState.filterType = 'all';
   _coverageState.filterValue = '';
-  _coverageState.sort = 'recent';
+  _coverageState.sort = _contentSortPrefs.coverage?.sort || _CONTENT_SORT_DEFAULTS.coverage.sort;
   _coverageState.visibleCount = _coverageState.pageSize;
   _renderInsightsCoverage();
 }
@@ -12518,8 +12452,9 @@ function coverageSetFilter(type, value = '') {
 }
 
 function coverageSetSort(sort) {
-  _coverageState.sort = sort || 'recent';
+  _coverageState.sort = _pickAllowed(sort, ['recent', 'oldest', 'artist', 'album'], _CONTENT_SORT_DEFAULTS.coverage.sort);
   _coverageState.visibleCount = _coverageState.pageSize;
+  _queueSaveContentSortPrefs();
   _renderInsightsCoverage();
 }
 
@@ -15727,6 +15662,7 @@ async function saveArtistImageSettings() {
 document.addEventListener('DOMContentLoaded', async () => {
   _initFrOverlaySelection();
   window.addEventListener('beforeunload', (e) => {
+    _flushContentSortPrefs();
     if (!_hasUnsavedMlPreview()) return;
     e.preventDefault();
     e.returnValue = '';

@@ -237,6 +237,7 @@ DEFAULT_SETTINGS = {
     'listening_tracking_enabled': True,
     'update_channel':         '',   # '' = use built-in channel from version.json; 'dev'|'rc'|'prod' = user override
     'update_channel_version': '',   # version the preference was set for; stale if build version changed
+    'content_sort_order': {},       # UI content sorting preferences, persisted outside WebView storage
 }
 
 _DEFAULT_GEAR_PROFILES = {
@@ -363,6 +364,9 @@ sync_state = {
 }
 sync_check_lock = threading.Lock()
 sync_check_inflight = set()
+# Manifest entries for files queued for copy — written per-file after a successful copy,
+# not at scan time, to avoid marking files as synced if the copy fails.
+_pending_manifest_by_device_rel: dict = {}  # {device_rel: (manifest_key, entry)}
 
 LISTEN_WINDOW_SECONDS = 365 * 24 * 60 * 60
 VALID_LISTEN_SECONDS = 30.0
@@ -6426,6 +6430,7 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
     local_only_reasons = {}
     warnings = []
     target_collisions = set()
+    target_collision_tracks = {}  # {target_rel: [local_rel, ...]} — all local tracks mapping to same dest
     local_live_rel_keys = {str(e.get('local_rel') or '').casefold() for e in track_entries}
     device_only_candidates = []
     library_deleted_on_source = []
@@ -6490,6 +6495,8 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
             target_rel = e['target_rel']
             if target_rel in local_copy_map and local_copy_map[target_rel] != e['local_rel']:
                 target_collisions.add(target_rel)
+                target_collision_tracks.setdefault(target_rel, [local_copy_map[target_rel]])
+                target_collision_tracks[target_rel].append(e['local_rel'])
                 continue
             local_copy_map[target_rel] = e['local_rel']
             local_only.append(target_rel)
@@ -6621,10 +6628,20 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
                     device_only_not_in_library.append(rel)
                     device_only_not_in_library_reasons[rel] = reason
 
-    # Keep only current device-file keys for this DAP and refresh verified entries.
+    # Split manifest updates: write in-sync entries now; defer pending-copy entries
+    # until after a successful copy so a failed copy doesn't falsely mark files synced.
+    local_only_set = set(local_only)
+    inSync_manifest_updates = {
+        k: v for k, v in manifest_updates.items()
+        if v.get('target_rel') not in local_only_set
+    }
+    pending_manifest_by_device_rel = {
+        v['target_rel']: (k, v) for k, v in manifest_updates.items()
+        if v.get('target_rel') in local_only_set
+    }
     _update_dap_sync_manifest(
         dap_id,
-        manifest_updates,
+        inSync_manifest_updates,
         prune_to_keys=device_keys.union(manifest_seen_keys),
     )
 
@@ -6652,8 +6669,16 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
         local_only_sizes[device_rel] = net
         required_bytes += net
 
+    # Sizes for device-only files (for local disk space check before copy-to-local).
+    device_only_sizes = {}
+    for rel in device_only_not_in_library:
+        try:
+            device_only_sizes[rel] = int((device_path / rel).stat().st_size)
+        except Exception:
+            device_only_sizes[rel] = 0
+
     mount_root, _ = _resolve_dap_mount(dap)
-    usage_path = mount_root if (mount_root and mount_root.exists()) else device_path
+    usage_path = mount_root or device_path
     available_bytes = None
     total_bytes = None
     try:
@@ -6665,6 +6690,12 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
         available_bytes = None
         total_bytes = None
 
+    local_free_bytes = None
+    try:
+        local_free_bytes = int(shutil.disk_usage(get_music_base()).free)
+    except Exception:
+        local_free_bytes = None
+
     space_ok = (available_bytes is None) or (required_bytes <= available_bytes)
     shortfall_bytes = 0
     if available_bytes is not None and required_bytes > available_bytes:
@@ -6674,7 +6705,16 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
         )
 
     for c in sorted(target_collisions):
-        warnings.append(f'Path collision for "{c}" — multiple local tracks map to the same destination.')
+        tracks = target_collision_tracks.get(c, [])
+        track_list = ', '.join(f'"{t}"' for t in tracks)
+        warnings.append(
+            f'Path collision: {len(tracks)} local tracks all map to device path "{c}" — '
+            f'only the first will be synced. Tracks: {track_list}'
+        )
+        if c in local_only_reasons:
+            local_only_reasons[c] = (
+                f'Missing on device (note: {len(tracks)} tracks map here — only this one will be synced)'
+            )
     warnings = sorted(set(warnings))
     if len(warnings) > 250:
         extra = len(warnings) - 250
@@ -6736,7 +6776,9 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
         'local_only_copy_sizes': local_only_copy_sizes,
         'local_only_existing_sizes': local_only_existing_sizes,
         'local_only_reasons': local_only_reasons,
+        'device_only_sizes': device_only_sizes,
         'device_only_reasons': device_only_reasons,
+        'local_free_bytes': local_free_bytes,
         'library_deleted_reasons': library_deleted_reasons,
         'device_only_not_in_library_reasons': device_only_not_in_library_reasons,
         'total': music_out_of_sync_count,
@@ -6751,6 +6793,8 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
         'space_required_bytes': required_bytes,
         'space_shortfall_bytes': shortfall_bytes,
         'space_ok': space_ok,
+        'scanned_at': int(time.time()),
+        'pending_manifest_by_device_rel': pending_manifest_by_device_rel,
         'message': (
             f'{len(local_only)} to device, '
             f'{len(device_only_not_in_library)} device-only, '
@@ -6892,7 +6936,9 @@ def sync_scan():
         'local_only_copy_sizes': {},
         'local_only_existing_sizes': {},
         'local_only_reasons': {},
+        'device_only_sizes': {},
         'device_only_reasons': {},
+        'local_free_bytes': None,
         'music_out_of_sync_count': 0,
         'music_to_add_count': 0,
         'music_to_remove_count': 0,
@@ -6909,7 +6955,7 @@ def sync_scan():
     }
 
     def do_scan():
-        global sync_state
+        global sync_state, _pending_manifest_by_device_rel
         try:
             sync_state['current'] = 'Mapping local library structure…'
             daps = load_daps()
@@ -6940,7 +6986,9 @@ def sync_scan():
                 'local_only_copy_sizes': diff.get('local_only_copy_sizes', {}),
                 'local_only_existing_sizes': diff.get('local_only_existing_sizes', {}),
                 'local_only_reasons': diff.get('local_only_reasons', {}),
+                'device_only_sizes': diff.get('device_only_sizes', {}),
                 'device_only_reasons': diff.get('device_only_reasons', {}),
+                'local_free_bytes': diff.get('local_free_bytes'),
                 'total': diff['total'],
                 'current': '',
                 'music_out_of_sync_count': diff['music_out_of_sync_count'],
@@ -6958,6 +7006,7 @@ def sync_scan():
                 'playlists_out_of_sync_count': len(playlists_out),
                 'message': diff['message'],
             })
+            _pending_manifest_by_device_rel = diff.get('pending_manifest_by_device_rel', {})
             _update_dap_sync_summary(dap_id, {
                 'playlist_out_of_sync_count': int(stale_count) + int(never_exported),
                 'music_out_of_sync_count': diff['music_out_of_sync_count'],
@@ -7082,6 +7131,9 @@ def sync_execute():
         clean_ignore_removals.append(norm)
     playlist_ids = [str(x) for x in (data.get('playlist_ids') or []) if str(x).strip()]
     dap_id = sync_state['dap_id']
+    requested_dap_id = str(data.get('dap_id') or '').strip()
+    if requested_dap_id and requested_dap_id != dap_id:
+        return jsonify({'error': 'DAP mismatch — re-scan before syncing'}), 409
     device_path = get_dap_music_path(dap_id)
 
     if not device_path or not device_path.exists():
@@ -7098,19 +7150,29 @@ def sync_execute():
     if total == 0:
         return jsonify({'error': 'No operations selected'}), 400
 
-    # Re-check device free space right before copy starts.
+    # Re-check device free space right before copy starts using fresh file stats.
+    # Re-statting avoids using stale net sizes from scan time (the destination may have
+    # changed between scan and execute, making the pre-computed net delta wrong).
+    local_copy_map_pre = sync_state.get('local_copy_map') or {}
+    local_only_sizes_cached = sync_state.get('local_only_sizes') or {}
     required_selected = 0
-    local_only_sizes = sync_state.get('local_only_sizes') or {}
     for rel in add_to_device_paths:
-        try:
-            required_selected += int(local_only_sizes.get(rel) or 0)
-        except Exception:
+        local_rel = local_copy_map_pre.get(rel)
+        if not local_rel:
+            required_selected += int(local_only_sizes_cached.get(rel) or 0)
             continue
+        try:
+            src_sz = (get_music_base() / local_rel).stat().st_size
+            dst_path = device_path / rel
+            dst_sz = dst_path.stat().st_size if dst_path.exists() else 0
+            required_selected += max(0, src_sz - dst_sz)
+        except Exception:
+            required_selected += int(local_only_sizes_cached.get(rel) or 0)
     available_now = None
     try:
         dap = next((d for d in load_daps() if d.get('id') == dap_id), None)
         mount_root, _ = _resolve_dap_mount(dap)
-        usage_path = mount_root if (mount_root and mount_root.exists()) else device_path
+        usage_path = mount_root or device_path
         if usage_path and usage_path.exists():
             available_now = int(shutil.disk_usage(usage_path).free)
     except Exception:
@@ -7123,6 +7185,25 @@ def sync_execute():
             'space_required_bytes': required_selected,
             'space_shortfall_bytes': shortfall,
         }), 400
+
+    # Check local disk space for copy-to-local direction.
+    if copy_to_local_paths:
+        device_only_sizes_cached = sync_state.get('device_only_sizes') or {}
+        required_local = sum(
+            int(device_only_sizes_cached.get(rel) or 0) for rel in copy_to_local_paths
+        )
+        try:
+            local_free = int(shutil.disk_usage(get_music_base()).free)
+            if required_local > local_free:
+                shortfall_local = required_local - local_free
+                return jsonify({
+                    'error': 'Not enough local disk space for selected files from device',
+                    'local_free_bytes': local_free,
+                    'space_required_bytes': required_local,
+                    'space_shortfall_bytes': shortfall_local,
+                }), 400
+        except Exception:
+            pass
 
     if clean_ignore_upserts:
         _db.db_upsert_sync_ignored_discrepancies(dap_id, clean_ignore_upserts)
@@ -7139,10 +7220,11 @@ def sync_execute():
     })
 
     def do_copy():
-        global sync_state
+        global sync_state, _pending_manifest_by_device_rel
         errors = []
         progress = 0
         local_copy_map = sync_state.get('local_copy_map') or {}
+        pending_manifest = _pending_manifest_by_device_rel
 
         for row in clean_ignore_upserts:
             progress += 1
@@ -7170,6 +7252,9 @@ def sync_execute():
             try:
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
+                if device_rel in pending_manifest:
+                    mkey, mentry = pending_manifest[device_rel]
+                    _update_dap_sync_manifest(dap_id, {mkey: mentry})
             except Exception as e:
                 errors.append(f'{device_rel}: {e}')
             progress += 1
@@ -7181,6 +7266,21 @@ def sync_execute():
             dst = get_music_base() / rel
             sync_state['current'] = f'← Local: {rel}'
             try:
+                if dst.exists():
+                    try:
+                        dst_size = dst.stat().st_size
+                        src_size = src.stat().st_size
+                        if dst_size != src_size:
+                            errors.append(
+                                f'{rel}: local file already exists with different content — '
+                                f'skipped to prevent overwrite. Remove the local file first to import from device.'
+                            )
+                            progress += 1
+                            sync_state['progress'] = progress
+                            sync_state['message'] = f'Syncing {progress} / {total} items…'
+                            continue
+                    except OSError:
+                        pass
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
             except Exception as e:
