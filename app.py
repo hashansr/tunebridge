@@ -4319,10 +4319,9 @@ def history_view():
     since_days = int(request.args.get('since', 30))
     limit = min(int(request.args.get('limit', 500)), 2000)
     valid_only = request.args.get('valid_only', 'false').lower() == 'true'
-    cutoff = int(time.time()) - since_days * 86400
+    cutoff = int(time.time()) - since_days * 86400 if since_days > 0 else 0
     conn = _db.get_conn()
     valid_clause = "AND valid_listen=1" if valid_only else ""
-    fetch_limit = min(limit * 5, 8000)
     rows = conn.execute(f"""
         SELECT pe.id, pe.track_id, pe.played_at, pe.play_seconds, pe.completed, pe.valid_listen,
                pe.skipped, pe.track_duration_seconds,
@@ -4333,20 +4332,13 @@ def history_view():
         LEFT JOIN tracks t ON t.id = pe.track_id
         WHERE pe.played_at >= ? {valid_clause}
         ORDER BY pe.played_at DESC
-        LIMIT ?
-    """, (cutoff, fetch_limit)).fetchall()
+    """, (cutoff,)).fetchall()
 
-    sessions = _collapse_history_sessions(rows)[:limit]
+    sessions_all = _collapse_history_sessions(rows)
+    sessions = sessions_all[:limit]
     events = []
-    total_seconds = 0
-    unique_tracks = set()
-    artist_counts = {}
     for r in sessions:
         ps = r['play_seconds'] or 0
-        total_seconds += ps
-        unique_tracks.add(r['track_id'])
-        a = r['artist'] or 'Unknown'
-        artist_counts[a] = artist_counts.get(a, 0) + 1
         events.append({
             'id': r['id'],
             'track_id': r['track_id'],
@@ -4360,11 +4352,20 @@ def history_view():
             'duration': r['duration'],
             'album_art_key': r['album_art_key'],
         })
+
+    total_seconds = 0
+    unique_tracks = set()
+    artist_counts = {}
+    for r in sessions_all:
+        total_seconds += float(r.get('play_seconds') or 0.0)
+        unique_tracks.add(r.get('track_id'))
+        a = r.get('artist') or 'Unknown'
+        artist_counts[a] = artist_counts.get(a, 0) + 1
     top_artist = max(artist_counts, key=artist_counts.get) if artist_counts else None
     return jsonify({
         'events': events,
         'stats': {
-            'total_plays': len(events),
+            'total_plays': len(sessions_all),
             'total_hours': round(total_seconds / 3600, 1),
             'unique_tracks': len(unique_tracks),
             'top_artist': top_artist,
@@ -5622,7 +5623,7 @@ def history_clear():
 def history_charts():
     since_days = int(request.args.get('since', 30))
     valid_only = request.args.get('valid_only', 'false').lower() == 'true'
-    cutoff = int(time.time()) - since_days * 86400
+    cutoff = int(time.time()) - since_days * 86400 if since_days > 0 else 0
     conn = _db.get_conn()
     valid_clause = "AND valid_listen=1" if valid_only else ""
 

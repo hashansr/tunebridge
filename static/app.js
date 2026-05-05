@@ -11010,7 +11010,7 @@ function _historyThumbHtml(item, kind = 'track') {
     return `<img src="/api/artists/${esc(item.image_key)}/image" alt="${esc(name)}" loading="lazy" onerror="this.style.display='none'" />`;
   }
   if (item?.artwork_key || item?.album_art_key) {
-    return `<img src="/api/library/artwork/${esc(item.artwork_key || item.album_art_key)}" alt="${esc(name)}" loading="lazy" onerror="this.style.display='none'" />`;
+    return `<img src="/api/artwork/${esc(item.artwork_key || item.album_art_key)}" alt="${esc(name)}" loading="lazy" onerror="this.style.display='none'" />`;
   }
   return `<div class="history-top-thumb-placeholder"></div>`;
 }
@@ -11087,9 +11087,9 @@ async function loadHistoryView() {
         </button>
         <div class="history-date-events" style="display:${isOpen ? 'block' : 'none'}">
         ${evs.map(ev => `
-          <div class="history-event-row" ondblclick="Player.playTrackById('${esc(ev.track_id)}')">
+            <div class="history-event-row" ondblclick="Player.playTrackById('${esc(ev.track_id)}')">
             <div class="history-event-art">${ev.album_art_key
-              ? `<img src="/api/library/artwork/${esc(ev.album_art_key)}" onerror="this.style.display='none'" />`
+              ? `<img src="/api/artwork/${esc(ev.album_art_key)}" onerror="this.style.display='none'" />`
               : `<div class="history-art-placeholder"></div>`}</div>
             <div class="history-event-info">
               <div class="history-event-title">${esc(ev.title || 'Unknown')}</div>
@@ -11121,59 +11121,16 @@ async function _renderHistoryCharts(validOnly) {
     const d = await api(`/history/charts?since=${_historyPeriod}&valid_only=${validOnly}`);
     container.style.display = 'grid';
     container.innerHTML = `
-      <div class="history-chart-card history-chart-card--plays">
-        <div class="history-chart-title">Plays per day</div>
-        <div class="history-chart-wrap"><canvas id="history-day-chart"></canvas></div>
+      <div class="history-chart-card history-rank-card">
+        <div class="history-chart-title">Top artists</div>
+        ${_historyRankRows(d.top_artists, 'artist')}
       </div>
-      <div class="history-top-stack">
-        <div class="history-chart-card history-rank-card">
-          <div class="history-chart-title">Top artists</div>
-          ${_historyRankRows(d.top_artists, 'artist')}
-        </div>
-        <div class="history-chart-card history-rank-card">
-          <div class="history-chart-title">Top songs</div>
-          ${_historyRankRows(d.top_tracks, 'track')}
-        </div>
+      <div class="history-chart-card history-rank-card">
+        <div class="history-chart-title">Top songs</div>
+        ${_historyRankRows(d.top_tracks, 'track')}
       </div>
     `;
     if (_historyChart) { _historyChart.destroy(); _historyChart = null; }
-    const ctx = document.getElementById('history-day-chart');
-    if (ctx && d.daily_plays.length) {
-      _historyChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: d.daily_plays.map(r => {
-            const dt = new Date(r.date + 'T00:00:00');
-            return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-          }),
-          datasets: [{
-            data: d.daily_plays.map(r => r.count),
-            backgroundColor: 'rgba(173,198,255,0.65)',
-            borderColor: 'rgba(173,198,255,0.9)',
-            borderWidth: 1,
-            borderRadius: 3,
-          }],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() },
-          scales: {
-            x: {
-              grid: { color: 'rgba(173,198,255,0.05)' },
-              border: { color: 'transparent' },
-              ticks: { color: '#6b6b7b', font: { size: 10 }, maxTicksLimit: 10 },
-            },
-            y: {
-              grid: { color: 'rgba(173,198,255,0.06)' },
-              border: { color: 'transparent' },
-              ticks: { color: '#6b6b7b', font: { size: 9 }, stepSize: 1 },
-              beginAtZero: true,
-            },
-          },
-        },
-      });
-    }
   } catch (_) {
     container.style.display = 'none';
   }

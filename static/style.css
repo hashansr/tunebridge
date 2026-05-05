@@ -13913,7 +13913,7 @@ tr:hover .track-edit-btn:hover {
 
 /* History: charts row */
 .history-charts-row {
-  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin: 0 0 14px;
   align-items: stretch;
@@ -13927,25 +13927,10 @@ tr:hover .track-edit-btn:hover {
   display: flex;
   flex-direction: column;
 }
-.history-chart-card--plays { min-height: 352px; }
-.history-chart-wrap {
-  flex: 1 1 auto;
-  min-height: 260px;
-}
-.history-chart-wrap canvas {
-  width: 100% !important;
-  height: 100% !important;
-}
 .history-chart-title {
   font-size: 9px; text-transform: uppercase; letter-spacing: .11em;
   color: rgba(229, 226, 225, 0.7); margin-bottom: 12px;
   font-weight: 700;
-}
-.history-top-stack {
-  display: grid;
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  min-width: 0;
 }
 .history-rank-card {
   min-height: 0;
@@ -14017,8 +14002,6 @@ tr:hover .track-edit-btn:hover {
 
 @media (max-width: 1260px) {
   .history-stats-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .history-charts-row { grid-template-columns: 1fr; }
-  .history-top-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto; }
 }
 
 @media (max-width: 760px) {
@@ -14030,7 +14013,7 @@ tr:hover .track-edit-btn:hover {
   .history-event-meta { display: none; }
   .history-date-toggle { grid-template-columns: 1fr 22px; }
   .history-date-summary { grid-column: 1 / span 2; margin-top: -8px; }
-  .history-top-stack { grid-template-columns: 1fr; }
+  .history-charts-row { grid-template-columns: 1fr; }
 }
 
 /* Track play count badge */
