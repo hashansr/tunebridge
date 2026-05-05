@@ -729,7 +729,7 @@ def _write_tags_to_file(filepath: Path, changes: dict) -> None:
         }
         for field, (FrameCls, kwargs) in frame_map.items():
             if field in changes and changes[field] is not None:
-                audio.tags.add(FrameCls(encoding=3, text=str(changes[field]), **kwargs))
+                audio.tags.setall(FrameCls.__name__, [FrameCls(encoding=3, text=str(changes[field]), **kwargs)])
         if 'comment' in changes and changes['comment'] is not None:
             audio.tags.setall('COMM', [COMM(encoding=3, lang='eng', desc='', text=str(changes['comment']))])
         if 'compilation' in changes and changes['compilation'] is not None:
@@ -772,6 +772,32 @@ def _write_tags_to_file(filepath: Path, changes: dict) -> None:
         if 'compilation' in changes and changes['compilation'] is not None:
             val = str(changes['compilation']).strip().lower()
             audio.tags['cpil'] = [1 if val in ('1', 'true', 'yes', 'on') else 0]
+        audio.save()
+
+    elif ext in ('.wav', '.wave'):
+        audio = WAVE(str(filepath))
+        if audio.tags is None:
+            audio.add_tags()
+        frame_map = {
+            'title': (TIT2, {}),
+            'artist': (TPE1, {}),
+            'album_artist': (TPE2, {}),
+            'album': (TALB, {}),
+            'track_number': (TRCK, {}),
+            'year': (TDRC, {}),
+            'genre': (TCON, {}),
+            'composer': (TCOM, {}),
+            'disc_number': (TPOS, {}),
+        }
+        for field, (FrameCls, kwargs) in frame_map.items():
+            if field in changes and changes[field] is not None:
+                audio.tags.setall(FrameCls.__name__, [FrameCls(encoding=3, text=str(changes[field]), **kwargs)])
+        if 'comment' in changes and changes['comment'] is not None:
+            audio.tags.setall('COMM', [COMM(encoding=3, lang='eng', desc='', text=str(changes['comment']))])
+        if 'compilation' in changes and changes['compilation'] is not None:
+            val = str(changes['compilation']).strip().lower()
+            normalized = '1' if val in ('1', 'true', 'yes', 'on') else '0'
+            audio.tags.setall('TXXX:TCMP', [TXXX(encoding=3, desc='TCMP', text=normalized)])
         audio.save()
 
     else:
@@ -2301,12 +2327,15 @@ def _apply_tag_edit(track_id: str, changes: dict):
     if not clean:
         return track, None  # nothing to do
 
-    # Snapshot old values to tag_history
+    # Write to file
+    try:
+        _write_tags_to_file(abs_path, clean)
+    except Exception as e:
+        return None, f'Could not write tags to file: {e}'
+
+    # Snapshot old values to tag_history after the file write succeeds.
     old_values = {field: track.get(field) for field in clean}
     _db.db_record_tag_changes(track_id, clean, old_values)
-
-    # Write to file
-    _write_tags_to_file(abs_path, clean)
 
     # Update SQLite cache
     _db.db_update_track_tags(track_id, clean)
