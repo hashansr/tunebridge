@@ -5593,6 +5593,7 @@ let _syncScanRunId = 0;
 let _syncScanInFlight = false;
 let _syncPreviewWarningCount = 0;
 let _syncPreviewModel = null;
+let _syncScannedAt = 0;
 const _syncSectionCollapsed = {
   'to-device': true,
   'library-deleted': true,
@@ -6361,6 +6362,7 @@ function _syncBuildExecutePayload() {
 
 function renderSyncPreview(status) {
   _syncLastStatus = status || null;
+  _syncScannedAt = Date.now();
   _syncPreviewModel = _syncInitPreviewModel(status || {});
   _syncUpdatePreviewDirectionLabels();
   document.getElementById('sync-list-to-device').innerHTML =
