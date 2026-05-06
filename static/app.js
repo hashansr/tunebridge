@@ -11152,8 +11152,8 @@ async function loadHistoryView() {
       statsEl.innerHTML = `
         ${_historyStatCard(playsIcon, 'LISTENS', Number(stats.total_plays || 0).toLocaleString(), 'Plays')}
         ${_historyStatCard(minutesIcon, 'DURATION', Number(minutes || 0).toLocaleString(), 'Minutes')}
-        ${_historyStatCard(tracksIcon, 'CATALOGUE', Number(stats.unique_tracks || 0).toLocaleString(), 'Tracks')}
-        ${stats.top_artist ? _historyStatCard(artistIcon, 'LEADER', esc(stats.top_artist), 'Top artist', 'history-stat--wide') : ''}
+        ${_historyStatCard(tracksIcon, 'SONGS', Number(stats.unique_tracks || 0).toLocaleString(), 'Tracks')}
+        ${stats.top_artist ? _historyStatCard(artistIcon, 'ARTISTS', esc(stats.top_artist), 'Top artist', 'history-stat--wide') : ''}
       `;
     }
     _renderHistoryCharts(validOnly);
