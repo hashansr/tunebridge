@@ -346,6 +346,7 @@ const Player = (function () {
       const t = currentTrack();
       if (t) {
         _mpvCmd('play', { track_id: t.id, position: 0 });
+        _activeHistoryTrack = t;
         _markTrackSessionStart();
       }
     } else if (ps.repeatMode === 'all' || ps.queueIdx < ps.queue.length - 1) {
@@ -353,6 +354,7 @@ const Player = (function () {
       ps.queueIdx = (ps.queueIdx + 1) % Math.max(1, len);
       const t = currentTrack();
       if (t) {
+        _activeHistoryTrack = t;
         _updateTrackUI(t);
         _highlightActiveRow();
         _mpvCmd('play', { track_id: t.id }).then(() => {
@@ -366,6 +368,7 @@ const Player = (function () {
     } else {
       // End of queue, no repeat
       ps.isPlaying = false;
+      _activeHistoryTrack = null;
       _updatePlayBtn();
       _highlightActiveRow();
       if (ps.queueOpen) _renderQueue();
@@ -501,6 +504,7 @@ const Player = (function () {
       .catch(() => {})
       .finally(() => {
         ps.queueIdx = nextQueueIdx;
+        _activeHistoryTrack = nextTrack;
         _updateTrackUI(nextTrack);
         _highlightActiveRow();
         _markTrackSessionStart();
