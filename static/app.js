@@ -11155,13 +11155,13 @@ async function loadHistoryView() {
         ? Number(stats.total_minutes)
         : Math.round(Number(stats.total_hours || 0) * 60);
       const _historyStatCard = (icon, badge, value, label, extraClass = '') => `
-        <div class="history-stat ${extraClass}">
-          <div class="history-stat-top">
-            <span class="history-stat-icon">${icon}</span>
-            <span class="history-stat-badge">${badge}</span>
+        <div class="history-stat ov-stat-card ${extraClass}">
+          <div class="history-stat-top ov-stat-card-top">
+            <span class="history-stat-icon ov-stat-icon">${icon}</span>
+            <span class="history-stat-badge ov-stat-badge">${badge}</span>
           </div>
-          <span class="history-stat-val">${value}</span>
-          <span class="history-stat-lbl">${label}</span>
+          <div class="history-stat-val ov-stat-number">${value}</div>
+          <div class="history-stat-lbl ov-stat-label">${label}</div>
         </div>`;
       const playsIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5v14l11-7z"/></svg>`;
       const minutesIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
