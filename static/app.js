@@ -929,6 +929,9 @@ let _mlRefQuery = '';
 const _ML_MAX_REF_TRACKS = 12;
 let _mlRefDraftIds = [];
 let _mlPreviewSeed = 1337;
+let _srInitialJson = '';
+let _srDirty = false;
+let _srDirtyBound = false;
 
 const _ML_MOOD_PRESETS = {
   focus: { energy: 0.42, brightness: 0.4 },
@@ -2718,8 +2721,8 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null) {
   if (labelEl) labelEl.textContent = label || (tracks.length === 1 ? tracks[0].title : `${tracks.length} songs`);
   if (smartLabel) {
     smartLabel.textContent = tracks.length === 1
-      ? 'Create Smart Playlist from This Song'
-      : `Create Smart Playlist from ${tracks.length} Songs`;
+      ? 'Create AI Mix from This Song'
+      : `Create AI Mix from ${tracks.length} Songs`;
   }
   if (favItem && favLabel) {
     if (!favTarget?.id || !favTarget?.type) {
@@ -3281,6 +3284,10 @@ function _isImportModalDirty() {
   return !!(_importData || Object.keys(_importMappings || {}).length);
 }
 
+function _isSmartRulesModalDirty() {
+  return _isOverlayOpen('sr-modal') && _srDirty;
+}
+
 function _isSyncBusy() {
   if (!_isOverlayOpen('sync-modal')) return false;
   const modal = document.getElementById('sync-modal');
@@ -3298,6 +3305,7 @@ function _guardModalNavigation() {
   if (_isPeqUploadModalDirty() && !window.confirm('Discard unsaved PEQ upload details?')) return false;
   if (_isCreatePlaylistModalDirty() && !window.confirm('Discard new playlist name?')) return false;
   if (_isImportModalDirty() && !window.confirm('Discard current playlist import mapping?')) return false;
+  if (_isSmartRulesModalDirty() && !window.confirm('Discard Smart Rules changes?')) return false;
   return true;
 }
 
@@ -3315,6 +3323,7 @@ function _closeModalOverlaysForNavigation() {
   if (_isOverlayOpen('help-modal')) closeHelp();
   if (_isOverlayOpen('sync-modal')) closeSyncModal();
   if (_isOverlayOpen('import-modal')) closeImportModal();
+  if (_isOverlayOpen('sr-modal')) srClose(true);
   if (_isOverlayOpen('dup-modal')) document.getElementById('dup-modal').style.display = 'none';
   if (_isOverlayOpen('problem-tracks-modal')) closeProblemTracksModal();
   if (_isOverlayOpen('genre-distribution-modal')) closeGenreDistributionModal();
@@ -3382,7 +3391,7 @@ function _guardMlGeneratorNavigation() {
 
 function _getMlSeedCandidates() {
   const selectedIds = [...state.selectedTrackIds];
-  if (selectedIds.length) return selectedIds.slice(0, 15);
+  if (selectedIds.length) return selectedIds.slice(0, _ML_MAX_REF_TRACKS);
   if (_mlGenContext === 'playlist' && state.playlist?.tracks?.length) {
     return state.playlist.tracks.slice(0, 8).map(t => t.id).filter(Boolean);
   }
@@ -3731,26 +3740,29 @@ function _renderMlPreviewTracks(tracks = [], explanations = []) {
   const explainById = new Map((explanations || []).map(e => [e.track_id, e]));
   el.innerHTML = `
     <div class="tb-table-shell">
-    <table class="insights-table tb-table tb-table-density-compact" style="width:100%;min-width:640px">
+    <table class="insights-table tb-table tb-table-density-compact ml-preview-table">
       <thead>
         <tr>
-          <th style="width:44px">#</th>
+          <th class="ml-preview-col-num">#</th>
           <th>Title</th>
           <th>Artist</th>
           <th>Album</th>
-          <th style="width:84px;text-align:right">Fit</th>
+          <th>Why it fits</th>
+          <th class="ml-preview-col-fit">Fit</th>
         </tr>
       </thead>
       <tbody>
         ${tracks.map((t, i) => {
           const ex = explainById.get(t.id) || {};
           const fitPct = Math.max(0, Math.min(100, Math.round((Number(ex.placement_score) || 0) * 100)));
+          const reason = ex.reason || _mlReasonFromScores(ex.score_components || {});
           return `<tr>
             <td>${i + 1}</td>
             <td title="${esc(t.title)}">${esc(t.title)}</td>
             <td title="${esc(t.artist)}">${esc(t.artist)}</td>
             <td title="${esc(t.album)}">${esc(t.album)}</td>
-            <td style="text-align:right;color:var(--text-secondary);font-weight:600">${fitPct}%</td>
+            <td title="${esc(reason)}">${esc(reason)}</td>
+            <td class="ml-preview-fit">${fitPct}%</td>
           </tr>`;
         }).join('')}
       </tbody>
@@ -3758,6 +3770,17 @@ function _renderMlPreviewTracks(tracks = [], explanations = []) {
     </div>
   `;
   _enhanceTableSystem(el);
+}
+
+function _mlReasonFromScores(scores = {}) {
+  const ranked = [
+    ['Genre fit', scores.genre_match],
+    ['Reference match', scores.similarity],
+    ['Vibe match', scores.mood_match],
+    ['Smooth transition', scores.sound_match],
+  ].filter(([, value]) => Number.isFinite(Number(value)))
+   .sort((a, b) => Number(b[1]) - Number(a[1]));
+  return ranked[0]?.[0] || 'Balanced fit';
 }
 
 async function openMlPlaylistGenerator(context = 'global', options = {}) {
@@ -3779,7 +3802,7 @@ async function openMlPlaylistGenerator(context = 'global', options = {}) {
   const nameEl = document.getElementById('ml-gen-name');
   if (nameEl) {
     const stamp = new Date().toISOString().slice(0, 10);
-    nameEl.value = `Smart Playlist ${stamp}`;
+    nameEl.value = `AI Mix ${stamp}`;
   }
   _resetMlPreviewState();
   try {
@@ -5450,23 +5473,10 @@ async function handleImportFile(input) {
 function showImportModal(data) {
   document.getElementById('import-name-input').value = data.name;
 
-  const summary = document.getElementById('import-summary');
-  const total = data.matched + data.unmatched;
-  if (data.matched === 0) {
-    summary.innerHTML = `<span style="color:#f87171">No tracks matched in your library.</span> ${total} entr${total !== 1 ? 'ies' : 'y'} in the file.`;
-    document.getElementById('import-confirm-btn').disabled = true;
-  } else {
-    const matchPct = Math.round((data.matched / total) * 100);
-    summary.innerHTML =
-      `<span style="color:#4ade80">✓ ${data.matched} track${data.matched !== 1 ? 's' : ''} matched</span>` +
-      (data.unmatched ? `  ·  <span style="color:#f87171">${data.unmatched} unmatched</span>` : '') +
-      `  ·  ${matchPct}% of ${total} entries`;
-    document.getElementById('import-confirm-btn').disabled = false;
-  }
-
   const unmatchedWrap = document.getElementById('import-unmatched-wrap');
   const unmatchedList = document.getElementById('import-unmatched-list');
   _importMappings = {};
+  _renderImportSummary();
   if (data.unmatched_entries?.length) {
     unmatchedWrap.style.display = 'block';
     unmatchedList.innerHTML = data.unmatched_entries.map((e, idx) => {
@@ -5510,6 +5520,52 @@ function showImportModal(data) {
   }
 
   document.getElementById('import-modal').style.display = 'flex';
+}
+
+function _renderImportSummary() {
+  if (!_importData) return;
+  const summary = document.getElementById('import-summary');
+  const btn = document.getElementById('import-confirm-btn');
+  if (!summary) return;
+  const matched = Number(_importData.matched || 0);
+  const unmatched = Number(_importData.unmatched || 0);
+  const mapped = Object.keys(_importMappings || {}).length;
+  const totalEntries = matched + unmatched;
+  const finalCount = matched + mapped;
+  const pct = totalEntries ? Math.round((finalCount / totalEntries) * 100) : 0;
+  const importLabel = finalCount > 0
+    ? `Import Playlist (${finalCount} track${finalCount !== 1 ? 's' : ''})`
+    : 'Import Playlist';
+
+  summary.innerHTML = `
+    <div class="import-summary-grid">
+      <div class="import-summary-stat import-summary-stat--ok">
+        <span>Matched</span>
+        <strong>${matched}</strong>
+      </div>
+      <div class="import-summary-stat ${unmatched ? 'import-summary-stat--warn' : 'import-summary-stat--ok'}">
+        <span>Unmatched</span>
+        <strong>${unmatched}</strong>
+      </div>
+      <div class="import-summary-stat ${mapped ? 'import-summary-stat--ok' : ''}">
+        <span>Mapped</span>
+        <strong>${mapped}</strong>
+      </div>
+      <div class="import-summary-stat import-summary-stat--total">
+        <span>Ready</span>
+        <strong>${finalCount}/${totalEntries}</strong>
+      </div>
+    </div>
+    <div class="import-summary-note">
+      ${finalCount
+        ? `${pct}% of this playlist is ready to import. Map unmatched tracks below to improve it.`
+        : 'No tracks matched in your library yet. Search below to map entries before importing.'}
+    </div>
+  `;
+  if (btn) {
+    btn.disabled = finalCount === 0;
+    btn.textContent = importLabel;
+  }
 }
 
 function closeImportModal() {
@@ -5599,16 +5655,7 @@ function clearMapping(idx) {
 }
 
 function _updateMappingCount() {
-  if (!_importData) return;
-  const mappedCount = Object.keys(_importMappings).length;
-  const total = _importData.matched + mappedCount;
-  const btn = document.getElementById('import-confirm-btn');
-  if (btn) {
-    btn.disabled = total === 0;
-    btn.textContent = mappedCount > 0
-      ? `Import Playlist (${total} tracks)`
-      : 'Import Playlist';
-  }
+  _renderImportSummary();
 }
 
 /* ── Sync ────────────────────────────────────────────────────────────── */
@@ -10868,22 +10915,32 @@ function srOpen() {
   document.getElementById('sr-sort-order').value = 'desc';
   _srRenderRules();
   document.getElementById('sr-preview-count').textContent = '';
+  _srRenderPreview([]);
   document.getElementById('sr-unanalysed-banner').style.display = 'none';
   document.getElementById('sr-modal').style.display = 'flex';
+  _srBindDirtyInputs();
+  _srDirty = false;
+  _srInitialJson = _srStateJson();
 }
 
-function srClose() {
+function srClose(force = false) {
+  if (!force && _srDirty && !window.confirm('Discard Smart Rules changes?')) return;
+  _srDirty = false;
+  _srInitialJson = '';
+  _srRenderPreview([]);
   document.getElementById('sr-modal').style.display = 'none';
 }
 
 function srAddRule() {
   _srRules.push({ field: 'genre', op: 'contains', value: '' });
   _srRenderRules();
+  srMarkDirty();
 }
 
 function srRemoveRule(idx) {
   _srRules.splice(idx, 1);
   _srRenderRules();
+  srMarkDirty();
 }
 
 function srChangeField(idx, field) {
@@ -10891,10 +10948,12 @@ function srChangeField(idx, field) {
   const ops = fd ? _SR_OPS[fd.type] : _SR_OPS.string;
   _srRules[idx] = { field, op: ops[0][0], value: fd?.type === 'bool' ? true : '' };
   _srRenderRules();
+  srMarkDirty();
 }
 
 function srChangeOp(idx, op) {
   _srRules[idx].op = op;
+  srMarkDirty();
 }
 
 function srChangeVal(idx, val) {
@@ -10902,6 +10961,33 @@ function srChangeVal(idx, val) {
   if (fd?.type === 'bool') _srRules[idx].value = val === 'true';
   else if (fd?.type === 'int' || fd?.type === 'float') _srRules[idx].value = Number(val);
   else _srRules[idx].value = val;
+  srMarkDirty();
+}
+
+function _srBindDirtyInputs() {
+  if (_srDirtyBound) return;
+  ['sr-name', 'sr-match-mode', 'sr-limit', 'sr-sort-field', 'sr-sort-order'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', srMarkDirty);
+    el.addEventListener('change', srMarkDirty);
+  });
+  _srDirtyBound = true;
+}
+
+function _srStateJson() {
+  return JSON.stringify({
+    name: document.getElementById('sr-name')?.value || '',
+    ..._srBuildPayload(),
+  });
+}
+
+function srMarkDirty() {
+  if (!_isOverlayOpen('sr-modal')) return;
+  _srDirty = _srStateJson() !== _srInitialJson;
+  const countEl = document.getElementById('sr-preview-count');
+  if (countEl && _srDirty) countEl.textContent = '';
+  if (_srDirty) _srRenderPreview([]);
 }
 
 function _srRenderRules() {
@@ -10944,8 +11030,10 @@ async function srPreview() {
   const msg = document.getElementById('sr-unanalysed-msg');
   try {
     if (countEl) countEl.textContent = 'Previewing…';
+    _srRenderPreview([]);
     const res = await api('/playlists/smart/preview', { method: 'POST', body: payload });
     if (countEl) countEl.textContent = `${res.total} track${res.total !== 1 ? 's' : ''} match`;
+    _srRenderPreview(Array.isArray(res.tracks) ? res.tracks : []);
     if (res.unanalysed_count > 0 && banner && msg) {
       msg.textContent = `${res.unanalysed_count} tracks excluded — run Analyse Library to include them.`;
       banner.style.display = 'flex';
@@ -10954,7 +11042,46 @@ async function srPreview() {
     }
   } catch (e) {
     if (countEl) countEl.textContent = 'Preview failed';
+    _srRenderPreview([]);
   }
+}
+
+function _srRenderPreview(tracks = []) {
+  const pane = document.getElementById('sr-preview-pane');
+  const list = document.getElementById('sr-preview-list');
+  if (!pane || !list) return;
+  if (!tracks.length) {
+    pane.style.display = 'none';
+    list.innerHTML = '';
+    return;
+  }
+  pane.style.display = 'block';
+  list.innerHTML = `
+    <div class="sr-preview-table-wrap tb-table-shell">
+      <table class="insights-table tb-table tb-table-density-compact sr-preview-table">
+        <thead>
+          <tr>
+            <th class="sr-preview-col-num">#</th>
+            <th>Title</th>
+            <th>Artist</th>
+            <th>Album</th>
+            <th>Genre</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tracks.slice(0, 25).map((t, i) => `<tr>
+            <td>${i + 1}</td>
+            <td title="${esc(t.title || '')}">${esc(t.title || 'Untitled')}</td>
+            <td title="${esc(t.artist || '')}">${esc(t.artist || 'Unknown Artist')}</td>
+            <td title="${esc(t.album || '')}">${esc(t.album || 'Unknown Album')}</td>
+            <td title="${esc(t.genre || '')}">${esc(t.genre || '-')}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      ${tracks.length > 25 ? `<div class="sr-preview-more">Showing first 25 of ${tracks.length} matches.</div>` : ''}
+    </div>
+  `;
+  _enhanceTableSystem(list);
 }
 
 function _srBuildPayload() {
@@ -10968,13 +11095,14 @@ function _srBuildPayload() {
 }
 
 async function srSave() {
-  const name = (document.getElementById('sr-name')?.value || '').trim() || 'Smart Playlist';
+  const name = (document.getElementById('sr-name')?.value || '').trim() || 'Smart Rules Playlist';
   const payload = { ..._srBuildPayload(), name, refresh_on_open: true };
   try {
     const res = await api('/playlists/smart', { method: 'POST', body: payload });
-    srClose();
+    _srDirty = false;
+    srClose(true);
     await loadPlaylists();
-    toast(`Smart playlist "${res.name}" created (${res.track_count} tracks)`);
+    toast(`Smart Rules playlist "${res.name}" created (${res.track_count} tracks)`);
     if (res.unanalysed_count > 0) {
       toast(`${res.unanalysed_count} tracks excluded — run Analyse Library to include them`, 'warn');
     }
@@ -10994,6 +11122,8 @@ function srLoadTemplate(key) {
   document.getElementById('sr-sort-order').value = tmpl.sort_order;
   _srRenderRules();
   document.getElementById('sr-preview-count').textContent = '';
+  _srRenderPreview([]);
+  srMarkDirty();
 }
 
 /* ── History view ───────────────────────────────────────────────────── */
@@ -12303,6 +12433,7 @@ const App = {
   srChangeField,
   srChangeOp,
   srChangeVal,
+  srMarkDirty,
   srPreview,
   srSave,
   srLoadTemplate,
