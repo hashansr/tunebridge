@@ -7167,14 +7167,22 @@ tbody tr:hover {
   flex-direction: column;
   overflow: hidden;
 }
+.ml-gen-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+}
 .ml-gen-body {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-height: 0;
-  max-height: min(42vh, 520px);
-  overflow: auto;
-  padding: 2px 2px 0;
+  overflow: visible;
+  padding: 2px 0 0;
 }
 .ml-gen-row {
   margin-bottom: 0 !important;
@@ -7183,12 +7191,7 @@ tbody tr:hover {
   grid-column: 1 / -1;
 }
 .ml-gen-section {
-  border: 1px solid rgba(173, 198, 255, 0.1);
-  border-radius: 12px;
-  background:
-    radial-gradient(120% 120% at 0% 0%, rgba(173, 198, 255, 0.07), transparent 62%),
-    rgba(0, 0, 0, 0.14);
-  padding: 12px;
+  padding: 0 0 8px;
 }
 .ml-gen-section-head {
   display: flex;
@@ -7210,7 +7213,7 @@ tbody tr:hover {
 }
 .ml-gen-advanced-wrap {
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 .ml-gen-advanced-wrap details {
   padding: 0;
@@ -7222,18 +7225,45 @@ tbody tr:hover {
   font-weight: 750;
   letter-spacing: 0.08em;
   list-style: none;
-  padding: 12px;
+  padding: 10px 0;
   text-transform: uppercase;
 }
 .ml-gen-advanced-wrap summary::-webkit-details-marker {
   display: none;
 }
 .ml-gen-advanced-grid {
-  border-top: 1px solid rgba(173, 198, 255, 0.08);
-  padding: 12px;
+  padding: 8px 0 12px;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px 12px;
+}
+.ml-gen-advanced-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ml-gen-accordion {
+  border-top: 1px solid rgba(173, 198, 255, 0.08);
+}
+.ml-gen-accordion:last-child {
+  border-bottom: 1px solid rgba(173, 198, 255, 0.08);
+}
+.ml-gen-advanced-wrap .ml-gen-accordion summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.ml-gen-advanced-wrap .ml-gen-accordion summary::after {
+  content: '+';
+  color: rgba(173, 198, 255, 0.82);
+  font-size: 15px;
+  line-height: 1;
+}
+.ml-gen-advanced-wrap .ml-gen-accordion[open] summary::after {
+  content: '-';
 }
 .ml-gen-modal .ml-gen-row label {
   width: 100%;
@@ -7252,10 +7282,10 @@ tbody tr:hover {
 .ml-gen-seed-note {
   font-size: 12px;
   color: var(--text-secondary);
-  background: rgba(173, 198, 255, 0.06);
-  border: 1px solid rgba(173, 198, 255, 0.13);
-  border-radius: 10px;
-  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 2px 0;
   min-height: 38px;
   display: flex;
   align-items: center;
@@ -7285,8 +7315,8 @@ tbody tr:hover {
   padding: 4px 10px;
   max-width: 100%;
   border-radius: 8px;
-  border: 1px solid rgba(173, 198, 255, 0.18);
-  background: rgba(173, 198, 255, 0.08);
+  border: none;
+  background: rgba(173, 198, 255, 0.07);
   color: var(--text-secondary);
   font-size: 12px;
   min-width: 0;
@@ -7392,6 +7422,9 @@ tbody tr:hover {
   padding-top: 12px;
   border-top: 1px solid rgba(173, 198, 255, 0.1);
   flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+  background: transparent;
 }
 .ml-gen-preview-pane {
   margin-top: 12px;
@@ -7399,6 +7432,7 @@ tbody tr:hover {
   padding-top: 12px;
   min-height: 0;
   flex: 0 1 auto;
+  overflow: visible;
 }
 #ml-gen-preview {
   margin-top: 10px;
@@ -7411,10 +7445,10 @@ tbody tr:hover {
 }
 .ml-gen-summary-stat {
   min-width: 0;
-  padding: 9px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(173, 198, 255, 0.1);
-  background: rgba(255, 255, 255, 0.035);
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
 }
 .ml-gen-summary-stat span {
   display: block;
@@ -7436,14 +7470,14 @@ tbody tr:hover {
   white-space: nowrap;
 }
 .ml-preview-table-shell.tb-table-shell {
-  border: 1px solid rgba(173, 198, 255, 0.1);
+  border: none;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.16);
+  background: transparent;
   box-shadow: none;
 }
 .ml-preview-table-shell .tb-table-scroll-area {
-  max-height: 31vh;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 .ml-preview-table {
   width: 100%;
@@ -7526,9 +7560,6 @@ tbody tr:hover {
   .modal .settings-row label {
     width: 100%;
     padding-top: 0;
-  }
-  .ml-gen-body {
-    max-height: 46vh;
   }
   .ml-gen-section-grid,
   .ml-gen-advanced-grid {

@@ -2648,6 +2648,7 @@
         </button>
       </div>
 
+      <div class="ml-gen-scroll">
       <div class="ml-gen-body">
         <section class="ml-gen-section">
           <div class="ml-gen-section-head">
@@ -2714,71 +2715,86 @@
         <section class="ml-gen-section ml-gen-advanced-wrap">
           <details id="ml-gen-advanced">
             <summary>Advanced options</summary>
-            <div class="ml-gen-advanced-grid">
-              <div class="settings-row ml-gen-row" id="ml-gen-genre-mode-row">
-                <label>Genre focus</label>
-                <select id="ml-gen-genre-mode">
-                  <option value="strict">Stay close</option>
-                  <option value="relaxed">Allow nearby genres</option>
-                </select>
-              </div>
-              <div class="settings-row ml-gen-row">
-                <label>Energy shape</label>
-                <select id="ml-gen-arc">
-                  <option value="steady">Steady</option>
-                  <option value="gradual_build">Gradual Build</option>
-                  <option value="peak_release">Peak then Release</option>
-                  <option value="wind_down">Wind Down</option>
-                </select>
-              </div>
-              <div class="settings-row ml-gen-row">
-                <label>Energy</label>
-                <input id="ml-gen-energy" type="number" min="0" max="1" step="0.05" value="0.5" />
-              </div>
-              <div class="settings-row ml-gen-row">
-                <label>Brightness</label>
-                <input id="ml-gen-brightness" type="number" min="0" max="1" step="0.05" value="0.5" />
-              </div>
-              <div class="settings-row ml-gen-row">
-                <label>Diversity</label>
-                <input id="ml-gen-diversity" type="number" min="0" max="1" step="0.05" value="0.7" />
-              </div>
-              <div class="settings-row ml-gen-row">
-                <label>Flow between songs</label>
-                <input id="ml-gen-smoothness" type="number" min="0" max="1" step="0.05" value="0.8" />
-              </div>
-              <div class="settings-row ml-gen-row">
-                <label>Year from</label>
-                <input id="ml-gen-year-min" type="number" min="1900" max="2100" placeholder="Any" />
-              </div>
-              <div class="settings-row ml-gen-row">
-                <label>Year to</label>
-                <input id="ml-gen-year-max" type="number" min="1900" max="2100" placeholder="Any" />
-              </div>
-              <div class="settings-row ml-gen-row">
-                <label>Allow repeat artists</label>
-                <select id="ml-gen-repeat-artists">
-                  <option value="false">No</option>
-                  <option value="true">Yes</option>
-                </select>
-              </div>
-              <div class="settings-row ml-gen-row">
-                <label>Deterministic</label>
-                <select id="ml-gen-deterministic">
-                  <option value="true">On</option>
-                  <option value="false">Off</option>
-                </select>
-              </div>
-              <div class="settings-row ml-gen-row">
-                <label>Listening history</label>
-                <select id="ml-gen-heard">
-                  <option value="">Any tracks</option>
-                  <option value="unheard">Unheard only</option>
-                  <option value="not_30">Not heard in 30 days</option>
-                  <option value="not_60">Not heard in 60 days</option>
-                  <option value="not_90">Not heard in 90 days</option>
-                </select>
-              </div>
+            <div class="ml-gen-advanced-stack">
+              <details class="ml-gen-accordion" open>
+                <summary>Style tuning</summary>
+                <div class="ml-gen-advanced-grid">
+                  <div class="settings-row ml-gen-row" id="ml-gen-genre-mode-row">
+                    <label>Genre focus</label>
+                    <select id="ml-gen-genre-mode">
+                      <option value="strict">Stay close</option>
+                      <option value="relaxed">Allow nearby genres</option>
+                    </select>
+                  </div>
+                  <div class="settings-row ml-gen-row">
+                    <label>Energy shape</label>
+                    <select id="ml-gen-arc">
+                      <option value="steady">Steady</option>
+                      <option value="gradual_build">Gradual Build</option>
+                      <option value="peak_release">Peak then Release</option>
+                      <option value="wind_down">Wind Down</option>
+                    </select>
+                  </div>
+                  <div class="settings-row ml-gen-row">
+                    <label>Energy</label>
+                    <input id="ml-gen-energy" type="number" min="0" max="1" step="0.05" value="0.5" />
+                  </div>
+                  <div class="settings-row ml-gen-row">
+                    <label>Brightness</label>
+                    <input id="ml-gen-brightness" type="number" min="0" max="1" step="0.05" value="0.5" />
+                  </div>
+                </div>
+              </details>
+              <details class="ml-gen-accordion">
+                <summary>Variety and flow</summary>
+                <div class="ml-gen-advanced-grid">
+                  <div class="settings-row ml-gen-row">
+                    <label>Diversity</label>
+                    <input id="ml-gen-diversity" type="number" min="0" max="1" step="0.05" value="0.7" />
+                  </div>
+                  <div class="settings-row ml-gen-row">
+                    <label>Flow between songs</label>
+                    <input id="ml-gen-smoothness" type="number" min="0" max="1" step="0.05" value="0.8" />
+                  </div>
+                  <div class="settings-row ml-gen-row">
+                    <label>Allow repeat artists</label>
+                    <select id="ml-gen-repeat-artists">
+                      <option value="false">No</option>
+                      <option value="true">Yes</option>
+                    </select>
+                  </div>
+                  <div class="settings-row ml-gen-row">
+                    <label>Deterministic</label>
+                    <select id="ml-gen-deterministic">
+                      <option value="true">On</option>
+                      <option value="false">Off</option>
+                    </select>
+                  </div>
+                </div>
+              </details>
+              <details class="ml-gen-accordion">
+                <summary>Library filters</summary>
+                <div class="ml-gen-advanced-grid">
+                  <div class="settings-row ml-gen-row">
+                    <label>Year from</label>
+                    <input id="ml-gen-year-min" type="number" min="1900" max="2100" placeholder="Any" />
+                  </div>
+                  <div class="settings-row ml-gen-row">
+                    <label>Year to</label>
+                    <input id="ml-gen-year-max" type="number" min="1900" max="2100" placeholder="Any" />
+                  </div>
+                  <div class="settings-row ml-gen-row">
+                    <label>Listening history</label>
+                    <select id="ml-gen-heard">
+                      <option value="">Any tracks</option>
+                      <option value="unheard">Unheard only</option>
+                      <option value="not_30">Not heard in 30 days</option>
+                      <option value="not_60">Not heard in 60 days</option>
+                      <option value="not_90">Not heard in 90 days</option>
+                    </select>
+                  </div>
+                </div>
+              </details>
             </div>
           </details>
         </section>
@@ -2787,6 +2803,7 @@
       <div id="ml-gen-preview-pane" class="ml-gen-preview-pane" style="display:none">
         <div id="ml-gen-summary" class="ml-gen-summary"></div>
         <div id="ml-gen-preview"></div>
+      </div>
       </div>
 
       <div class="modal-actions">
