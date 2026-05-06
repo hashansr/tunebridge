@@ -3720,11 +3720,26 @@ function _renderMlPreviewSummary(summary = {}) {
   const target = summary.target_genre || 'Any genre';
   const seedTag = `run: ${_mlPreviewSeed}`;
   el.innerHTML = `
-    <strong>${generated}/${requested}</strong> tracks generated ·
-    mode: <strong>${esc(mode)}</strong> ·
-    target: <strong>${esc(target)}</strong> ·
-    pool: <strong>${pool}</strong> from <strong>${considered}</strong> tracks ·
-    <strong>${seedTag}</strong>
+    <div class="ml-gen-summary-stat">
+      <span>Tracks</span>
+      <strong>${generated}/${requested}</strong>
+    </div>
+    <div class="ml-gen-summary-stat">
+      <span>Style</span>
+      <strong>${esc(mode)}</strong>
+    </div>
+    <div class="ml-gen-summary-stat">
+      <span>Target</span>
+      <strong>${esc(target)}</strong>
+    </div>
+    <div class="ml-gen-summary-stat">
+      <span>Pool</span>
+      <strong>${pool}/${considered}</strong>
+    </div>
+    <div class="ml-gen-summary-stat">
+      <span>Seed</span>
+      <strong>${esc(seedTag)}</strong>
+    </div>
   `;
 }
 
@@ -3739,34 +3754,36 @@ function _renderMlPreviewTracks(tracks = [], explanations = []) {
   }
   const explainById = new Map((explanations || []).map(e => [e.track_id, e]));
   el.innerHTML = `
-    <div class="tb-table-shell">
-    <table class="insights-table tb-table tb-table-density-compact ml-preview-table">
-      <thead>
-        <tr>
-          <th class="ml-preview-col-num">#</th>
-          <th>Title</th>
-          <th>Artist</th>
-          <th>Album</th>
-          <th>Why it fits</th>
-          <th class="ml-preview-col-fit">Fit</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${tracks.map((t, i) => {
-          const ex = explainById.get(t.id) || {};
-          const fitPct = Math.max(0, Math.min(100, Math.round((Number(ex.placement_score) || 0) * 100)));
-          const reason = ex.reason || _mlReasonFromScores(ex.score_components || {});
-          return `<tr>
-            <td>${i + 1}</td>
-            <td title="${esc(t.title)}">${esc(t.title)}</td>
-            <td title="${esc(t.artist)}">${esc(t.artist)}</td>
-            <td title="${esc(t.album)}">${esc(t.album)}</td>
-            <td title="${esc(reason)}">${esc(reason)}</td>
-            <td class="ml-preview-fit">${fitPct}%</td>
-          </tr>`;
-        }).join('')}
-      </tbody>
-    </table>
+    <div class="ml-preview-table-shell tb-table-shell">
+      <div class="tb-table-scroll-area">
+        <table class="insights-table tb-table tb-table-density-compact ml-preview-table">
+          <thead>
+            <tr>
+              <th class="ml-preview-col-num">#</th>
+              <th>Title</th>
+              <th>Artist</th>
+              <th>Album</th>
+              <th>Why it fits</th>
+              <th class="ml-preview-col-fit">Fit</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tracks.map((t, i) => {
+              const ex = explainById.get(t.id) || {};
+              const fitPct = Math.max(0, Math.min(100, Math.round((Number(ex.placement_score) || 0) * 100)));
+              const reason = ex.reason || _mlReasonFromScores(ex.score_components || {});
+              return `<tr>
+                <td>${i + 1}</td>
+                <td title="${esc(t.title)}">${esc(t.title)}</td>
+                <td title="${esc(t.artist)}">${esc(t.artist)}</td>
+                <td title="${esc(t.album)}">${esc(t.album)}</td>
+                <td title="${esc(reason)}">${esc(reason)}</td>
+                <td class="ml-preview-fit">${fitPct}%</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
     </div>
   `;
   _enhanceTableSystem(el);

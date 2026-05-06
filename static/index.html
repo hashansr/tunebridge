@@ -2649,26 +2649,57 @@
       </div>
 
       <div class="ml-gen-body">
-        <div class="settings-row ml-gen-row ml-gen-row-span2">
-          <label>Playlist name</label>
-          <input id="ml-gen-name" type="text" placeholder="New generated playlist" />
-        </div>
-        <div class="settings-row ml-gen-row">
-          <label>Mix style</label>
-          <select id="ml-gen-mode">
-            <option value="seed">Track DNA</option>
-            <option value="genre">Genre Lane</option>
-            <option value="hybrid">Blend Mode</option>
-          </select>
-        </div>
-        <div class="settings-row ml-gen-row" id="ml-gen-target-row">
-          <label>Genre lane</label>
-          <select id="ml-gen-target-genre">
-            <option value="">Any</option>
-          </select>
-        </div>
-        <div class="settings-row ml-gen-row ml-gen-row-span2" id="ml-gen-seed-row">
-          <label>Reference tracks</label>
+        <section class="ml-gen-section">
+          <div class="ml-gen-section-head">
+            <span>Mix Setup</span>
+          </div>
+          <div class="ml-gen-section-grid">
+            <div class="settings-row ml-gen-row ml-gen-row-span2">
+              <label>Playlist name</label>
+              <input id="ml-gen-name" type="text" placeholder="New generated playlist" />
+            </div>
+            <div class="settings-row ml-gen-row">
+              <label>Mix style</label>
+              <select id="ml-gen-mode">
+                <option value="seed">Track DNA</option>
+                <option value="genre">Genre Lane</option>
+                <option value="hybrid">Blend Mode</option>
+              </select>
+            </div>
+            <div class="settings-row ml-gen-row" id="ml-gen-target-row">
+              <label>Genre lane</label>
+              <select id="ml-gen-target-genre">
+                <option value="">Any</option>
+              </select>
+            </div>
+            <div class="settings-row ml-gen-row">
+              <label>Length</label>
+              <select id="ml-gen-length">
+                <option value="12">Short (12 tracks)</option>
+                <option value="20" selected>Standard (20 tracks)</option>
+                <option value="30">Long (30 tracks)</option>
+              </select>
+            </div>
+            <div class="settings-row ml-gen-row">
+              <label>Vibe</label>
+              <select id="ml-gen-mood">
+                <option value="">Balanced</option>
+                <option value="hype">Hype</option>
+                <option value="warm_relaxed">Chill</option>
+                <option value="late_night">After Hours</option>
+                <option value="focus">Deep Focus</option>
+                <option value="bright_bouncy">Bright Pop</option>
+                <option value="dark_heavy">Dark & Heavy</option>
+                <option value="energetic">Cardio</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section class="ml-gen-section" id="ml-gen-seed-row">
+          <div class="ml-gen-section-head">
+            <span>Reference Tracks</span>
+          </div>
           <div class="ml-gen-ref-wrap">
             <div id="ml-gen-seed-note" class="ml-gen-seed-note">No reference songs selected yet.</div>
             <div class="ml-gen-ref-search-row">
@@ -2678,29 +2709,9 @@
             </div>
             <div id="ml-gen-ref-selected" class="ml-gen-ref-selected"></div>
           </div>
-        </div>
-        <div class="settings-row ml-gen-row">
-          <label>Length</label>
-          <select id="ml-gen-length">
-            <option value="12">Short (12 tracks)</option>
-            <option value="20" selected>Standard (20 tracks)</option>
-            <option value="30">Long (30 tracks)</option>
-          </select>
-        </div>
-        <div class="settings-row ml-gen-row">
-          <label>Vibe</label>
-          <select id="ml-gen-mood">
-            <option value="">Balanced</option>
-            <option value="hype">Hype</option>
-            <option value="warm_relaxed">Chill</option>
-            <option value="late_night">After Hours</option>
-            <option value="focus">Deep Focus</option>
-            <option value="bright_bouncy">Bright Pop</option>
-            <option value="dark_heavy">Dark & Heavy</option>
-            <option value="energetic">Cardio</option>
-          </select>
-        </div>
-        <div class="ml-gen-row-span2 ml-gen-advanced-wrap">
+        </section>
+
+        <section class="ml-gen-section ml-gen-advanced-wrap">
           <details id="ml-gen-advanced">
             <summary>Advanced options</summary>
             <div class="ml-gen-advanced-grid">
@@ -2770,7 +2781,12 @@
               </div>
             </div>
           </details>
-        </div>
+        </section>
+      </div>
+
+      <div id="ml-gen-preview-pane" class="ml-gen-preview-pane" style="display:none">
+        <div id="ml-gen-summary" class="ml-gen-summary"></div>
+        <div id="ml-gen-preview"></div>
       </div>
 
       <div class="modal-actions">
@@ -2778,11 +2794,6 @@
         <button id="ml-gen-preview-btn" class="btn-secondary" onclick="App.runMlPlaylistPreview()">Preview</button>
         <button id="ml-gen-regen-btn" class="btn-secondary" onclick="App.regenerateMlPlaylist()">Regenerate</button>
         <button id="ml-gen-save-btn" class="btn-primary" onclick="App.saveMlGeneratedPlaylist()">Save Playlist</button>
-      </div>
-
-      <div id="ml-gen-preview-pane" class="ml-gen-preview-pane" style="display:none">
-        <div id="ml-gen-summary" class="settings-hint" style="padding-left:0;margin-top:0"></div>
-        <div id="ml-gen-preview"></div>
       </div>
     </div>
   </div>
