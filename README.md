@@ -119,16 +119,21 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 
 ## Quick Start
 
+For end users, use the macOS DMG below. The source workflow is for development.
+
 ```bash
 # 1. Clone and install
 git clone https://github.com/hashansr/tunebridge.git
 cd tunebridge
 bash install.sh
 
-# 2. Run
+# 2. Run in a browser for backend/frontend development
+bash run.sh
+# → Opens at http://localhost:5001
+
+# Or run the native development wrapper
 source venv/bin/activate
-python app.py
-# → Open http://localhost:5001
+python tunebridge_gui.py
 ```
 
 ## macOS Distribution (Recommended)
@@ -144,7 +149,7 @@ Install flow for end users:
 2. Drag `TuneBridge.app` to `Applications`
 3. Launch TuneBridge from Applications
 
-The packaged app is self-contained (no separate Python install needed on target machines).
+The packaged app is the supported user experience. It starts the embedded local server itself and opens TuneBridge in a native macOS WKWebView window, so users do not need Terminal, a browser tab, Python, pip, or project source files.
 
 ### First Launch on macOS (Unsigned / Not Notarized Build)
 
@@ -178,13 +183,14 @@ Notes:
 - Automatically creates app data at:
   `~/Library/Application Support/TuneBridge/`
 - Packaged app already includes Python dependencies (no first-run `pip install`).
+- First-run onboarding appears only for a fresh App Support database. Choosing `Set Up Later` records that preference so the modal does not keep returning on every launch.
 - Shows onboarding for fresh installs to capture:
   - default library folder
   - folder structure preference
   - primary file format preference
 - Initializes/migrates SQLite schema where applicable.
 - Starts the embedded local server and opens native UI.
-- If mpv bit-perfect mode is needed, install it from `Settings → Playback → Install mpv`.
+- Standard playback works without optional system packages. If mpv bit-perfect mode is needed, install it from `Settings → Playback → Install mpv`; Homebrew/libmpv are optional and checked in-app.
 
 ---
 

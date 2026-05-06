@@ -10419,6 +10419,13 @@ function closeOnboarding() {
   if (modal) modal.style.display = 'none';
 }
 
+async function skipOnboarding() {
+  try {
+    await api('/settings', { method: 'PUT', body: { onboarding_completed: true } });
+  } catch (_) {}
+  closeOnboarding();
+}
+
 function _showOnboarding(settings = {}) {
   const modal = document.getElementById('onboarding-modal');
   if (!modal) return;
@@ -12132,6 +12139,7 @@ const App = {
   loadSettings,
   saveLibraryPath,
   closeOnboarding,
+  skipOnboarding,
   completeOnboarding,
   restartApp,
   setUpdateChannel,

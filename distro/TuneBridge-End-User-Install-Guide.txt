@@ -4,6 +4,7 @@ End-User Install Guide (macOS)
 What you need
 - A Mac (Apple Silicon)
 - The file: TuneBridge.dmg
+- No Python, Terminal setup, or dependency installation is required.
 
 Install TuneBridge
 1. Double-click TuneBridge.dmg.
@@ -36,6 +37,8 @@ When TuneBridge opens for the first time:
 2. Confirm your folder/file preferences.
 3. Continue into the app.
 
+TuneBridge runs as a native macOS app. It starts its own local server in the background and opens its built-in app window.
+
 Where TuneBridge saves your data
 TuneBridge stores your library/playlists/settings here:
 ~/Library/Application Support/TuneBridge
@@ -50,3 +53,4 @@ Your app data remains in Application Support and is kept between updates.
 
 Need help?
 If TuneBridge does not open, restart your Mac and try the first-launch steps again.
+If the app opens but bit-perfect playback is unavailable, open Settings > Playback and use Install mpv. This is optional; normal playback does not require it.

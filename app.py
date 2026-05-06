@@ -4729,9 +4729,14 @@ def export_playlist(pid, fmt):
 
 @app.route('/api/settings', methods=['GET'])
 def get_settings():
+    try:
+        conn = _db.get_conn()
+        settings_exists = conn.execute("SELECT 1 FROM settings LIMIT 1").fetchone() is not None
+    except Exception:
+        settings_exists = False
     s = load_settings()
     s['_data_dir'] = str(DATA_DIR)
-    s['_settings_exists'] = True
+    s['_settings_exists'] = settings_exists
     return jsonify(s)
 
 

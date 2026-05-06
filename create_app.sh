@@ -41,24 +41,40 @@ echo -e "${BOLD}🏗️   TuneBridge — Build Mac App${NC}"
 echo -e "${DIM}────────────────────────────────────────${NC}"
 echo ""
 
-# ── Find CLT Python ───────────────────────────────────────────────────────────
-printf "  🔍  Finding CLT Python... "
+# ── Find Python 3.10+ ─────────────────────────────────────────────────────────
+printf "  🔍  Finding Python 3.10+... "
 CLT_PYTHON=""
 for candidate in \
-    "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3" \
-    "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.11/bin/python3" \
-    "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.12/bin/python3"; do
+    "$(command -v python3.13 2>/dev/null || true)" \
+    "$(command -v python3.12 2>/dev/null || true)" \
+    "$(command -v python3.11 2>/dev/null || true)" \
+    "$(command -v python3.10 2>/dev/null || true)" \
+    "$(command -v python3 2>/dev/null || true)" \
+    "/opt/homebrew/bin/python3.13" \
+    "/opt/homebrew/bin/python3.12" \
+    "/opt/homebrew/bin/python3.11" \
+    "/opt/homebrew/bin/python3.10" \
+    "/usr/local/bin/python3.13" \
+    "/usr/local/bin/python3.12" \
+    "/usr/local/bin/python3.11" \
+    "/usr/local/bin/python3.10" \
+    "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.12/bin/python3" \
+    "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.11/bin/python3"; do
+  [ -n "$candidate" ] || continue
   if [ -x "$candidate" ]; then
-    CLT_PYTHON="$candidate"
-    break
+    _maj=$("$candidate" -c 'import sys; print(sys.version_info.major)' 2>/dev/null || echo 0)
+    _min=$("$candidate" -c 'import sys; print(sys.version_info.minor)' 2>/dev/null || echo 0)
+    if [ "$_maj" = "3" ] && [ "$_min" -ge 10 ] 2>/dev/null; then
+      CLT_PYTHON="$candidate"
+      break
+    fi
   fi
 done
 
 if [ -z "$CLT_PYTHON" ]; then
   echo -e "${RED}not found ❌${NC}"
   echo ""
-  echo "  Install Xcode Command Line Tools:"
-  echo "  ${BOLD}xcode-select --install${NC}"
+  echo "  Install Python 3.10+ with Homebrew or from python.org."
   exit 1
 fi
 CLT_PYVER="$("$CLT_PYTHON" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"

@@ -36,13 +36,22 @@ echo ""
 BACKUP_DIR="data/backups/$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$BACKUP_DIR"
 BACKED_UP=0
-for f in data/tunebridge.db data/tunebridge.db-wal data/tunebridge.db-shm; do
+APP_SUPPORT_DIR="$HOME/Library/Application Support/TuneBridge"
+for f in \
+  "$APP_SUPPORT_DIR/tunebridge.db" \
+  "$APP_SUPPORT_DIR/tunebridge.db-wal" \
+  "$APP_SUPPORT_DIR/tunebridge.db-shm" \
+  data/tunebridge.db \
+  data/tunebridge.db-wal \
+  data/tunebridge.db-shm; do
   if [ -f "$f" ]; then
     cp "$f" "$BACKUP_DIR/"
     BACKED_UP=$(( BACKED_UP + 1 ))
   fi
 done
-if [ -d "data/playlist_artwork" ]; then
+if [ -d "$APP_SUPPORT_DIR/playlist_artwork" ]; then
+  cp -R "$APP_SUPPORT_DIR/playlist_artwork" "$BACKUP_DIR/"
+elif [ -d "data/playlist_artwork" ]; then
   cp -R data/playlist_artwork "$BACKUP_DIR/"
 fi
 echo -e "  💾  Data backed up... ${GREEN}${BACKED_UP} file(s) → ${BACKUP_DIR} ✅${NC}"
@@ -69,6 +78,13 @@ source venv/bin/activate
 _spin_start "Updating dependencies..."
 pip install -q --upgrade pip
 pip install -q -r requirements.txt
+python - <<'PYEOF'
+from pathlib import Path
+import hashlib
+req = Path('requirements.txt')
+stamp = Path('venv/.tunebridge-requirements.sha256')
+stamp.write_text(hashlib.sha256(req.read_bytes()).hexdigest() + '\n')
+PYEOF
 _spin_stop
 echo -e "  📦  Dependencies... ${GREEN}up to date ✅${NC}"
 

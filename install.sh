@@ -32,29 +32,58 @@ echo -e "${BOLD}🎵  TuneBridge — Setup${NC}"
 echo -e "${DIM}────────────────────────────────────────${NC}"
 echo ""
 
-# ── Python 3.8+ check ─────────────────────────────────────────────────────────
-printf "  🔍  Checking Python 3... "
-if ! command -v python3 &>/dev/null; then
+# ── Python 3.10+ check ────────────────────────────────────────────────────────
+printf "  🔍  Checking Python 3.10+... "
+PYTHON_BIN=""
+for candidate in \
+  "$(command -v python3.13 2>/dev/null || true)" \
+  "$(command -v python3.12 2>/dev/null || true)" \
+  "$(command -v python3.11 2>/dev/null || true)" \
+  "$(command -v python3.10 2>/dev/null || true)" \
+  "$(command -v python3 2>/dev/null || true)" \
+  "/opt/homebrew/bin/python3.13" \
+  "/opt/homebrew/bin/python3.12" \
+  "/opt/homebrew/bin/python3.11" \
+  "/opt/homebrew/bin/python3.10" \
+  "/opt/homebrew/bin/python3" \
+  "/usr/local/bin/python3.13" \
+  "/usr/local/bin/python3.12" \
+  "/usr/local/bin/python3.11" \
+  "/usr/local/bin/python3.10" \
+  "/usr/local/bin/python3"; do
+  [ -n "$candidate" ] || continue
+  [ -x "$candidate" ] || continue
+  PY_VER=$("$candidate" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "")
+  PY_MAJOR=$(echo "$PY_VER" | cut -d. -f1)
+  PY_MINOR=$(echo "$PY_VER" | cut -d. -f2)
+  if [ "$PY_MAJOR" = "3" ] && [ "$PY_MINOR" -ge 10 ] 2>/dev/null; then
+    PYTHON_BIN="$candidate"
+    break
+  fi
+done
+if [ -z "$PYTHON_BIN" ]; then
   echo -e "${RED}not found ❌${NC}"
   echo ""
-  echo "  Install Python 3.8+ from https://python.org and re-run."
-  exit 1
-fi
-PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-PY_MAJOR=$(echo "$PY_VER" | cut -d. -f1)
-PY_MINOR=$(echo "$PY_VER" | cut -d. -f2)
-if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 8 ]; }; then
-  echo -e "${RED}Python $PY_VER — need 3.8+ ❌${NC}"
+  echo "  Install Python 3.10+ from https://python.org or Homebrew and re-run."
   exit 1
 fi
 echo -e "${GREEN}Python $PY_VER ✅${NC}"
+echo -e "  ${DIM}${PYTHON_BIN}${NC}"
 
 # ── Virtual environment ───────────────────────────────────────────────────────
 if [ -d "venv" ]; then
-  echo -e "  📁  Virtual environment... ${YELLOW}already exists, skipping ⏭️${NC}"
+  VENV_VER=$(venv/bin/python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")
+  VENV_MAJOR=$(echo "$VENV_VER" | cut -d. -f1)
+  VENV_MINOR=$(echo "$VENV_VER" | cut -d. -f2)
+  if [ "$VENV_MAJOR" -lt 3 ] || { [ "$VENV_MAJOR" -eq 3 ] && [ "$VENV_MINOR" -lt 10 ]; }; then
+    echo -e "  📁  Virtual environment... ${RED}Python $VENV_VER found; recreate with Python 3.10+ ❌${NC}"
+    echo -e "  Remove the old venv and rerun: ${BOLD}rm -rf venv && bash install.sh${NC}"
+    exit 1
+  fi
+  echo -e "  📁  Virtual environment... ${YELLOW}already exists (Python $VENV_VER), skipping ⏭️${NC}"
 else
   _spin_start "Creating virtual environment..."
-  python3 -m venv venv
+  "$PYTHON_BIN" -m venv venv
   _spin_stop
   echo -e "  📁  Virtual environment... ${GREEN}created ✅${NC}"
 fi
@@ -64,15 +93,23 @@ source venv/bin/activate
 _spin_start "Installing dependencies (this may take a moment)..."
 pip install -q --upgrade pip
 pip install -q -r requirements.txt
+python - <<'PYEOF'
+from pathlib import Path
+import hashlib
+req = Path('requirements.txt')
+stamp = Path('venv/.tunebridge-requirements.sha256')
+stamp.write_text(hashlib.sha256(req.read_bytes()).hexdigest() + '\n')
+PYEOF
 _spin_stop
 echo -e "  📦  Dependencies... ${GREEN}installed ✅${NC}"
 
 # ── Data directories ──────────────────────────────────────────────────────────
-mkdir -p data/artwork data/playlist_artwork
+APP_SUPPORT_DIR="$HOME/Library/Application Support/TuneBridge"
+mkdir -p "$APP_SUPPORT_DIR/artwork" "$APP_SUPPORT_DIR/playlist_artwork"
 echo -e "  📂  Data directories... ${GREEN}ready ✅${NC}"
 
 # ── SQLite bootstrap ──────────────────────────────────────────────────────────
-if [ ! -f "data/tunebridge.db" ]; then
+if [ ! -f "$APP_SUPPORT_DIR/tunebridge.db" ]; then
   echo -e "  🗃️   SQLite database... ${YELLOW}will be created on first app launch ⏭️${NC}"
 else
   echo -e "  🗃️   SQLite database... ${GREEN}found ✅${NC}"

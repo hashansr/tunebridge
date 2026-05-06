@@ -35,7 +35,7 @@ _ios()     { bash "$SCRIPT_DIR/ios/setup.sh"; }
 _menu() {
   _header
   echo -e "  What would you like to do?\n"
-  echo -e "  ${BOLD}1)${NC}  🚀  Run TuneBridge             ${DIM}start the server + open browser${NC}"
+  echo -e "  ${BOLD}1)${NC}  🚀  Run TuneBridge             ${DIM}development server in browser${NC}"
   echo -e "  ${BOLD}2)${NC}  📦  Install                    ${DIM}first-time setup${NC}"
   echo -e "  ${BOLD}3)${NC}  🔄  Update                     ${DIM}pull latest + rebuild${NC}"
   echo -e "  ${BOLD}4)${NC}  🏗️   Build Mac app               ${DIM}dev build, installs to /Applications${NC}"
@@ -72,7 +72,7 @@ _help() {
   echo "  Usage: bash tunebridge.sh [command]"
   echo ""
   echo "  Commands:"
-  printf "    %-10s  %s\n" "run"     "🚀  Start TuneBridge in your browser"
+  printf "    %-10s  %s\n" "run"     "🚀  Start the development server in your browser"
   printf "    %-10s  %s\n" "install" "📦  First-time setup (venv, deps, data files)"
   printf "    %-10s  %s\n" "update"  "🔄  Pull latest changes and rebuild"
   printf "    %-10s  %s\n" "app"     "🏗️   Build TuneBridge.app (dev, /Applications)"
