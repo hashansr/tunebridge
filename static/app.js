@@ -5104,6 +5104,9 @@ function _captureNavSnapshot() {
     dapId: _currentDapId || null,
     iemId: _currentIemId || null,
     favPanel: state.favPanel || 'artists',
+    historyPeriod: _historyPeriod,
+    historyValidOnly: !!document.getElementById('history-valid-only')?.checked,
+    historyOpenDays: Array.from(_historyOpenDays || []),
     scrollTop: document.getElementById('main')?.scrollTop || 0,
   };
 }
@@ -5202,6 +5205,19 @@ async function _restoreNavSnapshot(snap) {
       setActiveNav('insights'); renderSidebarPlaylists(); showViewEl('insights');
       await loadInsightsView();
       break;
+    case 'history': {
+      state.view = 'history'; state.playlist = null; clearSelection();
+      _historyPeriod = Number.isFinite(Number(snap.historyPeriod)) ? Number(snap.historyPeriod) : 7;
+      _historyOpenDays = new Set(Array.isArray(snap.historyOpenDays) ? snap.historyOpenDays : []);
+      document.querySelectorAll('[data-period]').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.period) === _historyPeriod);
+      });
+      const validToggle = document.getElementById('history-valid-only');
+      if (validToggle) validToggle.checked = !!snap.historyValidOnly;
+      setActiveNav('history'); renderSidebarPlaylists(); showViewEl('history');
+      await loadHistoryView();
+      break;
+    }
     case 'missing-tags':
       await openMissingTagsEditor();
       return;
@@ -11117,11 +11133,27 @@ async function loadHistoryView() {
     const { events, stats } = data;
     if (statsEl) {
       statsEl.style.display = 'grid';
+      const minutes = Number.isFinite(Number(stats.total_minutes))
+        ? Number(stats.total_minutes)
+        : Math.round(Number(stats.total_hours || 0) * 60);
+      const _historyStatCard = (icon, badge, value, label, extraClass = '') => `
+        <div class="history-stat ${extraClass}">
+          <div class="history-stat-top">
+            <span class="history-stat-icon">${icon}</span>
+            <span class="history-stat-badge">${badge}</span>
+          </div>
+          <span class="history-stat-val">${value}</span>
+          <span class="history-stat-lbl">${label}</span>
+        </div>`;
+      const playsIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5v14l11-7z"/></svg>`;
+      const minutesIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`;
+      const tracksIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+      const artistIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>`;
       statsEl.innerHTML = `
-        <div class="history-stat"><span class="history-stat-val">${stats.total_plays}</span><span class="history-stat-lbl">Plays</span></div>
-        <div class="history-stat"><span class="history-stat-val">${stats.total_hours}</span><span class="history-stat-lbl">Hours</span></div>
-        <div class="history-stat"><span class="history-stat-val">${stats.unique_tracks}</span><span class="history-stat-lbl">Tracks</span></div>
-        ${stats.top_artist ? `<div class="history-stat history-stat--wide"><span class="history-stat-val">${esc(stats.top_artist)}</span><span class="history-stat-lbl">Top artist</span></div>` : ''}
+        ${_historyStatCard(playsIcon, 'LISTENS', Number(stats.total_plays || 0).toLocaleString(), 'Plays')}
+        ${_historyStatCard(minutesIcon, 'DURATION', Number(minutes || 0).toLocaleString(), 'Minutes')}
+        ${_historyStatCard(tracksIcon, 'CATALOGUE', Number(stats.unique_tracks || 0).toLocaleString(), 'Tracks')}
+        ${stats.top_artist ? _historyStatCard(artistIcon, 'LEADER', esc(stats.top_artist), 'Top artist', 'history-stat--wide') : ''}
       `;
     }
     _renderHistoryCharts(validOnly);
@@ -11177,6 +11209,23 @@ async function loadHistoryView() {
     `; }).join('');
   } catch (e) {
     if (listEl) listEl.innerHTML = '<div class="empty-state"><p>Could not load history.</p></div>';
+  }
+}
+
+async function refreshHistoryView() {
+  const btn = document.querySelector('.history-header-actions .history-action-btn');
+  if (btn) btn.classList.add('is-loading');
+  try {
+    if (window.Player && typeof Player.flushHistoryNow === 'function') {
+      await Player.flushHistoryNow();
+    }
+    _playStatsLoaded = false;
+    await loadHistoryView();
+    toast('History refreshed');
+  } catch (_) {
+    await loadHistoryView();
+  } finally {
+    if (btn) btn.classList.remove('is-loading');
   }
 }
 
@@ -12252,6 +12301,7 @@ const App = {
   refreshSmartPlaylist,
   // History
   loadHistoryView,
+  refreshHistoryView,
   setHistoryPeriod,
   toggleHistoryDay,
   toggleHistoryClearMenu,

@@ -2881,10 +2881,10 @@ const Player = (function () {
       // Keep bounded queue; enough to survive brief outages without unbounded growth.
       _pendingPlaybackEvents = merged.slice(-120);
     }
-    if (_eventPostInFlight || _pendingPlaybackEvents.length === 0) return;
+    if (_eventPostInFlight || _pendingPlaybackEvents.length === 0) return Promise.resolve(false);
     _eventPostInFlight = true;
     const batch = _pendingPlaybackEvents.slice(0, 50);
-    fetch('/api/player/events', {
+    return fetch('/api/player/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ events: batch }),
@@ -2953,23 +2953,23 @@ const Player = (function () {
 
   function _flushCurrentTrackEvent(reason = 'switch', opts = {}) {
     const t = _activeHistoryTrack || currentTrack();
-    _flushTrackEvent(t, reason, opts);
+    return _flushTrackEvent(t, reason, opts);
   }
 
   function _flushTrackEvent(t, reason = 'switch', opts = {}) {
-    if (!t) return;
+    if (!t) return Promise.resolve(false);
     const { pos, elapsed } = _capturePlaybackSeconds();
     const contextMinElapsed = typeof opts.contextMinElapsed === 'number' ? opts.contextMinElapsed : 1;
     if (reason !== 'pause' && elapsed >= contextMinElapsed) {
       _pushRecentContext(t, reason);
     }
     const minElapsed = typeof opts.minElapsed === 'number' ? opts.minElapsed : 3;
-    if (elapsed < minElapsed) return;
+    if (elapsed < minElapsed) return Promise.resolve(false);
     const duration = Number(t.duration || (_isMpvActive() ? _mpvDuration : _audio.duration) || 0);
     const completed = !!opts.completed || (duration > 0 && pos >= Math.max(duration - 1.0, duration * 0.98));
     const skipped = !!opts.skipped;
     const ctx = ps.playbackContext || { sourceType: 'unknown', sourceId: '', sourceLabel: '' };
-    _postPlaybackEvents([{
+    const posted = _postPlaybackEvents([{
       track_id: t.id,
       played_at: Math.floor(_safeNowSec()),
       play_seconds: elapsed,
@@ -2989,6 +2989,18 @@ const Player = (function () {
     if (!opts.keepSessionStart) {
       _trackSessionStartPos = pos;
     }
+    return posted;
+  }
+
+  function flushHistoryNow() {
+    if (ps.isPlaying && currentTrack()) {
+      return _flushCurrentTrackEvent('refresh', {
+        minElapsed: 1,
+        contextMinElapsed: Number.POSITIVE_INFINITY,
+        keepSessionStart: true,
+      });
+    }
+    return _postPlaybackEvents([]);
   }
 
   /* ── Public API ─────────────────────────────────────────────────────── */
@@ -3007,6 +3019,7 @@ const Player = (function () {
     // Queue
     playTrack,
     playTrackById,
+    flushHistoryNow,
     playAll,
     playCollectionShuffled,
     addToQueue,

@@ -4367,6 +4367,7 @@ def history_view():
         'stats': {
             'total_plays': len(sessions_all),
             'total_hours': round(total_seconds / 3600, 1),
+            'total_minutes': round(total_seconds / 60),
             'unique_tracks': len(unique_tracks),
             'top_artist': top_artist,
             'raw_rows': len(rows),
