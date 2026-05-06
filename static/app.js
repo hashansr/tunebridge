@@ -6860,33 +6860,22 @@ async function loadDapsView() {
     const summary = d.sync_summary || {};
     const musicStatus = _dapMusicStatus(summary, !!d.mounted);
     const playlistStatus = _dapPlaylistStatus(d, summary);
-    const statusClass = d.mounted ? 'gear-dap-conn--on' : 'gear-dap-conn--off';
     const statusText = d.mounted ? 'Connected' : 'Not connected';
-    const musicTone = musicStatus.className === 'gear-sync-ok'
-      ? 'gear-dap-value--ok'
-      : (musicStatus.className === 'gear-sync-neutral' ? 'gear-dap-value--neutral' : 'gear-dap-value--warn');
-    const playlistTone = playlistStatus.className === 'gear-sync-ok' ? 'gear-dap-value--ok' : 'gear-dap-value--warn';
-    const musicValue = musicStatus.className === 'gear-sync-ok'
-      ? 'Synced'
-      : (musicStatus.className === 'gear-sync-neutral' ? 'Check status' : 'Out of sync');
-    const playlistValue = playlistStatus.className === 'gear-sync-ok' ? 'Synced' : 'Out of sync';
-    const musicTitle = musicStatus.detail ? ` title="${esc(musicStatus.detail)}"` : '';
-    const playlistTitle = playlistStatus.detail ? ` title="${esc(playlistStatus.detail)}"` : '';
+    const statusBadge = d.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected';
+    const statusDetail = [musicStatus.detail, playlistStatus.detail].filter(Boolean).join(' · ');
     return `
     <div class="gear-card gear-card-dap" onclick="App.showDapDetail('${d.id}')">
+      <div class="gear-card-icon gear-card-icon-dap">${_DAP_SVG}</div>
       <div class="gear-card-body gear-card-dap-body">
         <div class="gear-card-dap-head">
           <div class="gear-card-name">${esc(d.name)}</div>
-          <div class="gear-card-dap-miniicon">${_DAP_SVG}</div>
+          <span class="gear-badge ${statusBadge}">${statusText}</span>
         </div>
-        <div class="gear-card-subline gear-card-dap-connection ${statusClass}">${statusText.toUpperCase()}</div>
-        <div class="gear-card-dap-rule"></div>
-        <div class="gear-card-dap-status">
-          <span class="gear-dap-label">Music</span>
-          <span class="gear-dap-value ${musicTone}"${musicTitle}>${musicValue}</span>
-          <span class="gear-dap-label">Playlists</span>
-          <span class="gear-dap-value ${playlistTone}"${playlistTitle}>${playlistValue}</span>
+        <div class="gear-card-row gear-card-dap-status">
+          ${_gearStatusPillHtml(_GEAR_ICON_MUSIC, musicStatus.className, musicStatus.text)}
+          ${_gearStatusPillHtml(_GEAR_ICON_PLAYLIST, playlistStatus.className, playlistStatus.text)}
         </div>
+        ${statusDetail ? `<div class="gear-card-meta-text gear-card-dap-detail">${esc(statusDetail)}</div>` : ''}
       </div>
     </div>`;
   }).join('');

@@ -1,11 +1,13 @@
 # TuneBridge Codex Memory
 
-Last updated: 2026-04-09 (Australia/Sydney)
+Last updated: 2026-05-06 (Australia/Sydney)
 Maintainer: Codex agent
 Purpose: Persistent project memory for implementation context, decisions, and progress.
 
 Note (2026-04-09): TuneBridge runtime persistence is now SQLite-only (`tunebridge.db`).
 Some JSON references in historical sections below describe legacy behavior and change history.
+
+Note (2026-05-06): Gear home was realigned with the shared page/card language. Section overline pre-titles were removed, `IEMs & Headphones` was renamed to `Listening Gear`, DAP cards now use the same left-icon/title/status-pill rhythm as Listening Gear cards, and Gear header actions share the app's pill button treatment.
 
 ## 1) Product Context
 TuneBridge is a local-first music management app for a personal FLAC-centric library. It runs entirely on the user's machine and combines:
