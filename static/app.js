@@ -1517,7 +1517,7 @@ async function loadAlbums(artistFilter = null) {
 }
 
 /* ── Tracks view ────────────────────────────────────────────────────── */
-async function loadTracks(artist = null, album = null) {
+async function loadTracks(artist = null, album = null, displayArtist = '') {
   _ensurePlayStats();
   let q = [];
   if (artist) q.push(`artist=${encodeURIComponent(artist)}`);
@@ -1534,12 +1534,13 @@ async function loadTracks(artist = null, album = null) {
   // Album / artist hero
   const albumHero = document.getElementById('album-hero');
   if (album && tracks.length) {
+    const heroArtist = displayArtist || artist || '';
     const artKey = tracks[0].artwork_key || '';
     document.getElementById('album-hero-art').innerHTML =
       artKey ? `<img src="${artworkUrl(artKey)}" />` : coverPlaceholder('album', 64, 'var(--radius)', true);
     document.getElementById('album-hero-name').textContent = album;
-    document.getElementById('album-hero-artist').innerHTML = artist
-      ? `<span class="link" data-artist="${esc(artist)}" onclick="App.showArtist(this.dataset.artist)">${esc(artist)}</span>` : '';
+    document.getElementById('album-hero-artist').innerHTML = heroArtist
+      ? `<span class="link" data-artist="${esc(heroArtist)}" onclick="App.showArtist(this.dataset.artist)">${esc(heroArtist)}</span>` : '';
     const totalSecs = tracks.reduce((s, t) => s + (t.duration || 0), 0);
     const yr = tracks[0].year;
     const genre = tracks[0].genre;
@@ -1566,8 +1567,8 @@ async function loadTracks(artist = null, album = null) {
       };
     }
     const albumMoreBtn = document.getElementById('album-hero-more');
-    if (albumMoreBtn) albumMoreBtn.onclick = (e) => App.showAlbumDetailCtxMenu(e, artist, album);
-    albumHero.oncontextmenu = (e) => App.showAlbumDetailCtxMenu(e, artist, album);
+    if (albumMoreBtn) albumMoreBtn.onclick = (e) => App.showAlbumDetailCtxMenu(e, artist || heroArtist, album);
+    albumHero.oncontextmenu = (e) => App.showAlbumDetailCtxMenu(e, artist || heroArtist, album);
     albumHero.style.display = 'flex';
   } else if (!album && artist && tracks.length) {
     const artKey = tracks[0].artwork_key || '';
@@ -4484,7 +4485,8 @@ function _homeOnClick(item) {
   const a = encodeURIComponent(item.artist || '');
   const al = encodeURIComponent(item.album || '');
   const pid = encodeURIComponent(item.playlist_id || '');
-  return `App.homeOpenItem('${esc(item.kind || '')}','${tid}','${a}','${al}','${pid}')`;
+  const af = encodeURIComponent(Object.prototype.hasOwnProperty.call(item, 'artist_filter') ? item.artist_filter : (item.artist || ''));
+  return `App.homeOpenItem('${esc(item.kind || '')}','${tid}','${a}','${al}','${pid}','${af}')`;
 }
 
 function _homeOnPlay(item, e) {
@@ -4492,7 +4494,8 @@ function _homeOnPlay(item, e) {
   const a = encodeURIComponent(item.artist || '');
   const al = encodeURIComponent(item.album || '');
   const pid = encodeURIComponent(item.playlist_id || '');
-  return `App.homePlayItem(event,'${esc(item.kind || '')}','${tid}','${a}','${al}','${pid}')`;
+  const af = encodeURIComponent(Object.prototype.hasOwnProperty.call(item, 'artist_filter') ? item.artist_filter : (item.artist || ''));
+  return `App.homePlayItem(event,'${esc(item.kind || '')}','${tid}','${a}','${al}','${pid}','${af}')`;
 }
 
 const _HOME_PLAY_SVG = playSvg(16);
@@ -4915,15 +4918,19 @@ async function _homeResolveTrackById(trackId) {
   try { return await api(`/library/tracks/${encodeURIComponent(trackId)}`); } catch (_) { return null; }
 }
 
-async function homeOpenItem(kind, trackIdEnc = '', artistEnc = '', albumEnc = '', playlistIdEnc = '') {
+async function homeOpenItem(kind, trackIdEnc = '', artistEnc = '', albumEnc = '', playlistIdEnc = '', artistFilterEnc = '') {
   const kindNorm = String(kind || '').toLowerCase();
   const trackId = decodeURIComponent(trackIdEnc || '');
   const artist = decodeURIComponent(artistEnc || '');
   const album  = decodeURIComponent(albumEnc  || '');
   const playlistId = decodeURIComponent(playlistIdEnc || '');
-  if (kindNorm === 'album' && artist && album)  {
-    const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`).catch(() => []);
-    if (Array.isArray(tracks) && tracks.length) { showAlbum(artist, album); return; }
+  const rawArtistFilter = decodeURIComponent(artistFilterEnc || '');
+  const artistFilter = rawArtistFilter === '*' ? '' : (rawArtistFilter || artist);
+  if (kindNorm === 'album' && album)  {
+    const qs = [`album=${encodeURIComponent(album)}`];
+    if (artistFilter) qs.unshift(`artist=${encodeURIComponent(artistFilter)}`);
+    const tracks = await api(`/library/tracks?${qs.join('&')}`).catch(() => []);
+    if (Array.isArray(tracks) && tracks.length) { showAlbum(artistFilter, album, artist); return; }
   }
   if (kindNorm === 'artist' && artist) {
     const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artist)}`).catch(() => []);
@@ -4938,18 +4945,22 @@ async function homeOpenItem(kind, trackIdEnc = '', artistEnc = '', albumEnc = ''
   if (liveArtist) showArtist(liveArtist);
 }
 
-async function homePlayItem(event, kind, trackIdEnc = '', artistEnc = '', albumEnc = '', playlistIdEnc = '') {
+async function homePlayItem(event, kind, trackIdEnc = '', artistEnc = '', albumEnc = '', playlistIdEnc = '', artistFilterEnc = '') {
   event && event.stopPropagation();
   const kindNorm = String(kind || '').toLowerCase();
   const trackId = decodeURIComponent(trackIdEnc || '');
   const artist = decodeURIComponent(artistEnc || '');
   const album  = decodeURIComponent(albumEnc  || '');
   const playlistId = decodeURIComponent(playlistIdEnc || '');
-  if (kindNorm === 'album' && artist && album) {
-    const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`).catch(() => []);
+  const rawArtistFilter = decodeURIComponent(artistFilterEnc || '');
+  const artistFilter = rawArtistFilter === '*' ? '' : (rawArtistFilter || artist);
+  if (kindNorm === 'album' && album) {
+    const qs = [`album=${encodeURIComponent(album)}`];
+    if (artistFilter) qs.unshift(`artist=${encodeURIComponent(artistFilter)}`);
+    const tracks = await api(`/library/tracks?${qs.join('&')}`).catch(() => []);
     if (tracks && tracks.length) {
       Player.registerTracks?.(tracks);
-      Player.setPlaybackContext?.(tracks, { sourceType: 'album', sourceId: `${artist}||${album}`, sourceLabel: `Album · ${album}` });
+      Player.setPlaybackContext?.(tracks, { sourceType: 'album', sourceId: `${artistFilter || artist || ''}||${album}`, sourceLabel: `Album · ${album}` });
       Player.playAll(tracks, 0, `Album · ${album}`);
       return;
     }
@@ -5261,7 +5272,7 @@ async function showArtist(artist) {
   await loadAlbums(artist);
 }
 
-async function showAlbum(artist, album) {
+async function showAlbum(artist, album, displayArtist = '') {
   if (!_guardMlGeneratorNavigation()) return;
   if (!_guardPeqEditorNavigation()) return;
   if (!_guardModalNavigation()) return;
@@ -5274,7 +5285,7 @@ async function showAlbum(artist, album) {
   setActiveNav(null);
   renderSidebarPlaylists();
   showViewEl('tracks');
-  await loadTracks(artist, album);
+  await loadTracks(artist, album, displayArtist);
 }
 
 async function showArtistTracks(artist) {

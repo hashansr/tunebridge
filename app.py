@@ -1563,29 +1563,105 @@ def _recently_added_items(tracks, albums, playlists, limit=10):
     now = int(time.time())
     seven_days_ago = now - 7 * 86400
     track_by_id = {str(t.get('id')): t for t in tracks if t.get('id')}
-    album_first_track_id = {}
+
+    def _display_album_artist(names):
+        counts = {}
+        originals = {}
+        for name in names:
+            raw = str(name or '').strip()
+            if not raw:
+                continue
+            base = re.split(r'\s+(?:feat\.?|ft\.?|featuring)\s+', raw, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+            key = base.lower() or raw.lower()
+            counts[key] = counts.get(key, 0) + 1
+            originals.setdefault(key, base or raw)
+        if not counts:
+            return 'Unknown Artist'
+        best = max(counts, key=counts.get)
+        return originals.get(best) or 'Unknown Artist'
+
+    def _album_artist_base(name):
+        raw = str(name or '').strip()
+        if not raw:
+            return 'Unknown Artist'
+        return re.split(r'\s+(?:feat\.?|ft\.?|featuring)\s+', raw, maxsplit=1, flags=re.IGNORECASE)[0].strip() or raw
+
+    recent_album_groups = {}
     for t in tracks:
-        aid = str(t.get('id') or '').strip()
-        if not aid:
-            continue
-        a_artist = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').strip().lower()
-        a_album = (t.get('album') or 'Unknown Album').strip().lower()
-        akey = f"{a_artist}||{a_album}"
-        if akey not in album_first_track_id:
-            album_first_track_id[akey] = aid
-    album_items = sorted(albums.values(), key=lambda a: int(a.get('date_added') or 0), reverse=True)
-    album_cards = [{
-        'kind': 'album',
-        'artist': a['artist'],
-        'album': a['album'],
-        'title': a['album'],
-        'subtitle': a['artist'],
-        'meta': f"{a.get('track_count', 0)} songs",
-        'artwork_key': a.get('artwork_key'),
-        'track_id': album_first_track_id.get(f"{(a.get('artist') or '').strip().lower()}||{(a.get('album') or '').strip().lower()}", ''),
-        'date_added': int(a.get('date_added') or 0),
-        'is_new': int(a.get('date_added') or 0) >= seven_days_ago,
-    } for a in album_items[:max(1, limit)]]
+        album = (t.get('album') or 'Unknown Album').strip()
+        artist = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').strip()
+        artwork_key = str(t.get('artwork_key') or '').strip()
+        # Featured-track albums sometimes arrive with each track's featured
+        # credit copied into album_artist. Strip the feature suffix for this
+        # Home-only grouping so one new album appears once in Recently Added.
+        artist_base = _album_artist_base(artist)
+        group_key = f"{artist_base.lower()}||{album.lower()}"
+        slot = recent_album_groups.get(group_key)
+        if slot is None:
+            slot = {
+                'album': album,
+                'artists': [],
+                'raw_artist_keys': set(),
+                'artwork_key': artwork_key,
+                'track_count': 0,
+                'date_added': 0,
+                'track_id': '',
+            }
+            recent_album_groups[group_key] = slot
+        slot['artists'].append(artist)
+        slot['raw_artist_keys'].add(artist.lower())
+        slot['track_count'] += 1
+        slot['date_added'] = max(int(slot.get('date_added') or 0), int(t.get('date_added') or 0))
+        if not slot.get('artwork_key') and artwork_key:
+            slot['artwork_key'] = artwork_key
+        tid = str(t.get('id') or '').strip()
+        if tid and not slot.get('track_id'):
+            slot['track_id'] = tid
+
+    album_cards = []
+    for group in sorted(recent_album_groups.values(), key=lambda a: int(a.get('date_added') or 0), reverse=True):
+        artist = _display_album_artist(group.get('artists') or [])
+        is_collapsed = len(group.get('raw_artist_keys') or set()) > 1
+        album_cards.append({
+            'kind': 'album',
+            'artist': artist,
+            'artist_filter': '*' if is_collapsed else artist,
+            'album': group['album'],
+            'title': group['album'],
+            'subtitle': artist,
+            'meta': f"{group.get('track_count', 0)} songs",
+            'artwork_key': group.get('artwork_key'),
+            'track_id': group.get('track_id') or '',
+            'date_added': int(group.get('date_added') or 0),
+            'is_new': int(group.get('date_added') or 0) >= seven_days_ago,
+        })
+        if len(album_cards) >= max(1, limit):
+            break
+
+    if not album_cards:
+        album_first_track_id = {}
+        for t in tracks:
+            aid = str(t.get('id') or '').strip()
+            if not aid:
+                continue
+            a_artist = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').strip().lower()
+            a_album = (t.get('album') or 'Unknown Album').strip().lower()
+            akey = f"{a_artist}||{a_album}"
+            if akey not in album_first_track_id:
+                album_first_track_id[akey] = aid
+        album_items = sorted(albums.values(), key=lambda a: int(a.get('date_added') or 0), reverse=True)
+        album_cards = [{
+            'kind': 'album',
+            'artist': a['artist'],
+            'album': a['album'],
+            'title': a['album'],
+            'subtitle': a['artist'],
+            'meta': f"{a.get('track_count', 0)} songs",
+            'artwork_key': a.get('artwork_key'),
+            'track_id': album_first_track_id.get(f"{(a.get('artist') or '').strip().lower()}||{(a.get('album') or '').strip().lower()}", ''),
+            'date_added': int(a.get('date_added') or 0),
+            'is_new': int(a.get('date_added') or 0) >= seven_days_ago,
+        } for a in album_items[:max(1, limit)]]
 
     playlist_cards = []
     for pl in sorted((playlists or {}).values(), key=lambda p: int(p.get('updated_at') or 0), reverse=True):
