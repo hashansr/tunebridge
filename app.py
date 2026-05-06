@@ -4369,6 +4369,9 @@ def history_view():
             'total_hours': round(total_seconds / 3600, 1),
             'unique_tracks': len(unique_tracks),
             'top_artist': top_artist,
+            'raw_rows': len(rows),
+            'visible_rows': len(events),
+            'is_limited': len(sessions_all) > len(events),
         }
     })
 
@@ -5573,8 +5576,12 @@ def player_events():
         play_seconds = max(0.0, float(raw.get('play_seconds') or 0.0))
         duration = max(0.0, float(raw.get('track_duration_seconds') or src.get('duration') or 0.0))
         completed = _to_bool(raw.get('completed', False))
+        event_reason = str(raw.get('reason') or raw.get('event_reason') or '').strip()
         valid = (play_seconds >= VALID_LISTEN_SECONDS) or (duration > 0 and (play_seconds / duration) >= VALID_LISTEN_RATIO)
-        skipped = _to_bool(raw.get('skipped', False)) or (play_seconds > 0 and not completed and not valid)
+        skipped = (
+            event_reason != 'heartbeat'
+            and (_to_bool(raw.get('skipped', False)) or (play_seconds > 0 and not completed and not valid))
+        )
 
         rows.append({
             'track_id': track_id,
@@ -5591,12 +5598,13 @@ def player_events():
             'album': str(raw.get('album') or src.get('album') or ''),
             'title': str(raw.get('title') or src.get('title') or ''),
             'format': str(raw.get('format') or src.get('format') or ''),
+            'session_id': str(raw.get('session_id') or '').strip(),
+            'event_reason': event_reason,
         })
     if not rows:
         return jsonify({'ok': True, 'stored': 0, 'tracking_enabled': True})
 
     _db.db_insert_play_events(rows)
-    _db.db_prune_play_events(_current_listen_cutoff())
     return jsonify({'ok': True, 'stored': len(rows), 'tracking_enabled': True})
 
 
@@ -5644,6 +5652,20 @@ def history_charts():
     artist_stats = {}
     track_stats = {}
     artist_image_keys = _db.db_get_all_artist_image_keys()
+    artist_artwork_keys = {}
+    with library_lock:
+        for t in library:
+            artwork_key = t.get('artwork_key')
+            if not artwork_key:
+                continue
+            names = {
+                str(t.get('artist') or '').strip(),
+                str(t.get('album_artist') or '').strip(),
+            }
+            for name in names:
+                key = name.lower()
+                if key and key not in artist_artwork_keys:
+                    artist_artwork_keys[key] = artwork_key
     for s in sessions:
         day = time.strftime('%Y-%m-%d', time.localtime(int(s['played_at'] or 0)))
         daily_counts[day] = daily_counts.get(day, 0) + 1
@@ -5653,12 +5675,14 @@ def history_charts():
             'artist': artist,
             'count': 0,
             'seconds': 0.0,
-            'artwork_key': s.get('album_art_key'),
+            'artwork_key': s.get('album_art_key') or artist_artwork_keys.get(artist.lower()),
         })
         artist_slot['count'] += 1
         artist_slot['seconds'] += float(s['play_seconds'] or 0.0)
         if not artist_slot.get('artwork_key') and s.get('album_art_key'):
             artist_slot['artwork_key'] = s.get('album_art_key')
+        if not artist_slot.get('artwork_key'):
+            artist_slot['artwork_key'] = artist_artwork_keys.get(artist.lower())
 
         track_id = s['track_id']
         track_slot = track_stats.setdefault(track_id, {
@@ -5682,11 +5706,11 @@ def history_charts():
             'hours': round(a['seconds'] / 3600.0, 1),
             'artwork_key': a.get('artwork_key'),
             'image_key': (
-                get_artist_image_key(a['artist'])
-                if get_artist_image_key(a['artist']) in artist_image_keys else None
+                image_key if image_key in artist_image_keys else None
             ),
         }
         for a in sorted(artist_stats.values(), key=lambda x: x['count'], reverse=True)[:5]
+        for image_key in [get_artist_image_key(a['artist'])]
     ]
     top_tracks = sorted(track_stats.values(), key=lambda x: x['count'], reverse=True)[:5]
 

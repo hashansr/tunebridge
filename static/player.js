@@ -108,6 +108,7 @@ const Player = (function () {
   let _activeHistoryTrack    = null;
   let _trackSessionStartedAt = 0;
   let _trackSessionStartPos = 0;
+  let _trackHistorySessionId = '';
   let _lastPauseEventAt = 0;
   let _suppressPauseFlush = false;
   let _startupRestoreGuardActive = true;
@@ -2754,8 +2755,13 @@ const Player = (function () {
     // - flush play events during long sessions (so Home/stats update without track switches)
     setInterval(() => {
       _saveStateToServer();
-      // Do not flush while a track is still playing: one listen should become one history row.
-      if ((!ps.isPlaying || !currentTrack()) && _pendingPlaybackEvents.length > 0) {
+      if (ps.isPlaying && currentTrack()) {
+        _flushCurrentTrackEvent('heartbeat', {
+          minElapsed: 30,
+          contextMinElapsed: Number.POSITIVE_INFINITY,
+          keepSessionStart: true,
+        });
+      } else if (_pendingPlaybackEvents.length > 0) {
         _postPlaybackEvents([]);
       }
     }, 10000);
@@ -2784,6 +2790,7 @@ const Player = (function () {
                 title: t.title || '',
                 format: t.format || '',
                 reason: 'unload',
+                session_id: _trackHistorySessionId || '',
               }],
             });
             if (navigator && typeof navigator.sendBeacon === 'function') {
@@ -2899,6 +2906,9 @@ const Player = (function () {
   function _markTrackSessionStart() {
     _trackSessionStartedAt = _safeNowSec();
     _trackSessionStartPos = _isMpvActive() ? (_mpvPosition || 0) : (_audio.currentTime || 0);
+    const t = _activeHistoryTrack || currentTrack();
+    const trackId = t?.id || 'track';
+    _trackHistorySessionId = `${trackId}-${Math.floor(_trackSessionStartedAt * 1000)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   function _pushRecentContext(track, reason = '') {
@@ -2974,8 +2984,11 @@ const Player = (function () {
       title: t.title || '',
       format: t.format || '',
       reason,
+      session_id: _trackHistorySessionId || '',
     }]);
-    _trackSessionStartPos = pos;
+    if (!opts.keepSessionStart) {
+      _trackSessionStartPos = pos;
+    }
   }
 
   /* ── Public API ─────────────────────────────────────────────────────── */

@@ -53,7 +53,7 @@ def close_conn():
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -90,6 +90,11 @@ _MIGRATIONS: list[tuple] = [
         'ALTER TABLE duplicate_ignores ADD COLUMN title TEXT',
         'ALTER TABLE duplicate_ignores ADD COLUMN artist TEXT',
         'ALTER TABLE duplicate_ignores ADD COLUMN album TEXT',
+    ]),
+    (8, 'Add session metadata to playback history', [
+        'ALTER TABLE play_events ADD COLUMN session_id TEXT DEFAULT ""',
+        'ALTER TABLE play_events ADD COLUMN event_reason TEXT DEFAULT ""',
+        'CREATE INDEX IF NOT EXISTS idx_play_events_session ON play_events(session_id)',
     ]),
 ]
 
@@ -373,7 +378,9 @@ CREATE TABLE IF NOT EXISTS play_events (
     artist                  TEXT DEFAULT '',
     album                   TEXT DEFAULT '',
     title                   TEXT DEFAULT '',
-    format                  TEXT DEFAULT ''
+    format                  TEXT DEFAULT '',
+    session_id              TEXT DEFAULT '',
+    event_reason            TEXT DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_play_events_played_at ON play_events(played_at DESC);
@@ -1873,36 +1880,79 @@ def db_get_all_artist_image_keys() -> set:
 # ---------------------------------------------------------------------------
 
 def db_insert_play_events(events):
-    """Insert a batch of playback events."""
+    """Insert or update a batch of playback events.
+
+    Frontend playback sends multiple updates for the same song session: a
+    heartbeat while it is still playing, then a final switch/pause/end event.
+    When session_id is present, keep that as one row so history stats count one
+    listen instead of every progress save.
+    """
     if not events:
         return
-    rows = []
-    for e in events:
-        rows.append((
-            str(e.get('track_id') or ''),
-            int(e.get('played_at') or 0),
-            float(e.get('play_seconds') or 0.0),
-            float(e.get('track_duration_seconds') or 0.0),
-            1 if e.get('completed') else 0,
-            1 if e.get('skipped') else 0,
-            1 if e.get('valid_listen') else 0,
-            str(e.get('source_type') or 'unknown'),
-            str(e.get('source_id') or ''),
-            str(e.get('source_label') or ''),
-            str(e.get('artist') or ''),
-            str(e.get('album') or ''),
-            str(e.get('title') or ''),
-            str(e.get('format') or ''),
-        ))
     conn = get_conn()
-    conn.executemany(
-        """INSERT INTO play_events (
-               track_id, played_at, play_seconds, track_duration_seconds,
-               completed, skipped, valid_listen, source_type, source_id, source_label,
-               artist, album, title, format
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        rows
-    )
+    for e in events:
+        track_id = str(e.get('track_id') or '')
+        played_at = int(e.get('played_at') or 0)
+        play_seconds = float(e.get('play_seconds') or 0.0)
+        duration = float(e.get('track_duration_seconds') or 0.0)
+        completed = 1 if e.get('completed') else 0
+        skipped = 1 if e.get('skipped') else 0
+        valid_listen = 1 if e.get('valid_listen') else 0
+        source_type = str(e.get('source_type') or 'unknown')
+        source_id = str(e.get('source_id') or '')
+        source_label = str(e.get('source_label') or '')
+        artist = str(e.get('artist') or '')
+        album = str(e.get('album') or '')
+        title = str(e.get('title') or '')
+        fmt = str(e.get('format') or '')
+        session_id = str(e.get('session_id') or '')
+        event_reason = str(e.get('event_reason') or e.get('reason') or '')
+
+        existing = None
+        if session_id:
+            existing = conn.execute(
+                "SELECT id, play_seconds FROM play_events WHERE session_id = ? ORDER BY id DESC LIMIT 1",
+                (session_id,)
+            ).fetchone()
+
+        if existing:
+            conn.execute(
+                """UPDATE play_events
+                   SET played_at = ?,
+                       play_seconds = MAX(play_seconds, ?),
+                       track_duration_seconds = MAX(track_duration_seconds, ?),
+                       completed = MAX(completed, ?),
+                       skipped = ?,
+                       valid_listen = MAX(valid_listen, ?),
+                       source_type = ?,
+                       source_id = ?,
+                       source_label = ?,
+                       artist = CASE WHEN ? != '' THEN ? ELSE artist END,
+                       album = CASE WHEN ? != '' THEN ? ELSE album END,
+                       title = CASE WHEN ? != '' THEN ? ELSE title END,
+                       format = CASE WHEN ? != '' THEN ? ELSE format END,
+                       event_reason = ?
+                   WHERE id = ?""",
+                (
+                    played_at, play_seconds, duration, completed, skipped, valid_listen,
+                    source_type, source_id, source_label,
+                    artist, artist, album, album, title, title, fmt, fmt, event_reason,
+                    existing['id'],
+                )
+            )
+        else:
+            conn.execute(
+                """INSERT INTO play_events (
+                       track_id, played_at, play_seconds, track_duration_seconds,
+                       completed, skipped, valid_listen, source_type, source_id, source_label,
+                       artist, album, title, format, session_id, event_reason
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    track_id, played_at, play_seconds, duration, completed, skipped,
+                    valid_listen, source_type, source_id, source_label, artist, album,
+                    title, fmt, session_id, event_reason,
+                )
+            )
     conn.commit()
 
 
