@@ -2828,72 +2828,88 @@
         </button>
       </div>
 
-      <div class="sr-body">
-        <div class="settings-row ml-gen-row ml-gen-row-span2">
-          <label>Playlist name</label>
-          <input id="sr-name" type="text" placeholder="My Smart Rules Playlist" oninput="App.srMarkDirty()" />
-        </div>
+      <div class="sr-scroll">
+        <div class="sr-body">
+          <section class="sr-section">
+            <div class="sr-section-head"><span>Playlist Setup</span></div>
+            <div class="settings-row ml-gen-row sr-name-row">
+              <label>Playlist name</label>
+              <input id="sr-name" type="text" placeholder="My Smart Rules Playlist" oninput="App.srMarkDirty()" />
+            </div>
+          </section>
 
-        <div class="sr-match-row">
-          Match
-          <select id="sr-match-mode" onchange="App.srMarkDirty()">
-            <option value="all">All</option>
-            <option value="any">Any</option>
-          </select>
-          of the following rules:
-        </div>
+          <section class="sr-section">
+            <div class="sr-section-head"><span>Rules</span></div>
+            <div class="sr-match-row">
+              <span>Match</span>
+              <select id="sr-match-mode" onchange="App.srMarkDirty()">
+                <option value="all">All</option>
+                <option value="any">Any</option>
+              </select>
+              <span>rules below</span>
+            </div>
 
-        <div id="sr-rules-list" class="sr-rules-list"></div>
-        <button class="btn-secondary sr-add-rule-btn" onclick="App.srAddRule()">+ Add Rule</button>
+            <div id="sr-rules-list" class="sr-rules-list"></div>
+            <button class="btn-secondary sr-add-rule-btn" onclick="App.srAddRule()">+ Add Rule</button>
 
-        <div id="sr-unanalysed-banner" class="sr-unanalysed-banner" style="display:none">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          <span id="sr-unanalysed-msg"></span>
-        </div>
+            <div id="sr-unanalysed-banner" class="sr-unanalysed-banner" style="display:none">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span id="sr-unanalysed-msg"></span>
+            </div>
+          </section>
 
-        <div class="sr-footer-row">
-          <div class="settings-row ml-gen-row">
-            <label>Limit</label>
-            <input id="sr-limit" class="sr-limit-input" type="number" min="5" max="500" value="50" oninput="App.srMarkDirty()" />
-          </div>
-          <div class="settings-row ml-gen-row">
-            <label>Sort by</label>
-            <select id="sr-sort-field" onchange="App.srMarkDirty()">
-              <option value="date_added">Date added</option>
-              <option value="play_count">Play count</option>
-              <option value="last_played">Last played</option>
-              <option value="title">Title</option>
-              <option value="artist">Artist</option>
-              <option value="year">Year</option>
-            </select>
-          </div>
-          <div class="settings-row ml-gen-row">
-            <label>Order</label>
-            <select id="sr-sort-order" onchange="App.srMarkDirty()">
-              <option value="desc">Newest first</option>
-              <option value="asc">Oldest first</option>
-            </select>
-          </div>
-        </div>
+          <details class="sr-accordion">
+            <summary>Output</summary>
+            <div class="sr-output-grid">
+              <div class="settings-row ml-gen-row">
+                <label>Limit</label>
+                <input id="sr-limit" class="sr-limit-input" type="number" min="5" max="500" value="50" oninput="App.srMarkDirty()" />
+              </div>
+              <div class="settings-row ml-gen-row">
+                <label>Sort by</label>
+                <select id="sr-sort-field" onchange="App.srMarkDirty()">
+                  <option value="date_added">Date added</option>
+                  <option value="play_count">Play count</option>
+                  <option value="last_played">Last played</option>
+                  <option value="title">Title</option>
+                  <option value="artist">Artist</option>
+                  <option value="year">Year</option>
+                </select>
+              </div>
+              <div class="settings-row ml-gen-row">
+                <label>Order</label>
+                <select id="sr-sort-order" onchange="App.srMarkDirty()">
+                  <option value="desc">Newest first</option>
+                  <option value="asc">Oldest first</option>
+                </select>
+              </div>
+            </div>
+          </details>
 
-        <div class="sr-preview-row">
-          <span id="sr-preview-count" class="sr-preview-count"></span>
-          <button class="btn-secondary" onclick="App.srPreview()">Preview</button>
-        </div>
-        <div id="sr-preview-pane" class="sr-preview-pane" style="display:none">
-          <div id="sr-preview-list"></div>
-        </div>
+          <section class="sr-section sr-preview-section">
+            <div class="sr-preview-row">
+              <div>
+                <div class="sr-section-head"><span>Preview</span></div>
+                <span id="sr-preview-count" class="sr-preview-count"></span>
+              </div>
+              <button class="btn-secondary" onclick="App.srPreview()">Preview</button>
+            </div>
+            <div id="sr-preview-pane" class="sr-preview-pane" style="display:none">
+              <div id="sr-preview-list"></div>
+            </div>
+          </section>
 
-        <div class="sr-templates-wrap">
-          <div class="sr-templates-label">Discovery starters</div>
-          <div class="sr-templates-grid">
-            <button class="sr-template-btn" onclick="App.srLoadTemplate('unheard')">Unheard Library</button>
-            <button class="sr-template-btn" onclick="App.srLoadTemplate('forgotten')">Forgotten Favorites</button>
-            <button class="sr-template-btn" onclick="App.srLoadTemplate('new_unheard')">Recently Added, Unheard</button>
-            <button class="sr-template-btn" onclick="App.srLoadTemplate('high_energy')">High Energy Unheard</button>
-            <button class="sr-template-btn" onclick="App.srLoadTemplate('flac_only')">FLAC Only</button>
-            <button class="sr-template-btn" onclick="App.srLoadTemplate('deep_cuts')">Old Deep Cuts</button>
-          </div>
+          <details class="sr-accordion">
+            <summary>Discovery Starters</summary>
+            <div class="sr-templates-grid">
+              <button class="sr-template-btn" onclick="App.srLoadTemplate('unheard')">Unheard Library</button>
+              <button class="sr-template-btn" onclick="App.srLoadTemplate('forgotten')">Forgotten Favorites</button>
+              <button class="sr-template-btn" onclick="App.srLoadTemplate('new_unheard')">Recently Added, Unheard</button>
+              <button class="sr-template-btn" onclick="App.srLoadTemplate('high_energy')">High Energy Unheard</button>
+              <button class="sr-template-btn" onclick="App.srLoadTemplate('flac_only')">FLAC Only</button>
+              <button class="sr-template-btn" onclick="App.srLoadTemplate('deep_cuts')">Old Deep Cuts</button>
+            </div>
+          </details>
         </div>
       </div>
 

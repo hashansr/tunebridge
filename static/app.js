@@ -11083,26 +11083,35 @@ function _srRenderPreview(tracks = []) {
   pane.style.display = 'block';
   list.innerHTML = `
     <div class="sr-preview-table-wrap tb-table-shell">
-      <table class="insights-table tb-table tb-table-density-compact sr-preview-table">
-        <thead>
-          <tr>
-            <th class="sr-preview-col-num">#</th>
-            <th>Title</th>
-            <th>Artist</th>
-            <th>Album</th>
-            <th>Genre</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${tracks.slice(0, 25).map((t, i) => `<tr>
-            <td>${i + 1}</td>
-            <td title="${esc(t.title || '')}">${esc(t.title || 'Untitled')}</td>
-            <td title="${esc(t.artist || '')}">${esc(t.artist || 'Unknown Artist')}</td>
-            <td title="${esc(t.album || '')}">${esc(t.album || 'Unknown Album')}</td>
-            <td title="${esc(t.genre || '')}">${esc(t.genre || '-')}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
+      <div class="tb-table-scroll-area">
+        <table class="insights-table tb-table tb-table-density-compact sr-preview-table">
+          <colgroup>
+            <col class="sr-preview-col-num" />
+            <col class="sr-preview-col-title" />
+            <col class="sr-preview-col-artist" />
+            <col class="sr-preview-col-album" />
+            <col class="sr-preview-col-genre" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th data-col="position">#</th>
+              <th data-col="title">Title</th>
+              <th data-col="artist">Artist</th>
+              <th data-col="album">Album</th>
+              <th data-col="genre">Genre</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tracks.slice(0, 25).map((t, i) => `<tr>
+              <td data-col="position">${i + 1}</td>
+              <td data-col="title" title="${esc(t.title || '')}">${esc(t.title || 'Untitled')}</td>
+              <td data-col="artist" title="${esc(t.artist || '')}">${esc(t.artist || 'Unknown Artist')}</td>
+              <td data-col="album" title="${esc(t.album || '')}">${esc(t.album || 'Unknown Album')}</td>
+              <td data-col="genre" title="${esc(t.genre || '')}">${esc(t.genre || '-')}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
       ${tracks.length > 25 ? `<div class="sr-preview-more">Showing first 25 of ${tracks.length} matches.</div>` : ''}
     </div>
   `;
