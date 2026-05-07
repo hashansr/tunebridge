@@ -7482,14 +7482,33 @@ tbody tr:hover {
 .ml-preview-table {
   width: 100%;
   min-width: 760px;
+  table-layout: fixed;
 }
 .ml-preview-col-num {
   width: 44px;
 }
+.ml-preview-col-title {
+  width: 36%;
+}
+.ml-preview-col-artist {
+  width: 20%;
+}
+.ml-preview-col-album {
+  width: 24%;
+}
+.ml-preview-col-reason {
+  width: 14%;
+}
 .ml-preview-col-fit,
 .ml-preview-fit {
-  width: 84px;
+  width: 72px;
   text-align: right;
+}
+.ml-preview-table th,
+.ml-preview-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ml-preview-fit {
   color: var(--text-secondary);

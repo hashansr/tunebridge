@@ -3757,14 +3757,22 @@ function _renderMlPreviewTracks(tracks = [], explanations = []) {
     <div class="ml-preview-table-shell tb-table-shell">
       <div class="tb-table-scroll-area">
         <table class="insights-table tb-table tb-table-density-compact ml-preview-table">
+          <colgroup>
+            <col class="ml-preview-col-num" />
+            <col class="ml-preview-col-title" />
+            <col class="ml-preview-col-artist" />
+            <col class="ml-preview-col-album" />
+            <col class="ml-preview-col-reason" />
+            <col class="ml-preview-col-fit" />
+          </colgroup>
           <thead>
             <tr>
-              <th class="ml-preview-col-num">#</th>
-              <th>Title</th>
-              <th>Artist</th>
-              <th>Album</th>
-              <th>Why it fits</th>
-              <th class="ml-preview-col-fit">Fit</th>
+              <th data-col="position">#</th>
+              <th data-col="title">Title</th>
+              <th data-col="artist">Artist</th>
+              <th data-col="album">Album</th>
+              <th data-col="reason">Why it fits</th>
+              <th data-col="fit" class="ml-preview-col-fit">Fit</th>
             </tr>
           </thead>
           <tbody>
