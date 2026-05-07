@@ -1899,6 +1899,12 @@ function _formatTrackNumber(trackNumber, fallbackNum) {
   return main;
 }
 
+function _lyricBadge(t) {
+  if (!t?.has_lyrics) return '';
+  const title = t.lyric_path ? `Lyrics file: ${t.lyric_path}` : 'Lyrics available';
+  return `<span class="track-lyrics-badge" title="${esc(title)}" aria-label="Lyrics available">L</span>`;
+}
+
 /* ── Track row (library) ────────────────────────────────────────────── */
 function trackRow(t, num, inPlaylist) {
   const trackNumLabel = inPlaylist ? String(num) : _formatTrackNumber(t.track_number, num);
@@ -1935,7 +1941,10 @@ function trackRow(t, num, inPlaylist) {
             <button class="thumb-play-btn" onclick="event.stopPropagation();Player.playTrackById('${t.id}')" title="Play"><span class="thumb-play-icon">${playIcon}</span><span class="thumb-now-playing">${nowPlayingIcon}</span></button>
           </div>
           <div class="track-info">
-            <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
+            <div class="track-title-line">
+              ${_lyricBadge(t)}
+              <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
+            </div>
             <div class="track-artist" title="${esc(t.artist)}">${esc(t.artist)}</div>
           </div>
         </div>
@@ -4268,7 +4277,10 @@ function _favSongRow(t, idx) {
             <button class="thumb-play-btn" onclick="event.stopPropagation();Player.playTrackById('${t.id}')" title="Play"><span class="thumb-play-icon">${playIcon}</span><span class="thumb-now-playing">${nowPlayingIcon}</span></button>
           </div>
           <div class="track-info">
-            <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
+            <div class="track-title-line">
+              ${_lyricBadge(t)}
+              <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
+            </div>
             <div class="track-artist" title="${esc(t.artist)}">${esc(t.artist)}</div>
           </div>
         </div>
@@ -10088,7 +10100,10 @@ function renderSongsTable() {
             <button class="thumb-play-btn" onclick="event.stopPropagation();Player.playTrackById('${t.id}')" title="Play"><span class="thumb-play-icon">${playIcon}</span><span class="thumb-now-playing">${nowPlayingIcon}</span></button>
           </div>
           <div class="track-info">
-            <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
+            <div class="track-title-line">
+              ${_lyricBadge(t)}
+              <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
+            </div>
           </div>
         </div>
       </td>

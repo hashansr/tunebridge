@@ -53,7 +53,7 @@ def close_conn():
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -96,6 +96,10 @@ _MIGRATIONS: list[tuple] = [
         'ALTER TABLE play_events ADD COLUMN event_reason TEXT DEFAULT ""',
         'CREATE INDEX IF NOT EXISTS idx_play_events_session ON play_events(session_id)',
     ]),
+    (9, 'Add lyric file tracking to library tracks', [
+        'ALTER TABLE tracks ADD COLUMN has_lyrics INTEGER DEFAULT 0',
+        'ALTER TABLE tracks ADD COLUMN lyric_path TEXT',
+    ]),
 ]
 
 _SCHEMA_SQL = """
@@ -129,7 +133,9 @@ CREATE TABLE IF NOT EXISTS tracks (
     rg_track_gain   REAL,
     rg_album_gain   REAL,
     rg_track_peak   REAL,
-    rg_album_peak   REAL
+    rg_album_peak   REAL,
+    has_lyrics      INTEGER DEFAULT 0,
+    lyric_path      TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_tracks_artist       ON tracks(artist COLLATE NOCASE);
@@ -558,8 +564,8 @@ def db_save_library(tracks):
         """INSERT INTO tracks (id, path, filename, title, artist, album_artist,
            album, track_number, disc_number, year, genre, duration, artwork_key, bitrate,
            format, sample_rate, bits_per_sample, date_added,
-           rg_track_gain, rg_album_gain, rg_track_peak, rg_album_peak)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           rg_track_gain, rg_album_gain, rg_track_peak, rg_album_peak, has_lyrics, lyric_path)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 t['id'], t.get('path', ''), t.get('filename', ''),
@@ -573,6 +579,8 @@ def db_save_library(tracks):
                 t.get('date_added'),
                 t.get('rg_track_gain'), t.get('rg_album_gain'),
                 t.get('rg_track_peak'), t.get('rg_album_peak'),
+                1 if t.get('has_lyrics') else 0,
+                t.get('lyric_path'),
             )
             for t in tracks
         ]
@@ -592,6 +600,7 @@ def _row_to_track(row):
         d['disc_number'] = str(d['disc_number'])
     if d.get('year') is not None:
         d['year'] = str(d['year'])
+    d['has_lyrics'] = bool(d.get('has_lyrics'))
     # DB schema stores numeric duration only; frontend expects duration_fmt too.
     d['duration_fmt'] = _format_duration(d.get('duration'))
     return d

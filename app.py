@@ -851,10 +851,25 @@ def get_flac_tag(tags, *keys):
 
 def scan_file(filepath):
     filepath = Path(filepath)
-    rel_path = str(filepath.relative_to(get_music_base()))
+    music_base = get_music_base()
+    rel_path = str(filepath.relative_to(music_base))
     filename = filepath.name
 
     try:
+        lyric_path = filepath.with_suffix('.lrc')
+        if not lyric_path.exists():
+            target_name = f'{filepath.stem}.lrc'.lower()
+            try:
+                lyric_path = next(
+                    (candidate for candidate in filepath.parent.iterdir()
+                     if candidate.is_file() and candidate.name.lower() == target_name),
+                    None
+                )
+            except OSError:
+                lyric_path = None
+        has_lyrics = bool(lyric_path and lyric_path.exists())
+        lyric_rel_path = str(lyric_path.relative_to(music_base)) if has_lyrics else None
+
         disc_num = None
         rg_track_gain = None
         rg_album_gain = None
@@ -1103,6 +1118,8 @@ def scan_file(filepath):
             'rg_album_gain': rg_album_gain,
             'rg_track_peak': rg_track_peak,
             'rg_album_peak': rg_album_peak,
+            'has_lyrics': has_lyrics,
+            'lyric_path': lyric_rel_path,
         }
     except Exception as e:
         print(f"Error scanning {filepath}: {e}")
