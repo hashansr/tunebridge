@@ -2831,7 +2831,32 @@
       <div class="sr-scroll">
         <div class="sr-body">
           <section class="sr-section">
-            <div class="sr-section-head"><span>Playlist Setup</span></div>
+            <div class="sr-section-head">
+              <span>Start With</span>
+              <small>Choose a discovery goal, then refine it.</small>
+            </div>
+            <div id="sr-starters-grid" class="sr-starters-grid">
+              <button class="sr-starter-card" data-template="unheard" onclick="App.srLoadTemplate('unheard')">
+                <strong>Unheard Library</strong>
+                <span>Fresh tracks you have not played yet.</span>
+              </button>
+              <button class="sr-starter-card" data-template="forgotten" onclick="App.srLoadTemplate('forgotten')">
+                <strong>Forgotten Favorites</strong>
+                <span>Songs you liked enough to replay, now overdue.</span>
+              </button>
+              <button class="sr-starter-card" data-template="new_unheard" onclick="App.srLoadTemplate('new_unheard')">
+                <strong>Recently Added, Unheard</strong>
+                <span>New library additions waiting for a first listen.</span>
+              </button>
+              <button class="sr-starter-card" data-template="high_energy" onclick="App.srLoadTemplate('high_energy')">
+                <strong>High Energy Unheard</strong>
+                <span>Analysed tracks with momentum and no plays.</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="sr-section">
+            <div class="sr-section-head"><span>Name</span></div>
             <div class="settings-row ml-gen-row sr-name-row">
               <label>Playlist name</label>
               <input id="sr-name" type="text" placeholder="My Smart Rules Playlist" oninput="App.srMarkDirty()" />
@@ -2839,7 +2864,10 @@
           </section>
 
           <section class="sr-section">
-            <div class="sr-section-head"><span>Rules</span></div>
+            <div class="sr-section-head">
+              <span>Playlist Recipe</span>
+              <small>Every rule narrows the playlist unless you switch to Any.</small>
+            </div>
             <div class="sr-match-row">
               <span>Match</span>
               <select id="sr-match-mode" onchange="App.srMarkDirty()">
@@ -2851,6 +2879,7 @@
 
             <div id="sr-rules-list" class="sr-rules-list"></div>
             <button class="btn-secondary sr-add-rule-btn" onclick="App.srAddRule()">+ Add Rule</button>
+            <div id="sr-validation-msg" class="sr-validation-msg" aria-live="polite"></div>
 
             <div id="sr-unanalysed-banner" class="sr-unanalysed-banner" style="display:none">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -2892,7 +2921,7 @@
                 <div class="sr-section-head"><span>Preview</span></div>
                 <span id="sr-preview-count" class="sr-preview-count"></span>
               </div>
-              <button class="btn-secondary" onclick="App.srPreview()">Preview</button>
+              <button id="sr-preview-btn" class="btn-secondary" onclick="App.srPreview()">Preview Matches</button>
             </div>
             <div id="sr-preview-pane" class="sr-preview-pane" style="display:none">
               <div id="sr-preview-list"></div>
@@ -2900,12 +2929,8 @@
           </section>
 
           <details class="sr-accordion">
-            <summary>Discovery Starters</summary>
+            <summary>More Discovery Starters</summary>
             <div class="sr-templates-grid">
-              <button class="sr-template-btn" onclick="App.srLoadTemplate('unheard')">Unheard Library</button>
-              <button class="sr-template-btn" onclick="App.srLoadTemplate('forgotten')">Forgotten Favorites</button>
-              <button class="sr-template-btn" onclick="App.srLoadTemplate('new_unheard')">Recently Added, Unheard</button>
-              <button class="sr-template-btn" onclick="App.srLoadTemplate('high_energy')">High Energy Unheard</button>
               <button class="sr-template-btn" onclick="App.srLoadTemplate('flac_only')">FLAC Only</button>
               <button class="sr-template-btn" onclick="App.srLoadTemplate('deep_cuts')">Old Deep Cuts</button>
             </div>
@@ -2915,7 +2940,7 @@
 
       <div class="modal-actions">
         <button class="btn-secondary" onclick="App.srClose()">Cancel</button>
-        <button class="btn-primary" onclick="App.srSave()">Create Rules Playlist</button>
+        <button id="sr-save-btn" class="btn-primary" onclick="App.srSave()" disabled>Save Discovery Playlist</button>
       </div>
     </div>
   </div>

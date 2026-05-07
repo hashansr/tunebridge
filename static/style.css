@@ -14004,6 +14004,7 @@ tr:hover .track-edit-btn:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 10px;
 }
 .sr-section-head span,
@@ -14013,6 +14014,53 @@ tr:hover .track-edit-btn:hover {
   font-weight: 750;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+.sr-section-head small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-align: right;
+}
+.sr-starters-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+.sr-starter-card {
+  min-height: 78px;
+  padding: 10px 12px;
+  border: 1px solid rgba(173, 198, 255, 0.1);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.sr-starter-card strong,
+.sr-starter-card span {
+  display: block;
+}
+.sr-starter-card strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.25;
+}
+.sr-starter-card span {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.sr-starter-card:hover {
+  border-color: rgba(173, 198, 255, 0.24);
+  background: rgba(173, 198, 255, 0.04);
+}
+.sr-starter-card.is-selected {
+  border-color: rgba(157, 185, 244, 0.54);
+  background: rgba(157, 185, 244, 0.08);
 }
 .sr-name-row {
   margin-bottom: 0 !important;
@@ -14029,13 +14077,27 @@ tr:hover .track-edit-btn:hover {
 .sr-rules-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 .sr-rule-row {
   display: grid;
   grid-template-columns: minmax(130px, 1fr) minmax(130px, 1fr) minmax(120px, 1fr) 32px;
-  align-items: center;
+  align-items: end;
   gap: 10px;
+}
+.sr-rule-control {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+.sr-rule-control span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 .sr-field-sel,
 .sr-op-sel,
@@ -14050,7 +14112,7 @@ tr:hover .track-edit-btn:hover {
 }
 .sr-remove-btn {
   width: 32px;
-  height: 32px;
+  height: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -14068,6 +14130,21 @@ tr:hover .track-edit-btn:hover {
 .sr-add-rule-btn {
   align-self: flex-start;
   margin-top: 10px;
+}
+.sr-empty-rules,
+.sr-validation-msg,
+.sr-preview-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.sr-validation-msg {
+  display: none;
+  margin-top: 8px;
+  color: #f0b429;
+}
+.sr-validation-msg.is-visible {
+  display: block;
 }
 .sr-unanalysed-banner {
   display: flex;
@@ -14127,6 +14204,9 @@ tr:hover .track-edit-btn:hover {
 }
 .sr-preview-pane {
   margin-top: 10px;
+}
+.sr-preview-empty {
+  padding: 6px 0 2px;
 }
 .sr-preview-table-wrap.tb-table-shell {
   border: none;
@@ -14189,10 +14269,19 @@ tr:hover .track-edit-btn:hover {
   color: var(--accent-primary);
 }
 @media (max-width: 760px) {
+  .sr-starters-grid,
   .sr-match-row,
   .sr-rule-row,
   .sr-output-grid {
     grid-template-columns: 1fr;
+  }
+  .sr-section-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .sr-section-head small {
+    text-align: left;
   }
   .sr-remove-btn {
     justify-self: start;

@@ -10900,24 +10900,24 @@ function _getOsPlatform() {
 
 /* ── Smart Rules modal ──────────────────────────────────────────────── */
 const _SR_FIELDS = [
-  { value: 'genre',       label: 'Genre',        type: 'string' },
-  { value: 'artist',      label: 'Artist',       type: 'string' },
-  { value: 'album',       label: 'Album',        type: 'string' },
-  { value: 'year',        label: 'Year',         type: 'int' },
-  { value: 'format',      label: 'Format',       type: 'string' },
-  { value: 'bitrate',     label: 'Bitrate',      type: 'int' },
-  { value: 'date_added',  label: 'Date added',   type: 'date' },
-  { value: 'play_count',  label: 'Play count',   type: 'int' },
-  { value: 'never_played',label: 'Never played', type: 'bool' },
-  { value: 'last_played', label: 'Last played',  type: 'date' },
-  { value: 'energy',      label: 'Energy',       type: 'float' },
-  { value: 'brightness',  label: 'Brightness',   type: 'float' },
-  { value: 'has_analysis',label: 'Has analysis', type: 'bool' },
+  { value: 'genre',        label: 'Genre',        type: 'string', placeholder: 'Rock' },
+  { value: 'artist',       label: 'Artist',       type: 'string', placeholder: 'Artist name' },
+  { value: 'album',        label: 'Album',        type: 'string', placeholder: 'Album name' },
+  { value: 'year',         label: 'Year',         type: 'int',    placeholder: '1990' },
+  { value: 'format',       label: 'Format',       type: 'string', placeholder: 'FLAC' },
+  { value: 'bitrate',      label: 'Bitrate',      type: 'int',    placeholder: '320' },
+  { value: 'date_added',   label: 'Date added',   type: 'date',   placeholder: '30' },
+  { value: 'play_count',   label: 'Play count',   type: 'int',    placeholder: '2' },
+  { value: 'never_played', label: 'Never played', type: 'bool' },
+  { value: 'last_played',  label: 'Last played',  type: 'date',   placeholder: '90' },
+  { value: 'energy',       label: 'Energy',       type: 'float',  placeholder: '0.65' },
+  { value: 'brightness',   label: 'Brightness',   type: 'float',  placeholder: '0.5' },
+  { value: 'has_analysis', label: 'Has analysis', type: 'bool' },
 ];
 const _SR_OPS = {
-  string: [['contains','contains'],['not_contains','does not contain'],['is','is'],['is_not','is not']],
-  int:    [['equals','='],['greater_than','>'],['less_than','<']],
-  float:  [['greater_than','>'],['less_than','<']],
+  string: [['contains','contains'],['not_contains','does not contain'],['is','is exactly'],['is_not','is not']],
+  int:    [['equals','is'],['greater_than','is more than'],['less_than','is less than']],
+  float:  [['greater_than','is more than'],['less_than','is less than']],
   bool:   [['is','is']],
   date:   [['within_days','within days'],['older_than_days','older than days']],
 };
@@ -10930,40 +10930,45 @@ const _SR_TEMPLATES = {
   deep_cuts:  { name: 'Old Deep Cuts',           rules: [{field:'year',op:'less_than',value:1990},{field:'never_played',op:'is',value:true},{field:'has_analysis',op:'is',value:true}], limit: 50, sort_field: 'year', sort_order: 'asc' },
 };
 let _srRules = [];
+let _srSelectedTemplateKey = 'unheard';
+let _srLastPreviewJson = '';
+let _srLastPreviewTotal = 0;
 
 function srOpen() {
-  _srRules = [{ field: 'never_played', op: 'is', value: true }];
-  document.getElementById('sr-name').value = '';
-  document.getElementById('sr-match-mode').value = 'all';
-  document.getElementById('sr-limit').value = '50';
-  document.getElementById('sr-sort-field').value = 'date_added';
-  document.getElementById('sr-sort-order').value = 'desc';
-  _srRenderRules();
-  document.getElementById('sr-preview-count').textContent = '';
-  _srRenderPreview([]);
+  _srSelectedTemplateKey = 'unheard';
+  _srApplyTemplate('unheard');
+  _srRenderStarters();
+  _srSetPreviewStatus('');
   document.getElementById('sr-unanalysed-banner').style.display = 'none';
   document.getElementById('sr-modal').style.display = 'flex';
   _srBindDirtyInputs();
   _srDirty = false;
   _srInitialJson = _srStateJson();
+  _srLastPreviewJson = '';
+  _srLastPreviewTotal = 0;
+  _srUpdateActionState();
 }
 
 function srClose(force = false) {
   if (!force && _srDirty && !window.confirm('Discard Smart Rules changes?')) return;
   _srDirty = false;
   _srInitialJson = '';
+  _srLastPreviewJson = '';
+  _srLastPreviewTotal = 0;
   _srRenderPreview([]);
   document.getElementById('sr-modal').style.display = 'none';
 }
 
 function srAddRule() {
   _srRules.push({ field: 'genre', op: 'contains', value: '' });
+  _srSelectedTemplateKey = '';
   _srRenderRules();
   srMarkDirty();
 }
 
 function srRemoveRule(idx) {
   _srRules.splice(idx, 1);
+  _srSelectedTemplateKey = '';
   _srRenderRules();
   srMarkDirty();
 }
@@ -10971,21 +10976,24 @@ function srRemoveRule(idx) {
 function srChangeField(idx, field) {
   const fd = _SR_FIELDS.find(f => f.value === field);
   const ops = fd ? _SR_OPS[fd.type] : _SR_OPS.string;
-  _srRules[idx] = { field, op: ops[0][0], value: fd?.type === 'bool' ? true : '' };
+  _srRules[idx] = { field, op: ops[0][0], value: _srDefaultValue(fd) };
+  _srSelectedTemplateKey = '';
   _srRenderRules();
   srMarkDirty();
 }
 
 function srChangeOp(idx, op) {
   _srRules[idx].op = op;
+  _srSelectedTemplateKey = '';
   srMarkDirty();
 }
 
 function srChangeVal(idx, val) {
   const fd = _SR_FIELDS.find(f => f.value === _srRules[idx].field);
   if (fd?.type === 'bool') _srRules[idx].value = val === 'true';
-  else if (fd?.type === 'int' || fd?.type === 'float') _srRules[idx].value = Number(val);
+  else if (fd?.type === 'int' || fd?.type === 'float' || fd?.type === 'date') _srRules[idx].value = val;
   else _srRules[idx].value = val;
+  _srSelectedTemplateKey = '';
   srMarkDirty();
 }
 
@@ -11010,74 +11018,103 @@ function _srStateJson() {
 function srMarkDirty() {
   if (!_isOverlayOpen('sr-modal')) return;
   _srDirty = _srStateJson() !== _srInitialJson;
-  const countEl = document.getElementById('sr-preview-count');
-  if (countEl && _srDirty) countEl.textContent = '';
+  if (_srDirty) _srSetPreviewStatus('Preview needed before saving.');
   if (_srDirty) _srRenderPreview([]);
+  _srLastPreviewJson = '';
+  _srLastPreviewTotal = 0;
+  _srRenderStarters();
+  _srUpdateActionState();
 }
 
 function _srRenderRules() {
   const list = document.getElementById('sr-rules-list');
   if (!list) return;
+  if (!_srRules.length) {
+    list.innerHTML = '<div class="sr-empty-rules">Add at least one rule, or choose a discovery starter above.</div>';
+    _srUpdateActionState();
+    return;
+  }
   list.innerHTML = _srRules.map((r, i) => {
     const fd = _SR_FIELDS.find(f => f.value === r.field) || _SR_FIELDS[0];
     const ops = _SR_OPS[fd.type] || _SR_OPS.string;
     const fieldOpts = _SR_FIELDS.map(f => `<option value="${f.value}" ${f.value === r.field ? 'selected' : ''}>${f.label}</option>`).join('');
     const opOpts = ops.map(([v, l]) => `<option value="${v}" ${v === r.op ? 'selected' : ''}>${l}</option>`).join('');
+    const value = r.value ?? '';
     let valInput;
     if (fd.type === 'bool') {
-      valInput = `<select class="sr-val-input" onchange="App.srChangeVal(${i},this.value)">
+      valInput = `<label class="sr-rule-control"><span>Value</span><select class="sr-val-input" onchange="App.srChangeVal(${i},this.value)">
         <option value="true" ${r.value === true ? 'selected' : ''}>Yes</option>
         <option value="false" ${r.value === false ? 'selected' : ''}>No</option>
-      </select>`;
+      </select></label>`;
     } else {
-      valInput = `<input class="sr-val-input" type="${fd.type === 'float' ? 'number' : 'text'}"
+      valInput = `<label class="sr-rule-control"><span>Value</span><input class="sr-val-input" type="${fd.type === 'float' || fd.type === 'int' || fd.type === 'date' ? 'number' : 'text'}"
         ${fd.type === 'float' ? 'min="0" max="1" step="0.05"' : ''}
-        ${fd.type === 'int' ? 'min="0" step="1"' : ''}
-        value="${r.value ?? ''}"
+        ${fd.type === 'int' || fd.type === 'date' ? 'min="0" step="1"' : ''}
+        placeholder="${esc(fd.placeholder || '')}"
+        value="${esc(value)}"
         onchange="App.srChangeVal(${i},this.value)"
-        oninput="App.srChangeVal(${i},this.value)" />`;
+        oninput="App.srChangeVal(${i},this.value)" /></label>`;
     }
     return `<div class="sr-rule-row">
-      <select class="sr-field-sel" onchange="App.srChangeField(${i},this.value)">${fieldOpts}</select>
-      <select class="sr-op-sel" onchange="App.srChangeOp(${i},this.value)">${opOpts}</select>
+      <label class="sr-rule-control"><span>Find</span><select class="sr-field-sel" onchange="App.srChangeField(${i},this.value)">${fieldOpts}</select></label>
+      <label class="sr-rule-control"><span>Condition</span><select class="sr-op-sel" onchange="App.srChangeOp(${i},this.value)">${opOpts}</select></label>
       ${valInput}
       <button class="sr-remove-btn" onclick="App.srRemoveRule(${i})" title="Remove rule">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>`;
   }).join('');
+  _srUpdateActionState();
 }
 
 async function srPreview() {
-  const payload = _srBuildPayload();
-  const countEl = document.getElementById('sr-preview-count');
+  const validation = _srValidateRules();
   const banner = document.getElementById('sr-unanalysed-banner');
   const msg = document.getElementById('sr-unanalysed-msg');
+  if (!validation.valid) {
+    _srSetValidationMessage(validation.message);
+    _srSetPreviewStatus('Fix the recipe before previewing.');
+    _srRenderPreview([], { emptyMessage: validation.message });
+    _srUpdateActionState();
+    return;
+  }
+  const payload = validation.payload;
   try {
-    if (countEl) countEl.textContent = 'Previewing…';
+    _srSetValidationMessage('');
+    _srSetPreviewStatus('Previewing...');
     _srRenderPreview([]);
     const res = await api('/playlists/smart/preview', { method: 'POST', body: payload });
-    if (countEl) countEl.textContent = `${res.total} track${res.total !== 1 ? 's' : ''} match`;
-    _srRenderPreview(Array.isArray(res.tracks) ? res.tracks : []);
+    const tracks = Array.isArray(res.tracks) ? res.tracks : [];
+    const total = Number(res.total || 0);
+    _srSetPreviewStatus(`${total} track${total !== 1 ? 's' : ''} match`);
+    _srRenderPreview(tracks, { emptyMessage: 'No tracks match this recipe yet. Try Any rules, a wider date range, or another starter.' });
+    _srLastPreviewJson = _srStateJson();
+    _srLastPreviewTotal = total;
     if (res.unanalysed_count > 0 && banner && msg) {
-      msg.textContent = `${res.unanalysed_count} tracks excluded — run Analyse Library to include them.`;
+      msg.textContent = `${res.unanalysed_count} unanalysed tracks may be missing from sonic rules.`;
       banner.style.display = 'flex';
     } else if (banner) {
       banner.style.display = 'none';
     }
   } catch (e) {
-    if (countEl) countEl.textContent = 'Preview failed';
-    _srRenderPreview([]);
+    _srSetPreviewStatus('Preview failed');
+    _srRenderPreview([], { emptyMessage: e.message || 'Preview failed. Check the recipe and try again.' });
   }
+  _srUpdateActionState();
 }
 
-function _srRenderPreview(tracks = []) {
+function _srRenderPreview(tracks = [], opts = {}) {
   const pane = document.getElementById('sr-preview-pane');
   const list = document.getElementById('sr-preview-list');
   if (!pane || !list) return;
   if (!tracks.length) {
-    pane.style.display = 'none';
-    list.innerHTML = '';
+    if (opts.emptyMessage) {
+      pane.style.display = 'block';
+      list.innerHTML = `<div class="sr-preview-empty">${esc(opts.emptyMessage)}</div>`;
+    } else {
+      pane.style.display = 'none';
+      list.innerHTML = '';
+    }
     return;
   }
   pane.style.display = 'block';
@@ -11129,8 +11166,19 @@ function _srBuildPayload() {
 }
 
 async function srSave() {
+  const validation = _srValidateRules();
+  if (!validation.valid) {
+    _srSetValidationMessage(validation.message);
+    _srUpdateActionState();
+    return;
+  }
+  if (_srLastPreviewJson !== _srStateJson() || _srLastPreviewTotal < 1) {
+    _srSetPreviewStatus('Preview matches before saving.');
+    _srUpdateActionState();
+    return;
+  }
   const name = (document.getElementById('sr-name')?.value || '').trim() || 'Smart Rules Playlist';
-  const payload = { ..._srBuildPayload(), name, refresh_on_open: true };
+  const payload = { ...validation.payload, name, refresh_on_open: true };
   try {
     const res = await api('/playlists/smart', { method: 'POST', body: payload });
     _srDirty = false;
@@ -11147,17 +11195,108 @@ async function srSave() {
 }
 
 function srLoadTemplate(key) {
+  if (!_srApplyTemplate(key)) return;
+  _srSelectedTemplateKey = key;
+  _srRenderStarters();
+  srMarkDirty();
+}
+
+function _srApplyTemplate(key) {
   const tmpl = _SR_TEMPLATES[key];
-  if (!tmpl) return;
+  if (!tmpl) return false;
   _srRules = tmpl.rules.map(r => ({ ...r }));
   document.getElementById('sr-name').value = tmpl.name;
+  document.getElementById('sr-match-mode').value = 'all';
   document.getElementById('sr-limit').value = String(tmpl.limit);
   document.getElementById('sr-sort-field').value = tmpl.sort_field;
   document.getElementById('sr-sort-order').value = tmpl.sort_order;
   _srRenderRules();
-  document.getElementById('sr-preview-count').textContent = '';
+  _srSetValidationMessage('');
+  _srSetPreviewStatus('Preview needed before saving.');
   _srRenderPreview([]);
-  srMarkDirty();
+  return true;
+}
+
+function _srDefaultValue(fd) {
+  if (fd?.type === 'bool') return true;
+  return '';
+}
+
+function _srSetPreviewStatus(text) {
+  const countEl = document.getElementById('sr-preview-count');
+  if (countEl) countEl.textContent = text || '';
+}
+
+function _srSetValidationMessage(text) {
+  const el = document.getElementById('sr-validation-msg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.classList.toggle('is-visible', !!text);
+}
+
+function _srRenderStarters() {
+  document.querySelectorAll('#sr-starters-grid .sr-starter-card').forEach((btn) => {
+    btn.classList.toggle('is-selected', btn.dataset.template === _srSelectedTemplateKey);
+  });
+}
+
+function _srValidateRules() {
+  const rules = [];
+  if (!_srRules.length) return { valid: false, message: 'Choose a starter or add at least one rule.' };
+
+  for (let i = 0; i < _srRules.length; i += 1) {
+    const rule = _srRules[i];
+    const fd = _SR_FIELDS.find(f => f.value === rule.field);
+    if (!fd) return { valid: false, message: `Rule ${i + 1} uses an unknown field.` };
+    const op = rule.op;
+    const allowedOps = (_SR_OPS[fd.type] || []).map(([value]) => value);
+    if (!allowedOps.includes(op)) return { valid: false, message: `Rule ${i + 1} has an unsupported condition.` };
+
+    let value = rule.value;
+    if (fd.type === 'bool') {
+      value = value === true || value === 'true';
+    } else if (fd.type === 'string') {
+      value = String(value ?? '').trim();
+      if (!value) return { valid: false, message: `Add a value for ${fd.label.toLowerCase()} in rule ${i + 1}.` };
+    } else if (fd.type === 'int' || fd.type === 'date') {
+      value = Number.parseInt(value, 10);
+      if (!Number.isFinite(value) || value < 0) return { valid: false, message: `Use a whole number for ${fd.label.toLowerCase()} in rule ${i + 1}.` };
+    } else if (fd.type === 'float') {
+      value = Number.parseFloat(value);
+      if (!Number.isFinite(value) || value < 0 || value > 1) return { valid: false, message: `${fd.label} must be between 0 and 1 in rule ${i + 1}.` };
+    }
+    rules.push({ field: fd.value, op, value });
+  }
+
+  let limit = Number.parseInt(document.getElementById('sr-limit')?.value || '50', 10);
+  if (!Number.isFinite(limit)) limit = 50;
+  limit = Math.max(5, Math.min(limit, 500));
+  const limitEl = document.getElementById('sr-limit');
+  if (limitEl) limitEl.value = String(limit);
+
+  return {
+    valid: true,
+    payload: {
+      rules,
+      match_mode: document.getElementById('sr-match-mode')?.value || 'all',
+      limit_count: limit,
+      sort_field: document.getElementById('sr-sort-field')?.value || 'date_added',
+      sort_order: document.getElementById('sr-sort-order')?.value || 'desc',
+    },
+  };
+}
+
+function _srUpdateActionState() {
+  const validation = _srValidateRules();
+  _srSetValidationMessage(validation.valid ? '' : validation.message);
+  const previewBtn = document.getElementById('sr-preview-btn');
+  const saveBtn = document.getElementById('sr-save-btn');
+  const hasFreshPreview = _srLastPreviewJson === _srStateJson() && _srLastPreviewTotal > 0;
+  if (previewBtn) previewBtn.disabled = !validation.valid;
+  if (saveBtn) {
+    saveBtn.disabled = !validation.valid || !hasFreshPreview;
+    saveBtn.title = hasFreshPreview ? '' : 'Preview matches before saving';
+  }
 }
 
 /* ── History view ───────────────────────────────────────────────────── */

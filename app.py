@@ -4264,14 +4264,100 @@ def _evaluate_smart_rules(rules, match_mode='all', limit_count=50, sort_field='d
 # Smart Playlist routes
 # ---------------------------------------------------------------------------
 
+def _normalise_smart_playlist_payload(data):
+    allowed_fields = {
+        'genre': 'string',
+        'artist': 'string',
+        'album': 'string',
+        'year': 'int',
+        'format': 'string',
+        'bitrate': 'int',
+        'date_added': 'date',
+        'play_count': 'int',
+        'never_played': 'bool',
+        'last_played': 'date',
+        'energy': 'float',
+        'brightness': 'float',
+        'has_analysis': 'bool',
+    }
+    allowed_ops = {
+        'string': {'contains', 'not_contains', 'is', 'is_not'},
+        'int': {'equals', 'greater_than', 'less_than'},
+        'float': {'greater_than', 'less_than'},
+        'bool': {'is'},
+        'date': {'within_days', 'older_than_days'},
+    }
+
+    rules_in = data.get('rules') or []
+    if not isinstance(rules_in, list) or not rules_in:
+        raise ValueError('Choose a starter or add at least one rule.')
+
+    rules = []
+    for idx, rule in enumerate(rules_in, start=1):
+        field = str((rule or {}).get('field') or '')
+        typ = allowed_fields.get(field)
+        if not typ:
+            raise ValueError(f'Rule {idx} uses an unknown field.')
+
+        op = str((rule or {}).get('op') or '')
+        if op not in allowed_ops[typ]:
+            raise ValueError(f'Rule {idx} has an unsupported condition.')
+
+        val = (rule or {}).get('value')
+        if typ == 'bool':
+            if isinstance(val, str):
+                val = val.strip().lower() in {'1', 'true', 'yes', 'on'}
+            else:
+                val = bool(val)
+        elif typ == 'string':
+            val = str(val or '').strip()
+            if not val:
+                raise ValueError(f'Add a value for rule {idx}.')
+        elif typ in {'int', 'date'}:
+            try:
+                val = int(val)
+            except (TypeError, ValueError):
+                raise ValueError(f'Use a whole number for rule {idx}.')
+            if val < 0:
+                raise ValueError(f'Use a positive number for rule {idx}.')
+        elif typ == 'float':
+            try:
+                val = float(val)
+            except (TypeError, ValueError):
+                raise ValueError(f'Use a number between 0 and 1 for rule {idx}.')
+            if val < 0 or val > 1:
+                raise ValueError(f'Use a number between 0 and 1 for rule {idx}.')
+
+        rules.append({'field': field, 'op': op, 'value': val})
+
+    match_mode = str(data.get('match_mode', 'all'))
+    if match_mode not in {'all', 'any'}:
+        match_mode = 'all'
+
+    try:
+        limit_count = int(data.get('limit_count') or 50)
+    except (TypeError, ValueError):
+        limit_count = 50
+    limit_count = max(5, min(limit_count, 500))
+
+    sort_field = str(data.get('sort_field', 'date_added'))
+    if sort_field not in {'date_added', 'play_count', 'last_played', 'title', 'artist', 'album', 'year'}:
+        sort_field = 'date_added'
+
+    sort_order = str(data.get('sort_order', 'desc'))
+    if sort_order not in {'asc', 'desc'}:
+        sort_order = 'desc'
+
+    return rules, match_mode, limit_count, sort_field, sort_order
+
+
 @app.route('/api/playlists/smart/preview', methods=['POST'])
 def smart_playlist_preview():
     data = request.json or {}
-    rules = data.get('rules') or []
-    match_mode = str(data.get('match_mode', 'all'))
-    limit_count = min(int(data.get('limit_count') or 50), 500)
-    sort_field = str(data.get('sort_field', 'date_added'))
-    sort_order = str(data.get('sort_order', 'desc'))
+    try:
+        rules, match_mode, limit_count, sort_field, sort_order = _normalise_smart_playlist_payload(data)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
     result = _evaluate_smart_rules(rules, match_mode, limit_count, sort_field, sort_order)
     with library_lock:
         lib_map = {t['id']: t for t in library}
@@ -4283,11 +4369,10 @@ def smart_playlist_preview():
 def smart_playlist_create():
     data = request.json or {}
     name = str(data.get('name') or '').strip() or f"Smart Playlist {time.strftime('%Y-%m-%d %H:%M')}"
-    rules = data.get('rules') or []
-    match_mode = str(data.get('match_mode', 'all'))
-    limit_count = min(int(data.get('limit_count') or 50), 500)
-    sort_field = str(data.get('sort_field', 'date_added'))
-    sort_order = str(data.get('sort_order', 'desc'))
+    try:
+        rules, match_mode, limit_count, sort_field, sort_order = _normalise_smart_playlist_payload(data)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
     refresh_on_open = bool(data.get('refresh_on_open', True))
 
     result = _evaluate_smart_rules(rules, match_mode, limit_count, sort_field, sort_order)
@@ -4312,11 +4397,10 @@ def smart_playlist_get_rules(pid):
 @app.route('/api/playlists/<pid>/smart', methods=['PUT'])
 def smart_playlist_update_rules(pid):
     data = request.json or {}
-    rules = data.get('rules') or []
-    match_mode = str(data.get('match_mode', 'all'))
-    limit_count = min(int(data.get('limit_count') or 50), 500)
-    sort_field = str(data.get('sort_field', 'date_added'))
-    sort_order = str(data.get('sort_order', 'desc'))
+    try:
+        rules, match_mode, limit_count, sort_field, sort_order = _normalise_smart_playlist_payload(data)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
     refresh_on_open = bool(data.get('refresh_on_open', True))
     _db.db_save_smart_rules(pid, rules, match_mode, limit_count, sort_field, sort_order, refresh_on_open)
     return jsonify({'ok': True})
@@ -4327,9 +4411,12 @@ def smart_playlist_refresh(pid):
     rules_data = _db.db_load_smart_rules(pid)
     if rules_data is None:
         return jsonify({'error': 'Not a smart playlist'}), 404
+    try:
+        rules, match_mode, limit_count, sort_field, sort_order = _normalise_smart_playlist_payload(rules_data)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
     result = _evaluate_smart_rules(
-        rules_data['rules'], rules_data['match_mode'],
-        rules_data['limit_count'], rules_data['sort_field'], rules_data['sort_order']
+        rules, match_mode, limit_count, sort_field, sort_order
     )
     now = int(time.time())
     _db.db_set_playlist_tracks(pid, result['track_ids'], now)
