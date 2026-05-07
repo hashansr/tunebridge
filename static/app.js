@@ -1942,8 +1942,8 @@ function trackRow(t, num, inPlaylist) {
           </div>
           <div class="track-info">
             <div class="track-title-line">
-              ${_lyricBadge(t)}
               <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
+              ${_lyricBadge(t)}
             </div>
             <div class="track-artist" title="${esc(t.artist)}">${esc(t.artist)}</div>
           </div>
@@ -4278,8 +4278,8 @@ function _favSongRow(t, idx) {
           </div>
           <div class="track-info">
             <div class="track-title-line">
-              ${_lyricBadge(t)}
               <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
+              ${_lyricBadge(t)}
             </div>
             <div class="track-artist" title="${esc(t.artist)}">${esc(t.artist)}</div>
           </div>
@@ -10101,8 +10101,8 @@ function renderSongsTable() {
           </div>
           <div class="track-info">
             <div class="track-title-line">
-              ${_lyricBadge(t)}
               <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
+              ${_lyricBadge(t)}
             </div>
           </div>
         </div>

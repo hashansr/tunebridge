@@ -1766,27 +1766,29 @@ tbody tr:hover .drag-handle { opacity: 0.8; }
 .track-info .track-title-line {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
   max-width: 280px;
 }
 .track-info .track-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 280px; }
 .track-info .track-artist { font-size: var(--text-sm); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
 .track-lyrics-badge {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  border: 1px solid rgba(233, 238, 249, 0.38);
-  border-radius: 6px;
-  background: rgba(233, 238, 249, 0.055);
-  color: rgba(233, 238, 249, 0.82);
-  font-size: 11px;
-  font-weight: 650;
+  border: 1px solid rgba(233, 238, 249, 0.24);
+  border-radius: 5px;
+  background: rgba(233, 238, 249, 0.025);
+  color: rgba(233, 238, 249, 0.56);
+  font-size: 9px;
+  font-weight: 600;
   line-height: 1;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  opacity: 0.72;
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .col-artist td, td.cell-artist { color: var(--text-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }

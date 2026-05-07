@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Lyrics badges now appear after song titles and use a smaller, subtler visual treatment.
 
 ## v0.142-rc.070526-1738 · 2026-05-07
 - Add: Library scan now tracks same-basename `.lrc` lyric sidecars and shows a restrained lyrics badge beside songs with lyrics.
