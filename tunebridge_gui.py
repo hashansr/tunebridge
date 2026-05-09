@@ -16,6 +16,7 @@ import json
 import socket
 import threading
 import time
+import traceback
 from collections import deque
 from pathlib import Path
 
@@ -67,6 +68,7 @@ import webview  # noqa: E402 — must come after sys.path setup
 BASE_PORT = int(os.environ.get("TUNEBRIDGE_PORT", 5001))
 PORT = BASE_PORT
 URL  = f"http://localhost:{PORT}"
+_SERVER_STARTUP_ERROR = None
 
 
 def _set_port(port: int):
@@ -97,13 +99,19 @@ _NX_KEYTYPE_REWIND   = 20
 
 def _start_server():
     """Start the Waitress/Flask server in a daemon thread."""
-    from app import app  # noqa: F401 — imports register all routes
+    global _SERVER_STARTUP_ERROR
 
     try:
-        from waitress import serve
-        serve(app, host="127.0.0.1", port=PORT, threads=4)
-    except ImportError:
-        app.run(host="127.0.0.1", port=PORT, debug=False, use_reloader=False)
+        from app import app  # noqa: F401 — imports register all routes
+        try:
+            from waitress import serve
+        except ImportError:
+            app.run(host="127.0.0.1", port=PORT, debug=False, use_reloader=False)
+        else:
+            serve(app, host="127.0.0.1", port=PORT, threads=4)
+    except Exception:
+        _SERVER_STARTUP_ERROR = traceback.format_exc()
+        print(_SERVER_STARTUP_ERROR)
 
 
 def _health_check(port: int | None = None) -> bool:
@@ -310,11 +318,19 @@ def main():
         if not _wait_for_server():
             # Last-chance check: maybe a concurrent launch beat us to the port
             if not _health_check():
+                detail = _SERVER_STARTUP_ERROR or "No backend response before startup timeout."
+                detail_html = (
+                    detail.replace("&", "&amp;")
+                          .replace("<", "&lt;")
+                          .replace(">", "&gt;")
+                )
                 webview.create_window(
                     "TuneBridge — Error",
                     html="<h2 style='font-family:sans-serif;color:#c00;padding:40px'>"
                          "TuneBridge failed to start.<br>"
-                         "<small>Check that port 5001 is not blocked.</small></h2>",
+                         "<small>Check that port 5001 is not blocked.</small></h2>"
+                         "<pre style='font-family:monospace;color:#333;padding:0 40px;white-space:pre-wrap'>"
+                         f"{detail_html}</pre>",
                 )
                 webview.start()
                 return
