@@ -45,6 +45,8 @@ const Player = (function () {
   let _mpvPosition   = 0;      // last known position from mpv (seconds)
   let _mpvDuration   = 0;      // last known duration from mpv (seconds)
   let _lastMpvActive = false;
+  let _lastMpvPlaying = false;
+  let _mpvIdleAdvanceHandled = false;
 
   function _isMpvActive() {
     if (!_mpvAvailable) return false;
@@ -289,8 +291,22 @@ const Player = (function () {
 
     if (!state || !state.available) return;
 
+    const prevMpvPosition = _mpvPosition;
+    const prevMpvDuration = _mpvDuration;
+    const wasMpvPlaying   = _lastMpvPlaying;
+    const isMpvIdle       = !!state.idle;
+    const reachedEndWhileActive =
+      !state.track_ended
+      && isMpvIdle
+      && wasMpvPlaying
+      && !_mpvIdleAdvanceHandled
+      && prevMpvDuration > 0
+      && prevMpvPosition >= Math.max(prevMpvDuration - 1.0, prevMpvDuration * 0.98);
+
     _mpvPosition = state.position || 0;
     _mpvDuration = state.duration || 0;
+    _lastMpvPlaying = !!state.playing;
+    if (_lastMpvPlaying) _mpvIdleAdvanceHandled = false;
 
     // Sync play/pause indicator (only when not seek-dragging)
     if (!_seekDragging && !_seeking) {
@@ -334,7 +350,8 @@ const Player = (function () {
     }
 
     // Track ended — advance queue (suppressed by backend during xfade)
-    if (state.track_ended) {
+    if (state.track_ended || reachedEndWhileActive) {
+      _mpvIdleAdvanceHandled = true;
       _onMpvTrackEnded();
     }
   }
