@@ -783,10 +783,63 @@
         <div class="view-header">
           <h2 class="tb-page-title">Settings</h2>
         </div>
-        <div class="settings-content">
+        <div class="settings-shell">
+          <nav class="settings-category-sidebar" aria-label="Settings categories">
+            <button class="settings-category-btn active" type="button" data-settings-category="library" onclick="App.showSettingsCategory('library')">
+              <span class="settings-category-main">
+                <span class="settings-category-title">Library</span>
+                <span class="settings-category-sub">Path, scan, tags</span>
+              </span>
+              <span class="settings-category-count">4</span>
+            </button>
+            <button class="settings-category-btn" type="button" data-settings-category="playback" onclick="App.showSettingsCategory('playback')">
+              <span class="settings-category-main">
+                <span class="settings-category-title">Playback</span>
+                <span class="settings-category-sub">Output and history</span>
+              </span>
+              <span class="settings-category-count">3</span>
+            </button>
+            <button class="settings-category-btn" type="button" data-settings-category="devices" onclick="App.showSettingsCategory('devices')">
+              <span class="settings-category-main">
+                <span class="settings-category-title">Devices</span>
+                <span class="settings-category-sub">DAP paths</span>
+              </span>
+              <span class="settings-category-count">3</span>
+            </button>
+            <button class="settings-category-btn" type="button" data-settings-category="audio-tools" onclick="App.showSettingsCategory('audio-tools')">
+              <span class="settings-category-main">
+                <span class="settings-category-title">Audio Tools</span>
+                <span class="settings-category-sub">PEQ and baselines</span>
+              </span>
+              <span class="settings-category-count">2</span>
+            </button>
+            <button class="settings-category-btn" type="button" data-settings-category="artwork" onclick="App.showSettingsCategory('artwork')">
+              <span class="settings-category-main">
+                <span class="settings-category-title">Artwork</span>
+                <span class="settings-category-sub">Image services</span>
+              </span>
+              <span class="settings-category-count">2</span>
+            </button>
+            <button class="settings-category-btn" type="button" data-settings-category="maintenance" onclick="App.showSettingsCategory('maintenance')">
+              <span class="settings-category-main">
+                <span class="settings-category-title">Maintenance</span>
+                <span class="settings-category-sub">Health and backup</span>
+              </span>
+              <span class="settings-category-count">3</span>
+            </button>
+            <button class="settings-category-btn" type="button" data-settings-category="app" onclick="App.showSettingsCategory('app')">
+              <span class="settings-category-main">
+                <span class="settings-category-title">App</span>
+                <span class="settings-category-sub">Updates, restart</span>
+              </span>
+              <span class="settings-category-count">2</span>
+            </button>
+          </nav>
+
+          <div class="settings-content">
 
           <!-- Library section -->
-          <div class="settings-section" id="settings-library-section">
+          <div class="settings-section settings-panel active" id="settings-library-section" data-settings-panel="library">
             <h3 class="settings-section-title tb-section-title">Library</h3>
             <div class="settings-row">
               <label>Music library path</label>
@@ -838,7 +891,7 @@
           </div>
 
           <!-- Data & Backup section -->
-          <div class="settings-section" id="settings-data-backup-section">
+          <div class="settings-section settings-panel" id="settings-data-backup-section" data-settings-panel="maintenance">
             <h3 class="settings-section-title tb-section-title">Data Backup</h3>
             <p class="settings-data-dir-label">Data location: <code id="settings-data-dir">~/Library/Application Support/TuneBridge</code></p>
             <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
@@ -859,7 +912,7 @@
           </div>
 
           <!-- Artist Images section -->
-          <div class="settings-section" id="settings-image-search-section">
+          <div class="settings-section settings-panel" id="settings-image-search-section" data-settings-panel="artwork">
             <h3 class="settings-section-title tb-section-title">Image Search</h3>
             <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
               Search for both artist portraits and album covers from an online service. Choose a service and optionally add an API key for better results.
@@ -915,7 +968,7 @@
           </div>
 
           <!-- Frequency Response Baselines section -->
-          <div class="settings-section" id="settings-baselines-section">
+          <div class="settings-section settings-panel" id="settings-baselines-section" data-settings-panel="audio-tools">
             <h3 class="settings-section-title tb-section-title">Frequency Response Baselines</h3>
             <p class="settings-baseline-intro">
               Add tuning targets from <a href="https://squig.link" target="_blank" style="color:var(--accent)">squig.link</a>. They appear as reference lines on all IEM &amp; headphone frequency response graphs.
@@ -940,7 +993,7 @@
           </div>
 
           <!-- System Status section -->
-          <div class="settings-section" id="settings-system-status-section">
+          <div class="settings-section settings-panel" id="settings-system-status-section" data-settings-panel="maintenance">
             <h3 class="settings-section-title tb-section-title">System Status</h3>
             <div id="health-grid" class="health-grid" style="display:none">
               <!-- populated by runHealthCheck() -->
@@ -986,7 +1039,7 @@
             </div>
           </div>
 
-          <div class="settings-section" id="settings-peq-section">
+          <div class="settings-section settings-panel" id="settings-peq-section" data-settings-panel="audio-tools">
             <h3 class="settings-section-title tb-section-title">Parametric EQ</h3>
             <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
               Open Custom PEQ workspace to tune EQ while keeping player controls available.
@@ -997,7 +1050,7 @@
           </div>
 
           <!-- Playback section -->
-          <div class="settings-section" id="settings-playback-section">
+          <div class="settings-section settings-panel" id="settings-playback-section" data-settings-panel="playback">
             <h3 class="settings-section-title tb-section-title">Playback</h3>
 
             <!-- Audio output device -->
@@ -1040,6 +1093,7 @@
               <label class="settings-toggle settings-app-control" id="exclusive-toggle-label">
                 <input type="checkbox" id="exclusive-mode-toggle" onchange="App.setExclusiveMode(this.checked)" disabled>
                 <span class="settings-toggle-track"></span>
+                <span class="settings-toggle-state" id="exclusive-mode-state">Unavailable</span>
               </label>
             </div>
 
@@ -1055,12 +1109,54 @@
               <label class="settings-toggle settings-app-control">
                 <input type="checkbox" id="listening-tracking-toggle" onchange="App.setListeningTracking(this.checked)">
                 <span class="settings-toggle-track"></span>
+                <span class="settings-toggle-state" id="listening-tracking-state">On</span>
               </label>
             </div>
           </div>
 
+          <!-- Devices section -->
+          <div class="settings-section settings-panel" id="settings-devices-section" data-settings-panel="devices">
+            <h3 class="settings-section-title tb-section-title">Devices</h3>
+            <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
+              Legacy fixed-player paths used by older playlist export flows. Newer DAP profiles are managed from the Devices area.
+            </p>
+
+            <div class="settings-device-block">
+              <div class="settings-device-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
+                Poweramp — FiiO M21
+              </div>
+              <div class="settings-row">
+                <label>Mac mount path</label>
+                <input id="s-poweramp-mount" type="text" placeholder="/Volumes/FIIO M21" />
+              </div>
+              <div class="settings-row">
+                <label>Internal SD card path</label>
+                <input id="s-poweramp-prefix" type="text" placeholder="Leave empty for relative paths, e.g. /storage/sdcard0" />
+              </div>
+              <p class="settings-hint">The internal path is prepended to track paths in exported M3U8 files. Leave empty to use relative paths.</p>
+            </div>
+
+            <div class="settings-device-block">
+              <div class="settings-device-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
+                AP80 Pro Max
+              </div>
+              <div class="settings-row">
+                <label>Mac mount path</label>
+                <input id="s-ap80-mount" type="text" placeholder="/Volumes/AP80" />
+              </div>
+              <p class="settings-hint">Playlists are written to <code>playlist_data/</code> at the SD card root using relative paths.</p>
+            </div>
+
+            <div class="settings-inline-actions settings-inline-actions-wrap">
+              <button class="btn-primary" onclick="App.saveDeviceSettings()">Save Device Paths</button>
+              <button class="btn-secondary" onclick="App.showView('gear')">Manage DAP Profiles</button>
+            </div>
+          </div>
+
           <!-- App section -->
-          <div class="settings-section" id="settings-app-restart-section">
+          <div class="settings-section settings-panel" id="settings-app-restart-section" data-settings-panel="app">
             <h3 class="settings-section-title tb-section-title">App</h3>
 
             <!-- Version + channel — compact single row -->
@@ -1105,6 +1201,7 @@
           </div>
 
         </div>
+      </div>
       </div>
 
       <!-- ── Insights View ───────────────────────────────────────────── -->
@@ -1651,49 +1748,6 @@
           App data location: <code id="help-data-dir">Loading…</code><br />
           Use the <strong>↺</strong> button in the sidebar to rescan after adding or removing music.
         </p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Device settings modal -->
-  <div id="settings-modal" class="modal-overlay tb-modal-overlay" style="display:none">
-    <div class="modal modal-wide tb-modal-shell tb-modal--md">
-      <div class="modal-head modal-head-spaced">
-        <h3>Device Settings</h3>
-        <button class="modal-x-btn" onclick="App.closeSettings()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-      </div>
-
-      <div class="settings-device-block">
-        <div class="settings-device-title">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
-          Poweramp — FiiO M21
-        </div>
-        <div class="settings-row">
-          <label>Mac mount path</label>
-          <input id="s-poweramp-mount" type="text" placeholder="/Volumes/FIIO M21" />
-        </div>
-        <div class="settings-row">
-          <label>Internal SD card path</label>
-          <input id="s-poweramp-prefix" type="text" placeholder="Leave empty for relative paths, e.g. /storage/sdcard0" />
-        </div>
-        <p class="settings-hint">The internal path is prepended to track paths in the exported M3U8, e.g. <code>/storage/sdcard0/Music/…</code>. Leave empty to use relative paths.</p>
-      </div>
-
-      <div class="settings-device-block" style="border-bottom:none;padding-bottom:0">
-        <div class="settings-device-title">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
-          AP80 Pro Max
-        </div>
-        <div class="settings-row">
-          <label>Mac mount path</label>
-          <input id="s-ap80-mount" type="text" placeholder="/Volumes/AP80" />
-        </div>
-        <p class="settings-hint">Playlists are written to <code>playlist_data/</code> at the SD card root using relative paths — no additional configuration needed.</p>
-      </div>
-
-      <div class="modal-actions" style="margin-top:20px">
-        <button class="btn-secondary" onclick="App.closeSettings()">Cancel</button>
-        <button class="btn-primary" onclick="App.saveSettings()">Save</button>
       </div>
     </div>
   </div>

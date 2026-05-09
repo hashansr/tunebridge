@@ -5159,6 +5159,7 @@ function showView(viewName) {
   else if (viewName === 'library-coverage') loadInsightsCoverage();
   else if (viewName === 'settings') {
     setHealthSectionExpanded(false);
+    showSettingsCategory('library');
     loadSettings();
   }
   else if (viewName === 'insights') loadInsightsView();
@@ -5467,25 +5468,17 @@ async function loadSettings() {
 }
 
 function showSettings() {
-  document.getElementById('s-poweramp-mount').value  = _settings.poweramp_mount  || '';
-  document.getElementById('s-poweramp-prefix').value = _settings.poweramp_prefix || '';
-  document.getElementById('s-ap80-mount').value      = _settings.ap80_mount      || '';
-  document.getElementById('settings-modal').style.display = 'flex';
+  showView('settings');
+  showSettingsCategory('devices');
 }
 
 function closeSettings() {
-  document.getElementById('settings-modal').style.display = 'none';
+  const modal = document.getElementById('settings-modal');
+  if (modal) modal.style.display = 'none';
 }
 
 async function saveSettings() {
-  const updated = {
-    poweramp_mount:   document.getElementById('s-poweramp-mount').value.trim(),
-    poweramp_prefix:  document.getElementById('s-poweramp-prefix').value.trim(),
-    ap80_mount:       document.getElementById('s-ap80-mount').value.trim(),
-  };
-  _settings = await api('/settings', { method: 'PUT', body: updated });
-  closeSettings();
-  toast('Settings saved');
+  return saveDeviceSettings();
 }
 
 /* ── Help modal ─────────────────────────────────────────────────────── */
@@ -10301,18 +10294,50 @@ async function importBackup(input) {
 }
 
 /* ── Settings ──────────────────────────────────────────────────────── */
+let _activeSettingsCategory = 'library';
+
+function showSettingsCategory(category = 'library') {
+  _activeSettingsCategory = category;
+  document.querySelectorAll('.settings-category-btn').forEach(btn => {
+    const active = btn.dataset.settingsCategory === category;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-current', active ? 'page' : 'false');
+  });
+  document.querySelectorAll('.settings-panel').forEach(panel => {
+    panel.classList.toggle('active', panel.dataset.settingsPanel === category);
+  });
+}
+
+function _setSettingsToggleState(inputId, stateId, enabled, available = true) {
+  const input = document.getElementById(inputId);
+  const stateEl = document.getElementById(stateId);
+  if (!stateEl) return;
+  const isDisabled = input ? input.disabled || !available : !available;
+  stateEl.textContent = isDisabled ? 'Unavailable' : (enabled ? 'On' : 'Off');
+  stateEl.classList.toggle('is-on', !isDisabled && !!enabled);
+  stateEl.classList.toggle('is-off', !isDisabled && !enabled);
+  stateEl.classList.toggle('is-disabled', isDisabled);
+}
+
 async function loadSettings() {
   const [settings, cap] = await Promise.all([
     api('/settings').catch(() => ({})),
     fetch('/api/player/capabilities').then(r => r.json()).catch(() => ({})),
     loadBaselines(),
   ]);
+  _settings = settings || {};
   if (!_contentSortPrefsHydrated) _applyContentSortPrefs(settings);
   if (typeof Player !== 'undefined' && Player.updateCapabilities) {
     Player.updateCapabilities(cap || {});
   }
   const inp = document.getElementById('lib-path-input');
   if (inp) inp.value = settings.library_path || '/Volumes/Storage/Music/FLAC';
+  const powerampMount = document.getElementById('s-poweramp-mount');
+  if (powerampMount) powerampMount.value = settings.poweramp_mount || '';
+  const powerampPrefix = document.getElementById('s-poweramp-prefix');
+  if (powerampPrefix) powerampPrefix.value = settings.poweramp_prefix || '';
+  const ap80Mount = document.getElementById('s-ap80-mount');
+  if (ap80Mount) ap80Mount.value = settings.ap80_mount || '';
   const dirEl = document.getElementById('settings-data-dir');
   if (dirEl && settings._data_dir) dirEl.textContent = settings._data_dir;
 
@@ -10367,6 +10392,7 @@ async function loadSettings() {
       installBtn.disabled = false;
       installBtn.textContent = 'Install mpv';
     }
+    _setSettingsToggleState('exclusive-mode-toggle', 'exclusive-mode-state', !!(cap && cap.exclusive_mode), mpvOk);
   }
 
   // Populate artist image service settings
@@ -10384,6 +10410,7 @@ async function loadSettings() {
   const listeningToggle = document.getElementById('listening-tracking-toggle');
   if (listeningToggle) {
     listeningToggle.checked = settings.listening_tracking_enabled !== false;
+    _setSettingsToggleState('listening-tracking-toggle', 'listening-tracking-state', listeningToggle.checked, true);
   }
 
   // Resume batch-job progress banner if a job is already running
@@ -10408,17 +10435,34 @@ async function loadSettings() {
     if (channelSel && ver.channel) channelSel.value = ver.channel;
   } catch (_) {}
 
+  showSettingsCategory(_activeSettingsCategory || 'library');
   return settings;
 }
 
 async function setListeningTracking(enabled) {
   try {
     await api('/settings', { method: 'PUT', body: { listening_tracking_enabled: !!enabled } });
+    _setSettingsToggleState('listening-tracking-toggle', 'listening-tracking-state', !!enabled, true);
     toast(enabled ? 'Listening history enabled' : 'Listening history paused');
   } catch (e) {
     const toggle = document.getElementById('listening-tracking-toggle');
     if (toggle) toggle.checked = !enabled;
+    _setSettingsToggleState('listening-tracking-toggle', 'listening-tracking-state', !enabled, true);
     toast('Could not update listening history');
+  }
+}
+
+async function saveDeviceSettings() {
+  const updated = {
+    poweramp_mount:  document.getElementById('s-poweramp-mount')?.value.trim() || '',
+    poweramp_prefix: document.getElementById('s-poweramp-prefix')?.value.trim() || '',
+    ap80_mount:      document.getElementById('s-ap80-mount')?.value.trim() || '',
+  };
+  try {
+    _settings = await api('/settings', { method: 'PUT', body: updated });
+    toast('Device paths saved');
+  } catch (e) {
+    toast('Could not save device paths');
   }
 }
 
@@ -10454,6 +10498,9 @@ async function setExclusiveMode(enabled) {
     }
     const bpPill = document.getElementById('exclusive-bp-pill');
     if (bpPill) bpPill.style.display = data.exclusive_mode ? '' : 'none';
+    const exclusiveToggle = document.getElementById('exclusive-mode-toggle');
+    if (exclusiveToggle) exclusiveToggle.checked = !!data.exclusive_mode;
+    _setSettingsToggleState('exclusive-mode-toggle', 'exclusive-mode-state', !!data.exclusive_mode, true);
 
     // Resume same track at same position on the new mpv instance
     if (data.resume_track_id && typeof Player !== 'undefined') {
@@ -10466,6 +10513,8 @@ async function setExclusiveMode(enabled) {
 
     toast(data.exclusive_mode ? 'Exclusive mode on — bit-perfect output active' : 'Exclusive mode off');
   } catch (e) {
+    const toggle = document.getElementById('exclusive-mode-toggle');
+    if (toggle) _setSettingsToggleState('exclusive-mode-toggle', 'exclusive-mode-state', toggle.checked, !toggle.disabled);
     toast('Could not toggle exclusive mode');
   }
 }
@@ -12475,9 +12524,9 @@ const App = {
   rescanClean,
   toggleRescanMenu,
   closeRescanMenu,
-  showSettings: () => {},
-  closeSettings: () => {},
-  saveSettings: () => {},
+  showSettings,
+  closeSettings,
+  saveSettings,
   showHelp,
   closeHelp,
   triggerImport,
@@ -12528,7 +12577,9 @@ const App = {
   setTableColumnVisible,
   // Settings
   loadSettings,
+  showSettingsCategory,
   saveLibraryPath,
+  saveDeviceSettings,
   closeOnboarding,
   skipOnboarding,
   completeOnboarding,
