@@ -912,6 +912,7 @@ async function refreshCurrentLibraryView() {
 /* ── Context menu state ─────────────────────────────────────────────── */
 let _ctxTracks = [];
 let _ctxFavTarget = null;
+let _ctxFinderTarget = null;
 let _ctxDetailMode = null; // 'album' | 'artist' | null
 
 /* ── Create playlist modal state ────────────────────────────────────── */
@@ -2717,14 +2718,16 @@ function showAddDropdown(event, trackId) {
 }
 
 /* ── Right-click context menu ───────────────────────────────────────── */
-function _showCtxMenu(x, y, tracks, label, favTarget = null) {
+function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null) {
   _ctxTracks = tracks;
   _ctxFavTarget = favTarget;
+  _ctxFinderTarget = finderTarget?.path ? finderTarget : null;
   const menu = document.getElementById('ctx-menu');
   const labelEl = document.getElementById('ctx-label');
   const smartLabel = document.getElementById('ctx-smart-playlist-label');
   const favItem = document.getElementById('ctx-favourite-item');
   const favLabel = document.getElementById('ctx-favourite-label');
+  const finderItem = document.getElementById('ctx-show-in-finder-item');
   const removeItem = document.getElementById('ctx-remove-from-playlist-item');
   const removeLabel = document.getElementById('ctx-remove-from-playlist-label');
   if (labelEl) labelEl.textContent = label || (tracks.length === 1 ? tracks[0].title : `${tracks.length} songs`);
@@ -2742,6 +2745,9 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null) {
         ? 'Remove from Favourites'
         : 'Add to Favourites';
     }
+  }
+  if (finderItem) {
+    finderItem.style.display = _ctxFinderTarget?.path ? '' : 'none';
   }
   if (removeItem && removeLabel) {
     const canRemove = state.view === 'playlist' && !!state.playlist && !state.playlist?.is_favourites && tracks.length > 0;
@@ -2778,15 +2784,48 @@ function hideCtxMenu() {
   clearTimeout(_ctxSubmenuTimer);
   _ctxTracks = [];
   _ctxFavTarget = null;
+  _ctxFinderTarget = null;
   _ctxDetailMode = null;
   const editAlbumItem = document.getElementById('ctx-edit-album-tags-item');
   const editArtistItem = document.getElementById('ctx-rename-artist-item');
   const editTrackItem = document.getElementById('ctx-edit-track-tags-item');
+  const finderItem = document.getElementById('ctx-show-in-finder-item');
   const removeItem = document.getElementById('ctx-remove-from-playlist-item');
   if (editAlbumItem) editAlbumItem.style.display = 'none';
   if (editArtistItem) editArtistItem.style.display = 'none';
   if (editTrackItem) editTrackItem.style.display = 'none';
+  if (finderItem) finderItem.style.display = 'none';
   if (removeItem) removeItem.style.display = 'none';
+}
+
+function _normalizeFinderRelPath(path) {
+  return String(path || '').replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+}
+
+function _trackFinderTarget(track) {
+  const path = _normalizeFinderRelPath(track?.path);
+  return path ? { path } : null;
+}
+
+function _albumFinderTarget(tracks) {
+  const parents = (tracks || [])
+    .map(t => _normalizeFinderRelPath(t?.path))
+    .filter(Boolean)
+    .map(path => {
+      const parts = path.split('/').filter(Boolean);
+      parts.pop();
+      return parts;
+    });
+  if (!parents.length) return null;
+
+  const common = parents[0].slice();
+  for (const parts of parents.slice(1)) {
+    let i = 0;
+    while (i < common.length && i < parts.length && common[i] === parts[i]) i += 1;
+    common.length = i;
+  }
+
+  return { path: common.length ? common.join('/') : '.' };
 }
 
 function showTrackCtxMenu(e, trackId) {
@@ -2816,7 +2855,7 @@ function showTrackCtxMenu(e, trackId) {
 
   const track = Player.getTrack(id);
   if (!track) return;
-  _showCtxMenu(e.clientX, e.clientY, [track], track.title, { type: 'songs', id });
+  _showCtxMenu(e.clientX, e.clientY, [track], track.title, { type: 'songs', id }, _trackFinderTarget(track));
 }
 
 async function playArtistCard(artistName) {
@@ -2847,7 +2886,8 @@ async function showAlbumCtxMenu(e, artist, album) {
     const artworkKey = tracks[0]?.artwork_key || '';
     _showCtxMenu(e.clientX, e.clientY, tracks,
       `${album} · ${tracks.length} song${tracks.length !== 1 ? 's' : ''}`,
-      artworkKey ? { type: 'albums', id: artworkKey } : null);
+      artworkKey ? { type: 'albums', id: artworkKey } : null,
+      _albumFinderTarget(tracks));
   } catch (_) {}
 }
 
@@ -2913,6 +2953,20 @@ async function ctxToggleFavourite() {
   hideCtxMenu();
   if (!target?.type || !target?.id) return;
   await toggleFavourite(target.type, encodeURIComponent(target.id));
+}
+
+async function ctxShowInFinder() {
+  const target = _ctxFinderTarget;
+  hideCtxMenu();
+  if (!target?.path) {
+    toast('Path not available', 'error');
+    return;
+  }
+  try {
+    await api('/open-in-finder', { method: 'POST', body: { path: target.path } });
+  } catch (_) {
+    toast('Could not open in Finder', 'error');
+  }
 }
 
 function ctxEditTrackTags() {
@@ -12338,6 +12392,7 @@ const App = {
   ctxAddToQueue,
   ctxCreateSmartPlaylist,
   ctxToggleFavourite,
+  ctxShowInFinder,
   ctxEditTrackTags,
   ctxEditAlbumTags,
   ctxRenameArtist,

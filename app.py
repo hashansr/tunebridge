@@ -11647,13 +11647,18 @@ def library_duplicates_delete_folders():
 def open_in_finder():
     """Reveal a file or directory in macOS Finder (open -R)."""
     data = request.get_json() or {}
-    rel_path = data.get('path', '').strip()
-    dap_abs = data.get('abs_path', '').strip()  # pre-resolved absolute path for DAP files
+    rel_path = str(data.get('path', '') or '').strip()
+    dap_abs = str(data.get('abs_path', '') or '').strip()  # pre-resolved absolute path for DAP files
 
     if dap_abs:
         abs_path = Path(dap_abs)
     elif rel_path:
-        abs_path = get_music_base() / rel_path
+        music_base = get_music_base().resolve()
+        abs_path = (music_base / rel_path).resolve()
+        try:
+            abs_path.relative_to(music_base)
+        except ValueError:
+            return jsonify({'error': 'Path must be inside the music library'}), 400
     else:
         return jsonify({'error': 'path required'}), 400
 
@@ -11661,6 +11666,11 @@ def open_in_finder():
     if not abs_path.exists():
         # Still try to reveal the parent if the file is gone
         abs_path = abs_path.parent
+        if rel_path and not dap_abs:
+            try:
+                abs_path.resolve().relative_to(music_base)
+            except ValueError:
+                return jsonify({'error': 'Path must be inside the music library'}), 400
         if not abs_path.exists():
             return jsonify({'error': 'Path not found'}), 404
 
