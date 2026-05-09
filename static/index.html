@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=49" />
+  <link rel="stylesheet" href="/style.css?v=50" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -787,31 +787,31 @@
           <nav class="settings-category-bar" aria-label="Settings categories">
             <button class="settings-category-btn active" type="button" data-settings-category="library" onclick="App.showSettingsCategory('library')">
               <span class="settings-category-title">Library</span>
-              <span class="settings-category-count">4</span>
+              <span class="settings-category-indicator" data-settings-indicator="library" style="display:none"></span>
             </button>
             <button class="settings-category-btn" type="button" data-settings-category="playback" onclick="App.showSettingsCategory('playback')">
               <span class="settings-category-title">Playback</span>
-              <span class="settings-category-count">3</span>
+              <span class="settings-category-indicator" data-settings-indicator="playback" style="display:none"></span>
             </button>
             <button class="settings-category-btn" type="button" data-settings-category="devices" onclick="App.showSettingsCategory('devices')">
               <span class="settings-category-title">Devices</span>
-              <span class="settings-category-count">3</span>
+              <span class="settings-category-indicator" data-settings-indicator="devices" style="display:none"></span>
             </button>
             <button class="settings-category-btn" type="button" data-settings-category="audio-tools" onclick="App.showSettingsCategory('audio-tools')">
               <span class="settings-category-title">Audio Tools</span>
-              <span class="settings-category-count">2</span>
+              <span class="settings-category-indicator" data-settings-indicator="audio-tools" style="display:none"></span>
             </button>
             <button class="settings-category-btn" type="button" data-settings-category="artwork" onclick="App.showSettingsCategory('artwork')">
               <span class="settings-category-title">Artwork</span>
-              <span class="settings-category-count">2</span>
+              <span class="settings-category-indicator" data-settings-indicator="artwork" style="display:none"></span>
             </button>
             <button class="settings-category-btn" type="button" data-settings-category="maintenance" onclick="App.showSettingsCategory('maintenance')">
               <span class="settings-category-title">Maintenance</span>
-              <span class="settings-category-count">3</span>
+              <span class="settings-category-indicator" data-settings-indicator="maintenance" style="display:none"></span>
             </button>
             <button class="settings-category-btn" type="button" data-settings-category="app" onclick="App.showSettingsCategory('app')">
               <span class="settings-category-title">App</span>
-              <span class="settings-category-count">2</span>
+              <span class="settings-category-indicator" data-settings-indicator="app" style="display:none"></span>
             </button>
           </nav>
 
@@ -819,7 +819,7 @@
 
           <!-- Library section -->
           <div class="settings-section settings-panel active" id="settings-library-section" data-settings-panel="library">
-            <h3 class="settings-section-title tb-section-title">Library</h3>
+            <h3 class="settings-section-title tb-section-title">Library <span class="settings-section-status" data-settings-section-status="library" style="display:none"></span></h3>
             <div class="settings-row">
               <label>Music library path</label>
               <div class="input-browse-group">
@@ -892,7 +892,7 @@
 
           <!-- Artist Images section -->
           <div class="settings-section settings-panel" id="settings-image-search-section" data-settings-panel="artwork">
-            <h3 class="settings-section-title tb-section-title">Image Search</h3>
+            <h3 class="settings-section-title tb-section-title">Image Search <span class="settings-section-status" data-settings-section-status="artwork" style="display:none"></span></h3>
             <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
               Search for both artist portraits and album covers from an online service. Choose a service and optionally add an API key for better results.
             </p>
@@ -3350,6 +3350,6 @@
   </div>
 
   <script src="/player.js?v=36"></script>
-  <script src="/app.js?v=42"></script>
+  <script src="/app.js?v=43"></script>
 </body>
 </html>

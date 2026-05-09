@@ -838,6 +838,11 @@ function _renderSidebarScanStatus(status) {
   if (status?.status === 'scanning') {
     const pct = status.total > 0 ? Math.round((status.progress / status.total) * 100) : 0;
     setState('Scanning', 'is-scanning');
+    _setSettingsStatus('library', {
+      text: 'SCAN',
+      tone: 'busy',
+      title: `Library scan running${status.total ? `: ${Number(status.progress || 0).toLocaleString()} / ${Number(status.total || 0).toLocaleString()}` : ''}`,
+    });
     barWrap.style.display = 'block';
     bar.style.width = pct + '%';
     msg.innerHTML = `
@@ -856,6 +861,7 @@ function _renderSidebarScanStatus(status) {
   bar.style.width = '100%';
   msg.classList.remove('scanning-pulse');
   if (rescanBtn) rescanBtn.classList.remove('is-scanning');
+  if (status?.status !== 'scanning') _loadRgInfo();
 
   if (status?.status === 'done' && status.total_tracks != null) {
     setState('Library Ready');
@@ -10308,6 +10314,25 @@ function showSettingsCategory(category = 'library') {
   });
 }
 
+function _setSettingsStatus(category, opts = {}) {
+  const text = opts.text || '';
+  const tone = opts.tone || 'info';
+  const show = !!(text || opts.show);
+  const nodes = [
+    ...document.querySelectorAll(`[data-settings-indicator="${category}"]`),
+    ...document.querySelectorAll(`[data-settings-section-status="${category}"]`),
+  ];
+  nodes.forEach(node => {
+    node.style.display = show ? 'inline-flex' : 'none';
+    node.textContent = text;
+    node.title = opts.title || text || '';
+    node.classList.toggle('has-text', !!text);
+    node.classList.toggle('is-warning', tone === 'warning');
+    node.classList.toggle('is-busy', tone === 'busy');
+    node.classList.toggle('is-error', tone === 'error');
+  });
+}
+
 function _setSettingsToggleState(inputId, stateId, enabled, available = true) {
   const input = document.getElementById(inputId);
   const stateEl = document.getElementById(stateId);
@@ -16130,12 +16155,19 @@ function _updateArtistBatchBanner(s) {
   banner.style.display   = (s.status === 'idle') ? 'none' : '';
   if (startBtn)  startBtn.disabled    = running;
   if (cancelBtn) cancelBtn.style.display = running ? '' : 'none';
+  if (s.status === 'idle') _setSettingsStatus('artwork');
 
   if (s.status === 'running') {
     const pct = s.total > 0 ? Math.round((s.done / s.total) * 100) : 0;
+    _setSettingsStatus('artwork', {
+      text: 'RUN',
+      tone: 'busy',
+      title: `Artist photo fetch running: ${Number(s.done || 0).toLocaleString()} / ${Number(s.total || 0).toLocaleString()}`,
+    });
     if (bar) bar.style.width = pct + '%';
     if (msg) msg.textContent = `Searching… ${s.done.toLocaleString()} / ${s.total.toLocaleString()} artists — ${s.fetched} found, ${s.skipped} skipped`;
   } else if (s.status === 'done') {
+    _setSettingsStatus('artwork');
     if (bar) bar.style.width = '100%';
     if (msg) {
       const errNote = s.failed > 0 ? `, ${s.failed} not found` : '';
@@ -16143,10 +16175,12 @@ function _updateArtistBatchBanner(s) {
     }
     if (startBtn) startBtn.disabled = false;
   } else if (s.status === 'cancelled') {
+    _setSettingsStatus('artwork');
     if (bar) bar.style.width = '0%';
     if (msg) msg.textContent = `Cancelled after ${s.done.toLocaleString()} artists — ${s.fetched} photos saved`;
     if (startBtn) startBtn.disabled = false;
   } else if (s.status === 'error') {
+    _setSettingsStatus('artwork', { text: '!', tone: 'error', title: 'Artist photo fetch encountered an error' });
     if (msg) msg.textContent = 'Batch job encountered an error.';
     if (startBtn) startBtn.disabled = false;
   }
@@ -16166,6 +16200,17 @@ async function _loadRgInfo() {
       } else {
         el.textContent = `${d.tagged.toLocaleString()} of ${d.total.toLocaleString()} tracks tagged · ${d.pending.toLocaleString()} missing`;
       }
+    }
+    if (d.status === 'running') {
+      _setSettingsStatus('library', { text: 'RG', tone: 'busy', title: 'ReplayGain tagging is running' });
+    } else if (d.pending > 0) {
+      _setSettingsStatus('library', {
+        text: d.pending > 999 ? '999+' : String(d.pending),
+        tone: 'warning',
+        title: `${d.pending.toLocaleString()} tracks missing ReplayGain tags`,
+      });
+    } else {
+      _setSettingsStatus('library');
     }
     // Resume polling and disable button if a job is already running
     if (d.status === 'running') {
@@ -16209,6 +16254,7 @@ async function cancelRgTagging() {
   if (cancelBtn) cancelBtn.style.display = 'none';
   if (tagBtn)    tagBtn.disabled = false;
   if (banner)    banner.style.display = 'none';
+  _loadRgInfo();
 }
 
 function _startRgPolling() {
@@ -16218,6 +16264,7 @@ function _startRgPolling() {
   if (tagBtn)    tagBtn.disabled = true;
   if (cancelBtn) cancelBtn.style.display = '';
   if (banner)    banner.style.display = '';
+  _setSettingsStatus('library', { text: 'RG', tone: 'busy', title: 'ReplayGain tagging is running' });
   if (_rgPoller) clearInterval(_rgPoller);
   _rgPoller = setInterval(_pollRgStatus, 1500);
 }
@@ -16258,18 +16305,26 @@ function _updateRgBanner(s) {
   if (bar) bar.style.width = pct + '%';
 
   if (s.status === 'running') {
+    _setSettingsStatus('library', {
+      text: 'RG',
+      tone: 'busy',
+      title: `ReplayGain tagging: ${Number(s.done || 0).toLocaleString()} / ${Number(s.total || 0).toLocaleString()}`,
+    });
     if (label) label.textContent = s.stalled ? 'Waiting for drive…' : 'Tagging tracks…';
     if (sub)   sub.textContent   = `${s.done.toLocaleString()} / ${s.total.toLocaleString()} · ${pct}%${errNote}`;
     if (fileLine) fileLine.textContent = s.current_file || '';
   } else if (s.status === 'done') {
+    _setSettingsStatus('library');
     if (label) label.textContent = 'Tagging complete';
     if (sub)   sub.textContent   = `${s.done.toLocaleString()} tracks tagged${errNote}`;
     if (fileLine) fileLine.textContent = '';
   } else if (s.status === 'cancelled') {
+    _loadRgInfo();
     if (label) label.textContent = 'Tagging cancelled';
     if (sub)   sub.textContent   = `${s.done.toLocaleString()} of ${s.total.toLocaleString()} tracks tagged`;
     if (fileLine) fileLine.textContent = '';
   } else if (s.status === 'error') {
+    _setSettingsStatus('library', { text: '!', tone: 'error', title: s.error || 'ReplayGain tagging failed' });
     if (label) label.textContent = 'Tagging failed';
     if (sub)   sub.textContent   = s.error || 'Unknown error';
     if (fileLine) fileLine.textContent = '';

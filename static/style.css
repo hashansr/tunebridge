@@ -722,59 +722,99 @@ nav {
 .settings-category-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 18px;
   max-width: 100%;
   overflow-x: auto;
-  padding: 4px 2px 10px;
+  padding: 0 2px 12px;
   scrollbar-width: thin;
 }
 .settings-category-btn {
   border: 1px solid transparent;
-  border-radius: 999px;
-  padding: 7px 9px 7px 13px;
-  background: rgba(255,255,255,0.035);
+  border-radius: 0;
+  padding: 2px 0 8px;
+  background: transparent;
   color: var(--text-muted);
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   white-space: nowrap;
   cursor: pointer;
   font-family: inherit;
   flex: 0 0 auto;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  position: relative;
+  transition: color 0.15s;
 }
 .settings-category-btn:hover {
-  background: rgba(255,255,255,0.07);
+  background: transparent;
   color: var(--text);
 }
 .settings-category-btn.active {
-  background: rgba(173,198,255,0.16);
-  border-color: rgba(173,198,255,0.32);
+  background: transparent;
+  border-color: transparent;
   color: var(--text-primary);
+}
+.settings-category-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(173,198,255,0.32);
 }
 .settings-category-title {
   font-size: 12px;
   font-weight: 650;
   color: inherit;
 }
-.settings-category-count {
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
+.settings-category-indicator,
+.settings-section-status {
+  min-width: 8px;
+  height: 8px;
+  padding: 0;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: rgba(255,255,255,0.055);
-  color: rgba(229,226,225,0.72);
-  font-size: 11px;
+  background: var(--accent);
+  color: #121722;
+  font-size: 10px;
   font-weight: 700;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-.settings-category-btn.active .settings-category-count {
-  background: rgba(173,198,255,0.18);
-  color: var(--accent);
+.settings-category-indicator.has-text,
+.settings-section-status.has-text {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+}
+.settings-category-indicator.is-warning,
+.settings-section-status.is-warning {
+  background: #f0b429;
+  color: #17120a;
+}
+.settings-category-indicator.is-busy,
+.settings-section-status.is-busy {
+  background: var(--accent);
+  color: #111826;
+  animation: settingsStatusPulse 1.4s ease-in-out infinite;
+}
+.settings-category-indicator.is-error,
+.settings-section-status.is-error {
+  background: var(--accent-secondary);
+  color: #1d0d0e;
+}
+.settings-section-status {
+  margin-left: 8px;
+  vertical-align: 1px;
+}
+@keyframes settingsStatusPulse {
+  0%, 100% { opacity: 0.62; transform: scale(0.94); }
+  50% { opacity: 1; transform: scale(1); }
 }
 .settings-content {
   display: flex;
@@ -794,13 +834,11 @@ nav {
 #settings-data-backup-section { order: 7; }
 #settings-app-restart-section { order: 8; }
 .settings-section {
-  background: var(--surface-section-gradient);
-  border-radius: 1.15rem;
-  padding: 20px 22px;
-  margin-bottom: 14px;
-  box-shadow:
-    0 14px 34px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background: transparent;
+  border-radius: 0;
+  padding: 14px 0 0;
+  margin-bottom: 0;
+  box-shadow: none;
 }
 .settings-panel {
   display: none;
@@ -1166,12 +1204,8 @@ h4.settings-subsection-title {
   .settings-category-btn {
     padding: 7px 9px 7px 11px;
   }
-  .settings-category-count {
-    display: none;
-  }
   .settings-section {
-    padding: 16px;
-    border-radius: 12px;
+    padding: 12px 0 0;
   }
   .settings-row {
     align-items: stretch;
