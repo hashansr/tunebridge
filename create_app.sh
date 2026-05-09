@@ -180,15 +180,23 @@ if [ -f "$CUSTOM_ICON" ]; then
 fi
 
 "$VENV_PYTHON" - "$CONTENTS/Info.plist" "$PROJECT_DIR" "$ICON_KEY" > /dev/null <<'PYEOF'
-import plistlib, sys
+import json
+import plistlib
+import sys
+from pathlib import Path
 plist_path, project_dir, icon_key = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    version_info = json.loads((Path(project_dir) / 'version.json').read_text())
+except Exception:
+    version_info = {}
+version = str(version_info.get('version') or '1.0')
 
 plist = {
     'CFBundleName': 'TuneBridge',
     'CFBundleDisplayName': 'TuneBridge',
     'CFBundleIdentifier': 'com.tunebridge.app',
-    'CFBundleVersion': '1.0',
-    'CFBundleShortVersionString': '1.0',
+    'CFBundleVersion': version,
+    'CFBundleShortVersionString': version,
     'CFBundleExecutable': 'TuneBridge',
     'CFBundlePackageType': 'APPL',
     'CFBundleSignature': '????',

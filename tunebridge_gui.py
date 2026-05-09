@@ -12,6 +12,8 @@ Works in two modes:
 
 import os
 import sys
+import json
+import socket
 import threading
 import time
 from collections import deque
@@ -62,8 +64,25 @@ os.chdir(PROJECT_DIR)
 
 import webview  # noqa: E402 — must come after sys.path setup
 
-PORT = int(os.environ.get("TUNEBRIDGE_PORT", 5001))
+BASE_PORT = int(os.environ.get("TUNEBRIDGE_PORT", 5001))
+PORT = BASE_PORT
 URL  = f"http://localhost:{PORT}"
+
+
+def _set_port(port: int):
+    """Update the process-wide local server port."""
+    global PORT, URL
+    PORT = int(port)
+    URL = f"http://localhost:{PORT}"
+
+
+def _bundled_version_info() -> dict:
+    """Return the version metadata for this app bundle/source checkout."""
+    try:
+        with open(Path(PROJECT_DIR) / "version.json", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 # ── macOS media key integration ──────────────────────────────────────────────
@@ -87,15 +106,57 @@ def _start_server():
         app.run(host="127.0.0.1", port=PORT, debug=False, use_reloader=False)
 
 
-def _health_check() -> bool:
+def _health_check(port: int | None = None) -> bool:
     """Return True if a TuneBridge server is already healthy on PORT."""
     import urllib.request
     import json as _json
+    check_url = f"http://localhost:{port or PORT}"
     try:
-        with urllib.request.urlopen(f"{URL}/api/health", timeout=2) as r:
+        with urllib.request.urlopen(f"{check_url}/api/health", timeout=2) as r:
             return _json.loads(r.read().decode()).get("status") == "ok"
     except Exception:
         return False
+
+
+def _server_version_info(port: int | None = None) -> dict:
+    """Return version metadata from an already-running TuneBridge server."""
+    import urllib.request
+    check_url = f"http://localhost:{port or PORT}"
+    try:
+        with urllib.request.urlopen(f"{check_url}/api/version", timeout=2) as r:
+            return json.loads(r.read().decode())
+    except Exception:
+        return {}
+
+
+def _same_build(server_info: dict, bundled_info: dict) -> bool:
+    """Return True when a running server matches this app bundle."""
+    if not server_info or not bundled_info:
+        return False
+    server_build = server_info.get("build")
+    bundled_build = bundled_info.get("build")
+    if server_build is not None and bundled_build is not None:
+        try:
+            return int(server_build) == int(bundled_build)
+        except Exception:
+            pass
+    return (server_info.get("version_full") or server_info.get("version")) == (
+        bundled_info.get("version_full") or bundled_info.get("version")
+    )
+
+
+def _port_is_free(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.25)
+        return sock.connect_ex(("127.0.0.1", int(port))) != 0
+
+
+def _find_fallback_port(start: int) -> int:
+    """Find a free local port for this app when 5001 has a stale server."""
+    for port in range(max(1, start), start + 100):
+        if _port_is_free(port):
+            return port
+    raise RuntimeError("No available TuneBridge local port found.")
 
 
 def _wait_for_server(timeout: int = 15) -> bool:
@@ -212,9 +273,36 @@ def _start_media_key_bridge(window):
 
 
 def main():
-    # If a TuneBridge server is already running (e.g. a dev server, or a
-    # previous app instance), reuse it instead of showing an error.
-    reusing = _health_check()
+    # If the same TuneBridge build is already running, reuse it. If an older
+    # dev/app server is still on the default port, start this bundle on a
+    # fallback port so a new app window cannot accidentally show stale UI.
+    bundled_info = _bundled_version_info()
+    reusing = False
+    if _health_check(BASE_PORT):
+        existing_info = _server_version_info(BASE_PORT)
+        if _same_build(existing_info, bundled_info):
+            _set_port(BASE_PORT)
+            reusing = True
+        else:
+            try:
+                fallback = _find_fallback_port(BASE_PORT + 1)
+                print(
+                    "TuneBridge: existing server on port "
+                    f"{BASE_PORT} is build {existing_info.get('version_full') or existing_info.get('version') or 'unknown'}; "
+                    f"starting this build on port {fallback}."
+                )
+                _set_port(fallback)
+            except Exception as exc:
+                webview.create_window(
+                    "TuneBridge — Error",
+                    html="<h2 style='font-family:sans-serif;color:#c00;padding:40px'>"
+                         "TuneBridge could not find a free local port.<br>"
+                         f"<small>{exc}</small></h2>",
+                )
+                webview.start()
+                return
+    else:
+        _set_port(BASE_PORT)
 
     if not reusing:
         server_thread = threading.Thread(target=_start_server, daemon=True)

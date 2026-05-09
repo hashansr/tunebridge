@@ -4933,7 +4933,19 @@ def put_settings():
 
 @app.route('/api/health')
 def health():
-    return jsonify({'status': 'ok', 'pid': os.getpid()})
+    version_info = {}
+    try:
+        version_info = _built_version_info()
+    except Exception:
+        version_info = {}
+    return jsonify({
+        'status': 'ok',
+        'pid': os.getpid(),
+        'version': version_info.get('version', ''),
+        'version_full': version_info.get('version_full', ''),
+        'build': version_info.get('build', 0),
+        'channel': version_info.get('channel', ''),
+    })
 
 
 # ── mpv audio engine ──────────────────────────────────────────────────────
