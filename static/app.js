@@ -2721,7 +2721,9 @@ function showAddDropdown(event, trackId) {
 function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null) {
   _ctxTracks = tracks;
   _ctxFavTarget = favTarget;
-  _ctxFinderTarget = finderTarget?.path ? finderTarget : null;
+  _ctxFinderTarget = finderTarget?.path
+    ? finderTarget
+    : (tracks.length === 1 ? _trackFinderTarget(tracks[0]) : null);
   const menu = document.getElementById('ctx-menu');
   const labelEl = document.getElementById('ctx-label');
   const smartLabel = document.getElementById('ctx-smart-playlist-label');
@@ -2807,6 +2809,22 @@ function _trackFinderTarget(track) {
   return path ? { path } : null;
 }
 
+function _findTrackForContext(trackId) {
+  const id = String(trackId || '');
+  if (!id) return null;
+  const pools = [
+    state.tracks,
+    state.playlist?.tracks,
+    _songsData,
+    Player.getTrack(id) ? [Player.getTrack(id)] : null,
+  ];
+  for (const pool of pools) {
+    const match = (pool || []).find(t => String(t?.id || '') === id);
+    if (match) return match;
+  }
+  return null;
+}
+
 function _albumFinderTarget(tracks) {
   const parents = (tracks || [])
     .map(t => _normalizeFinderRelPath(t?.path))
@@ -2853,7 +2871,7 @@ function showTrackCtxMenu(e, trackId) {
     updateSelectionUI();
   }
 
-  const track = Player.getTrack(id);
+  const track = _findTrackForContext(id);
   if (!track) return;
   _showCtxMenu(e.clientX, e.clientY, [track], track.title, { type: 'songs', id }, _trackFinderTarget(track));
 }
