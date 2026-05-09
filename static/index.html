@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=52" />
+  <link rel="stylesheet" href="/style.css?v=53" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -819,7 +819,7 @@
 
           <!-- Library section -->
           <div class="settings-section settings-panel active" id="settings-library-section" data-settings-panel="library">
-            <h3 class="settings-section-title tb-section-title">Library <span class="settings-section-status" data-settings-section-status="library" style="display:none"></span></h3>
+            <h3 class="settings-section-title tb-section-title">Library</h3>
             <div class="settings-row">
               <label>Music library path</label>
               <div class="input-browse-group">
@@ -853,7 +853,10 @@
                 <span id="rg-info-text" class="settings-rg-sub">Loading…</span>
               </div>
               <div class="settings-rg-actions">
-                <button id="rg-tag-btn" class="btn-secondary" onclick="App.tagReplayGain()">Tag Missing Tracks</button>
+                <button id="rg-tag-btn" class="btn-secondary settings-action-with-status" onclick="App.tagReplayGain()">
+                  <span>Tag Missing Tracks</span>
+                  <span class="settings-action-status" data-settings-action-status="library-rg" style="display:none"></span>
+                </button>
                 <button id="rg-cancel-btn" class="btn-secondary" onclick="App.cancelRgTagging()" style="display:none">Cancel</button>
               </div>
             </div>
@@ -3373,6 +3376,6 @@
   </div>
 
   <script src="/player.js?v=37"></script>
-  <script src="/app.js?v=45"></script>
+  <script src="/app.js?v=46"></script>
 </body>
 </html>

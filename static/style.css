@@ -776,7 +776,8 @@ nav {
   color: inherit;
 }
 .settings-category-indicator,
-.settings-section-status {
+.settings-section-status,
+.settings-action-status {
   min-width: 8px;
   height: 8px;
   padding: 0;
@@ -793,18 +794,21 @@ nav {
   font-variant-numeric: tabular-nums;
 }
 .settings-category-indicator.is-warning,
-.settings-section-status.is-warning {
+.settings-section-status.is-warning,
+.settings-action-status.is-warning {
   background: #f0b429;
   color: transparent;
 }
 .settings-category-indicator.is-busy,
-.settings-section-status.is-busy {
+.settings-section-status.is-busy,
+.settings-action-status.is-busy {
   background: var(--accent);
   color: transparent;
   animation: settingsStatusPulse 1.4s ease-in-out infinite;
 }
 .settings-category-indicator.is-error,
-.settings-section-status.is-error {
+.settings-section-status.is-error,
+.settings-action-status.is-error {
   background: var(--accent-secondary);
   color: transparent;
 }
@@ -840,6 +844,15 @@ nav {
   padding: 14px 0 0;
   margin-bottom: 0;
   box-shadow: none;
+}
+.settings-action-with-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-action-status {
+  margin-left: 0;
+  box-shadow: 0 0 0 2px rgba(18, 19, 22, 0.55);
 }
 .settings-panel {
   display: none;
