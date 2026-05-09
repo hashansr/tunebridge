@@ -1938,7 +1938,7 @@ function _formatTrackNumber(trackNumber, fallbackNum) {
 function _lyricBadge(t) {
   if (!t?.has_lyrics) return '';
   const title = t.lyric_path ? `Lyrics file: ${t.lyric_path}` : 'Lyrics available';
-  return `<span class="track-lyrics-badge" title="${esc(title)}" aria-label="Lyrics available">L</span>`;
+  return `<span class="track-lyrics-badge" title="${esc(title)}" aria-label="Lyrics available"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="11" x2="17" y2="11"/><line x1="3" y1="16" x2="13" y2="16"/></svg></span>`;
 }
 
 /* ── Track row (library) ────────────────────────────────────────────── */
@@ -2775,7 +2775,9 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null
     const showLyrics = tracks.length > 0 && missing.length > 0;
     findLyricsItem.style.display = showLyrics ? '' : 'none';
     findLyricsSep.style.display = showLyrics ? '' : 'none';
-    findLyricsLabel.textContent = missing.length === 1 ? 'Find Lyrics' : `Find Lyrics (${missing.length})`;
+    findLyricsLabel.textContent = tracks.length === 1
+      ? 'Find Lyrics'
+      : `Find Lyrics for ${missing.length} missing song${missing.length === 1 ? '' : 's'}`;
   }
   if (labelEl) labelEl.textContent = label || (tracks.length === 1 ? tracks[0].title : `${tracks.length} songs`);
   if (smartLabel) {
@@ -12629,7 +12631,7 @@ function _renderLyrics(parsed) {
   const introGap = _lyricsGaps.find(g => g.beforeLineIdx === 0);
   if (introGap) parts.push(_lyricsGapHtml(introGap));
   parsed.lines.forEach((line, i) => {
-    parts.push(`<button class="lyrics-line" data-idx="${i}" onclick="Player.seek(${Math.max(0, line.ms / 1000)})">${esc(line.text)}</button>`);
+    parts.push(`<button class="lyrics-line" data-idx="${i}" onclick="_lyricsUserScrolled=false;Player.seekSeconds(${Math.max(0, line.ms / 1000)})">${esc(line.text)}</button>`);
     const gap = _lyricsGaps.find(g => g.afterLineIdx === i);
     if (gap) parts.push(_lyricsGapHtml(gap));
   });
@@ -12668,19 +12670,28 @@ function _syncLyricsToTime(seconds) {
   const scroll = document.getElementById('lyrics-scroll');
   if (!scroll) return;
   const gaps = scroll.querySelectorAll('.lyrics-gap');
+  let activeGap = false;
   gaps.forEach(el => {
     const active = ms >= Number(el.dataset.start || 0) && ms < Number(el.dataset.end || 0);
     el.classList.toggle('lyrics-gap--active', active);
+    if (active) activeGap = true;
   });
   const lines = scroll.querySelectorAll('.lyrics-line');
   let activeEl = null;
   lines.forEach((el, i) => {
-    const active = i === activeIdx;
+    const active = !activeGap && i === activeIdx;
+    const upcoming = !activeGap && i > activeIdx && i <= activeIdx + 2;
     el.classList.toggle('lyrics-line--active', active);
-    el.classList.toggle('lyrics-line--upcoming', i > activeIdx && i <= activeIdx + 2);
+    el.classList.toggle('lyrics-line--upcoming', upcoming);
     if (active) activeEl = el;
   });
-  if (activeEl && !_lyricsUserScrolled) {
+  // Scroll active gap or lyric line into view
+  if (!activeEl && activeGap) {
+    const activeGapEl = scroll.querySelector('.lyrics-gap--active');
+    if (activeGapEl && !_lyricsUserScrolled) {
+      activeGapEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  } else if (activeEl && !_lyricsUserScrolled) {
     activeEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 }

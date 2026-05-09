@@ -1962,22 +1962,13 @@ tbody tr:hover .drag-handle { opacity: 0.8; }
 .track-info .track-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 280px; }
 .track-info .track-artist { font-size: var(--text-sm); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
 .track-lyrics-badge {
-  width: 14px;
-  height: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  border: 1px solid rgba(233, 238, 249, 0.24);
-  border-radius: 5px;
-  background: rgba(233, 238, 249, 0.025);
-  color: rgba(233, 238, 249, 0.56);
-  font-size: 9px;
-  font-weight: 600;
+  color: rgba(233, 238, 249, 0.45);
   line-height: 1;
-  opacity: 0.72;
-  transform: translateY(1px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  vertical-align: middle;
 }
 
 .col-artist td, td.cell-artist { color: var(--text-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }

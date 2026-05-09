@@ -1140,6 +1140,12 @@ const Player = (function () {
     setTimeout(() => { _seekDragging = false; }, 50);
   }
 
+  function seekSeconds(seconds) {
+    const dur = _isMpvActive() ? _mpvDuration : _audio.duration;
+    if (!currentTrack() || !isFinite(dur) || dur <= 0) return;
+    seek((parseFloat(seconds) / dur) * 1000);
+  }
+
   function setVolume(value) {
     ps.volume = Math.max(0, Math.min(1, parseFloat(value) / 100));
     _applyVolume();
@@ -3040,6 +3046,7 @@ const Player = (function () {
     prev,
     next,
     seekInput,
+    seekSeconds,
     seek,
     setVolume,
     toggleMute,
