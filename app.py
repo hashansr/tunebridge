@@ -869,6 +869,17 @@ def scan_file(filepath):
                 lyric_path = None
         has_lyrics = bool(lyric_path and lyric_path.exists())
         lyric_rel_path = str(lyric_path.relative_to(music_base)) if has_lyrics else None
+        lyrics_status_from_file = None
+        if has_lyrics and lyric_path:
+            try:
+                for line in lyric_path.read_text(encoding='utf-8', errors='replace').splitlines():
+                    s = line.strip()
+                    if s and not s.startswith('[ti:') and not s.startswith('[ar:') \
+                            and not s.startswith('[al:') and not s.startswith('[length:'):
+                        lyrics_status_from_file = 'synced' if re.match(r'\[\d+:\d+', s) else 'plain'
+                        break
+            except Exception:
+                pass
 
         disc_num = None
         rg_track_gain = None
@@ -1120,6 +1131,8 @@ def scan_file(filepath):
             'rg_album_peak': rg_album_peak,
             'has_lyrics': has_lyrics,
             'lyric_path': lyric_rel_path,
+            'lyrics_status': lyrics_status_from_file,
+            'lyrics_fetched_at': None,
         }
     except Exception as e:
         print(f"Error scanning {filepath}: {e}")
@@ -1164,6 +1177,21 @@ def do_scan():
         track = scan_file(filepath)
         if track:
             tracks.append(track)
+
+    try:
+        conn = _db.get_conn()
+        rows = conn.execute(
+            "SELECT id, lyrics_status, lyrics_fetched_at FROM tracks WHERE lyrics_status IS NOT NULL"
+        ).fetchall()
+        existing_lyrics = {r['id']: (r['lyrics_status'], r['lyrics_fetched_at']) for r in rows}
+        for t in tracks:
+            if t.get('lyrics_status') is None and t['id'] in existing_lyrics:
+                prev_status, prev_ts = existing_lyrics[t['id']]
+                if not t.get('has_lyrics') and prev_status in ('not_found', 'instrumental', 'error'):
+                    t['lyrics_status'] = prev_status
+                    t['lyrics_fetched_at'] = prev_ts
+    except Exception:
+        pass
 
     with library_lock:
         library = tracks
@@ -3548,6 +3576,308 @@ def remove_track(pid, track_id):
     playlists[pid]['updated_at'] = int(time.time())
     save_playlists(playlists)
     return jsonify({'total': len(tracks)})
+
+
+# ── Lyrics / LrcLib ────────────────────────────────────────────────────────────
+
+def _make_lrclib_session(rate_per_sec=5.0):
+    """Create a requests.Session throttled to rate_per_sec requests/second."""
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'TuneBridge/1.0 (https://github.com/hashansr/tunebridge)',
+        'Lrclib-Client': 'TuneBridge/1.0',
+    })
+    min_interval = 1.0 / rate_per_sec
+    _last = [0.0]
+    original_get = session.get
+
+    def throttled_get(*args, **kwargs):
+        elapsed = time.monotonic() - _last[0]
+        if elapsed < min_interval:
+            time.sleep(min_interval - elapsed)
+        _last[0] = time.monotonic()
+        return original_get(*args, **kwargs)
+
+    session.get = throttled_get
+    return session
+
+
+_lrclib_session = _make_lrclib_session(rate_per_sec=5.0)
+
+
+def _lrclib_get(session, title, artist, album, duration):
+    params = {'track_name': title, 'artist_name': artist}
+    if album:
+        params['album_name'] = album
+    if duration:
+        params['duration'] = int(duration)
+    try:
+        r = session.get('https://lrclib.net/api/get', params=params, timeout=15)
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return r.json()
+    except requests.RequestException:
+        return None
+
+
+def _lrclib_search(session, title, artist, duration, tolerance=5):
+    try:
+        r = session.get(
+            'https://lrclib.net/api/search',
+            params={'q': f'{artist} {title}'},
+            timeout=15,
+        )
+        r.raise_for_status()
+        results = r.json()
+    except requests.RequestException:
+        return None
+    if not results:
+        return None
+    if duration:
+        best = min(results, key=lambda x: abs((x.get('duration') or 0) - duration))
+        if abs((best.get('duration') or 0) - duration) <= tolerance:
+            return best
+        return None
+    return results[0]
+
+
+def _fetch_lyrics_for_track(track, music_base):
+    title = (track.get('title') or '').strip()
+    artist = (track.get('artist') or '').strip()
+    if not title or not artist:
+        return 'error'
+
+    album = (track.get('album') or '').strip() or None
+    duration = track.get('duration')
+    lrc_abs = (music_base / track['path']).with_suffix('.lrc')
+
+    data = _lrclib_get(_lrclib_session, title, artist, album, duration)
+    if data is None:
+        data = _lrclib_search(_lrclib_session, title, artist, duration)
+    if data is None:
+        status = 'not_found'
+        _db.db_update_track_lyrics(track['id'], False, None, status, int(time.time()))
+        _patch_library_track_lyrics(track['id'], False, None, status)
+        return status
+
+    if data.get('instrumental'):
+        status = 'instrumental'
+        _db.db_update_track_lyrics(track['id'], False, None, status, int(time.time()))
+        _patch_library_track_lyrics(track['id'], False, None, status)
+        return status
+
+    content = data.get('syncedLyrics') or data.get('plainLyrics')
+    if not content:
+        status = 'not_found'
+        _db.db_update_track_lyrics(track['id'], False, None, status, int(time.time()))
+        _patch_library_track_lyrics(track['id'], False, None, status)
+        return status
+
+    is_synced = bool(data.get('syncedLyrics'))
+    try:
+        lrc_abs.write_text(content, encoding='utf-8')
+    except OSError as e:
+        print(f"Lyrics: could not write {lrc_abs}: {e}")
+        status = 'error'
+        _db.db_update_track_lyrics(track['id'], False, None, status, int(time.time()))
+        _patch_library_track_lyrics(track['id'], False, None, status)
+        return status
+
+    status = 'synced' if is_synced else 'plain'
+    lyric_rel = str(lrc_abs.relative_to(music_base))
+    _db.db_update_track_lyrics(track['id'], True, lyric_rel, status, int(time.time()))
+    _patch_library_track_lyrics(track['id'], True, lyric_rel, status)
+    return status
+
+
+def _patch_library_track_lyrics(track_id, has_lyrics, lyric_path, lyrics_status):
+    with library_lock:
+        for t in library:
+            if t.get('id') == track_id:
+                t['has_lyrics'] = has_lyrics
+                t['lyric_path'] = lyric_path
+                t['lyrics_status'] = lyrics_status
+                t['lyrics_fetched_at'] = int(time.time())
+                break
+
+
+lyrics_state = {
+    'status': 'idle',
+    'mode': None,
+    'progress': 0,
+    'total': 0,
+    'synced': 0,
+    'plain': 0,
+    'not_found': 0,
+    'instrumental': 0,
+    'errors': 0,
+    'elapsed': 0.0,
+    'started_at': 0.0,
+    'message': '',
+}
+lyrics_state_lock = threading.Lock()
+
+
+def do_lyrics_bulk(mode):
+    music_base = get_music_base()
+    tracks = _db.db_get_tracks_for_lyrics_bulk(mode)
+    with lyrics_state_lock:
+        lyrics_state.update({
+            'status': 'running', 'mode': mode,
+            'progress': 0, 'total': len(tracks),
+            'synced': 0, 'plain': 0, 'not_found': 0, 'instrumental': 0, 'errors': 0,
+            'elapsed': 0.0, 'started_at': time.monotonic(), 'message': 'Starting...',
+        })
+
+    for i, track in enumerate(tracks):
+        if lyrics_state['status'] != 'running':
+            break
+        try:
+            status = _fetch_lyrics_for_track(track, music_base)
+        except Exception as e:
+            print(f"Lyrics bulk error on track {track.get('id')}: {e}")
+            status = 'error'
+        with lyrics_state_lock:
+            lyrics_state['progress'] = i + 1
+            lyrics_state['elapsed'] = time.monotonic() - lyrics_state['started_at']
+            if status in ('synced', 'plain', 'not_found', 'instrumental'):
+                lyrics_state[status] += 1
+            else:
+                lyrics_state['errors'] += 1
+
+    with lyrics_state_lock:
+        if lyrics_state['status'] == 'running':
+            lyrics_state['status'] = 'done'
+        lyrics_state['elapsed'] = time.monotonic() - lyrics_state['started_at']
+        s = lyrics_state
+        lyrics_state['message'] = (
+            f"Done - {s['synced']} synced, {s['plain']} plain, "
+            f"{s['not_found']} not found, {s['instrumental']} instrumental"
+        )
+
+
+@app.route('/api/lyrics/fetch', methods=['POST'])
+def api_lyrics_fetch():
+    body = request.json or {}
+    track_ids = body.get('track_ids', [])
+    if not track_ids:
+        return jsonify({'error': 'track_ids required'}), 400
+    music_base = get_music_base()
+    requested = set(track_ids)
+    with library_lock:
+        track_map = {t['id']: t for t in library if t.get('id') in requested}
+    tracks_to_fetch = [track_map[tid] for tid in track_ids if tid in track_map]
+    if not tracks_to_fetch:
+        return jsonify({'error': 'No matching tracks found'}), 404
+
+    if len(tracks_to_fetch) > 10:
+        if lyrics_state['status'] == 'running':
+            return jsonify({'error': 'A bulk lyrics fetch is already running'}), 409
+
+        def _bulk_fetch_selected():
+            with lyrics_state_lock:
+                lyrics_state.update({
+                    'status': 'running', 'mode': 'fetch',
+                    'progress': 0, 'total': len(tracks_to_fetch),
+                    'synced': 0, 'plain': 0, 'not_found': 0, 'instrumental': 0, 'errors': 0,
+                    'elapsed': 0.0, 'started_at': time.monotonic(), 'message': 'Starting...',
+                })
+            for i, track in enumerate(tracks_to_fetch):
+                if lyrics_state['status'] != 'running':
+                    break
+                try:
+                    status = _fetch_lyrics_for_track(track, music_base)
+                except Exception:
+                    status = 'error'
+                with lyrics_state_lock:
+                    lyrics_state['progress'] = i + 1
+                    lyrics_state['elapsed'] = time.monotonic() - lyrics_state['started_at']
+                    if status in ('synced', 'plain', 'not_found', 'instrumental'):
+                        lyrics_state[status] += 1
+                    else:
+                        lyrics_state['errors'] += 1
+            with lyrics_state_lock:
+                if lyrics_state['status'] == 'running':
+                    lyrics_state['status'] = 'done'
+
+        threading.Thread(target=_bulk_fetch_selected, daemon=True).start()
+        return jsonify({'queued': True, 'total': len(tracks_to_fetch)})
+
+    results = {}
+    for track in tracks_to_fetch:
+        try:
+            results[track['id']] = _fetch_lyrics_for_track(track, music_base)
+        except Exception:
+            results[track['id']] = 'error'
+    return jsonify({'results': results})
+
+
+@app.route('/api/lyrics/bulk', methods=['POST'])
+def api_lyrics_bulk():
+    if lyrics_state['status'] == 'running':
+        return jsonify({'error': 'A bulk lyrics fetch is already running'}), 409
+    body = request.json or {}
+    mode = body.get('mode', 'new')
+    if mode not in ('new', 'all'):
+        return jsonify({'error': 'mode must be "new" or "all"'}), 400
+    threading.Thread(target=do_lyrics_bulk, args=(mode,), daemon=True).start()
+    return jsonify({'ok': True, 'mode': mode})
+
+
+@app.route('/api/lyrics/status')
+def api_lyrics_status():
+    return jsonify(dict(lyrics_state))
+
+
+@app.route('/api/lyrics/cancel', methods=['POST'])
+def api_lyrics_cancel():
+    if lyrics_state['status'] == 'running':
+        with lyrics_state_lock:
+            lyrics_state['status'] = 'cancelled'
+    return jsonify({'ok': True})
+
+
+@app.route('/api/lyrics/track/<track_id>')
+def api_lyrics_track(track_id):
+    with library_lock:
+        track = next((t for t in library if t.get('id') == track_id), None)
+    if not track:
+        return jsonify({'error': 'Track not found'}), 404
+    if not track.get('lyric_path'):
+        return jsonify({'error': 'No lyrics file'}), 404
+    lrc_abs = get_music_base() / track['lyric_path']
+    if not lrc_abs.exists():
+        return jsonify({'error': 'Lyrics file missing'}), 404
+    try:
+        content = lrc_abs.read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return jsonify({'error': 'Could not read lyrics file'}), 500
+    is_synced = False
+    for line in content.splitlines():
+        s = line.strip()
+        if s and not re.match(r'^\[(?:ti|ar|al|by|length|re|ve):', s, re.IGNORECASE):
+            is_synced = bool(re.match(r'\[\d+:\d+', s))
+            break
+    return jsonify({'content': content, 'is_synced': is_synced})
+
+
+@app.route('/api/lyrics/stats')
+def api_lyrics_stats():
+    return jsonify(_db.db_get_lyrics_stats())
+
+
+@app.route('/api/lyrics/settings', methods=['GET', 'PUT'])
+def api_lyrics_settings():
+    if request.method == 'GET':
+        settings = load_settings()
+        return jsonify({'service': settings.get('lyrics_service', 'lrclib')})
+    body = request.json or {}
+    service = body.get('service', 'lrclib').strip().lower()
+    settings = load_settings()
+    settings['lyrics_service'] = service
+    save_settings(settings)
+    return jsonify({'ok': True})
 
 
 # ── ML Playlist Generation (v1) ───────────────────────────────────────────────

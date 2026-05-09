@@ -100,6 +100,10 @@ _MIGRATIONS: list[tuple] = [
         'ALTER TABLE tracks ADD COLUMN has_lyrics INTEGER DEFAULT 0',
         'ALTER TABLE tracks ADD COLUMN lyric_path TEXT',
     ]),
+    (10, 'Add lyrics_status and lyrics_fetched_at to tracks', [
+        'ALTER TABLE tracks ADD COLUMN lyrics_status TEXT',
+        'ALTER TABLE tracks ADD COLUMN lyrics_fetched_at INTEGER',
+    ]),
 ]
 
 _SCHEMA_SQL = """
@@ -135,7 +139,9 @@ CREATE TABLE IF NOT EXISTS tracks (
     rg_track_peak   REAL,
     rg_album_peak   REAL,
     has_lyrics      INTEGER DEFAULT 0,
-    lyric_path      TEXT
+    lyric_path      TEXT,
+    lyrics_status   TEXT,
+    lyrics_fetched_at INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_tracks_artist       ON tracks(artist COLLATE NOCASE);
@@ -564,8 +570,9 @@ def db_save_library(tracks):
         """INSERT INTO tracks (id, path, filename, title, artist, album_artist,
            album, track_number, disc_number, year, genre, duration, artwork_key, bitrate,
            format, sample_rate, bits_per_sample, date_added,
-           rg_track_gain, rg_album_gain, rg_track_peak, rg_album_peak, has_lyrics, lyric_path)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           rg_track_gain, rg_album_gain, rg_track_peak, rg_album_peak,
+           has_lyrics, lyric_path, lyrics_status, lyrics_fetched_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 t['id'], t.get('path', ''), t.get('filename', ''),
@@ -581,6 +588,8 @@ def db_save_library(tracks):
                 t.get('rg_track_peak'), t.get('rg_album_peak'),
                 1 if t.get('has_lyrics') else 0,
                 t.get('lyric_path'),
+                t.get('lyrics_status'),
+                t.get('lyrics_fetched_at'),
             )
             for t in tracks
         ]
@@ -601,6 +610,7 @@ def _row_to_track(row):
     if d.get('year') is not None:
         d['year'] = str(d['year'])
     d['has_lyrics'] = bool(d.get('has_lyrics'))
+    # lyrics_status stays as string/None for API consumers.
     # DB schema stores numeric duration only; frontend expects duration_fmt too.
     d['duration_fmt'] = _format_duration(d.get('duration'))
     return d
@@ -630,6 +640,48 @@ def db_get_track(track_id):
     conn = get_conn()
     row = conn.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
     return _row_to_track(row) if row else None
+
+
+def db_update_track_lyrics(track_id, has_lyrics, lyric_path, lyrics_status, lyrics_fetched_at):
+    """Update lyrics fields for a single track after a fetch attempt."""
+    conn = get_conn()
+    conn.execute(
+        'UPDATE tracks SET has_lyrics=?, lyric_path=?, lyrics_status=?, lyrics_fetched_at=? WHERE id=?',
+        (1 if has_lyrics else 0, lyric_path, lyrics_status, lyrics_fetched_at, track_id)
+    )
+    conn.commit()
+
+
+def db_get_lyrics_stats():
+    """Return aggregate lyrics status counts for Settings."""
+    conn = get_conn()
+    total = conn.execute('SELECT COUNT(*) FROM tracks').fetchone()[0]
+    rows = conn.execute(
+        'SELECT lyrics_status, COUNT(*) as n FROM tracks GROUP BY lyrics_status'
+    ).fetchall()
+    by_status = {}
+    for row in rows:
+        key = row['lyrics_status'] if row['lyrics_status'] else 'null'
+        by_status[key] = row['n']
+    has_files = conn.execute('SELECT COUNT(*) FROM tracks WHERE has_lyrics = 1').fetchone()[0]
+    return {'total': total, 'has_files': has_files, 'by_status': by_status}
+
+
+def db_get_tracks_for_lyrics_bulk(mode):
+    """Return minimal track dicts for bulk lyrics fetching."""
+    conn = get_conn()
+    if mode == 'new':
+        rows = conn.execute(
+            'SELECT id, path, title, artist, album, duration FROM tracks WHERE lyrics_status IS NULL'
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT id, path, title, artist, album, duration FROM tracks
+               WHERE has_lyrics = 0
+               AND (lyrics_status IS NULL
+                    OR lyrics_status NOT IN ('synced', 'plain', 'instrumental'))"""
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def db_get_tracks(search='', artist_filter='', album_filter=''):

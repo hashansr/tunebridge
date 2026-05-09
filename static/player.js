@@ -307,6 +307,9 @@ const Player = (function () {
     _mpvDuration = state.duration || 0;
     _lastMpvPlaying = !!state.playing;
     if (_lastMpvPlaying) _mpvIdleAdvanceHandled = false;
+    if (typeof App !== 'undefined' && App._syncLyricsToTime) {
+      App._syncLyricsToTime(_mpvPosition);
+    }
 
     // Sync play/pause indicator (only when not seek-dragging)
     if (!_seekDragging && !_seeking) {
@@ -1561,6 +1564,9 @@ const Player = (function () {
     if (seekEl) seekEl.value = clampedPct * 1000;
     if (fillEl) fillEl.style.width = (clampedPct * 100) + '%';
     if (curEl)  curEl.textContent  = _fmtTime(_audio.currentTime);
+    if (typeof App !== 'undefined' && App._syncLyricsToTime) {
+      App._syncLyricsToTime(_audio.currentTime);
+    }
 
     // Throttled seek-position save: write at most once per 1-second bucket
     const bucket = Math.floor(_audio.currentTime / 1);
@@ -2238,6 +2244,7 @@ const Player = (function () {
       if (_llb) _llb.style.display = 'none';
       document.title = 'TuneBridge';
       window.dispatchEvent(new CustomEvent('tb-track-change', { detail: { trackId: null } }));
+      if (typeof App !== 'undefined' && App._onLyricsTrackChange) App._onLyricsTrackChange(null);
       return;
     }
 
@@ -2277,6 +2284,7 @@ const Player = (function () {
     _updateBitPerfectBadge();
     document.title = `${track.title} — TuneBridge`;
     window.dispatchEvent(new CustomEvent('tb-track-change', { detail: { trackId: track.id } }));
+    if (typeof App !== 'undefined' && App._onLyricsTrackChange) App._onLyricsTrackChange(track);
   }
 
   function _updateBitPerfectBadge() {
