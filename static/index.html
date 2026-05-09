@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=50" />
+  <link rel="stylesheet" href="/style.css?v=51" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -793,9 +793,9 @@
               <span class="settings-category-title">Playback</span>
               <span class="settings-category-indicator" data-settings-indicator="playback" style="display:none"></span>
             </button>
-            <button class="settings-category-btn" type="button" data-settings-category="devices" onclick="App.showSettingsCategory('devices')">
-              <span class="settings-category-title">Devices</span>
-              <span class="settings-category-indicator" data-settings-indicator="devices" style="display:none"></span>
+            <button class="settings-category-btn" type="button" data-settings-category="lyrics" onclick="App.showSettingsCategory('lyrics')">
+              <span class="settings-category-title">Lyrics</span>
+              <span class="settings-category-indicator" data-settings-indicator="lyrics" style="display:none"></span>
             </button>
             <button class="settings-category-btn" type="button" data-settings-category="audio-tools" onclick="App.showSettingsCategory('audio-tools')">
               <span class="settings-category-title">Audio Tools</span>
@@ -1093,44 +1093,20 @@
             </div>
           </div>
 
-          <!-- Devices section -->
-          <div class="settings-section settings-panel" id="settings-devices-section" data-settings-panel="devices">
-            <h3 class="settings-section-title tb-section-title">Devices</h3>
+          <!-- Lyrics section -->
+          <div class="settings-section settings-panel" id="settings-lyrics-section" data-settings-panel="lyrics">
+            <h3 class="settings-section-title tb-section-title">Lyrics</h3>
             <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
-              Legacy fixed-player paths used by older playlist export flows. Newer DAP profiles are managed from the Devices area.
+              TuneBridge detects synced lyric files during library scans. Put an <code>.lrc</code> file beside a track using the same filename.
             </p>
-
-            <div class="settings-device-block">
-              <div class="settings-device-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
-                Poweramp — FiiO M21
+            <div class="settings-rg-row">
+              <div class="settings-rg-meta">
+                <span class="settings-rg-label">Lyric file matching</span>
+                <span class="settings-rg-sub">Files like <code>Track Name.lrc</code> are linked to matching audio files and shown with lyric badges.</span>
               </div>
-              <div class="settings-row">
-                <label>Mac mount path</label>
-                <input id="s-poweramp-mount" type="text" placeholder="/Volumes/FIIO M21" />
+              <div class="settings-rg-actions">
+                <button class="btn-secondary btn-with-icon" onclick="App.rescan()"><span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>Rescan Library</button>
               </div>
-              <div class="settings-row">
-                <label>Internal SD card path</label>
-                <input id="s-poweramp-prefix" type="text" placeholder="Leave empty for relative paths, e.g. /storage/sdcard0" />
-              </div>
-              <p class="settings-hint">The internal path is prepended to track paths in exported M3U8 files. Leave empty to use relative paths.</p>
-            </div>
-
-            <div class="settings-device-block">
-              <div class="settings-device-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>
-                AP80 Pro Max
-              </div>
-              <div class="settings-row">
-                <label>Mac mount path</label>
-                <input id="s-ap80-mount" type="text" placeholder="/Volumes/AP80" />
-              </div>
-              <p class="settings-hint">Playlists are written to <code>playlist_data/</code> at the SD card root using relative paths.</p>
-            </div>
-
-            <div class="settings-inline-actions settings-inline-actions-wrap">
-              <button class="btn-primary" onclick="App.saveDeviceSettings()">Save Device Paths</button>
-              <button class="btn-secondary" onclick="App.showView('gear')">Manage DAP Profiles</button>
             </div>
           </div>
 
@@ -3350,6 +3326,6 @@
   </div>
 
   <script src="/player.js?v=36"></script>
-  <script src="/app.js?v=43"></script>
+  <script src="/app.js?v=44"></script>
 </body>
 </html>

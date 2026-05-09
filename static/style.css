@@ -723,10 +723,16 @@ nav {
   display: flex;
   align-items: center;
   gap: 18px;
+  flex: 0 0 auto;
+  min-height: 0;
   max-width: 100%;
   overflow-x: auto;
+  overflow-y: visible;
   padding: 0 2px 12px;
+  background: transparent;
   scrollbar-width: thin;
+  position: relative;
+  z-index: 1;
 }
 .settings-category-btn {
   border: 1px solid transparent;
@@ -786,27 +792,21 @@ nav {
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-.settings-category-indicator.has-text,
-.settings-section-status.has-text {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 6px;
-}
 .settings-category-indicator.is-warning,
 .settings-section-status.is-warning {
   background: #f0b429;
-  color: #17120a;
+  color: transparent;
 }
 .settings-category-indicator.is-busy,
 .settings-section-status.is-busy {
   background: var(--accent);
-  color: #111826;
+  color: transparent;
   animation: settingsStatusPulse 1.4s ease-in-out infinite;
 }
 .settings-category-indicator.is-error,
 .settings-section-status.is-error {
   background: var(--accent-secondary);
-  color: #1d0d0e;
+  color: transparent;
 }
 .settings-section-status {
   margin-left: 8px;
@@ -827,12 +827,13 @@ nav {
 /* Settings section order */
 #settings-library-section { order: 1; }
 #settings-playback-section { order: 2; }
-#settings-peq-section { order: 3; }
-#settings-baselines-section { order: 4; }
-#settings-image-search-section { order: 5; }
-#settings-system-status-section { order: 6; }
-#settings-data-backup-section { order: 7; }
-#settings-app-restart-section { order: 8; }
+#settings-lyrics-section { order: 3; }
+#settings-peq-section { order: 4; }
+#settings-baselines-section { order: 5; }
+#settings-image-search-section { order: 6; }
+#settings-system-status-section { order: 7; }
+#settings-data-backup-section { order: 8; }
+#settings-app-restart-section { order: 9; }
 .settings-section {
   background: transparent;
   border-radius: 0;

@@ -839,7 +839,7 @@ function _renderSidebarScanStatus(status) {
     const pct = status.total > 0 ? Math.round((status.progress / status.total) * 100) : 0;
     setState('Scanning', 'is-scanning');
     _setSettingsStatus('library', {
-      text: 'SCAN',
+      show: true,
       tone: 'busy',
       title: `Library scan running${status.total ? `: ${Number(status.progress || 0).toLocaleString()} / ${Number(status.total || 0).toLocaleString()}` : ''}`,
     });
@@ -5474,8 +5474,7 @@ async function loadSettings() {
 }
 
 function showSettings() {
-  showView('settings');
-  showSettingsCategory('devices');
+  showView('gear');
 }
 
 function closeSettings() {
@@ -5484,7 +5483,7 @@ function closeSettings() {
 }
 
 async function saveSettings() {
-  return saveDeviceSettings();
+  toast('Device profiles are managed in Gear.');
 }
 
 /* ── Help modal ─────────────────────────────────────────────────────── */
@@ -10315,18 +10314,17 @@ function showSettingsCategory(category = 'library') {
 }
 
 function _setSettingsStatus(category, opts = {}) {
-  const text = opts.text || '';
   const tone = opts.tone || 'info';
-  const show = !!(text || opts.show);
+  const show = !!(opts.show || opts.title);
   const nodes = [
     ...document.querySelectorAll(`[data-settings-indicator="${category}"]`),
     ...document.querySelectorAll(`[data-settings-section-status="${category}"]`),
   ];
   nodes.forEach(node => {
     node.style.display = show ? 'inline-flex' : 'none';
-    node.textContent = text;
-    node.title = opts.title || text || '';
-    node.classList.toggle('has-text', !!text);
+    node.textContent = '';
+    node.title = opts.title || '';
+    node.classList.remove('has-text');
     node.classList.toggle('is-warning', tone === 'warning');
     node.classList.toggle('is-busy', tone === 'busy');
     node.classList.toggle('is-error', tone === 'error');
@@ -10478,10 +10476,17 @@ async function setListeningTracking(enabled) {
 }
 
 async function saveDeviceSettings() {
+  const powerampMount = document.getElementById('s-poweramp-mount');
+  const powerampPrefix = document.getElementById('s-poweramp-prefix');
+  const ap80Mount = document.getElementById('s-ap80-mount');
+  if (!powerampMount && !powerampPrefix && !ap80Mount) {
+    toast('Device profiles are managed in Gear.');
+    return;
+  }
   const updated = {
-    poweramp_mount:  document.getElementById('s-poweramp-mount')?.value.trim() || '',
-    poweramp_prefix: document.getElementById('s-poweramp-prefix')?.value.trim() || '',
-    ap80_mount:      document.getElementById('s-ap80-mount')?.value.trim() || '',
+    poweramp_mount:  powerampMount?.value.trim() || '',
+    poweramp_prefix: powerampPrefix?.value.trim() || '',
+    ap80_mount:      ap80Mount?.value.trim() || '',
   };
   try {
     _settings = await api('/settings', { method: 'PUT', body: updated });
@@ -16160,7 +16165,7 @@ function _updateArtistBatchBanner(s) {
   if (s.status === 'running') {
     const pct = s.total > 0 ? Math.round((s.done / s.total) * 100) : 0;
     _setSettingsStatus('artwork', {
-      text: 'RUN',
+      show: true,
       tone: 'busy',
       title: `Artist photo fetch running: ${Number(s.done || 0).toLocaleString()} / ${Number(s.total || 0).toLocaleString()}`,
     });
@@ -16180,7 +16185,7 @@ function _updateArtistBatchBanner(s) {
     if (msg) msg.textContent = `Cancelled after ${s.done.toLocaleString()} artists — ${s.fetched} photos saved`;
     if (startBtn) startBtn.disabled = false;
   } else if (s.status === 'error') {
-    _setSettingsStatus('artwork', { text: '!', tone: 'error', title: 'Artist photo fetch encountered an error' });
+    _setSettingsStatus('artwork', { show: true, tone: 'error', title: 'Artist photo fetch encountered an error' });
     if (msg) msg.textContent = 'Batch job encountered an error.';
     if (startBtn) startBtn.disabled = false;
   }
@@ -16202,10 +16207,10 @@ async function _loadRgInfo() {
       }
     }
     if (d.status === 'running') {
-      _setSettingsStatus('library', { text: 'RG', tone: 'busy', title: 'ReplayGain tagging is running' });
+      _setSettingsStatus('library', { show: true, tone: 'busy', title: 'ReplayGain tagging is running' });
     } else if (d.pending > 0) {
       _setSettingsStatus('library', {
-        text: d.pending > 999 ? '999+' : String(d.pending),
+        show: true,
         tone: 'warning',
         title: `${d.pending.toLocaleString()} tracks missing ReplayGain tags`,
       });
@@ -16264,7 +16269,7 @@ function _startRgPolling() {
   if (tagBtn)    tagBtn.disabled = true;
   if (cancelBtn) cancelBtn.style.display = '';
   if (banner)    banner.style.display = '';
-  _setSettingsStatus('library', { text: 'RG', tone: 'busy', title: 'ReplayGain tagging is running' });
+  _setSettingsStatus('library', { show: true, tone: 'busy', title: 'ReplayGain tagging is running' });
   if (_rgPoller) clearInterval(_rgPoller);
   _rgPoller = setInterval(_pollRgStatus, 1500);
 }
@@ -16306,7 +16311,7 @@ function _updateRgBanner(s) {
 
   if (s.status === 'running') {
     _setSettingsStatus('library', {
-      text: 'RG',
+      show: true,
       tone: 'busy',
       title: `ReplayGain tagging: ${Number(s.done || 0).toLocaleString()} / ${Number(s.total || 0).toLocaleString()}`,
     });
@@ -16324,7 +16329,7 @@ function _updateRgBanner(s) {
     if (sub)   sub.textContent   = `${s.done.toLocaleString()} of ${s.total.toLocaleString()} tracks tagged`;
     if (fileLine) fileLine.textContent = '';
   } else if (s.status === 'error') {
-    _setSettingsStatus('library', { text: '!', tone: 'error', title: s.error || 'ReplayGain tagging failed' });
+    _setSettingsStatus('library', { show: true, tone: 'error', title: s.error || 'ReplayGain tagging failed' });
     if (label) label.textContent = 'Tagging failed';
     if (sub)   sub.textContent   = s.error || 'Unknown error';
     if (fileLine) fileLine.textContent = '';
