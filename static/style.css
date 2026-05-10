@@ -8008,8 +8008,8 @@ tbody tr:hover {
   -webkit-mask-size: contain;
 }
 .tb-icon-shuffle {
-  mask-image: url('/icons/playlist-shuffle-svgrepo-com.svg');
-  -webkit-mask-image: url('/icons/playlist-shuffle-svgrepo-com.svg');
+  mask-image: url('/icons/shuffle.svg');
+  -webkit-mask-image: url('/icons/shuffle.svg');
 }
 .tb-icon-playlist {
   mask-image: url('/icons/queue.svg');
