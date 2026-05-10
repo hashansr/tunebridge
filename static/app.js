@@ -7037,6 +7037,10 @@ const _HEADPHONE_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="n
 const _GEAR_DOTS = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`;
 const _GEAR_ICON_MUSIC = `<span class="gear-mask-icon gear-mask-icon-player" aria-hidden="true"></span>`;
 const _GEAR_ICON_PLAYLIST = `<span class="gear-mask-icon gear-mask-icon-playlist" aria-hidden="true"></span>`;
+const _GEAR_ICON_EDIT = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2l2.5 2.5-7 7H2.5v-2.5l7-7z"/></svg>`;
+const _GEAR_ICON_TRASH = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M6 6.5v4M8 6.5v4M3.5 4l.7 8h5.6l.7-8"/></svg>`;
+const _GEAR_ICON_EQ = `<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M3 12V8M3 6V2M7 12V9M7 7V2M11 12V6M11 4V2"/><circle cx="3" cy="7" r="1.2" fill="currentColor"/><circle cx="7" cy="8" r="1.2" fill="currentColor"/><circle cx="11" cy="5" r="1.2" fill="currentColor"/></svg>`;
+const _GEAR_ICON_COMPARE = `<svg width="13" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><rect x="0.5" y="1.5" width="5" height="9" rx="1"/><rect x="8.5" y="1.5" width="5" height="9" rx="1"/><path d="M5.5 6h3"/></svg>`;
 
 function _prettyModelLabel(model) {
   const raw = String(model || 'generic').trim();
@@ -7130,28 +7134,47 @@ async function loadDapsView() {
   refreshSidebarSyncIndicator(daps);
   const grid  = document.getElementById('daps-grid');
   const empty = document.getElementById('daps-empty');
-  if (!daps.length) { grid.innerHTML = ''; empty.style.display = 'flex'; return; }
+
+  // Update section header count and pending badge
+  const countEl   = document.getElementById('daps-count');
+  const pendingEl  = document.getElementById('daps-pending');
+  const pendingLbl = document.getElementById('daps-pending-label');
+  if (countEl) countEl.textContent = '· ' + String(daps.length).padStart(2, '0');
+
+  if (!daps.length) { grid.innerHTML = ''; empty.style.display = 'flex'; if (pendingEl) pendingEl.style.display = 'none'; return; }
   empty.style.display = 'none';
+
+  const dapsPending = daps.filter(d => {
+    const s = d.sync_summary || {};
+    return (s.music_out_of_sync_count > 0) || (s.playlists_out_of_sync_count > 0);
+  }).length;
+  if (pendingEl) {
+    pendingEl.style.display = dapsPending ? '' : 'none';
+    if (pendingLbl && dapsPending) pendingLbl.textContent = `${dapsPending} pending`;
+  }
+
   grid.innerHTML = daps.map(d => {
     const summary = d.sync_summary || {};
-    const musicStatus = _dapMusicStatus(summary, !!d.mounted);
+    const musicStatus    = _dapMusicStatus(summary, !!d.mounted);
     const playlistStatus = _dapPlaylistStatus(d, summary);
-    const statusText = d.mounted ? 'Connected' : 'Not connected';
-    const statusBadge = d.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected';
-    const statusDetail = [musicStatus.detail, playlistStatus.detail].filter(Boolean).join(' · ');
+    const syncDetail     = [musicStatus.detail, playlistStatus.detail].filter(Boolean).join(' · ');
+    const needsSync      = !!syncDetail;
+    const connOn         = !!d.mounted;
     return `
-    <div class="gear-card gear-card-dap" onclick="App.showDapDetail('${d.id}')">
-      <div class="gear-card-icon gear-card-icon-dap">${_DAP_SVG}</div>
-      <div class="gear-card-body gear-card-dap-body">
-        <div class="gear-card-dap-head">
-          <div class="gear-card-name">${esc(d.name)}</div>
-          <span class="gear-badge ${statusBadge}">${statusText}</span>
-        </div>
-        <div class="gear-card-row gear-card-dap-status">
-          ${_gearStatusPillHtml(_GEAR_ICON_MUSIC, musicStatus.className, musicStatus.text)}
-          ${_gearStatusPillHtml(_GEAR_ICON_PLAYLIST, playlistStatus.className, playlistStatus.text)}
-        </div>
-        ${statusDetail ? `<div class="gear-card-meta-text gear-card-dap-detail">${esc(statusDetail)}</div>` : ''}
+    <div class="gear-row gear-row-dap${needsSync ? ' gear-row--warn' : ''}" onclick="App.showDapDetail('${d.id}')">
+      <span class="gear-row-icon">${_DAP_SVG}</span>
+      <div class="gear-row-info">
+        <div class="gear-row-name">${esc(d.name)}</div>
+        <div class="gear-row-sub">Digital audio player</div>
+      </div>
+      <div class="gear-row-conn">
+        <span class="dot ${connOn ? 'dot-on' : 'dot-off'}"></span>
+        <span class="gear-row-conn-label ${connOn ? 'gear-conn--on' : 'gear-conn--off'}">${connOn ? 'Connected' : 'Offline'}</span>
+      </div>
+      <div class="gear-row-sync-detail">${syncDetail ? esc(syncDetail) : ''}</div>
+      <div class="gear-row-actions" onclick="event.stopPropagation()">
+        <button class="gear-icon-btn" title="Edit" onclick="App.showEditDapModal('${d.id}')">${_GEAR_ICON_EDIT}</button>
+        <button class="gear-icon-btn" title="Delete" onclick="App.deleteDap('${d.id}')">${_GEAR_ICON_TRASH}</button>
       </div>
     </div>`;
   }).join('');
@@ -7183,29 +7206,36 @@ async function loadIemsView() {
 function _renderIemCards(iems) {
   const grid = document.getElementById('iems-grid');
   if (!grid) return;
+
+  // Update section header count
+  const countEl = document.getElementById('iems-count');
+  if (countEl) countEl.textContent = '· ' + String(iems.length).padStart(2, '0');
+
   grid.innerHTML = iems.map(i => {
-    const typeLabel = String(i.type || 'IEM');
+    const typeLabel   = String(i.type || 'IEM');
     const isHeadphone = /headphone|over-?ear|on-?ear/i.test(typeLabel);
-    const badgeClass  = isHeadphone ? 'gear-badge-hp' : 'gear-badge-iem';
     const peqCount    = i.peq_profiles?.length || 0;
-    const peqStr      = peqCount > 0 ? `PEQ ${peqCount}` : '';
+    const peqStr      = peqCount > 0 ? `${peqCount} PEQ ${peqCount === 1 ? 'profile' : 'profiles'}` : '—';
     const isSelected  = _iemCompareSelected.has(i.id);
     const clickAction = _iemCompareMode
       ? `App.toggleIemCompareSelect('${i.id}', event)`
       : `App.showIemDetail('${i.id}')`;
+    const subLabel = isHeadphone ? 'Headphones' : 'In-ear monitor';
+    const actions = _iemCompareMode
+      ? `<div class="gear-compare-check${isSelected ? ' checked' : ''}"></div>`
+      : `<button class="gear-hdr-btn gear-hdr-btn--sm gear-hdr-btn--ghost" onclick="App.openPeqEditor({iemId:'${i.id}',mode:'create'});event.stopPropagation()">${_GEAR_ICON_EQ} Edit PEQ</button>
+         <button class="gear-icon-btn" title="Edit" onclick="App.showEditIemModal('${i.id}');event.stopPropagation()">${_GEAR_ICON_EDIT}</button>
+         <button class="gear-icon-btn" title="Delete" onclick="App.deleteIem('${i.id}');event.stopPropagation()">${_GEAR_ICON_TRASH}</button>`;
     return `
-    <div class="gear-card gear-card-iem${isSelected ? ' gear-card--selected' : ''}" id="gear-iem-card-${i.id}" onclick="${clickAction}">
-      <div class="gear-card-icon">${isHeadphone ? _HEADPHONE_SVG : _IEM_ICON_HTML}</div>
-      <div class="gear-card-body gear-card-iem-body">
-        <div class="gear-card-name">${esc(i.name)}</div>
-        <div class="gear-card-row">
-          <span class="gear-badge ${badgeClass}">${esc(i.type || 'IEM')}</span>
-          ${peqStr ? `<span class="gear-sync-badge gear-sync-neutral">${peqStr}</span>` : ''}
-        </div>
+    <div class="gear-row gear-row-iem${isSelected ? ' gear-row--selected' : ''}" id="gear-iem-card-${i.id}" onclick="${clickAction}">
+      <span class="gear-row-icon">${isHeadphone ? _HEADPHONE_SVG : _IEM_ICON_HTML}</span>
+      <div class="gear-row-info">
+        <div class="gear-row-name">${esc(i.name)}</div>
+        <div class="gear-row-sub">${subLabel}</div>
       </div>
-      ${_iemCompareMode
-        ? `<div class="gear-compare-check${isSelected ? ' checked' : ''}"></div>`
-        : `<div class="gear-card-kebab">${_GEAR_DOTS}</div>`}
+      <div><span class="gear-row-type-tag">${esc(typeLabel)}</span></div>
+      <div class="gear-row-peq">${peqStr}</div>
+      <div class="gear-row-actions" onclick="event.stopPropagation()">${actions}</div>
     </div>`;
   }).join('');
 }
@@ -7215,7 +7245,9 @@ function toggleIemCompareMode() {
   _iemCompareSelected.clear();
   const btn = document.getElementById('iems-compare-btn');
   if (btn) {
-    btn.textContent = _iemCompareMode ? 'Cancel' : 'Compare';
+    btn.innerHTML = _iemCompareMode
+      ? 'Cancel'
+      : `${_GEAR_ICON_COMPARE} Compare`;
     btn.classList.toggle('active', _iemCompareMode);
   }
   _updateIemCompareBar();

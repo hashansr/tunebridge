@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Gear view redesigned from card grid to tabular row layout — eyebrow section headers with live counts and pending badge; DAP rows show connection status dot and sync detail inline; IEM rows show type tag and PEQ profile count; hover reveals Edit/Delete actions per row
 
 ## v0.184-rc.110526-0833 · 2026-05-11
 
