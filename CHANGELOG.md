@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Replaced icon set app-wide — player controls, volume (3-level), mute, PEQ, queue, sync, settings, favourite star, bin/trash, lyrics, and refresh now use a unified filled SVG family
 
 ## v0.176-rc.100526-1907 · 2026-05-10
 
