@@ -8054,8 +8054,8 @@ tbody tr:hover {
 }
 .tb-icon-play-lg,
 .tb-icon-pause-lg {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
 }
 .tb-icon-play-lg {
   mask-image: url('/icons/media-play-svgrepo-com.svg');
@@ -8096,33 +8096,28 @@ tbody tr:hover {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   line-height: 1;
-  border: 1px solid rgba(193,198,215,0.2);
 }
 .player-btn-text.active {
   color: var(--primary);
   background: transparent;
-  border-color: rgba(173,198,255,0.38);
 }
 
 .player-play-pause {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: linear-gradient(180deg, #d8e2ff 0%, #adc6ff 100%);
-  color: #001c44;
+  background: transparent;
+  color: rgba(235,240,255,0.95);
   border: none;
   padding: 0;
-  box-shadow: 0 4px 16px rgba(173,198,255,0.22);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease, color 0.15s ease;
 }
 .player-play-pause:hover {
-  background: linear-gradient(180deg, #e6ecff 0%, #b8cdfd 100%);
-  color: #00102a;
-  transform: scale(1.06);
-  box-shadow: 0 6px 22px rgba(173,198,255,0.3);
+  color: #fff;
+  transform: scale(1.1);
 }
 .player-play-pause:active {
-  transform: scale(0.94);
+  transform: scale(0.9);
 }
 
 /* Progress bar */
