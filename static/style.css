@@ -16172,6 +16172,11 @@ thead th:hover .table-col-resizer::after {
   contain: none;
 }
 
+#view-albums .album-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 260px 324px;
+}
+
 #view-artists .artist-card:hover,
 #view-albums .album-card:hover,
 #view-favourites .artist-card:hover,

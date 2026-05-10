@@ -50,6 +50,7 @@ const state = {
   albumSearch: '',
   albumAlpha: '',
   _albumScope: '__all__',
+  _albumRenderToken: 0,
 };
 let _homeLoading = false;
 let _homeAutoRefreshTimer = null;
@@ -1362,6 +1363,55 @@ function _filteredAlbumsData() {
   return { artistFilter, base, filtered, presentLetters };
 }
 
+const _ALBUM_GRID_INITIAL_BATCH = 84;
+const _ALBUM_GRID_BATCH = 72;
+
+function _scheduleIdle(fn) {
+  if ('requestIdleCallback' in window) {
+    return window.requestIdleCallback(fn, { timeout: 180 });
+  }
+  return setTimeout(fn, 16);
+}
+
+function _albumCardHtml(al, artistFilter, index = 0) {
+  const eager = index < 24;
+  const img = al.artwork_key
+    ? `<img src="${artworkUrl(al.artwork_key)}" width="160" height="160" style="border-radius:6px;object-fit:cover" loading="${eager ? 'eager' : 'lazy'}" decoding="async" ${eager ? 'fetchpriority="high"' : ''} onerror="this.style.display='none'" />`
+    : coverPlaceholder('song', 160, '6px');
+  return `
+    <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
+      <div class="album-thumb">
+        ${img}
+        <div class="card-thumb-overlay">
+          <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
+            ${playSvg(15)}
+          </button>
+        </div>
+        ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn')}
+        <button class="album-art-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App._openAlbumArtForCard(this.dataset.artist,this.dataset.album)" title="Change album art">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
+      </div>
+      <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
+      ${!artistFilter ? `<div class="album-artist">${esc(al.artist)}</div>` : ''}
+      ${al.year ? `<div class="album-year">${esc(al.year)}</div>` : ''}
+      <button class="card-more-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)" title="More options">⋮</button>
+    </div>
+  `;
+}
+
+function _renderAlbumGridBatches(grid, rows, artistFilter, token, start = 0) {
+  if (!grid || token !== state._albumRenderToken) return;
+  const batchSize = start === 0 ? _ALBUM_GRID_INITIAL_BATCH : _ALBUM_GRID_BATCH;
+  const end = Math.min(start + batchSize, rows.length);
+  const html = rows.slice(start, end).map((al, i) => _albumCardHtml(al, artistFilter, start + i)).join('');
+  if (start === 0) grid.innerHTML = html;
+  else grid.insertAdjacentHTML('beforeend', html);
+  if (end < rows.length) {
+    _scheduleIdle(() => _renderAlbumGridBatches(grid, rows, artistFilter, token, end));
+  }
+}
+
 function renderAlbumsGrid() {
   const grid = document.getElementById('albums-grid');
   const countEl = document.getElementById('albums-count');
@@ -1413,26 +1463,9 @@ function renderAlbumsGrid() {
 
   if (albumsEmpty) albumsEmpty.style.display = 'none';
   if (grid) {
-    grid.innerHTML = filtered.map(al => `
-      <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
-        <div class="album-thumb">
-          ${thumbImg(al.artwork_key, 160, '6px')}
-          <div class="card-thumb-overlay">
-            <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
-              ${playSvg(15)}
-            </button>
-          </div>
-          ${_favToggleBtn('albums', al.artwork_key || '', 'card-fav-btn')}
-          <button class="album-art-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App._openAlbumArtForCard(this.dataset.artist,this.dataset.album)" title="Change album art">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          </button>
-        </div>
-        <div class="album-name" title="${esc(al.name)}">${esc(al.name)}</div>
-        ${!artistFilter ? `<div class="album-artist">${esc(al.artist)}</div>` : ''}
-        ${al.year ? `<div class="album-year">${esc(al.year)}</div>` : ''}
-        <button class="card-more-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)" title="More options">⋮</button>
-      </div>
-    `).join('');
+    const token = ++state._albumRenderToken;
+    grid.innerHTML = '';
+    _renderAlbumGridBatches(grid, filtered, artistFilter, token, 0);
   }
 }
 
