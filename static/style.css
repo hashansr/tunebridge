@@ -16152,7 +16152,7 @@ thead th:hover .table-col-resizer::after {
 #view-fav-artists .favourites-fixed-grid,
 #view-fav-albums .favourites-fixed-grid,
 #view-playlists .playlists-view-grid {
-  gap: 28px 22px;
+  gap: 54px 22px;
 }
 
 #view-artists .artist-card,
