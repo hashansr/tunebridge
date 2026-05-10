@@ -2542,6 +2542,11 @@ tbody tr:hover .remove-btn { opacity: 1; }
 .toast-error   { border-color: rgba(255, 179, 181, 0.15); }
 .toast-warning { border-color: rgba(245, 197, 66, 0.12); }
 .toast-msg { flex: 1; line-height: 1.4; }
+.toast-live-dots {
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+}
 
 /* ── Modal ───────────────────────────────────────────────────────────── */
 .modal-overlay {

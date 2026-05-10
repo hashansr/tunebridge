@@ -280,7 +280,11 @@ function _showLiveToast(msg) {
   el.className = 'toast-item toast-info';
   const text = document.createElement('span');
   text.className = 'toast-msg';
-  text.textContent = msg + '.';
+  const label = document.createTextNode(msg);
+  const dotsEl = document.createElement('span');
+  dotsEl.className = 'toast-live-dots';
+  dotsEl.textContent = '.';
+  text.append(label, dotsEl);
   el.appendChild(text);
   container.appendChild(el);
   _toastActive.push(el);
@@ -289,7 +293,7 @@ function _showLiveToast(msg) {
   let dots = 1;
   const ticker = setInterval(() => {
     dots = (dots % 3) + 1;
-    text.textContent = msg + '.'.repeat(dots);
+    dotsEl.textContent = '.'.repeat(dots);
   }, 400);
   return {
     finish(finalMsg, type = null) {
@@ -3042,7 +3046,7 @@ async function ctxFindLyrics() {
     toast('Lyrics already available');
     return;
   }
-  const liveToast = _showLiveToast('Finding lyrics');
+  const liveToast = _showLiveToast('Looking for lyrics');
   try {
     const res = await fetch('/api/lyrics/fetch', {
       method: 'POST',
@@ -3054,15 +3058,16 @@ async function ctxFindLyrics() {
       return;
     }
     if (res.queued) {
-      liveToast.finish(`Finding lyrics for ${res.total} songs in the background`);
+      liveToast.finish(`Looking for lyrics: 0 of ${res.total} found`);
       _startLyricsBulkPolling();
       return;
     }
     const statuses = Object.values(res.results || {});
     const found = statuses.filter(s => s === 'synced' || s === 'plain').length;
     const instrumental = statuses.filter(s => s === 'instrumental').length;
+    const total = statuses.length || missing.length;
     if (found) {
-      liveToast.finish(found === 1 ? 'Lyrics found' : `Lyrics found for ${found} songs`);
+      liveToast.finish(`Lyrics found for ${found} of ${total} song${total === 1 ? '' : 's'}`);
     } else if (instrumental) {
       liveToast.finish('Marked as instrumental');
     } else {
@@ -12814,13 +12819,18 @@ function _updateLyricsBulkBanner(s) {
   if (cancelBtn) cancelBtn.style.display = running ? '' : 'none';
   if (running) {
     const pct = s.total > 0 ? Math.round((s.progress / s.total) * 100) : 0;
+    const found = (s.synced || 0) + (s.plain || 0);
     if (bar) bar.style.width = pct + '%';
     if (msg) msg.textContent =
-      `Searching lyrics... ${(s.progress || 0).toLocaleString()} / ${(s.total || 0).toLocaleString()} · ` +
+      `Looking for lyrics: ${found.toLocaleString()} of ${(s.total || 0).toLocaleString()} found · ` +
+      `${(s.progress || 0).toLocaleString()} searched · ` +
       `${s.synced || 0} synced, ${s.plain || 0} plain, ${s.not_found || 0} not found`;
   } else if (s.status === 'done') {
+    const found = (s.synced || 0) + (s.plain || 0);
     if (bar) bar.style.width = '100%';
-    if (msg) msg.textContent = `Done - ${s.synced || 0} synced, ${s.plain || 0} plain, ${s.not_found || 0} not found`;
+    if (msg) msg.textContent =
+      `Done - ${found.toLocaleString()} of ${(s.total || 0).toLocaleString()} found · ` +
+      `${s.synced || 0} synced, ${s.plain || 0} plain, ${s.not_found || 0} not found`;
     if (newBtn) newBtn.disabled = false;
     if (allBtn) allBtn.disabled = false;
   } else if (s.status === 'cancelled') {
