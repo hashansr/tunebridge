@@ -8,6 +8,7 @@ import subprocess
 import plistlib
 import sqlite3
 import tempfile
+import ssl
 try:
     from waitress import serve as waitress_serve
     HAS_WAITRESS = True
@@ -430,6 +431,17 @@ _ALLOWED_IMAGE_DOMAINS = {
     'a1.mzstatic.com', 'a2.mzstatic.com', 'a3.mzstatic.com',
 }
 
+_MAX_REMOTE_IMAGE_BYTES = 10 * 1024 * 1024
+_IMAGE_DOWNLOAD_HEADERS = {
+    'User-Agent': (
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/124.0 Safari/537.36 TuneBridge/1.0'
+    ),
+    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+}
+
 
 def _validate_image_url(url: str):
     """
@@ -450,6 +462,49 @@ def _validate_image_url(url: str):
         if host == allowed or host.endswith('.' + allowed):
             return True, None
     return False, f'Image host "{host}" is not in the allowed list'
+
+
+def _image_download_ssl_context():
+    """Default TLS context, tolerant of image CDNs that close without close_notify."""
+    ctx = ssl.create_default_context()
+    ignore_eof = getattr(ssl, 'OP_IGNORE_UNEXPECTED_EOF', None)
+    if ignore_eof is not None:
+        ctx.options |= ignore_eof
+    return ctx
+
+
+def _read_limited_response_chunks(chunks, max_bytes=_MAX_REMOTE_IMAGE_BYTES) -> bytes:
+    data = bytearray()
+    for chunk in chunks:
+        if not chunk:
+            continue
+        data.extend(chunk)
+        if len(data) > max_bytes:
+            raise ValueError('Downloaded image too large (max 10 MB)')
+    return bytes(data)
+
+
+def _download_remote_image(url: str, timeout: int = 15) -> bytes:
+    """
+    Download an allowlisted remote image with retry behavior for finicky CDNs.
+    Some providers occasionally terminate TLS without close_notify, which
+    urllib reports as UNEXPECTED_EOF_WHILE_READING even after image bytes are sent.
+    """
+    ok, err = _validate_image_url(url)
+    if not ok:
+        raise ValueError(err)
+
+    req = UrlRequest(url, headers=_IMAGE_DOWNLOAD_HEADERS)
+    try:
+        with urlopen(req, timeout=timeout, context=_image_download_ssl_context()) as r:
+            return _read_limited_response_chunks(iter(lambda: r.read(64 * 1024), b''))
+    except Exception as first_error:
+        try:
+            with requests.get(url, headers=_IMAGE_DOWNLOAD_HEADERS, timeout=timeout, stream=True) as r:
+                r.raise_for_status()
+                return _read_limited_response_chunks(r.iter_content(chunk_size=64 * 1024))
+        except Exception as second_error:
+            raise RuntimeError(f'{first_error}; retry failed: {second_error}') from second_error
 
 
 # ── Artist image search helpers ──────────────────────────────────────────────
@@ -2950,10 +3005,7 @@ def set_album_artwork():
         elif request.is_json and request.json.get('source_url'):
             # Fetch from URL (validated against allowlist)
             source_url = request.json['source_url']
-            _validate_image_url(source_url)
-            req = UrlRequest(source_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urlopen(req, timeout=15) as r:
-                raw = r.read()
+            raw = _download_remote_image(source_url)
         else:
             return jsonify({'error': 'Provide a file upload or source_url'}), 400
 
@@ -2971,6 +3023,9 @@ def set_album_artwork():
                     t['artwork_key'] = artwork_key
 
         return jsonify({'artwork_key': artwork_key, 'size_kb': size_kb})
+    except ValueError as e:
+        print(f"[album-art] save error: {e}")
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         print(f"[album-art] save error: {e}")
         return jsonify({'error': str(e)}), 500
@@ -3107,14 +3162,11 @@ def save_artist_image(artist_key):
             return jsonify({'error': err}), 400
 
         try:
-            req = UrlRequest(source_url, headers={'User-Agent': 'TuneBridge/1.0'})
-            with urlopen(req, timeout=15) as r:
-                image_data = r.read()
+            image_data = _download_remote_image(source_url)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
         except Exception as e:
             return jsonify({'error': f'Failed to download image: {e}'}), 502
-
-        if len(image_data) > 10 * 1024 * 1024:
-            return jsonify({'error': 'Downloaded image too large (max 10 MB)'}), 400
 
     try:
         processed = _process_artist_image(image_data)
@@ -3177,14 +3229,11 @@ def save_artist_image_by_name():
             return jsonify({'error': err}), 400
 
         try:
-            req = UrlRequest(source_url, headers={'User-Agent': 'TuneBridge/1.0'})
-            with urlopen(req, timeout=15) as r:
-                image_data = r.read()
+            image_data = _download_remote_image(source_url)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
         except Exception as e:
             return jsonify({'error': f'Failed to download image: {e}'}), 502
-
-        if len(image_data) > 10 * 1024 * 1024:
-            return jsonify({'error': 'Downloaded image too large (max 10 MB)'}), 400
 
     if not artist_name:
         return jsonify({'error': 'artist_name required'}), 400
@@ -3294,14 +3343,7 @@ def _run_artist_image_batch(service: str, overwrite: bool) -> None:
         # Fetch and save the first (best) candidate
         chosen = candidates[0]
         try:
-            ok, err = _validate_image_url(chosen['url'])
-            if not ok:
-                raise ValueError(err)
-            req = UrlRequest(chosen['url'], headers={'User-Agent': 'TuneBridge/1.0'})
-            with urlopen(req, timeout=15) as r:
-                raw = r.read()
-            if len(raw) > 10 * 1024 * 1024:
-                raise ValueError('Image too large (> 10 MB)')
+            raw = _download_remote_image(chosen['url'])
             processed = _process_artist_image(raw)
             img_path  = ARTIST_ARTWORK_DIR / f"{artist_key}.jpg"
             img_path.write_bytes(processed)
