@@ -348,8 +348,8 @@ nav {
   -webkit-mask-image: url('/icons/music-player-svgrepo-com.svg');
 }
 .nav-mask-icon-playlist {
-  mask-image: url('/icons/playlist-svgrepo-com.svg');
-  -webkit-mask-image: url('/icons/playlist-svgrepo-com.svg');
+  mask-image: url('/icons/queue.svg');
+  -webkit-mask-image: url('/icons/queue.svg');
 }
 .nav-item:hover { background: rgba(255,255,255,0.05); color: var(--text-sub); }
 .nav-item.active { background: var(--accent-dim); color: var(--text); font-weight: 600; }
@@ -8012,8 +8012,8 @@ tbody tr:hover {
   -webkit-mask-image: url('/icons/playlist-shuffle-svgrepo-com.svg');
 }
 .tb-icon-playlist {
-  mask-image: url('/icons/playlist-svgrepo-com.svg');
-  -webkit-mask-image: url('/icons/playlist-svgrepo-com.svg');
+  mask-image: url('/icons/queue.svg');
+  -webkit-mask-image: url('/icons/queue.svg');
 }
 .tb-icon-repeat-list {
   mask-image: url('/icons/repeat-list-svgrepo-com.svg');
@@ -8024,8 +8024,8 @@ tbody tr:hover {
   -webkit-mask-image: url('/icons/repeat-song-svgrepo-com.svg');
 }
 .tb-icon-refresh {
-  mask-image: url('/icons/refresh-cw-svgrepo-com.svg');
-  -webkit-mask-image: url('/icons/refresh-cw-svgrepo-com.svg');
+  mask-image: url('/icons/refresh2.svg');
+  -webkit-mask-image: url('/icons/refresh2.svg');
 }
 .tb-icon-refresh-sidebar {
   width: 13px;
@@ -8041,16 +8041,20 @@ tbody tr:hover {
   height: 18px;
 }
 .tb-icon-speaker-1 {
-  mask-image: url('/icons/speaker-wave-1-svgrepo-com.svg');
-  -webkit-mask-image: url('/icons/speaker-wave-1-svgrepo-com.svg');
+  mask-image: url('/icons/volume1.svg');
+  -webkit-mask-image: url('/icons/volume1.svg');
 }
 .tb-icon-speaker-2 {
-  mask-image: url('/icons/speaker-wave-2-svgrepo-com.svg');
-  -webkit-mask-image: url('/icons/speaker-wave-2-svgrepo-com.svg');
+  mask-image: url('/icons/volume2.svg');
+  -webkit-mask-image: url('/icons/volume2.svg');
+}
+.tb-icon-speaker-3 {
+  mask-image: url('/icons/volume3.svg');
+  -webkit-mask-image: url('/icons/volume3.svg');
 }
 .tb-icon-speaker-x {
-  mask-image: url('/icons/speaker-xmark-svgrepo-com.svg');
-  -webkit-mask-image: url('/icons/speaker-xmark-svgrepo-com.svg');
+  mask-image: url('/icons/mute.svg');
+  -webkit-mask-image: url('/icons/mute.svg');
 }
 .tb-icon-play-lg,
 .tb-icon-pause-lg {
@@ -8058,18 +8062,18 @@ tbody tr:hover {
   height: 26px;
 }
 .tb-icon-play-lg {
-  mask-image: url('/icons/media-play-svgrepo-com.svg');
-  -webkit-mask-image: url('/icons/media-play-svgrepo-com.svg');
+  mask-image: url('/icons/play.svg');
+  -webkit-mask-image: url('/icons/play.svg');
 }
 .tb-icon-pause-lg {
-  mask-image: url('/icons/pause-svgrepo-com.svg');
-  -webkit-mask-image: url('/icons/pause-svgrepo-com.svg');
+  mask-image: url('/icons/pause.svg');
+  -webkit-mask-image: url('/icons/pause.svg');
 }
 .tb-icon-eq {
   width: 16px;
   height: 16px;
-  mask-image: url('/icons/equaliser-svgrepo-com.svg');
-  -webkit-mask-image: url('/icons/equaliser-svgrepo-com.svg');
+  mask-image: url('/icons/peq.svg');
+  -webkit-mask-image: url('/icons/peq.svg');
 }
 .player-btn:hover {
   color: rgba(225,230,245,0.95);

@@ -2452,10 +2452,12 @@ const Player = (function () {
     if (btn) {
       if (ps.muted || ps.volume === 0) {
         btn.innerHTML = `<span class="tb-icon tb-icon-speaker-x" aria-hidden="true"></span>`;
-      } else if (ps.volume < 0.4) {
+      } else if (ps.volume < 0.34) {
         btn.innerHTML = `<span class="tb-icon tb-icon-speaker-1" aria-hidden="true"></span>`;
-      } else {
+      } else if (ps.volume < 0.67) {
         btn.innerHTML = `<span class="tb-icon tb-icon-speaker-2" aria-hidden="true"></span>`;
+      } else {
+        btn.innerHTML = `<span class="tb-icon tb-icon-speaker-3" aria-hidden="true"></span>`;
       }
     }
     _updateBitPerfectBadge();
