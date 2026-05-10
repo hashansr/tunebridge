@@ -113,6 +113,10 @@
   --text-md:   14px;
   --text-lg:   15px;
 
+  /* Canonical font stacks */
+  --tb-font-sans: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  --tb-font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+
   /* App page background (source of truth: Insights page gradient) */
   --app-page-gradient:
     radial-gradient(1200px 700px at 20% -10%, rgba(39, 63, 116, 0.22), transparent 60%),
@@ -5913,7 +5917,7 @@ tr:hover .fav-toggle,
 }
 .gear-hdr-count {
   font-size: 11px;
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
 .gear-hdr-pending {
@@ -5928,7 +5932,6 @@ tr:hover .fav-toggle,
   text-transform: uppercase;
   font-weight: 600;
   color: var(--accent-warning);
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
 }
 .gear-sec-hdr-right {
   display: flex;
@@ -6020,9 +6023,9 @@ tr:hover .fav-toggle,
   color: rgba(173,198,255,0.75);
   flex-shrink: 0;
 }
-.gear-row-icon .gear-mask-icon { width: 18px; height: 18px; }
-.gear-row-icon .gear-iem-icon-image { width: 17px; height: 17px; }
-.gear-row-icon svg { width: 17px; height: 17px; }
+.gear-row-icon .gear-mask-icon { width: var(--tb-icon-inline); height: var(--tb-icon-inline); }
+.gear-row-icon .gear-iem-icon-image { width: var(--tb-icon-inline); height: var(--tb-icon-inline); }
+.gear-row-icon svg { width: var(--tb-icon-inline); height: var(--tb-icon-inline); }
 
 .gear-row-info { min-width: 0; }
 .gear-row-name {
@@ -6049,9 +6052,9 @@ tr:hover .fav-toggle,
 }
 .gear-row-conn-label {
   font-size: 10.5px;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
 }
 .gear-conn--on  { color: var(--accent-success); }
 .gear-conn--off { color: var(--text-muted); }
@@ -6078,9 +6081,8 @@ tr:hover .fav-toggle,
 }
 
 .gear-row-peq {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-sub, #c1c6d7);
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
 }
 
 .gear-row-actions {
@@ -6108,7 +6110,7 @@ tr:hover .fav-toggle,
   font-family: inherit;
 }
 .gear-icon-btn:hover { background: var(--accent-dim); color: var(--text); }
-.gear-icon-btn svg { width: 14px; height: 14px; }
+.gear-icon-btn svg { width: var(--tb-icon-inline); height: var(--tb-icon-inline); }
 
 /* DAP row column layout: icon | name+sub | connection | sync detail | actions */
 .gear-row-dap {
