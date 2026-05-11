@@ -242,6 +242,7 @@ DEFAULT_SETTINGS = {
     'content_sort_order': {},       # UI content sorting preferences, persisted outside WebView storage
     'table_column_config': {},      # UI table visible-column preferences, persisted outside WebView storage
     'table_column_widths': {},      # UI table resized-column widths, persisted outside WebView storage
+    'table_column_order': {},       # UI table column ordering preferences, persisted outside WebView storage
 }
 
 _DEFAULT_GEAR_PROFILES = {

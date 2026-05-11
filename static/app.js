@@ -9812,16 +9812,18 @@ let _songsPage = 0;
 const SONGS_PER_PAGE = 100;
 const _TABLE_COLUMNS_STORAGE_KEY = 'tb.table_columns.v1';
 const _TABLE_WIDTHS_STORAGE_KEY = 'tb.table_widths.v1';
+const _TABLE_ORDER_STORAGE_KEY = 'tb.table_order.v1';
+const _TABLE_LOCKED_ORDER_COLUMNS = ['track_number', 'title'];
 const _TABLE_COLUMNS = [
   { key: 'track_number', label: '#' },
   { key: 'title', label: 'Title' },
   { key: 'artist', label: 'Artist' },
   { key: 'album', label: 'Album' },
+  { key: 'duration', label: 'Time' },
   { key: 'genre', label: 'Genre' },
   { key: 'lyrics', label: 'Lyrics' },
   { key: 'favourite', label: 'Favourite' },
   { key: 'actions', label: 'Actions' },
-  { key: 'duration', label: 'Time' },
   { key: 'plays', label: 'Plays' },
   { key: 'album_artist', label: 'Album Artist' },
   { key: 'year', label: 'Year' },
@@ -9863,7 +9865,7 @@ const _TB_TABLE_REGISTRY = {
 };
 const _TRACKS_TABLE_COL_DEFAULTS = {
   ..._TABLE_COL_DEFAULTS,
-  duration: false,
+  duration: true,
   album_artist: false,
   year: false,
   disc_number: false,
@@ -9892,6 +9894,7 @@ let _tableColsPopoverEl = null;
 let _tableColsContextKeys = _TABLE_COLUMNS.map(c => c.key);
 let _tableColsContext = 'songs';
 let _tableColWidths = {};
+let _tableColOrderByContext = {};
 let _tablePrefsHydrated = false;
 let _tablePrefsSaveTimer = null;
 
@@ -9901,6 +9904,45 @@ function _hasPlainObjectKeys(value) {
 
 function _tableColumnDefaultsForContext(ctx) {
   return ctx === 'tracks' ? { ..._TRACKS_TABLE_COL_DEFAULTS } : { ..._TABLE_COL_DEFAULTS };
+}
+
+function _defaultColumnOrderForContext(ctx) {
+  if (ctx === 'playlist') {
+    return ['track_number', 'title', 'artist', 'album', 'duration', 'genre', 'lyrics', 'favourite', 'actions', 'year'];
+  }
+  if (ctx === 'fav_songs') {
+    return ['track_number', 'title', 'artist', 'album', 'duration', 'genre', 'lyrics', 'favourite', 'actions'];
+  }
+  return ['track_number', 'title', 'artist', 'album', 'duration', 'genre', 'lyrics', 'favourite', 'actions', 'plays', 'year', 'disc_number', 'album_artist', 'format', 'bitrate', 'sample_rate', 'bit_depth', 'date_added', 'filename'];
+}
+
+function _normalizeTableColumnOrder(source = {}) {
+  const next = {};
+  for (const ctx of _TABLE_COL_CONTEXTS) {
+    const defaults = _defaultColumnOrderForContext(ctx);
+    const allowed = new Set(defaults);
+    const saved = Array.isArray(source?.[ctx]) ? source[ctx] : [];
+    const order = [];
+    _TABLE_LOCKED_ORDER_COLUMNS.forEach((key) => {
+      if (allowed.has(key)) order.push(key);
+    });
+    saved.forEach((key) => {
+      if (!allowed.has(key) || _TABLE_LOCKED_ORDER_COLUMNS.includes(key) || order.includes(key)) return;
+      order.push(key);
+    });
+    defaults.forEach((key) => {
+      if (!order.includes(key)) order.push(key);
+    });
+    next[ctx] = order;
+  }
+  return next;
+}
+
+function _tableColumnOrder(ctx = 'songs') {
+  if (!_tableColOrderByContext[ctx]) {
+    _tableColOrderByContext = _normalizeTableColumnOrder(_tableColOrderByContext);
+  }
+  return _tableColOrderByContext[ctx] || _defaultColumnOrderForContext(ctx);
 }
 
 function _normalizeTableColumnPrefs(source = {}) {
@@ -9924,6 +9966,7 @@ function _snapshotTablePrefs() {
   return {
     table_column_config: _normalizeTableColumnPrefs(_tableColVisibleByContext),
     table_column_widths: _tableColWidths && typeof _tableColWidths === 'object' ? _tableColWidths : {},
+    table_column_order: _normalizeTableColumnOrder(_tableColOrderByContext),
   };
 }
 
@@ -9951,8 +9994,10 @@ function _flushTablePrefs() {
 function _hydrateTablePrefsFromSettings(settings = {}) {
   const serverColumns = settings?.table_column_config;
   const serverWidths = settings?.table_column_widths;
+  const serverOrder = settings?.table_column_order;
   const hasServerColumns = _hasPlainObjectKeys(serverColumns);
   const hasServerWidths = _hasPlainObjectKeys(serverWidths);
+  const hasServerOrder = _hasPlainObjectKeys(serverOrder);
 
   if (hasServerColumns) {
     _tableColVisibleByContext = _normalizeTableColumnPrefs(serverColumns);
@@ -9960,12 +10005,17 @@ function _hydrateTablePrefsFromSettings(settings = {}) {
   if (hasServerWidths) {
     _tableColWidths = serverWidths;
   }
+  if (hasServerOrder) {
+    _tableColOrderByContext = _normalizeTableColumnOrder(serverOrder);
+  } else {
+    _tableColOrderByContext = _normalizeTableColumnOrder(_tableColOrderByContext);
+  }
 
   _tablePrefsHydrated = true;
   _applyTableColumnVisibility();
   _applyTableColumnWidths();
 
-  if (!hasServerColumns || !hasServerWidths) {
+  if (!hasServerColumns || !hasServerWidths || !hasServerOrder) {
     _queueSaveTablePrefs();
   }
 }
@@ -10054,6 +10104,26 @@ function _loadTableWidthPrefs() {
   } catch (_) {}
 }
 
+function _loadTableOrderPrefs() {
+  try {
+    const raw = localStorage.getItem(_TABLE_ORDER_STORAGE_KEY);
+    if (!raw) {
+      _tableColOrderByContext = _normalizeTableColumnOrder(_tableColOrderByContext);
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+    _tableColOrderByContext = _normalizeTableColumnOrder(parsed);
+  } catch (_) {}
+}
+
+function _saveTableOrderPrefs() {
+  try {
+    localStorage.setItem(_TABLE_ORDER_STORAGE_KEY, JSON.stringify(_tableColOrderByContext));
+  } catch (_) {}
+  _queueSaveTablePrefs();
+}
+
 function _saveTableWidthPrefs() {
   try {
     localStorage.setItem(_TABLE_WIDTHS_STORAGE_KEY, JSON.stringify(_tableColWidths));
@@ -10124,6 +10194,35 @@ function _applyTableColumnWidths() {
   });
 }
 
+function _reorderChildrenByColumn(parent, order) {
+  if (!parent || !Array.isArray(order) || !order.length) return;
+  const children = Array.from(parent.children || []);
+  const byCol = new Map();
+  children.forEach((child) => {
+    const key = child.getAttribute?.('data-col');
+    if (key && !byCol.has(key)) byCol.set(key, child);
+  });
+  order.forEach((key) => {
+    const child = byCol.get(key);
+    if (child) parent.appendChild(child);
+  });
+}
+
+function _applyTableColumnOrder() {
+  const tables = [
+    ...['songs-table', 'tracks-table', 'pl-table', 'fav-songs-table']
+      .map(id => document.getElementById(id))
+      .filter(Boolean),
+    ...Array.from(document.querySelectorAll('table.tracks-table-disc')),
+  ];
+  tables.forEach((table) => {
+    const ctx = _tableContextFromTable(table);
+    const order = _tableColumnOrder(ctx);
+    table.querySelectorAll('thead tr').forEach((row) => _reorderChildrenByColumn(row, order));
+    table.querySelectorAll('tbody tr').forEach((row) => _reorderChildrenByColumn(row, order));
+  });
+}
+
 function _bindTableColumnResizers() {
   const tables = [
     ...['songs-table', 'tracks-table', 'pl-table', 'fav-songs-table']
@@ -10177,6 +10276,7 @@ function _bindTableColumnResizers() {
 
 function _isTableColVisible(colKey, context = 'songs') {
   if (!colKey) return true;
+  if (_TABLE_LOCKED_ORDER_COLUMNS.includes(colKey)) return true;
   if (colKey === 'actions') return true;
   if (!Object.prototype.hasOwnProperty.call(_TABLE_COL_DEFAULTS, colKey)) return true;
   const byCtx = _tableColVisibleByContext[context] || _TABLE_COL_DEFAULTS;
@@ -10185,6 +10285,7 @@ function _isTableColVisible(colKey, context = 'songs') {
 
 function _applyTableColumnVisibility() {
   _enhanceTableSystem();
+  _applyTableColumnOrder();
   ['songs-table', 'tracks-table', 'pl-table', 'fav-songs-table'].forEach(id => {
     const table = document.getElementById(id);
     if (!table) return;
@@ -10214,15 +10315,31 @@ function _ensureTableColsPopover() {
 
 function _renderTableColumnsPopover() {
   const pop = _ensureTableColsPopover();
-  const visibleDefs = _TABLE_COLUMNS.filter(c => _tableColsContextKeys.includes(c.key));
+  const defsByKey = new Map(_TABLE_COLUMNS.map(c => [c.key, c]));
+  const orderedKeys = _tableColumnOrder(_tableColsContext).filter(k => _tableColsContextKeys.includes(k));
+  _tableColsContextKeys.forEach((key) => {
+    if (!orderedKeys.includes(key)) orderedKeys.push(key);
+  });
+  const firstMovableIdx = orderedKeys.findIndex(key => !_TABLE_LOCKED_ORDER_COLUMNS.includes(key));
   pop.innerHTML = `
-    <div class="table-columns-popover-title">Visible Columns</div>
-    ${visibleDefs.map(c => `
+    <div class="table-columns-popover-title">Columns</div>
+    ${orderedKeys.map((key, idx) => {
+      const c = defsByKey.get(key) || { key, label: key };
+      const locked = _TABLE_LOCKED_ORDER_COLUMNS.includes(key);
+      const canMoveUp = !locked && idx > firstMovableIdx;
+      const canMoveDown = !locked && idx < orderedKeys.length - 1;
+      return `
       <label class="table-columns-popover-item">
-        <input type="checkbox" ${_isTableColVisible(c.key, _tableColsContext) ? 'checked' : ''} onchange="App.setTableColumnVisible('${c.key}', this.checked)" />
-        <span>${esc(c.label)}</span>
+        <input type="checkbox" ${_isTableColVisible(key, _tableColsContext) ? 'checked' : ''} ${locked ? 'disabled' : ''} onchange="App.setTableColumnVisible('${key}', this.checked)" />
+        <span class="table-columns-popover-label">${esc(c.label)}</span>
+        <span class="table-columns-popover-actions">
+          ${locked ? '<span class="table-column-lock">Locked</span>' : `
+            <button type="button" class="table-column-move-btn" onclick="event.preventDefault();event.stopPropagation();App.moveTableColumn('${key}', -1)" ${canMoveUp ? '' : 'disabled'} title="Move left">←</button>
+            <button type="button" class="table-column-move-btn" onclick="event.preventDefault();event.stopPropagation();App.moveTableColumn('${key}', 1)" ${canMoveDown ? '' : 'disabled'} title="Move right">→</button>
+          `}
+        </span>
       </label>
-    `).join('')}
+    `; }).join('')}
   `;
 }
 
@@ -10254,16 +10371,16 @@ function _getColumnContextKeys(anchor) {
   if (headerKeys.length) return headerKeys;
   const context = _tableContextFromAnchor(anchor);
   if (context === 'songs') {
-    return ['track_number', 'title', 'artist', 'album', 'genre', 'lyrics', 'favourite', 'actions', 'duration', 'plays', 'year', 'disc_number', 'album_artist', 'format', 'bitrate', 'sample_rate', 'bit_depth', 'date_added', 'filename'];
+    return _defaultColumnOrderForContext('songs');
   }
   if (context === 'playlist') {
-    return ['track_number', 'title', 'artist', 'album', 'genre', 'lyrics', 'favourite', 'actions', 'duration', 'year'];
+    return _defaultColumnOrderForContext('playlist');
   }
   if (context === 'fav_songs') {
-    return ['track_number', 'title', 'artist', 'album', 'genre', 'lyrics', 'favourite', 'actions', 'duration'];
+    return _defaultColumnOrderForContext('fav_songs');
   }
   if (context === 'tracks') {
-    return ['track_number', 'title', 'artist', 'album', 'genre', 'lyrics', 'favourite', 'actions', 'duration', 'year', 'disc_number', 'album_artist', 'format', 'bitrate', 'sample_rate', 'bit_depth', 'date_added', 'filename'];
+    return _defaultColumnOrderForContext('tracks');
   }
   return _TABLE_COLUMNS.map(c => c.key);
 }
@@ -10314,6 +10431,34 @@ function setTableColumnVisible(colKey, visible) {
   _applyTableColumnVisibility();
 }
 
+function moveTableColumn(colKey, direction) {
+  const key = String(colKey || '');
+  if (!key || _TABLE_LOCKED_ORDER_COLUMNS.includes(key)) return;
+  const ctx = _tableColsContext || 'songs';
+  const allowed = _tableColsContextKeys.length ? _tableColsContextKeys : _defaultColumnOrderForContext(ctx);
+  const order = _tableColumnOrder(ctx).filter(k => allowed.includes(k));
+  allowed.forEach((candidate) => {
+    if (!order.includes(candidate)) order.push(candidate);
+  });
+  const idx = order.indexOf(key);
+  if (idx < 0) return;
+  const dir = Number(direction) < 0 ? -1 : 1;
+  const target = idx + dir;
+  const firstMovableIdx = order.findIndex(k => !_TABLE_LOCKED_ORDER_COLUMNS.includes(k));
+  if (target < firstMovableIdx || target >= order.length) return;
+  if (_TABLE_LOCKED_ORDER_COLUMNS.includes(order[target])) return;
+  [order[idx], order[target]] = [order[target], order[idx]];
+
+  const fullOrder = [...order];
+  _defaultColumnOrderForContext(ctx).forEach((candidate) => {
+    if (!fullOrder.includes(candidate)) fullOrder.push(candidate);
+  });
+  _tableColOrderByContext[ctx] = fullOrder;
+  _saveTableOrderPrefs();
+  _applyTableColumnVisibility();
+  _renderTableColumnsPopover();
+}
+
 document.addEventListener('click', (e) => {
   const pop = _tableColsPopoverEl;
   if (!pop || pop.style.display !== 'block') return;
@@ -10325,6 +10470,7 @@ document.addEventListener('click', (e) => {
 
 _loadTableColumnPrefs();
 _loadTableWidthPrefs();
+_loadTableOrderPrefs();
 
 function _getSongsFilteredTracks() {
   let tracks = _songsData;
@@ -13219,6 +13365,7 @@ const App = {
   songsNextPage,
   toggleTableColumnsPopover,
   setTableColumnVisible,
+  moveTableColumn,
   // Settings
   loadSettings,
   showSettingsCategory,
