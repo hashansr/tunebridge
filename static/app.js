@@ -7136,22 +7136,8 @@ async function loadDapsView() {
   const empty = document.getElementById('daps-empty');
 
   // Update section header count and pending badge
-  const countEl   = document.getElementById('daps-count');
-  const pendingEl  = document.getElementById('daps-pending');
-  const pendingLbl = document.getElementById('daps-pending-label');
-  if (countEl) countEl.textContent = '· ' + String(daps.length).padStart(2, '0');
-
-  if (!daps.length) { grid.innerHTML = ''; empty.style.display = 'flex'; if (pendingEl) pendingEl.style.display = 'none'; return; }
+  if (!daps.length) { grid.innerHTML = ''; empty.style.display = 'flex'; return; }
   empty.style.display = 'none';
-
-  const dapsPending = daps.filter(d => {
-    const s = d.sync_summary || {};
-    return (s.music_out_of_sync_count > 0) || (s.playlists_out_of_sync_count > 0);
-  }).length;
-  if (pendingEl) {
-    pendingEl.style.display = dapsPending ? '' : 'none';
-    if (pendingLbl && dapsPending) pendingLbl.textContent = `${dapsPending} pending`;
-  }
 
   const _PL_ICON = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="11" y2="8"/><line x1="2" y1="12" x2="8" y2="12"/></svg>`;
 
@@ -7159,7 +7145,6 @@ async function loadDapsView() {
     const summary        = d.sync_summary || {};
     const musicStatus    = _dapMusicStatus(summary, !!d.mounted);
     const playlistStatus = _dapPlaylistStatus(d, summary);
-    const needsSync      = musicStatus.className === 'gear-sync-stale' || playlistStatus.className === 'gear-sync-stale';
     const connOn         = !!d.mounted;
 
     const _dotClass = cls => cls === 'gear-sync-ok' ? 'gear-dot--on' : cls === 'gear-sync-stale' ? 'gear-dot--warn' : 'gear-dot--off';
@@ -7170,15 +7155,11 @@ async function loadDapsView() {
     const connLbl = connOn ? 'gear-status-label--on' : 'gear-status-label--off';
     const connTxt = connOn ? 'Connected' : 'Not connected';
 
-    // Music sync column — map text to user-facing labels
-    const musicTextMap = {
-      'Check status': 'Check status',
-      'Library in sync': 'Synched',
-      'Library update needed': 'Out of sync',
-    };
+    // Music sync column
+    const musicTextMap = { 'Check status': 'Check status', 'Library in sync': 'Synched', 'Library update needed': 'Out of sync' };
     const musicTxt = musicTextMap[musicStatus.text] || musicStatus.text;
 
-    // Playlist sync column — compute counts from dap fields
+    // Playlist sync column — plain muted text, no dot, just counts
     const never = Number(d.never_exported || 0);
     const stale = Number(d.stale_count || 0);
     let plTxt;
@@ -7194,7 +7175,7 @@ async function loadDapsView() {
     }
 
     return `
-    <div class="gear-row gear-row-dap${needsSync ? ' gear-row--warn' : ''}" onclick="App.showDapDetail('${d.id}')">
+    <div class="gear-row gear-row-dap" onclick="App.showDapDetail('${d.id}')">
       <span class="gear-row-icon">${_DAP_SVG}</span>
       <div class="gear-row-info">
         <div class="gear-row-name">${esc(d.name)}</div>
@@ -7210,8 +7191,7 @@ async function loadDapsView() {
       </div>
       <div class="gear-row-status">
         <span class="gear-pl-icon">${_PL_ICON}</span>
-        <span class="gear-status-dot ${_dotClass(playlistStatus.className)}"></span>
-        <span class="gear-status-label ${_lblClass(playlistStatus.className)}">${esc(plTxt)}</span>
+        <span class="gear-status-label gear-status-label--off">${esc(plTxt)}</span>
       </div>
       <div class="gear-row-actions" onclick="event.stopPropagation()">
         <button class="gear-icon-btn" title="Edit" onclick="App.showEditDapModal('${d.id}')">${_GEAR_ICON_EDIT}</button>
@@ -7247,10 +7227,6 @@ async function loadIemsView() {
 function _renderIemCards(iems) {
   const grid = document.getElementById('iems-grid');
   if (!grid) return;
-
-  // Update section header count
-  const countEl = document.getElementById('iems-count');
-  if (countEl) countEl.textContent = '· ' + String(iems.length).padStart(2, '0');
 
   grid.innerHTML = iems.map(i => {
     const typeLabel   = String(i.type || 'IEM');

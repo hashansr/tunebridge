@@ -6053,14 +6053,6 @@ tr:hover .fav-toggle,
   cursor: pointer;
 }
 .gear-row:hover { background: var(--bg-hover); }
-.gear-row::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 1px; width: 2px;
-  background: transparent;
-  transition: background 0.15s;
-}
-.gear-row--warn::before { background: var(--accent-warning); }
 
 .gear-row-icon {
   width: 36px;
@@ -6168,7 +6160,7 @@ tr:hover .fav-toggle,
   min-height: 66px;
   padding: 0 6px 0 4px;
   grid-template-columns: 36px minmax(0, 1.6fr) 140px 140px minmax(0, 1fr) 80px;
-  column-gap: 18px;
+  column-gap: 12px;
 }
 
 /* IEM row column layout: icon | name+sub | type tag | peq | actions */
@@ -6176,7 +6168,7 @@ tr:hover .fav-toggle,
   min-height: 60px;
   padding: 0 6px 0 4px;
   grid-template-columns: 36px minmax(0, 1.8fr) 80px minmax(0, 1fr) 160px;
-  column-gap: 18px;
+  column-gap: 12px;
 }
 
 .gear-row--selected { background: rgba(48,53,68,0.45); }
