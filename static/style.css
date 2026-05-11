@@ -892,6 +892,9 @@ nav {
 .settings-hint-block-gap {
   margin-bottom: 14px;
 }
+.settings-library-section-label {
+  margin-bottom: 10px;
+}
 .settings-library-path-row .input-browse-group .btn-secondary {
   flex-shrink: 0;
 }
