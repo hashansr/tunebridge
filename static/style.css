@@ -8473,16 +8473,6 @@ tbody tr:hover {
   display: flex;
   align-items: center;
 }
-.player-seek-wrap::after {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 9999px;
-  background: radial-gradient(120px 30px at 50% 50%, rgba(173,198,255,0.2), transparent 70%);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.18s ease;
-}
 .player-progress-bg,
 .player-progress-fill {
   position: absolute;
@@ -8515,7 +8505,6 @@ tbody tr:hover {
 /* Show thumb on hover */
 .player-seek-wrap:hover .player-progress-fill { background: linear-gradient(90deg, rgba(190,210,255,0.98), rgba(102,232,125,0.95)); }
 .player-seek-wrap:hover .player-progress-bg   { background: rgba(74,74,72,0.95); }
-.player-seek-wrap:hover::after { opacity: 1; }
 
 /* ── Right section ────────────────────────────────────────────────────── */
 .player-right {
@@ -9550,7 +9539,6 @@ tbody tr:hover {
   .player-btn,
   .player-play-pause,
   .player-track-info,
-  .player-seek-wrap::after,
   .player-vol-slider,
   .player-vol-slider::-webkit-slider-thumb,
   .peq-popover,
