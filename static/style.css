@@ -359,6 +359,10 @@ nav {
   mask-image: url('/icons/playlist.svg');
   -webkit-mask-image: url('/icons/playlist.svg');
 }
+.nav-mask-icon-gear {
+  mask-image: url('/icons/gear.svg');
+  -webkit-mask-image: url('/icons/gear.svg');
+}
 .nav-item:hover { background: rgba(255,255,255,0.05); color: var(--text-sub); }
 .nav-item.active { background: var(--accent-dim); color: var(--text); font-weight: 600; }
 .nav-item.active svg,
@@ -4834,6 +4838,10 @@ tr.track-selected .track-check-indicator {
   mask-image: url('/icons/playlist.svg');
   -webkit-mask-image: url('/icons/playlist.svg');
 }
+.gear-mask-icon-dap {
+  mask-image: url('/icons/gear.svg');
+  -webkit-mask-image: url('/icons/gear.svg');
+}
 .gear-pill-icon {
   width: 11px;
   height: 11px;
@@ -6682,6 +6690,10 @@ tbody tr:hover {
   color: var(--accent);
   border: 1px solid rgba(173, 198, 255, 0.18);
   flex-shrink: 0;
+}
+.dap-detail-icon .gear-mask-icon {
+  width: 28px;
+  height: 28px;
 }
 .dap-detail-title {
   --tb-object-title-size: 26px;
