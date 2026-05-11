@@ -10806,16 +10806,20 @@ async function loadSettings() {
   const deviceSelect = document.getElementById('audio-device-select');
   if (deviceSelect) {
     const mpvOk = !!(cap && cap.mpv_available);
-    deviceSelect.disabled = !mpvOk;
+    const exclusiveActive = mpvOk && !!(cap && cap.exclusive_mode);
+    deviceSelect.disabled = !exclusiveActive;
     if (mpvOk) {
       try {
         const { devices } = await fetch('/api/player/audio_devices').then(r => r.json());
         deviceSelect.innerHTML = '';
-        (devices || []).forEach(d => {
+        const audioDevices = (devices || []).some(d => d && d.name === 'auto')
+          ? devices
+          : [{ name: 'auto', description: 'Auto Select Device' }, ...(devices || [])];
+        audioDevices.forEach(d => {
           const opt = document.createElement('option');
           opt.value       = d.name;
-          opt.textContent = d.description || d.name;
-          if (d.name === (cap.audio_device || 'auto')) opt.selected = true;
+          opt.textContent = d.name === 'auto' ? 'Auto Select Device' : (d.description || d.name);
+          if (d.name === (exclusiveActive ? (cap.audio_device || 'auto') : 'auto')) opt.selected = true;
           deviceSelect.appendChild(opt);
         });
         // Keep player's output popover in sync
@@ -10823,6 +10827,9 @@ async function loadSettings() {
           Player.updateOutputDevice(cap.audio_device || 'auto');
         }
       } catch (_) {}
+    } else {
+      deviceSelect.innerHTML = '<option value="auto">Auto Select Device</option>';
+      deviceSelect.value = 'auto';
     }
   }
 
@@ -10970,6 +10977,11 @@ async function setExclusiveMode(enabled) {
     const exclusiveToggle = document.getElementById('exclusive-mode-toggle');
     if (exclusiveToggle) exclusiveToggle.checked = !!data.exclusive_mode;
     _setSettingsToggleState('exclusive-mode-toggle', 'exclusive-mode-state', !!data.exclusive_mode, true);
+    const deviceSelect = document.getElementById('audio-device-select');
+    if (deviceSelect) {
+      deviceSelect.disabled = !data.exclusive_mode;
+      if (!data.exclusive_mode) deviceSelect.value = 'auto';
+    }
 
     // Resume same track at same position on the new mpv instance
     if (data.resume_track_id && typeof Player !== 'undefined') {

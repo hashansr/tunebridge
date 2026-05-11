@@ -1029,6 +1029,10 @@ h4.settings-subsection-title {
   column-gap: 18px;
   row-gap: 10px;
 }
+.settings-playback-row {
+  display: block;
+  max-width: 960px;
+}
 .settings-app-main {
   min-width: 0;
 }
@@ -1045,11 +1049,42 @@ h4.settings-subsection-title {
   color: var(--text);
   margin-bottom: 4px;
 }
+.settings-playback-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 4px;
+}
 .settings-app-row-hint {
   font-size: var(--text-sm);
   color: var(--text-muted);
   line-height: 1.5;
   max-width: 86ch;
+}
+.settings-help-text {
+  max-width: 78ch;
+  margin-top: 10px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: rgba(193, 198, 215, 0.72);
+}
+.settings-nested-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  align-items: center;
+  gap: 16px;
+  max-width: 760px;
+  margin-top: 16px;
+}
+.settings-nested-copy {
+  min-width: 0;
+}
+.settings-nested-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
 }
 .settings-app-row + .settings-app-row {
   margin-top: 20px;
@@ -1180,37 +1215,11 @@ h4.settings-subsection-title {
   padding-top: 14px;
 }
 #audio-device-row .settings-select {
-  width: min(320px, 100%);
+  width: 100%;
 }
-#audio-device-row .settings-app-main,
 #exclusive-mode-row .settings-app-main {
-  max-width: 920px;
+  max-width: 960px;
 }
-.settings-bp-criteria {
-  margin-top: 8px;
-  padding: 8px 10px;
-  border: 1px solid rgba(193, 198, 215, 0.14);
-  border-radius: 8px;
-  background: rgba(193, 198, 215, 0.03);
-}
-.settings-bp-criteria-title {
-  font-size: 11px;
-  color: rgba(193, 198, 215, 0.8);
-  margin-bottom: 4px;
-  letter-spacing: 0.01em;
-}
-.settings-bp-criteria ul {
-  margin: 0;
-  padding-left: 16px;
-  display: grid;
-  gap: 2px;
-}
-.settings-bp-criteria li {
-  font-size: 11px;
-  color: rgba(193, 198, 215, 0.68);
-  line-height: 1.35;
-}
-
 @media (max-width: 1240px) {
   .settings-app-row {
     grid-template-columns: 1fr;
@@ -1226,6 +1235,13 @@ h4.settings-subsection-title {
   }
   .settings-app-row-hint {
     max-width: 100%;
+  }
+  .settings-nested-control {
+    grid-template-columns: 1fr;
+  }
+  .settings-playback-title-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 
