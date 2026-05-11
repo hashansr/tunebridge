@@ -7031,7 +7031,7 @@ async function syncScanAgain() {
 /* ── DAP management ─────────────────────────────────────────────────── */
 
 // SVG icon used for all DAP cards/headers
-const _DAP_SVG = `<span class="gear-mask-icon gear-mask-icon-player-fill" aria-hidden="true"></span>`;
+const _DAP_SVG = `<svg width="16" height="16" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="21" r="1" fill="currentColor" stroke="none"/><path d="M26,6c-2.2,0-4,1.8-4,4v9c0,0.6-0.4,1-1,1h-1V5c0-1.7-1.3-3-3-3H5C3.3,2,2,3.3,2,5v22c0,1.7,1.3,3,3,3h12c1.7,0,3-1.3,3-3v-5h1c1.7,0,3-1.3,3-3v-9c0-1.1,0.9-2,2-2s2,0.9,2,2v9h-2c-0.6,0-1,0.4-1,1v3.2c-0.5,0.2-0.9,0.5-1.3,0.9c-0.6,0.7-0.8,1.6-0.7,2.4c0.2,1.4,1.6,2.5,3.1,2.5H27c1.7,0,3-1.3,3-3v-5v-1V10C30,7.8,28.2,6,26,6z M11,26c-2.8,0-5-2.2-5-5s2.2-5,5-5s5,2.2,5,5S13.8,26,11,26z M16,14H6c-0.6,0-1-0.4-1-1s0.4-1,1-1h10c0.6,0,1,0.4,1,1S16.6,14,16,14z"/></svg>`;
 const _IEM_ICON_HTML = `<img src="icons/earphone-1-svgrepo-com.svg" alt="" class="gear-iem-icon-image" loading="lazy" decoding="async" />`;
 const _HEADPHONE_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`;
 const _GEAR_DOTS = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`;
@@ -7586,7 +7586,7 @@ async function showDapDetail(id) {
 
   document.getElementById('dap-detail-content').innerHTML = `
     <div class="dap-detail-header">
-      <div class="dap-detail-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="9" y1="6" x2="15" y2="6"/></svg></div>
+      <div class="dap-detail-icon"><svg width="28" height="28" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="21" r="1" fill="currentColor" stroke="none"/><path d="M26,6c-2.2,0-4,1.8-4,4v9c0,0.6-0.4,1-1,1h-1V5c0-1.7-1.3-3-3-3H5C3.3,2,2,3.3,2,5v22c0,1.7,1.3,3,3,3h12c1.7,0,3-1.3,3-3v-5h1c1.7,0,3-1.3,3-3v-9c0-1.1,0.9-2,2-2s2,0.9,2,2v9h-2c-0.6,0-1,0.4-1,1v3.2c-0.5,0.2-0.9,0.5-1.3,0.9c-0.6,0.7-0.8,1.6-0.7,2.4c0.2,1.4,1.6,2.5,3.1,2.5H27c1.7,0,3-1.3,3-3v-5v-1V10C30,7.8,28.2,6,26,6z M11,26c-2.8,0-5-2.2-5-5s2.2-5,5-5s5,2.2,5,5S13.8,26,11,26z M16,14H6c-0.6,0-1-0.4-1-1s0.4-1,1-1h10c0.6,0,1,0.4,1,1S16.6,14,16,14z"/></svg></div>
       <div>
         <div class="dap-detail-title tb-object-title">${esc(dap.name)}</div>
         <div class="dap-detail-sub">
