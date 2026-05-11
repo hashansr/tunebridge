@@ -1975,7 +1975,7 @@ function _formatTrackNumber(trackNumber, fallbackNum) {
 function _lyricBadge(t) {
   if (!t?.has_lyrics) return '';
   const title = t.lyric_path ? `Lyrics file: ${t.lyric_path}` : 'Lyrics available';
-  return `<span class="track-lyrics-badge" title="${esc(title)}" aria-label="Lyrics available"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="11" x2="17" y2="11"/><line x1="3" y1="16" x2="13" y2="16"/></svg></span>`;
+  return `<span class="track-lyrics-badge" title="${esc(title)}" aria-label="Lyrics available"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M4 1C2.34315 1 1 2.34315 1 4V15C1 16.6569 2.34315 18 4 18H6V22C6 22.388 6.22446 22.741 6.57584 22.9056C6.92723 23.0702 7.3421 23.0166 7.64018 22.7682L13.362 18H20C21.6569 18 23 16.6569 23 15V4C23 2.34315 21.6569 1 20 1H4Z"/></svg></span>`;
 }
 
 /* ── Track row (library) ────────────────────────────────────────────── */
