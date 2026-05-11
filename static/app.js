@@ -7153,13 +7153,46 @@ async function loadDapsView() {
     if (pendingLbl && dapsPending) pendingLbl.textContent = `${dapsPending} pending`;
   }
 
+  const _PL_ICON = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="11" y2="8"/><line x1="2" y1="12" x2="8" y2="12"/></svg>`;
+
   grid.innerHTML = daps.map(d => {
-    const summary = d.sync_summary || {};
+    const summary        = d.sync_summary || {};
     const musicStatus    = _dapMusicStatus(summary, !!d.mounted);
     const playlistStatus = _dapPlaylistStatus(d, summary);
-    const syncDetail     = [musicStatus.detail, playlistStatus.detail].filter(Boolean).join(' · ');
-    const needsSync      = !!syncDetail;
+    const needsSync      = musicStatus.className === 'gear-sync-stale' || playlistStatus.className === 'gear-sync-stale';
     const connOn         = !!d.mounted;
+
+    const _dotClass = cls => cls === 'gear-sync-ok' ? 'gear-dot--on' : cls === 'gear-sync-stale' ? 'gear-dot--warn' : 'gear-dot--off';
+    const _lblClass = cls => cls === 'gear-sync-ok' ? 'gear-status-label--on' : cls === 'gear-sync-stale' ? 'gear-status-label--warn' : 'gear-status-label--off';
+
+    // Connection column
+    const connDot = connOn ? 'gear-dot--on' : 'gear-dot--off';
+    const connLbl = connOn ? 'gear-status-label--on' : 'gear-status-label--off';
+    const connTxt = connOn ? 'Connected' : 'Not connected';
+
+    // Music sync column — map text to user-facing labels
+    const musicTextMap = {
+      'Check status': 'Check status',
+      'Library in sync': 'Synched',
+      'Library update needed': 'Out of sync',
+    };
+    const musicTxt = musicTextMap[musicStatus.text] || musicStatus.text;
+
+    // Playlist sync column — compute counts from dap fields
+    const never = Number(d.never_exported || 0);
+    const stale = Number(d.stale_count || 0);
+    let plTxt;
+    if (playlistStatus.className === 'gear-sync-ok') {
+      plTxt = 'Synched';
+    } else if (playlistStatus.className === 'gear-sync-neutral') {
+      plTxt = 'Check status';
+    } else {
+      const parts = [];
+      if (never > 0) parts.push(`${never} new`);
+      if (stale > 0) parts.push(`${stale} updated`);
+      plTxt = parts.length ? parts.join(', ') : 'Out of sync';
+    }
+
     return `
     <div class="gear-row gear-row-dap${needsSync ? ' gear-row--warn' : ''}" onclick="App.showDapDetail('${d.id}')">
       <span class="gear-row-icon">${_DAP_SVG}</span>
@@ -7167,11 +7200,19 @@ async function loadDapsView() {
         <div class="gear-row-name">${esc(d.name)}</div>
         <div class="gear-row-sub">Digital audio player</div>
       </div>
-      <div class="gear-row-conn">
-        <span class="dot ${connOn ? 'dot-on' : 'dot-off'}"></span>
-        <span class="gear-row-conn-label ${connOn ? 'gear-conn--on' : 'gear-conn--off'}">${connOn ? 'Connected' : 'Offline'}</span>
+      <div class="gear-row-status">
+        <span class="gear-status-dot ${connDot}"></span>
+        <span class="gear-status-label ${connLbl}">${connTxt}</span>
       </div>
-      <div class="gear-row-sync-detail">${syncDetail ? esc(syncDetail) : ''}</div>
+      <div class="gear-row-status">
+        <span class="gear-status-dot ${_dotClass(musicStatus.className)}"></span>
+        <span class="gear-status-label ${_lblClass(musicStatus.className)}">${esc(musicTxt)}</span>
+      </div>
+      <div class="gear-row-status">
+        <span class="gear-pl-icon">${_PL_ICON}</span>
+        <span class="gear-status-dot ${_dotClass(playlistStatus.className)}"></span>
+        <span class="gear-status-label ${_lblClass(playlistStatus.className)}">${esc(plTxt)}</span>
+      </div>
       <div class="gear-row-actions" onclick="event.stopPropagation()">
         <button class="gear-icon-btn" title="Edit" onclick="App.showEditDapModal('${d.id}')">${_GEAR_ICON_EDIT}</button>
         <button class="gear-icon-btn" title="Delete" onclick="App.deleteDap('${d.id}')">${_GEAR_ICON_TRASH}</button>

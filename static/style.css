@@ -117,6 +117,10 @@
   --tb-font-sans: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
   --tb-font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
 
+  /* Semantic colour aliases used across components */
+  --accent-warning:     var(--tb-warning);
+  --accent-warning-dim: rgba(251,191,36,0.14);
+
   /* App page background (source of truth: Insights page gradient) */
   --app-page-gradient:
     radial-gradient(1200px 700px at 20% -10%, rgba(39, 63, 116, 0.22), transparent 60%),
@@ -5992,6 +5996,53 @@ tr:hover .fav-toggle,
   padding: 0 0 24px;
 }
 
+/* ── Status dot system (used in gear rows) ───────────────────── */
+.gear-status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.gear-dot--on {
+  background: var(--accent-success);
+  box-shadow: 0 0 0 3px rgba(74,222,128,0.14);
+}
+.gear-dot--off {
+  background: var(--text-muted);
+  opacity: 0.45;
+}
+.gear-dot--warn {
+  background: var(--accent-warning);
+  box-shadow: 0 0 0 3px var(--accent-warning-dim);
+}
+
+.gear-row-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.gear-status-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gear-status-label--on   { color: var(--text); }
+.gear-status-label--off  { color: var(--text-muted); }
+.gear-status-label--warn { color: var(--accent-warning); }
+
+.gear-pl-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.gear-pl-icon svg { width: 11px; height: 11px; }
+
 /* ── Gear rows ───────────────────────────────────────────────── */
 .gear-row {
   position: relative;
@@ -6112,11 +6163,11 @@ tr:hover .fav-toggle,
 .gear-icon-btn:hover { background: var(--accent-dim); color: var(--text); }
 .gear-icon-btn svg { width: var(--tb-icon-inline); height: var(--tb-icon-inline); }
 
-/* DAP row column layout: icon | name+sub | connection | sync detail | actions */
+/* DAP row column layout: icon | name+sub | connection | music sync | playlist sync | actions */
 .gear-row-dap {
   min-height: 66px;
   padding: 0 6px 0 4px;
-  grid-template-columns: 36px minmax(0, 1.6fr) 110px 1fr 112px;
+  grid-template-columns: 36px minmax(0, 1.6fr) 140px 140px minmax(0, 1fr) 80px;
   column-gap: 18px;
 }
 
