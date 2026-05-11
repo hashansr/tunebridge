@@ -9892,6 +9892,83 @@ let _tableColsPopoverEl = null;
 let _tableColsContextKeys = _TABLE_COLUMNS.map(c => c.key);
 let _tableColsContext = 'songs';
 let _tableColWidths = {};
+let _tablePrefsHydrated = false;
+let _tablePrefsSaveTimer = null;
+
+function _hasPlainObjectKeys(value) {
+  return !!(value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length);
+}
+
+function _tableColumnDefaultsForContext(ctx) {
+  return ctx === 'tracks' ? { ..._TRACKS_TABLE_COL_DEFAULTS } : { ..._TABLE_COL_DEFAULTS };
+}
+
+function _normalizeTableColumnPrefs(source = {}) {
+  const next = {};
+  for (const ctx of _TABLE_COL_CONTEXTS) {
+    const base = _tableColumnDefaultsForContext(ctx);
+    const ctxSource = source?.[ctx];
+    if (ctxSource && typeof ctxSource === 'object' && !Array.isArray(ctxSource)) {
+      for (const c of _TABLE_COLUMNS) {
+        if (Object.prototype.hasOwnProperty.call(ctxSource, c.key)) {
+          base[c.key] = !!ctxSource[c.key];
+        }
+      }
+    }
+    next[ctx] = base;
+  }
+  return next;
+}
+
+function _snapshotTablePrefs() {
+  return {
+    table_column_config: _normalizeTableColumnPrefs(_tableColVisibleByContext),
+    table_column_widths: _tableColWidths && typeof _tableColWidths === 'object' ? _tableColWidths : {},
+  };
+}
+
+function _queueSaveTablePrefs() {
+  if (!_tablePrefsHydrated) return;
+  clearTimeout(_tablePrefsSaveTimer);
+  _tablePrefsSaveTimer = setTimeout(() => {
+    api('/settings', { method: 'PUT', body: _snapshotTablePrefs() }).catch(() => {});
+  }, 120);
+}
+
+function _flushTablePrefs() {
+  if (!_tablePrefsHydrated) return;
+  clearTimeout(_tablePrefsSaveTimer);
+  try {
+    fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(_snapshotTablePrefs()),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+function _hydrateTablePrefsFromSettings(settings = {}) {
+  const serverColumns = settings?.table_column_config;
+  const serverWidths = settings?.table_column_widths;
+  const hasServerColumns = _hasPlainObjectKeys(serverColumns);
+  const hasServerWidths = _hasPlainObjectKeys(serverWidths);
+
+  if (hasServerColumns) {
+    _tableColVisibleByContext = _normalizeTableColumnPrefs(serverColumns);
+  }
+  if (hasServerWidths) {
+    _tableColWidths = serverWidths;
+  }
+
+  _tablePrefsHydrated = true;
+  _applyTableColumnVisibility();
+  _applyTableColumnWidths();
+
+  if (!hasServerColumns || !hasServerWidths) {
+    _queueSaveTablePrefs();
+  }
+}
 
 function _enhanceTableSystem(root = document) {
   if (!root) root = document;
@@ -9956,17 +10033,7 @@ function _loadTableColumnPrefs() {
       // Keep requested Album Detail first-load defaults for tracks context.
       return;
     }
-    for (const ctx of _TABLE_COL_CONTEXTS) {
-      const source = parsed?.[ctx];
-      if (!source || typeof source !== 'object') continue;
-      const base = ctx === 'tracks' ? { ..._TRACKS_TABLE_COL_DEFAULTS } : { ..._TABLE_COL_DEFAULTS };
-      for (const c of _TABLE_COLUMNS) {
-        if (Object.prototype.hasOwnProperty.call(source, c.key)) {
-          base[c.key] = !!source[c.key];
-        }
-      }
-      _tableColVisibleByContext[ctx] = base;
-    }
+    _tableColVisibleByContext = _normalizeTableColumnPrefs(parsed);
   } catch (_) {}
 }
 
@@ -9974,6 +10041,7 @@ function _saveTableColumnPrefs() {
   try {
     localStorage.setItem(_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(_tableColVisibleByContext));
   } catch (_) {}
+  _queueSaveTablePrefs();
 }
 
 function _loadTableWidthPrefs() {
@@ -9990,6 +10058,7 @@ function _saveTableWidthPrefs() {
   try {
     localStorage.setItem(_TABLE_WIDTHS_STORAGE_KEY, JSON.stringify(_tableColWidths));
   } catch (_) {}
+  _queueSaveTablePrefs();
 }
 
 function _tableResizeKey(table) {
@@ -10012,9 +10081,11 @@ function _tableContextFromTable(table) {
 
 function _tableContextFromAnchor(anchor) {
   if (!anchor) return 'songs';
+  const shell = anchor.closest('[data-table-context]');
+  if (shell?.dataset?.tableContext) return shell.dataset.tableContext;
   if (anchor.closest('#view-tracks') || anchor.closest('#view-albums')) return 'tracks';
   if (anchor.closest('#view-playlist')) return 'playlist';
-  if (anchor.closest('#view-fav-songs')) return 'fav_songs';
+  if (anchor.closest('#favourites-panel-songs') || anchor.closest('#view-fav-songs')) return 'fav_songs';
   return 'songs';
 }
 
@@ -10155,19 +10226,44 @@ function _renderTableColumnsPopover() {
   `;
 }
 
+function _tableFromColumnsAnchor(anchor) {
+  const shell = anchor?.closest?.('[data-table-context]');
+  if (shell) {
+    const table = shell.querySelector('table[data-table-context], table');
+    if (table) return table;
+  }
+  const context = _tableContextFromAnchor(anchor);
+  const cfg = _TB_TABLE_REGISTRY[context];
+  return cfg?.tableId ? document.getElementById(cfg.tableId) : null;
+}
+
+function _getTableHeaderColumnKeys(anchor) {
+  const table = _tableFromColumnsAnchor(anchor);
+  if (!table) return [];
+  const keys = [];
+  table.querySelectorAll('thead th[data-col]').forEach((th) => {
+    const key = String(th.getAttribute('data-col') || '').trim();
+    if (key && !keys.includes(key)) keys.push(key);
+  });
+  return keys;
+}
+
 function _getColumnContextKeys(anchor) {
   if (!anchor) return _TABLE_COLUMNS.map(c => c.key);
-  if (anchor.closest('#view-songs')) {
-    return ['track_number', 'title', 'artist', 'album', 'duration', 'plays', 'favourite', 'genre', 'year', 'disc_number', 'album_artist', 'format', 'bitrate', 'sample_rate', 'bit_depth', 'date_added', 'filename', 'actions'];
+  const headerKeys = _getTableHeaderColumnKeys(anchor);
+  if (headerKeys.length) return headerKeys;
+  const context = _tableContextFromAnchor(anchor);
+  if (context === 'songs') {
+    return ['track_number', 'title', 'artist', 'album', 'genre', 'lyrics', 'favourite', 'actions', 'duration', 'plays', 'year', 'disc_number', 'album_artist', 'format', 'bitrate', 'sample_rate', 'bit_depth', 'date_added', 'filename'];
   }
-  if (anchor.closest('#view-playlist')) {
-    return ['track_number', 'title', 'artist', 'album', 'duration', 'genre', 'year', 'favourite', 'actions'];
+  if (context === 'playlist') {
+    return ['track_number', 'title', 'artist', 'album', 'genre', 'lyrics', 'favourite', 'actions', 'duration', 'year'];
   }
-  if (anchor.closest('#view-fav-songs')) {
-    return ['track_number', 'title', 'artist', 'album', 'duration', 'favourite', 'actions'];
+  if (context === 'fav_songs') {
+    return ['track_number', 'title', 'artist', 'album', 'genre', 'lyrics', 'favourite', 'actions', 'duration'];
   }
-  if (anchor.closest('#view-tracks') || anchor.closest('#view-albums')) {
-    return ['track_number', 'title', 'artist', 'album', 'duration', 'favourite', 'genre', 'year', 'disc_number', 'album_artist', 'format', 'bitrate', 'sample_rate', 'bit_depth', 'date_added', 'filename', 'actions'];
+  if (context === 'tracks') {
+    return ['track_number', 'title', 'artist', 'album', 'genre', 'lyrics', 'favourite', 'actions', 'duration', 'year', 'disc_number', 'album_artist', 'format', 'bitrate', 'sample_rate', 'bit_depth', 'date_added', 'filename'];
   }
   return _TABLE_COLUMNS.map(c => c.key);
 }
@@ -10544,6 +10640,7 @@ async function loadSettings() {
   ]);
   _settings = settings || {};
   if (!_contentSortPrefsHydrated) _applyContentSortPrefs(settings);
+  if (!_tablePrefsHydrated) _hydrateTablePrefsFromSettings(settings);
   if (typeof Player !== 'undefined' && Player.updateCapabilities) {
     Player.updateCapabilities(cap || {});
   }
@@ -16903,6 +17000,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   _initFrOverlaySelection();
   window.addEventListener('beforeunload', (e) => {
     _flushContentSortPrefs();
+    _flushTablePrefs();
     if (!_hasUnsavedMlPreview()) return;
     e.preventDefault();
     e.returnValue = '';
