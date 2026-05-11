@@ -817,10 +817,6 @@
               <span class="settings-category-title">Playback</span>
               <span class="settings-category-indicator" data-settings-indicator="playback" style="display:none"></span>
             </button>
-            <button class="settings-category-btn" type="button" data-settings-category="lyrics" onclick="App.showSettingsCategory('lyrics')">
-              <span class="settings-category-title">Lyrics</span>
-              <span class="settings-category-indicator" data-settings-indicator="lyrics" style="display:none"></span>
-            </button>
             <button class="settings-category-btn" type="button" data-settings-category="audio-tools" onclick="App.showSettingsCategory('audio-tools')">
               <span class="settings-category-title">Audio Tools</span>
               <span class="settings-category-indicator" data-settings-indicator="audio-tools" style="display:none"></span>
@@ -1121,7 +1117,7 @@
           </div>
 
           <!-- Lyrics section -->
-          <div class="settings-section settings-panel" id="settings-lyrics-section" data-settings-panel="lyrics">
+          <div class="settings-section settings-panel" id="settings-lyrics-section" data-settings-panel="library">
             <h3 class="settings-section-title tb-section-title">Lyrics</h3>
             <div class="settings-rg-row">
               <div class="settings-rg-meta">
@@ -1129,7 +1125,7 @@
                 <span id="lyrics-stats-text" class="settings-rg-sub">Loading…</span>
               </div>
               <div class="settings-rg-actions">
-                <button class="btn-primary" id="lyrics-bulk-new-btn" onclick="App.startLyricsBulk('new')">Find New Songs</button>
+                <button class="btn-secondary" id="lyrics-bulk-new-btn" onclick="App.startLyricsBulk('new')">Find New Songs</button>
                 <button class="btn-secondary" id="lyrics-bulk-all-btn" onclick="App.startLyricsBulk('all')">Find All Missing</button>
                 <button class="btn-secondary" id="lyrics-bulk-cancel-btn" onclick="App.cancelLyricsBulk()" style="display:none">Cancel</button>
               </div>

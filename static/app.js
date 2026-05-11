@@ -10724,6 +10724,7 @@ async function importBackup(input) {
 let _activeSettingsCategory = 'library';
 
 function showSettingsCategory(category = 'library') {
+  if (category === 'lyrics') category = 'library';
   _activeSettingsCategory = category;
   document.querySelectorAll('.settings-category-btn').forEach(btn => {
     const active = btn.dataset.settingsCategory === category;
