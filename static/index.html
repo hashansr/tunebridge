@@ -1057,16 +1057,9 @@
             <!-- Bit-perfect / exclusive mode -->
             <div class="settings-app-row settings-playback-row" id="exclusive-mode-row">
               <div class="settings-app-main">
-                <div class="settings-playback-title-row">
-                  <div class="settings-app-row-label">Bit-perfect output
-                    <span id="exclusive-bp-pill" class="player-bitperfect-badge" style="display:none">BP</span>
-                    <span id="exclusive-backend-badge" class="settings-badge" style="display:none"></span>
-                  </div>
-                  <label class="settings-toggle" id="exclusive-toggle-label">
-                    <input type="checkbox" id="exclusive-mode-toggle" onchange="App.setExclusiveMode(this.checked)" disabled>
-                    <span class="settings-toggle-track"></span>
-                    <span class="settings-toggle-state" id="exclusive-mode-state">Unavailable</span>
-                  </label>
+                <div class="settings-app-row-label">Bit-perfect output
+                  <span id="exclusive-bp-pill" class="player-bitperfect-badge" style="display:none">BP</span>
+                  <span id="exclusive-backend-badge" class="settings-badge" style="display:none"></span>
                 </div>
                 <div class="settings-app-row-hint">
                   Sends playback directly to CoreAudio in exclusive mode. This avoids the macOS mixer for lossless files, but system audio may be muted while the device is in use.
@@ -1076,41 +1069,48 @@
                   The player shows the BP badge when bit-perfect output is on, the current track is lossless, EQ is off, and volume is at 100%.
                 </div>
 
-                <div class="settings-nested-control" id="audio-device-row">
-                  <div class="settings-nested-copy">
-                    <div class="settings-nested-label">Output device</div>
-                    <div class="settings-app-row-hint">
-                      Choose a device for exclusive playback. When bit-perfect output is off, TuneBridge uses the normal system output.
-                    </div>
-                  </div>
-                  <select id="audio-device-select" class="settings-select"
-                          onchange="App.setAudioDevice(this.value)" disabled>
-                    <option value="auto">Auto Select Device</option>
-                  </select>
-                </div>
-
                 <div class="settings-inline-actions" id="mpv-install-actions" style="display:none">
                   <button class="btn-secondary" id="mpv-retry-btn" onclick="App.retryMpvDetection()">Retry detection</button>
                   <button class="btn-secondary" id="mpv-install-btn" onclick="App.installMpv()">Install mpv</button>
                 </div>
+              </div>
+              <div class="settings-playback-actions">
+                <label class="settings-toggle" id="exclusive-toggle-label">
+                  <input type="checkbox" id="exclusive-mode-toggle" onchange="App.setExclusiveMode(this.checked)" disabled>
+                  <span class="settings-toggle-track"></span>
+                  <span class="settings-toggle-state" id="exclusive-mode-state">Unavailable</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-app-row settings-playback-row settings-playback-dependent-row" id="audio-device-row">
+              <div class="settings-app-main">
+                <div class="settings-app-row-label">Output device</div>
+                <div class="settings-app-row-hint">
+                  Choose a device for exclusive playback. When bit-perfect output is off, TuneBridge uses the normal system output.
+                </div>
+              </div>
+              <div class="settings-playback-actions">
+                <select id="audio-device-select" class="settings-select"
+                        onchange="App.setAudioDevice(this.value)" disabled>
+                  <option value="auto">Auto Select Device</option>
+                </select>
               </div>
             </div>
 
             <div class="settings-subsection-divider"></div>
             <div class="settings-app-row settings-playback-row" id="listening-history-row">
               <div class="settings-app-main">
-                <div class="settings-playback-title-row">
-                  <div class="settings-app-row-label">Listening history</div>
-                  <label class="settings-toggle">
-                    <input type="checkbox" id="listening-tracking-toggle" onchange="App.setListeningTracking(this.checked)">
-                    <span class="settings-toggle-track"></span>
-                    <span class="settings-toggle-state" id="listening-tracking-state">On</span>
-                  </label>
-                </div>
+                <div class="settings-app-row-label">Listening history</div>
                 <div class="settings-app-row-hint">Stored on this device for Home recommendations and yearly listening stats.</div>
-                <div class="settings-inline-actions">
-                  <button class="btn-secondary" id="listening-history-clear-btn" onclick="App.clearListeningHistory()">Clear History</button>
-                </div>
+              </div>
+              <div class="settings-playback-actions">
+                <label class="settings-toggle">
+                  <input type="checkbox" id="listening-tracking-toggle" onchange="App.setListeningTracking(this.checked)">
+                  <span class="settings-toggle-track"></span>
+                  <span class="settings-toggle-state" id="listening-tracking-state">On</span>
+                </label>
+                <button class="btn-secondary" id="listening-history-clear-btn" onclick="App.clearListeningHistory()">Clear History</button>
               </div>
             </div>
           </div>

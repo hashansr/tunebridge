@@ -105,7 +105,8 @@
   --main-nav-top-inset: var(--main-nav-side-inset);
   --main-nav-btn-size: 34px;
   --main-nav-title-gap: 15px;
-  --tb-grid-card-size: 210px;
+  --tb-grid-card-gap: 22px;
+  --tb-grid-card-size: calc((100% - 88px) / 5);
 
   /* Type */
   --text-xs:   11px;
@@ -1031,8 +1032,11 @@ h4.settings-subsection-title {
   row-gap: 10px;
 }
 .settings-playback-row {
-  display: block;
-  max-width: 960px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  align-items: center;
+  gap: 18px;
+  max-width: none;
 }
 .settings-app-main {
   min-width: 0;
@@ -1048,44 +1052,30 @@ h4.settings-subsection-title {
   font-size: var(--text-base);
   font-weight: 500;
   color: var(--text);
-  margin-bottom: 4px;
-}
-.settings-playback-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 .settings-app-row-hint {
   font-size: var(--text-sm);
   color: var(--text-muted);
-  line-height: 1.5;
-  max-width: 86ch;
+  line-height: 1.62;
+  max-width: 78ch;
 }
 .settings-help-text {
-  max-width: 78ch;
-  margin-top: 10px;
+  max-width: 74ch;
+  margin-top: 12px;
   font-size: var(--text-sm);
-  line-height: 1.5;
+  line-height: 1.62;
   color: rgba(193, 198, 215, 0.72);
 }
-.settings-nested-control {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+.settings-playback-actions {
+  display: flex;
   align-items: center;
-  gap: 16px;
-  max-width: 760px;
-  margin-top: 16px;
-}
-.settings-nested-copy {
+  justify-content: flex-end;
+  gap: 10px;
   min-width: 0;
 }
-.settings-nested-label {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 2px;
+.settings-playback-actions .settings-toggle {
+  justify-content: flex-end;
 }
 .settings-app-row + .settings-app-row {
   margin-top: 20px;
@@ -1237,12 +1227,11 @@ h4.settings-subsection-title {
   .settings-app-row-hint {
     max-width: 100%;
   }
-  .settings-nested-control {
+  .settings-playback-row {
     grid-template-columns: 1fr;
   }
-  .settings-playback-title-row {
-    align-items: flex-start;
-    flex-direction: column;
+  .settings-playback-actions {
+    justify-content: flex-start;
   }
 }
 
@@ -13040,7 +13029,7 @@ body.is-col-resizing {
 /* Rail */
 .home-rail {
   display: flex;
-  gap: 14px;
+  gap: var(--tb-grid-card-gap);
   overflow-x: auto;
   padding: 6px 0 24px 8px;
   scrollbar-width: none;
@@ -16456,9 +16445,9 @@ thead th:hover .table-col-resizer::after {
 #view-fav-artists .favourites-fixed-grid,
 #view-fav-albums .favourites-fixed-grid,
 #view-playlists .playlists-view-grid {
-  gap: 54px 22px;
-  grid-template-columns: repeat(auto-fill, var(--tb-grid-card-size));
-  justify-content: start;
+  gap: 54px var(--tb-grid-card-gap);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  justify-content: stretch;
 }
 
 #view-artists .artist-card,
@@ -16476,7 +16465,7 @@ thead th:hover .table-col-resizer::after {
   overflow: visible;
   transition: transform 0.2s ease;
   contain: none;
-  width: var(--tb-grid-card-size);
+  width: 100%;
 }
 
 #view-albums .album-card {
@@ -16503,8 +16492,8 @@ thead th:hover .table-col-resizer::after {
 #view-fav-artists .artist-thumb,
 #view-fav-albums .album-thumb,
 #view-playlists .pl-view-cover {
-  width: var(--tb-grid-card-size);
-  height: var(--tb-grid-card-size);
+  width: 100%;
+  height: auto;
   aspect-ratio: 1 / 1;
   border-radius: 10px;
   background: rgba(36, 37, 44, 0.86);
@@ -16521,6 +16510,66 @@ thead th:hover .table-col-resizer::after {
 #view-fav-albums .album-card:hover .album-thumb,
 #view-playlists .pl-view-card:hover .pl-view-cover {
   box-shadow: 0 14px 42px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 1220px) {
+  :root {
+    --tb-grid-card-size: calc((100% - 66px) / 4);
+  }
+
+  #view-artists .artist-grid,
+  #view-albums .album-grid,
+  #view-favourites .favourites-fixed-grid,
+  #view-fav-artists .favourites-fixed-grid,
+  #view-fav-albums .favourites-fixed-grid,
+  #view-playlists .playlists-view-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  :root {
+    --tb-grid-card-size: calc((100% - 44px) / 3);
+  }
+
+  #view-artists .artist-grid,
+  #view-albums .album-grid,
+  #view-favourites .favourites-fixed-grid,
+  #view-fav-artists .favourites-fixed-grid,
+  #view-fav-albums .favourites-fixed-grid,
+  #view-playlists .playlists-view-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  :root {
+    --tb-grid-card-size: calc((100% - 22px) / 2);
+  }
+
+  #view-artists .artist-grid,
+  #view-albums .album-grid,
+  #view-favourites .favourites-fixed-grid,
+  #view-fav-artists .favourites-fixed-grid,
+  #view-fav-albums .favourites-fixed-grid,
+  #view-playlists .playlists-view-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  :root {
+    --tb-grid-card-size: 100%;
+  }
+
+  #view-artists .artist-grid,
+  #view-albums .album-grid,
+  #view-favourites .favourites-fixed-grid,
+  #view-fav-artists .favourites-fixed-grid,
+  #view-fav-albums .favourites-fixed-grid,
+  #view-playlists .playlists-view-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 #view-artists .artist-name,
