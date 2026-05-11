@@ -356,8 +356,8 @@ nav {
   -webkit-mask-image: url('/icons/music-player-svgrepo-com.svg');
 }
 .nav-mask-icon-playlist {
-  mask-image: url('/icons/queue.svg');
-  -webkit-mask-image: url('/icons/queue.svg');
+  mask-image: url('/icons/playlist.svg');
+  -webkit-mask-image: url('/icons/playlist.svg');
 }
 .nav-item:hover { background: rgba(255,255,255,0.05); color: var(--text-sub); }
 .nav-item.active { background: var(--accent-dim); color: var(--text); font-weight: 600; }
@@ -2395,8 +2395,8 @@ tbody tr:hover .remove-btn { opacity: 1; }
   -webkit-mask-image: url('/icons/music-player-fill-svgrepo-com.svg');
 }
 .empty-mask-icon-playlist {
-  mask-image: url('/icons/playlist-svgrepo-com.svg');
-  -webkit-mask-image: url('/icons/playlist-svgrepo-com.svg');
+  mask-image: url('/icons/playlist.svg');
+  -webkit-mask-image: url('/icons/playlist.svg');
 }
 .empty-mask-icon-earphone {
   mask-image: url('/icons/earphone-1-svgrepo-com.svg');
@@ -4828,8 +4828,8 @@ tr.track-selected .track-check-indicator {
   -webkit-mask-image: url('/icons/music-player-svgrepo-com.svg');
 }
 .gear-mask-icon-playlist {
-  mask-image: url('/icons/playlist-svgrepo-com.svg');
-  -webkit-mask-image: url('/icons/playlist-svgrepo-com.svg');
+  mask-image: url('/icons/playlist.svg');
+  -webkit-mask-image: url('/icons/playlist.svg');
 }
 .gear-pill-icon {
   width: 11px;
@@ -8300,8 +8300,8 @@ tbody tr:hover {
   -webkit-mask-image: url('/icons/shuffle.svg');
 }
 .tb-icon-playlist {
-  mask-image: url('/icons/queue.svg');
-  -webkit-mask-image: url('/icons/queue.svg');
+  mask-image: url('/icons/playlist.svg');
+  -webkit-mask-image: url('/icons/playlist.svg');
 }
 .tb-icon-repeat-list {
   mask-image: url('/icons/repeat-list-svgrepo-com.svg');
