@@ -105,6 +105,7 @@
   --main-nav-top-inset: var(--main-nav-side-inset);
   --main-nav-btn-size: 34px;
   --main-nav-title-gap: 15px;
+  --tb-grid-card-size: 210px;
 
   /* Type */
   --text-xs:   11px;
@@ -13128,7 +13129,7 @@ body.is-col-resizing {
 
 /* Rail cards */
 .home-card {
-  --home-card-size: calc((100% - 80px) / 6 - 24px);
+  --home-card-size: var(--tb-grid-card-size);
   text-align: left;
   border: none;
   background: transparent;
@@ -13149,31 +13150,31 @@ body.is-col-resizing {
 
 @media (max-width: 1460px) {
   .home-card {
-    --home-card-size: calc((100% - 64px) / 5 - 24px);
+    --home-card-size: var(--tb-grid-card-size);
   }
 }
 
 @media (max-width: 1220px) {
   .home-card {
-    --home-card-size: calc((100% - 48px) / 4 - 24px);
+    --home-card-size: var(--tb-grid-card-size);
   }
 }
 
 @media (max-width: 980px) {
   .home-card {
-    --home-card-size: calc((100% - 32px) / 3 - 24px);
+    --home-card-size: var(--tb-grid-card-size);
   }
 }
 
 @media (max-width: 720px) {
   .home-card {
-    --home-card-size: calc((100% - 16px) / 2 - 24px);
+    --home-card-size: var(--tb-grid-card-size);
   }
 }
 
 @media (max-width: 520px) {
   .home-card {
-    --home-card-size: calc(100% - 24px);
+    --home-card-size: var(--tb-grid-card-size);
   }
 }
 
@@ -16456,6 +16457,8 @@ thead th:hover .table-col-resizer::after {
 #view-fav-albums .favourites-fixed-grid,
 #view-playlists .playlists-view-grid {
   gap: 54px 22px;
+  grid-template-columns: repeat(auto-fill, var(--tb-grid-card-size));
+  justify-content: start;
 }
 
 #view-artists .artist-card,
@@ -16473,11 +16476,12 @@ thead th:hover .table-col-resizer::after {
   overflow: visible;
   transition: transform 0.2s ease;
   contain: none;
+  width: var(--tb-grid-card-size);
 }
 
 #view-albums .album-card {
   content-visibility: auto;
-  contain-intrinsic-size: 260px 324px;
+  contain-intrinsic-size: 210px 272px;
 }
 
 #view-artists .artist-card:hover,
@@ -16499,6 +16503,9 @@ thead th:hover .table-col-resizer::after {
 #view-fav-artists .artist-thumb,
 #view-fav-albums .album-thumb,
 #view-playlists .pl-view-cover {
+  width: var(--tb-grid-card-size);
+  height: var(--tb-grid-card-size);
+  aspect-ratio: 1 / 1;
   border-radius: 10px;
   background: rgba(36, 37, 44, 0.86);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
