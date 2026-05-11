@@ -5312,6 +5312,7 @@ function showView(viewName) {
 }
 
 function showViewEl(name) {
+  closeLyricsView();
   const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
@@ -5659,6 +5660,7 @@ async function renderHelpCenter() {
 }
 
 function showHelp() {
+  closeLyricsView();
   document.getElementById('help-modal').style.display = 'flex';
   renderHelpCenter();
 }
@@ -6096,6 +6098,7 @@ function syncGoToPreview() {
 }
 
 async function showSync() {
+  closeLyricsView();
   const modal = document.getElementById('sync-modal');
   if (modal) modal.style.display = 'flex';
 
@@ -12879,6 +12882,10 @@ let _lyricsScrollResumeTimer = null;
 let _lyricsBulkPoller = null;
 
 function openLyricsView() {
+  if (_lyricsViewOpen) {
+    closeLyricsView();
+    return;
+  }
   const view = document.getElementById('lyrics-view');
   if (!view) return;
   view.style.display = 'flex';
@@ -12899,6 +12906,11 @@ function openLyricsView() {
   document.addEventListener('keydown', _lyricsEscHandler, { once: true });
 }
 
+function toggleLyricsView() {
+  if (_lyricsViewOpen) closeLyricsView();
+  else openLyricsView();
+}
+
 function closeLyricsView() {
   const view = document.getElementById('lyrics-view');
   if (view) view.style.display = 'none';
@@ -12910,6 +12922,7 @@ function closeLyricsView() {
   _lyricsUserScrolled = false;
   clearTimeout(_lyricsScrollResumeTimer);
   document.getElementById('player-lyrics-btn')?.classList.remove('lyrics-active');
+  document.removeEventListener('keydown', _lyricsEscHandler);
 }
 
 function _lyricsEscHandler(e) {
@@ -13549,6 +13562,7 @@ const App = {
   cancelRgTagging,
   // Lyrics
   openLyricsView,
+  toggleLyricsView,
   closeLyricsView,
   _syncLyricsToTime,
   _onLyricsTrackChange,

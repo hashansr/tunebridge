@@ -1811,6 +1811,7 @@ const Player = (function () {
   }
 
   async function togglePeqPopover() {
+    if (typeof App !== 'undefined' && App.closeLyricsView) App.closeLyricsView();
     ps.peqOpen = !ps.peqOpen;
     _setPeqPopoverOpen(ps.peqOpen);
     if (ps.peqOpen) {
