@@ -8300,8 +8300,8 @@ tbody tr:hover {
   -webkit-mask-image: url('/icons/shuffle.svg');
 }
 .tb-icon-playlist {
-  mask-image: url('/icons/playlist.svg');
-  -webkit-mask-image: url('/icons/playlist.svg');
+  mask-image: url('/icons/queue.svg');
+  -webkit-mask-image: url('/icons/queue.svg');
 }
 .tb-icon-repeat-list {
   mask-image: url('/icons/repeat-list-svgrepo-com.svg');
