@@ -821,10 +821,6 @@
               <span class="settings-category-title">Audio Tools</span>
               <span class="settings-category-indicator" data-settings-indicator="audio-tools" style="display:none"></span>
             </button>
-            <button class="settings-category-btn" type="button" data-settings-category="artwork" onclick="App.showSettingsCategory('artwork')">
-              <span class="settings-category-title">Artwork</span>
-              <span class="settings-category-indicator" data-settings-indicator="artwork" style="display:none"></span>
-            </button>
             <button class="settings-category-btn" type="button" data-settings-category="maintenance" onclick="App.showSettingsCategory('maintenance')">
               <span class="settings-category-title">Maintenance</span>
               <span class="settings-category-indicator" data-settings-indicator="maintenance" style="display:none"></span>
@@ -913,51 +909,21 @@
             </div>
           </div>
 
-          <!-- Artist Images section -->
-          <div class="settings-section settings-panel" id="settings-image-search-section" data-settings-panel="artwork">
-            <h3 class="settings-section-title tb-section-title">Image Search <span class="settings-section-status" data-settings-section-status="artwork" style="display:none"></span></h3>
-            <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
-              Search for both artist portraits and album covers from an online service. Choose a service and optionally add an API key for better results.
-            </p>
-            <div class="settings-row">
-              <label>Image service</label>
-              <select id="artist-image-service-select" class="settings-select" onchange="App.onArtistImageServiceChange(this.value)">
-                <option value="itunes">iTunes Search (no key required)</option>
-                <option value="lastfm">Last.fm</option>
-                <option value="fanart">Fanart.tv</option>
-              </select>
-            </div>
-            <div id="lastfm-key-row" class="settings-row" style="display:none">
-              <label>Last.fm API key</label>
-              <div class="input-browse-group">
-                <input id="lastfm-api-key-input" type="text" placeholder="Paste your API key" />
-                <a class="btn-browse" href="https://www.last.fm/api/accounts" target="_blank">Get Key</a>
+          <!-- Artwork section -->
+          <div class="settings-section settings-panel" id="settings-image-search-section" data-settings-panel="library">
+            <h3 class="settings-section-title tb-section-title">Artwork <span class="settings-section-status" data-settings-section-status="artwork" style="display:none"></span></h3>
+            <div class="settings-rg-row">
+              <div class="settings-rg-meta">
+                <span class="settings-rg-label">Artist Photos</span>
+                <span class="settings-rg-sub">Find photos for artists in your library that don't already have one</span>
               </div>
-            </div>
-            <div id="fanart-key-row" class="settings-row" style="display:none">
-              <label>Fanart.tv API key</label>
-              <div class="input-browse-group">
-                <input id="fanart-api-key-input" type="text" placeholder="Paste your API key" />
-                <a class="btn-browse" href="https://fanart.tv/get-an-api-key/" target="_blank">Get Key</a>
+              <div class="settings-rg-actions">
+                <button class="btn-secondary settings-fetch-btn" id="batch-img-start-btn" onclick="App.startArtistImageBatch()">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 3C13.5 2.44772 13.0523 2 12.5 2H11.5C10.9477 2 10.5 2.44772 10.5 3V10.5H3C2.44772 10.5 2 10.9477 2 11.5V12.5C2 13.0523 2.44772 13.5 3 13.5H10.5V21C10.5 21.5523 10.9477 22 11.5 22H12.5C13.0523 22 13.5 21.5523 13.5 21V13.5H21C21.5523 13.5 22 13.0523 22 12.5V11.5C22 10.9477 21.5523 10.5 21 10.5H13.5V3Z"/></svg>
+                  Fetch Missing Images
+                </button>
+                <button class="btn-secondary" id="batch-img-cancel-btn" onclick="App.cancelArtistImageBatch()" style="display:none">Cancel</button>
               </div>
-            </div>
-            <p class="settings-hint settings-hint-inline-start">API keys are stored locally on your device and never shared.</p>
-            <div class="settings-inline-actions">
-              <button class="btn-primary" onclick="App.saveArtistImageSettings()">Save</button>
-            </div>
-
-            <!-- Batch fetch -->
-            <div class="settings-subsection-divider"></div>
-            <h4 class="settings-subsection-title">Auto fetch Artist Photos</h4>
-            <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
-              Searches for a photo for every artist in your library that doesn't already have one. Uses the service selected above.
-            </p>
-            <div class="settings-inline-actions">
-              <button class="btn-primary settings-fetch-btn" id="batch-img-start-btn" onclick="App.startArtistImageBatch()">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 3C13.5 2.44772 13.0523 2 12.5 2H11.5C10.9477 2 10.5 2.44772 10.5 3V10.5H3C2.44772 10.5 2 10.9477 2 11.5V12.5C2 13.0523 2.44772 13.5 3 13.5H10.5V21C10.5 21.5523 10.9477 22 11.5 22H12.5C13.0523 22 13.5 21.5523 13.5 21V13.5H21C21.5523 13.5 22 13.0523 22 12.5V11.5C22 10.9477 21.5523 10.5 21 10.5H13.5V3Z"/></svg>
-                Fetch Missing Images
-              </button>
-              <button class="btn-secondary" id="batch-img-cancel-btn" onclick="App.cancelArtistImageBatch()" style="display:none">Cancel</button>
             </div>
 
             <!-- Progress banner -->
@@ -966,6 +932,44 @@
                 <div id="batch-img-bar" class="scan-bar-inner" style="width:0%"></div>
               </div>
               <div id="batch-img-msg" class="scan-status-msg"></div>
+            </div>
+
+            <div class="lyrics-advanced-wrap">
+              <button class="lyrics-advanced-toggle" onclick="App.toggleArtworkAdvanced()">
+                Advanced
+                <svg id="artwork-advanced-chevron" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="transition:transform 0.2s"><path fill-rule="evenodd" clip-rule="evenodd" d="M18.5861 8.0858C18.1956 7.69528 17.5624 7.69528 17.1719 8.0858L11.879 13.3787L6.58609 8.0858C6.19556 7.69528 5.5624 7.69528 5.17187 8.0858L4.46477 8.79291C4.07424 9.18343 4.07424 9.8166 4.46477 10.2071L10.8183 16.5607C11.4041 17.1465 12.3539 17.1465 12.9396 16.5607L19.2932 10.2071C19.6837 9.8166 19.6837 9.18343 19.2932 8.79291L18.5861 8.0858Z"/></svg>
+              </button>
+              <div id="artwork-advanced-body" style="display:none">
+                <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
+                  Choose the artwork service and optionally add an API key for better results.
+                </p>
+                <div class="settings-row">
+                  <label>Image service</label>
+                  <select id="artist-image-service-select" class="settings-select" onchange="App.onArtistImageServiceChange(this.value)">
+                    <option value="itunes">iTunes Search (no key required)</option>
+                    <option value="lastfm">Last.fm</option>
+                    <option value="fanart">Fanart.tv</option>
+                  </select>
+                </div>
+                <div id="lastfm-key-row" class="settings-row" style="display:none">
+                  <label>Last.fm API key</label>
+                  <div class="input-browse-group">
+                    <input id="lastfm-api-key-input" type="text" placeholder="Paste your API key" />
+                    <a class="btn-browse" href="https://www.last.fm/api/accounts" target="_blank">Get Key</a>
+                  </div>
+                </div>
+                <div id="fanart-key-row" class="settings-row" style="display:none">
+                  <label>Fanart.tv API key</label>
+                  <div class="input-browse-group">
+                    <input id="fanart-api-key-input" type="text" placeholder="Paste your API key" />
+                    <a class="btn-browse" href="https://fanart.tv/get-an-api-key/" target="_blank">Get Key</a>
+                  </div>
+                </div>
+                <p class="settings-hint settings-hint-inline-start">API keys are stored locally on your device and never shared.</p>
+                <div class="settings-inline-actions">
+                  <button class="btn-primary" onclick="App.saveArtistImageSettings()">Save</button>
+                </div>
+              </div>
             </div>
           </div>
 

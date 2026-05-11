@@ -10724,7 +10724,7 @@ async function importBackup(input) {
 let _activeSettingsCategory = 'library';
 
 function showSettingsCategory(category = 'library') {
-  if (category === 'lyrics') category = 'library';
+  if (category === 'lyrics' || category === 'artwork') category = 'library';
   _activeSettingsCategory = category;
   document.querySelectorAll('.settings-category-btn').forEach(btn => {
     const active = btn.dataset.settingsCategory === category;
@@ -13096,6 +13096,15 @@ function toggleLyricsAdvanced() {
   if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
 }
 
+function toggleArtworkAdvanced() {
+  const body = document.getElementById('artwork-advanced-body');
+  const chevron = document.getElementById('artwork-advanced-chevron');
+  if (!body) return;
+  const open = body.style.display === 'none';
+  body.style.display = open ? '' : 'none';
+  if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
+}
+
 async function startLyricsBulk(mode = 'new') {
   try {
     const res = await fetch('/api/lyrics/bulk', {
@@ -13373,6 +13382,7 @@ const App = {
   loadLyricsSettings,
   onLyricsServiceChange,
   toggleLyricsAdvanced,
+  toggleArtworkAdvanced,
   startLyricsBulk,
   cancelLyricsBulk,
   saveLibraryPath,
