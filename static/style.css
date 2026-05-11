@@ -16593,3 +16593,22 @@ thead th:hover .table-col-resizer::after {
     font-size: 22px;
   }
 }
+
+/* Native app cursor policy: keep the arrow cursor for clickable UI. */
+html,
+body,
+body * {
+  cursor: default !important;
+}
+
+input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+textarea,
+[contenteditable="true"],
+[contenteditable=""] {
+  cursor: text !important;
+}
+
+.table-col-resizer,
+body.is-col-resizing {
+  cursor: col-resize !important;
+}
