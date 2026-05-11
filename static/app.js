@@ -1978,6 +1978,10 @@ function _lyricBadge(t) {
   return `<span class="track-lyrics-badge" title="${esc(title)}" aria-label="Lyrics available"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M4 1C2.34315 1 1 2.34315 1 4V15C1 16.6569 2.34315 18 4 18H6V22C6 22.388 6.22446 22.741 6.57584 22.9056C6.92723 23.0702 7.3421 23.0166 7.64018 22.7682L13.362 18H20C21.6569 18 23 16.6569 23 15V4C23 2.34315 21.6569 1 20 1H4Z"/></svg></span>`;
 }
 
+function _lyricsCell(t) {
+  return `<td data-col="lyrics" class="col-lyrics-cell">${_lyricBadge(t)}</td>`;
+}
+
 /* ── Track row (library) ────────────────────────────────────────────── */
 function trackRow(t, num, inPlaylist) {
   const trackNumLabel = inPlaylist ? String(num) : _formatTrackNumber(t.track_number, num);
@@ -2016,7 +2020,6 @@ function trackRow(t, num, inPlaylist) {
           <div class="track-info">
             <div class="track-title-line">
               <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
-              ${_lyricBadge(t)}
             </div>
             <div class="track-artist" title="${esc(t.artist)}">${esc(t.artist)}</div>
           </div>
@@ -2036,21 +2039,9 @@ function trackRow(t, num, inPlaylist) {
       ${sharedTitleCells}
       <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
-      <td data-col="duration" class="col-dur">
-        ${esc(t.duration_fmt || '')}
-        ${_playStats[t.id]?.count ? `<span class="track-play-badge" title="Last played ${new Date(_playStats[t.id].last_played * 1000).toLocaleDateString()}">${_playStats[t.id].count}×</span>` : ''}
-      </td>
-      <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn')}</td>
       <td data-col="genre" class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
-      <td data-col="year" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.year || '')}</td>
-      <td data-col="disc_number" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.disc_number || '')}</td>
-      <td data-col="album_artist" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.album_artist || '')}">${esc(t.album_artist || '')}</td>
-      <td data-col="format" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.format || '')}</td>
-      <td data-col="bitrate" style="color:var(--text-muted);font-size:var(--text-sm)">${bitrate}</td>
-      <td data-col="sample_rate" style="color:var(--text-muted);font-size:var(--text-sm)">${sampleRate}</td>
-      <td data-col="bit_depth" style="color:var(--text-muted);font-size:var(--text-sm)">${bitDepth}</td>
-      <td data-col="date_added" style="color:var(--text-muted);font-size:var(--text-sm)">${fmtDate}</td>
-      <td data-col="filename" style="color:var(--text-muted);font-size:var(--text-sm)" title="${esc(t.filename || '')}">${esc(t.filename || '')}</td>
+      ${_lyricsCell(t)}
+      <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn')}</td>
       <td data-col="actions"><div class="col-act-inner">
         <button class="row-ctx-btn" onclick="event.stopPropagation();App.showTrackCtxMenu(event,'${t.id}')" title="More actions">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
@@ -2062,6 +2053,19 @@ function trackRow(t, num, inPlaylist) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div></td>
+      <td data-col="duration" class="col-dur">
+        ${esc(t.duration_fmt || '')}
+        ${_playStats[t.id]?.count ? `<span class="track-play-badge" title="Last played ${new Date(_playStats[t.id].last_played * 1000).toLocaleDateString()}">${_playStats[t.id].count}×</span>` : ''}
+      </td>
+      <td data-col="year" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.year || '')}</td>
+      <td data-col="disc_number" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.disc_number || '')}</td>
+      <td data-col="album_artist" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.album_artist || '')}">${esc(t.album_artist || '')}</td>
+      <td data-col="format" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.format || '')}</td>
+      <td data-col="bitrate" style="color:var(--text-muted);font-size:var(--text-sm)">${bitrate}</td>
+      <td data-col="sample_rate" style="color:var(--text-muted);font-size:var(--text-sm)">${sampleRate}</td>
+      <td data-col="bit_depth" style="color:var(--text-muted);font-size:var(--text-sm)">${bitDepth}</td>
+      <td data-col="date_added" style="color:var(--text-muted);font-size:var(--text-sm)">${fmtDate}</td>
+      <td data-col="filename" style="color:var(--text-muted);font-size:var(--text-sm)" title="${esc(t.filename || '')}">${esc(t.filename || '')}</td>
     </tr>`;
   }
 
@@ -2077,9 +2081,8 @@ function trackRow(t, num, inPlaylist) {
       ${sharedTitleCells}
       <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
-      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
       <td data-col="genre" class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.genre || '')}</td>
-      <td data-col="year" class="col-year" style="color:var(--text-muted);font-size:var(--text-sm)">${t.year || ''}</td>
+      ${_lyricsCell(t)}
       <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, `track-fav-btn${inPlaylist ? '' : ''}`)}</td>
       <td data-col="actions"><div class="col-act-inner">
         ${removeAction}
@@ -2091,6 +2094,8 @@ function trackRow(t, num, inPlaylist) {
         </button>
         ${addAction}
       </div></td>
+      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
+      <td data-col="year" class="col-year" style="color:var(--text-muted);font-size:var(--text-sm)">${t.year || ''}</td>
     </tr>`;
 }
 
@@ -4479,7 +4484,6 @@ function _favSongRow(t, idx) {
           <div class="track-info">
             <div class="track-title-line">
               <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
-              ${_lyricBadge(t)}
             </div>
             <div class="track-artist" title="${esc(t.artist)}">${esc(t.artist)}</div>
           </div>
@@ -4487,7 +4491,8 @@ function _favSongRow(t, idx) {
       </td>
       <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
-      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
+      <td data-col="genre" class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
+      ${_lyricsCell(t)}
       <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn is-fav')}</td>
       <td data-col="actions"><div class="col-act-inner">
         <button class="track-edit-btn" onclick="event.stopPropagation();App.openTagEditor('${t.id}')" title="Edit tags">
@@ -4497,6 +4502,7 @@ function _favSongRow(t, idx) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div></td>
+      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
     </tr>
   `;
 }
@@ -9809,12 +9815,15 @@ const _TABLE_WIDTHS_STORAGE_KEY = 'tb.table_widths.v1';
 const _TABLE_COLUMNS = [
   { key: 'track_number', label: '#' },
   { key: 'title', label: 'Title' },
-  { key: 'duration', label: 'Time' },
-  { key: 'plays', label: 'Plays' },
   { key: 'artist', label: 'Artist' },
   { key: 'album', label: 'Album' },
-  { key: 'album_artist', label: 'Album Artist' },
   { key: 'genre', label: 'Genre' },
+  { key: 'lyrics', label: 'Lyrics' },
+  { key: 'favourite', label: 'Favourite' },
+  { key: 'actions', label: 'Actions' },
+  { key: 'duration', label: 'Time' },
+  { key: 'plays', label: 'Plays' },
+  { key: 'album_artist', label: 'Album Artist' },
   { key: 'year', label: 'Year' },
   { key: 'disc_number', label: 'Disc #' },
   { key: 'format', label: 'Format' },
@@ -9823,8 +9832,6 @@ const _TABLE_COLUMNS = [
   { key: 'bit_depth', label: 'Bit Depth' },
   { key: 'date_added', label: 'Date Added' },
   { key: 'filename', label: 'Filename' },
-  { key: 'favourite', label: 'Favourite' },
-  { key: 'actions', label: 'Actions' },
 ];
 const _TABLE_COL_DEFAULTS = {
   track_number: true,
@@ -9835,6 +9842,7 @@ const _TABLE_COL_DEFAULTS = {
   album: true,
   album_artist: true,
   genre: true,
+  lyrics: true,
   year: true,
   disc_number: false,
   format: false,
@@ -9870,6 +9878,7 @@ const _TRACKS_TABLE_COL_DEFAULTS = {
   album: true,
   artist: true,
   genre: true,
+  lyrics: true,
   favourite: true,
   actions: true,
 };
@@ -10010,7 +10019,7 @@ function _tableContextFromAnchor(anchor) {
 }
 
 function _tableMinColWidth(colKey) {
-  if (colKey === 'favourite' || colKey === 'actions') return 56;
+  if (colKey === 'favourite' || colKey === 'lyrics' || colKey === 'actions') return 56;
   if (colKey === 'track_number' || colKey === 'year' || colKey === 'disc_number') return 72;
   return 84;
 }
@@ -10343,26 +10352,15 @@ function renderSongsTable() {
           <div class="track-info">
             <div class="track-title-line">
               <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
-              ${_lyricBadge(t)}
             </div>
           </div>
         </div>
       </td>
       <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
-      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
-      <td data-col="plays" title="${_playStats[t.id]?.last_played ? `Last played ${new Date(_playStats[t.id].last_played * 1000).toLocaleDateString()}` : 'No plays yet'}">${Number(_playStats[t.id]?.count || 0).toLocaleString()}</td>
-      <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn')}</td>
       <td data-col="genre" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
-      <td data-col="year" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.year || '')}</td>
-      <td data-col="disc_number" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.disc_number || '')}</td>
-      <td data-col="album_artist" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.album_artist || '')}">${esc(t.album_artist || '')}</td>
-      <td data-col="format" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.format || '')}</td>
-      <td data-col="bitrate" style="color:var(--text-muted);font-size:var(--text-sm)">${bitrate}</td>
-      <td data-col="sample_rate" style="color:var(--text-muted);font-size:var(--text-sm)">${sampleRate}</td>
-      <td data-col="bit_depth" style="color:var(--text-muted);font-size:var(--text-sm)">${bitDepth}</td>
-      <td data-col="date_added" style="color:var(--text-muted);font-size:var(--text-sm)">${fmtDate}</td>
-      <td data-col="filename" style="color:var(--text-muted);font-size:var(--text-sm)" title="${esc(t.filename || '')}">${esc(t.filename || '')}</td>
+      ${_lyricsCell(t)}
+      <td data-col="favourite" class="col-fav-cell">${_favToggleBtn('songs', t.id, 'track-fav-btn')}</td>
       <td data-col="actions"><div class="col-act-inner">
         <button class="row-ctx-btn" onclick="event.stopPropagation();App.showTrackCtxMenu(event,'${t.id}')" title="More actions">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
@@ -10374,6 +10372,17 @@ function renderSongsTable() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div></td>
+      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
+      <td data-col="plays" title="${_playStats[t.id]?.last_played ? `Last played ${new Date(_playStats[t.id].last_played * 1000).toLocaleDateString()}` : 'No plays yet'}">${Number(_playStats[t.id]?.count || 0).toLocaleString()}</td>
+      <td data-col="year" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.year || '')}</td>
+      <td data-col="disc_number" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.disc_number || '')}</td>
+      <td data-col="album_artist" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.album_artist || '')}">${esc(t.album_artist || '')}</td>
+      <td data-col="format" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.format || '')}</td>
+      <td data-col="bitrate" style="color:var(--text-muted);font-size:var(--text-sm)">${bitrate}</td>
+      <td data-col="sample_rate" style="color:var(--text-muted);font-size:var(--text-sm)">${sampleRate}</td>
+      <td data-col="bit_depth" style="color:var(--text-muted);font-size:var(--text-sm)">${bitDepth}</td>
+      <td data-col="date_added" style="color:var(--text-muted);font-size:var(--text-sm)">${fmtDate}</td>
+      <td data-col="filename" style="color:var(--text-muted);font-size:var(--text-sm)" title="${esc(t.filename || '')}">${esc(t.filename || '')}</td>
     </tr>`;
   }).join('');
   _applyTableColumnVisibility();

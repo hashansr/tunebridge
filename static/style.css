@@ -2072,7 +2072,10 @@ tbody tr:hover .remove-btn { opacity: 1; }
   font-size: var(--text-sm);
 }
 #songs-table th.col-fav {
-  min-width: 92px;
+  min-width: 38px;
+}
+#songs-table th.col-lyrics {
+  min-width: 38px;
 }
 #songs-table th.col-act {
   min-width: 120px;
@@ -4952,9 +4955,31 @@ tr.track-selected .track-check-indicator {
   min-width: 38px;
 }
 
+.col-lyrics {
+  width: 38px;
+  min-width: 38px;
+}
+
 .col-fav-cell {
   width: 38px;
   text-align: center;
+}
+
+.col-lyrics-cell {
+  width: 38px;
+  text-align: center;
+}
+
+.tb-col-header-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  color: rgba(229, 226, 225, 0.52);
+}
+
+.tb-col-header-icon-fav {
+  color: rgba(245, 197, 66, 0.82);
 }
 
 .fav-toggle {
