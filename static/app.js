@@ -1239,9 +1239,12 @@ function renderArtistsGrid() {
     if (grid) grid.innerHTML = '';
     if (alphaBar) alphaBar.innerHTML = '';
     if (artistsEmpty) {
-      const [title, hint] = artistsEmpty.querySelectorAll('p');
+      const title = artistsEmpty.querySelector('.empty-title');
+      const hint = artistsEmpty.querySelector('.empty-subtitle');
+      const cta = artistsEmpty.querySelector('.empty-cta');
       if (title) title.textContent = 'No artists found.';
-      if (hint) hint.textContent = 'Rescan your library to load music.';
+      if (hint) hint.textContent = 'Scan your music folder to load music.';
+      if (cta) cta.style.display = 'none';
       artistsEmpty.style.display = 'flex';
     }
     return;
@@ -1257,9 +1260,12 @@ function renderArtistsGrid() {
   if (!filtered.length) {
     if (grid) grid.innerHTML = '';
     if (artistsEmpty) {
-      const [title, hint] = artistsEmpty.querySelectorAll('p');
-      if (title) title.textContent = 'No artists match your filters.';
-      if (hint) hint.textContent = 'Try a different search or alphabet filter.';
+      const title = artistsEmpty.querySelector('.empty-title');
+      const hint = artistsEmpty.querySelector('.empty-subtitle');
+      const cta = artistsEmpty.querySelector('.empty-cta');
+      if (title) title.textContent = 'No artists match your search.';
+      if (hint) hint.textContent = 'Try a different search or letter.';
+      if (cta) cta.style.display = '';
       artistsEmpty.style.display = 'flex';
     }
     return;
@@ -1452,9 +1458,12 @@ function renderAlbumsGrid() {
   if (!base.length) {
     if (grid) grid.innerHTML = '';
     if (albumsEmpty) {
-      const [title, hint] = albumsEmpty.querySelectorAll('p');
+      const title = albumsEmpty.querySelector('.empty-title');
+      const hint = albumsEmpty.querySelector('.empty-subtitle');
+      const cta = albumsEmpty.querySelector('.empty-cta');
       if (title) title.textContent = 'No albums found.';
-      if (hint) hint.textContent = 'Browse by artist or rescan your library.';
+      if (hint) hint.textContent = 'Browse by artist or scan your library.';
+      if (cta) cta.style.display = 'none';
       albumsEmpty.style.display = 'flex';
     }
     return;
@@ -1463,9 +1472,12 @@ function renderAlbumsGrid() {
   if (!filtered.length) {
     if (grid) grid.innerHTML = '';
     if (albumsEmpty) {
-      const [title, hint] = albumsEmpty.querySelectorAll('p');
-      if (title) title.textContent = 'No albums match your filters.';
-      if (hint) hint.textContent = 'Try a different search or alphabet filter.';
+      const title = albumsEmpty.querySelector('.empty-title');
+      const hint = albumsEmpty.querySelector('.empty-subtitle');
+      const cta = albumsEmpty.querySelector('.empty-cta');
+      if (title) title.textContent = 'No albums match your search.';
+      if (hint) hint.textContent = 'Try a different search or letter.';
+      if (cta) cta.style.display = '';
       albumsEmpty.style.display = 'flex';
     }
     return;
@@ -1915,7 +1927,16 @@ function _renderTracksTable() {
   const wrap = document.getElementById('tracks-table-wrap');
   const baseTable = document.getElementById('tracks-table');
   const tbody = document.getElementById('tracks-tbody');
+  const tracksEmpty = document.getElementById('tracks-empty');
   if (!wrap || !baseTable || !tbody) return;
+
+  if (!rows.length && state.album) {
+    if (tracksEmpty) tracksEmpty.style.display = 'flex';
+    wrap.style.display = 'none';
+    return;
+  }
+  if (tracksEmpty) tracksEmpty.style.display = 'none';
+  wrap.style.display = '';
 
   const discGroups = _buildAlbumDiscGroups(rows);
   const shouldGroupByDisc = !!(state.album && discGroups.length > 1);
@@ -2435,24 +2456,29 @@ function renderPlaylistTracks(tracks) {
   const isSorted = state.plSortMode !== 'original';
   const isDragEnabled = !isFiltered && !isSorted;
   const totalTracks = (state.playlist?.tracks || []).length;
-  const emptyTitleEl = empty ? empty.querySelector('p') : null;
-  const emptySubEl = empty ? empty.querySelector('p.muted') : null;
+  const emptyTitleEl = empty ? empty.querySelector('.empty-title') : null;
+  const emptySubEl = empty ? empty.querySelector('.empty-subtitle') : null;
+  const emptyCta = empty ? empty.querySelector('.empty-cta') : null;
 
   if (emptyTitleEl && emptySubEl) {
     if (state.playlist?.is_favourites) {
       if (isFiltered && totalTracks > 0) {
         emptyTitleEl.textContent = 'No songs match this filter.';
         emptySubEl.textContent = 'Try a different search or clear the filter.';
+        if (emptyCta) { emptyCta.textContent = 'Clear filter'; emptyCta.onclick = App.clearPlaylistFilter; emptyCta.style.display = ''; }
       } else {
         emptyTitleEl.textContent = 'No favourite songs yet.';
         emptySubEl.textContent = 'Add songs to Favourites and they will show up here.';
+        if (emptyCta) emptyCta.style.display = 'none';
       }
     } else if (isFiltered && totalTracks > 0) {
       emptyTitleEl.textContent = 'No songs match this filter.';
       emptySubEl.textContent = 'Try a different search or clear the filter.';
+      if (emptyCta) { emptyCta.textContent = 'Clear filter'; emptyCta.onclick = App.clearPlaylistFilter; emptyCta.style.display = ''; }
     } else {
       emptyTitleEl.textContent = 'This playlist is empty.';
       emptySubEl.innerHTML = 'Browse the library and click <strong>+</strong> to add songs.';
+      if (emptyCta) { emptyCta.textContent = 'Browse library'; emptyCta.onclick = () => App.showView('artists'); emptyCta.style.display = ''; }
     }
   }
 
@@ -10543,7 +10569,16 @@ function renderSongsTable() {
   if (!total) {
     if (songsWrap) songsWrap.style.display = '';
     if (scrollArea) scrollArea.style.display = 'none';
-    if (songsEmpty) songsEmpty.style.display = 'flex';
+    if (songsEmpty) {
+      const hasFilter = !!_songsFilter;
+      const title = songsEmpty.querySelector('.empty-title');
+      const hint = songsEmpty.querySelector('.empty-subtitle');
+      const cta = songsEmpty.querySelector('.empty-cta');
+      if (title) title.textContent = hasFilter ? 'No songs match your search.' : 'No songs found.';
+      if (hint) hint.textContent = hasFilter ? 'Try a different search term.' : 'Scan your music folder to load music.';
+      if (cta) cta.style.display = hasFilter ? '' : 'none';
+      songsEmpty.style.display = 'flex';
+    }
     const count = document.getElementById('songs-count');
     if (count) count.textContent = '0 songs';
     const paginationEl = document.getElementById('songs-pagination');
@@ -12149,7 +12184,11 @@ async function loadHistoryView() {
     }
     _renderHistoryCharts(validOnly);
     if (!events.length) {
-      listEl.innerHTML = '<div class="empty-state"><p>No listening history for this period.</p></div>';
+      listEl.innerHTML = `<div class="empty-state">
+        <div class="empty-icon-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+        <p class="empty-title">No listening history for this period.</p>
+        <p class="empty-subtitle">Play music in TuneBridge and your history will appear here.</p>
+      </div>`;
       return;
     }
     // Group by the period granularity: day, week, month, or year.
@@ -12199,7 +12238,7 @@ async function loadHistoryView() {
       </div>
     `; }).join('');
   } catch (e) {
-    if (listEl) listEl.innerHTML = '<div class="empty-state"><p>Could not load history.</p></div>';
+    if (listEl) listEl.innerHTML = `<div class="empty-state"><div class="empty-icon-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><p class="empty-title">Could not load history.</p><p class="empty-subtitle">Check your connection and try refreshing.</p></div>`;
   }
 }
 
@@ -13004,7 +13043,7 @@ async function _loadLyricsForTrack(trackId, track) {
     const res = await fetch(`/api/lyrics/track/${encodeURIComponent(trackId)}`);
     if (_lyricsTrackId !== trackId) return;
     if (!res.ok) {
-      if (scroll) scroll.innerHTML = '<div class="lyrics-empty-state">No lyrics available</div>';
+      if (scroll) scroll.innerHTML = '<div class="lyrics-empty-state"><div class="empty-icon-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></div><p class="empty-title">No lyrics available</p></div>';
       return;
     }
     const data = await res.json();
@@ -13045,7 +13084,7 @@ function _renderLyrics(parsed) {
   if (!parsed.is_synced) {
     scroll.innerHTML = parsed.text
       ? `<div class="lyrics-plain">${esc(parsed.text).replace(/\n/g, '<br>')}</div>`
-      : '<div class="lyrics-empty-state">No lyrics available</div>';
+      : '<div class="lyrics-empty-state"><div class="empty-icon-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></div><p class="empty-title">No lyrics available</p></div>';
     return;
   }
   if (!parsed.lines.length) {
@@ -13125,7 +13164,7 @@ function _syncLyricsToTime(seconds) {
 function _onLyricsTrackChange(track) {
   if (_lyricsViewOpen) {
     if (track) _loadLyricsForTrack(track.id, track);
-    else document.getElementById('lyrics-scroll').innerHTML = '<div class="lyrics-empty-state">No lyrics available</div>';
+    else document.getElementById('lyrics-scroll').innerHTML = '<div class="lyrics-empty-state"><div class="empty-icon-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></div><p class="empty-title">No lyrics available</p></div>';
   }
   _updateLyricsButtonForTrack(track);
 }

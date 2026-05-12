@@ -2498,45 +2498,30 @@ tbody tr:hover .remove-btn { opacity: 1; }
 
 .empty-state {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 60px 32px;
-  color: var(--text-muted);
+  padding: 80px 32px;
   text-align: center;
-  gap: 12px;
+  gap: 14px;
 }
-.empty-mask-icon {
-  display: inline-block;
-  width: 48px;
-  height: 48px;
-  background-color: currentColor;
-  opacity: 0.68;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  -webkit-mask-size: contain;
+.empty-icon-circle {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  margin-bottom: 4px;
 }
-.empty-state-art {
-  display: block;
-  width: 60px;
-  height: 60px;
-  opacity: 0.98;
-  filter: drop-shadow(0 8px 20px rgba(11, 16, 28, 0.28));
+.empty-icon-circle svg { width: 28px; height: 28px; }
+.empty-title {
+  font-size: 15px; font-weight: 500;
+  color: var(--text);
+  margin: 0;
 }
-.empty-mask-icon-player-fill {
-  mask-image: url('/icons/music-player-fill-svgrepo-com.svg');
-  -webkit-mask-image: url('/icons/music-player-fill-svgrepo-com.svg');
+.empty-subtitle {
+  font-size: 13px; color: var(--text-muted);
+  margin: 0; max-width: 320px; line-height: 1.5;
 }
-.empty-mask-icon-playlist {
-  mask-image: url('/icons/playlist.svg');
-  -webkit-mask-image: url('/icons/playlist.svg');
-}
-.empty-mask-icon-earphone {
-  mask-image: url('/icons/earphone-1-svgrepo-com.svg');
-  -webkit-mask-image: url('/icons/earphone-1-svgrepo-com.svg');
-}
-.empty-state p { font-size: 14px; }
-.empty-state p.muted { font-size: 13px; color: var(--text-muted); }
+.empty-cta { margin-top: 4px; }
 
 /* ── Songs view ──────────────────────────────────────────────────────── */
 .view-songs { padding: calc(28px + var(--main-nav-overlay-clearance)) var(--view-gutter) 28px; min-height: 100%; }
@@ -16493,11 +16478,9 @@ thead th:hover .table-col-resizer::after {
 }
 
 .lyrics-empty-state {
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.35);
-  margin: auto;
-  padding: 60px 0;
-  align-self: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 60px 24px;
+  text-align: center; margin: auto; align-self: center;
 }
 
 .lyrics-gap {
