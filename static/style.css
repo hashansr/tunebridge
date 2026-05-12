@@ -1681,7 +1681,17 @@ h4.settings-subsection-title {
   background: var(--app-page-gradient);
 }
 
-.view-count { color: var(--text-muted); font-size: var(--text-base); }
+.view-count {
+  color: var(--text-muted);
+  display: block;
+  font-size: var(--text-base);
+  line-height: 1.35;
+  margin-top: 4px;
+}
+
+.library-page-header {
+  align-items: flex-start;
+}
 
 .breadcrumb {
   display: flex;
@@ -2561,7 +2571,7 @@ tbody tr:hover .remove-btn { opacity: 1; }
 .empty-cta { margin-top: 4px; }
 
 /* ── Songs view ──────────────────────────────────────────────────────── */
-.view-songs { padding: calc(28px + var(--main-nav-overlay-clearance)) var(--view-gutter) 28px; min-height: 100%; }
+.view-songs { min-height: 100%; }
 .songs-toolbar {
   display: flex;
   align-items: center;
