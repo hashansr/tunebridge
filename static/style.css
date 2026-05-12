@@ -16866,7 +16866,21 @@ thead th:hover .table-col-resizer::after {
 
 #view-favourites .favourites-hero-play,
 #view-favourites .favourites-hero-shuffle {
-  min-height: 40px;
+  height: 34px;
+  min-height: 34px;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 12px;
+}
+
+#view-favourites .favourites-hero-play {
+  padding-left: 14px;
+  padding-right: 16px;
+}
+
+#view-favourites .favourites-hero-shuffle {
+  padding-left: 14px;
+  padding-right: 16px;
 }
 
 #view-favourites .favourites-hero-play:disabled,
@@ -16879,7 +16893,7 @@ thead th:hover .table-col-resizer::after {
 #view-favourites .favourites-action-count {
   margin-left: 2px;
   opacity: 0.58;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
@@ -16887,7 +16901,7 @@ thead th:hover .table-col-resizer::after {
 #view-favourites .favourites-control-row {
   display: flex;
   align-items: flex-end;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 22px;
   margin-bottom: 22px;
   border-bottom: 1px solid rgba(65, 71, 85, 0.18);
@@ -16986,17 +17000,26 @@ thead th:hover .table-col-resizer::after {
 #view-favourites .favourites-toolbar {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
-  margin: 0 0 7px;
+  margin: 0 0 10px auto;
 }
 
 #view-favourites .favourites-search-wrap {
+  flex: 0 0 auto;
+  height: 34px;
+  min-height: 34px;
   min-width: 220px;
-  max-width: 280px;
+  width: 280px;
+  max-width: 30vw;
   border-radius: 999px;
+  padding: 0 12px;
   background: rgba(28, 27, 27, 0.5);
+}
+
+#view-favourites .favourites-search-wrap input {
+  min-height: 32px;
 }
 
 #view-favourites .favourites-sort-shell {
@@ -17004,14 +17027,20 @@ thead th:hover .table-col-resizer::after {
 }
 
 #view-favourites .favourites-sort-group {
+  height: 34px;
+  min-height: 34px;
   background: rgba(28, 27, 27, 0.70);
   border: 1px solid rgba(65, 71, 85, 0.25);
   border-radius: 999px;
-  padding: 3px;
+  padding: 2px;
 }
 
 #view-favourites .favourites-sort-group .pl-sort-pill {
+  min-height: 28px;
+  height: 28px;
+  padding: 0 14px;
   border-radius: 999px;
+  font-size: 12px;
 }
 
 #view-favourites .favourites-inline-panels {
