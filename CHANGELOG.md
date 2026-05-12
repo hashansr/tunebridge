@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.212-rc.120526-1534 · 2026-05-12
 - Change: Unified all empty states to use a consistent icon-circle + title + subtitle + optional CTA button pattern across every view
 - Fix: Artists, Albums, and Songs filter empty states now show a "Clear search" button and filter-specific copy instead of generic "scan your library" text
 - Fix: Playlist filter empty state now shows "Clear filter" CTA; empty playlist shows "Browse library" CTA; correct icons replace wrong DAP media-player icon
