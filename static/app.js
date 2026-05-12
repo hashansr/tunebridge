@@ -5012,7 +5012,8 @@ function _homeUpdateRailAffordance(railId) {
   const maxScroll = Math.max(0, rail.scrollWidth - rail.clientWidth);
   const canScroll = maxScroll > 2;
   const scrollLeft = Math.max(0, rail.scrollLeft);
-  const atStart = scrollLeft <= 2;
+  const startThreshold = (parseFloat(getComputedStyle(rail).paddingLeft) || 0) + 2;
+  const atStart = scrollLeft <= startThreshold;
   const atEnd = maxScroll - scrollLeft <= 2;
 
   shell.classList.toggle('can-scroll-left', canScroll && !atStart);
@@ -5041,7 +5042,9 @@ function _homeBindRailUX(railId) {
       _homeRailResizeObserver.observe(rail);
     }
   }
-  window.requestAnimationFrame(() => _homeUpdateRailAffordance(railId));
+  window.requestAnimationFrame(() =>
+    window.requestAnimationFrame(() => _homeUpdateRailAffordance(railId))
+  );
 }
 
 function _homeRefreshRailAffordances() {

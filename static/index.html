@@ -140,11 +140,11 @@
             <button class="home-section-see-all" onclick="App.showView('history')">See All</button>
           </div>
           <div class="home-rail-shell" data-rail-id="home-continue">
-            <button class="home-rail-nav home-rail-nav-left" type="button" title="Scroll left" onclick="App.homeRailStep('home-continue', -1)">
+            <button class="home-rail-nav home-rail-nav-left" type="button" title="Scroll left" onclick="App.homeRailStep('home-continue', -1)" hidden>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M15.9142 18.5858C16.3047 18.1953 16.3047 17.5621 15.9142 17.1716L10.6213 11.8787L15.9142 6.58578C16.3047 6.19526 16.3047 5.56209 15.9142 5.17157L15.2071 4.46446C14.8166 4.07394 14.1834 4.07394 13.7929 4.46446L7.43934 10.818C6.85355 11.4038 6.85355 12.3535 7.43934 12.9393L13.7929 19.2929C14.1834 19.6834 14.8166 19.6834 15.2071 19.2929L15.9142 18.5858Z"/></svg>
             </button>
             <div id="home-continue" class="home-rail"></div>
-            <button class="home-rail-nav home-rail-nav-right" type="button" title="Scroll right" onclick="App.homeRailStep('home-continue', 1)">
+            <button class="home-rail-nav home-rail-nav-right" type="button" title="Scroll right" onclick="App.homeRailStep('home-continue', 1)" hidden>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M8.08586 5.41412C7.69534 5.80465 7.69534 6.43781 8.08586 6.82834L13.3788 12.1212L8.08586 17.4141C7.69534 17.8046 7.69534 18.4378 8.08586 18.8283L8.79297 19.5354C9.18349 19.926 9.81666 19.926 10.2072 19.5354L16.5607 13.1819C17.1465 12.5961 17.1465 11.6464 16.5607 11.0606L10.2072 4.70702C9.81666 4.31649 9.18349 4.31649 8.79297 4.70702L8.08586 5.41412Z"/></svg>
             </button>
             <div class="home-rail-fade home-rail-fade-left" aria-hidden="true"></div>
@@ -159,11 +159,11 @@
             <button class="home-section-see-all" onclick="App.showView('artists')">See All</button>
           </div>
           <div class="home-rail-shell" data-rail-id="home-listen-next">
-            <button class="home-rail-nav home-rail-nav-left" type="button" title="Scroll left" onclick="App.homeRailStep('home-listen-next', -1)">
+            <button class="home-rail-nav home-rail-nav-left" type="button" title="Scroll left" onclick="App.homeRailStep('home-listen-next', -1)" hidden>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M15.9142 18.5858C16.3047 18.1953 16.3047 17.5621 15.9142 17.1716L10.6213 11.8787L15.9142 6.58578C16.3047 6.19526 16.3047 5.56209 15.9142 5.17157L15.2071 4.46446C14.8166 4.07394 14.1834 4.07394 13.7929 4.46446L7.43934 10.818C6.85355 11.4038 6.85355 12.3535 7.43934 12.9393L13.7929 19.2929C14.1834 19.6834 14.8166 19.6834 15.2071 19.2929L15.9142 18.5858Z"/></svg>
             </button>
             <div id="home-listen-next" class="home-rail"></div>
-            <button class="home-rail-nav home-rail-nav-right" type="button" title="Scroll right" onclick="App.homeRailStep('home-listen-next', 1)">
+            <button class="home-rail-nav home-rail-nav-right" type="button" title="Scroll right" onclick="App.homeRailStep('home-listen-next', 1)" hidden>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M8.08586 5.41412C7.69534 5.80465 7.69534 6.43781 8.08586 6.82834L13.3788 12.1212L8.08586 17.4141C7.69534 17.8046 7.69534 18.4378 8.08586 18.8283L8.79297 19.5354C9.18349 19.926 9.81666 19.926 10.2072 19.5354L16.5607 13.1819C17.1465 12.5961 17.1465 11.6464 16.5607 11.0606L10.2072 4.70702C9.81666 4.31649 9.18349 4.31649 8.79297 4.70702L8.08586 5.41412Z"/></svg>
             </button>
             <div class="home-rail-fade home-rail-fade-left" aria-hidden="true"></div>
@@ -178,11 +178,11 @@
             <button class="home-section-see-all" onclick="App.showView('albums')">See All</button>
           </div>
           <div class="home-rail-shell" data-rail-id="home-recently-added">
-            <button class="home-rail-nav home-rail-nav-left" type="button" title="Scroll left" onclick="App.homeRailStep('home-recently-added', -1)">
+            <button class="home-rail-nav home-rail-nav-left" type="button" title="Scroll left" onclick="App.homeRailStep('home-recently-added', -1)" hidden>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M15.9142 18.5858C16.3047 18.1953 16.3047 17.5621 15.9142 17.1716L10.6213 11.8787L15.9142 6.58578C16.3047 6.19526 16.3047 5.56209 15.9142 5.17157L15.2071 4.46446C14.8166 4.07394 14.1834 4.07394 13.7929 4.46446L7.43934 10.818C6.85355 11.4038 6.85355 12.3535 7.43934 12.9393L13.7929 19.2929C14.1834 19.6834 14.8166 19.6834 15.2071 19.2929L15.9142 18.5858Z"/></svg>
             </button>
             <div id="home-recently-added" class="home-rail"></div>
-            <button class="home-rail-nav home-rail-nav-right" type="button" title="Scroll right" onclick="App.homeRailStep('home-recently-added', 1)">
+            <button class="home-rail-nav home-rail-nav-right" type="button" title="Scroll right" onclick="App.homeRailStep('home-recently-added', 1)" hidden>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M8.08586 5.41412C7.69534 5.80465 7.69534 6.43781 8.08586 6.82834L13.3788 12.1212L8.08586 17.4141C7.69534 17.8046 7.69534 18.4378 8.08586 18.8283L8.79297 19.5354C9.18349 19.926 9.81666 19.926 10.2072 19.5354L16.5607 13.1819C17.1465 12.5961 17.1465 11.6464 16.5607 11.0606L10.2072 4.70702C9.81666 4.31649 9.18349 4.31649 8.79297 4.70702L8.08586 5.41412Z"/></svg>
             </button>
             <div class="home-rail-fade home-rail-fade-left" aria-hidden="true"></div>
@@ -196,11 +196,11 @@
             <h3 class="home-section-title">Because You Listened</h3>
           </div>
           <div class="home-rail-shell" data-rail-id="home-because">
-            <button class="home-rail-nav home-rail-nav-left" type="button" title="Scroll left" onclick="App.homeRailStep('home-because', -1)">
+            <button class="home-rail-nav home-rail-nav-left" type="button" title="Scroll left" onclick="App.homeRailStep('home-because', -1)" hidden>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M15.9142 18.5858C16.3047 18.1953 16.3047 17.5621 15.9142 17.1716L10.6213 11.8787L15.9142 6.58578C16.3047 6.19526 16.3047 5.56209 15.9142 5.17157L15.2071 4.46446C14.8166 4.07394 14.1834 4.07394 13.7929 4.46446L7.43934 10.818C6.85355 11.4038 6.85355 12.3535 7.43934 12.9393L13.7929 19.2929C14.1834 19.6834 14.8166 19.6834 15.2071 19.2929L15.9142 18.5858Z"/></svg>
             </button>
             <div id="home-because" class="home-rail"></div>
-            <button class="home-rail-nav home-rail-nav-right" type="button" title="Scroll right" onclick="App.homeRailStep('home-because', 1)">
+            <button class="home-rail-nav home-rail-nav-right" type="button" title="Scroll right" onclick="App.homeRailStep('home-because', 1)" hidden>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M8.08586 5.41412C7.69534 5.80465 7.69534 6.43781 8.08586 6.82834L13.3788 12.1212L8.08586 17.4141C7.69534 17.8046 7.69534 18.4378 8.08586 18.8283L8.79297 19.5354C9.18349 19.926 9.81666 19.926 10.2072 19.5354L16.5607 13.1819C17.1465 12.5961 17.1465 11.6464 16.5607 11.0606L10.2072 4.70702C9.81666 4.31649 9.18349 4.31649 8.79297 4.70702L8.08586 5.41412Z"/></svg>
             </button>
             <div class="home-rail-fade home-rail-fade-left" aria-hidden="true"></div>
