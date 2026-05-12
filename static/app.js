@@ -1162,6 +1162,16 @@ function _scrollMainTop() {
   if (main) main.scrollTop = 0;
 }
 
+function _resetPlaylistDetailScroll() {
+  _scrollMainTop();
+  const tableScroll = document.querySelector('#view-playlist .tb-table-scroll-area');
+  if (tableScroll) tableScroll.scrollTop = 0;
+  requestAnimationFrame(() => {
+    _scrollMainTop();
+    if (tableScroll) tableScroll.scrollTop = 0;
+  });
+}
+
 function _renderAlphaButtons({ barEl, presentLetters, activeLetter, clickFn }) {
   if (!barEl) return;
   const LETTERS = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -2111,6 +2121,7 @@ async function openPlaylist(pid) {
   setActiveNav('playlist');
   renderSidebarPlaylists();
   showViewEl('playlist');
+  _resetPlaylistDetailScroll();
 
   // Auto-refresh smart playlist silently before rendering
   if (pl.is_smart && pl.smart_rules?.refresh_on_open) {
@@ -2141,6 +2152,7 @@ async function openPlaylist(pid) {
   updatePlaylistCover(pl.tracks);
   updatePlaylistStats(pl.tracks);
   renderDapExportPills(pid);
+  _resetPlaylistDetailScroll();
 
   // Register tracks with player
   Player.registerTracks(pl.tracks);
@@ -2200,6 +2212,7 @@ async function openFavouriteSongsPlaylist() {
   setActiveNav('favourites');
   renderSidebarPlaylists();
   showViewEl('playlist');
+  _resetPlaylistDetailScroll();
 
 
   document.getElementById('pl-name').textContent = pl.name;
@@ -2212,6 +2225,7 @@ async function openFavouriteSongsPlaylist() {
   }
   updatePlaylistStats(pl.tracks);
   renderDapExportPills(pl.id);
+  _resetPlaylistDetailScroll();
 
   Player.registerTracks(pl.tracks);
   Player.setPlaybackContext(pl.tracks, { sourceType: 'playlist', sourceId: pl.id, sourceLabel: 'Playlist · Favourite Songs' });

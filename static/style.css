@@ -1098,6 +1098,22 @@ h4.settings-subsection-title {
   color: var(--text-sub);
   font-size: 0.92em;
 }
+.settings-audio-tool-row {
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 660px);
+  align-items: center;
+}
+.settings-audio-tool-actions {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.42fr) minmax(180px, 1fr) 42px auto;
+  gap: 8px;
+  align-items: stretch;
+  min-width: 0;
+}
+.settings-audio-tool-actions--single {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
 
 /* Inline badge next to setting labels */
 .settings-badge {
@@ -1252,6 +1268,15 @@ h4.settings-subsection-title {
   .settings-app-actions {
     justify-content: flex-start;
   }
+  .settings-audio-tool-row {
+    grid-template-columns: 1fr;
+  }
+  .settings-audio-tool-actions {
+    max-width: 760px;
+  }
+  .settings-audio-tool-actions--single {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1395,8 +1420,16 @@ h4.settings-subsection-title {
 .settings-baseline-add > .baseline-color-wrap {
   min-height: 36px;
 }
+.settings-audio-tool-actions > input,
+.settings-audio-tool-actions > button,
+.settings-audio-tool-actions > .baseline-color-wrap {
+  min-height: 36px;
+}
 #baseline-add-btn {
   min-width: 96px;
+}
+#baselines-list {
+  margin-top: 14px;
 }
 .settings-baseline-name {
   width: 100%;
@@ -1492,6 +1525,9 @@ h4.settings-subsection-title {
   }
 }
 @media (max-width: 920px) {
+  .settings-audio-tool-actions {
+    grid-template-columns: 1fr;
+  }
   .settings-baseline-add {
     grid-template-columns: 1fr;
   }
