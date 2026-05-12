@@ -54,7 +54,7 @@
   --tb-font-caption: 12px;
   --tb-font-stat-number: 30px;
   --tb-font-stat-label: 18px;
-  --tb-page-title-size: 22px;
+  --tb-page-title-size: 40px;
   --tb-page-title-weight: 700;
   --tb-page-title-letter-spacing: -0.02em;
   --tb-page-title-line-height: 1.15;
@@ -16850,7 +16850,6 @@ thead th:hover .table-col-resizer::after {
 }
 
 #view-favourites .favourites-hero .tb-page-title {
-  font-size: 40px;
   font-weight: 800;
   letter-spacing: -0.025em;
   line-height: 1.05;
@@ -17049,12 +17048,6 @@ thead th:hover .table-col-resizer::after {
 
 #view-favourites .favourites-panel-header {
   display: none;
-}
-
-#view-favourites .favourites-fixed-grid {
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  column-gap: 22px;
-  row-gap: 26px;
 }
 
 #favourites-panel-songs .pl-controls {
