@@ -45,6 +45,8 @@ const state = {
   favArtistsSort: _CONTENT_SORT_DEFAULTS.favourites.artists,
   favAlbumsSort: _CONTENT_SORT_DEFAULTS.favourites.albums,
   favPanel: 'artists',
+  favSearch: '',
+  favCounts: { artists: 0, albums: 0, songs: 0 },
   artistSearch: '',
   artistAlpha: '',
   albumSearch: '',
@@ -4299,8 +4301,8 @@ function _favOrderIds(type) {
 function _favSummaryCard(title, count, panel) {
   return `
     <button class="favourites-summary-card" data-fav-panel="${esc(panel)}" aria-pressed="false" onclick="App.selectFavouritesPanel('${esc(panel)}')">
-      <div class="favourites-summary-title">${esc(title)}</div>
-      <div class="favourites-summary-count">${count}</div>
+      <span class="favourites-summary-title">${esc(title)}</span>
+      <span class="favourites-summary-count">${count}</span>
     </button>
   `;
 }
@@ -4311,6 +4313,65 @@ function _applyFavouritesPanelState() {
     btn.classList.toggle('is-active', isActive);
     btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
+  document.querySelectorAll('[data-favourites-sort-group]').forEach(group => {
+    group.style.display = group.dataset.favouritesSortGroup === state.favPanel ? '' : 'none';
+  });
+  const input = document.getElementById('favourites-search-input');
+  const clear = document.getElementById('favourites-search-clear');
+  const activeLabel = state.favPanel === 'artists' ? 'artists' : state.favPanel === 'albums' ? 'albums' : 'songs';
+  if (input) {
+    input.placeholder = `Search ${activeLabel}...`;
+    if (input.value !== state.favSearch) input.value = state.favSearch || '';
+  }
+  if (clear) clear.style.display = state.favSearch ? '' : 'none';
+  _renderFavouritesHeroMeta();
+}
+
+function _renderFavouritesHeroMeta() {
+  const counts = state.favCounts || { artists: 0, albums: 0, songs: 0 };
+  const stats = document.getElementById('favourites-stats');
+  if (stats) {
+    stats.innerHTML = `
+      <span><strong>${counts.artists || 0}</strong> artists</span>
+      <span aria-hidden="true">·</span>
+      <span><strong>${counts.albums || 0}</strong> albums</span>
+      <span aria-hidden="true">·</span>
+      <span><strong>${counts.songs || 0}</strong> songs</span>
+    `;
+  }
+  const countEl = document.getElementById('favourites-play-active-count');
+  const active = state.favPanel === 'albums' ? 'albums' : state.favPanel === 'songs' ? 'songs' : 'artists';
+  const count = counts[active] || 0;
+  if (countEl) countEl.textContent = `${count} ${active}`;
+  const playBtn = document.getElementById('favourites-play-active-btn');
+  const shuffleBtn = document.getElementById('favourites-shuffle-active-btn');
+  [playBtn, shuffleBtn].forEach(btn => { if (btn) btn.disabled = count === 0; });
+}
+
+function _favSearchNeedle() {
+  return String(state.favSearch || '').trim().toLowerCase();
+}
+
+function _matchesFavSearch(row, keys) {
+  const q = _favSearchNeedle();
+  if (!q) return true;
+  return keys.some(key => String(row?.[key] || '').toLowerCase().includes(q));
+}
+
+function setFavouritesSearch(value) {
+  state.favSearch = String(value || '');
+  _applyFavouritesPanelState();
+  if (state.favPanel === 'artists') loadFavArtists();
+  else if (state.favPanel === 'albums') loadFavAlbums();
+  else loadFavSongs();
+}
+
+function clearFavouritesSearch() {
+  state.favSearch = '';
+  _applyFavouritesPanelState();
+  if (state.favPanel === 'artists') loadFavArtists();
+  else if (state.favPanel === 'albums') loadFavAlbums();
+  else loadFavSongs();
 }
 
 async function selectFavouritesPanel(panel) {
@@ -4375,8 +4436,12 @@ async function loadFavouritesSummary() {
   const favAlbumRows = state.albums.filter(a => state.favourites.albums.has(String(a.artwork_key || '')));
 
   const total = favArtistRows.length + favAlbumRows.length + favSongs.length;
+  state.favCounts = { artists: favArtistRows.length, albums: favAlbumRows.length, songs: favSongs.length };
+  _renderFavouritesHeroMeta();
   empty.style.display = total === 0 ? 'flex' : 'none';
   grid.style.display = total === 0 ? 'none' : 'grid';
+  const toolbar = document.getElementById('favourites-toolbar');
+  if (toolbar) toolbar.style.display = total === 0 ? 'none' : '';
   const inlinePanels = document.getElementById('favourites-inline-panels');
   if (inlinePanels) inlinePanels.style.display = total === 0 ? 'none' : '';
   grid.innerHTML = [
@@ -4393,12 +4458,13 @@ function _renderFavArtistCards(rows) {
   const grid = document.getElementById('fav-artists-grid');
   if (!grid) return;
   if (!rows.length) {
+    const searching = !!_favSearchNeedle();
     grid.innerHTML = `
       <div class="empty-state favourites-grid-empty">
         <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="3.2"/><path d="M5 19c0-3.1 2.6-5.4 7-5.4s7 2.3 7 5.4"/></svg>
-        <p>No favourite artists yet.</p>
-        <p class="muted">Tap ★ on artists to build your quick-access artist list.</p>
-        <button class="btn-secondary" onclick="App.showView('artists')">Browse Artists</button>
+        <p>${searching ? 'No favourite artists match this search.' : 'No favourite artists yet.'}</p>
+        <p class="muted">${searching ? 'Try a different query, or clear the search to see all artists.' : 'Tap ★ on artists to build your quick-access artist list.'}</p>
+        <button class="btn-secondary" onclick="${searching ? 'App.clearFavouritesSearch()' : "App.showView('artists')"}">${searching ? 'Clear Search' : 'Browse Artists'}</button>
       </div>
     `;
     return;
@@ -4427,6 +4493,7 @@ function _renderFavArtistCards(rows) {
 
 function _getFavArtistsRowsSorted() {
   let rows = state.artists.filter(a => state.favourites.artists.has(_normArtistId(a.name)));
+  rows = rows.filter(a => _matchesFavSearch(a, ['name']));
   if (state.favArtistsSort === 'az') {
     rows = [...rows].sort((a, b) => _nameSortKey(a.name).localeCompare(_nameSortKey(b.name)));
   } else {
@@ -4454,12 +4521,13 @@ function _renderFavAlbumCards(rows) {
   const grid = document.getElementById('fav-albums-grid');
   if (!grid) return;
   if (!rows.length) {
+    const searching = !!_favSearchNeedle();
     grid.innerHTML = `
       <div class="empty-state favourites-grid-empty">
         <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4.5" y="4.5" width="15" height="15" rx="2.2"/><circle cx="12" cy="12" r="3.2"/></svg>
-        <p>No favourite albums yet.</p>
-        <p class="muted">Tap ★ on albums to keep your must-listen records here.</p>
-        <button class="btn-secondary" onclick="App.showView('albums')">Browse Albums</button>
+        <p>${searching ? 'No favourite albums match this search.' : 'No favourite albums yet.'}</p>
+        <p class="muted">${searching ? 'Try a different query, or clear the search to see all albums.' : 'Tap ★ on albums to keep your must-listen records here.'}</p>
+        <button class="btn-secondary" onclick="${searching ? 'App.clearFavouritesSearch()' : "App.showView('albums')"}">${searching ? 'Clear Search' : 'Browse Albums'}</button>
       </div>
     `;
     return;
@@ -4488,6 +4556,7 @@ function _renderFavAlbumCards(rows) {
 
 function _getFavAlbumsRowsSorted() {
   let rows = state.albums.filter(a => state.favourites.albums.has(String(a.artwork_key || '')));
+  rows = rows.filter(a => _matchesFavSearch(a, ['name', 'artist', 'year']));
   if (state.favAlbumsSort === 'az') {
     rows = [...rows].sort((a, b) => _nameSortKey(a.name).localeCompare(_nameSortKey(b.name)));
   } else {
@@ -4594,6 +4663,11 @@ async function loadFavSongs() {
   if (!tracks.length) {
     table.style.display = 'none';
     empty.style.display = 'flex';
+    const title = empty.querySelector('.empty-title');
+    const subtitle = empty.querySelector('.empty-subtitle');
+    const searching = !!_favSearchNeedle();
+    if (title) title.textContent = searching ? 'No favourite songs match this search.' : 'No favourite songs yet.';
+    if (subtitle) subtitle.textContent = searching ? 'Try a different query, or clear the search to see all songs.' : 'Click ★ on a song to add it here.';
     tbody.innerHTML = '';
     return;
   }
@@ -4601,7 +4675,7 @@ async function loadFavSongs() {
   table.style.display = 'table';
 
   const addedAt = _favAddedAtMap('songs');
-  let rows = [...tracks];
+  let rows = tracks.filter(t => _matchesFavSearch(t, ['title', 'artist', 'album', 'genre']));
   if (state.favSongsSort === 'my') {
     const order = _favOrderIds('songs');
     const idx = new Map(order.map((id, i) => [id, i]));
@@ -4632,6 +4706,54 @@ async function loadFavSongs() {
   } else {
     state.sortable = null;
   }
+}
+
+async function playActiveFavouritesPanel() {
+  if (state.favPanel === 'albums') return playAllFavouriteAlbums();
+  if (state.favPanel === 'songs') return playAllFavouriteSongs();
+  return playAllFavouriteArtists();
+}
+
+async function shuffleActiveFavouritesPanel() {
+  if (state.favPanel === 'artists') {
+    if (!state.artists.length) state.artists = await api('/library/artists').catch(() => []);
+    const favArtists = _getFavArtistsRowsSorted();
+    if (!favArtists.length) return toast('No favourite artists to shuffle yet.');
+    const chunks = await Promise.all(
+      favArtists.map(a => api(`/library/tracks?artist=${encodeURIComponent(a.name)}`).catch(() => []))
+    );
+    const tracks = _uniqueTracksById(chunks.flat());
+    if (!tracks.length) return toast('No tracks found for favourite artists.');
+    Player.registerTracks(tracks);
+    Player.setPlaybackContext(tracks, { sourceType: 'favourites', sourceId: 'artists', sourceLabel: 'Favourites · Artists' });
+    Player.playCollectionShuffled(tracks, 'Favourites · Artists');
+    return;
+  }
+  if (state.favPanel === 'albums') {
+    if (!state.albums.length) state.albums = await api('/library/albums').catch(() => []);
+    const favAlbums = _getFavAlbumsRowsSorted();
+    if (!favAlbums.length) return toast('No favourite albums to shuffle yet.');
+    const chunks = await Promise.all(
+      favAlbums.map(al => api(`/library/tracks?artist=${encodeURIComponent(al.artist)}&album=${encodeURIComponent(al.name)}`).catch(() => []))
+    );
+    const tracks = _uniqueTracksById(chunks.flat());
+    if (!tracks.length) return toast('No tracks found for favourite albums.');
+    Player.registerTracks(tracks);
+    Player.setPlaybackContext(tracks, { sourceType: 'favourites', sourceId: 'albums', sourceLabel: 'Favourites · Albums' });
+    Player.playCollectionShuffled(tracks, 'Favourites · Albums');
+    return;
+  }
+  let tracks = Array.isArray(state.favSongsData) ? state.favSongsData : [];
+  if (!tracks.length) {
+    const res = await api('/favourites/songs/tracks').catch(() => ({ tracks: [] }));
+    tracks = Array.isArray(res?.tracks) ? res.tracks : [];
+  }
+  tracks = tracks.filter(t => _matchesFavSearch(t, ['title', 'artist', 'album', 'genre']));
+  tracks = _uniqueTracksById(tracks);
+  if (!tracks.length) return toast('No favourite songs to shuffle yet.');
+  Player.registerTracks(tracks);
+  Player.setPlaybackContext(tracks, { sourceType: 'favourites', sourceId: 'songs', sourceLabel: 'Favourites · Songs' });
+  Player.playCollectionShuffled(tracks, 'Favourites · Songs');
 }
 
 function _uniqueTracksById(tracks) {
@@ -13408,7 +13530,11 @@ const App = {
   playAllFavouriteArtists,
   playAllFavouriteAlbums,
   playAllFavouriteSongs,
+  playActiveFavouritesPanel,
+  shuffleActiveFavouritesPanel,
   selectFavouritesPanel,
+  setFavouritesSearch,
+  clearFavouritesSearch,
   setFavArtistsSort,
   setFavAlbumsSort,
   setFavSongsSort,

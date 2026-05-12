@@ -16831,6 +16831,299 @@ thead th:hover .table-col-resizer::after {
   box-shadow: inset 0 0 0 1px rgba(229, 226, 225, 0.08);
 }
 
+/* ── Favourites mockup refresh ─────────────────────────────────────── */
+#view-favourites {
+  background:
+    radial-gradient(1200px 700px at 18% -12%, rgba(173, 198, 255, 0.10), transparent 58%),
+    radial-gradient(900px 700px at 95% 4%, rgba(255, 179, 181, 0.06), transparent 62%),
+    linear-gradient(180deg, rgba(19, 19, 19, 0) 0%, rgba(19, 19, 19, 1) 65%),
+    #131313;
+}
+
+#view-favourites .favourites-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+
+#view-favourites .favourites-hero-copy {
+  min-width: 0;
+}
+
+#view-favourites .favourites-hero .tb-page-title {
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  color: #e5e2e1;
+}
+
+#view-favourites .favourites-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: #6b6b7b;
+  font-size: 13px;
+}
+
+#view-favourites .favourites-stats strong {
+  color: #c1c6d7;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+#view-favourites .favourites-hero-actions,
+#view-favourites .favourites-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+#view-favourites .favourites-primary-action,
+#view-favourites .favourites-secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 40px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
+  transition: transform 0.14s ease, background 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
+}
+
+#view-favourites .favourites-primary-action {
+  padding: 9px 18px 9px 14px;
+  color: #0c1933;
+  background: linear-gradient(135deg, #b9cdfb, #9fbcfd);
+  box-shadow: 0 6px 22px rgba(173, 198, 255, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+#view-favourites .favourites-primary-action svg {
+  width: 22px;
+  height: 22px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(12, 25, 51, 0.18);
+}
+
+#view-favourites .favourites-secondary-action {
+  padding: 9px 16px;
+  color: #c1c6d7;
+  background: rgba(28, 27, 27, 0.6);
+  border: 1px solid rgba(65, 71, 85, 0.35);
+}
+
+#view-favourites .favourites-primary-action:hover,
+#view-favourites .favourites-secondary-action:hover {
+  transform: translateY(-1px);
+}
+
+#view-favourites .favourites-primary-action:disabled,
+#view-favourites .favourites-secondary-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+
+#view-favourites .favourites-action-count {
+  margin-left: 2px;
+  opacity: 0.58;
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+#view-favourites .favourites-summary-grid {
+  display: flex;
+  align-items: flex-end;
+  gap: 28px;
+  padding: 0;
+  margin: 0 0 22px;
+  border-bottom: 1px solid rgba(65, 71, 85, 0.18);
+}
+
+#view-favourites .favourites-summary-card {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  width: auto;
+  padding: 6px 2px 12px;
+  position: relative;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: #6b6b7b;
+  transform: none;
+}
+
+#view-favourites .favourites-summary-card::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: transparent;
+  box-shadow: none;
+}
+
+#view-favourites .favourites-summary-card:hover {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+#view-favourites .favourites-summary-card.is-active,
+#view-favourites .favourites-summary-card[aria-pressed="true"] {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+#view-favourites .favourites-summary-card.is-active::after,
+#view-favourites .favourites-summary-card[aria-pressed="true"]::after {
+  background: #adc6ff;
+  box-shadow: 0 0 12px rgba(173, 198, 255, 0.45);
+}
+
+#view-favourites .favourites-summary-title {
+  color: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+#view-favourites .favourites-summary-card.is-active .favourites-summary-title,
+#view-favourites .favourites-summary-card[aria-pressed="true"] .favourites-summary-title {
+  color: #e5e2e1;
+}
+
+#view-favourites .favourites-summary-count {
+  margin: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: #4a5568;
+  border: 1px solid rgba(65, 71, 85, 0.18);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+#view-favourites .favourites-summary-card.is-active .favourites-summary-count,
+#view-favourites .favourites-summary-card[aria-pressed="true"] .favourites-summary-count {
+  color: #adc6ff;
+  background: rgba(173, 198, 255, 0.10);
+  border-color: rgba(173, 198, 255, 0.18);
+}
+
+#view-favourites .favourites-toolbar {
+  justify-content: space-between;
+  margin: -2px 0 22px;
+}
+
+#view-favourites .favourites-search-wrap {
+  min-width: 220px;
+  max-width: 300px;
+  border-radius: 999px;
+  background: rgba(28, 27, 27, 0.5);
+}
+
+#view-favourites .favourites-sort-shell {
+  min-width: 0;
+}
+
+#view-favourites .favourites-sort-group {
+  background: rgba(28, 27, 27, 0.70);
+  border: 1px solid rgba(65, 71, 85, 0.25);
+  border-radius: 999px;
+  padding: 3px;
+}
+
+#view-favourites .favourites-sort-group .pl-sort-pill {
+  border-radius: 999px;
+}
+
+#view-favourites .favourites-inline-panels {
+  margin-top: 0;
+}
+
+#view-favourites .favourites-panel-header {
+  display: none;
+}
+
+#view-favourites .favourites-fixed-grid {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  column-gap: 22px;
+  row-gap: 26px;
+}
+
+#favourites-panel-songs .pl-controls {
+  display: none;
+}
+
+#favourites-panel-songs #fav-songs-table-wrap.tb-table-shell {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+#favourites-panel-songs .tb-table-scroll-area {
+  overflow: visible;
+}
+
+#favourites-panel-songs #fav-songs-table {
+  background: transparent;
+}
+
+#favourites-panel-songs #fav-songs-table th[data-col="genre"],
+#favourites-panel-songs #fav-songs-table td[data-col="genre"],
+#favourites-panel-songs #fav-songs-table th[data-col="lyrics"],
+#favourites-panel-songs #fav-songs-table td[data-col="lyrics"],
+#favourites-panel-songs #fav-songs-table th[data-col="favourite"],
+#favourites-panel-songs #fav-songs-table td[data-col="favourite"],
+#favourites-panel-songs #fav-songs-table th[data-col="actions"],
+#favourites-panel-songs #fav-songs-table td[data-col="actions"] {
+  display: none;
+}
+
+#favourites-panel-songs #fav-songs-table tbody tr {
+  border-radius: 8px;
+}
+
+#favourites-panel-songs #fav-songs-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+@media (max-width: 760px) {
+  #view-favourites .favourites-hero .tb-page-title {
+    font-size: 32px;
+  }
+
+  #view-favourites .favourites-summary-grid {
+    gap: 18px;
+    overflow-x: auto;
+  }
+
+  #view-favourites .favourites-toolbar,
+  #view-favourites .favourites-search-wrap {
+    width: 100%;
+  }
+}
+
 @media (max-width: 760px) {
   .lyrics-view {
     left: 0;
