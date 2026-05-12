@@ -10728,6 +10728,7 @@ let _activeSettingsCategory = 'library';
 
 function showSettingsCategory(category = 'library') {
   if (category === 'lyrics' || category === 'artwork') category = 'library';
+  if (category === 'maintenance') category = 'app';
   _activeSettingsCategory = category;
   document.querySelectorAll('.settings-category-btn').forEach(btn => {
     const active = btn.dataset.settingsCategory === category;
