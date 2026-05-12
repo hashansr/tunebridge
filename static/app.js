@@ -11323,14 +11323,51 @@ async function runHealthCheck() {
       </div>
     </div>`;
 
-  // squig.link
-  const sq = data.squig;
-  const sqHtml = `
+  // External integrations
+  const integrations = data.integrations || {};
+  const integrationOrder = [
+    ['lyrics', 'Lyrics'],
+    ['squig', 'squig.link'],
+    ['itunes', 'iTunes'],
+    ['lastfm', 'Last.fm'],
+    ['fanart', 'Fanart.tv'],
+    ['musicbrainz', 'MusicBrainz'],
+  ];
+  const integrationRows = integrationOrder.map(([key, label]) => {
+    const item = integrations[key] || {};
+    const state = item.state || (item.ok ? 'ok' : 'err');
+    const latency = Number.isFinite(Number(item.latency_ms)) ? ` · ${Number(item.latency_ms).toLocaleString()} ms` : '';
+    const status = item.ok
+      ? `Reachable${item.status ? ` · HTTP ${item.status}` : ''}${latency}`
+      : (item.configured === false ? esc(item.error || 'Not configured') : esc(item.error || 'Unreachable'));
+    return `
+      <div class="health-integration-row">
+        ${dotState(state)}
+        <span class="health-integration-name">${esc(label)}</span>
+        <span class="health-integration-status">${status}</span>
+      </div>`;
+  }).join('');
+  const configuredArtwork = integrations.artwork_service?.service;
+  const configuredLyrics = integrations.lyrics?.configured_service;
+  const integrationSummary = [
+    configuredLyrics ? `Lyrics: ${configuredLyrics}` : '',
+    configuredArtwork ? `Artwork: ${configuredArtwork}` : '',
+  ].filter(Boolean).join(' · ');
+  const integrationItems = integrationOrder.map(([key]) => integrations[key]).filter(Boolean);
+  const integrationState = integrationItems.some(i => (i.state || (i.ok ? 'ok' : 'err')) === 'err')
+    ? 'err'
+    : integrationItems.some(i => (i.state || (i.ok ? 'ok' : 'err')) === 'warn')
+      ? 'warn'
+      : 'ok';
+  const integrationsHtml = `
     <div class="health-item">
-      ${dot(sq.ok)}
+      ${dotState(integrationState)}
       <div class="health-item-body">
-        <div class="health-item-label">squig.link</div>
-        <div class="health-item-detail">${sq.ok ? 'Reachable' : esc(sq.error || 'Unreachable')}</div>
+        <div class="health-item-label">Integrations</div>
+        <div class="health-item-detail">
+          ${integrationSummary ? `${esc(integrationSummary)}<br>` : ''}
+          <div class="health-integration-list">${integrationRows}</div>
+        </div>
       </div>
     </div>`;
 
@@ -11403,7 +11440,7 @@ async function runHealthCheck() {
     </div>`;
 
   const grid = document.getElementById('health-grid');
-  if (grid) grid.innerHTML = libHtml + sqHtml + dapHtml + playbackHtml + storageHtml;
+  if (grid) grid.innerHTML = libHtml + integrationsHtml + dapHtml + playbackHtml + storageHtml;
 
   const lastRun = document.getElementById('health-last-run');
   if (lastRun) lastRun.textContent = 'Last checked: ' + new Date().toLocaleTimeString();

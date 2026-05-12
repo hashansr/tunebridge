@@ -236,6 +236,7 @@ DEFAULT_SETTINGS = {
     'artist_image_service': 'itunes',  # 'itunes' | 'lastfm' | 'fanart'
     'lastfm_api_key':   '',
     'fanart_api_key':   '',
+    'lyrics_service':   'lrclib',
     'listening_tracking_enabled': True,
     'update_channel':         '',   # '' = use built-in channel from version.json; 'dev'|'rc'|'prod' = user override
     'update_channel_version': '',   # version the preference was set for; stale if build version changed
@@ -6339,7 +6340,42 @@ def library_play_stats():
 @app.route('/api/health/status')
 def health_status():
     import time as _time
+    import urllib.error as _req_err
+    import urllib.request as _req
     result = {}
+
+    def _check_url(name, url, *, method='HEAD', headers=None, timeout=4, ok_statuses=None):
+        ok_statuses = set(ok_statuses or range(200, 400))
+        started = _time.monotonic()
+        try:
+            req = _req.Request(url, method=method, headers=headers or {})
+            with _req.urlopen(req, timeout=timeout) as r:
+                status = int(getattr(r, 'status', 200) or 200)
+            return {
+                'name': name,
+                'ok': status in ok_statuses,
+                'state': 'ok' if status in ok_statuses else 'warn',
+                'status': status,
+                'latency_ms': int((_time.monotonic() - started) * 1000),
+            }
+        except _req_err.HTTPError as e:
+            status = int(getattr(e, 'code', 0) or 0)
+            return {
+                'name': name,
+                'ok': status in ok_statuses,
+                'state': 'ok' if status in ok_statuses else 'warn',
+                'status': status,
+                'latency_ms': int((_time.monotonic() - started) * 1000),
+                'error': f'HTTP {status}',
+            }
+        except Exception as e:
+            return {
+                'name': name,
+                'ok': False,
+                'state': 'err',
+                'latency_ms': int((_time.monotonic() - started) * 1000),
+                'error': str(e),
+            }
 
     # 1. Local library
     music_path = get_music_base()
@@ -6360,18 +6396,81 @@ def health_status():
         'cache_age_hours': cache_age,
     }
 
-    # 2. squig.link connectivity (host reachability, not endpoint auth/policy)
-    import urllib.request as _req
-    import urllib.error as _req_err
-    try:
-        req = _req.Request('https://squig.link', method='HEAD')
-        r = _req.urlopen(req, timeout=4)
-        result['squig'] = {'ok': True, 'status': getattr(r, 'status', 200)}
-    except _req_err.HTTPError as e:
-        # HTTP status (including 403/404) still proves host is up/reachable.
-        result['squig'] = {'ok': True, 'status': int(getattr(e, 'code', 0) or 0)}
-    except Exception as e:
-        result['squig'] = {'ok': False, 'error': str(e)}
+    # 2. External integrations
+    settings = load_settings()
+    user_agent = {'User-Agent': 'TuneBridge/1.0'}
+    integrations = {
+        'squig': _check_url(
+            'squig.link',
+            'https://squig.link',
+            headers=user_agent,
+            ok_statuses=set(range(200, 500)),  # any HTTP response proves host reachability
+        ),
+        'lyrics': _check_url(
+            'LRCLIB lyrics',
+            'https://lrclib.net/api/search?q=the%20beatles%20yesterday',
+            method='GET',
+            headers={**user_agent, 'Accept': 'application/json'},
+            ok_statuses=set(range(200, 300)),
+        ),
+        'itunes': _check_url(
+            'iTunes artwork',
+            'https://itunes.apple.com/search?term=daft%20punk&entity=musicArtist&limit=1',
+            method='GET',
+            headers={**user_agent, 'Accept': 'application/json'},
+            ok_statuses=set(range(200, 300)),
+        ),
+        'musicbrainz': _check_url(
+            'MusicBrainz',
+            'https://musicbrainz.org/ws/2/artist/?query=artist:Daft%20Punk&fmt=json&limit=1',
+            method='GET',
+            headers={**user_agent, 'Accept': 'application/json'},
+            ok_statuses=set(range(200, 300)),
+        ),
+    }
+    lastfm_key = (settings.get('lastfm_api_key') or '').strip()
+    fanart_key = (settings.get('fanart_api_key') or '').strip()
+    if lastfm_key:
+        integrations['lastfm'] = _check_url(
+            'Last.fm',
+            f'https://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=Daft%20Punk&api_key={urlquote(lastfm_key)}&format=json',
+            method='GET',
+            headers={**user_agent, 'Accept': 'application/json'},
+            ok_statuses=set(range(200, 300)),
+        )
+    else:
+        integrations['lastfm'] = {
+            'name': 'Last.fm',
+            'ok': False,
+            'state': 'warn',
+            'configured': False,
+            'error': 'API key not configured',
+        }
+    if fanart_key:
+        integrations['fanart'] = _check_url(
+            'Fanart.tv',
+            f'https://webservice.fanart.tv/v3/music/056e4f3e-d505-4dad-8ec1-d04f521cbb56?api_key={urlquote(fanart_key)}',
+            method='GET',
+            headers={**user_agent, 'Accept': 'application/json'},
+            ok_statuses=set(range(200, 300)),
+        )
+    else:
+        integrations['fanart'] = {
+            'name': 'Fanart.tv',
+            'ok': False,
+            'state': 'warn',
+            'configured': False,
+            'error': 'API key not configured',
+        }
+    integrations['lyrics']['configured_service'] = settings.get('lyrics_service', 'lrclib')
+    integrations['artwork_service'] = {
+        'name': 'Configured artwork service',
+        'ok': True,
+        'state': 'ok',
+        'service': settings.get('artist_image_service', 'itunes'),
+    }
+    result['integrations'] = integrations
+    result['squig'] = integrations['squig']
 
     # 3. DAPs
     daps = load_daps()
@@ -6389,7 +6488,6 @@ def health_status():
 
     # 4. Playback runtime
     _refresh_mpv_backend()
-    settings = load_settings()
     runtime = _mpv_runtime_status()
     selected_audio_device = settings.get('audio_device', 'auto') or 'auto'
     effective_audio_device = selected_audio_device

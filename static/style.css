@@ -1385,6 +1385,25 @@ h4.settings-subsection-title {
 .health-item-detail { font-size: var(--text-xs); color: var(--text-muted); line-height: 1.4; word-break: break-all; }
 .health-dap-list { display: flex; flex-direction: column; gap: 6px; }
 .health-dap-row { display: flex; align-items: center; gap: 8px; }
+.health-integration-list { display: flex; flex-direction: column; gap: 7px; }
+.health-integration-row {
+  display: grid;
+  grid-template-columns: 8px minmax(92px, 0.8fr) minmax(120px, 1.4fr);
+  align-items: center;
+  gap: 8px;
+}
+.health-integration-name {
+  color: var(--text-sub);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.health-integration-status {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
 .health-actions { margin-top: 8px; display: flex; gap: 8px; }
 .health-action-btn { padding: 5px 10px; font-size: 11px; }
 .health-run-row { display: flex; align-items: center; gap: 12px; }
