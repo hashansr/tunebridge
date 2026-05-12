@@ -16833,11 +16833,7 @@ thead th:hover .table-col-resizer::after {
 
 /* ── Favourites mockup refresh ─────────────────────────────────────── */
 #view-favourites {
-  background:
-    radial-gradient(1200px 700px at 18% -12%, rgba(173, 198, 255, 0.10), transparent 58%),
-    radial-gradient(900px 700px at 95% 4%, rgba(255, 179, 181, 0.06), transparent 62%),
-    linear-gradient(180deg, rgba(19, 19, 19, 0) 0%, rgba(19, 19, 19, 1) 65%),
-    #131313;
+  background: var(--app-page-gradient);
 }
 
 #view-favourites .favourites-hero {
@@ -16845,7 +16841,7 @@ thead th:hover .table-col-resizer::after {
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 28px;
+  margin-bottom: 26px;
   flex-wrap: wrap;
 }
 
@@ -16861,72 +16857,20 @@ thead th:hover .table-col-resizer::after {
   color: #e5e2e1;
 }
 
-#view-favourites .favourites-stats {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  color: #6b6b7b;
-  font-size: 13px;
-}
-
-#view-favourites .favourites-stats strong {
-  color: #c1c6d7;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-#view-favourites .favourites-hero-actions,
-#view-favourites .favourites-toolbar {
+#view-favourites .favourites-hero-actions {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-#view-favourites .favourites-primary-action,
-#view-favourites .favourites-secondary-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
+#view-favourites .favourites-hero-play,
+#view-favourites .favourites-hero-shuffle {
   min-height: 40px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: 0;
-  transition: transform 0.14s ease, background 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
 }
 
-#view-favourites .favourites-primary-action {
-  padding: 9px 18px 9px 14px;
-  color: #0c1933;
-  background: linear-gradient(135deg, #b9cdfb, #9fbcfd);
-  box-shadow: 0 6px 22px rgba(173, 198, 255, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.25);
-}
-
-#view-favourites .favourites-primary-action svg {
-  width: 22px;
-  height: 22px;
-  padding: 6px;
-  border-radius: 999px;
-  background: rgba(12, 25, 51, 0.18);
-}
-
-#view-favourites .favourites-secondary-action {
-  padding: 9px 16px;
-  color: #c1c6d7;
-  background: rgba(28, 27, 27, 0.6);
-  border: 1px solid rgba(65, 71, 85, 0.35);
-}
-
-#view-favourites .favourites-primary-action:hover,
-#view-favourites .favourites-secondary-action:hover {
-  transform: translateY(-1px);
-}
-
-#view-favourites .favourites-primary-action:disabled,
-#view-favourites .favourites-secondary-action:disabled {
+#view-favourites .favourites-hero-play:disabled,
+#view-favourites .favourites-hero-shuffle:disabled {
   opacity: 0.45;
   cursor: default;
   transform: none;
@@ -16940,13 +16884,23 @@ thead th:hover .table-col-resizer::after {
   font-variant-numeric: tabular-nums;
 }
 
+#view-favourites .favourites-control-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 22px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid rgba(65, 71, 85, 0.18);
+  flex-wrap: wrap;
+}
+
 #view-favourites .favourites-summary-grid {
   display: flex;
   align-items: flex-end;
-  gap: 28px;
+  gap: 16px;
   padding: 0;
-  margin: 0 0 22px;
-  border-bottom: 1px solid rgba(65, 71, 85, 0.18);
+  margin: 0;
+  border-bottom: 0;
 }
 
 #view-favourites .favourites-summary-card {
@@ -16954,7 +16908,7 @@ thead th:hover .table-col-resizer::after {
   align-items: baseline;
   gap: 8px;
   width: auto;
-  padding: 6px 2px 12px;
+  padding: 6px 2px 11px;
   position: relative;
   background: transparent;
   border: 0;
@@ -16998,7 +16952,7 @@ thead th:hover .table-col-resizer::after {
 
 #view-favourites .favourites-summary-title {
   color: inherit;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 650;
   letter-spacing: 0;
   text-transform: none;
@@ -17030,13 +16984,17 @@ thead th:hover .table-col-resizer::after {
 }
 
 #view-favourites .favourites-toolbar {
-  justify-content: space-between;
-  margin: -2px 0 22px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 7px;
 }
 
 #view-favourites .favourites-search-wrap {
   min-width: 220px;
-  max-width: 300px;
+  max-width: 280px;
   border-radius: 999px;
   background: rgba(28, 27, 27, 0.5);
 }
@@ -17116,6 +17074,10 @@ thead th:hover .table-col-resizer::after {
   #view-favourites .favourites-summary-grid {
     gap: 18px;
     overflow-x: auto;
+  }
+
+  #view-favourites .favourites-control-row {
+    gap: 12px;
   }
 
   #view-favourites .favourites-toolbar,
