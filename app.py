@@ -33,7 +33,7 @@ from mutagen.wave import WAVE
 import hashlib
 import re
 import unicodedata
-from PIL import Image
+from PIL import Image, ImageOps
 
 import db as _db
 import migrate as _migrate
@@ -3432,6 +3432,54 @@ def has_playlist_artwork(pid):
     return (PLAYLIST_ARTWORK_DIR / f'{pid}.jpg').exists()
 
 
+def _playlist_cover_image_from_tracks(tracks):
+    art_paths = []
+    seen = set()
+    for t in tracks or []:
+        key = str((t or {}).get('artwork_key') or '').strip()
+        if not key or key in seen:
+            continue
+        path = ARTWORK_DIR / f'{key}.jpg'
+        if not path.exists():
+            continue
+        seen.add(key)
+        art_paths.append(path)
+        if len(art_paths) >= 4:
+            break
+
+    if not art_paths:
+        return None
+    if len(art_paths) == 1:
+        with Image.open(art_paths[0]) as img:
+            return ImageOps.fit(img.convert('RGB'), (800, 800), method=Image.LANCZOS)
+
+    canvas = Image.new('RGB', (800, 800), (20, 20, 20))
+    positions = [(0, 0), (400, 0), (0, 400), (400, 400)]
+    tile_paths = (art_paths * 4)[:4]
+    for path, pos in zip(tile_paths, positions):
+        with Image.open(path) as img:
+            tile = ImageOps.fit(img.convert('RGB'), (400, 400), method=Image.LANCZOS)
+            canvas.paste(tile, pos)
+    return canvas
+
+
+def _copy_playlist_cover_to_device(pid, playlist, tracks, device_root, safe_name):
+    art_src = PLAYLIST_ARTWORK_DIR / f'{pid}.jpg'
+    pics_dir = device_root / 'Pictures'
+    art_dst = pics_dir / f'{safe_name}.jpg'
+    if art_src.exists():
+        pics_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(art_src, art_dst)
+        return True, 'custom'
+
+    cover = _playlist_cover_image_from_tracks(tracks)
+    if cover is None:
+        return False, 'none'
+    pics_dir.mkdir(parents=True, exist_ok=True)
+    cover.save(art_dst, 'JPEG', quality=90)
+    return True, 'generated'
+
+
 @app.route('/api/playlists', methods=['GET'])
 def get_playlists():
     playlists = load_playlists()
@@ -3503,6 +3551,8 @@ def upload_playlist_artwork(pid):
     img.thumbnail((800, 800), Image.LANCZOS)
     out_path = PLAYLIST_ARTWORK_DIR / f'{pid}.jpg'
     img.save(out_path, 'JPEG', quality=90)
+    playlists[pid]['updated_at'] = int(time.time())
+    save_playlists(playlists)
     return jsonify({'ok': True, 'has_artwork': True})
 
 
@@ -3530,9 +3580,13 @@ def download_playlist_artwork(pid):
 
 @app.route('/api/playlists/<pid>/artwork', methods=['DELETE'])
 def delete_playlist_artwork(pid):
+    playlists = load_playlists()
     art_path = PLAYLIST_ARTWORK_DIR / f'{pid}.jpg'
     if art_path.exists():
         art_path.unlink()
+    if pid in playlists:
+        playlists[pid]['updated_at'] = int(time.time())
+        save_playlists(playlists)
     return jsonify({'ok': True, 'has_artwork': False})
 
 
@@ -3652,12 +3706,21 @@ def _make_lrclib_session(rate_per_sec=5.0):
 _lrclib_session = _make_lrclib_session(rate_per_sec=5.0)
 
 
+def _lrclib_duration(duration):
+    try:
+        seconds = int(float(duration or 0))
+    except (TypeError, ValueError):
+        return None
+    return seconds if 1 <= seconds <= 3600 else None
+
+
 def _lrclib_get(session, title, artist, album, duration):
     params = {'track_name': title, 'artist_name': artist}
     if album:
         params['album_name'] = album
+    duration = _lrclib_duration(duration)
     if duration:
-        params['duration'] = int(duration)
+        params['duration'] = duration
     try:
         r = session.get('https://lrclib.net/api/get', params=params, timeout=15)
         if r.status_code == 404:
@@ -3670,6 +3733,7 @@ def _lrclib_get(session, title, artist, album, duration):
 
 
 def _lrclib_search(session, title, artist, duration, tolerance=5):
+    duration = _lrclib_duration(duration)
     try:
         r = session.get(
             'https://lrclib.net/api/search',
@@ -6728,20 +6792,19 @@ def export_to_device():
     with open(out_path, 'w', encoding='utf-8') as f:
         f.write(content)
 
-    # Copy custom playlist artwork to device Pictures folder if available
-    art_src = PLAYLIST_ARTWORK_DIR / f'{pid}.jpg'
-    art_copied = False
-    if art_src.exists():
-        pics_dir = device_root / 'Pictures'
-        pics_dir.mkdir(exist_ok=True)
-        art_dst = pics_dir / f"{playlist['name']}.jpg"
-        shutil.copy2(art_src, art_dst)
-        art_copied = True
+    art_copied, art_source = _copy_playlist_cover_to_device(
+        pid,
+        playlist,
+        tracks,
+        device_root,
+        playlist['name'].replace('/', '-').replace(':', '-'),
+    )
 
     return jsonify({
         'message': f"Exported to {out_path}",
         'path': str(out_path),
         'artwork_copied': art_copied,
+        'artwork_source': art_source,
     })
 
 
@@ -8938,6 +9001,7 @@ def _export_playlist_to_dap(did, pid, daps=None, playlists=None, save_after=True
 
     out_dir = device_root / dap.get('export_folder', 'Playlists')
     art_copied = False
+    art_source = 'none'
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
         content = generate_m3u(export_tracks, playlist['name'], path_prefix=prefix)
@@ -8945,12 +9009,7 @@ def _export_playlist_to_dap(did, pid, daps=None, playlists=None, save_after=True
         with open(out_dir / f"{safe_name}.m3u", 'w', encoding=m3u_encoding) as f:
             f.write(content)
 
-        art_src = PLAYLIST_ARTWORK_DIR / f'{pid}.jpg'
-        if art_src.exists():
-            pics_dir = device_root / 'Pictures'
-            pics_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(art_src, pics_dir / f"{safe_name}.jpg")
-            art_copied = True
+        art_copied, art_source = _copy_playlist_cover_to_device(pid, playlist, export_tracks, device_root, safe_name)
     except OSError as e:
         import errno as _errno
         if e.errno == _errno.EROFS:
@@ -8968,6 +9027,7 @@ def _export_playlist_to_dap(did, pid, daps=None, playlists=None, save_after=True
         'missing_on_device_count': len(missing_on_device),
         'missing_on_device_sample': missing_on_device[:8],
         'artwork_copied': art_copied,
+        'artwork_source': art_source,
     }
 
 
