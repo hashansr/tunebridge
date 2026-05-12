@@ -13147,15 +13147,42 @@ function toggleArtworkAdvanced() {
 
 async function startLyricsBulk(mode = 'new') {
   try {
+    _updateLyricsBulkBanner({
+      status: 'running',
+      mode,
+      progress: 0,
+      total: 0,
+      synced: 0,
+      plain: 0,
+      not_found: 0,
+      instrumental: 0,
+      errors: 0,
+    });
     const res = await fetch('/api/lyrics/bulk', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode }),
     });
     const data = await res.json();
-    if (!res.ok) { toast(data.error || 'Could not start lyrics fetch', 'error'); return; }
+    if (!res.ok) {
+      toast(data.error || 'Could not start lyrics fetch', 'error');
+      loadLyricsSettings();
+      return;
+    }
+    _updateLyricsBulkBanner({
+      status: 'running',
+      mode: data.mode || mode,
+      progress: 0,
+      total: data.total || 0,
+      synced: 0,
+      plain: 0,
+      not_found: 0,
+      instrumental: 0,
+      errors: 0,
+    });
     _startLyricsBulkPolling();
   } catch (_) {
+    loadLyricsSettings();
     toast('Error starting lyrics fetch', 'error');
   }
 }
@@ -13192,26 +13219,41 @@ function _updateLyricsBulkBanner(s) {
   const banner = document.getElementById('lyrics-bulk-banner');
   const bar = document.getElementById('lyrics-bulk-bar');
   const msg = document.getElementById('lyrics-bulk-msg');
+  const pctEl = document.getElementById('lyrics-bulk-percent');
   const newBtn = document.getElementById('lyrics-bulk-new-btn');
   const allBtn = document.getElementById('lyrics-bulk-all-btn');
   const cancelBtn = document.getElementById('lyrics-bulk-cancel-btn');
   if (!banner) return;
   const running = s.status === 'running';
+  const mode = s.mode || 'new';
+  const pct = s.total > 0 ? Math.min(100, Math.round(((s.progress || 0) / s.total) * 100)) : 0;
   banner.style.display = (s.status === 'idle') ? 'none' : '';
-  if (newBtn) newBtn.disabled = running;
-  if (allBtn) allBtn.disabled = running;
+  [newBtn, allBtn].forEach((btn) => {
+    if (!btn) return;
+    const isActive = running && btn.id === (mode === 'all' ? 'lyrics-bulk-all-btn' : 'lyrics-bulk-new-btn');
+    btn.disabled = running;
+    btn.classList.toggle('is-loading', isActive);
+    btn.setAttribute('aria-busy', isActive ? 'true' : 'false');
+    const label = btn.querySelector('.lyrics-bulk-btn-label');
+    if (label) label.textContent = isActive ? 'Finding...' : (btn.dataset.label || label.textContent);
+  });
   if (cancelBtn) cancelBtn.style.display = running ? '' : 'none';
+  if (pctEl) pctEl.textContent = `${pct}%`;
   if (running) {
-    const pct = s.total > 0 ? Math.round((s.progress / s.total) * 100) : 0;
     const found = (s.synced || 0) + (s.plain || 0);
     if (bar) bar.style.width = pct + '%';
-    if (msg) msg.textContent =
-      `Looking for lyrics: ${found.toLocaleString()} of ${(s.total || 0).toLocaleString()} found · ` +
-      `${(s.progress || 0).toLocaleString()} searched · ` +
-      `${s.synced || 0} synced, ${s.plain || 0} plain, ${s.not_found || 0} not found`;
+    if (msg) {
+      const total = s.total || 0;
+      msg.textContent = total > 0
+        ? `Looking for lyrics: ${found.toLocaleString()} of ${total.toLocaleString()} found · ` +
+          `${(s.progress || 0).toLocaleString()} searched · ` +
+          `${s.synced || 0} synced, ${s.plain || 0} plain, ${s.not_found || 0} not found`
+        : 'Starting lyrics search...';
+    }
   } else if (s.status === 'done') {
     const found = (s.synced || 0) + (s.plain || 0);
     if (bar) bar.style.width = '100%';
+    if (pctEl) pctEl.textContent = '100%';
     if (msg) msg.textContent =
       `Done - ${found.toLocaleString()} of ${(s.total || 0).toLocaleString()} found · ` +
       `${s.synced || 0} synced, ${s.plain || 0} plain, ${s.not_found || 0} not found`;
@@ -13219,6 +13261,7 @@ function _updateLyricsBulkBanner(s) {
     if (allBtn) allBtn.disabled = false;
   } else if (s.status === 'cancelled') {
     if (bar) bar.style.width = '0%';
+    if (pctEl) pctEl.textContent = '0%';
     if (msg) msg.textContent = `Cancelled after ${(s.progress || 0).toLocaleString()} tracks`;
     if (newBtn) newBtn.disabled = false;
     if (allBtn) allBtn.disabled = false;

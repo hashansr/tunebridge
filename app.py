@@ -3765,16 +3765,9 @@ lyrics_state = {
 lyrics_state_lock = threading.Lock()
 
 
-def do_lyrics_bulk(mode):
+def do_lyrics_bulk(mode, tracks=None):
     music_base = get_music_base()
-    tracks = _db.db_get_tracks_for_lyrics_bulk(mode)
-    with lyrics_state_lock:
-        lyrics_state.update({
-            'status': 'running', 'mode': mode,
-            'progress': 0, 'total': len(tracks),
-            'synced': 0, 'plain': 0, 'not_found': 0, 'instrumental': 0, 'errors': 0,
-            'elapsed': 0.0, 'started_at': time.monotonic(), 'message': 'Starting...',
-        })
+    tracks = tracks if tracks is not None else _db.db_get_tracks_for_lyrics_bulk(mode)
 
     for i, track in enumerate(tracks):
         if lyrics_state['status'] != 'running':
@@ -3867,8 +3860,16 @@ def api_lyrics_bulk():
     mode = body.get('mode', 'new')
     if mode not in ('new', 'all'):
         return jsonify({'error': 'mode must be "new" or "all"'}), 400
-    threading.Thread(target=do_lyrics_bulk, args=(mode,), daemon=True).start()
-    return jsonify({'ok': True, 'mode': mode})
+    tracks = _db.db_get_tracks_for_lyrics_bulk(mode)
+    with lyrics_state_lock:
+        lyrics_state.update({
+            'status': 'running', 'mode': mode,
+            'progress': 0, 'total': len(tracks),
+            'synced': 0, 'plain': 0, 'not_found': 0, 'instrumental': 0, 'errors': 0,
+            'elapsed': 0.0, 'started_at': time.monotonic(), 'message': 'Starting...',
+        })
+    threading.Thread(target=do_lyrics_bulk, args=(mode, tracks), daemon=True).start()
+    return jsonify({'ok': True, 'mode': mode, 'total': len(tracks)})
 
 
 @app.route('/api/lyrics/status')

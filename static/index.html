@@ -1133,18 +1133,19 @@
                 <span id="lyrics-stats-text" class="settings-rg-sub">Loading…</span>
               </div>
               <div class="settings-rg-actions">
-                <button class="btn-secondary" id="lyrics-bulk-new-btn" onclick="App.startLyricsBulk('new')">Find New Songs</button>
-                <button class="btn-secondary" id="lyrics-bulk-all-btn" onclick="App.startLyricsBulk('all')">Find All Missing</button>
+                <button class="btn-secondary lyrics-bulk-btn" id="lyrics-bulk-new-btn" data-label="Find New Songs" onclick="App.startLyricsBulk('new')"><span class="lyrics-bulk-spinner" aria-hidden="true"></span><span class="lyrics-bulk-btn-label">Find New Songs</span></button>
+                <button class="btn-secondary lyrics-bulk-btn" id="lyrics-bulk-all-btn" data-label="Find All Songs" onclick="App.startLyricsBulk('all')"><span class="lyrics-bulk-spinner" aria-hidden="true"></span><span class="lyrics-bulk-btn-label">Find All Songs</span></button>
                 <button class="btn-secondary" id="lyrics-bulk-cancel-btn" onclick="App.cancelLyricsBulk()" style="display:none">Cancel</button>
               </div>
             </div>
-            <div id="lyrics-bulk-banner" class="rg-banner" style="display:none">
+            <div id="lyrics-bulk-banner" class="rg-banner" role="status" aria-live="polite" style="display:none">
               <div class="rg-banner-text">
                 <span id="lyrics-bulk-msg" style="color:var(--text-muted)"></span>
               </div>
               <div class="insights-analysis-bar-wrap" style="flex:1;min-width:80px">
                 <div id="lyrics-bulk-bar" class="insights-analysis-bar" style="width:0%"></div>
               </div>
+              <span id="lyrics-bulk-percent" class="lyrics-bulk-percent">0%</span>
             </div>
             <div class="lyrics-advanced-wrap">
               <button class="lyrics-advanced-toggle" onclick="App.toggleLyricsAdvanced()">
