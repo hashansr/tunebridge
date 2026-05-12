@@ -3118,8 +3118,17 @@ async function ctxFindLyrics() {
     const found = statuses.filter(s => s === 'synced' || s === 'plain').length;
     const instrumental = statuses.filter(s => s === 'instrumental').length;
     const total = statuses.length || missing.length;
+    const serviceErrors = statuses.filter(s => s === 'service_error').length;
+    const writeErrors = statuses.filter(s => s === 'write_error').length;
+    const errors = statuses.filter(s => s === 'error').length + serviceErrors + writeErrors;
     if (found) {
       liveToast.finish(`Lyrics found for ${found} of ${total} song${total === 1 ? '' : 's'}`);
+    } else if (serviceErrors) {
+      liveToast.finish('Lyrics service unavailable. Try again later.', 'error');
+    } else if (writeErrors) {
+      liveToast.finish('Could not save lyrics files', 'error');
+    } else if (errors) {
+      liveToast.finish('Could not fetch lyrics for selected songs', 'error');
     } else if (instrumental) {
       liveToast.finish('Marked as instrumental');
     } else {
@@ -13113,8 +13122,10 @@ function _updateLyricsStatsRow(stats) {
   const hasFiles = stats.has_files || 0;
   const by = stats.by_status || {};
   const never = by.null || 0;
+  const retryable = by.error || 0;
   const parts = [`${hasFiles.toLocaleString()} of ${total.toLocaleString()} songs have lyrics`];
   if (never) parts.push(`${never.toLocaleString()} new songs without lyrics`);
+  if (retryable) parts.push(`${retryable.toLocaleString()} retryable errors`);
   el.textContent = parts.join(' · ');
 }
 
@@ -13227,6 +13238,23 @@ function _updateLyricsBulkBanner(s) {
   const running = s.status === 'running';
   const mode = s.mode || 'new';
   const pct = s.total > 0 ? Math.min(100, Math.round(((s.progress || 0) / s.total) * 100)) : 0;
+  const lyricOutcomeSummary = () => {
+    const genericErrors = Math.max(0, (s.errors || 0) - (s.service_errors || 0) - (s.write_errors || 0) - (s.track_errors || 0));
+    const parts = [
+      `${s.synced || 0} synced`,
+      `${s.plain || 0} plain`,
+      `${s.not_found || 0} not found`,
+    ];
+    if (s.instrumental) parts.push(`${s.instrumental} instrumental`);
+    if (s.service_errors) parts.push(`${s.service_errors} service ${s.service_errors === 1 ? 'error' : 'errors'}`);
+    if (s.write_errors) parts.push(`${s.write_errors} save ${s.write_errors === 1 ? 'error' : 'errors'}`);
+    if (s.track_errors) parts.push(`${s.track_errors} track ${s.track_errors === 1 ? 'error' : 'errors'}`);
+    if (genericErrors) parts.push(`${genericErrors} ${genericErrors === 1 ? 'error' : 'errors'}`);
+    const accounted = (s.synced || 0) + (s.plain || 0) + (s.not_found || 0) + (s.instrumental || 0) + (s.errors || 0);
+    const unreported = Math.max(0, (s.progress || 0) - accounted);
+    if (unreported) parts.push(`${unreported} pending`);
+    return parts.join(', ');
+  };
   banner.style.display = (s.status === 'idle') ? 'none' : '';
   [newBtn, allBtn].forEach((btn) => {
     if (!btn) return;
@@ -13247,16 +13275,29 @@ function _updateLyricsBulkBanner(s) {
       msg.textContent = total > 0
         ? `Looking for lyrics: ${found.toLocaleString()} of ${total.toLocaleString()} found · ` +
           `${(s.progress || 0).toLocaleString()} searched · ` +
-          `${s.synced || 0} synced, ${s.plain || 0} plain, ${s.not_found || 0} not found`
+          lyricOutcomeSummary()
         : 'Starting lyrics search...';
     }
   } else if (s.status === 'done') {
     const found = (s.synced || 0) + (s.plain || 0);
     if (bar) bar.style.width = '100%';
     if (pctEl) pctEl.textContent = '100%';
+    if (msg) {
+      const prefix = s.errors
+        ? `Done with ${s.errors.toLocaleString()} retryable ${s.errors === 1 ? 'error' : 'errors'}`
+        : 'Done';
+      msg.textContent =
+        `${prefix} - ${found.toLocaleString()} of ${(s.total || 0).toLocaleString()} found · ` +
+        lyricOutcomeSummary();
+    }
+    if (newBtn) newBtn.disabled = false;
+    if (allBtn) allBtn.disabled = false;
+  } else if (s.status === 'error') {
+    if (bar) bar.style.width = pct + '%';
     if (msg) msg.textContent =
-      `Done - ${found.toLocaleString()} of ${(s.total || 0).toLocaleString()} found · ` +
-      `${s.synced || 0} synced, ${s.plain || 0} plain, ${s.not_found || 0} not found`;
+      `${s.last_error || s.message || 'Lyrics search paused because of errors'} · ` +
+      `${(s.progress || 0).toLocaleString()} searched · ` +
+      lyricOutcomeSummary();
     if (newBtn) newBtn.disabled = false;
     if (allBtn) allBtn.disabled = false;
   } else if (s.status === 'cancelled') {

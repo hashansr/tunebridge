@@ -3660,11 +3660,12 @@ def _lrclib_get(session, title, artist, album, duration):
     try:
         r = session.get('https://lrclib.net/api/get', params=params, timeout=15)
         if r.status_code == 404:
-            return None
+            return None, 'not_found'
         r.raise_for_status()
-        return r.json()
-    except requests.RequestException:
-        return None
+        return r.json(), 'ok'
+    except (ValueError, requests.RequestException) as e:
+        print(f"Lyrics: LRCLIB get failed for {artist} - {title}: {e}")
+        return None, 'service_error'
 
 
 def _lrclib_search(session, title, artist, duration, tolerance=5):
@@ -3676,16 +3677,17 @@ def _lrclib_search(session, title, artist, duration, tolerance=5):
         )
         r.raise_for_status()
         results = r.json()
-    except requests.RequestException:
-        return None
+    except (ValueError, requests.RequestException) as e:
+        print(f"Lyrics: LRCLIB search failed for {artist} - {title}: {e}")
+        return None, 'service_error'
     if not results:
-        return None
+        return None, 'not_found'
     if duration:
         best = min(results, key=lambda x: abs((x.get('duration') or 0) - duration))
         if abs((best.get('duration') or 0) - duration) <= tolerance:
-            return best
-        return None
-    return results[0]
+            return best, 'ok'
+        return None, 'not_found'
+    return results[0], 'ok'
 
 
 def _fetch_lyrics_for_track(track, music_base):
@@ -3698,9 +3700,19 @@ def _fetch_lyrics_for_track(track, music_base):
     duration = track.get('duration')
     lrc_abs = (music_base / track['path']).with_suffix('.lrc')
 
-    data = _lrclib_get(_lrclib_session, title, artist, album, duration)
+    data, result = _lrclib_get(_lrclib_session, title, artist, album, duration)
+    if result == 'service_error':
+        status = 'error'
+        _db.db_update_track_lyrics(track['id'], False, None, status, int(time.time()))
+        _patch_library_track_lyrics(track['id'], False, None, status)
+        return 'service_error'
     if data is None:
-        data = _lrclib_search(_lrclib_session, title, artist, duration)
+        data, result = _lrclib_search(_lrclib_session, title, artist, duration)
+    if result == 'service_error':
+        status = 'error'
+        _db.db_update_track_lyrics(track['id'], False, None, status, int(time.time()))
+        _patch_library_track_lyrics(track['id'], False, None, status)
+        return 'service_error'
     if data is None:
         status = 'not_found'
         _db.db_update_track_lyrics(track['id'], False, None, status, int(time.time()))
@@ -3728,7 +3740,7 @@ def _fetch_lyrics_for_track(track, music_base):
         status = 'error'
         _db.db_update_track_lyrics(track['id'], False, None, status, int(time.time()))
         _patch_library_track_lyrics(track['id'], False, None, status)
-        return status
+        return 'write_error'
 
     status = 'synced' if is_synced else 'plain'
     lyric_rel = str(lrc_abs.relative_to(music_base))
@@ -3758,16 +3770,48 @@ lyrics_state = {
     'not_found': 0,
     'instrumental': 0,
     'errors': 0,
+    'service_errors': 0,
+    'write_errors': 0,
+    'track_errors': 0,
     'elapsed': 0.0,
     'started_at': 0.0,
     'message': '',
+    'last_error': '',
 }
 lyrics_state_lock = threading.Lock()
+
+
+def _reset_lyrics_state(mode, total):
+    lyrics_state.update({
+        'status': 'running', 'mode': mode,
+        'progress': 0, 'total': total,
+        'synced': 0, 'plain': 0, 'not_found': 0, 'instrumental': 0, 'errors': 0,
+        'service_errors': 0, 'write_errors': 0, 'track_errors': 0,
+        'elapsed': 0.0, 'started_at': time.monotonic(),
+        'message': 'Starting...', 'last_error': '',
+    })
+
+
+def _record_lyrics_result(status):
+    if status in ('synced', 'plain', 'not_found', 'instrumental'):
+        lyrics_state[status] += 1
+        return
+    lyrics_state['errors'] += 1
+    if status == 'service_error':
+        lyrics_state['service_errors'] += 1
+        lyrics_state['last_error'] = 'Lyrics service unavailable. Retry later.'
+    elif status == 'write_error':
+        lyrics_state['write_errors'] += 1
+        lyrics_state['last_error'] = 'Could not save one or more lyrics files.'
+    else:
+        lyrics_state['track_errors'] += 1
+        lyrics_state['last_error'] = 'Some tracks could not be processed.'
 
 
 def do_lyrics_bulk(mode, tracks=None):
     music_base = get_music_base()
     tracks = tracks if tracks is not None else _db.db_get_tracks_for_lyrics_bulk(mode)
+    consecutive_service_errors = 0
 
     for i, track in enumerate(tracks):
         if lyrics_state['status'] != 'running':
@@ -3777,23 +3821,27 @@ def do_lyrics_bulk(mode, tracks=None):
         except Exception as e:
             print(f"Lyrics bulk error on track {track.get('id')}: {e}")
             status = 'error'
+        consecutive_service_errors = consecutive_service_errors + 1 if status == 'service_error' else 0
         with lyrics_state_lock:
             lyrics_state['progress'] = i + 1
             lyrics_state['elapsed'] = time.monotonic() - lyrics_state['started_at']
-            if status in ('synced', 'plain', 'not_found', 'instrumental'):
-                lyrics_state[status] += 1
-            else:
-                lyrics_state['errors'] += 1
+            _record_lyrics_result(status)
+            if consecutive_service_errors >= 5:
+                lyrics_state['status'] = 'error'
+                lyrics_state['message'] = 'Lyrics service appears unavailable. Search paused so these tracks can be retried later.'
+                lyrics_state['last_error'] = lyrics_state['message']
+                break
 
     with lyrics_state_lock:
         if lyrics_state['status'] == 'running':
             lyrics_state['status'] = 'done'
+            s = lyrics_state
+            lyrics_state['message'] = (
+                f"Done - {s['synced']} synced, {s['plain']} plain, "
+                f"{s['not_found']} not found, {s['instrumental']} instrumental, "
+                f"{s['errors']} errors"
+            )
         lyrics_state['elapsed'] = time.monotonic() - lyrics_state['started_at']
-        s = lyrics_state
-        lyrics_state['message'] = (
-            f"Done - {s['synced']} synced, {s['plain']} plain, "
-            f"{s['not_found']} not found, {s['instrumental']} instrumental"
-        )
 
 
 @app.route('/api/lyrics/fetch', methods=['POST'])
@@ -3816,29 +3864,8 @@ def api_lyrics_fetch():
 
         def _bulk_fetch_selected():
             with lyrics_state_lock:
-                lyrics_state.update({
-                    'status': 'running', 'mode': 'fetch',
-                    'progress': 0, 'total': len(tracks_to_fetch),
-                    'synced': 0, 'plain': 0, 'not_found': 0, 'instrumental': 0, 'errors': 0,
-                    'elapsed': 0.0, 'started_at': time.monotonic(), 'message': 'Starting...',
-                })
-            for i, track in enumerate(tracks_to_fetch):
-                if lyrics_state['status'] != 'running':
-                    break
-                try:
-                    status = _fetch_lyrics_for_track(track, music_base)
-                except Exception:
-                    status = 'error'
-                with lyrics_state_lock:
-                    lyrics_state['progress'] = i + 1
-                    lyrics_state['elapsed'] = time.monotonic() - lyrics_state['started_at']
-                    if status in ('synced', 'plain', 'not_found', 'instrumental'):
-                        lyrics_state[status] += 1
-                    else:
-                        lyrics_state['errors'] += 1
-            with lyrics_state_lock:
-                if lyrics_state['status'] == 'running':
-                    lyrics_state['status'] = 'done'
+                _reset_lyrics_state('fetch', len(tracks_to_fetch))
+            do_lyrics_bulk('fetch', tracks_to_fetch)
 
         threading.Thread(target=_bulk_fetch_selected, daemon=True).start()
         return jsonify({'queued': True, 'total': len(tracks_to_fetch)})
@@ -3862,12 +3889,7 @@ def api_lyrics_bulk():
         return jsonify({'error': 'mode must be "new" or "all"'}), 400
     tracks = _db.db_get_tracks_for_lyrics_bulk(mode)
     with lyrics_state_lock:
-        lyrics_state.update({
-            'status': 'running', 'mode': mode,
-            'progress': 0, 'total': len(tracks),
-            'synced': 0, 'plain': 0, 'not_found': 0, 'instrumental': 0, 'errors': 0,
-            'elapsed': 0.0, 'started_at': time.monotonic(), 'message': 'Starting...',
-        })
+        _reset_lyrics_state(mode, len(tracks))
     threading.Thread(target=do_lyrics_bulk, args=(mode, tracks), daemon=True).start()
     return jsonify({'ok': True, 'mode': mode, 'total': len(tracks)})
 

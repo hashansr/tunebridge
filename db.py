@@ -672,7 +672,8 @@ def db_get_tracks_for_lyrics_bulk(mode):
     conn = get_conn()
     if mode == 'new':
         rows = conn.execute(
-            'SELECT id, path, title, artist, album, duration FROM tracks WHERE lyrics_status IS NULL'
+            """SELECT id, path, title, artist, album, duration FROM tracks
+               WHERE lyrics_status IS NULL OR lyrics_status = 'error'"""
         ).fetchall()
     else:
         rows = conn.execute(
