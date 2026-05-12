@@ -13787,6 +13787,18 @@ body.is-col-resizing {
   border: none;
 }
 
+#insights-tag-health-section {
+  display: flex;
+  flex-direction: column;
+}
+
+#insights-tag-health-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 /* Overview cards */
 .ov-stat-grid {
   display: grid;
@@ -13978,12 +13990,18 @@ body.is-col-resizing {
 .tag-health-bars--compact {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+  flex: 1;
+  grid-auto-rows: minmax(118px, 1fr);
 }
 .tag-health-pill {
   border-radius: 12px;
-  padding: 9px 10px 8px;
+  padding: 14px 16px 13px;
   background: rgba(28, 29, 34, 0.85);
   border: 1px solid rgba(130, 143, 173, 0.14);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 118px;
 }
 .tag-health-pill-top {
   display: flex;
