@@ -286,7 +286,12 @@
       "Bash(curl -s -X POST \"http://localhost:5001/api/library/replaygain/cancel\")",
       "Bash(curl -s http://localhost:5001/api/library/replaygain/info)",
       "Bash(curl -s http://localhost:5001/api/library/replaygain/status)",
-      "Bash(curl -s -X POST http://localhost:5001/api/library/replaygain/cancel)"
+      "Bash(curl -s -X POST http://localhost:5001/api/library/replaygain/cancel)",
+      "Bash(grep -n \"songs-empty\" \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/static/index.html\" | head -10 *)",
+      "Bash(kill 43649)",
+      "Bash(\"/Users/hashan/Documents/Claude/Projects/Playlist Creator/venv/bin/python\" app.py)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
