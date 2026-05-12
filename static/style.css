@@ -55,9 +55,9 @@
   --tb-font-stat-number: 30px;
   --tb-font-stat-label: 18px;
   --tb-page-title-size: 40px;
-  --tb-page-title-weight: 700;
-  --tb-page-title-letter-spacing: -0.02em;
-  --tb-page-title-line-height: 1.15;
+  --tb-page-title-weight: 800;
+  --tb-page-title-letter-spacing: -0.025em;
+  --tb-page-title-line-height: 1.05;
   --tb-page-header-gap: 12px;
   --tb-page-header-margin-bottom: 20px;
   --tb-object-title-size: 30px;
@@ -9177,10 +9177,10 @@ tbody tr:hover {
 }
 
 .peq-workspace-header h2 {
-  font-size: 22px;
-  line-height: 1.15;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: var(--tb-page-title-size);
+  line-height: var(--tb-page-title-line-height);
+  font-weight: var(--tb-page-title-weight);
+  letter-spacing: var(--tb-page-title-letter-spacing);
   margin: 0;
 }
 
@@ -9610,7 +9610,7 @@ tbody tr:hover {
     padding: 18px 16px 18px;
   }
   .peq-workspace-header h2 {
-    font-size: 22px;
+    font-size: var(--tb-page-title-size);
   }
   .peq-workspace-context {
     grid-template-columns: 1fr;
@@ -13005,13 +13005,6 @@ body.is-col-resizing {
   flex-direction: column;
   gap: 0;
   background: var(--app-page-gradient);
-}
-
-/* Home-specific title override — larger than any in-page section title */
-#view-home .home-title {
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
 }
 
 #main.main-home-active #view-home {
@@ -16901,9 +16894,6 @@ thead th:hover .table-col-resizer::after {
 }
 
 #view-favourites .favourites-hero .tb-page-title {
-  font-weight: 800;
-  letter-spacing: -0.025em;
-  line-height: 1.05;
   color: #e5e2e1;
 }
 
@@ -17140,10 +17130,6 @@ thead th:hover .table-col-resizer::after {
 }
 
 @media (max-width: 760px) {
-  #view-favourites .favourites-hero .tb-page-title {
-    font-size: 32px;
-  }
-
   #view-favourites .favourites-summary-grid {
     gap: 18px;
     overflow-x: auto;
