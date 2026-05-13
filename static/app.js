@@ -416,7 +416,7 @@ function _artistThumbHtml(a, size = 120) {
 }
 
 function _applyArtistCardPalette(img) {
-  const card = img?.closest?.('.artist-card');
+  const card = img?.closest?.('.artist-card, .artist-detail-art-card');
   if (!card || !img.naturalWidth || !img.naturalHeight) return;
   try {
     const canvas = document.createElement('canvas');
@@ -446,7 +446,11 @@ function _applyArtistCardPalette(img) {
     g = Math.round(g / weight);
     b = Math.round(b / weight);
     card.style.setProperty('--artist-card-accent', `rgb(${r}, ${g}, ${b})`);
-    card.classList.add('artist-card--palette-ready');
+    if (card.classList.contains('artist-detail-art-card')) {
+      card.classList.add('artist-detail-art-card--palette-ready');
+    } else {
+      card.classList.add('artist-card--palette-ready');
+    }
   } catch (_) {
     // Palette extraction is progressive enhancement; same-origin artwork should work.
   }
@@ -1971,11 +1975,16 @@ async function loadAlbums(artistFilter = null) {
     if (albumsViewCount) albumsViewCount.style.display = 'none';
     // Populate artist hero
     const artistData = state.artists?.find(a => a.name === artistFilter);
-    const artKey = albums[0]?.artwork_key || artistData?.artwork_key || '';
-    const artistImgKey = artistData?.image_key;
-    document.getElementById('artist-hero-art').innerHTML = artistImgKey
-      ? `<img src="/api/artists/${artistImgKey}/image?t=${Date.now()}" alt="${esc(artistFilter)}" />`
-      : (artKey ? `<img src="${artworkUrl(artKey)}" />` : coverPlaceholder('artist', 64, 'var(--radius)', true));
+    const heroArt = document.getElementById('artist-hero-art');
+    if (heroArt) {
+      heroArt.className = 'hero-art-sq artist-detail-art-card';
+      heroArt.style.setProperty('--artist-card-accent', _artistCardAccent(artistFilter));
+      heroArt.innerHTML = _artistThumbHtml({
+        name: artistFilter,
+        image_key: artistData?.image_key || '',
+        artwork_key: albums[0]?.artwork_key || artistData?.artwork_key || '',
+      }, 200);
+    }
     document.getElementById('artist-hero-name').textContent = artistFilter;
     const totalSongs = albums.reduce((s, al) => s + (al.track_count || 0), 0);
     document.getElementById('artist-hero-meta').textContent =
@@ -17658,9 +17667,15 @@ function _refreshArtistHeroImage() {
   const artist = (state.artists || []).find(a => a.name === state.artist);
   const heroArt = document.getElementById('artist-hero-art');
   if (!heroArt) return;
-  if (artist?.image_key) {
-    heroArt.innerHTML = `<img src="/api/artists/${artist.image_key}/image?t=${Date.now()}" alt="${esc(artist.name)}" />`;
-  }
+  const artistName = artist?.name || state.artist || '';
+  if (!artistName) return;
+  heroArt.className = 'hero-art-sq artist-detail-art-card';
+  heroArt.style.setProperty('--artist-card-accent', _artistCardAccent(artistName));
+  heroArt.innerHTML = _artistThumbHtml({
+    name: artistName,
+    image_key: artist?.image_key || '',
+    artwork_key: artist?.artwork_key || '',
+  }, 200);
 }
 
 // ── Artist Image Settings ────────────────────────────────────────────────────

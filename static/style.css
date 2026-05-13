@@ -16801,7 +16801,8 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .artist-card,
 #view-favourites .artist-card,
-#view-fav-artists .artist-card {
+#view-fav-artists .artist-card,
+.artist-detail-art-card {
   --artist-card-accent: rgb(78, 86, 82);
 }
 
@@ -16841,7 +16842,8 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .artist-thumb,
 #view-favourites .artist-thumb,
-#view-fav-artists .artist-thumb {
+#view-fav-artists .artist-thumb,
+.artist-detail-art-card {
   --artist-portrait-size: 74%;
   background: var(--artist-card-accent);
   background:
@@ -16859,7 +16861,8 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .artist-card--palette-ready .artist-thumb,
 #view-favourites .artist-card--palette-ready .artist-thumb,
-#view-fav-artists .artist-card--palette-ready .artist-thumb {
+#view-fav-artists .artist-card--palette-ready .artist-thumb,
+.artist-detail-art-card--palette-ready {
   background: var(--artist-card-accent);
   background:
     radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.18) 0, rgba(255, 255, 255, 0) 30%),
@@ -16872,7 +16875,8 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .artist-portrait,
 #view-favourites .artist-portrait,
-#view-fav-artists .artist-portrait {
+#view-fav-artists .artist-portrait,
+.artist-detail-art-card .artist-portrait {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 50%;
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
@@ -16891,7 +16895,9 @@ thead th:hover .table-col-resizer::after {
 #view-fav-artists .artist-thumb .artist-thumb-img,
 #view-artists .artist-portrait .cover-placeholder,
 #view-favourites .artist-portrait .cover-placeholder,
-#view-fav-artists .artist-portrait .cover-placeholder {
+#view-fav-artists .artist-portrait .cover-placeholder,
+.artist-detail-art-card .artist-thumb-img,
+.artist-detail-art-card .cover-placeholder {
   border: 0 !important;
   border-radius: 0 !important;
   box-shadow: none !important;
@@ -16902,7 +16908,8 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .artist-portrait .cover-placeholder,
 #view-favourites .artist-portrait .cover-placeholder,
-#view-fav-artists .artist-portrait .cover-placeholder {
+#view-fav-artists .artist-portrait .cover-placeholder,
+.artist-detail-art-card .cover-placeholder {
   background: color-mix(in srgb, var(--artist-card-accent) 36%, rgba(255, 255, 255, 0.08));
   color: rgba(255, 255, 255, 0.62);
 }
