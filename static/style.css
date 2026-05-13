@@ -1867,7 +1867,7 @@ h4.settings-subsection-title {
   width: var(--play-icon-size, 14px);
   height: var(--play-icon-size, 14px);
   display: block;
-  transform: translateX(var(--play-icon-shift, 0.9px));
+  transform: translateX(var(--play-icon-shift, 0px));
 }
 
 /* Vertical ••• more-options button — bottom-right of card */
