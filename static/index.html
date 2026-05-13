@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=55" />
+  <link rel="stylesheet" href="/style.css?v=56" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -493,6 +493,7 @@
                 <button class="pl-sort-pill" data-fav-song-sort="album" onclick="App.setFavSongsSort('album')">Album</button>
               </div>
             </div>
+            <div id="favourites-layout-controls" class="collection-layout-controls"></div>
           </div>
         </div>
         <div id="favourites-inline-panels" class="favourites-inline-panels" style="display:none">
@@ -839,7 +840,6 @@
         <div class="view-header">
           <h2 class="tb-page-title">Playlists</h2>
           <div class="view-header-actions">
-            <div id="playlists-layout-controls" class="collection-layout-controls"></div>
             <div style="position:relative">
               <button class="btn-secondary" id="pl-view-sort-btn" onclick="App.togglePlViewSort(event)" title="Sort playlists">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
@@ -874,6 +874,7 @@
               Unplayed Albums
             </button>
             <button class="btn-primary" onclick="App.createPlaylist()">+ New Playlist</button>
+            <div id="playlists-layout-controls" class="collection-layout-controls"></div>
           </div>
         </div>
         <div id="playlists-view-grid" class="playlists-view-grid"></div>
@@ -3500,6 +3501,6 @@
   </div>
 
   <script src="/player.js?v=38"></script>
-  <script src="/app.js?v=48"></script>
+  <script src="/app.js?v=49"></script>
 </body>
 </html>

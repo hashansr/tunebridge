@@ -2593,53 +2593,53 @@ tbody tr:hover .remove-btn { opacity: 1; }
 .collection-layout-controls {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 0;
   flex: 0 0 auto;
+  margin-left: auto;
 }
 
-.collection-view-toggle,
-.collection-density-toggle {
+.collection-view-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   min-height: 34px;
-  padding: 2px;
-  border-radius: 12px;
+  padding: 3px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(173, 198, 255, 0.1);
 }
 
-.collection-density-toggle.is-hidden {
-  display: none;
-}
-
-.collection-toggle-btn,
-.collection-density-btn {
+.collection-toggle-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 30px;
-  height: 28px;
-  padding: 0 8px;
+  width: 36px;
+  height: 30px;
+  padding: 0;
   border: 0;
-  border-radius: 9px;
+  border-radius: 11px;
   background: transparent;
   color: rgba(233, 238, 249, 0.68);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 650;
+  transition: background var(--tb-motion-fast), color var(--tb-motion-fast), box-shadow var(--tb-motion-fast);
 }
 
-.collection-toggle-btn:hover,
-.collection-density-btn:hover {
+.collection-toggle-btn:hover {
   background: rgba(173, 198, 255, 0.08);
   color: var(--text);
 }
 
-.collection-toggle-btn.active,
-.collection-density-btn.active {
+.collection-toggle-btn.active {
   background: var(--accent);
   color: #00285c;
+  box-shadow: 0 8px 20px rgba(173, 198, 255, 0.2);
+}
+
+.collection-layout-icon {
+  display: block;
+  width: 18px;
+  height: 14px;
 }
 
 .collection-list-wrap {

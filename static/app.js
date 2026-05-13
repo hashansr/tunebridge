@@ -1246,19 +1246,28 @@ function _collectionLayout(key) {
 
 function _collectionControlHtml(key) {
   const layout = _collectionLayout(key);
-  const gridActive = layout.mode === 'grid';
+  const isGrid5 = layout.mode === 'grid' && Number(layout.density) === 5;
+  const isGrid6 = layout.mode === 'grid' && Number(layout.density) === 6;
+  const isList = layout.mode === 'list';
   return `
-    <div class="collection-view-toggle" role="group" aria-label="Collection view">
-      <button class="collection-toggle-btn ${gridActive ? 'active' : ''}" onclick="App.setCollectionLayoutMode('${key}','grid')" title="Grid view" aria-label="Grid view" aria-pressed="${gridActive ? 'true' : 'false'}">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"/></svg>
+    <div class="collection-view-toggle" role="group" aria-label="Collection layout">
+      <button class="collection-toggle-btn ${isGrid5 ? 'active' : ''}" onclick="App.setCollectionGridDensity('${key}',5)" title="Grid view - 5 cards per row" aria-label="Grid view, 5 cards per row" aria-pressed="${isGrid5 ? 'true' : 'false'}">
+        <svg class="collection-layout-icon" width="18" height="14" viewBox="0 0 18 14" fill="currentColor" aria-hidden="true">
+          <rect x="1" y="1" width="3.2" height="3.2" rx=".55"/><rect x="7.4" y="1" width="3.2" height="3.2" rx=".55"/><rect x="13.8" y="1" width="3.2" height="3.2" rx=".55"/>
+          <rect x="4.2" y="9.8" width="3.2" height="3.2" rx=".55"/><rect x="10.6" y="9.8" width="3.2" height="3.2" rx=".55"/>
+        </svg>
       </button>
-      <button class="collection-toggle-btn ${!gridActive ? 'active' : ''}" onclick="App.setCollectionLayoutMode('${key}','list')" title="List view" aria-label="List view" aria-pressed="${!gridActive ? 'true' : 'false'}">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 5h3v3H4V5Zm5 0h11v3H9V5ZM4 11h3v3H4v-3Zm5 0h11v3H9v-3ZM4 17h3v3H4v-3Zm5 0h11v3H9v-3Z"/></svg>
+      <button class="collection-toggle-btn ${isGrid6 ? 'active' : ''}" onclick="App.setCollectionGridDensity('${key}',6)" title="Grid view - 6 cards per row" aria-label="Grid view, 6 cards per row" aria-pressed="${isGrid6 ? 'true' : 'false'}">
+        <svg class="collection-layout-icon" width="18" height="14" viewBox="0 0 18 14" fill="currentColor" aria-hidden="true">
+          <rect x="1" y="1" width="3.2" height="3.2" rx=".55"/><rect x="7.4" y="1" width="3.2" height="3.2" rx=".55"/><rect x="13.8" y="1" width="3.2" height="3.2" rx=".55"/>
+          <rect x="1" y="9.8" width="3.2" height="3.2" rx=".55"/><rect x="7.4" y="9.8" width="3.2" height="3.2" rx=".55"/><rect x="13.8" y="9.8" width="3.2" height="3.2" rx=".55"/>
+        </svg>
       </button>
-    </div>
-    <div class="collection-density-toggle ${gridActive ? '' : 'is-hidden'}" role="group" aria-label="Grid density">
-      <button class="collection-density-btn ${Number(layout.density) === 5 ? 'active' : ''}" onclick="App.setCollectionGridDensity('${key}',5)" title="5 cards per row" aria-pressed="${Number(layout.density) === 5 ? 'true' : 'false'}">5</button>
-      <button class="collection-density-btn ${Number(layout.density) === 6 ? 'active' : ''}" onclick="App.setCollectionGridDensity('${key}',6)" title="6 cards per row" aria-pressed="${Number(layout.density) === 6 ? 'true' : 'false'}">6</button>
+      <button class="collection-toggle-btn ${isList ? 'active' : ''}" onclick="App.setCollectionLayoutMode('${key}','list')" title="List view" aria-label="List view" aria-pressed="${isList ? 'true' : 'false'}">
+        <svg class="collection-layout-icon" width="18" height="14" viewBox="0 0 18 14" fill="currentColor" aria-hidden="true">
+          <rect x="1" y="1.3" width="16" height="2.1" rx="1.05"/><rect x="1" y="5.95" width="16" height="2.1" rx="1.05"/><rect x="1" y="10.6" width="16" height="2.1" rx="1.05"/>
+        </svg>
+      </button>
     </div>
   `;
 }
@@ -1266,6 +1275,11 @@ function _collectionControlHtml(key) {
 function _syncCollectionLayoutControls(key) {
   const host = document.getElementById(`${key.replace('_', '-')}-layout-controls`);
   if (host) host.innerHTML = _collectionControlHtml(key);
+  const favHost = document.getElementById('favourites-layout-controls');
+  if (favHost && ((key === 'fav_artists' && state.favPanel === 'artists') || (key === 'fav_albums' && state.favPanel === 'albums'))) {
+    favHost.innerHTML = _collectionControlHtml(key);
+    favHost.style.display = '';
+  }
 }
 
 function _syncAllCollectionLayoutControls() {
@@ -1300,10 +1314,13 @@ function setCollectionLayoutMode(key, mode) {
 
 function setCollectionGridDensity(key, density) {
   if (!_COLLECTION_LAYOUT_DEFAULTS[key]) return;
-  state.collectionLayouts[key] = { ..._collectionLayout(key), density: Number(density) === 6 ? 6 : 5 };
+  const wasList = _collectionLayout(key).mode === 'list';
+  state.collectionLayouts[key] = { ..._collectionLayout(key), mode: 'grid', density: Number(density) === 6 ? 6 : 5 };
+  if (wasList) _resetCollectionPage(key);
   _syncCollectionLayoutControls(key);
   _queueSaveCollectionLayoutPrefs();
   _rerenderCollection(key);
+  if (wasList) _scrollMainTop();
 }
 
 function _setCollectionVisibility(key, grid, listWrap, paginationEl, hasRows) {
@@ -4684,6 +4701,19 @@ function _applyFavouritesPanelState() {
     if (input.value !== state.favSearch) input.value = state.favSearch || '';
   }
   if (clear) clear.style.display = state.favSearch ? '' : 'none';
+  const favLayout = document.getElementById('favourites-layout-controls');
+  if (favLayout) {
+    if (state.favPanel === 'artists') {
+      favLayout.innerHTML = _collectionControlHtml('fav_artists');
+      favLayout.style.display = '';
+    } else if (state.favPanel === 'albums') {
+      favLayout.innerHTML = _collectionControlHtml('fav_albums');
+      favLayout.style.display = '';
+    } else {
+      favLayout.innerHTML = '';
+      favLayout.style.display = 'none';
+    }
+  }
   _renderFavouritesHeroMeta();
 }
 
