@@ -416,7 +416,7 @@ function _artistThumbHtml(a, size = 120) {
 }
 
 function _applyArtistCardPalette(img) {
-  const card = img?.closest?.('.artist-card, .artist-detail-art-card');
+  const card = img?.closest?.('.artist-card, .artist-detail-art-card, .home-artist-art-card, .history-artist-art-card');
   if (!card || !img.naturalWidth || !img.naturalHeight) return;
   try {
     const canvas = document.createElement('canvas');
@@ -448,6 +448,10 @@ function _applyArtistCardPalette(img) {
     card.style.setProperty('--artist-card-accent', `rgb(${r}, ${g}, ${b})`);
     if (card.classList.contains('artist-detail-art-card')) {
       card.classList.add('artist-detail-art-card--palette-ready');
+    } else if (card.classList.contains('home-artist-art-card')) {
+      card.classList.add('home-artist-art-card--palette-ready');
+    } else if (card.classList.contains('history-artist-art-card')) {
+      card.classList.add('history-artist-art-card--palette-ready');
     } else {
       card.classList.add('artist-card--palette-ready');
     }
@@ -5360,13 +5364,14 @@ function _homeSectionVisible(id, visible) {
 }
 
 function _homeArtEl(item) {
-  const artistImageUrl = (item?.kind === 'artist' && item?.image_key)
-    ? `/api/artists/${esc(item.image_key)}/image`
-    : '';
-  if (artistImageUrl) {
-    return `<img src="${artistImageUrl}" loading="lazy" onerror="this.style.display='none'" />`;
-  }
   const kind = String(item?.kind || '').toLowerCase();
+  if (kind === 'artist') {
+    return _artistThumbHtml({
+      name: item?.artist || item?.title || '',
+      image_key: item?.image_key || '',
+      artwork_key: item?.artwork_key || item?.album_art_key || '',
+    }, 120);
+  }
   const playlistId = String(item?.playlist_id || '').trim();
   const artworkKey = item?.artwork_key || '';
   if (kind === 'playlist' && playlistId) {
@@ -5405,10 +5410,13 @@ const _HOME_PLAY_SVG = playSvg(16);
 function _homeRailCardHtml(item) {
   const title = item.title || 'Unknown';
   const subtitle = item.subtitle || '';
+  const isArtist = String(item?.kind || '').toLowerCase() === 'artist';
+  const artClass = isArtist ? 'home-card-art home-artist-art-card' : 'home-card-art';
+  const artStyle = isArtist ? ` style="--artist-card-accent:${_artistCardAccent(item?.artist || item?.title || '')}"` : '';
   // Use div.home-card-play-btn (not button) to avoid nested-button invalid HTML
   return `
     <div class="home-card" onclick="${_homeOnClick(item)}" role="button" tabindex="0">
-      <div class="home-card-art">
+      <div class="${artClass}"${artStyle}>
         ${_homeArtEl(item)}
         <div class="home-card-play-btn" onclick="${_homeOnPlay(item)}" role="button" tabindex="0" title="Play">
           ${_HOME_PLAY_SVG}
@@ -5423,9 +5431,12 @@ function _homePickCardHtml(item) {
   const title = item.title || 'Unknown';
   const subtitle = item.subtitle || '';
   const reason = item.reason || '';
+  const isArtist = String(item?.kind || '').toLowerCase() === 'artist';
+  const artClass = isArtist ? 'home-pick-art home-artist-art-card' : 'home-pick-art';
+  const artStyle = isArtist ? ` style="--artist-card-accent:${_artistCardAccent(item?.artist || item?.title || '')}"` : '';
   return `
     <div class="home-pick-card" onclick="${_homeOnClick(item)}" role="button" tabindex="0">
-      <div class="home-pick-art">
+      <div class="${artClass}"${artStyle}>
         ${_homeArtEl(item)}
         <div class="home-card-play-btn" onclick="${_homeOnPlay(item)}" role="button" tabindex="0" title="Play">
           ${_HOME_PLAY_SVG}
@@ -12693,6 +12704,13 @@ function _historyBucketForEvent(ev, mode) {
 function _historyThumbHtml(item, kind = 'track') {
   const name = item?.artist || item?.title || '';
   const artKey = item?.artwork_key || item?.album_art_key || '';
+  if (kind === 'artist') {
+    return _artistThumbHtml({
+      name,
+      image_key: item?.image_key || '',
+      artwork_key: artKey,
+    }, 40);
+  }
   const fallbackSrc = artKey ? `/api/artwork/${esc(artKey)}` : '';
   const initials = String(name || '?')
     .trim()
@@ -12726,7 +12744,7 @@ function _historyRankRows(rows, kind) {
     return `
       <div class="history-top-row history-top-row--media" ${navAttrs}>
         <div class="history-top-rank">${idx + 1}</div>
-        <div class="history-top-thumb">${_historyThumbHtml(row, kind)}</div>
+        <div class="history-top-thumb${kind === 'artist' ? ' history-artist-art-card' : ''}"${kind === 'artist' ? ` style="--artist-card-accent:${_artistCardAccent(row.artist || '')}"` : ''}>${_historyThumbHtml(row, kind)}</div>
         <div class="history-top-main">
           <div class="history-top-title">${esc(title || 'Unknown')}</div>
           <div class="history-top-sub">${subtitle}</div>
