@@ -5057,20 +5057,11 @@ async function loadFavSongs() {
   const table = document.getElementById('fav-songs-table');
   const tbody = document.getElementById('fav-songs-tbody');
   const empty = document.getElementById('fav-songs-empty');
-  const orphan = document.getElementById('fav-songs-orphans');
-  if (!table || !tbody || !empty || !orphan) return;
+  if (!table || !tbody || !empty) return;
 
   const res = await api('/favourites/songs/tracks').catch(() => ({ tracks: [], orphaned_count: 0 }));
   const tracks = Array.isArray(res?.tracks) ? res.tracks : [];
-  const orphanedCount = Number(res?.orphaned_count || 0);
   state.favSongsData = tracks;
-
-  if (orphanedCount > 0) {
-    orphan.style.display = 'block';
-    orphan.textContent = `${orphanedCount} favourited song${orphanedCount === 1 ? '' : 's'} are no longer in your library.`;
-  } else {
-    orphan.style.display = 'none';
-  }
 
   if (!tracks.length) {
     table.style.display = 'none';
