@@ -390,6 +390,68 @@ function thumbImg(key, size = 38, rounded = '4px') {
   return coverPlaceholder('song', size, rounded);
 }
 
+function _artistImageSrc(a) {
+  if (a?.image_key) return `/api/artists/${encodeURIComponent(a.image_key)}/image`;
+  if (a?.artwork_key) return artworkUrl(a.artwork_key);
+  return '';
+}
+
+function _artistCardAccent(name = '') {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) hash = ((hash << 5) - hash) + name.charCodeAt(i);
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue} 34% 38%)`;
+}
+
+function _artistCardStyle(a) {
+  return `style="--artist-card-accent:${_artistCardAccent(a?.name || '')}"`;
+}
+
+function _artistThumbHtml(a, size = 120) {
+  const src = _artistImageSrc(a);
+  if (src) {
+    return `<img class="artist-thumb-img" src="${src}" alt="${esc(a.name)}" width="${size}" height="${size}" loading="lazy" decoding="async" onload="_applyArtistCardPalette(this)" onerror="this.style.display='none'" />`;
+  }
+  return coverPlaceholder('artist', size, '50%');
+}
+
+function _applyArtistCardPalette(img) {
+  const card = img?.closest?.('.artist-card');
+  if (!card || !img.naturalWidth || !img.naturalHeight) return;
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const size = 28;
+    canvas.width = size;
+    canvas.height = size;
+    ctx.drawImage(img, 0, 0, size, size);
+    const data = ctx.getImageData(0, 0, size, size).data;
+    let r = 0, g = 0, b = 0, weight = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const pr = data[i], pg = data[i + 1], pb = data[i + 2], alpha = data[i + 3];
+      if (alpha < 180) continue;
+      const max = Math.max(pr, pg, pb);
+      const min = Math.min(pr, pg, pb);
+      const light = (max + min) / 2;
+      if (light < 22 || light > 238) continue;
+      const sat = max === 0 ? 0 : (max - min) / max;
+      const w = 0.65 + sat * 1.6;
+      r += pr * w;
+      g += pg * w;
+      b += pb * w;
+      weight += w;
+    }
+    if (!weight) return;
+    r = Math.round(r / weight);
+    g = Math.round(g / weight);
+    b = Math.round(b / weight);
+    card.style.setProperty('--artist-card-accent', `rgb(${r}, ${g}, ${b})`);
+    card.classList.add('artist-card--palette-ready');
+  } catch (_) {
+    // Palette extraction is progressive enhancement; same-origin artwork should work.
+  }
+}
+
 function musicNote(size = 38) {
   const s = Math.round(size * 0.45);
   return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
@@ -1618,15 +1680,10 @@ function renderArtistsGrid() {
   if (grid) {
     grid.innerHTML = filtered.map(a => {
       const hasArtistArt = !!(a.image_key || a.artwork_key);
-      const imgSrc = a.image_key
-        ? `<img src="/api/artists/${a.image_key}/image" alt="${esc(a.name)}" loading="lazy" />`
-        : (a.artwork_key
-          ? thumbImg(a.artwork_key, 120, '6px')
-          : coverPlaceholder('artist', 120, '6px'));
       return `
-      <div class="artist-card" data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
+      <div class="artist-card" data-artist="${esc(a.name)}" ${_artistCardStyle(a)} onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
         <div class="artist-thumb${hasArtistArt ? '' : ' artist-thumb--placeholder'}">
-          ${imgSrc}
+          ${_artistThumbHtml(a, 120)}
           <div class="card-thumb-overlay">
             <button class="card-play-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.playArtistCard(this.dataset.artist)" title="Play all songs">
               ${playSvg(15)}
@@ -4869,13 +4926,9 @@ function _renderFavArtistCards(rows) {
     return;
   }
   grid.innerHTML = rows.map(a => `
-    <div class="artist-card" data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
+    <div class="artist-card" data-artist="${esc(a.name)}" ${_artistCardStyle(a)} onclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
       <div class="artist-thumb${(a.image_key || a.artwork_key) ? '' : ' artist-thumb--placeholder'}">
-        ${a.image_key
-          ? `<img src="/api/artists/${a.image_key}/image" alt="${esc(a.name)}" loading="lazy" />`
-          : (a.artwork_key
-            ? thumbImg(a.artwork_key, 120, '6px')
-            : coverPlaceholder('artist', 120, '6px'))}
+        ${_artistThumbHtml(a, 120)}
         <div class="card-thumb-overlay">
           <button class="card-play-btn" data-artist="${esc(a.name)}" onclick="event.stopPropagation();App.playArtistCard(this.dataset.artist)" title="Play all songs">
             ${playSvg(15)}
