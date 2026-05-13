@@ -16842,7 +16842,7 @@ thead th:hover .table-col-resizer::after {
 #view-artists .artist-thumb,
 #view-favourites .artist-thumb,
 #view-fav-artists .artist-thumb {
-  --artist-portrait-inset: 13.5%;
+  --artist-portrait-size: 74%;
   background: var(--artist-card-accent);
   background:
     radial-gradient(circle at 50% 37%, rgba(255, 255, 255, 0.16) 0, rgba(255, 255, 255, 0) 32%),
@@ -16870,28 +16870,39 @@ thead th:hover .table-col-resizer::after {
     );
 }
 
+#view-artists .artist-portrait,
+#view-favourites .artist-portrait,
+#view-fav-artists .artist-portrait {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+  display: flex;
+  height: var(--artist-portrait-size);
+  left: 50%;
+  overflow: hidden;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: var(--artist-portrait-size);
+}
+
 #view-artists .artist-thumb .artist-thumb-img,
 #view-favourites .artist-thumb .artist-thumb-img,
 #view-fav-artists .artist-thumb .artist-thumb-img,
-#view-artists .artist-thumb .cover-placeholder,
-#view-favourites .artist-thumb .cover-placeholder,
-#view-fav-artists .artist-thumb .cover-placeholder {
-  aspect-ratio: 1 / 1;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 50% !important;
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
-  display: flex;
-  height: auto !important;
-  inset: var(--artist-portrait-inset);
+#view-artists .artist-portrait .cover-placeholder,
+#view-favourites .artist-portrait .cover-placeholder,
+#view-fav-artists .artist-portrait .cover-placeholder {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  height: 100% !important;
   object-fit: cover;
-  overflow: hidden;
-  position: absolute;
-  width: auto !important;
+  width: 100% !important;
 }
 
-#view-artists .artist-thumb .cover-placeholder,
-#view-favourites .artist-thumb .cover-placeholder,
-#view-fav-artists .artist-thumb .cover-placeholder {
+#view-artists .artist-portrait .cover-placeholder,
+#view-favourites .artist-portrait .cover-placeholder,
+#view-fav-artists .artist-portrait .cover-placeholder {
   background: color-mix(in srgb, var(--artist-card-accent) 36%, rgba(255, 255, 255, 0.08));
   color: rgba(255, 255, 255, 0.62);
 }

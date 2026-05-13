@@ -410,9 +410,9 @@ function _artistCardStyle(a) {
 function _artistThumbHtml(a, size = 120) {
   const src = _artistImageSrc(a);
   if (src) {
-    return `<img class="artist-thumb-img" src="${src}" alt="${esc(a.name)}" width="${size}" height="${size}" loading="lazy" decoding="async" onload="_applyArtistCardPalette(this)" onerror="this.style.display='none'" />`;
+    return `<span class="artist-portrait"><img class="artist-thumb-img" src="${src}" alt="${esc(a.name)}" width="${size}" height="${size}" loading="lazy" decoding="async" onload="_applyArtistCardPalette(this)" onerror="this.style.display='none'" /></span>`;
   }
-  return coverPlaceholder('artist', size, '50%');
+  return `<span class="artist-portrait artist-portrait--placeholder">${coverPlaceholder('artist', size, '50%')}</span>`;
 }
 
 function _applyArtistCardPalette(img) {
