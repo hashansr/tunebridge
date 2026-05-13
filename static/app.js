@@ -1252,21 +1252,13 @@ function _collectionControlHtml(key) {
   return `
     <div class="collection-view-toggle" role="group" aria-label="Collection layout">
       <button class="collection-toggle-btn ${isGrid5 ? 'active' : ''}" onclick="App.setCollectionGridDensity('${key}',5)" title="Grid view - 5 cards per row" aria-label="Grid view, 5 cards per row" aria-pressed="${isGrid5 ? 'true' : 'false'}">
-        <svg class="collection-layout-icon" width="18" height="14" viewBox="0 0 18 14" fill="currentColor" aria-hidden="true">
-          <rect x="1" y="1" width="3.2" height="3.2" rx=".55"/><rect x="7.4" y="1" width="3.2" height="3.2" rx=".55"/><rect x="13.8" y="1" width="3.2" height="3.2" rx=".55"/>
-          <rect x="4.2" y="9.8" width="3.2" height="3.2" rx=".55"/><rect x="10.6" y="9.8" width="3.2" height="3.2" rx=".55"/>
-        </svg>
+        <span class="collection-layout-icon collection-layout-icon-5" aria-hidden="true"></span>
       </button>
       <button class="collection-toggle-btn ${isGrid6 ? 'active' : ''}" onclick="App.setCollectionGridDensity('${key}',6)" title="Grid view - 6 cards per row" aria-label="Grid view, 6 cards per row" aria-pressed="${isGrid6 ? 'true' : 'false'}">
-        <svg class="collection-layout-icon" width="18" height="14" viewBox="0 0 18 14" fill="currentColor" aria-hidden="true">
-          <rect x="1" y="1" width="3.2" height="3.2" rx=".55"/><rect x="7.4" y="1" width="3.2" height="3.2" rx=".55"/><rect x="13.8" y="1" width="3.2" height="3.2" rx=".55"/>
-          <rect x="1" y="9.8" width="3.2" height="3.2" rx=".55"/><rect x="7.4" y="9.8" width="3.2" height="3.2" rx=".55"/><rect x="13.8" y="9.8" width="3.2" height="3.2" rx=".55"/>
-        </svg>
+        <span class="collection-layout-icon collection-layout-icon-6" aria-hidden="true"></span>
       </button>
       <button class="collection-toggle-btn ${isList ? 'active' : ''}" onclick="App.setCollectionLayoutMode('${key}','list')" title="List view" aria-label="List view" aria-pressed="${isList ? 'true' : 'false'}">
-        <svg class="collection-layout-icon" width="18" height="14" viewBox="0 0 18 14" fill="currentColor" aria-hidden="true">
-          <rect x="1" y="1.3" width="16" height="2.1" rx="1.05"/><rect x="1" y="5.95" width="16" height="2.1" rx="1.05"/><rect x="1" y="10.6" width="16" height="2.1" rx="1.05"/>
-        </svg>
+        <span class="collection-layout-icon collection-layout-icon-list" aria-hidden="true"></span>
       </button>
     </div>
   `;

@@ -2638,8 +2638,30 @@ tbody tr:hover .remove-btn { opacity: 1; }
 
 .collection-layout-icon {
   display: block;
-  width: 18px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
+  background: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+}
+
+.collection-layout-icon-5 {
+  mask-image: url('/icons/layout-grid-5.svg');
+  -webkit-mask-image: url('/icons/layout-grid-5.svg');
+}
+
+.collection-layout-icon-6 {
+  mask-image: url('/icons/layout-grid-6.svg');
+  -webkit-mask-image: url('/icons/layout-grid-6.svg');
+}
+
+.collection-layout-icon-list {
+  mask-image: url('/icons/layout-list.svg');
+  -webkit-mask-image: url('/icons/layout-list.svg');
 }
 
 .collection-list-wrap {
