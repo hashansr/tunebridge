@@ -241,6 +241,7 @@ DEFAULT_SETTINGS = {
     'update_channel':         '',   # '' = use built-in channel from version.json; 'dev'|'rc'|'prod' = user override
     'update_channel_version': '',   # version the preference was set for; stale if build version changed
     'content_sort_order': {},       # UI content sorting preferences, persisted outside WebView storage
+    'collection_layout_prefs': {},  # UI grid/list + grid-density preferences for collection views
     'table_column_config': {},      # UI table visible-column preferences, persisted outside WebView storage
     'table_column_widths': {},      # UI table resized-column widths, persisted outside WebView storage
     'table_column_order': {},       # UI table column ordering preferences, persisted outside WebView storage

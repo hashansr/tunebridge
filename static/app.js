@@ -7,6 +7,14 @@ const _CONTENT_SORT_DEFAULTS = {
   favourites: { songs: 'my', artists: 'recent', albums: 'recent' },
   coverage: { sort: 'recent' },
 };
+const _COLLECTION_LAYOUT_DEFAULTS = {
+  artists: { mode: 'grid', density: 5 },
+  albums: { mode: 'grid', density: 5 },
+  playlists: { mode: 'grid', density: 5 },
+  fav_artists: { mode: 'grid', density: 5 },
+  fav_albums: { mode: 'grid', density: 5 },
+};
+const _COLLECTION_PAGE_SIZE = 100;
 
 const state = {
   view: 'artists',         // artists | albums | tracks | playlist
@@ -53,6 +61,8 @@ const state = {
   albumAlpha: '',
   _albumScope: '__all__',
   _albumRenderToken: 0,
+  collectionLayouts: _cloneCollectionLayoutDefaults(),
+  collectionPages: { artists: 0, albums: 0, playlists: 0, fav_artists: 0, fav_albums: 0 },
 };
 let _homeLoading = false;
 let _homeAutoRefreshTimer = null;
@@ -87,9 +97,15 @@ async function api(path, opts = {}) {
 let _contentSortPrefs = _cloneContentSortDefaults();
 let _contentSortPrefsHydrated = false;
 let _contentSortSaveTimer = null;
+let _collectionLayoutPrefsHydrated = false;
+let _collectionLayoutSaveTimer = null;
 
 function _cloneContentSortDefaults() {
   return JSON.parse(JSON.stringify(_CONTENT_SORT_DEFAULTS));
+}
+
+function _cloneCollectionLayoutDefaults() {
+  return JSON.parse(JSON.stringify(_COLLECTION_LAYOUT_DEFAULTS));
 }
 
 function _pickAllowed(value, allowed, fallback) {
@@ -203,6 +219,50 @@ function _flushContentSortPrefs() {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content_sort_order: _contentSortPrefs }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+function _normalizeCollectionLayoutPrefs(raw = {}) {
+  const source = (raw && typeof raw === 'object') ? raw : {};
+  const out = _cloneCollectionLayoutDefaults();
+  Object.keys(out).forEach(key => {
+    const row = (source[key] && typeof source[key] === 'object') ? source[key] : {};
+    out[key] = {
+      mode: _pickAllowed(row.mode, ['grid', 'list'], out[key].mode),
+      density: Number(row.density) === 6 ? 6 : 5,
+    };
+  });
+  return out;
+}
+
+function _snapshotCollectionLayoutPrefs() {
+  return _normalizeCollectionLayoutPrefs(state.collectionLayouts);
+}
+
+function _applyCollectionLayoutPrefs(settings = {}) {
+  state.collectionLayouts = _normalizeCollectionLayoutPrefs(settings.collection_layout_prefs);
+  _collectionLayoutPrefsHydrated = true;
+  _syncAllCollectionLayoutControls();
+}
+
+function _queueSaveCollectionLayoutPrefs() {
+  if (!_collectionLayoutPrefsHydrated) return;
+  clearTimeout(_collectionLayoutSaveTimer);
+  _collectionLayoutSaveTimer = setTimeout(() => {
+    api('/settings', { method: 'PUT', body: { collection_layout_prefs: _snapshotCollectionLayoutPrefs() } }).catch(() => {});
+  }, 120);
+}
+
+function _flushCollectionLayoutPrefs() {
+  if (!_collectionLayoutPrefsHydrated) return;
+  clearTimeout(_collectionLayoutSaveTimer);
+  try {
+    fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ collection_layout_prefs: _snapshotCollectionLayoutPrefs() }),
       keepalive: true,
     }).catch(() => {});
   } catch (_) {}
@@ -1050,6 +1110,7 @@ function toggleSidebarSort(event) {
 
 function setSidebarSort(mode) {
   state.playlistSortMode = _pickAllowed(mode, ['alpha', 'created', 'updated'], _CONTENT_SORT_DEFAULTS.playlistSortMode);
+  _resetCollectionPage('playlists');
   localStorage.setItem('sidebarSort', state.playlistSortMode);
   const dd = document.getElementById('pl-view-sort-dd');
   if (dd) dd.style.display = 'none';
@@ -1059,6 +1120,7 @@ function setSidebarSort(mode) {
   });
   _queueSaveContentSortPrefs();
   renderSidebarPlaylists();
+  if (state.view === 'playlists') loadPlaylistsView();
 }
 
 function togglePlViewSort(event) {
@@ -1074,6 +1136,8 @@ function togglePlViewSort(event) {
 
 async function loadPlaylistsView() {
   const grid = document.getElementById('playlists-view-grid');
+  const listWrap = document.getElementById('playlists-list-wrap');
+  const paginationEl = document.getElementById('playlists-pagination');
   const empty = document.getElementById('playlists-view-empty');
   if (!grid) return;
   const favTracksRes = await api('/favourites/songs/tracks').catch(() => ({ tracks: [] }));
@@ -1092,10 +1156,22 @@ async function loadPlaylistsView() {
 
   if (!pls.length && favCount === 0) {
     grid.innerHTML = '';
+    if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
+    if (paginationEl) paginationEl.style.display = 'none';
     if (empty) empty.style.display = 'flex';
     return;
   }
   if (empty) empty.style.display = 'none';
+  _setCollectionVisibility('playlists', grid, listWrap, paginationEl, true);
+
+  const listRows = favCount > 0
+    ? [{ id: '__favourites__', name: 'Favourite Songs', track_count: favCount, created_at: 0, updated_at: 0 }, ...pls]
+    : pls;
+  if (_collectionLayout('playlists').mode === 'list') {
+    grid.innerHTML = '';
+    _renderPlaylistsList(listWrap, paginationEl, listRows, favCount);
+    return;
+  }
 
   const playlistCards = pls.map(pl => {
     // Build cover art HTML
@@ -1164,6 +1240,246 @@ function _scrollMainTop() {
   if (main) main.scrollTop = 0;
 }
 
+function _collectionLayout(key) {
+  return state.collectionLayouts?.[key] || _COLLECTION_LAYOUT_DEFAULTS[key] || { mode: 'grid', density: 5 };
+}
+
+function _collectionControlHtml(key) {
+  const layout = _collectionLayout(key);
+  const gridActive = layout.mode === 'grid';
+  return `
+    <div class="collection-view-toggle" role="group" aria-label="Collection view">
+      <button class="collection-toggle-btn ${gridActive ? 'active' : ''}" onclick="App.setCollectionLayoutMode('${key}','grid')" title="Grid view" aria-label="Grid view" aria-pressed="${gridActive ? 'true' : 'false'}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"/></svg>
+      </button>
+      <button class="collection-toggle-btn ${!gridActive ? 'active' : ''}" onclick="App.setCollectionLayoutMode('${key}','list')" title="List view" aria-label="List view" aria-pressed="${!gridActive ? 'true' : 'false'}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 5h3v3H4V5Zm5 0h11v3H9V5ZM4 11h3v3H4v-3Zm5 0h11v3H9v-3ZM4 17h3v3H4v-3Zm5 0h11v3H9v-3Z"/></svg>
+      </button>
+    </div>
+    <div class="collection-density-toggle ${gridActive ? '' : 'is-hidden'}" role="group" aria-label="Grid density">
+      <button class="collection-density-btn ${Number(layout.density) === 5 ? 'active' : ''}" onclick="App.setCollectionGridDensity('${key}',5)" title="5 cards per row" aria-pressed="${Number(layout.density) === 5 ? 'true' : 'false'}">5</button>
+      <button class="collection-density-btn ${Number(layout.density) === 6 ? 'active' : ''}" onclick="App.setCollectionGridDensity('${key}',6)" title="6 cards per row" aria-pressed="${Number(layout.density) === 6 ? 'true' : 'false'}">6</button>
+    </div>
+  `;
+}
+
+function _syncCollectionLayoutControls(key) {
+  const host = document.getElementById(`${key.replace('_', '-')}-layout-controls`);
+  if (host) host.innerHTML = _collectionControlHtml(key);
+}
+
+function _syncAllCollectionLayoutControls() {
+  Object.keys(_COLLECTION_LAYOUT_DEFAULTS).forEach(_syncCollectionLayoutControls);
+}
+
+function _resetCollectionPage(key) {
+  if (state.collectionPages && Object.prototype.hasOwnProperty.call(state.collectionPages, key)) {
+    state.collectionPages[key] = 0;
+  }
+}
+
+function _rerenderCollection(key) {
+  if (key === 'artists') renderArtistsGrid();
+  else if (key === 'albums') renderAlbumsGrid();
+  else if (key === 'playlists') loadPlaylistsView();
+  else if (key === 'fav_artists') loadFavArtists();
+  else if (key === 'fav_albums') loadFavAlbums();
+}
+
+function setCollectionLayoutMode(key, mode) {
+  if (!_COLLECTION_LAYOUT_DEFAULTS[key]) return;
+  const nextMode = _pickAllowed(mode, ['grid', 'list'], 'grid');
+  state.collectionLayouts[key] = { ..._collectionLayout(key), mode: nextMode };
+  _resetCollectionPage(key);
+  if (nextMode === 'list' && key === 'albums') state._albumRenderToken++;
+  _syncCollectionLayoutControls(key);
+  _queueSaveCollectionLayoutPrefs();
+  _rerenderCollection(key);
+  _scrollMainTop();
+}
+
+function setCollectionGridDensity(key, density) {
+  if (!_COLLECTION_LAYOUT_DEFAULTS[key]) return;
+  state.collectionLayouts[key] = { ..._collectionLayout(key), density: Number(density) === 6 ? 6 : 5 };
+  _syncCollectionLayoutControls(key);
+  _queueSaveCollectionLayoutPrefs();
+  _rerenderCollection(key);
+}
+
+function _setCollectionVisibility(key, grid, listWrap, paginationEl, hasRows) {
+  const layout = _collectionLayout(key);
+  const isGrid = layout.mode === 'grid';
+  if (grid) {
+    grid.style.display = isGrid || !hasRows ? '' : 'none';
+    grid.dataset.gridDensity = String(layout.density || 5);
+  }
+  if (listWrap) listWrap.style.display = (!isGrid && hasRows) ? '' : 'none';
+  if (paginationEl && (isGrid || !hasRows)) paginationEl.style.display = 'none';
+}
+
+function _collectionPageRows(key, rows) {
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / _COLLECTION_PAGE_SIZE));
+  if (!state.collectionPages) state.collectionPages = {};
+  if ((state.collectionPages[key] || 0) >= totalPages) state.collectionPages[key] = totalPages - 1;
+  if ((state.collectionPages[key] || 0) < 0) state.collectionPages[key] = 0;
+  const page = state.collectionPages[key] || 0;
+  const start = page * _COLLECTION_PAGE_SIZE;
+  const end = Math.min(start + _COLLECTION_PAGE_SIZE, total);
+  return { page, totalPages, start, end, rows: rows.slice(start, end) };
+}
+
+function _renderCollectionPagination(key, paginationEl, total, pageInfo) {
+  if (!paginationEl || total <= _COLLECTION_PAGE_SIZE) {
+    if (paginationEl) paginationEl.style.display = 'none';
+    return;
+  }
+  paginationEl.innerHTML = `
+    <button class="btn-secondary" onclick="App.collectionPrevPage('${key}')" ${pageInfo.page === 0 ? 'disabled' : ''}>‹ Prev</button>
+    <span class="songs-page-info">Page ${pageInfo.page + 1} of ${pageInfo.totalPages} &nbsp;·&nbsp; ${(pageInfo.start + 1).toLocaleString()}-${pageInfo.end.toLocaleString()} of ${total.toLocaleString()}</span>
+    <button class="btn-secondary" onclick="App.collectionNextPage('${key}')" ${pageInfo.page >= pageInfo.totalPages - 1 ? 'disabled' : ''}>Next ›</button>
+  `;
+  paginationEl.style.display = 'flex';
+}
+
+function collectionPrevPage(key) {
+  if (!state.collectionPages || (state.collectionPages[key] || 0) <= 0) return;
+  state.collectionPages[key]--;
+  _rerenderCollection(key);
+  _scrollMainTop();
+}
+
+function collectionNextPage(key) {
+  if (!state.collectionPages) state.collectionPages = {};
+  state.collectionPages[key] = (state.collectionPages[key] || 0) + 1;
+  _rerenderCollection(key);
+  _scrollMainTop();
+}
+
+function _collectionThumb(kind, html) {
+  return `<div class="collection-row-thumb collection-row-thumb-${kind}">${html}</div>`;
+}
+
+function _renderArtistsList(wrap, paginationEl, key, rows) {
+  if (!wrap) return;
+  const pageInfo = _collectionPageRows(key, rows);
+  _renderCollectionPagination(key, paginationEl, rows.length, pageInfo);
+  wrap.innerHTML = `
+    <div class="tb-table-scroll-area">
+      <table class="collection-table tb-table tb-table-density-compact">
+        <thead><tr>
+          <th class="collection-col-title">Artist</th>
+          <th>Albums</th>
+          <th>Songs</th>
+          <th>Favourite</th>
+          <th data-col="actions">Actions</th>
+        </tr></thead>
+        <tbody>${pageInfo.rows.map(a => {
+          const art = a.image_key
+            ? `<img src="/api/artists/${a.image_key}/image" alt="${esc(a.name)}" loading="lazy" />`
+            : (a.artwork_key ? thumbImg(a.artwork_key, 34, '5px') : coverPlaceholder('artist', 34, '5px'));
+          return `
+          <tr data-artist="${esc(a.name)}" tabindex="0" onclick="if(!event.target.closest('button')) App.showArtist(this.dataset.artist)" onkeydown="if(event.key==='Enter') App.showArtist(this.dataset.artist)" ondblclick="App.showArtist(this.dataset.artist)" oncontextmenu="event.preventDefault();App.showArtistCtxMenu(event,this.dataset.artist)">
+            <td class="collection-col-title"><div class="collection-title-cell">${_collectionThumb('artist', art)}<span title="${esc(a.name)}">${esc(a.name)}</span></div></td>
+            <td>${Number(a.album_count || 0).toLocaleString()}</td>
+            <td>${Number(a.track_count || 0).toLocaleString()}</td>
+            <td>${_favToggleBtn('artists', _normArtistId(a.name), 'track-fav-btn')}</td>
+            <td data-col="actions"><div class="col-act-inner">
+              <button class="row-ctx-btn" onclick="event.stopPropagation();App.playArtistCard(this.closest('tr').dataset.artist)" title="Play all songs">${playSvg(12)}</button>
+              <button class="row-ctx-btn" onclick="event.stopPropagation();App.showArtistCtxMenu(event,this.closest('tr').dataset.artist)" title="More actions"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
+            </div></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+  _enhanceTableSystem(wrap);
+}
+
+function _renderAlbumsList(wrap, paginationEl, key, rows) {
+  if (!wrap) return;
+  const pageInfo = _collectionPageRows(key, rows);
+  _renderCollectionPagination(key, paginationEl, rows.length, pageInfo);
+  wrap.innerHTML = `
+    <div class="tb-table-scroll-area">
+      <table class="collection-table tb-table tb-table-density-compact">
+        <thead><tr>
+          <th class="collection-col-title">Album</th>
+          <th>Artist</th>
+          <th>Year</th>
+          <th>Songs</th>
+          <th>Favourite</th>
+          <th data-col="actions">Actions</th>
+        </tr></thead>
+        <tbody>${pageInfo.rows.map(al => {
+          const art = al.artwork_key ? thumbImg(al.artwork_key, 34, '5px') : coverPlaceholder('album', 34, '5px');
+          return `
+          <tr data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" tabindex="0" onclick="if(!event.target.closest('button')) App.showAlbum(this.dataset.artist,this.dataset.album)" onkeydown="if(event.key==='Enter') App.showAlbum(this.dataset.artist,this.dataset.album)" ondblclick="App.showAlbum(this.dataset.artist,this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
+            <td class="collection-col-title"><div class="collection-title-cell">${_collectionThumb('album', art)}<span title="${esc(al.name)}">${esc(al.name)}</span></div></td>
+            <td class="cell-artist" title="${esc(al.artist)}">${esc(al.artist)}</td>
+            <td>${esc(al.year || '')}</td>
+            <td>${Number(al.track_count || 0).toLocaleString()}</td>
+            <td>${_favToggleBtn('albums', al.artwork_key || '', 'track-fav-btn')}</td>
+            <td data-col="actions"><div class="col-act-inner">
+              <button class="row-ctx-btn" onclick="event.stopPropagation();App.playAlbum(this.closest('tr').dataset.artist,this.closest('tr').dataset.album)" title="Play album">${playSvg(12)}</button>
+              <button class="row-ctx-btn" onclick="event.stopPropagation();App.showAlbumCtxMenu(event,this.closest('tr').dataset.artist,this.closest('tr').dataset.album)" title="More actions"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
+            </div></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+  _enhanceTableSystem(wrap);
+}
+
+function _formatCollectionDate(ts) {
+  const n = Number(ts || 0);
+  return n > 0 ? new Date(n * 1000).toLocaleDateString() : '';
+}
+
+function _renderPlaylistsList(wrap, paginationEl, rows, favCount) {
+  if (!wrap) return;
+  const pageInfo = _collectionPageRows('playlists', rows);
+  _renderCollectionPagination('playlists', paginationEl, rows.length, pageInfo);
+  wrap.innerHTML = `
+    <div class="tb-table-scroll-area">
+      <table class="collection-table tb-table tb-table-density-compact">
+        <thead><tr>
+          <th class="collection-col-title">Playlist</th>
+          <th>Tracks</th>
+          <th>Type</th>
+          <th>Created</th>
+          <th>Updated</th>
+          <th data-col="actions">Actions</th>
+        </tr></thead>
+        <tbody>${pageInfo.rows.map(pl => {
+          const count = pl.track_count != null ? pl.track_count : (pl.tracks ? pl.tracks.length : 0);
+          let coverHtml = '';
+          if (pl.id === '__favourites__') {
+            coverHtml = `<img src="${_FAV_PLAYLIST_COVER}" alt="" loading="lazy" />`;
+          } else if (pl.has_artwork) {
+            coverHtml = `<img src="/api/playlists/${pl.id}/artwork?t=${Date.now()}" alt="" loading="lazy" />`;
+          } else {
+            const keys = (pl.artwork_keys || []).slice(0, 1);
+            coverHtml = keys.length ? `<img src="/api/artwork/${keys[0]}" alt="" loading="lazy" />` : coverPlaceholder('playlist', 34, '5px');
+          }
+          const open = pl.id === '__favourites__' ? "App.showView('fav-songs')" : `App.openPlaylist('${pl.id}')`;
+          const type = pl.id === '__favourites__' ? 'Favourites' : (pl.is_smart ? 'Smart' : 'Manual');
+          return `
+          <tr data-playlist-id="${esc(pl.id)}" tabindex="0" onclick="if(!event.target.closest('button')) ${open}" onkeydown="if(event.key==='Enter') ${open}" ondblclick="${open}">
+            <td class="collection-col-title"><div class="collection-title-cell">${_collectionThumb('playlist', coverHtml)}<span title="${esc(pl.name)}">${esc(pl.name)}</span></div></td>
+            <td>${Number(count).toLocaleString()}</td>
+            <td>${esc(type)}</td>
+            <td>${esc(_formatCollectionDate(pl.created_at))}</td>
+            <td>${esc(_formatCollectionDate(pl.updated_at || pl.created_at))}</td>
+            <td data-col="actions"><div class="col-act-inner">
+              ${pl.id === '__favourites__' ? '' : `<button class="row-ctx-btn" onclick="event.stopPropagation();App.deletePlaylist('${pl.id}')" title="Delete playlist"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>`}
+            </div></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+  _enhanceTableSystem(wrap);
+}
+
 function _resetPlaylistDetailScroll() {
   _scrollMainTop();
   const tableScroll = document.querySelector('#view-playlist .tb-table-scroll-area');
@@ -1192,6 +1508,7 @@ function _renderAlphaButtons({ barEl, presentLetters, activeLetter, clickFn }) {
 const _debouncedRenderArtistsGrid = _debounce(() => { renderArtistsGrid(); _scrollMainTop(); }, 200);
 function setArtistSearch(query) {
   state.artistSearch = String(query || '');
+  _resetCollectionPage('artists');
   const clearBtn = document.getElementById('artists-filter-clear');
   if (clearBtn) clearBtn.style.display = state.artistSearch ? 'block' : 'none';
   _debouncedRenderArtistsGrid();
@@ -1199,6 +1516,7 @@ function setArtistSearch(query) {
 
 function clearArtistSearch() {
   state.artistSearch = '';
+  _resetCollectionPage('artists');
   const inp = document.getElementById('artists-filter-input');
   if (inp) inp.value = '';
   const clearBtn = document.getElementById('artists-filter-clear');
@@ -1209,6 +1527,7 @@ function clearArtistSearch() {
 function setArtistAlphaFilter(letter = '') {
   const target = String(letter || '').toUpperCase();
   state.artistAlpha = state.artistAlpha === target ? '' : target;
+  _resetCollectionPage('artists');
   renderArtistsGrid();
   _scrollMainTop();
 }
@@ -1225,6 +1544,8 @@ function _filteredArtistsData() {
 
 function renderArtistsGrid() {
   const grid = document.getElementById('artists-grid');
+  const listWrap = document.getElementById('artists-list-wrap');
+  const paginationEl = document.getElementById('artists-pagination');
   const alphaBar = document.getElementById('alpha-bar');
   const artistsEmpty = document.getElementById('artists-empty');
   const countEl = document.getElementById('artists-count');
@@ -1239,6 +1560,8 @@ function renderArtistsGrid() {
 
   if (!base.length) {
     if (grid) grid.innerHTML = '';
+    if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
+    if (paginationEl) paginationEl.style.display = 'none';
     if (alphaBar) alphaBar.innerHTML = '';
     if (artistsEmpty) {
       const title = artistsEmpty.querySelector('.empty-title');
@@ -1261,6 +1584,8 @@ function renderArtistsGrid() {
 
   if (!filtered.length) {
     if (grid) grid.innerHTML = '';
+    if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
+    if (paginationEl) paginationEl.style.display = 'none';
     if (artistsEmpty) {
       const title = artistsEmpty.querySelector('.empty-title');
       const hint = artistsEmpty.querySelector('.empty-subtitle');
@@ -1274,6 +1599,13 @@ function renderArtistsGrid() {
   }
 
   if (artistsEmpty) artistsEmpty.style.display = 'none';
+  const isList = _collectionLayout('artists').mode === 'list';
+  _setCollectionVisibility('artists', grid, listWrap, paginationEl, true);
+  if (isList) {
+    if (grid) grid.innerHTML = '';
+    _renderArtistsList(listWrap, paginationEl, 'artists', filtered);
+    return;
+  }
   if (grid) {
     grid.innerHTML = filtered.map(a => {
       const hasArtistArt = !!(a.image_key || a.artwork_key);
@@ -1315,7 +1647,12 @@ function _openArtistImageForCard(artistName) {
 }
 
 async function loadArtists() {
-  document.getElementById('artists-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
+  const artistsGrid = document.getElementById('artists-grid');
+  if (artistsGrid) { artistsGrid.style.display = ''; artistsGrid.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>'; }
+  const listWrap = document.getElementById('artists-list-wrap');
+  const paginationEl = document.getElementById('artists-pagination');
+  if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
+  if (paginationEl) paginationEl.style.display = 'none';
   let artists;
   try {
     artists = await api('/library/artists');
@@ -1346,6 +1683,7 @@ function scrollToLetter(letter) {
 const _debouncedRenderAlbumsGrid = _debounce(() => { renderAlbumsGrid(); _scrollMainTop(); }, 200);
 function setAlbumSearch(query) {
   state.albumSearch = String(query || '');
+  _resetCollectionPage('albums');
   const clearBtn = document.getElementById('albums-filter-clear');
   if (clearBtn) clearBtn.style.display = state.albumSearch ? 'block' : 'none';
   _debouncedRenderAlbumsGrid();
@@ -1353,6 +1691,7 @@ function setAlbumSearch(query) {
 
 function clearAlbumSearch() {
   state.albumSearch = '';
+  _resetCollectionPage('albums');
   const inp = document.getElementById('albums-filter-input');
   if (inp) inp.value = '';
   const clearBtn = document.getElementById('albums-filter-clear');
@@ -1363,6 +1702,7 @@ function clearAlbumSearch() {
 function setAlbumAlphaFilter(letter = '') {
   const target = String(letter || '').toUpperCase();
   state.albumAlpha = state.albumAlpha === target ? '' : target;
+  _resetCollectionPage('albums');
   renderAlbumsGrid();
   _scrollMainTop();
 }
@@ -1432,6 +1772,8 @@ function _renderAlbumGridBatches(grid, rows, artistFilter, token, start = 0) {
 
 function renderAlbumsGrid() {
   const grid = document.getElementById('albums-grid');
+  const listWrap = document.getElementById('albums-list-wrap');
+  const paginationEl = document.getElementById('albums-pagination');
   const countEl = document.getElementById('albums-count');
   const albumsAlphaBar = document.getElementById('albums-alpha-bar');
   const albumsEmpty = document.getElementById('albums-empty');
@@ -1459,6 +1801,8 @@ function renderAlbumsGrid() {
 
   if (!base.length) {
     if (grid) grid.innerHTML = '';
+    if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
+    if (paginationEl) paginationEl.style.display = 'none';
     if (albumsEmpty) {
       const title = albumsEmpty.querySelector('.empty-title');
       const hint = albumsEmpty.querySelector('.empty-subtitle');
@@ -1473,6 +1817,8 @@ function renderAlbumsGrid() {
 
   if (!filtered.length) {
     if (grid) grid.innerHTML = '';
+    if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
+    if (paginationEl) paginationEl.style.display = 'none';
     if (albumsEmpty) {
       const title = albumsEmpty.querySelector('.empty-title');
       const hint = albumsEmpty.querySelector('.empty-subtitle');
@@ -1486,6 +1832,14 @@ function renderAlbumsGrid() {
   }
 
   if (albumsEmpty) albumsEmpty.style.display = 'none';
+  const isList = _collectionLayout('albums').mode === 'list';
+  _setCollectionVisibility('albums', grid, listWrap, paginationEl, true);
+  if (isList) {
+    state._albumRenderToken++;
+    if (grid) grid.innerHTML = '';
+    _renderAlbumsList(listWrap, paginationEl, 'albums', filtered);
+    return;
+  }
   if (grid) {
     const token = ++state._albumRenderToken;
     grid.innerHTML = '';
@@ -1498,7 +1852,12 @@ function scrollToAlbumLetter(letter) {
 }
 
 async function loadAlbums(artistFilter = null) {
-  document.getElementById('albums-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
+  const albumsGrid = document.getElementById('albums-grid');
+  if (albumsGrid) { albumsGrid.style.display = ''; albumsGrid.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>'; }
+  const listWrap = document.getElementById('albums-list-wrap');
+  const paginationEl = document.getElementById('albums-pagination');
+  if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
+  if (paginationEl) paginationEl.style.display = 'none';
   const query = artistFilter ? `?artist=${encodeURIComponent(artistFilter)}` : '';
   let albums;
   try {
@@ -1532,6 +1891,7 @@ async function loadAlbums(artistFilter = null) {
     state._albumScope = scope;
     state.albumSearch = '';
     state.albumAlpha = '';
+    _resetCollectionPage('albums');
   }
 
   const hero = document.getElementById('artist-hero');
@@ -4360,6 +4720,8 @@ function _matchesFavSearch(row, keys) {
 
 function setFavouritesSearch(value) {
   state.favSearch = String(value || '');
+  if (state.favPanel === 'artists') _resetCollectionPage('fav_artists');
+  else if (state.favPanel === 'albums') _resetCollectionPage('fav_albums');
   _applyFavouritesPanelState();
   if (state.favPanel === 'artists') loadFavArtists();
   else if (state.favPanel === 'albums') loadFavAlbums();
@@ -4368,6 +4730,8 @@ function setFavouritesSearch(value) {
 
 function clearFavouritesSearch() {
   state.favSearch = '';
+  if (state.favPanel === 'artists') _resetCollectionPage('fav_artists');
+  else if (state.favPanel === 'albums') _resetCollectionPage('fav_albums');
   _applyFavouritesPanelState();
   if (state.favPanel === 'artists') loadFavArtists();
   else if (state.favPanel === 'albums') loadFavAlbums();
@@ -4394,6 +4758,8 @@ async function selectFavouritesPanel(panel) {
     el.style.display = '';
     el.setAttribute('aria-hidden', isActive ? 'false' : 'true');
   });
+  if (normalized === 'artists') _resetCollectionPage('fav_artists');
+  if (normalized === 'albums') _resetCollectionPage('fav_albums');
 
   if (normalized === 'artists') await loadFavArtists();
   else if (normalized === 'albums') await loadFavAlbums();
@@ -4456,8 +4822,13 @@ async function loadFavouritesSummary() {
 
 function _renderFavArtistCards(rows) {
   const grid = document.getElementById('fav-artists-grid');
+  const listWrap = document.getElementById('fav-artists-list-wrap');
+  const paginationEl = document.getElementById('fav-artists-pagination');
   if (!grid) return;
   if (!rows.length) {
+    if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
+    if (paginationEl) paginationEl.style.display = 'none';
+    grid.style.display = '';
     const searching = !!_favSearchNeedle();
     grid.innerHTML = `
       <div class="empty-state favourites-grid-empty">
@@ -4467,6 +4838,12 @@ function _renderFavArtistCards(rows) {
         <button class="btn-secondary" onclick="${searching ? 'App.clearFavouritesSearch()' : "App.showView('artists')"}">${searching ? 'Clear Search' : 'Browse Artists'}</button>
       </div>
     `;
+    return;
+  }
+  _setCollectionVisibility('fav_artists', grid, listWrap, paginationEl, true);
+  if (_collectionLayout('fav_artists').mode === 'list') {
+    grid.innerHTML = '';
+    _renderArtistsList(listWrap, paginationEl, 'fav_artists', rows);
     return;
   }
   grid.innerHTML = rows.map(a => `
@@ -4512,6 +4889,7 @@ async function loadFavArtists() {
 
 function setFavArtistsSort(mode) {
   state.favArtistsSort = _pickAllowed(mode, ['recent', 'az'], _CONTENT_SORT_DEFAULTS.favourites.artists);
+  _resetCollectionPage('fav_artists');
   _syncSortControls();
   _queueSaveContentSortPrefs();
   loadFavArtists();
@@ -4519,8 +4897,13 @@ function setFavArtistsSort(mode) {
 
 function _renderFavAlbumCards(rows) {
   const grid = document.getElementById('fav-albums-grid');
+  const listWrap = document.getElementById('fav-albums-list-wrap');
+  const paginationEl = document.getElementById('fav-albums-pagination');
   if (!grid) return;
   if (!rows.length) {
+    if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
+    if (paginationEl) paginationEl.style.display = 'none';
+    grid.style.display = '';
     const searching = !!_favSearchNeedle();
     grid.innerHTML = `
       <div class="empty-state favourites-grid-empty">
@@ -4530,6 +4913,12 @@ function _renderFavAlbumCards(rows) {
         <button class="btn-secondary" onclick="${searching ? 'App.clearFavouritesSearch()' : "App.showView('albums')"}">${searching ? 'Clear Search' : 'Browse Albums'}</button>
       </div>
     `;
+    return;
+  }
+  _setCollectionVisibility('fav_albums', grid, listWrap, paginationEl, true);
+  if (_collectionLayout('fav_albums').mode === 'list') {
+    grid.innerHTML = '';
+    _renderAlbumsList(listWrap, paginationEl, 'fav_albums', rows);
     return;
   }
   grid.innerHTML = rows.map(al => `
@@ -4575,6 +4964,7 @@ async function loadFavAlbums() {
 
 function setFavAlbumsSort(mode) {
   state.favAlbumsSort = _pickAllowed(mode, ['recent', 'az'], _CONTENT_SORT_DEFAULTS.favourites.albums);
+  _resetCollectionPage('fav_albums');
   _syncSortControls();
   _queueSaveContentSortPrefs();
   loadFavAlbums();
@@ -10974,6 +11364,7 @@ async function loadSettings() {
   ]);
   _settings = settings || {};
   if (!_contentSortPrefsHydrated) _applyContentSortPrefs(settings);
+  if (!_collectionLayoutPrefsHydrated) _applyCollectionLayoutPrefs(settings);
   if (!_tablePrefsHydrated) _hydrateTablePrefsFromSettings(settings);
   if (typeof Player !== 'undefined' && Player.updateCapabilities) {
     Player.updateCapabilities(cap || {});
@@ -13541,6 +13932,10 @@ const App = {
   setFavArtistsSort,
   setFavAlbumsSort,
   setFavSongsSort,
+  setCollectionLayoutMode,
+  setCollectionGridDensity,
+  collectionPrevPage,
+  collectionNextPage,
   favSongsReorder,
   favArtistsReorder,
   favAlbumsReorder,
@@ -17488,6 +17883,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   _initFrOverlaySelection();
   window.addEventListener('beforeunload', (e) => {
     _flushContentSortPrefs();
+    _flushCollectionLayoutPrefs();
     _flushTablePrefs();
     if (!_hasUnsavedMlPreview()) return;
     e.preventDefault();

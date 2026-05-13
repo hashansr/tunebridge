@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=54" />
+  <link rel="stylesheet" href="/style.css?v=55" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -247,10 +247,13 @@
               <input id="artists-filter-input" type="text" placeholder="Search artists..." oninput="App.setArtistSearch(this.value)" />
               <button id="artists-filter-clear" class="pl-filter-clear" onclick="App.clearArtistSearch()" style="display:none" title="Clear search">&#10005;</button>
             </div>
+            <div id="artists-layout-controls" class="collection-layout-controls"></div>
           </div>
         </div>
         <div id="alpha-bar" class="alpha-bar"></div>
         <div id="artists-grid" class="artist-grid"></div>
+        <div id="artists-list-wrap" class="collection-list-wrap tb-table-shell" style="display:none"></div>
+        <div id="artists-pagination" class="collection-pagination" style="display:none"></div>
         <div id="artists-empty" class="empty-state" style="display:none">
           <div class="empty-icon-circle" id="artists-empty-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -273,6 +276,7 @@
               <input id="albums-filter-input" type="text" placeholder="Search albums..." oninput="App.setAlbumSearch(this.value)" />
               <button id="albums-filter-clear" class="pl-filter-clear" onclick="App.clearAlbumSearch()" style="display:none" title="Clear search">&#10005;</button>
             </div>
+            <div id="albums-layout-controls" class="collection-layout-controls"></div>
           </div>
         </div>
         <div id="albums-alpha-bar" class="alpha-bar" style="display:none"></div>
@@ -302,6 +306,8 @@
           </div>
         </div>
         <div id="albums-grid" class="album-grid"></div>
+        <div id="albums-list-wrap" class="collection-list-wrap tb-table-shell" style="display:none"></div>
+        <div id="albums-pagination" class="collection-pagination" style="display:none"></div>
         <div id="albums-empty" class="empty-state" style="display:none">
           <div class="empty-icon-circle" id="albums-empty-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="9"/></svg>
@@ -504,8 +510,11 @@
                 <button class="pl-sort-pill active" data-fav-artist-sort="recent" onclick="App.setFavArtistsSort('recent')">Recently Added</button>
                 <button class="pl-sort-pill" data-fav-artist-sort="az" onclick="App.setFavArtistsSort('az')">A–Z</button>
               </div>
+              <div id="fav-artists-layout-controls" class="collection-layout-controls"></div>
             </div>
             <div id="fav-artists-grid" class="artist-grid favourites-fixed-grid"></div>
+            <div id="fav-artists-list-wrap" class="collection-list-wrap tb-table-shell" style="display:none"></div>
+            <div id="fav-artists-pagination" class="collection-pagination" style="display:none"></div>
           </div>
 
           <div id="favourites-panel-albums" class="favourites-inline-panel" style="display:none">
@@ -522,8 +531,11 @@
                 <button class="pl-sort-pill active" data-fav-album-sort="recent" onclick="App.setFavAlbumsSort('recent')">Recently Added</button>
                 <button class="pl-sort-pill" data-fav-album-sort="az" onclick="App.setFavAlbumsSort('az')">A–Z</button>
               </div>
+              <div id="fav-albums-layout-controls" class="collection-layout-controls"></div>
             </div>
             <div id="fav-albums-grid" class="album-grid favourites-fixed-grid"></div>
+            <div id="fav-albums-list-wrap" class="collection-list-wrap tb-table-shell" style="display:none"></div>
+            <div id="fav-albums-pagination" class="collection-pagination" style="display:none"></div>
           </div>
 
           <div id="favourites-panel-songs" class="favourites-inline-panel" style="display:none">
@@ -827,6 +839,7 @@
         <div class="view-header">
           <h2 class="tb-page-title">Playlists</h2>
           <div class="view-header-actions">
+            <div id="playlists-layout-controls" class="collection-layout-controls"></div>
             <div style="position:relative">
               <button class="btn-secondary" id="pl-view-sort-btn" onclick="App.togglePlViewSort(event)" title="Sort playlists">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
@@ -864,6 +877,8 @@
           </div>
         </div>
         <div id="playlists-view-grid" class="playlists-view-grid"></div>
+        <div id="playlists-list-wrap" class="collection-list-wrap tb-table-shell" style="display:none"></div>
+        <div id="playlists-pagination" class="collection-pagination" style="display:none"></div>
         <div id="playlists-view-empty" class="empty-state" style="display:none">
           <div class="empty-icon-circle">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
@@ -3485,6 +3500,6 @@
   </div>
 
   <script src="/player.js?v=38"></script>
-  <script src="/app.js?v=47"></script>
+  <script src="/app.js?v=48"></script>
 </body>
 </html>
