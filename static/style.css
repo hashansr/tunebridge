@@ -16842,8 +16842,7 @@ thead th:hover .table-col-resizer::after {
 #view-artists .artist-thumb,
 #view-favourites .artist-thumb,
 #view-fav-artists .artist-thumb {
-  --artist-card-rim: color-mix(in srgb, var(--artist-card-accent) 70%, white 14%);
-  align-items: center;
+  --artist-portrait-inset: 13.5%;
   background: var(--artist-card-accent);
   background:
     radial-gradient(circle at 50% 37%, rgba(255, 255, 255, 0.16) 0, rgba(255, 255, 255, 0) 32%),
@@ -16853,10 +16852,9 @@ thead th:hover .table-col-resizer::after {
       color-mix(in srgb, var(--artist-card-accent) 82%, #151515 18%) 100%
     );
   border-radius: 10px;
-  display: flex;
-  justify-content: center;
+  display: block;
   overflow: hidden;
-  padding: 17%;
+  position: relative;
 }
 
 #view-artists .artist-card--palette-ready .artist-thumb,
@@ -16883,10 +16881,12 @@ thead th:hover .table-col-resizer::after {
   border-radius: 50% !important;
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
   display: flex;
-  height: 72% !important;
+  height: auto !important;
+  inset: var(--artist-portrait-inset);
   object-fit: cover;
   overflow: hidden;
-  width: 72% !important;
+  position: absolute;
+  width: auto !important;
 }
 
 #view-artists .artist-thumb .cover-placeholder,
