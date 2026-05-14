@@ -12529,9 +12529,9 @@ tr.player-active .track-title { color: var(--accent); }
   --album-hero-accent: 173, 198, 255;
   position: relative;
   align-items: center;
-  min-height: 430px;
-  margin: calc(-1 * (var(--main-nav-top-inset) + var(--main-nav-overlay-clearance))) calc(-1 * var(--page-content-inset)) -118px;
-  padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 28px) var(--page-content-inset) 154px;
+  min-height: 312px;
+  margin: calc(-1 * (var(--main-nav-top-inset) + var(--main-nav-overlay-clearance))) calc(-1 * var(--page-content-inset)) 18px;
+  padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 28px) var(--page-content-inset) 36px;
   overflow: hidden;
   isolation: isolate;
   background:
@@ -12643,18 +12643,19 @@ tr.player-active .track-title { color: var(--accent); }
   position: relative;
   z-index: 1;
   margin-top: 0;
-  background:
-    linear-gradient(180deg, rgba(var(--album-hero-primary), 0.13), rgba(var(--album-hero-secondary), 0.06) 90px, rgba(7, 10, 16, 0) 180px);
+  box-shadow:
+    0 -80px 120px rgba(var(--album-hero-primary), 0.14),
+    0 -42px 78px rgba(var(--album-hero-secondary), 0.08);
 }
 
 #view-tracks #album-hero.album-detail-hero.is-album-context + #tracks-table-wrap::before {
   content: "";
   position: absolute;
-  inset: -128px calc(-1 * var(--page-content-inset)) auto;
-  height: 240px;
+  inset: -72px calc(-1 * var(--page-content-inset)) auto;
+  height: 96px;
   z-index: -1;
   background:
-    linear-gradient(180deg, rgba(var(--album-hero-primary), 0.18), rgba(var(--album-hero-secondary), 0.08) 42%, rgba(7, 10, 16, 0) 100%);
+    linear-gradient(180deg, rgba(var(--album-hero-primary), 0.16), rgba(var(--album-hero-secondary), 0.07) 48%, rgba(7, 10, 16, 0) 100%);
   pointer-events: none;
 }
 
@@ -12664,8 +12665,8 @@ tr.player-active .track-title { color: var(--accent); }
     flex-direction: column;
     min-height: 0;
     gap: 18px;
-    margin-bottom: -74px;
-    padding-bottom: 112px;
+    margin-bottom: 16px;
+    padding-bottom: 58px;
   }
 
   #view-tracks #album-hero.album-detail-hero.is-album-context .hero-art-sq {
