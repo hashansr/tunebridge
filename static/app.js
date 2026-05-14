@@ -7085,10 +7085,15 @@ function _swParsePath(rel) {
   const title = basename.replace(/^\d{1,3}[\s.\-_]+/, '').trim() || basename;
   // Drop generic root dirs (Music, FLAC, Audio) when parsing artist/album
   const folders = parts.slice(0, -1).filter(f => !/^(music|flac|audio)$/i.test(f));
-  const album  = folders.length > 0 ? folders[folders.length - 1] : '';
-  const artist = folders.length > 1 ? folders[folders.length - 2] : '';
+  // macOS HFS stores "/" as ":" in folder names — restore for display
+  const fixSlash = s => s.replace(/:/g, '/');
+  const album  = fixSlash(folders.length > 0 ? folders[folders.length - 1] : '');
+  const artist = fixSlash(folders.length > 1 ? folders[folders.length - 2] : '');
   return { title, artist, album };
 }
+
+// Normalise for fuzzy artwork lookup — strip all non-alphanumeric chars
+function _swNorm(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
 function _swBuildProposal(status) {
   const sizeToMB = b => b ? (b / (1024 ** 2)).toFixed(1) : '';
@@ -7356,11 +7361,12 @@ function _swRowThumb(item) {
     return `<div class="sw-row-thumb" style="background:${bg}">${initials}<img src="${src}" alt="" onerror="this.style.display='none'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit" /></div>`;
   }
 
-  // Track: look up artwork from loaded album list
+  // Track: look up artwork via normalised match (handles AC/DC vs AC:DC, apostrophes, etc.)
   if (item.album && state.albums?.length) {
+    const nAlbum = _swNorm(item.album);
+    const nArtist = _swNorm(item.artist);
     const al = state.albums.find(a =>
-      a.name?.toLowerCase() === item.album.toLowerCase() &&
-      a.artist?.toLowerCase() === (item.artist || '').toLowerCase()
+      _swNorm(a.name) === nAlbum && _swNorm(a.artist) === nArtist
     );
     if (al?.artwork_key) {
       const src = `/api/artwork/${al.artwork_key}`;
@@ -7479,7 +7485,8 @@ function _swUpdateReviewFooter() {
     const statusEl = document.getElementById('sw-footer-status');
     if (t.outOfSpace) {
       const over = _fmtGB(t.afterUsed - t.capBytes);
-      msgEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Not enough space. Deselect ${over} to continue.`;
+      msgEl.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;margin-right:5px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Not enough space. Deselect ${over} to continue.`;
+      msgEl.style.cssText = 'color:var(--accent-warning);font-weight:600;font-size:13px';
       if (statusEl) statusEl.className = 'sw-footer-status sw-footer-status--warn';
     } else {
       const parts = [];
@@ -7488,6 +7495,7 @@ function _swUpdateReviewFooter() {
       if (t.deleteCount)    parts.push(`${t.deleteCount} deleted from device`);
       if (t.playlistCount)  parts.push(`${t.playlistCount} playlist${t.playlistCount===1?'':'s'}`);
       msgEl.innerHTML = parts.length ? parts.join(' &middot; ') : 'No changes selected.';
+      msgEl.style.cssText = '';
       if (statusEl) statusEl.className = 'sw-footer-status';
     }
   }
