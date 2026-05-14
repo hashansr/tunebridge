@@ -6658,6 +6658,10 @@ async function loadSyncView() {
   // Highlight sync nav button
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.getElementById('sync-nav-btn')?.classList.add('sw-nav-active');
+  // Prefetch albums for artwork display in Step 3 (fire-and-forget)
+  if (!state.albums?.length) {
+    api('/library/albums').then(a => { state.albums = a; }).catch(() => {});
+  }
   // Fetch DAP list
   try {
     const daps = await api('/daps');
@@ -6675,6 +6679,9 @@ async function loadSyncView() {
     }
     if (status.status === 'ready' && status.dap_id) {
       _sw.device = { id: status.dap_id, name: status.dap_name || 'Device' };
+      if (!state.albums?.length) {
+        state.albums = await api('/library/albums').catch(() => []);
+      }
       _swBuildProposal(status);
       _swGoTo(3);
       return;
@@ -7041,6 +7048,9 @@ async function _swPollScan() {
     clearInterval(_sw.scanPollTimer); _sw.scanPollTimer = null;
     _swSetProgress('scan', 100);
     _swRenderPhases('sw-scan-phases', _SW_SCAN_PHASES, _SW_SCAN_PHASES.length);
+    if (!state.albums?.length) {
+      state.albums = await api('/library/albums').catch(() => []);
+    }
     setTimeout(() => {
       _swBuildProposal(status);
       _swGoTo(3);
