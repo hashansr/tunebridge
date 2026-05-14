@@ -6591,6 +6591,7 @@ let _sw = {
   proposal: null,
   selection: {},
   filter: 'all',
+  pages: {},
   scanPollTimer: null,
   syncPollTimer: null,
   scanStartTs: 0,
@@ -7010,16 +7011,42 @@ function _swHandleScanError(msg) {
 
 /* ── Step 3: Review ──────────────────────────────────────── */
 
+const REVIEW_PAGE_SIZE = 100;
+
+function _swParsePath(rel) {
+  const parts = (rel || '').split('/').filter(Boolean);
+  if (!parts.length) return { title: '?', artist: '', album: '' };
+  const filename = parts[parts.length - 1];
+  const ext = filename.lastIndexOf('.');
+  const basename = ext > 0 ? filename.slice(0, ext) : filename;
+  const title = basename.replace(/^\d{1,3}[\s.\-_]+/, '').trim() || basename;
+  // Drop generic root dirs (Music, FLAC, Audio) when parsing artist/album
+  const folders = parts.slice(0, -1).filter(f => !/^(music|flac|audio)$/i.test(f));
+  const album  = folders.length > 0 ? folders[folders.length - 1] : '';
+  const artist = folders.length > 1 ? folders[folders.length - 2] : '';
+  return { title, artist, album };
+}
+
 function _swBuildProposal(status) {
-  const toItems = (arr) => (arr || []).map((p, i) => ({
-    id: String(p.rel_path || p.path || p.id || i),
-    kind: 'track',
-    title: p.title || p.filename || (p.rel_path ? p.rel_path.split('/').pop() : '?'),
-    artist: p.artist || '',
-    album: p.album || '',
-    dur: p.duration ? _fmtSecs(p.duration) : '',
-    size: p.size_bytes ? (p.size_bytes / (1024 ** 2)).toFixed(1) : '',
-  }));
+  const sizeToMB = b => b ? (b / (1024 ** 2)).toFixed(1) : '';
+
+  // local_only items are plain strings (device rel paths)
+  const toDeviceItems = (arr, sizeMap) => (arr || []).map((p, i) => {
+    const rel = typeof p === 'string' ? p : (p.rel_path || '');
+    const { title, artist, album } = _swParsePath(rel);
+    const sizeBytes = (sizeMap && sizeMap[rel]) || 0;
+    return { id: rel || String(i), kind: 'track', title, artist, album,
+      dur: '', size: sizeToMB(sizeBytes), rel };
+  });
+
+  // library_deleted / device_only items are _sync_row dicts {rel_path, filename, folder}
+  const toRowItems = (arr, sizeMap) => (arr || []).map((p, i) => {
+    const rel = typeof p === 'string' ? p : (p.rel_path || '');
+    const { title, artist, album } = _swParsePath(rel);
+    const sizeBytes = (sizeMap && sizeMap[rel]) || 0;
+    return { id: rel || String(i), kind: 'track', title, artist, album,
+      dur: '', size: sizeToMB(sizeBytes), rel };
+  });
 
   const plItems = (arr) => (arr || []).map(p => ({
     id: p.id || p.name,
@@ -7030,11 +7057,14 @@ function _swBuildProposal(status) {
   }));
 
   _sw.proposal = {
-    toDevice:         { label: 'New on this Mac — add to device',          hint: 'Tracks present locally but not on player', items: toItems(status.local_only) },
-    toLibrary:        { label: 'New on device — add to library',            hint: 'Files on player not in library',           items: toItems(status.device_only_not_in_library) },
+    toDevice:         { label: 'New on this Mac — add to device',          hint: 'Tracks present locally but not on player', items: toDeviceItems(status.local_only, status.local_only_sizes) },
+    toLibrary:        { label: 'New on device — add to library',            hint: 'Files on player not in library',           items: toRowItems(status.device_only_not_in_library, status.device_only_sizes) },
     playlists:        { label: 'Playlist changes',                          hint: 'Playlists that differ',                   items: plItems(status.playlists_out_of_sync) },
-    removeFromDevice: { label: 'Deleted from library — remove from device', hint: 'Gone locally, still on player',           items: toItems(status.library_deleted_on_source) },
+    removeFromDevice: { label: 'Deleted from library — remove from device', hint: 'Gone locally, still on player',           items: toRowItems(status.library_deleted_on_source, status.device_only_sizes) },
   };
+
+  // Reset pagination
+  _sw.pages = { toDevice: 0, toLibrary: 0, playlists: 0, removeFromDevice: 0 };
 
   // Initialise selection
   _sw.selection = {};
@@ -7106,9 +7136,32 @@ function _swBuildGroupCard(gid, group) {
     : 'Sync playlist';
   const chipClass = isDanger ? 'sw-action-chip sw-action-chip--danger' : 'sw-action-chip';
 
+  // Pagination
+  const page = _sw.pages?.[gid] ?? 0;
+  const totalPages = Math.ceil(total / REVIEW_PAGE_SIZE);
+  const pageItems = group.items.slice(page * REVIEW_PAGE_SIZE, (page + 1) * REVIEW_PAGE_SIZE);
+  const pageStart = page * REVIEW_PAGE_SIZE + 1;
+  const pageEnd = Math.min((page + 1) * REVIEW_PAGE_SIZE, total);
+
   const card = document.createElement('div');
   card.className = `sw-group-card${isDanger ? ' sw-group-card--danger' : ''} sw-group-card--expanded`;
   card.dataset.gid = gid;
+
+  const paginationBar = total > REVIEW_PAGE_SIZE ? `
+    <div class="sw-page-bar">
+      <span class="sw-page-info">Showing ${pageStart}–${pageEnd} of ${total}</span>
+      <div class="sw-page-btns">
+        <button class="sw-page-btn" ${page === 0 ? 'disabled' : ''} onclick="event.stopPropagation();App.swReviewPage('${gid}',${page-1})">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Prev
+        </button>
+        <span class="sw-page-count">${page + 1} / ${totalPages}</span>
+        <button class="sw-page-btn" ${page >= totalPages - 1 ? 'disabled' : ''} onclick="event.stopPropagation();App.swReviewPage('${gid}',${page+1})">
+          Next
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </div>` : '';
 
   card.innerHTML = `
     <div class="sw-group-hdr" onclick="App.swToggleGroupCollapse('${gid}')">
@@ -7129,7 +7182,7 @@ function _swBuildGroupCard(gid, group) {
       </button>
     </div>
     <div class="sw-group-rows">
-      ${group.items.map(item => `
+      ${pageItems.map(item => `
       <div class="sw-review-row${sel[item.id] ? '' : ' sw-review-row--deselected'}" data-gid="${gid}" data-id="${esc(item.id)}">
         <input type="checkbox" class="sw-check" ${sel[item.id] ? 'checked' : ''}
           onclick="event.stopPropagation();App.swToggleItem('${gid}','${esc(item.id)}')" />
@@ -7145,6 +7198,7 @@ function _swBuildGroupCard(gid, group) {
         </button>
       </div>`).join('')}
     </div>
+    ${paginationBar}
   `;
 
   // Set indeterminate state on checkbox
@@ -7152,6 +7206,20 @@ function _swBuildGroupCard(gid, group) {
   if (chk && someSelected) chk.indeterminate = true;
 
   return card;
+}
+
+function swReviewPage(gid, page) {
+  if (!_sw.pages) _sw.pages = {};
+  _sw.pages[gid] = page;
+  // Rebuild just this card
+  const container = document.getElementById('sw-review-groups');
+  const existing = container?.querySelector(`.sw-group-card[data-gid="${gid}"]`);
+  const group = _sw.proposal?.[gid];
+  if (!existing || !group) return;
+  const newCard = _swBuildGroupCard(gid, group);
+  existing.replaceWith(newCard);
+  // Scroll card into view
+  newCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function _swThumbColor(name) {
@@ -13993,6 +14061,7 @@ const App = {
   swToggleGroup,
   swToggleGroupCollapse,
   swSetFilter,
+  swReviewPage,
   syncScanAgain,
   sortTracks,
   // Songs
