@@ -6058,7 +6058,9 @@ function _pushToNavHistory() {
 }
 
 function _updateNavButtonStates() {
-  const hasBack = _navHistory.length > 0;
+  const syncBackSteps = [3, 5];
+  const inSyncBack = state.view === 'sync' && syncBackSteps.includes(_sw.step);
+  const hasBack = _navHistory.length > 0 || inSyncBack;
   const backBtn = document.getElementById('nav-back-btn');
   if (backBtn) backBtn.style.visibility = hasBack ? 'visible' : 'hidden';
 }
@@ -6159,6 +6161,11 @@ async function _restoreNavSnapshot(snap) {
 }
 
 async function navBack() {
+  // Sync wizard intercept — back navigates between wizard steps
+  if (state.view === 'sync') {
+    swNavBack();
+    return;
+  }
   if (_navHistory.length === 0) return;
   if (!_guardMlGeneratorNavigation()) return;
   if (!_guardPeqEditorNavigation()) return;
@@ -6709,6 +6716,8 @@ function _swGoTo(step) {
   el('sw-sub').textContent = meta.sub ?? subMap[step] ?? '';
   // Footer per step
   _swUpdateFooter(step);
+  // Show/hide back button based on step
+  _updateNavButtonStates();
   // Step-specific init
   if (step === 2) _swInitScanStep();
   if (step === 4) _swInitSyncStep();
@@ -6914,9 +6923,27 @@ function swPrimaryAction() {
   if (fn) fn();
 }
 
-function swCancel() {
+function swNavBack() {
+  // Back on step 3 or 5 → reset to step 1
+  if (_sw.step === 3 || _sw.step === 5) {
+    _swResetToStep1();
+  }
+  // Steps 2 and 4 are in-progress — back does nothing
+}
+
+function _swResetToStep1() {
   _swClearTimers();
-  App.showView('artists');
+  _sw.proposal = null;
+  _sw.selection = {};
+  _sw.filter = 'all';
+  _sw.pages = {};
+  _sw.syncResult = null;
+  _swGoTo(1);
+  _updateNavButtonStates();
+}
+
+function swCancel() {
+  _swResetToStep1();
 }
 
 /* ── Step 2: Scan ────────────────────────────────────────── */
