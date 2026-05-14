@@ -6339,6 +6339,8 @@ tr:hover .fav-toggle,
 .gear-list {
   display: block;
   padding: 0 0 24px;
+  --gear-row-main-col: clamp(320px, 32vw, 560px);
+  --gear-row-status-col: 140px;
 }
 
 /* ── Status dot system (used in gear rows) ───────────────────── */
@@ -6504,7 +6506,7 @@ tr:hover .fav-toggle,
 .gear-row-dap {
   min-height: 66px;
   padding: 0 6px 0 4px;
-  grid-template-columns: 36px minmax(0, 1.6fr) 140px 140px minmax(0, 1fr) 80px;
+  grid-template-columns: 36px minmax(0, var(--gear-row-main-col)) var(--gear-row-status-col) var(--gear-row-status-col) minmax(0, 1fr) 80px;
   column-gap: 12px;
 }
 
@@ -6512,7 +6514,7 @@ tr:hover .fav-toggle,
 .gear-row-iem {
   min-height: 60px;
   padding: 0 6px 0 4px;
-  grid-template-columns: 36px minmax(0, 1.8fr) 80px minmax(0, 1fr) 160px;
+  grid-template-columns: 36px minmax(0, var(--gear-row-main-col)) var(--gear-row-status-col) var(--gear-row-status-col) minmax(0, 1fr);
   column-gap: 12px;
 }
 
