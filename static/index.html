@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=60" />
+  <link rel="stylesheet" href="/style.css?v=61" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -1766,9 +1766,8 @@
             <div class="sw-filter-chips" id="sw-filter-chips">
               <button class="sw-chip sw-chip--active" data-filter="all" onclick="App.swSetFilter('all')">All <span class="sw-chip-badge" id="sw-chip-all">0</span></button>
               <button class="sw-chip" data-filter="toDevice" onclick="App.swSetFilter('toDevice')">To device <span class="sw-chip-badge" id="sw-chip-toDevice">0</span></button>
-              <button class="sw-chip" data-filter="toLibrary" onclick="App.swSetFilter('toLibrary')">To library <span class="sw-chip-badge" id="sw-chip-toLibrary">0</span></button>
+              <button class="sw-chip" data-filter="onDevice" onclick="App.swSetFilter('onDevice')">On device <span class="sw-chip-badge" id="sw-chip-onDevice">0</span></button>
               <button class="sw-chip" data-filter="playlists" onclick="App.swSetFilter('playlists')">Playlists <span class="sw-chip-badge" id="sw-chip-playlists">0</span></button>
-              <button class="sw-chip" data-filter="removeFromDevice" onclick="App.swSetFilter('removeFromDevice')">Removals <span class="sw-chip-badge" id="sw-chip-removals">0</span></button>
             </div>
             <div id="sw-review-groups" class="sw-review-groups"><!-- populated by JS --></div>
           </div>

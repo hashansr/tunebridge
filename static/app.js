@@ -7030,7 +7030,7 @@ function _swParsePath(rel) {
 function _swBuildProposal(status) {
   const sizeToMB = b => b ? (b / (1024 ** 2)).toFixed(1) : '';
 
-  // local_only items are plain strings (device rel paths)
+  // local_only items are plain strings (device rel paths) — going to device
   const toDeviceItems = (arr, sizeMap) => (arr || []).map((p, i) => {
     const rel = typeof p === 'string' ? p : (p.rel_path || '');
     const { title, artist, album } = _swParsePath(rel);
@@ -7039,13 +7039,13 @@ function _swBuildProposal(status) {
       dur: '', size: sizeToMB(sizeBytes), rel };
   });
 
-  // library_deleted / device_only items are _sync_row dicts {rel_path, filename, folder}
-  const toRowItems = (arr, sizeMap) => (arr || []).map((p, i) => {
+  // Items on device but not in library — may be _sync_row dicts or plain strings
+  const onDeviceItems = (arr, defaultAction, sizeMap) => (arr || []).map((p, i) => {
     const rel = typeof p === 'string' ? p : (p.rel_path || '');
     const { title, artist, album } = _swParsePath(rel);
     const sizeBytes = (sizeMap && sizeMap[rel]) || 0;
     return { id: rel || String(i), kind: 'track', title, artist, album,
-      dur: '', size: sizeToMB(sizeBytes), rel };
+      dur: '', size: sizeToMB(sizeBytes), rel, defaultAction };
   });
 
   const plItems = (arr) => (arr || []).map(p => ({
@@ -7056,44 +7056,51 @@ function _swBuildProposal(status) {
     note: p.status || 'Updated',
   }));
 
+  // Merge both "on device not in library" categories into one group.
+  // library_deleted: user probably deleted intentionally → default Keep
+  // device_only: never in library → default Copy to library
+  const onDeviceCombined = [
+    ...onDeviceItems(status.library_deleted_on_source, 'keep', status.device_only_sizes),
+    ...onDeviceItems(status.device_only_not_in_library, 'copy', status.device_only_sizes),
+  ];
+
   _sw.proposal = {
-    toDevice:         { label: 'New on this Mac — add to device',          hint: 'Tracks present locally but not on player', items: toDeviceItems(status.local_only, status.local_only_sizes) },
-    toLibrary:        { label: 'New on device — add to library',            hint: 'Files on player not in library',           items: toRowItems(status.device_only_not_in_library, status.device_only_sizes) },
-    playlists:        { label: 'Playlist changes',                          hint: 'Playlists that differ',                   items: plItems(status.playlists_out_of_sync) },
-    removeFromDevice: { label: 'Deleted from library — remove from device', hint: 'Gone locally, still on player',           items: toRowItems(status.library_deleted_on_source, status.device_only_sizes) },
+    toDevice:  { label: 'New on this Mac — add to device', hint: 'Tracks present locally but not on player', items: toDeviceItems(status.local_only, status.local_only_sizes) },
+    onDevice:  { label: 'On device, not in library',       hint: 'Files on player not found in local library', items: onDeviceCombined },
+    playlists: { label: 'Playlist changes',                hint: 'Playlists that differ from device copy',   items: plItems(status.playlists_out_of_sync) },
   };
 
   // Reset pagination
-  _sw.pages = { toDevice: 0, toLibrary: 0, playlists: 0, removeFromDevice: 0 };
+  _sw.pages = { toDevice: 0, onDevice: 0, playlists: 0 };
 
   // Initialise selection
-  _sw.selection = {};
-  const order = ['toDevice', 'toLibrary', 'playlists', 'removeFromDevice'];
-  for (const gid of order) {
-    _sw.selection[gid] = {};
-    for (const item of _sw.proposal[gid].items) {
-      // removeFromDevice: default unchecked; playlists with 'No change': unchecked; others: checked
-      const defChecked = gid === 'removeFromDevice' ? false
-        : (gid === 'playlists' && item.note === 'No change') ? false
-        : true;
-      _sw.selection[gid][item.id] = defChecked;
-    }
+  _sw.selection = { toDevice: {}, onDevice: {}, playlists: {} };
+
+  for (const item of _sw.proposal.toDevice.items) {
+    _sw.selection.toDevice[item.id] = true;
+  }
+  // onDevice: each item gets an action string ('keep'|'copy'|'delete')
+  for (const item of _sw.proposal.onDevice.items) {
+    _sw.selection.onDevice[item.id] = item.defaultAction || 'keep';
+  }
+  for (const item of _sw.proposal.playlists.items) {
+    _sw.selection.playlists[item.id] = item.note !== 'No change';
   }
 
   _swRenderReview();
 }
 
 function _swRenderReview() {
-  const order = ['toDevice', 'toLibrary', 'playlists', 'removeFromDevice'];
+  const ORDER = ['toDevice', 'onDevice', 'playlists'];
   const filter = _sw.filter;
 
   // Update chip counts
-  for (const gid of order) {
+  for (const gid of ORDER) {
     const items = _sw.proposal?.[gid]?.items ?? [];
-    const el = document.getElementById(`sw-chip-${gid === 'removeFromDevice' ? 'removals' : gid}`);
+    const el = document.getElementById(`sw-chip-${gid}`);
     if (el) el.textContent = items.length;
   }
-  const allCount = order.reduce((s, g) => s + (_sw.proposal?.[g]?.items?.length ?? 0), 0);
+  const allCount = ORDER.reduce((s, g) => s + (_sw.proposal?.[g]?.items?.length ?? 0), 0);
   const allEl = document.getElementById('sw-chip-all');
   if (allEl) allEl.textContent = allCount;
 
@@ -7105,12 +7112,9 @@ function _swRenderReview() {
   const container = document.getElementById('sw-review-groups');
   if (!container) return;
 
-  const visibleGroups = filter === 'all' ? order
-    : filter === 'toDevice'         ? ['toDevice']
-    : filter === 'toLibrary'        ? ['toLibrary']
-    : filter === 'playlists'        ? ['playlists']
-    : filter === 'removeFromDevice' ? ['removeFromDevice']
-    : order;
+  const visibleGroups = filter === 'all' ? ORDER
+    : ORDER.includes(filter) ? [filter]
+    : ORDER;
 
   container.innerHTML = '';
   for (const gid of visibleGroups) {
@@ -7123,18 +7127,9 @@ function _swRenderReview() {
 }
 
 function _swBuildGroupCard(gid, group) {
-  const isDanger = gid === 'removeFromDevice';
   const sel = _sw.selection[gid] ?? {};
   const total = group.items.length;
-  const selectedCount = Object.values(sel).filter(Boolean).length;
-  const allSelected = selectedCount === total;
-  const someSelected = selectedCount > 0 && !allSelected;
-
-  const actionLabel = gid === 'toDevice' ? 'Add to device'
-    : gid === 'toLibrary' ? 'Add to library'
-    : gid === 'removeFromDevice' ? 'Remove'
-    : 'Sync playlist';
-  const chipClass = isDanger ? 'sw-action-chip sw-action-chip--danger' : 'sw-action-chip';
+  const isOnDevice = gid === 'onDevice';
 
   // Pagination
   const page = _sw.pages?.[gid] ?? 0;
@@ -7144,7 +7139,8 @@ function _swBuildGroupCard(gid, group) {
   const pageEnd = Math.min((page + 1) * REVIEW_PAGE_SIZE, total);
 
   const card = document.createElement('div');
-  card.className = `sw-group-card${isDanger ? ' sw-group-card--danger' : ''} sw-group-card--expanded`;
+  // Start collapsed — user expands to see items
+  card.className = 'sw-group-card' + (isOnDevice ? ' sw-group-card--on-device' : '');
   card.dataset.gid = gid;
 
   const paginationBar = total > REVIEW_PAGE_SIZE ? `
@@ -7163,47 +7159,106 @@ function _swBuildGroupCard(gid, group) {
       </div>
     </div>` : '';
 
-  card.innerHTML = `
-    <div class="sw-group-hdr" onclick="App.swToggleGroupCollapse('${gid}')">
-      <input type="checkbox" class="sw-check" id="sw-grp-chk-${gid}"
-        ${allSelected ? 'checked' : ''} onclick="event.stopPropagation();App.swToggleGroup('${gid}', this.checked)"
-        data-indeterminate="${someSelected}" />
-      <div class="sw-group-chev">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
-      </div>
-      <div class="sw-group-label-col">
-        <span class="sw-group-title">${esc(group.label)}</span>
-        <span class="sw-group-count-text">${total} item${total===1?'':'s'}</span>
-        <span class="sw-group-hint">${esc(group.hint)}</span>
-      </div>
-      <span class="sw-group-sel-pill">${selectedCount} selected</span>
-      <button class="sw-group-selall-btn" onclick="event.stopPropagation();App.swToggleGroup('${gid}', ${!allSelected})">
-        ${allSelected ? 'Deselect all' : 'Select all'}
-      </button>
-    </div>
-    <div class="sw-group-rows">
-      ${pageItems.map(item => `
-      <div class="sw-review-row${sel[item.id] ? '' : ' sw-review-row--deselected'}" data-gid="${gid}" data-id="${esc(item.id)}">
-        <input type="checkbox" class="sw-check" ${sel[item.id] ? 'checked' : ''}
-          onclick="event.stopPropagation();App.swToggleItem('${gid}','${esc(item.id)}')" />
-        <div class="sw-row-thumb" style="background:${_swThumbColor(item.title)}">${_swInitials(item.title)}</div>
-        <div class="sw-row-info">
-          <div class="sw-row-title" title="${esc(item.title)}">${esc(item.title)}</div>
-          <div class="sw-row-sub">${item.kind === 'playlist' ? esc(item.meta || '') : [item.artist, item.album].filter(Boolean).map(esc).join(' · ')}</div>
-        </div>
-        <span class="${chipClass}">${esc(actionLabel)}</span>
-        <span class="sw-row-size">${item.size ? `${item.size} MB` : ''}${item.size && item.dur ? ' · ' : ''}${item.dur ?? ''}</span>
-        <button class="sw-row-kebab" title="More options" onclick="event.stopPropagation()">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-        </button>
-      </div>`).join('')}
-    </div>
-    ${paginationBar}
-  `;
+  if (isOnDevice) {
+    // onDevice group: per-item 3-action selector, bulk actions in header
+    const copyCount   = Object.values(sel).filter(a => a === 'copy').length;
+    const deleteCount = Object.values(sel).filter(a => a === 'delete').length;
+    const keepCount   = Object.values(sel).filter(a => a === 'keep').length;
+    const summaryParts = [];
+    if (copyCount)   summaryParts.push(`${copyCount} copy`);
+    if (deleteCount) summaryParts.push(`${deleteCount} delete`);
+    if (keepCount)   summaryParts.push(`${keepCount} keep`);
 
-  // Set indeterminate state on checkbox
-  const chk = card.querySelector(`#sw-grp-chk-${gid}`);
-  if (chk && someSelected) chk.indeterminate = true;
+    card.innerHTML = `
+      <div class="sw-group-hdr sw-group-hdr--actions" onclick="App.swToggleGroupCollapse('${gid}')">
+        <div class="sw-group-chev">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </div>
+        <div class="sw-group-label-col">
+          <span class="sw-group-title">${esc(group.label)}</span>
+          <span class="sw-group-count-text">${total} item${total===1?'':'s'}</span>
+          <span class="sw-group-hint">${esc(group.hint)}</span>
+        </div>
+        <div class="sw-group-bulk-btns">
+          <button class="sw-bulk-btn sw-bulk-btn--copy" onclick="event.stopPropagation();App.swBulkAction('onDevice','copy')">Copy all</button>
+          <button class="sw-bulk-btn sw-bulk-btn--keep" onclick="event.stopPropagation();App.swBulkAction('onDevice','keep')">Keep all</button>
+          <button class="sw-bulk-btn sw-bulk-btn--delete" onclick="event.stopPropagation();App.swBulkAction('onDevice','delete')">Delete all</button>
+        </div>
+        <span class="sw-group-action-summary">${summaryParts.join(' · ')}</span>
+      </div>
+      <div class="sw-group-rows">
+        ${pageItems.map(item => {
+          const action = sel[item.id] || 'keep';
+          const iId = esc(item.id);
+          return `
+        <div class="sw-review-row sw-review-row--actions" data-gid="${gid}" data-id="${iId}">
+          <div class="sw-row-thumb" style="background:${_swThumbColor(item.title)}">${_swInitials(item.title)}</div>
+          <div class="sw-row-info">
+            <div class="sw-row-title" title="${esc(item.title)}">${esc(item.title)}</div>
+            <div class="sw-row-sub">${[item.artist, item.album].filter(Boolean).map(esc).join(' · ')}</div>
+          </div>
+          <div class="sw-action-btns">
+            <button class="sw-action-btn sw-action-btn--copy${action==='copy'?' sw-action-btn--active':''}"
+              onclick="event.stopPropagation();App.swSetItemAction('${iId}','copy')">Copy to library</button>
+            <button class="sw-action-btn sw-action-btn--keep${action==='keep'?' sw-action-btn--active':''}"
+              onclick="event.stopPropagation();App.swSetItemAction('${iId}','keep')">Keep</button>
+            <button class="sw-action-btn sw-action-btn--delete${action==='delete'?' sw-action-btn--active':''}"
+              onclick="event.stopPropagation();App.swSetItemAction('${iId}','delete')">Delete from DAP</button>
+          </div>
+          <span class="sw-row-size">${item.size ? `${item.size} MB` : ''}</span>
+        </div>`;
+        }).join('')}
+      </div>
+      ${paginationBar}
+    `;
+  } else {
+    // toDevice / playlists: checkbox rows
+    const selectedCount = Object.values(sel).filter(Boolean).length;
+    const allSelected = selectedCount === total;
+    const someSelected = selectedCount > 0 && !allSelected;
+    const actionLabel = gid === 'toDevice' ? 'Add to device' : 'Sync playlist';
+
+    card.innerHTML = `
+      <div class="sw-group-hdr" onclick="App.swToggleGroupCollapse('${gid}')">
+        <input type="checkbox" class="sw-check" id="sw-grp-chk-${gid}"
+          ${allSelected ? 'checked' : ''} onclick="event.stopPropagation();App.swToggleGroup('${gid}', this.checked)"
+          data-indeterminate="${someSelected}" />
+        <div class="sw-group-chev">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </div>
+        <div class="sw-group-label-col">
+          <span class="sw-group-title">${esc(group.label)}</span>
+          <span class="sw-group-count-text">${total} item${total===1?'':'s'}</span>
+          <span class="sw-group-hint">${esc(group.hint)}</span>
+        </div>
+        <span class="sw-group-sel-pill">${selectedCount} selected</span>
+        <button class="sw-group-selall-btn" onclick="event.stopPropagation();App.swToggleGroup('${gid}', ${!allSelected})">
+          ${allSelected ? 'Deselect all' : 'Select all'}
+        </button>
+      </div>
+      <div class="sw-group-rows">
+        ${pageItems.map(item => `
+        <div class="sw-review-row${sel[item.id] ? '' : ' sw-review-row--deselected'}" data-gid="${gid}" data-id="${esc(item.id)}">
+          <input type="checkbox" class="sw-check" ${sel[item.id] ? 'checked' : ''}
+            onclick="event.stopPropagation();App.swToggleItem('${gid}','${esc(item.id)}')" />
+          <div class="sw-row-thumb" style="background:${_swThumbColor(item.title)}">${_swInitials(item.title)}</div>
+          <div class="sw-row-info">
+            <div class="sw-row-title" title="${esc(item.title)}">${esc(item.title)}</div>
+            <div class="sw-row-sub">${item.kind === 'playlist' ? esc(item.meta || '') : [item.artist, item.album].filter(Boolean).map(esc).join(' · ')}</div>
+          </div>
+          <span class="sw-action-chip">${esc(actionLabel)}</span>
+          <span class="sw-row-size">${item.size ? `${item.size} MB` : ''}${item.size && item.dur ? ' · ' : ''}${item.dur ?? ''}</span>
+          <button class="sw-row-kebab" title="More options" onclick="event.stopPropagation()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+          </button>
+        </div>`).join('')}
+      </div>
+      ${paginationBar}
+    `;
+
+    const chk = card.querySelector(`#sw-grp-chk-${gid}`);
+    if (chk && someSelected) chk.indeterminate = true;
+  }
 
   return card;
 }
@@ -7243,7 +7298,6 @@ function swToggleGroupCollapse(gid) {
 function swToggleItem(gid, itemId) {
   if (!_sw.selection[gid]) _sw.selection[gid] = {};
   _sw.selection[gid][itemId] = !_sw.selection[gid][itemId];
-  // Re-render just the card to update checkboxes + selection pill
   _swRenderReview();
 }
 
@@ -7252,6 +7306,29 @@ function swToggleGroup(gid, toState) {
   if (!group) return;
   _sw.selection[gid] = {};
   for (const item of group.items) _sw.selection[gid][item.id] = toState;
+  _swRenderReview();
+}
+
+// Set action for a single onDevice item ('copy'|'keep'|'delete')
+function swSetItemAction(itemId, action) {
+  if (!_sw.selection.onDevice) _sw.selection.onDevice = {};
+  _sw.selection.onDevice[itemId] = action;
+  // Re-render only the onDevice card for performance
+  const container = document.getElementById('sw-review-groups');
+  const existing = container?.querySelector('.sw-group-card[data-gid="onDevice"]');
+  const group = _sw.proposal?.onDevice;
+  if (existing && group) {
+    existing.replaceWith(_swBuildGroupCard('onDevice', group));
+  }
+  _swUpdateReviewFooter();
+}
+
+// Set action for all onDevice items ('copy'|'keep'|'delete')
+function swBulkAction(gid, action) {
+  const group = _sw.proposal?.[gid];
+  if (!group) return;
+  if (!_sw.selection[gid]) _sw.selection[gid] = {};
+  for (const item of group.items) _sw.selection[gid][item.id] = action;
   _swRenderReview();
 }
 
@@ -7265,36 +7342,37 @@ function _swComputeTotals() {
   const selOf  = gid => Object.entries(_sw.selection[gid] ?? {}).filter(([,v]) => v);
 
   const toDev  = selOf('toDevice');
-  const toLib  = selOf('toLibrary');
-  const remove = selOf('removeFromDevice');
   const plists = selOf('playlists');
 
-  const mbOf = (gid, ids) => {
-    const items = (groups[gid]?.items ?? []);
-    return ids.reduce((s, [id]) => {
-      const item = items.find(x => x.id === id);
-      return s + (Number(item?.size) || 0);
-    }, 0);
-  };
+  // onDevice: partition by action
+  const onDeviceSel = _sw.selection.onDevice ?? {};
+  const onDeviceItems = groups.onDevice?.items ?? [];
+  const copyItems   = onDeviceItems.filter(i => onDeviceSel[i.id] === 'copy');
+  const deleteItems = onDeviceItems.filter(i => onDeviceSel[i.id] === 'delete');
 
-  const toDeviceMB    = mbOf('toDevice', toDev);
-  const toLibraryMB   = mbOf('toLibrary', toLib);
-  const removeMB      = mbOf('removeFromDevice', remove);
-  const netMB         = toDeviceMB - removeMB;
-  const netGB         = Math.abs(netMB) / 1024;
-  const sign          = netMB >= 0 ? '+' : '−';
-  const totalChanges  = toDev.length + toLib.length + remove.length + plists.length;
+  const mbOfItems = items => items.reduce((s, i) => s + (Number(i.size) || 0), 0);
 
-  const usedBytes = _sw.device?.used_bytes ?? 0;
-  const capBytes  = _sw.device?.capacity_bytes ?? 0;
-  const afterUsed = usedBytes + netMB * 1024 * 1024;
-  const tight     = capBytes > 0 && (afterUsed / capBytes) > 0.95;
+  const toDeviceMB  = mbOfItems((groups.toDevice?.items ?? []).filter(i => _sw.selection.toDevice?.[i.id]));
+  const copyMB      = mbOfItems(copyItems);
+  const deleteMB    = mbOfItems(deleteItems);
+  const netMB       = toDeviceMB - deleteMB;
+  const netGB       = Math.abs(netMB) / 1024;
+  const sign        = netMB >= 0 ? '+' : '−';
+  const totalChanges = toDev.length + copyItems.length + deleteItems.length + plists.length;
+
+  const usedBytes  = _sw.device?.used_bytes ?? 0;
+  const capBytes   = _sw.device?.capacity_bytes ?? 0;
+  const afterUsed  = usedBytes + netMB * 1024 * 1024;
+  const tight      = capBytes > 0 && (afterUsed / capBytes) > 0.95;
   const outOfSpace = capBytes > 0 && afterUsed > capBytes;
 
-  return { toDeviceCount: toDev.length, toLibraryCount: toLib.length,
-    removeCount: remove.length, playlistCount: plists.length,
-    toDeviceMB, toLibraryMB, removeMB, netMB, netGB, sign,
-    totalChanges, usedBytes, capBytes, afterUsed, tight, outOfSpace };
+  return {
+    toDeviceCount: toDev.length,
+    copyCount: copyItems.length, deleteCount: deleteItems.length,
+    playlistCount: plists.length,
+    toDeviceMB, copyMB, deleteMB, netMB, netGB, sign,
+    totalChanges, usedBytes, capBytes, afterUsed, tight, outOfSpace,
+  };
 }
 
 function _swUpdateReviewFooter() {
@@ -7303,8 +7381,8 @@ function _swUpdateReviewFooter() {
   if (msgEl) {
     const parts = [];
     if (t.toDeviceCount)  parts.push(`${t.toDeviceCount} to device`);
-    if (t.toLibraryCount) parts.push(`${t.toLibraryCount} to library`);
-    if (t.removeCount)    parts.push(`${t.removeCount} removed`);
+    if (t.copyCount)      parts.push(`${t.copyCount} copy to library`);
+    if (t.deleteCount)    parts.push(`${t.deleteCount} delete from device`);
     if (t.playlistCount)  parts.push(`${t.playlistCount} playlist${t.playlistCount===1?'':'s'}`);
     msgEl.textContent = parts.length ? parts.join(' · ') : 'No changes selected.';
   }
@@ -7315,7 +7393,7 @@ function _swUpdateReviewFooter() {
       primaryBtn.disabled = true;
       if (msgEl) msgEl.textContent = `Not enough space — deselect ${_fmtGB(t.afterUsed - t.capBytes)} to continue.`;
     } else {
-      primaryBtn.disabled = false;
+      primaryBtn.disabled = t.totalChanges === 0;
       primaryBtn.innerHTML = `Start sync (${t.totalChanges})`;
     }
   }
@@ -7325,11 +7403,11 @@ function _swUpdateReviewFooter() {
 
 async function swStartSync() {
   const totals = _swComputeTotals();
-  if (totals.removeCount > 0) {
+  if (totals.deleteCount > 0) {
     const ok = await _showConfirm({
-      title: `Remove ${totals.removeCount} track${totals.removeCount===1?'':'s'} from device?`,
-      message: 'These files will be permanently deleted from your player.',
-      okText: 'Remove', danger: true,
+      title: `Delete ${totals.deleteCount} file${totals.deleteCount===1?'':'s'} from device?`,
+      message: `${totals.deleteCount} file${totals.deleteCount===1?' will be':'s will be'} permanently deleted from your player. Empty folders will also be removed.`,
+      okText: 'Delete', danger: true,
     });
     if (!ok) return;
   }
@@ -7359,20 +7437,21 @@ function _swInitSyncStep() {
 }
 
 function _swBuildExecutePayload() {
-  const order = ['toDevice', 'toLibrary', 'playlists', 'removeFromDevice'];
   const proposal = _sw.proposal ?? {};
+  const onDeviceSel = _sw.selection.onDevice ?? {};
+  const onDeviceItems = proposal.onDevice?.items ?? [];
 
-  const toDevice    = (proposal.toDevice?.items ?? []).filter(i => _sw.selection.toDevice?.[i.id]).map(i => i.id);
-  const toLibrary   = (proposal.toLibrary?.items ?? []).filter(i => _sw.selection.toLibrary?.[i.id]).map(i => i.id);
-  const removals    = (proposal.removeFromDevice?.items ?? []).filter(i => _sw.selection.removeFromDevice?.[i.id]).map(i => i.id);
-  const playlists   = (proposal.playlists?.items ?? []).filter(i => _sw.selection.playlists?.[i.id]).map(i => i.id);
+  const toDevice   = (proposal.toDevice?.items ?? []).filter(i => _sw.selection.toDevice?.[i.id]).map(i => i.id);
+  const toLibrary  = onDeviceItems.filter(i => onDeviceSel[i.id] === 'copy').map(i => i.id);
+  const deletions  = onDeviceItems.filter(i => onDeviceSel[i.id] === 'delete').map(i => i.id);
+  const playlists  = (proposal.playlists?.items ?? []).filter(i => _sw.selection.playlists?.[i.id]).map(i => i.id);
 
   return {
-    dap_id:      _sw.device.id,
-    to_device:   toDevice,
-    to_library:  toLibrary,
-    remove:      removals,
-    playlists:   playlists,
+    dap_id:                _sw.device.id,
+    add_to_device_paths:   toDevice,
+    copy_to_local_paths:   toLibrary,
+    delete_on_device_paths: deletions,
+    playlist_ids:          playlists,
   };
 }
 
@@ -14062,6 +14141,8 @@ const App = {
   swToggleGroupCollapse,
   swSetFilter,
   swReviewPage,
+  swSetItemAction,
+  swBulkAction,
   syncScanAgain,
   sortTracks,
   // Songs
