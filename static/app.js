@@ -6941,7 +6941,7 @@ function _swInitScanStep() {
   if (pct) pct.textContent = '0%';
 
   // Start the actual scan
-  api('/sync/scan', { method: 'POST', body: JSON.stringify({ dap_id: _sw.device.id }) })
+  api('/sync/scan', { method: 'POST', body: { dap_id: _sw.device.id } })
     .catch(e => _swHandleScanError(String(e)));
 
   // Poll for progress
@@ -7284,7 +7284,7 @@ function _swInitSyncStep() {
   // Build execute payload from selection
   const payload = _swBuildExecutePayload();
 
-  api('/sync/execute', { method: 'POST', body: JSON.stringify(payload) })
+  api('/sync/execute', { method: 'POST', body: payload })
     .catch(e => _swHandleSyncError(String(e)));
 
   _sw.syncPollTimer = setInterval(_swPollSync, 600);
