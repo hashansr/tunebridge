@@ -5968,7 +5968,7 @@ function showViewEl(name) {
   const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
-    if (el) el.style.display = v === name ? (v === 'playlist' ? 'flex' : 'block') : 'none';
+    if (el) el.style.display = v === name ? (['playlist', 'sync'].includes(v) ? 'flex' : 'block') : 'none';
   });
   const main = document.getElementById('main');
   if (main) {
@@ -6799,12 +6799,6 @@ function _swRenderDeviceList(daps) {
             <span class="sw-conn-dot ${dotClass}"></span>${connText}
           </span>
         </div>
-        <div class="sw-device-meta">
-          <span>${freeText}</span>
-          <span>·</span>
-          <span class="sw-mini-bar-wrap"><span class="sw-mini-bar-fill ${fillClass}" style="width:${usedPct.toFixed(1)}%"></span></span>
-          <span>Last sync · ${lastSync}</span>
-        </div>
       </div>
       <div class="sw-device-radio"></div>
     </button>`;
@@ -6889,7 +6883,7 @@ function _swRenderDetailPanel(dap) {
     <div class="sw-detail-meta-grid">
       <div class="sw-detail-meta-cell">
         <div class="sw-detail-meta-label">Mount</div>
-        <div class="sw-detail-meta-value" title="${esc(mount)}">${esc(mount.replace(/^\/Volumes\//, ''))}</div>
+        <div class="sw-detail-meta-value" title="${esc(mount)}">${esc(mount)}</div>
       </div>
       <div class="sw-detail-meta-cell">
         <div class="sw-detail-meta-label">Last sync</div>
