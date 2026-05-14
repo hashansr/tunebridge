@@ -6677,7 +6677,7 @@ async function loadSyncView() {
     }
     if (status.status === 'copying') {
       _sw.device = { id: status.dap_id, name: status.dap_name || 'Device' };
-      _swGoTo(4);
+      _swResumeSync(); // resume poller only — do NOT re-post to execute
       return;
     }
   } catch (_) {}
@@ -6745,9 +6745,16 @@ function _swUpdateFooter(step) {
   if (step === 5) statusEl.classList.add('sw-footer-status--success');
 
   // Cancel button
-  const cancelLabels = { 1: 'Cancel', 2: '', 3: 'Cancel', 4: '', 5: '' };
+  const cancelLabels = { 1: 'Cancel', 2: '', 3: 'Cancel', 4: 'Stop sync', 5: '' };
   cancelBtn.textContent = cancelLabels[step] || '';
-  cancelBtn.style.display = (step === 1 || step === 3) ? '' : 'none';
+  cancelBtn.disabled = false;
+  cancelBtn.style.display = (step === 1 || step === 3 || step === 4) ? '' : 'none';
+  // Step 4 cancel calls swCancelSync, others call swCancel (via HTML onclick)
+  if (step === 4) {
+    cancelBtn.onclick = () => App.swCancelSync();
+  } else {
+    cancelBtn.onclick = () => App.swCancel();
+  }
 
   // Primary button
   const btnConfigs = {
@@ -6946,6 +6953,24 @@ function swCancel() {
   _swResetToStep1();
 }
 
+// Resume polling mid-sync after user navigated away and back — do NOT re-post execute
+function _swResumeSync() {
+  _sw.step = 4;
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById(`sw-step-${i}`);
+    if (el) el.style.display = i === 4 ? '' : 'none';
+  }
+  const meta = _SW_STEPS[3];
+  document.getElementById('sw-counter').textContent = '4 / 5';
+  document.getElementById('sw-title').textContent = meta.title;
+  document.getElementById('sw-sub').textContent = `Transferring to ${_sw.device?.name || 'device'}…`;
+  _swUpdateFooter(4);
+  _updateNavButtonStates();
+  _sw.syncStartTs = Date.now() / 1000;
+  _sw.logLines = [];
+  _sw.syncPollTimer = setInterval(_swPollSync, 600);
+}
+
 /* ── Step 2: Scan ────────────────────────────────────────── */
 
 async function swStartScan() {
@@ -6977,6 +7002,8 @@ function _swInitScanStep() {
 }
 
 async function _swPollScan() {
+  // Self-terminate if user navigated away from the scan step
+  if (_sw.step !== 2) { clearInterval(_sw.scanPollTimer); _sw.scanPollTimer = null; return; }
   let status;
   try { status = await api('/sync/status'); } catch (_) { return; }
 
@@ -7216,9 +7243,8 @@ function _swBuildGroupCard(gid, group) {
       <div class="sw-group-rows">
         ${pageItems.map(item => {
           const action = sel[item.id] || 'keep';
-          const iId = esc(item.id);
           return `
-        <div class="sw-review-row sw-review-row--actions" data-gid="${gid}" data-id="${iId}">
+        <div class="sw-review-row sw-review-row--actions" data-gid="${gid}" data-id="${esc(item.id)}">
           <div class="sw-row-thumb" style="background:${_swThumbColor(item.title)}">${_swInitials(item.title)}</div>
           <div class="sw-row-info">
             <div class="sw-row-title" title="${esc(item.title)}">${esc(item.title)}</div>
@@ -7226,11 +7252,14 @@ function _swBuildGroupCard(gid, group) {
           </div>
           <div class="sw-action-btns">
             <button class="sw-action-btn sw-action-btn--copy${action==='copy'?' sw-action-btn--active':''}"
-              onclick="event.stopPropagation();App.swSetItemAction('${iId}','copy')">Copy to library</button>
+              data-id="${esc(item.id)}" data-action="copy"
+              onclick="event.stopPropagation();App.swSetItemActionEl(this)">Copy to library</button>
             <button class="sw-action-btn sw-action-btn--keep${action==='keep'?' sw-action-btn--active':''}"
-              onclick="event.stopPropagation();App.swSetItemAction('${iId}','keep')">Keep</button>
+              data-id="${esc(item.id)}" data-action="keep"
+              onclick="event.stopPropagation();App.swSetItemActionEl(this)">Keep</button>
             <button class="sw-action-btn sw-action-btn--delete${action==='delete'?' sw-action-btn--active':''}"
-              onclick="event.stopPropagation();App.swSetItemAction('${iId}','delete')">Delete from DAP</button>
+              data-id="${esc(item.id)}" data-action="delete"
+              onclick="event.stopPropagation();App.swSetItemActionEl(this)">Delete from DAP</button>
           </div>
           <span class="sw-row-size">${item.size ? `${item.size} MB` : ''}</span>
         </div>`;
@@ -7266,8 +7295,9 @@ function _swBuildGroupCard(gid, group) {
       <div class="sw-group-rows">
         ${pageItems.map(item => `
         <div class="sw-review-row${sel[item.id] ? '' : ' sw-review-row--deselected'}" data-gid="${gid}" data-id="${esc(item.id)}">
-          <input type="checkbox" class="sw-check" ${sel[item.id] ? 'checked' : ''}
-            onclick="event.stopPropagation();App.swToggleItem('${gid}','${esc(item.id)}')" />
+          <input type="checkbox" class="sw-check sw-item-check" data-gid="${gid}" data-id="${esc(item.id)}"
+            ${sel[item.id] ? 'checked' : ''}
+            onclick="event.stopPropagation();App.swToggleItemEl(this)" />
           <div class="sw-row-thumb" style="background:${_swThumbColor(item.title)}">${_swInitials(item.title)}</div>
           <div class="sw-row-info">
             <div class="sw-row-title" title="${esc(item.title)}">${esc(item.title)}</div>
@@ -7334,6 +7364,14 @@ function swToggleGroup(gid, toState) {
   _sw.selection[gid] = {};
   for (const item of group.items) _sw.selection[gid][item.id] = toState;
   _swRenderReview();
+}
+
+// Bridge: reads id/gid from data attributes — avoids JS string escaping issues with special chars
+function swToggleItemEl(el) {
+  swToggleItem(el.dataset.gid, el.dataset.id);
+}
+function swSetItemActionEl(el) {
+  swSetItemAction(el.dataset.id, el.dataset.action);
 }
 
 // Set action for a single onDevice item ('copy'|'keep'|'delete')
@@ -7483,6 +7521,8 @@ function _swBuildExecutePayload() {
 }
 
 async function _swPollSync() {
+  // Self-terminate if user navigated away from the sync step
+  if (_sw.step !== 4) { clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null; return; }
   let status;
   try { status = await api('/sync/status'); } catch (_) { return; }
 
@@ -7503,6 +7543,12 @@ async function _swPollSync() {
   const phaseIndex = Math.floor((progress / 100) * (_SW_SYNC_PHASES.length - 1));
   _swRenderPhases('sw-sync-phases', _SW_SYNC_PHASES, phaseIndex);
 
+  if (status.status === 'cancelled') {
+    clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null;
+    _swHandleSyncCancelled();
+    return;
+  }
+
   if (status.status === 'error') {
     clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null;
     _swHandleSyncError(status.message || 'Sync failed.');
@@ -7516,6 +7562,38 @@ async function _swPollSync() {
     _sw.syncResult = status;
     setTimeout(() => _swGoTo(5), 600);
   }
+}
+
+function _swHandleSyncCancelled() {
+  const card = document.getElementById('sw-sync-card');
+  if (!card) return;
+  card.innerHTML = `<div class="sw-error-card">
+    <div class="sw-error-icon" style="color:var(--text-muted)">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    </div>
+    <div class="sw-error-title" style="color:var(--text-sub)">Sync cancelled</div>
+    <div class="sw-error-detail">Files copied before cancellation remain on the device.</div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="sw-btn sw-btn--secondary" onclick="App.swCancel()">Back to step 1</button>
+    </div>
+  </div>`;
+  // Update footer — hide syncing buttons
+  const cancelBtn = document.getElementById('sw-btn-cancel');
+  const primaryBtn = document.getElementById('sw-btn-primary');
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  if (primaryBtn) { primaryBtn.style.display = 'none'; }
+}
+
+async function swCancelSync() {
+  const cancelBtn = document.getElementById('sw-btn-cancel');
+  if (cancelBtn) { cancelBtn.disabled = true; cancelBtn.textContent = 'Stopping…'; }
+  try {
+    await api('/sync/cancel', { method: 'POST' });
+  } catch (_) {
+    // Already stopped or not running — just reset
+    _swResetToStep1();
+  }
+  // Poller will detect 'cancelled' status and call _swHandleSyncCancelled
 }
 
 function _swHandleSyncError(msg) {
@@ -14169,6 +14247,9 @@ const App = {
   swSetFilter,
   swReviewPage,
   swSetItemAction,
+  swToggleItemEl,
+  swSetItemActionEl,
+  swCancelSync,
   swBulkAction,
   syncScanAgain,
   sortTracks,

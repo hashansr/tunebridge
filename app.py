@@ -7823,6 +7823,7 @@ def sync_scan():
         'space_ok': True,
         'playlists_out_of_sync': [],
         'playlists_out_of_sync_count': 0,
+        'cancel_requested': False,
     }
 
     def do_scan():
@@ -8110,6 +8111,10 @@ def sync_execute():
             sync_state['message'] = f'Syncing {progress} / {total} items…'
 
         for device_rel in add_to_device_paths:
+            if sync_state.get('cancel_requested'):
+                sync_state['status'] = 'cancelled'
+                sync_state['message'] = 'Sync cancelled by user.'
+                return
             local_rel = local_copy_map.get(device_rel)
             if not local_rel:
                 errors.append(f'{device_rel}: no local source mapping found')
@@ -8133,6 +8138,10 @@ def sync_execute():
             sync_state['message'] = f'Syncing {progress} / {total} items…'
 
         for rel in copy_to_local_paths:
+            if sync_state.get('cancel_requested'):
+                sync_state['status'] = 'cancelled'
+                sync_state['message'] = 'Sync cancelled by user.'
+                return
             src = device_path / rel
             dst = get_music_base() / rel
             sync_state['current'] = f'← Local: {rel}'
@@ -8161,6 +8170,10 @@ def sync_execute():
             sync_state['message'] = f'Syncing {progress} / {total} items…'
 
         for rel in delete_on_device_paths:
+            if sync_state.get('cancel_requested'):
+                sync_state['status'] = 'cancelled'
+                sync_state['message'] = 'Sync cancelled by user.'
+                return
             sync_state['current'] = f'✖ Device delete: {rel}'
             try:
                 _safe_delete_device_rel_file(device_path, rel)
@@ -8293,6 +8306,16 @@ def sync_execute():
 
     threading.Thread(target=do_copy, daemon=True).start()
     return jsonify({'ok': True})
+
+
+@app.route('/api/sync/cancel', methods=['POST'])
+def sync_cancel():
+    global sync_state
+    status = sync_state.get('status')
+    if status not in ('scanning', 'copying'):
+        return jsonify({'error': 'No sync in progress'}), 400
+    sync_state['cancel_requested'] = True
+    return jsonify({'ok': True, 'status': status})
 
 
 @app.route('/api/sync/reset', methods=['POST'])
