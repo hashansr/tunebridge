@@ -390,6 +390,150 @@ function thumbImg(key, size = 38, rounded = '4px') {
   return coverPlaceholder('song', size, rounded);
 }
 
+const _ALBUM_HERO_FALLBACK_COLORS = {
+  primary: '45, 67, 111',
+  secondary: '24, 102, 118',
+  accent: '173, 198, 255',
+};
+let _albumHeroColorToken = 0;
+
+function _setAlbumHeroColors(hero, colors = _ALBUM_HERO_FALLBACK_COLORS) {
+  if (!hero) return;
+  hero.style.setProperty('--album-hero-primary', colors.primary || _ALBUM_HERO_FALLBACK_COLORS.primary);
+  hero.style.setProperty('--album-hero-secondary', colors.secondary || _ALBUM_HERO_FALLBACK_COLORS.secondary);
+  hero.style.setProperty('--album-hero-accent', colors.accent || _ALBUM_HERO_FALLBACK_COLORS.accent);
+}
+
+function _clearAlbumHeroAtmosphere(hero) {
+  if (!hero) return;
+  hero.style.removeProperty('--album-hero-art-url');
+  _setAlbumHeroColors(hero);
+}
+
+function _rgbToCss(rgb) {
+  return `${Math.round(rgb[0])}, ${Math.round(rgb[1])}, ${Math.round(rgb[2])}`;
+}
+
+function _rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      default: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+  return [h, s, l];
+}
+
+function _hslToRgb(h, s, l) {
+  if (s === 0) {
+    const v = l * 255;
+    return [v, v, v];
+  }
+  const hue2rgb = (p, q, t) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return [
+    hue2rgb(p, q, h + 1 / 3) * 255,
+    hue2rgb(p, q, h) * 255,
+    hue2rgb(p, q, h - 1 / 3) * 255,
+  ];
+}
+
+function _premiumAlbumHeroPalette(samples) {
+  if (!samples.length) return _ALBUM_HERO_FALLBACK_COLORS;
+  let total = 0;
+  const sum = [0, 0, 0];
+  let accent = samples[0];
+
+  samples.forEach(sample => {
+    const [r, g, b] = sample;
+    const [, sat, light] = _rgbToHsl(r, g, b);
+    const contrastWeight = 1 - Math.abs(light - 0.48);
+    const weight = Math.max(0.08, sat * 1.5 + contrastWeight * 0.7);
+    sum[0] += r * weight;
+    sum[1] += g * weight;
+    sum[2] += b * weight;
+    total += weight;
+
+    const [, accentSat, accentLight] = _rgbToHsl(accent[0], accent[1], accent[2]);
+    const accentScore = accentSat * (1 - Math.abs(accentLight - 0.5));
+    const score = sat * (1 - Math.abs(light - 0.5));
+    if (score > accentScore) accent = sample;
+  });
+
+  const base = sum.map(v => v / total);
+  const [h, s] = _rgbToHsl(base[0], base[1], base[2]);
+  const primary = _hslToRgb(h, Math.min(0.62, Math.max(0.3, s * 0.9)), 0.28);
+  const secondary = _hslToRgb((h + 0.08) % 1, Math.min(0.58, Math.max(0.26, s * 0.8)), 0.22);
+  const [ah, as] = _rgbToHsl(accent[0], accent[1], accent[2]);
+  const accentRgb = _hslToRgb(ah, Math.min(0.7, Math.max(0.38, as)), 0.64);
+
+  return {
+    primary: _rgbToCss(primary),
+    secondary: _rgbToCss(secondary),
+    accent: _rgbToCss(accentRgb),
+  };
+}
+
+function _applyAlbumHeroAtmosphere(hero, artKey) {
+  if (!hero) return;
+  const token = ++_albumHeroColorToken;
+  _clearAlbumHeroAtmosphere(hero);
+  if (!artKey) return;
+
+  const artUrl = artworkUrl(artKey);
+  hero.style.setProperty('--album-hero-art-url', `url("${artUrl}")`);
+
+  const img = new Image();
+  img.decoding = 'async';
+  img.onload = () => {
+    if (token !== _albumHeroColorToken) return;
+    try {
+      const canvas = document.createElement('canvas');
+      const size = 32;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, size, size);
+      const data = ctx.getImageData(0, 0, size, size).data;
+      const samples = [];
+      for (let i = 0; i < data.length; i += 4) {
+        const alpha = data[i + 3];
+        if (alpha < 180) continue;
+        const rgb = [data[i], data[i + 1], data[i + 2]];
+        const [, sat, light] = _rgbToHsl(rgb[0], rgb[1], rgb[2]);
+        if (light < 0.08 || light > 0.93 || sat < 0.04) continue;
+        samples.push(rgb);
+      }
+      _setAlbumHeroColors(hero, _premiumAlbumHeroPalette(samples));
+    } catch (_) {
+      _setAlbumHeroColors(hero);
+    }
+  };
+  img.onerror = () => {
+    if (token === _albumHeroColorToken) _clearAlbumHeroAtmosphere(hero);
+  };
+  img.src = artUrl;
+}
+
 function _artistImageSrc(a) {
   if (a?.image_key) return `/api/artists/${encodeURIComponent(a.image_key)}/image`;
   if (a?.artwork_key) return artworkUrl(a.artwork_key);
@@ -2073,10 +2217,12 @@ async function loadTracks(artist = null, album = null, displayArtist = '') {
   // Album / artist hero
   const albumHero = document.getElementById('album-hero');
   if (album && tracks.length) {
+    albumHero.classList.add('is-album-context');
     const heroArtist = displayArtist || artist || '';
     const artKey = tracks[0].artwork_key || '';
     document.getElementById('album-hero-art').innerHTML =
       artKey ? `<img src="${artworkUrl(artKey)}" />` : coverPlaceholder('album', 64, 'var(--radius)', true);
+    _applyAlbumHeroAtmosphere(albumHero, artKey);
     document.getElementById('album-hero-name').textContent = album;
     document.getElementById('album-hero-artist').innerHTML = heroArtist
       ? `<span class="link" data-artist="${esc(heroArtist)}" onclick="App.showArtist(this.dataset.artist)">${esc(heroArtist)}</span>` : '';
@@ -2110,9 +2256,11 @@ async function loadTracks(artist = null, album = null, displayArtist = '') {
     albumHero.oncontextmenu = (e) => App.showAlbumDetailCtxMenu(e, artist || heroArtist, album);
     albumHero.style.display = 'flex';
   } else if (!album && artist && tracks.length) {
+    albumHero.classList.remove('is-album-context');
     const artKey = tracks[0].artwork_key || '';
     document.getElementById('album-hero-art').innerHTML =
       artKey ? `<img src="${artworkUrl(artKey)}" />` : coverPlaceholder('song', 64, 'var(--radius)', true);
+    _clearAlbumHeroAtmosphere(albumHero);
     document.getElementById('album-hero-name').textContent = 'All Songs';
     document.getElementById('album-hero-artist').innerHTML =
       `<span class="link" data-artist="${esc(artist)}" onclick="App.showArtist(this.dataset.artist)">${esc(artist)}</span>`;
@@ -2127,6 +2275,8 @@ async function loadTracks(artist = null, album = null, displayArtist = '') {
     albumHero.style.display = 'flex';
   } else {
     albumHero.oncontextmenu = null;
+    albumHero.classList.remove('is-album-context');
+    _clearAlbumHeroAtmosphere(albumHero);
     albumHero.style.display = 'none';
   }
 
@@ -17582,6 +17732,7 @@ async function saveAlbumArt() {
     if (heroArt && newKey) {
       heroArt.innerHTML = `<img src="/api/artwork/${newKey}?t=${Date.now()}" alt="${esc(_albumArtAlbum)}" />`;
     }
+    _applyAlbumHeroAtmosphere(document.getElementById('album-hero'), newKey);
   } catch (e) {
     _showTagError('aa-error', e.message || 'Save failed. Check the image is accessible.');
     btn.disabled    = false;
@@ -17607,6 +17758,7 @@ async function removeAlbumArt() {
     if (state.view === 'tracks') loadTracks(state.artist, state.album);
     const heroArt = document.getElementById('album-hero-art');
     if (heroArt) heroArt.innerHTML = coverPlaceholder('album', 64, 'var(--radius)', true);
+    _clearAlbumHeroAtmosphere(document.getElementById('album-hero'));
   } catch (e) {
     toast('Error removing art: ' + e.message);
   }
