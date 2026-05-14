@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "static" / "index.html"
 STYLE_CSS = ROOT / "static" / "style.css"
 
-STRICT_MODAL_IDS = ["sync-modal"]
+STRICT_MODAL_IDS: list[str] = []  # sync-modal removed — sync is now an inline wizard view
 OVERLAY_EXCEPTIONS = {"onboarding-modal"}
 SHELL_EXCEPTIONS = {"onboarding-modal", "iem-compare-modal"}
 ALLOWED_INLINE_STYLE_PATTERNS = [
@@ -140,26 +140,8 @@ def check_inline_styles(index_html: Path) -> list[str]:
 
 
 def check_sync_modal_token_usage(style_css: Path) -> list[str]:
-    css = style_css.read_text(encoding="utf-8")
-    violations: list[str] = []
-    sync_start = css.find("/* ── Sync modal")
-    if sync_start < 0:
-        return ["sync-modal css block not found"]
-
-    required_tokenized_selectors = [
-        "#sync-modal .sync-modal-shell",
-        ".sync-modal-icon",
-    ]
-    for selector in required_tokenized_selectors:
-        idx = css.find(selector, sync_start)
-        if idx < 0:
-            violations.append(f"sync-modal css selector missing: {selector}")
-            continue
-        end = css.find("}", idx)
-        block = css[idx:end] if end > idx else ""
-        if "var(--tb-" not in block:
-            violations.append(f"sync-modal selector not tokenized: {selector}")
-    return violations
+    # sync-modal removed — sync feature is now a 5-step inline wizard (#view-sync / sw-* classes)
+    return []
 
 
 def main() -> int:
