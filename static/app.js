@@ -7128,9 +7128,9 @@ function _swBuildProposal(status) {
   ];
 
   _sw.proposal = {
-    toDevice:  { label: 'New on this Mac — add to device', hint: 'Tracks present locally but not on player', items: toDeviceItems(status.local_only, status.local_only_sizes) },
-    onDevice:  { label: 'On device, not in library',       hint: 'Files on player not found in local library', items: onDeviceCombined },
-    playlists: { label: 'Playlist changes',                hint: 'Playlists that differ from device copy',   items: plItems(status.playlists_out_of_sync) },
+    toDevice:  { label: 'New in Library',               hint: 'Tracks in your library not yet on the device', items: toDeviceItems(status.local_only, status.local_only_sizes) },
+    onDevice:  { label: 'On Device, not in Library',    hint: 'Files on the player with no match in your library', items: onDeviceCombined },
+    playlists: { label: 'New or Updated Playlists',     hint: 'Playlists that have changed since the last sync', items: plItems(status.playlists_out_of_sync) },
   };
 
   // Reset pagination
@@ -7282,7 +7282,7 @@ function _swBuildGroupCard(gid, group) {
     const selectedCount = Object.values(sel).filter(Boolean).length;
     const allSelected = selectedCount === total;
     const someSelected = selectedCount > 0 && !allSelected;
-    const actionLabel = gid === 'toDevice' ? 'Add to device' : 'Sync playlist';
+    const actionLabel = gid === 'playlists' ? 'Sync playlist' : null;
 
     card.innerHTML = `
       <div class="sw-group-hdr" onclick="App.swToggleGroupCollapse('${gid}')">
@@ -7312,7 +7312,7 @@ function _swBuildGroupCard(gid, group) {
             <div class="sw-row-title" title="${esc(item.title)}">${esc(item.title)}</div>
             <div class="sw-row-sub">${item.kind === 'playlist' ? esc(item.meta || '') : [item.artist, item.album].filter(Boolean).map(esc).join(' · ')}</div>
           </div>
-          <span class="sw-action-chip">${esc(actionLabel)}</span>
+          ${actionLabel ? `<span class="sw-action-chip">${esc(actionLabel)}</span>` : '<span></span>'}
           <span class="sw-row-size">${item.size ? `${item.size} MB` : ''}${item.size && item.dur ? ' · ' : ''}${item.dur ?? ''}</span>
         </div>`).join('')}
       </div>
@@ -7476,23 +7476,26 @@ function _swUpdateReviewFooter() {
   const t = _swComputeTotals();
   const msgEl = document.getElementById('sw-footer-msg');
   if (msgEl) {
-    const parts = [];
-    if (t.toDeviceCount)  parts.push(`${t.toDeviceCount} to device`);
-    if (t.copyCount)      parts.push(`${t.copyCount} copy to library`);
-    if (t.deleteCount)    parts.push(`${t.deleteCount} delete from device`);
-    if (t.playlistCount)  parts.push(`${t.playlistCount} playlist${t.playlistCount===1?'':'s'}`);
-    msgEl.textContent = parts.length ? parts.join(' · ') : 'No changes selected.';
+    const statusEl = document.getElementById('sw-footer-status');
+    if (t.outOfSpace) {
+      const over = _fmtGB(t.afterUsed - t.capBytes);
+      msgEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Not enough space. Deselect ${over} to continue.`;
+      if (statusEl) statusEl.className = 'sw-footer-status sw-footer-status--warn';
+    } else {
+      const parts = [];
+      if (t.toDeviceCount)  parts.push(`${t.toDeviceCount} to device`);
+      if (t.copyCount)      parts.push(`${t.copyCount} to library`);
+      if (t.deleteCount)    parts.push(`${t.deleteCount} deleted from device`);
+      if (t.playlistCount)  parts.push(`${t.playlistCount} playlist${t.playlistCount===1?'':'s'}`);
+      msgEl.innerHTML = parts.length ? parts.join(' &middot; ') : 'No changes selected.';
+      if (statusEl) statusEl.className = 'sw-footer-status';
+    }
   }
 
   const primaryBtn = document.getElementById('sw-btn-primary');
   if (primaryBtn) {
-    if (t.outOfSpace) {
-      primaryBtn.disabled = true;
-      if (msgEl) msgEl.textContent = `Not enough space — deselect ${_fmtGB(t.afterUsed - t.capBytes)} to continue.`;
-    } else {
-      primaryBtn.disabled = t.totalChanges === 0;
-      primaryBtn.innerHTML = `Start sync (${t.totalChanges})`;
-    }
+    primaryBtn.disabled = t.outOfSpace || t.totalChanges === 0;
+    if (!t.outOfSpace) primaryBtn.innerHTML = `Start sync (${t.totalChanges})`;
   }
 }
 

@@ -18571,6 +18571,12 @@ body.is-col-resizing {
   flex: 1;
 }
 .sw-footer-status--success { color: var(--accent-success); }
+.sw-footer-status--warn {
+  color: var(--accent-warning);
+  font-size: 13px;
+  font-weight: 600;
+  gap: 8px;
+}
 
 .sw-footer-actions {
   display: flex;
