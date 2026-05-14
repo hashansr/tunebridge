@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=57" />
+  <link rel="stylesheet" href="/style.css?v=58" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -71,7 +71,7 @@
       </nav>
 
       <div id="sync-cta-zone" aria-label="Music sync actions">
-        <button id="sync-nav-btn" onclick="App.showSync()">
+        <button id="sync-nav-btn" onclick="App.showView('sync')">
           <span class="sync-nav-icon" aria-hidden="true">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M1.72121 9.84783C1.60853 10.3885 2.00919 10.8844 2.55813 10.9451L3.55208 11.0549C4.10102 11.1156 4.58852 10.7169 4.72198 10.1809C5.53445 6.9183 8.48575 4.5 12.0002 4.5C13.5186 4.5 14.8077 5.08399 16.088 6.03743C16.176 6.10293 16.263 6.1694 16.3492 6.2368L14.7931 7.79292C14.5071 8.07892 14.4216 8.50904 14.5763 8.88271C14.7311 9.25639 15.0958 9.50003 15.5002 9.50003H21.0002C21.5525 9.50003 22.0002 9.05231 22.0002 8.50003V3.00003C22.0002 2.59557 21.7566 2.23093 21.3829 2.07615C21.0092 1.92137 20.5791 2.00692 20.2931 2.29292L18.4829 4.10309C18.2839 3.94028 18.0828 3.78239 17.8798 3.63127C16.287 2.44515 14.3803 1.5 12.0002 1.5C6.93842 1.5 2.71476 5.08059 1.72121 9.84783Z"/><path d="M22.2792 14.1522C22.3919 13.6115 21.9912 13.1156 21.4423 13.0549L20.4484 12.9451C19.8994 12.8844 19.4119 13.2831 19.2785 13.8191C18.466 17.0817 15.5147 19.5 12.0003 19.5C10.4818 19.5 9.19277 18.916 7.91239 17.9626C7.82443 17.8971 7.73741 17.8306 7.65119 17.7632L9.2073 16.2071C9.4933 15.9211 9.57885 15.491 9.42407 15.1173C9.26929 14.7436 8.90465 14.5 8.50019 14.5H3.00019C2.44791 14.5 2.00019 14.9477 2.00019 15.5V21C2.00019 21.4044 2.24383 21.7691 2.61751 21.9239C2.99118 22.0786 3.4213 21.9931 3.7073 21.7071L5.51748 19.8969C5.71653 20.0597 5.91768 20.2176 6.12063 20.3687C7.71348 21.5549 9.62015 22.5 12.0003 22.5C17.062 22.5 21.2857 18.9194 22.2792 14.1522Z"/></svg>
           </span>
@@ -1691,6 +1691,176 @@
           </div>
         </div>
       </div>
+      <!-- ───── Sync Wizard (inline view) ───── -->
+      <div id="view-sync" class="view sw-root" style="display:none">
+
+        <div class="sw-body" id="sw-body">
+
+          <!-- Step header (shown on all steps) -->
+          <div class="sw-step-header">
+            <span class="sw-step-counter" id="sw-counter">1 / 5</span>
+            <h1 class="sw-step-title" id="sw-title">Select a device</h1>
+            <p class="sw-step-sub" id="sw-sub">Choose a connected player to sync with your library.</p>
+          </div>
+
+          <!-- ── Step 1: Select device ── -->
+          <div id="sw-step-1" class="sw-step">
+            <div class="sw-step-1-layout">
+              <!-- Left: device list -->
+              <div class="sw-device-col">
+                <div id="sw-device-list" class="sw-device-list">
+                  <!-- populated by loadSyncView() -->
+                </div>
+                <button class="sw-add-device-btn" onclick="App.showView('gear')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add a new device
+                </button>
+              </div>
+              <!-- Right: detail panel -->
+              <div class="sw-detail-col">
+                <div id="sw-detail-panel" class="sw-detail-panel sw-card sw-card--detail">
+                  <div class="sw-detail-empty" id="sw-detail-empty">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.3;margin-bottom:10px"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="12" y1="6" x2="12" y2="8"/></svg>
+                    <p>Select a device to see details</p>
+                  </div>
+                  <div id="sw-detail-content" style="display:none">
+                    <!-- populated by swSelectDevice() -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Step 2: Scanning ── -->
+          <div id="sw-step-2" class="sw-step" style="display:none">
+            <div class="sw-progress-card sw-card" id="sw-scan-card">
+              <div class="sw-progress-hdr">
+                <div class="sw-progress-hdr-left">
+                  <span class="sw-overline">scanning</span>
+                  <span class="sw-progress-phase-label" id="sw-scan-phase-label">Preparing…</span>
+                </div>
+                <div class="sw-progress-stats">
+                  <span class="sw-stat-chip"><span class="sw-stat-val" id="sw-scan-items">0</span> <span class="sw-stat-lbl">items compared</span></span>
+                  <span class="sw-stat-chip"><span class="sw-stat-val" id="sw-scan-elapsed">0s</span> <span class="sw-stat-lbl">elapsed</span></span>
+                </div>
+              </div>
+              <div class="sw-big-pct" id="sw-scan-pct">0%</div>
+              <div class="sw-bar-wrap">
+                <div class="sw-bar sw-bar--scan" id="sw-scan-bar" style="width:0%"></div>
+              </div>
+              <div class="sw-progress-body">
+                <div class="sw-phases-col" id="sw-scan-phases"><!-- populated by JS --></div>
+                <div class="sw-log-col">
+                  <div class="sw-log-hdr">
+                    <span class="sw-overline">Live log</span>
+                    <span class="sw-log-count" id="sw-scan-log-count">0 entries</span>
+                  </div>
+                  <div class="sw-log" id="sw-scan-log"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Step 3: Review changes ── -->
+          <div id="sw-step-3" class="sw-step" style="display:none">
+            <div class="sw-filter-chips" id="sw-filter-chips">
+              <button class="sw-chip sw-chip--active" data-filter="all" onclick="App.swSetFilter('all')">All <span class="sw-chip-badge" id="sw-chip-all">0</span></button>
+              <button class="sw-chip" data-filter="toDevice" onclick="App.swSetFilter('toDevice')">To device <span class="sw-chip-badge" id="sw-chip-toDevice">0</span></button>
+              <button class="sw-chip" data-filter="toLibrary" onclick="App.swSetFilter('toLibrary')">To library <span class="sw-chip-badge" id="sw-chip-toLibrary">0</span></button>
+              <button class="sw-chip" data-filter="playlists" onclick="App.swSetFilter('playlists')">Playlists <span class="sw-chip-badge" id="sw-chip-playlists">0</span></button>
+              <button class="sw-chip" data-filter="removeFromDevice" onclick="App.swSetFilter('removeFromDevice')">Removals <span class="sw-chip-badge" id="sw-chip-removals">0</span></button>
+            </div>
+            <div id="sw-review-groups" class="sw-review-groups"><!-- populated by JS --></div>
+          </div>
+
+          <!-- ── Step 4: Syncing ── -->
+          <div id="sw-step-4" class="sw-step" style="display:none">
+            <div class="sw-progress-card sw-card" id="sw-sync-card">
+              <div class="sw-progress-hdr">
+                <div class="sw-progress-hdr-left">
+                  <span class="sw-overline">syncing</span>
+                  <span class="sw-progress-phase-label" id="sw-sync-phase-label">Preparing…</span>
+                </div>
+                <div class="sw-progress-stats">
+                  <span class="sw-stat-chip"><span class="sw-stat-val" id="sw-sync-tracks">0</span> <span class="sw-stat-lbl">tracks</span></span>
+                  <span class="sw-stat-chip"><span class="sw-stat-val" id="sw-sync-elapsed">0s</span> <span class="sw-stat-lbl">elapsed</span></span>
+                </div>
+              </div>
+              <div class="sw-big-pct" id="sw-sync-pct">0%</div>
+              <div class="sw-bar-wrap">
+                <div class="sw-bar sw-bar--sync" id="sw-sync-bar" style="width:0%"></div>
+              </div>
+              <div class="sw-progress-body">
+                <div class="sw-phases-col" id="sw-sync-phases"><!-- populated by JS --></div>
+                <div class="sw-log-col">
+                  <div class="sw-log-hdr">
+                    <span class="sw-overline">Live log</span>
+                    <span class="sw-log-count" id="sw-sync-log-count">0 entries</span>
+                  </div>
+                  <div class="sw-log" id="sw-sync-log"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Step 5: Done ── -->
+          <div id="sw-step-5" class="sw-step" style="display:none">
+            <div class="sw-done-hero" id="sw-done-hero">
+              <div class="sw-done-check-circle">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div class="sw-done-hero-text">
+                <span class="sw-overline sw-overline--success">COMPLETE</span>
+                <h2 class="sw-done-hero-title" id="sw-done-title">Device is up to date</h2>
+                <div class="sw-done-hero-meta" id="sw-done-meta"></div>
+              </div>
+            </div>
+            <div class="sw-stat-tiles" id="sw-stat-tiles"><!-- populated by JS --></div>
+            <div class="sw-done-body">
+              <div class="sw-changelog-card sw-card" id="sw-changelog"><!-- populated by JS --></div>
+              <div class="sw-done-right">
+                <div class="sw-storage-now-card sw-card" id="sw-storage-now"></div>
+                <div class="sw-upnext-card sw-card">
+                  <div class="sw-upnext-label sw-overline">Up next</div>
+                  <button class="sw-upnext-row" onclick="App.swFinish()">
+                    <svg class="sw-upnext-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v4a4 4 0 0 0 4 4h8a4 4 0 0 0 4-4v-4"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                    <span>Eject and disconnect</span>
+                    <svg class="sw-upnext-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                  <button class="sw-upnext-row" onclick="App.showView('history')">
+                    <svg class="sw-upnext-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="3"/></svg>
+                    <span>View activity log</span>
+                    <svg class="sw-upnext-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                  <button class="sw-upnext-row" onclick="App.swFinish()">
+                    <svg class="sw-upnext-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+                    <span>Sync another device</span>
+                    <svg class="sw-upnext-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /.sw-body -->
+
+        <!-- Sticky footer -->
+        <div class="sw-footer" id="sw-footer">
+          <div class="sw-footer-status" id="sw-footer-status">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="3"/></svg>
+            <span id="sw-footer-msg">You can keep using the app while the scan runs.</span>
+          </div>
+          <div class="sw-footer-actions">
+            <button class="sw-btn sw-btn--secondary" id="sw-btn-cancel" onclick="App.swCancel()">Cancel</button>
+            <button class="sw-btn sw-btn--primary" id="sw-btn-primary" onclick="App.swPrimaryAction()" disabled>
+              Scan device
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </button>
+          </div>
+        </div>
+
+      </div><!-- /#view-sync -->
+
     </main>
 
   <!-- Shared Insights help popover -->
@@ -1848,277 +2018,6 @@
           Use the <strong>↺</strong> button in the sidebar to rescan after adding or removing music.
         </p>
       </div>
-    </div>
-  </div>
-
-  <!-- Sync modal -->
-  <div id="sync-modal" class="modal-overlay tb-modal-overlay" style="display:none">
-    <div class="modal modal-wide sync-modal-shell tb-modal-shell tb-modal--md">
-
-      <!-- Header -->
-      <div class="sync-modal-header tb-modal-header">
-        <div class="sync-modal-header-left tb-modal-header-left">
-          <div class="sync-modal-icon tb-modal-icon-tile" id="sync-modal-phase-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M22.2792 9.84783C22.3919 10.3885 21.9912 10.8844 21.4423 10.9451L20.4484 11.0549C19.8994 11.1156 19.4119 10.7169 19.2785 10.1809C18.466 6.9183 15.5147 4.5 12.0003 4.5C10.4818 4.5 9.19277 5.08399 7.91239 6.03743C7.82444 6.10292 7.73743 6.16939 7.65122 6.23679L9.20733 7.79289C9.49332 8.07889 9.57888 8.50901 9.4241 8.88268C9.26932 9.25636 8.90468 9.5 8.50022 9.5H3.00022C2.44793 9.5 2.00022 9.05228 2.00022 8.5V3C2.00022 2.59554 2.24386 2.2309 2.61754 2.07612C2.99121 1.92134 3.42133 2.00689 3.70733 2.29289L5.51751 4.10308C5.71655 3.94027 5.91769 3.78239 6.12063 3.63127C7.71348 2.44515 9.62015 1.5 12.0003 1.5C17.062 1.5 21.2857 5.08059 22.2792 9.84783Z"/><path d="M1.72121 14.1522C1.60853 13.6115 2.00919 13.1156 2.55813 13.0549L3.55208 12.9451C4.10102 12.8844 4.58852 13.2831 4.72198 13.8191C5.53445 17.0817 8.48575 19.5 12.0002 19.5C13.5186 19.5 14.8077 18.916 16.088 17.9626C16.176 17.8971 16.263 17.8306 16.3493 17.7632L14.7931 16.2071C14.5071 15.9211 14.4216 15.491 14.5764 15.1173C14.7311 14.7436 15.0958 14.5 15.5002 14.5H21.0002C21.5525 14.5 22.0002 14.9477 22.0002 15.5V21C22.0002 21.4044 21.7566 21.7691 21.3829 21.9239C21.0093 22.0786 20.5791 21.9931 20.2931 21.7071L18.483 19.8969C18.2839 20.0597 18.0828 20.2176 17.8798 20.3687C16.287 21.5549 14.3803 22.5 12.0002 22.5C6.93842 22.5 2.71476 18.9194 1.72121 14.1522Z"/></svg>
-          </div>
-          <div>
-            <div class="sync-modal-step-label tb-modal-step" id="sync-modal-step-label">Step 1 of 5</div>
-            <div class="sync-modal-title tb-modal-title" id="sync-modal-title">Sync Music</div>
-            <div class="sync-modal-subtitle tb-modal-subtitle" id="sync-modal-subtitle">Choose a connected device to start syncing.</div>
-          </div>
-        </div>
-        <button class="modal-close-btn" onclick="App.closeSyncModal()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6.70718 4.5858C6.31666 4.19528 5.68349 4.19528 5.29297 4.5858L4.58586 5.29291C4.19534 5.68343 4.19534 6.3166 4.58586 6.70712L9.87877 12L4.5859 17.2929C4.19537 17.6834 4.19537 18.3166 4.5859 18.7071L5.293 19.4142C5.68353 19.8048 6.31669 19.8048 6.70722 19.4142L12.0001 14.1214L17.293 19.4142C17.6835 19.8048 18.3167 19.8048 18.7072 19.4142L19.4143 18.7071C19.8048 18.3166 19.8048 17.6834 19.4143 17.2929L14.1214 12L19.4143 6.70712C19.8048 6.3166 19.8048 5.68343 19.4143 5.29291L18.7072 4.5858C18.3167 4.19528 17.6835 4.19528 17.293 4.5858L12.0001 9.87871L6.70718 4.5858Z"/></svg>
-        </button>
-      </div>
-      <div class="sync-progress-banner" id="sync-progress-banner" style="display:none">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
-        <span class="sync-progress-banner-copy">
-          <strong id="sync-progress-banner-title">Scan in progress</strong>
-          <span id="sync-progress-banner-text">Do not dismiss. Closing this window may result in data inconsistency.</span>
-        </span>
-      </div>
-
-      <div class="sync-modal-body">
-        <!-- Phase: pick device -->
-        <div id="sync-phase-pick" class="sync-phase-panel sync-phase-panel--pick">
-          <div class="sync-pick-scroll">
-            <div class="sync-device-groups">
-              <section class="sync-device-group" id="sync-device-group-recommended">
-                <div class="sync-section-label">Connected</div>
-                <div id="sync-device-list-recommended" class="sync-device-list">
-                  <!-- Populated dynamically from DAP list in showSync() -->
-                </div>
-              </section>
-              <section class="sync-device-group" id="sync-device-group-external" style="display:none">
-                <div class="sync-section-label">Not Connected</div>
-                <div id="sync-device-list-external" class="sync-device-list">
-                  <!-- Populated dynamically from DAP list in showSync() -->
-                </div>
-              </section>
-            </div>
-          </div>
-          <div class="modal-actions sync-pick-actions">
-            <button class="btn-secondary" onclick="App.closeSyncModal()">Cancel</button>
-            <button class="btn-primary" id="sync-pick-next-btn" onclick="App.startSyncFromSelection()" disabled>Scan</button>
-          </div>
-        </div>
-
-        <!-- Phase: scanning -->
-        <div id="sync-phase-scanning" class="sync-phase-panel sync-phase-panel--progress sync-phase-panel--scan" style="display:none">
-          <div class="sync-progress-phase sync-progress-phase--scan">
-            <div class="sync-scan-panel">
-              <div class="sync-scan-panel-grid">
-                <div class="sync-scan-panel-left">
-                  <div class="sync-scan-ring" id="sync-scan-ring" style="--scan-pct: 0;">
-                    <div class="sync-scan-ring-inner">
-                      <div class="sync-scan-percent" id="sync-scan-percent">0%</div>
-                      <div class="sync-scan-percent-sub" id="sync-scan-mode">In Progress</div>
-                    </div>
-                  </div>
-                  <p class="sync-scan-msg" id="sync-scanning-msg">Scanning library data...</p>
-                </div>
-                <div class="sync-scan-summary" id="sync-scan-summary">
-                  <article class="sync-scan-stat-card">
-                    <div class="sync-scan-stat-label">To Device</div>
-                    <div class="sync-scan-stat-value" id="sync-scan-to-device">0</div>
-                    <div class="sync-scan-stat-note">New tracks to sync</div>
-                  </article>
-                  <article class="sync-scan-stat-card">
-                    <div class="sync-scan-stat-label">To Local</div>
-                    <div class="sync-scan-stat-value" id="sync-scan-to-local">0</div>
-                    <div class="sync-scan-stat-note">Missing locally</div>
-                  </article>
-                  <article class="sync-scan-stat-card">
-                    <div class="sync-scan-stat-label">Playlists</div>
-                    <div class="sync-scan-stat-value" id="sync-scan-playlists">0</div>
-                    <div class="sync-scan-stat-note">Updated metadata</div>
-                  </article>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- Phase: preview -->
-        <div id="sync-phase-preview" class="sync-phase-panel sync-phase-panel--preview" style="display:none">
-          <div class="sync-preview-scroll">
-            <div id="sync-warnings-wrap" class="sync-section sync-section--warning" style="display:none">
-              <div class="sync-section-hdr">
-                <div class="sync-section-hdr-left">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round"><path d="M12 3l9 16H3l9-16z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                  <span class="sync-section-title">Warnings</span>
-                  <span class="sync-count-pill" id="sync-warning-count">0</span>
-                </div>
-              </div>
-              <div class="sync-list" id="sync-list-warnings"></div>
-            </div>
-
-            <div id="sync-section-to-device" class="sync-section">
-              <div class="sync-section-hdr">
-                <div class="sync-section-hdr-left">
-                  <button class="sync-accordion-toggle" id="sync-toggle-to-device" onclick="App.toggleSyncSection('to-device')" aria-controls="sync-list-to-device" aria-expanded="false" title="Expand section">
-                    <span class="sync-section-icon sync-section-icon--add" aria-hidden="true">+</span>
-                    <span class="sync-accordion-chevron" aria-hidden="true"></span>
-                    <span class="sync-section-title sync-section-title--add" id="sync-to-device-title">New in Library → Add to DAP</span>
-                  </button>
-                  <span class="sync-count-pill" id="sync-to-device-count">0</span>
-                </div>
-                <label class="sync-check-all">
-                  Select all
-                  <input type="checkbox" id="chk-all-to-device" onchange="App.syncToggleAll('to-device', this.checked)" checked />
-                </label>
-              </div>
-              <div class="sync-list" id="sync-list-to-device"></div>
-            </div>
-
-            <div id="sync-section-library-deleted" class="sync-section">
-              <div class="sync-section-hdr">
-                <div class="sync-section-hdr-left">
-                  <button class="sync-accordion-toggle" id="sync-toggle-library-deleted" onclick="App.toggleSyncSection('library-deleted')" aria-controls="sync-list-library-deleted" aria-expanded="false" title="Expand section">
-                    <span class="sync-section-icon sync-section-icon--warn" aria-hidden="true">!</span>
-                    <span class="sync-accordion-chevron" aria-hidden="true"></span>
-                    <span class="sync-section-title sync-section-title--remove" id="sync-library-deleted-title">Deleted from Library (on DAP)</span>
-                  </button>
-                  <span class="sync-count-pill" id="sync-library-deleted-count">0</span>
-                </div>
-                <select id="sync-bulk-action-library-deleted" class="sync-bulk-action" onchange="App.syncSectionBulkActionChanged('library-deleted', this.value)">
-                  <option value="keep_on_dap">Keep on DAP</option>
-                  <option value="delete_on_dap">Delete on DAP</option>
-                  <option value="dont_remind">Don't remind me</option>
-                </select>
-                <label class="sync-check-all">
-                  Select all
-                  <input type="checkbox" id="chk-all-library-deleted" onchange="App.syncToggleAll('library-deleted', this.checked)" checked />
-                </label>
-              </div>
-              <div class="sync-list" id="sync-list-library-deleted"></div>
-            </div>
-
-            <div id="sync-section-device-only" class="sync-section">
-              <div class="sync-section-hdr">
-                <div class="sync-section-hdr-left">
-                  <button class="sync-accordion-toggle" id="sync-toggle-device-only" onclick="App.toggleSyncSection('device-only')" aria-controls="sync-list-device-only" aria-expanded="false" title="Expand section">
-                    <span class="sync-section-icon sync-section-icon--device" aria-hidden="true">↔</span>
-                    <span class="sync-accordion-chevron" aria-hidden="true"></span>
-                    <span class="sync-section-title sync-section-title--remove" id="sync-device-only-title">On DAP only (not in Library)</span>
-                  </button>
-                  <span class="sync-count-pill" id="sync-device-only-count">0</span>
-                </div>
-                <select id="sync-bulk-action-device-only" class="sync-bulk-action" onchange="App.syncSectionBulkActionChanged('device-only', this.value)">
-                  <option value="copy_to_library">Copy to Library</option>
-                  <option value="delete_on_dap">Delete on DAP</option>
-                  <option value="dont_remind">Don't remind me</option>
-                </select>
-                <label class="sync-check-all">
-                  Select all
-                  <input type="checkbox" id="chk-all-device-only" onchange="App.syncToggleAll('device-only', this.checked)" checked />
-                </label>
-              </div>
-              <div class="sync-list" id="sync-list-device-only"></div>
-            </div>
-
-            <div id="sync-section-playlists" class="sync-section">
-              <div class="sync-section-hdr">
-                <div class="sync-section-hdr-left">
-                  <button class="sync-accordion-toggle" id="sync-toggle-playlists" onclick="App.toggleSyncSection('playlists')" aria-controls="sync-list-playlists" aria-expanded="false" title="Expand section">
-                    <span class="sync-section-icon sync-section-icon--playlist" aria-hidden="true">≡</span>
-                    <span class="sync-accordion-chevron" aria-hidden="true"></span>
-                    <span class="sync-section-title sync-section-title--add" id="sync-playlist-title">Playlists to Sync</span>
-                  </button>
-                  <span class="sync-count-pill" id="sync-playlist-count">0</span>
-                </div>
-                <label class="sync-check-all">
-                  Select all
-                  <input type="checkbox" id="chk-all-playlists" onchange="App.syncToggleAll('playlists', this.checked)" checked />
-                </label>
-              </div>
-              <div class="sync-list" id="sync-list-playlists"></div>
-            </div>
-
-            <div id="sync-section-ignored" class="sync-section">
-              <div class="sync-section-hdr">
-                <div class="sync-section-hdr-left">
-                  <button class="sync-accordion-toggle" id="sync-toggle-ignored" onclick="App.toggleSyncSection('ignored')" aria-controls="sync-list-ignored" aria-expanded="false" title="Expand section">
-                    <span class="sync-section-icon sync-section-icon--ignored" aria-hidden="true">○</span>
-                    <span class="sync-accordion-chevron" aria-hidden="true"></span>
-                    <span class="sync-section-title" id="sync-ignored-title">Skipped tracks (ignored)</span>
-                  </button>
-                  <span class="sync-count-pill" id="sync-ignored-count">0</span>
-                </div>
-                <label class="sync-check-all">
-                  Un-ignore all
-                  <input type="checkbox" id="chk-all-ignored" onchange="App.syncToggleAll('ignored', this.checked)" />
-                </label>
-              </div>
-              <div class="sync-list" id="sync-list-ignored"></div>
-            </div>
-
-            <div id="sync-rescan-required" class="sync-rescan-required" style="display:none">
-              <span>Some skipped tracks were un-ignored. Re-run scan to refresh active changes before syncing.</span>
-              <button class="btn-secondary btn-with-icon" onclick="App.syncScanAgain()"><span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>Re-scan</button>
-            </div>
-
-          </div>
-
-          <div class="modal-actions sync-preview-actions">
-            <div id="sync-space-summary" class="sync-space-summary" style="display:block"></div>
-            <div class="sync-preview-actions-row">
-              <div class="sync-preview-estimate" id="sync-est-time"></div>
-              <div class="sync-preview-buttons">
-                <button class="btn-secondary" onclick="App.syncScanAgain()">Back</button>
-                <button class="btn-primary" id="sync-execute-btn" onclick="App.executeSync()">Start Sync</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Phase: copying -->
-        <div id="sync-phase-copying" class="sync-phase-panel sync-phase-panel--progress sync-phase-panel--copying" style="display:none">
-          <div class="sync-progress-phase sync-progress-phase--copy">
-            <div class="sync-scan-center">
-              <div class="sync-scan-ring sync-copy-ring" id="sync-copy-ring" style="--scan-pct: 0;">
-                <div class="sync-scan-ring-inner">
-                  <div class="sync-scan-percent" id="sync-copy-percent">0%</div>
-                  <div class="sync-scan-percent-sub" id="sync-copying-mode">Syncing</div>
-                </div>
-              </div>
-              <p class="sync-scan-msg" id="sync-copying-msg">Preparing to sync files…</p>
-              <p class="sync-current-file sync-current-file--copy" id="sync-copying-current"></p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Phase: done -->
-        <div id="sync-phase-done" class="sync-phase-panel sync-phase-panel--progress sync-phase-panel--done" style="display:none">
-          <div class="sync-done-wrap">
-            <div class="sync-done-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            </div>
-            <h4 class="sync-done-title" id="sync-done-title">Sync Complete</h4>
-            <p class="sync-done-copy" id="sync-done-copy">Your library and DAP are now in harmony.</p>
-            <p class="sync-done-detail" id="sync-done-detail"></p>
-          </div>
-          <div id="sync-errors-wrap" style="display:none;margin-top:16px">
-            <div class="sync-section-label" style="margin-bottom:8px">Errors</div>
-            <div class="sync-list" id="sync-errors-list"></div>
-          </div>
-          <div class="modal-actions modal-actions--stack sync-done-actions">
-            <button class="btn-primary sync-done-finish-btn" onclick="App.closeSyncModal()">Finish</button>
-            <button class="btn-secondary btn-with-icon sync-done-repeat-btn" onclick="App.syncScanAgain()"><span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>Run Another Scan</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="sync-phase-rail" aria-hidden="true">
-        <span class="sync-phase-step" data-step="pick"></span>
-        <span class="sync-phase-step" data-step="scanning"></span>
-        <span class="sync-phase-step" data-step="preview"></span>
-        <span class="sync-phase-step" data-step="copying"></span>
-        <span class="sync-phase-step" data-step="done"></span>
-      </div>
-
     </div>
   </div>
 

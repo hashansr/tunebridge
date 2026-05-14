@@ -5927,6 +5927,7 @@ function showView(viewName) {
   if (viewName !== 'missing-tags') _insightsMissingTagsOpen = false;
   state.playlist = null;
   clearSelection();
+  if (viewName !== 'sync') document.getElementById('sync-nav-btn')?.classList.remove('sw-nav-active');
   setActiveNav(viewName);
   renderSidebarPlaylists();
 
@@ -5949,6 +5950,7 @@ function showView(viewName) {
   else if (viewName === 'insights') loadInsightsView();
   else if (viewName === 'history') loadHistoryView();
   else if (viewName === 'duplicates') loadDuplicatesView();
+  else if (viewName === 'sync') loadSyncView();
 
   if (viewName === 'home') {
     if (_homeAutoRefreshTimer) clearInterval(_homeAutoRefreshTimer);
@@ -5963,7 +5965,7 @@ function showView(viewName) {
 
 function showViewEl(name) {
   closeLyricsView();
-  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates'];
+  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.style.display = v === name ? (v === 'playlist' ? 'flex' : 'block') : 'none';
@@ -6545,1147 +6547,965 @@ function _updateMappingCount() {
   _renderImportSummary();
 }
 
-/* ── Sync ────────────────────────────────────────────────────────────── */
-let _syncPollTimer = null;
-let _syncLastStatus = null;
-let _syncSelectedDapId = '';
-let _syncSelectedDapName = 'Selected device';
-let _syncScanRunId = 0;
-let _syncScanInFlight = false;
-let _syncPreviewWarningCount = 0;
-let _syncPreviewModel = null;
-let _syncScannedAt = 0;
-const _syncSectionCollapsed = {
-  'to-device': true,
-  'library-deleted': true,
-  'device-only': true,
-  'playlists': true,
-  'ignored': true,
-};
+/* ── Sync Wizard ─────────────────────────────────────────────────────── */
 
+// Utility: format bytes
 function _fmtBytes(bytes) {
   const n = Number(bytes);
   if (!Number.isFinite(n) || n < 0) return '—';
   if (n === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let v = n;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i += 1;
-  }
-  const decimals = v >= 100 || i === 0 ? 0 : (v >= 10 ? 1 : 2);
-  return `${v.toFixed(decimals)} ${units[i]}`;
+  let v = n, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  const d = v >= 100 || i === 0 ? 0 : (v >= 10 ? 1 : 2);
+  return `${v.toFixed(d)} ${units[i]}`;
 }
 
-function _formatSyncPhaseMessage(raw, phase) {
-  const msg = String(raw || '').trim();
-  if (!msg) {
-    if (phase === 'scan') return 'Scanning your library files…';
-    if (phase === 'copy') return 'Copying selected files…';
-    if (phase === 'done') return 'Sync complete.';
-    return '';
-  }
-  const progressMatch = msg.match(/(\d+)\s*\/\s*(\d+)/);
-  if (phase === 'scan') {
-    if (progressMatch) return `Scanning files (${progressMatch[1]} / ${progressMatch[2]})…`;
-    return msg;
-  }
-  if (phase === 'copy') {
-    if (progressMatch) return `Copying files (${progressMatch[1]} / ${progressMatch[2]})…`;
-    return msg;
-  }
-  if (phase === 'done') {
-    return msg;
-  }
-  return msg;
+function _fmtGB(bytes) {
+  if (!Number.isFinite(Number(bytes))) return '—';
+  return (Number(bytes) / (1024 ** 3)).toFixed(1) + ' GB';
 }
 
-function _syncDeviceStatusPills(dap) {
-  const summary = dap?.sync_summary || {};
-  const add = Number(summary.music_to_add_count || 0);
-  const remove = Number(summary.music_to_remove_count || 0);
-  const musicOut = Number(summary.music_out_of_sync_count || (add + remove));
-  const playlistOut = Number(summary.playlist_out_of_sync_count || (Number(dap?.stale_count || 0) + Number(dap?.never_exported || 0)));
+function _fmtSecs(s) {
+  if (s < 60) return `${Math.round(s)}s`;
+  const m = Math.floor(s / 60), r = Math.round(s % 60);
+  return `${m}m ${r}s`;
+}
 
-  const musicLabel = musicOut <= 0
-    ? 'Music synced'
-    : `Music ${add} add · ${remove} remove`;
-  const playlistLabel = playlistOut <= 0
-    ? 'Playlists synced'
-    : `Playlists ${playlistOut} out of sync`;
+function _fmtRelDate(ts) {
+  if (!ts) return 'Never';
+  const diff = (Date.now() / 1000) - ts;
+  if (diff < 60)  return 'Just now';
+  if (diff < 3600) return `${Math.round(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.round(diff/3600)}h ago`;
+  const d = Math.round(diff/86400);
+  if (d < 30) return `${d} day${d===1?'':'s'} ago`;
+  const mo = Math.round(d/30);
+  return `${mo} month${mo===1?'':'s'} ago`;
+}
 
-  return `
-    <div class="sync-device-card-statuses">
-      ${_gearStatusPillHtml(_GEAR_ICON_MUSIC, musicOut <= 0 ? 'gear-sync-ok' : 'gear-sync-stale', musicLabel)}
-      ${_gearStatusPillHtml(_GEAR_ICON_PLAYLIST, playlistOut <= 0 ? 'gear-sync-ok' : 'gear-sync-stale', playlistLabel)}
+// Wizard state
+let _sw = {
+  step: 1,
+  device: null,
+  proposal: null,
+  selection: {},
+  filter: 'all',
+  scanPollTimer: null,
+  syncPollTimer: null,
+  scanStartTs: 0,
+  syncStartTs: 0,
+  logLines: [],
+  syncResult: null,
+};
+
+const _SW_STEPS = [
+  { n: 1, title: 'Select a device',    sub: 'Choose a connected player to sync with your library.' },
+  { n: 2, title: 'Scanning library',   sub: null /* dynamic */ },
+  { n: 3, title: 'Review changes',     sub: null /* dynamic */ },
+  { n: 4, title: 'Syncing to device',  sub: null /* dynamic */ },
+  { n: 5, title: 'Sync complete',      sub: 'Your device matches your library.' },
+];
+
+const _SW_SCAN_PHASES = [
+  'Mounting device…',
+  'Reading device manifest',
+  'Hashing local library tracks',
+  'Comparing playlists',
+  'Reconciling artwork',
+  'Computing diff',
+];
+
+const _SW_SYNC_PHASES = [
+  'Preparing transfer queue',
+  'Copying tracks to device',
+  'Writing playlist files',
+  'Updating device manifest',
+  'Verifying transfers',
+  'Ejecting safely',
+];
+
+// Keep a reference to the legacy poll timer var name
+let _syncPollTimer = null;
+
+function showSync() {
+  App.showView('sync');
+}
+
+// Called by showView('sync')
+async function loadSyncView() {
+  // Clear active pollers from any previous session
+  _swClearTimers();
+  // Reset state
+  _sw = {
+    step: 1, device: null, proposal: null, selection: {},
+    filter: 'all', scanPollTimer: null, syncPollTimer: null,
+    scanStartTs: 0, syncStartTs: 0, logLines: [], syncResult: null,
+  };
+  showViewEl('sync');
+  // Highlight sync nav button
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('sync-nav-btn')?.classList.add('sw-nav-active');
+  // Fetch DAP list
+  try {
+    const daps = await api('/daps');
+    _swRenderDeviceList(daps);
+  } catch (e) {
+    _swRenderDeviceList([]);
+  }
+  // Check if a scan is already running — resume
+  try {
+    const status = await api('/sync/status');
+    if (status.status === 'scanning' || status.status === 'scan_running') {
+      _sw.device = { id: status.dap_id, name: status.dap_name || 'Device' };
+      _swGoTo(2);
+      return;
+    }
+    if (status.status === 'ready' && status.dap_id) {
+      _sw.device = { id: status.dap_id, name: status.dap_name || 'Device' };
+      _swBuildProposal(status);
+      _swGoTo(3);
+      return;
+    }
+    if (status.status === 'copying') {
+      _sw.device = { id: status.dap_id, name: status.dap_name || 'Device' };
+      _swGoTo(4);
+      return;
+    }
+  } catch (_) {}
+  _swGoTo(1);
+}
+
+function _swClearTimers() {
+  if (_sw.scanPollTimer) { clearInterval(_sw.scanPollTimer); _sw.scanPollTimer = null; }
+  if (_sw.syncPollTimer) { clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null; }
+}
+
+function _swGoTo(step) {
+  _sw.step = step;
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById(`sw-step-${i}`);
+    if (el) el.style.display = i === step ? '' : 'none';
+  }
+  // Animate entry
+  const activeEl = document.getElementById(`sw-step-${step}`);
+  if (activeEl) {
+    activeEl.classList.remove('sw-step-enter');
+    void activeEl.offsetWidth; // reflow
+    activeEl.classList.add('sw-step-enter');
+  }
+  // Update step header
+  const meta = _SW_STEPS[step - 1];
+  const el = n => document.getElementById(n);
+  el('sw-counter').textContent = `${step} / 5`;
+  el('sw-title').textContent = meta.title;
+  const devName = _sw.device?.name || 'device';
+  const subMap = {
+    2: `Comparing this Mac with ${devName}…`,
+    3: `Pick what to send to ${devName}, keep, or remove.`,
+    4: `Transferring to ${devName}…`,
+  };
+  el('sw-sub').textContent = meta.sub ?? subMap[step] ?? '';
+  // Footer per step
+  _swUpdateFooter(step);
+  // Step-specific init
+  if (step === 2) _swInitScanStep();
+  if (step === 4) _swInitSyncStep();
+  if (step === 5) _swRenderDone();
+}
+
+function _swUpdateFooter(step) {
+  const el = n => document.getElementById(n);
+  const statusEl = el('sw-footer-status');
+  const msgEl = el('sw-footer-msg');
+  const cancelBtn = el('sw-btn-cancel');
+  const primaryBtn = el('sw-btn-primary');
+
+  statusEl.className = 'sw-footer-status';
+
+  const msgs = {
+    1: 'You can keep using the app while the scan runs.',
+    2: 'Scanning usually finishes in under a minute.',
+    3: '',
+    4: 'Do not disconnect the device.',
+    5: 'Safe to disconnect.',
+  };
+  msgEl.textContent = msgs[step] ?? '';
+
+  if (step === 5) statusEl.classList.add('sw-footer-status--success');
+
+  // Cancel button
+  const cancelLabels = { 1: 'Cancel', 2: '', 3: 'Cancel', 4: '', 5: '' };
+  cancelBtn.textContent = cancelLabels[step] || '';
+  cancelBtn.style.display = (step === 1 || step === 3) ? '' : 'none';
+
+  // Primary button
+  const btnConfigs = {
+    1: { label: 'Scan device <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>', disabled: true, ghost: false },
+    2: { label: 'Scanning…', disabled: true, ghost: true },
+    3: { label: 'Start sync', disabled: false, ghost: false },
+    4: { label: 'Syncing…', disabled: true, ghost: true },
+    5: { label: 'Done', disabled: false, ghost: false },
+  };
+  const cfg = btnConfigs[step];
+  primaryBtn.innerHTML = cfg.label;
+  primaryBtn.disabled = cfg.disabled;
+  primaryBtn.className = `sw-btn sw-btn--${cfg.ghost ? 'ghost' : 'primary'}`;
+
+  if (step === 3) {
+    // Will be updated by _swUpdateReviewFooter
+  }
+}
+
+/* ── Step 1: Device list ─────────────────────────────────── */
+
+function _swRenderDeviceList(daps) {
+  const list = document.getElementById('sw-device-list');
+  if (!list) return;
+
+  if (!daps.length) {
+    list.innerHTML = `<div class="sw-device-empty">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.3"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/></svg>
+      <p>No devices configured.</p>
+      <p style="font-size:11px;margin-top:4px">Add a device in Gear to get started.</p>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = daps.map(dap => {
+    const connected = dap.mounted;
+    const connClass = connected ? 'sw-conn-chip--on' : 'sw-conn-chip--off';
+    const dotClass  = connected ? 'sw-conn-dot--on'  : 'sw-conn-dot--off';
+    const connText  = connected ? 'Connected' : 'Offline';
+    const lastSync = _fmtRelDate(dap.last_sync_at);
+    // Mini capacity bar (rough — we'll have real bytes after selecting)
+    const usedPct = (dap.space_used_gb && dap.space_total_gb)
+      ? Math.min(100, (dap.space_used_gb / dap.space_total_gb) * 100)
+      : 0;
+    const tight = usedPct > 95;
+    const fillClass = tight ? 'sw-mini-bar-fill--tight' : '';
+    const freeText = (dap.space_free_gb != null)
+      ? `${dap.space_free_gb.toFixed(1)} GB free`
+      : (connected ? '…' : '—');
+
+    return `<button class="sw-device-row${connected ? '' : ''}" data-dap-id="${esc(dap.id)}"
+        onclick="App.swSelectDevice('${esc(dap.id)}')"
+        ${connected ? '' : 'disabled'}>
+      <div class="sw-device-icon">${_DAP_SVG_SMALL}</div>
+      <div class="sw-device-info">
+        <div class="sw-device-name">${esc(dap.name)}</div>
+        <div class="sw-conn-row">
+          <span class="sw-conn-chip ${connClass}">
+            <span class="sw-conn-dot ${dotClass}"></span>${connText}
+          </span>
+        </div>
+        <div class="sw-device-meta">
+          <span>${freeText}</span>
+          <span>·</span>
+          <span class="sw-mini-bar-wrap"><span class="sw-mini-bar-fill ${fillClass}" style="width:${usedPct.toFixed(1)}%"></span></span>
+          <span>Last sync · ${lastSync}</span>
+        </div>
+      </div>
+      <div class="sw-device-radio"></div>
+    </button>`;
+  }).join('');
+}
+
+const _DAP_SVG_SMALL = `<span class="gear-mask-icon gear-mask-icon-dap" aria-hidden="true" style="width:20px;height:20px"></span>`;
+
+async function swSelectDevice(dapId) {
+  // Update row selection
+  document.querySelectorAll('.sw-device-row').forEach(r => {
+    r.classList.toggle('sw-device-row--selected', r.dataset.dapId === dapId);
+  });
+  // Enable primary button
+  const btn = document.getElementById('sw-btn-primary');
+  if (btn) { btn.disabled = false; btn.className = 'sw-btn sw-btn--primary'; }
+  // Fetch detail for the panel
+  try {
+    const dap = await api(`/daps/${dapId}`);
+    _sw.device = { id: dap.id, name: dap.name, mount: dap.active_mount_path || dap.mount_path,
+      capacity_bytes: dap.capacity_bytes, used_bytes: dap.used_bytes, last_sync_at: dap.last_sync_at };
+    _swRenderDetailPanel(dap);
+  } catch (e) {
+    _sw.device = { id: dapId, name: 'Device' };
+    document.getElementById('sw-detail-empty').style.display = 'none';
+    document.getElementById('sw-detail-content').style.display = '';
+    document.getElementById('sw-detail-content').innerHTML = `<p style="color:var(--text-muted);font-size:13px">Could not load device details.</p>`;
+  }
+}
+
+function _swRenderDetailPanel(dap) {
+  const empty = document.getElementById('sw-detail-empty');
+  const content = document.getElementById('sw-detail-content');
+  if (empty)   empty.style.display   = 'none';
+  if (content) content.style.display = '';
+
+  const cap  = dap.capacity_bytes ?? 0;
+  const used = dap.used_bytes ?? 0;
+  const free = cap - used;
+  const usedPct = cap > 0 ? Math.min(100, (used / cap) * 100) : 0;
+  const tight = usedPct > 95;
+  const barClass = tight ? 'sw-cap-bar-fill--tight' : '';
+  const mount = dap.active_mount_path || dap.mount_path || '—';
+  const lastSync = _fmtRelDate(dap.last_sync_at);
+
+  // Build recent activity from sync_summary
+  const summary = dap.sync_summary || {};
+  const activityRows = [];
+  if (summary.last_sync_at) {
+    const ago = _fmtRelDate(summary.last_sync_at);
+    const added = summary.last_sync_added ?? 0;
+    const removed = summary.last_sync_removed ?? 0;
+    const parts = [];
+    if (added)   parts.push(`Added ${added} track${added===1?'':'s'}`);
+    if (removed) parts.push(`removed ${removed}`);
+    activityRows.push({ text: parts.join(', ') || 'Synced', time: ago });
+  }
+  if (activityRows.length === 0 && dap.last_sync_at) {
+    activityRows.push({ text: 'Last sync', time: _fmtRelDate(dap.last_sync_at) });
+  }
+
+  content.innerHTML = `
+    <div class="sw-detail-hdr">
+      <div class="sw-detail-icon-tile">${_DAP_SVG_SMALL}</div>
+      <div class="sw-detail-hdr-text">
+        <div class="sw-overline">TARGET DEVICE</div>
+        <p class="sw-detail-name">${esc(dap.name)}</p>
+      </div>
     </div>
+
+    <div class="sw-cap-section">
+      <div class="sw-cap-label-row">
+        <span class="sw-overline" style="display:inline">Capacity</span>
+        <span class="sw-cap-used-text">${_fmtGB(used)} of ${_fmtGB(cap)} used</span>
+      </div>
+      <div class="sw-cap-bar-wrap">
+        <div class="sw-cap-bar-fill ${barClass}" style="width:${usedPct.toFixed(1)}%"></div>
+      </div>
+      <span class="sw-cap-free-caption">${_fmtGB(free)} free</span>
+    </div>
+
+    <div class="sw-detail-meta-grid">
+      <div class="sw-detail-meta-cell">
+        <div class="sw-detail-meta-label">Mount</div>
+        <div class="sw-detail-meta-value" title="${esc(mount)}">${esc(mount.replace(/^\/Volumes\//, ''))}</div>
+      </div>
+      <div class="sw-detail-meta-cell">
+        <div class="sw-detail-meta-label">Last sync</div>
+        <div class="sw-detail-meta-value">${lastSync}</div>
+      </div>
+    </div>
+
+    ${activityRows.length ? `
+    <div>
+      <div class="sw-overline" style="margin-bottom:6px">Recent activity</div>
+      <div class="sw-activity">
+        ${activityRows.slice(0, 2).map(r => `
+        <div class="sw-activity-row">
+          <span class="sw-activity-dot"></span>
+          <span>${esc(r.text)}</span>
+          <span class="sw-activity-time">${esc(r.time)}</span>
+        </div>`).join('')}
+      </div>
+    </div>` : ''}
   `;
 }
 
-function _syncPhase(name) {
-  const phaseIcons = {
-    pick: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
-    scanning: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`,
-    preview: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18"></path><path d="M3 12h18"></path><path d="M3 19h12"></path></svg>`,
-    copying: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="M7 10l5 5 5-5"></path><path d="M5 21h14"></path></svg>`,
-    done: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M1 12C1 5.92487 5.92487 1 12 1C18.0751 1 23 5.92487 23 12C23 18.0751 18.0751 23 12 23C5.92487 23 1 18.0751 1 12ZM18.4158 9.70405C18.8055 9.31268 18.8041 8.67952 18.4127 8.28984L17.7041 7.58426C17.3127 7.19458 16.6796 7.19594 16.2899 7.58731L10.5183 13.3838L7.19723 10.1089C6.80398 9.72117 6.17083 9.7256 5.78305 10.1189L5.08092 10.8309C4.69314 11.2241 4.69758 11.8573 5.09083 12.2451L9.82912 16.9174C10.221 17.3039 10.8515 17.301 11.2399 16.911L18.4158 9.70405Z"/></svg>`,
-  };
-  const phaseMeta = {
-    pick: {
-      step: 'Step 1 of 5',
-      title: 'Sync Music',
-      subtitle: 'Choose a connected device to start syncing.',
-    },
-    scanning: {
-      step: 'Step 2 of 5',
-      title: 'Scanning Library',
-      subtitle: 'Comparing your local library and selected device.',
-    },
-    preview: {
-      step: 'Step 3 of 5',
-      title: 'Review Changes',
-      subtitle: 'Select what to copy before starting sync.',
-    },
-    copying: {
-      step: 'Step 4 of 5',
-      title: 'Sync in Progress',
-      subtitle: 'Copying selected files. Keep this modal open.',
-    },
-    done: {
-      step: 'Step 5 of 5',
-      title: 'Sync Complete',
-      subtitle: 'Review the summary and run another scan if needed.',
-    },
-  };
-
-  const meta = phaseMeta[name];
-  if (meta) {
-    const stepEl = document.getElementById('sync-modal-step-label');
-    const titleEl = document.getElementById('sync-modal-title');
-    const subtitleEl = document.getElementById('sync-modal-subtitle');
-    if (stepEl) stepEl.textContent = meta.step;
-    if (titleEl) titleEl.textContent = meta.title;
-    if (subtitleEl) subtitleEl.textContent = meta.subtitle;
-  }
-  const iconHost = document.getElementById('sync-modal-phase-icon');
-  if (iconHost && phaseIcons[name]) iconHost.innerHTML = phaseIcons[name];
-
-  const progressBanner = document.getElementById('sync-progress-banner');
-  const progressBannerTitle = document.getElementById('sync-progress-banner-title');
-  const progressBannerText = document.getElementById('sync-progress-banner-text');
-  const showBusyBanner = name === 'scanning' || name === 'copying';
-  const showWarningBanner = name === 'preview' && _syncPreviewWarningCount > 0;
-  if (progressBanner) {
-    progressBanner.style.display = (showBusyBanner || showWarningBanner) ? '' : 'none';
-    progressBanner.classList.toggle('is-warning', showWarningBanner && !showBusyBanner);
-  }
-  if (progressBannerText) {
-    if (showBusyBanner) {
-      if (progressBannerTitle) {
-        progressBannerTitle.textContent = name === 'copying' ? 'Sync in Progress' : 'Scan in Progress';
-      }
-      progressBannerText.textContent = name === 'copying'
-        ? 'Do not dismiss. Closing this window may result in data inconsistency.'
-        : 'Do not dismiss. Closing this window may result in data inconsistency.';
-    } else if (showWarningBanner) {
-      if (progressBannerTitle) progressBannerTitle.textContent = 'Warnings Detected';
-      progressBannerText.textContent = `Warnings detected: ${_syncPreviewWarningCount} item${_syncPreviewWarningCount === 1 ? '' : 's'}. Review before syncing.`;
-    } else if (progressBannerTitle) {
-      progressBannerTitle.textContent = 'Scan in Progress';
-    }
-  }
-
-  const modal = document.getElementById('sync-modal');
-  if (modal) modal.setAttribute('data-phase', name);
-  document.querySelectorAll('#sync-modal .sync-phase-step').forEach(el => {
-    el.classList.toggle('active', el.dataset.step === name);
-  });
-  ['pick', 'scanning', 'preview', 'copying', 'done'].forEach(p => {
-    const el = document.getElementById(`sync-phase-${p}`);
-    if (el) el.style.display = p === name ? '' : 'none';
-  });
+/* Primary action button dispatcher */
+function swPrimaryAction() {
+  const actions = { 1: swStartScan, 3: swStartSync, 5: swFinish };
+  const fn = actions[_sw.step];
+  if (fn) fn();
 }
 
-function _syncReadStatusCount(status, directKey, fallbackKeys = []) {
-  const tryKeys = [directKey, ...fallbackKeys];
-  for (const key of tryKeys) {
-    const value = status?.[key];
-    if (Number.isFinite(Number(value))) return Math.max(0, Number(value));
-  }
-  const summary = status?.summary || status?.counts || {};
-  for (const key of tryKeys) {
-    const value = summary?.[key];
-    if (Number.isFinite(Number(value))) return Math.max(0, Number(value));
-  }
-  return 0;
+function swCancel() {
+  _swClearTimers();
+  App.showView('artists');
 }
 
-function _syncUpdateScanSummary(status) {
-  const toDevice = _syncReadStatusCount(status, 'music_to_add_count', ['to_device_count', 'add_to_device_count']);
-  const toLocal = _syncReadStatusCount(status, 'device_only_count', ['to_local_count', 'copy_to_local_count', 'music_to_local_count']);
-  const playlists = _syncReadStatusCount(status, 'playlist_out_of_sync_count', ['playlists_count', 'playlist_count']);
-  const setText = (id, value) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = Number(value || 0).toLocaleString();
-  };
-  setText('sync-scan-to-device', toDevice);
-  setText('sync-scan-to-local', toLocal);
-  setText('sync-scan-playlists', playlists);
+/* ── Step 2: Scan ────────────────────────────────────────── */
+
+async function swStartScan() {
+  if (!_sw.device?.id) return;
+  _swGoTo(2);
 }
 
-function syncBackToPick() {
-  if (_syncScanInFlight) return;
-  _syncPhase('pick');
+function _swInitScanStep() {
+  _swClearTimers();
+  _sw.logLines = [];
+  _sw.scanStartTs = Date.now() / 1000;
+
+  // Render phase list
+  _swRenderPhases('sw-scan-phases', _SW_SCAN_PHASES, -1);
+  // Clear log and bar
+  const log = document.getElementById('sw-scan-log');
+  if (log) log.innerHTML = '';
+  const bar = document.getElementById('sw-scan-bar');
+  if (bar) bar.style.width = '0%';
+  const pct = document.getElementById('sw-scan-pct');
+  if (pct) pct.textContent = '0%';
+
+  // Start the actual scan
+  api('/sync/scan', { method: 'POST', body: JSON.stringify({ dap_id: _sw.device.id }) })
+    .catch(e => _swHandleScanError(String(e)));
+
+  // Poll for progress
+  _sw.scanPollTimer = setInterval(_swPollScan, 600);
 }
 
-function syncGoToPreview() {
-  if (_syncLastStatus?.status === 'ready') {
-    renderSyncPreview(_syncLastStatus);
-    return;
+async function _swPollScan() {
+  let status;
+  try { status = await api('/sync/status'); } catch (_) { return; }
+
+  const progress = Number(status.progress ?? 0);
+  const elapsed  = (Date.now() / 1000) - _sw.scanStartTs;
+
+  // Update UI
+  _swSetProgress('scan', progress);
+  document.getElementById('sw-scan-elapsed').textContent = _fmtSecs(elapsed);
+
+  // Items compared
+  const compared = status.manifest_count ?? status.total ?? 0;
+  document.getElementById('sw-scan-items').textContent = compared.toLocaleString();
+
+  // Phase
+  const phase = status.phase ?? status.message ?? '';
+  const phaseEl = document.getElementById('sw-scan-phase-label');
+  if (phaseEl) phaseEl.textContent = phase || 'Scanning…';
+
+  // Log any new message
+  if (phase && (!_sw.logLines.length || _sw.logLines[_sw.logLines.length - 1] !== phase)) {
+    _swAppendLog('sw-scan-log', phase);
   }
-  toast('Scan still in progress.');
-}
 
-async function showSync() {
-  closeLyricsView();
-  const modal = document.getElementById('sync-modal');
-  if (modal) modal.style.display = 'flex';
+  // Phase indicator
+  const phaseIndex = Math.floor((progress / 100) * (_SW_SCAN_PHASES.length - 1));
+  _swRenderPhases('sw-scan-phases', _SW_SCAN_PHASES, phaseIndex);
 
-  const recommendedContainer = document.getElementById('sync-device-list-recommended');
-  const externalContainer = document.getElementById('sync-device-list-external');
-  const externalGroup = document.getElementById('sync-device-group-external');
-  const loadingHtml = `
-      <div class="sync-device-loading">
-        <div class="sync-device-loading-spinner" aria-hidden="true"></div>
-        <span>Loading your DAPs and sync status…</span>
-      </div>
-    `;
-  if (recommendedContainer) recommendedContainer.innerHTML = loadingHtml;
-  if (externalContainer) externalContainer.innerHTML = '';
-  if (externalGroup) externalGroup.style.display = 'none';
-
-  try {
-    await api('/sync/reset', { method: 'POST' });
-  } catch (e) {
-    const msg = String(e?.message || '');
-    if (/in progress/i.test(msg)) {
-      toast('Sync is already in progress. Please wait for it to finish before starting a new scan.');
-      return;
-    }
-    // Non-blocking fallback for transient reset failures.
-  }
-  _syncLastStatus = null;
-  _syncPreviewModel = null;
-  _syncSelectedDapId = '';
-  _syncSelectedDapName = 'Selected device';
-  _syncScanInFlight = false;
-  _syncPreviewWarningCount = 0;
-  _syncPhase('pick');
-  const errWrap = document.getElementById('sync-errors-wrap');
-  if (errWrap) errWrap.style.display = 'none';
-  const doneTitle = document.getElementById('sync-done-title');
-  const doneCopy = document.getElementById('sync-done-copy');
-  const doneDetail = document.getElementById('sync-done-detail');
-  if (doneTitle) doneTitle.textContent = 'Sync Complete';
-  if (doneCopy) doneCopy.textContent = 'Your library and DAP are now in harmony.';
-  if (doneDetail) doneDetail.textContent = '';
-
-  const daps = await api('/daps').catch(() => []);
-  if (!recommendedContainer || !externalContainer) {
-    document.getElementById('sync-modal').style.display = 'flex';
+  if (status.status === 'error') {
+    clearInterval(_sw.scanPollTimer); _sw.scanPollTimer = null;
+    _swHandleScanError(status.message || 'Scan failed.');
     return;
   }
 
-  const svgDevice = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>`;
-
-  const _deviceMeta = (dap) => {
-    const summary = dap?.sync_summary || {};
-    const total = Number(summary.space_total_bytes || 0);
-    const free = Number(summary.space_available_bytes || 0);
-    if (dap?.mounted && Number.isFinite(total) && total > 0 && Number.isFinite(free) && free >= 0) {
-      return `${_fmtBytes(free)} free of ${_fmtBytes(total)}`;
-    }
-    if (dap?.mount_path) {
-      return dap.mount_path;
-    }
-    return dap?.mounted ? 'Connected' : 'Not connected';
-  };
-  const _deviceSyncStatus = (dap) => {
-    const summary = dap?.sync_summary || {};
-    if (!dap?.mounted) return 'unknown';
-
-    const hasBooleanStatus = typeof summary?.in_sync === 'boolean' || typeof summary?.is_in_sync === 'boolean';
-    const hasKnownCount = (key) => summary?.[key] !== null && summary?.[key] !== undefined && Number.isFinite(Number(summary?.[key]));
-    const hasCountStatus =
-      hasKnownCount('music_out_of_sync_count') ||
-      hasKnownCount('playlist_out_of_sync_count') ||
-      hasKnownCount('music_to_add_count') ||
-      hasKnownCount('music_to_remove_count');
-
-    if (!hasBooleanStatus && !hasCountStatus) return 'unknown';
-
-    if (summary?.in_sync === true || summary?.is_in_sync === true) return 'in';
-    if (summary?.in_sync === false || summary?.is_in_sync === false) return 'out';
-
-    const addCount = Number(summary?.music_to_add_count ?? 0);
-    const removeCount = Number(summary?.music_to_remove_count ?? 0);
-    const hasMusicOutCount = hasKnownCount('music_out_of_sync_count');
-    const musicOut = hasMusicOutCount ? Number(summary.music_out_of_sync_count) : (addCount + removeCount);
-    const playlistsOut = hasKnownCount('playlist_out_of_sync_count') ? Number(summary.playlist_out_of_sync_count) : 0;
-    return (musicOut <= 0 && playlistsOut <= 0) ? 'in' : 'out';
-  };
-
-  if (!daps.length) {
-    recommendedContainer.innerHTML = `<p style="color:var(--text-muted);font-size:13px">No DAPs configured — add one in <strong>Gear → DAPs</strong> first.</p>`;
-    externalContainer.innerHTML = '';
-  } else {
-    const firstMounted = daps.find(d => d?.mounted);
-    _syncSelectedDapId = String((firstMounted || {}).id || '');
-    _syncSelectedDapName = String((firstMounted || {}).name || 'Selected device');
-    const renderCard = (dap) => {
-      const selectable = !!dap?.mounted;
-      const selected = selectable && String(dap.id) === String(_syncSelectedDapId);
-      const syncStatus = _deviceSyncStatus(dap);
-      const statusChip = syncStatus === 'in'
-        ? 'IN SYNC'
-        : (syncStatus === 'out' ? 'OUT OF SYNC' : 'CHECK STATUS');
-      return `
-        <button
-          class="sync-device-card${selected ? ' is-selected' : ''}${selectable ? '' : ' is-disabled'}"
-          data-dap-id="${esc(dap.id)}"
-          data-selectable="${selectable ? '1' : '0'}"
-          data-sync-status="${syncStatus}"
-          onclick="App.selectSyncDevice('${dap.id}')"
-          ${selectable ? '' : 'disabled aria-disabled="true"'}
-        >
-          <div class="sync-device-card-icon">${svgDevice}</div>
-          <div class="sync-device-card-info">
-            <span class="sync-device-card-name">${esc(dap.name)}</span>
-            <span class="sync-device-meta">
-              ${esc(_deviceMeta(dap))}
-            </span>
-          </div>
-          <div class="sync-device-card-statuses">
-            <span class="sync-device-chip sync-device-chip--${syncStatus}">${statusChip}</span>
-            <div class="sync-device-radio${selected ? ' is-selected' : ''}" aria-hidden="true">
-              <span></span>
-            </div>
-          </div>
-        </button>`;
-    };
-    const connected = daps.filter((d) => !!d?.mounted);
-    const notConnected = daps.filter((d) => !d?.mounted);
-    recommendedContainer.innerHTML = connected.length
-      ? connected.map(renderCard).join('')
-      : `<p style="color:var(--text-muted);font-size:12px;padding:6px 2px">No connected devices detected.</p>`;
-    externalContainer.innerHTML = notConnected.length ? notConnected.map(renderCard).join('') : '';
-    if (externalGroup) externalGroup.style.display = notConnected.length ? '' : 'none';
+  if (status.status === 'ready' || (status.status === 'done' && progress >= 100)) {
+    clearInterval(_sw.scanPollTimer); _sw.scanPollTimer = null;
+    _swSetProgress('scan', 100);
+    _swRenderPhases('sw-scan-phases', _SW_SCAN_PHASES, _SW_SCAN_PHASES.length);
+    setTimeout(() => {
+      _swBuildProposal(status);
+      _swGoTo(3);
+    }, 400);
   }
-
-  syncUpdatePickNextCta();
-  document.getElementById('sync-modal').style.display = 'flex';
 }
 
-function closeSyncModal() {
-  clearInterval(_syncPollTimer);
-  _syncPollTimer = null;
-  _syncScanRunId += 1;
-  _syncScanInFlight = false;
-  _syncPreviewModel = null;
-  _syncSelectedDapId = '';
-  _syncSelectedDapName = 'Selected device';
-  _syncPreviewWarningCount = 0;
-  document.getElementById('sync-modal').style.display = 'none';
-}
-
-function selectSyncDevice(dapId) {
-  const containers = [
-    document.getElementById('sync-device-list-recommended'),
-    document.getElementById('sync-device-list-external'),
-  ].filter(Boolean);
-  const targetId = String(dapId || '');
-  const allCards = containers.flatMap((container) => [...container.querySelectorAll('.sync-device-card')]);
-  const target = allCards.find((el) => String(el.getAttribute('data-dap-id') || '') === targetId) || null;
-  if (target?.dataset?.selectable !== '1') {
-    return;
-  }
-  _syncSelectedDapId = targetId;
-  _syncSelectedDapName = String(target.querySelector('.sync-device-card-name')?.textContent || '').trim() || 'Selected device';
-  allCards.forEach((el) => {
-    const cardId = String(el.getAttribute('data-dap-id') || '');
-    const selectable = el.dataset.selectable === '1';
-    const isSelected = selectable && cardId === _syncSelectedDapId;
-    el.classList.toggle('is-selected', isSelected);
-    const radio = el.querySelector('.sync-device-radio');
-    if (radio) radio.classList.toggle('is-selected', isSelected);
-    const chip = el.querySelector('.sync-device-chip');
-    if (chip) {
-      const status = String(el.getAttribute('data-sync-status') || 'unknown').toLowerCase();
-      chip.classList.remove('sync-device-chip--in', 'sync-device-chip--out', 'sync-device-chip--unknown');
-      chip.classList.add(
-        status === 'in'
-          ? 'sync-device-chip--in'
-          : (status === 'out' ? 'sync-device-chip--out' : 'sync-device-chip--unknown')
-      );
-      chip.textContent = status === 'in'
-        ? 'IN SYNC'
-        : (status === 'out' ? 'OUT OF SYNC' : 'CHECK STATUS');
-    }
-  });
-  syncUpdatePickNextCta();
-}
-
-function syncUpdatePickNextCta() {
-  const nextBtn = document.getElementById('sync-pick-next-btn');
-  if (!nextBtn) return;
-  const selectedId = String(_syncSelectedDapId || '');
-  const allCards = [
-    ...((document.getElementById('sync-device-list-recommended')?.querySelectorAll('.sync-device-card')) || []),
-    ...((document.getElementById('sync-device-list-external')?.querySelectorAll('.sync-device-card')) || []),
-  ];
-  const selected = allCards.find((el) => String(el.getAttribute('data-dap-id') || '') === selectedId) || null;
-  const canContinue = !!_syncSelectedDapId && selected?.dataset?.selectable === '1';
-  nextBtn.disabled = !canContinue;
-}
-
-async function startSyncFromSelection() {
-  if (!_syncSelectedDapId) {
-    toast('Select a device to continue.');
-    return;
-  }
-  await startSyncScan(_syncSelectedDapId);
-}
-
-function _syncSetScanningVisualProgress(percent) {
-  const pct = Math.max(0, Math.min(100, Number(percent) || 0));
-  const ring = document.getElementById('sync-scan-ring');
-  const label = document.getElementById('sync-scan-percent');
-  if (ring) ring.style.setProperty('--scan-pct', String(pct));
-  if (label) label.textContent = `${Math.round(pct)}%`;
-}
-
-function _syncSetCopyVisualProgress(percent) {
-  const pct = Math.max(0, Math.min(100, Number(percent) || 0));
-  const ring = document.getElementById('sync-copy-ring');
-  const label = document.getElementById('sync-copy-percent');
-  if (ring) ring.style.setProperty('--scan-pct', String(pct));
-  if (label) label.textContent = `${Math.round(pct)}%`;
-}
-
-function _syncDeviceNameLabel() {
-  const name = String(_syncSelectedDapName || '').trim();
-  return name || 'Selected device';
-}
-
-function _syncUpdatePreviewDirectionLabels() {
-  const deviceLabel = _syncDeviceNameLabel();
-  const toDeviceTitle = document.getElementById('sync-to-device-title');
-  const deletedTitle = document.getElementById('sync-library-deleted-title');
-  const deviceOnlyTitle = document.getElementById('sync-device-only-title');
-  const playlistTitle = document.getElementById('sync-playlist-title');
-  if (toDeviceTitle) toDeviceTitle.textContent = `New in Library → Add to ${deviceLabel}`;
-  if (deletedTitle) deletedTitle.textContent = `Deleted from Library (still on ${deviceLabel})`;
-  if (deviceOnlyTitle) deviceOnlyTitle.textContent = `Available on ${deviceLabel} only (not in Library)`;
-  if (playlistTitle) playlistTitle.textContent = `Playlists to Sync to ${deviceLabel}`;
-}
-
-async function startSyncScan(dapId) {
-  if (_syncScanInFlight) return;
-  _syncScanInFlight = true;
-  const runId = ++_syncScanRunId;
-  _syncPhase('scanning');
-  const scanMode = document.getElementById('sync-scan-mode');
-  if (scanMode) scanMode.textContent = 'In Progress';
-  _syncSetScanningVisualProgress(0);
-  _syncUpdateScanSummary(null);
-  document.getElementById('sync-scanning-msg').textContent = 'Scanning library data...';
-  const scanStartedAt = Date.now();
-  let visualPct = 0;
-  const setVisualPct = (nextPct, force = false) => {
-    const normalized = Math.max(0, Math.min(100, Number(nextPct) || 0));
-    if (!force && normalized < visualPct) return;
-    visualPct = normalized;
-    _syncSetScanningVisualProgress(visualPct);
-  };
-  const preflightAnimTimer = setInterval(() => {
-    if (runId !== _syncScanRunId) return;
-    const elapsedSec = (Date.now() - scanStartedAt) / 1000;
-    const easedPct = 8 + (1 - Math.exp(-elapsedSec / 6.8)) * 72;
-    setVisualPct(easedPct);
-  }, 260);
-
-  const res = await api('/sync/scan', { method: 'POST', body: { dap_id: dapId } });
-  clearInterval(preflightAnimTimer);
-  if (runId !== _syncScanRunId) {
-    _syncScanInFlight = false;
-    return;
-  }
-  if (res.error) {
-    _syncScanInFlight = false;
-    toast(res.error);
-    _syncPhase('pick');
-    return;
-  }
-
-  // Poll status while scanning/copy-prep progresses
-  clearInterval(_syncPollTimer);
-  let polling = false;
-  let finished = false;
-  _syncPollTimer = setInterval(async () => {
-    if (finished || polling || runId !== _syncScanRunId) return;
-    polling = true;
-    const elapsedSec = (Date.now() - scanStartedAt) / 1000;
-    const easedPct = 10 + (1 - Math.exp(-elapsedSec / 6.8)) * 76;
-    setVisualPct(easedPct);
-
-    const status = await api('/sync/status').catch(() => null);
-    if (!status || runId !== _syncScanRunId) {
-      polling = false;
-      return;
-    }
-
-    const explicitPct = Number(status.progress_pct ?? status.progress ?? status.percent);
-    if (Number.isFinite(explicitPct)) {
-      setVisualPct(explicitPct);
-    }
-
-    document.getElementById('sync-scanning-msg').textContent =
-      _formatSyncPhaseMessage(status.current || status.message, 'scan');
-    _syncUpdateScanSummary(status);
-
-    if (status.status === 'ready') {
-      finished = true;
-      setVisualPct(100, true);
-      clearInterval(_syncPollTimer);
-      _syncPollTimer = null;
-      _syncScanInFlight = false;
-      renderSyncPreview(status);
-    } else if (status.status === 'error') {
-      finished = true;
-      clearInterval(_syncPollTimer);
-      _syncPollTimer = null;
-      _syncScanInFlight = false;
-      toast('Could not complete scan: ' + status.message);
-      _syncPhase('pick');
-    }
-    polling = false;
-  }, 600);
-}
-
-function _syncFileRows(paths, side, reasons = {}) {
-  if (!paths.length) {
-    return `<div class="sync-empty">No files to sync in this direction.</div>`;
-  }
-  const deviceLabel = _syncDeviceNameLabel();
-  const originLabel = side === 'local'
-    ? `Local Library → ${deviceLabel}`
-    : `${deviceLabel} → Local Library`;
-  return paths.map((p) => {
-    const parts = p.replace(/\\/g, '/').split('/');
-    const filename = parts[parts.length - 1];
-    const folder = parts.slice(0, -1).join('/');
-    const reason = String(reasons[p] || '').trim();
-    return `<label class="sync-file-row sync-file-row--preview">
-      <input type="checkbox" class="sync-chk sync-chk-${side}" data-path="${esc(p)}" checked onchange="App.syncSelectionChanged()" />
-      <div class="sync-file-main">
-        <span class="sync-file-name">${esc(filename)}</span>
-        <span class="sync-file-folder">${esc(folder)}/</span>
-        ${reason ? `<span class="sync-file-reason">${esc(reason)}</span>` : ''}
-      </div>
-      <div class="sync-file-origin">${originLabel}</div>
-    </label>`;
-  }).join('');
-}
-
-function _syncPlaylistRows(items = []) {
-  if (!items.length) {
-    return `<div class="sync-empty">No playlists need syncing.</div>`;
-  }
-  const deviceLabel = _syncDeviceNameLabel();
-  return items.map((pl) => {
-    const pid = String(pl.id || '');
-    const name = String(pl.name || 'Playlist');
-    const trackCount = Number(pl.track_count || 0);
-    const reason = String(pl.reason || '').trim();
-    return `<label class="sync-file-row sync-file-row--preview">
-      <input type="checkbox" class="sync-chk sync-chk-playlists" data-plid="${esc(pid)}" checked onchange="App.syncSelectionChanged()" />
-      <div class="sync-file-main">
-        <span class="sync-file-name">${esc(name)}</span>
-        <span class="sync-file-folder">${trackCount} track${trackCount === 1 ? '' : 's'}</span>
-        ${reason ? `<span class="sync-file-reason">${esc(reason)}</span>` : ''}
-      </div>
-      <div class="sync-file-origin">Local Playlists → ${esc(deviceLabel)}</div>
-    </label>`;
-  }).join('');
-}
-
-function _syncWarningRows(items) {
-  if (!items || !items.length) return `<div class="sync-empty">No issues detected.</div>`;
-  return items.map(msg => `<div class="sync-warning-row">${esc(msg)}</div>`).join('');
-}
-
-function _syncSectionMapping() {
-  return {
-    'to-device': { wrapperId: 'sync-section-to-device', toggleId: 'sync-toggle-to-device' },
-    'library-deleted': { wrapperId: 'sync-section-library-deleted', toggleId: 'sync-toggle-library-deleted' },
-    'device-only': { wrapperId: 'sync-section-device-only', toggleId: 'sync-toggle-device-only' },
-    'playlists': { wrapperId: 'sync-section-playlists', toggleId: 'sync-toggle-playlists' },
-    'ignored': { wrapperId: 'sync-section-ignored', toggleId: 'sync-toggle-ignored' },
-  };
-}
-
-function _syncApplySectionCollapse(section) {
-  const conf = _syncSectionMapping()[section];
-  if (!conf) return;
-  const wrapper = document.getElementById(conf.wrapperId);
-  const toggle = document.getElementById(conf.toggleId);
-  if (!wrapper || !toggle) return;
-  const collapsed = !!_syncSectionCollapsed[section];
-  wrapper.classList.toggle('is-collapsed', collapsed);
-  toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-  toggle.title = collapsed ? 'Expand section' : 'Collapse section';
-}
-
-function toggleSyncSection(section) {
-  if (!_syncSectionMapping()[section]) return;
-  _syncSectionCollapsed[section] = !_syncSectionCollapsed[section];
-  _syncApplySectionCollapse(section);
-}
-
-function _syncInitPreviewModel(status) {
-  const playlistsOut = Array.isArray(status.playlists_out_of_sync) ? status.playlists_out_of_sync : [];
-  return {
-    toDevice: (status.to_device_add || []).map((row) => ({ ...row, selected: true, action: 'sync_to_dap' })),
-    libraryDeleted: (status.library_deleted_on_source || []).map((row) => ({ ...row, selected: true, action: 'keep_on_dap' })),
-    deviceOnly: (status.device_only_not_in_library || []).map((row) => ({ ...row, selected: true, action: 'copy_to_library' })),
-    playlists: playlistsOut.map((pl) => ({
-      id: String(pl.id || ''),
-      name: String(pl.name || 'Playlist'),
-      track_count: Number(pl.track_count || 0),
-      reason: String(pl.reason || ''),
-      selected: true,
-    })),
-    ignored: (status.ignored_tracks || []).map((row) => ({ ...row, selected: false })),
-    rescanRequired: false,
-  };
-}
-
-function _syncRenderActionButtons(section, idx, action, actions) {
-  if (!Array.isArray(actions) || !actions.length) return '';
-  const actionLabel = (name) => {
-    const map = {
-      sync_to_dap: 'Sync',
-      keep_on_dap: 'Skip',
-      skip: 'Skip',
-      delete_on_dap: 'Delete from Device',
-      copy_to_library: 'Sync',
-      dont_remind: 'Skip',
-    };
-    if (map[name]) return map[name];
-    const raw = String(name || '').replaceAll('_', ' ').trim();
-    return raw ? `${raw.charAt(0).toUpperCase()}${raw.slice(1)}` : '';
-  };
-  return `<div class="sync-row-actions" role="group" aria-label="Row action">
-    ${actions.map((name) => `
-      <button type="button" class="sync-row-action-btn sync-row-action-btn--${esc(name)}${action === name ? ' is-active' : ''}" onclick="App.syncRowActionChanged('${section}', ${idx}, '${name}')">${esc(actionLabel(name))}</button>
-    `).join('')}
+function _swHandleScanError(msg) {
+  const card = document.getElementById('sw-scan-card');
+  if (!card) return;
+  card.innerHTML = `<div class="sw-error-card">
+    <div class="sw-error-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="3"/></svg></div>
+    <div class="sw-error-title">Couldn't scan ${esc(_sw.device?.name ?? 'device')}</div>
+    <div class="sw-error-detail">${esc(msg)}</div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="sw-btn sw-btn--secondary" onclick="App.swCancel()">Cancel</button>
+      <button class="sw-btn sw-btn--primary" onclick="App.swStartScan()">Retry</button>
+    </div>
   </div>`;
 }
 
-function _syncBaseNameNoExt(path) {
-  const raw = String(path || '').split('/').pop() || '';
-  if (!raw) return '';
-  return raw.replace(/\.[^/.]+$/, '');
-}
+/* ── Step 3: Review ──────────────────────────────────────── */
 
-function _syncNormalizeTrackDisplayName(value) {
-  const raw = String(value || '').trim();
-  if (!raw) return '';
-  return raw.replace(/^unknown\s+track\s*-\s*/i, '').trim();
-}
+function _swBuildProposal(status) {
+  const toItems = (arr) => (arr || []).map((p, i) => ({
+    id: String(p.rel_path || p.path || p.id || i),
+    kind: 'track',
+    title: p.title || p.filename || (p.rel_path ? p.rel_path.split('/').pop() : '?'),
+    artist: p.artist || '',
+    album: p.album || '',
+    dur: p.duration ? _fmtSecs(p.duration) : '',
+    size: p.size_bytes ? (p.size_bytes / (1024 ** 2)).toFixed(1) : '',
+  }));
 
-function _syncDisplayTrackName(row, section, relPath) {
-  const explicitTitle = _syncNormalizeTrackDisplayName(row.title || row.track_title || row.track);
-  if (explicitTitle) return explicitTitle;
-  const filename = _syncNormalizeTrackDisplayName(row.filename || '');
-  const baseNoExt = _syncNormalizeTrackDisplayName(_syncBaseNameNoExt(filename || relPath));
-  const candidate = _syncNormalizeTrackDisplayName(filename || baseNoExt || relPath || 'Track');
-  const unknownish = /^(unknown(\s+track)?|track)$/i.test(candidate.trim());
-  if (section === 'device-only' && baseNoExt) return baseNoExt;
-  if (unknownish && baseNoExt) return baseNoExt;
-  return candidate;
-}
+  const plItems = (arr) => (arr || []).map(p => ({
+    id: p.id || p.name,
+    kind: 'playlist',
+    title: p.name || p.id,
+    meta: `${p.track_count ?? '?'} tracks`,
+    note: p.status || 'Updated',
+  }));
 
-function _syncFormatReason(reason) {
-  const raw = String(reason || '').trim();
-  if (!raw) return '';
-  const mismatch = raw.match(/size mismatch:\s*local\s*(\d+)\s*bytes,\s*device\s*(\d+)\s*bytes/i);
-  if (mismatch) {
-    const local = Number(mismatch[1] || 0);
-    const device = Number(mismatch[2] || 0);
-    const diff = Math.abs(local - device);
-    return `Size difference: ${_fmtBytes(diff)}`;
+  _sw.proposal = {
+    toDevice:         { label: 'New on this Mac — add to device',          hint: 'Tracks present locally but not on player', items: toItems(status.local_only) },
+    toLibrary:        { label: 'New on device — add to library',            hint: 'Files on player not in library',           items: toItems(status.device_only_not_in_library) },
+    playlists:        { label: 'Playlist changes',                          hint: 'Playlists that differ',                   items: plItems(status.playlists_out_of_sync) },
+    removeFromDevice: { label: 'Deleted from library — remove from device', hint: 'Gone locally, still on player',           items: toItems(status.library_deleted_on_source) },
+  };
+
+  // Initialise selection
+  _sw.selection = {};
+  const order = ['toDevice', 'toLibrary', 'playlists', 'removeFromDevice'];
+  for (const gid of order) {
+    _sw.selection[gid] = {};
+    for (const item of _sw.proposal[gid].items) {
+      // removeFromDevice: default unchecked; playlists with 'No change': unchecked; others: checked
+      const defChecked = gid === 'removeFromDevice' ? false
+        : (gid === 'playlists' && item.note === 'No change') ? false
+        : true;
+      _sw.selection[gid][item.id] = defChecked;
+    }
   }
-  return raw;
+
+  _swRenderReview();
 }
 
-function _syncRenderDecisionRows(section, rows, emptyMessage) {
-  if (!rows.length) return `<div class="sync-empty">${esc(emptyMessage)}</div>`;
-  return rows.map((row, idx) => {
-    const relPath = String(row.rel_path || '');
-    const filename = _syncDisplayTrackName(row, section, relPath);
-    const pathDisplay = String(
-      row.full_path
-      || row.path
-      || row.abs_path
-      || row.local_path
-      || row.device_path
-      || relPath
-      || row.folder
-      || ''
-    );
-    const reason = _syncFormatReason(row.reason || '');
-    return `<label class="sync-file-row sync-file-row--preview sync-file-row--decision">
-      <div class="sync-file-main">
-        <span class="sync-file-thumb" aria-hidden="true"><img src="/icons/empty-song.svg" alt="" aria-hidden="true" loading="lazy" /></span>
-        <span class="sync-file-name">${esc(filename)}</span>
-        <span class="sync-file-path" title="${esc(pathDisplay)}">${esc(pathDisplay)}</span>
-        ${reason ? `<span class="sync-file-reason">${esc(reason)}</span>` : ''}
+function _swRenderReview() {
+  const order = ['toDevice', 'toLibrary', 'playlists', 'removeFromDevice'];
+  const filter = _sw.filter;
+
+  // Update chip counts
+  for (const gid of order) {
+    const items = _sw.proposal?.[gid]?.items ?? [];
+    const el = document.getElementById(`sw-chip-${gid === 'removeFromDevice' ? 'removals' : gid}`);
+    if (el) el.textContent = items.length;
+  }
+  const allCount = order.reduce((s, g) => s + (_sw.proposal?.[g]?.items?.length ?? 0), 0);
+  const allEl = document.getElementById('sw-chip-all');
+  if (allEl) allEl.textContent = allCount;
+
+  // Update active chip
+  document.querySelectorAll('.sw-chip').forEach(c => {
+    c.classList.toggle('sw-chip--active', c.dataset.filter === filter);
+  });
+
+  const container = document.getElementById('sw-review-groups');
+  if (!container) return;
+
+  const visibleGroups = filter === 'all' ? order
+    : filter === 'toDevice'         ? ['toDevice']
+    : filter === 'toLibrary'        ? ['toLibrary']
+    : filter === 'playlists'        ? ['playlists']
+    : filter === 'removeFromDevice' ? ['removeFromDevice']
+    : order;
+
+  container.innerHTML = '';
+  for (const gid of visibleGroups) {
+    const group = _sw.proposal?.[gid];
+    if (!group || !group.items.length) continue;
+    container.appendChild(_swBuildGroupCard(gid, group));
+  }
+
+  _swUpdateReviewFooter();
+}
+
+function _swBuildGroupCard(gid, group) {
+  const isDanger = gid === 'removeFromDevice';
+  const sel = _sw.selection[gid] ?? {};
+  const total = group.items.length;
+  const selectedCount = Object.values(sel).filter(Boolean).length;
+  const allSelected = selectedCount === total;
+  const someSelected = selectedCount > 0 && !allSelected;
+
+  const actionLabel = gid === 'toDevice' ? 'Add to device'
+    : gid === 'toLibrary' ? 'Add to library'
+    : gid === 'removeFromDevice' ? 'Remove'
+    : 'Sync playlist';
+  const chipClass = isDanger ? 'sw-action-chip sw-action-chip--danger' : 'sw-action-chip';
+
+  const card = document.createElement('div');
+  card.className = `sw-group-card${isDanger ? ' sw-group-card--danger' : ''} sw-group-card--expanded`;
+  card.dataset.gid = gid;
+
+  card.innerHTML = `
+    <div class="sw-group-hdr" onclick="App.swToggleGroupCollapse('${gid}')">
+      <input type="checkbox" class="sw-check" id="sw-grp-chk-${gid}"
+        ${allSelected ? 'checked' : ''} onclick="event.stopPropagation();App.swToggleGroup('${gid}', this.checked)"
+        data-indeterminate="${someSelected}" />
+      <div class="sw-group-chev">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
       </div>
-      ${_syncRenderActionButtons(section, idx, String(row.action || ''), row.available_actions || [])}
-      <input type="checkbox" class="sync-chk sync-chk-${section}" data-index="${idx}" ${row.selected ? 'checked' : ''} onchange="App.syncRowSelectedChanged('${section}', ${idx}, this.checked)" />
-    </label>`;
+      <div class="sw-group-label-col">
+        <span class="sw-group-title">${esc(group.label)}</span>
+        <span class="sw-group-count-text">${total} item${total===1?'':'s'}</span>
+        <span class="sw-group-hint">${esc(group.hint)}</span>
+      </div>
+      <span class="sw-group-sel-pill">${selectedCount} selected</span>
+      <button class="sw-group-selall-btn" onclick="event.stopPropagation();App.swToggleGroup('${gid}', ${!allSelected})">
+        ${allSelected ? 'Deselect all' : 'Select all'}
+      </button>
+    </div>
+    <div class="sw-group-rows">
+      ${group.items.map(item => `
+      <div class="sw-review-row${sel[item.id] ? '' : ' sw-review-row--deselected'}" data-gid="${gid}" data-id="${esc(item.id)}">
+        <input type="checkbox" class="sw-check" ${sel[item.id] ? 'checked' : ''}
+          onclick="event.stopPropagation();App.swToggleItem('${gid}','${esc(item.id)}')" />
+        <div class="sw-row-thumb" style="background:${_swThumbColor(item.title)}">${_swInitials(item.title)}</div>
+        <div class="sw-row-info">
+          <div class="sw-row-title" title="${esc(item.title)}">${esc(item.title)}</div>
+          <div class="sw-row-sub">${item.kind === 'playlist' ? esc(item.meta || '') : [item.artist, item.album].filter(Boolean).map(esc).join(' · ')}</div>
+        </div>
+        <span class="${chipClass}">${esc(actionLabel)}</span>
+        <span class="sw-row-size">${item.size ? `${item.size} MB` : ''}${item.size && item.dur ? ' · ' : ''}${item.dur ?? ''}</span>
+        <button class="sw-row-kebab" title="More options" onclick="event.stopPropagation()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+        </button>
+      </div>`).join('')}
+    </div>
+  `;
+
+  // Set indeterminate state on checkbox
+  const chk = card.querySelector(`#sw-grp-chk-${gid}`);
+  if (chk && someSelected) chk.indeterminate = true;
+
+  return card;
+}
+
+function _swThumbColor(name) {
+  let h = 0;
+  for (let i = 0; i < (name||'').length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  return `linear-gradient(135deg, hsl(${hue},35%,28%), hsl(${(hue+30)%360},40%,22%))`;
+}
+
+function _swInitials(name) {
+  const parts = String(name || '?').trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return String(name || '?')[0].toUpperCase();
+}
+
+function swToggleGroupCollapse(gid) {
+  const card = document.querySelector(`.sw-group-card[data-gid="${gid}"]`);
+  if (card) card.classList.toggle('sw-group-card--expanded');
+}
+
+function swToggleItem(gid, itemId) {
+  if (!_sw.selection[gid]) _sw.selection[gid] = {};
+  _sw.selection[gid][itemId] = !_sw.selection[gid][itemId];
+  // Re-render just the card to update checkboxes + selection pill
+  _swRenderReview();
+}
+
+function swToggleGroup(gid, toState) {
+  const group = _sw.proposal?.[gid];
+  if (!group) return;
+  _sw.selection[gid] = {};
+  for (const item of group.items) _sw.selection[gid][item.id] = toState;
+  _swRenderReview();
+}
+
+function swSetFilter(f) {
+  _sw.filter = f;
+  _swRenderReview();
+}
+
+function _swComputeTotals() {
+  const groups = _sw.proposal ?? {};
+  const selOf  = gid => Object.entries(_sw.selection[gid] ?? {}).filter(([,v]) => v);
+
+  const toDev  = selOf('toDevice');
+  const toLib  = selOf('toLibrary');
+  const remove = selOf('removeFromDevice');
+  const plists = selOf('playlists');
+
+  const mbOf = (gid, ids) => {
+    const items = (groups[gid]?.items ?? []);
+    return ids.reduce((s, [id]) => {
+      const item = items.find(x => x.id === id);
+      return s + (Number(item?.size) || 0);
+    }, 0);
+  };
+
+  const toDeviceMB    = mbOf('toDevice', toDev);
+  const toLibraryMB   = mbOf('toLibrary', toLib);
+  const removeMB      = mbOf('removeFromDevice', remove);
+  const netMB         = toDeviceMB - removeMB;
+  const netGB         = Math.abs(netMB) / 1024;
+  const sign          = netMB >= 0 ? '+' : '−';
+  const totalChanges  = toDev.length + toLib.length + remove.length + plists.length;
+
+  const usedBytes = _sw.device?.used_bytes ?? 0;
+  const capBytes  = _sw.device?.capacity_bytes ?? 0;
+  const afterUsed = usedBytes + netMB * 1024 * 1024;
+  const tight     = capBytes > 0 && (afterUsed / capBytes) > 0.95;
+  const outOfSpace = capBytes > 0 && afterUsed > capBytes;
+
+  return { toDeviceCount: toDev.length, toLibraryCount: toLib.length,
+    removeCount: remove.length, playlistCount: plists.length,
+    toDeviceMB, toLibraryMB, removeMB, netMB, netGB, sign,
+    totalChanges, usedBytes, capBytes, afterUsed, tight, outOfSpace };
+}
+
+function _swUpdateReviewFooter() {
+  const t = _swComputeTotals();
+  const msgEl = document.getElementById('sw-footer-msg');
+  if (msgEl) {
+    const parts = [];
+    if (t.toDeviceCount)  parts.push(`${t.toDeviceCount} to device`);
+    if (t.toLibraryCount) parts.push(`${t.toLibraryCount} to library`);
+    if (t.removeCount)    parts.push(`${t.removeCount} removed`);
+    if (t.playlistCount)  parts.push(`${t.playlistCount} playlist${t.playlistCount===1?'':'s'}`);
+    msgEl.textContent = parts.length ? parts.join(' · ') : 'No changes selected.';
+  }
+
+  const primaryBtn = document.getElementById('sw-btn-primary');
+  if (primaryBtn) {
+    if (t.outOfSpace) {
+      primaryBtn.disabled = true;
+      if (msgEl) msgEl.textContent = `Not enough space — deselect ${_fmtGB(t.afterUsed - t.capBytes)} to continue.`;
+    } else {
+      primaryBtn.disabled = false;
+      primaryBtn.innerHTML = `Start sync (${t.totalChanges})`;
+    }
+  }
+}
+
+/* ── Step 4: Sync ────────────────────────────────────────── */
+
+async function swStartSync() {
+  const totals = _swComputeTotals();
+  if (totals.removeCount > 0) {
+    const ok = await _showConfirm({
+      title: `Remove ${totals.removeCount} track${totals.removeCount===1?'':'s'} from device?`,
+      message: 'These files will be permanently deleted from your player.',
+      okText: 'Remove', danger: true,
+    });
+    if (!ok) return;
+  }
+  _swGoTo(4);
+}
+
+function _swInitSyncStep() {
+  _swClearTimers();
+  _sw.logLines = [];
+  _sw.syncStartTs = Date.now() / 1000;
+
+  _swRenderPhases('sw-sync-phases', _SW_SYNC_PHASES, -1);
+  const log = document.getElementById('sw-sync-log');
+  if (log) log.innerHTML = '';
+  const bar = document.getElementById('sw-sync-bar');
+  if (bar) bar.style.width = '0%';
+  const pct = document.getElementById('sw-sync-pct');
+  if (pct) pct.textContent = '0%';
+
+  // Build execute payload from selection
+  const payload = _swBuildExecutePayload();
+
+  api('/sync/execute', { method: 'POST', body: JSON.stringify(payload) })
+    .catch(e => _swHandleSyncError(String(e)));
+
+  _sw.syncPollTimer = setInterval(_swPollSync, 600);
+}
+
+function _swBuildExecutePayload() {
+  const order = ['toDevice', 'toLibrary', 'playlists', 'removeFromDevice'];
+  const proposal = _sw.proposal ?? {};
+
+  const toDevice    = (proposal.toDevice?.items ?? []).filter(i => _sw.selection.toDevice?.[i.id]).map(i => i.id);
+  const toLibrary   = (proposal.toLibrary?.items ?? []).filter(i => _sw.selection.toLibrary?.[i.id]).map(i => i.id);
+  const removals    = (proposal.removeFromDevice?.items ?? []).filter(i => _sw.selection.removeFromDevice?.[i.id]).map(i => i.id);
+  const playlists   = (proposal.playlists?.items ?? []).filter(i => _sw.selection.playlists?.[i.id]).map(i => i.id);
+
+  return {
+    dap_id:      _sw.device.id,
+    to_device:   toDevice,
+    to_library:  toLibrary,
+    remove:      removals,
+    playlists:   playlists,
+  };
+}
+
+async function _swPollSync() {
+  let status;
+  try { status = await api('/sync/status'); } catch (_) { return; }
+
+  const progress = Number(status.progress ?? 0);
+  const elapsed  = (Date.now() / 1000) - _sw.syncStartTs;
+
+  _swSetProgress('sync', progress);
+  document.getElementById('sw-sync-elapsed').textContent = _fmtSecs(elapsed);
+  document.getElementById('sw-sync-tracks').textContent = String(status.current ?? status.progress ?? 0);
+
+  const phase = status.message ?? '';
+  const phaseEl = document.getElementById('sw-sync-phase-label');
+  if (phaseEl) phaseEl.textContent = phase || 'Syncing…';
+  if (phase && (!_sw.logLines.length || _sw.logLines[_sw.logLines.length - 1] !== phase)) {
+    _swAppendLog('sw-sync-log', phase);
+  }
+
+  const phaseIndex = Math.floor((progress / 100) * (_SW_SYNC_PHASES.length - 1));
+  _swRenderPhases('sw-sync-phases', _SW_SYNC_PHASES, phaseIndex);
+
+  if (status.status === 'error') {
+    clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null;
+    _swHandleSyncError(status.message || 'Sync failed.');
+    return;
+  }
+
+  if (status.status === 'done' || progress >= 100) {
+    clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null;
+    _swSetProgress('sync', 100);
+    _swRenderPhases('sw-sync-phases', _SW_SYNC_PHASES, _SW_SYNC_PHASES.length);
+    _sw.syncResult = status;
+    setTimeout(() => _swGoTo(5), 600);
+  }
+}
+
+function _swHandleSyncError(msg) {
+  const card = document.getElementById('sw-sync-card');
+  if (!card) return;
+  card.innerHTML = `<div class="sw-error-card">
+    <div class="sw-error-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="3"/></svg></div>
+    <div class="sw-error-title">Sync failed</div>
+    <div class="sw-error-detail">${esc(msg)}</div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="sw-btn sw-btn--secondary" onclick="App.swCancel()">Cancel</button>
+      <button class="sw-btn sw-btn--primary" onclick="App.swStartSync()">Retry</button>
+    </div>
+  </div>`;
+}
+
+/* ── Step 5: Done ────────────────────────────────────────── */
+
+function _swRenderDone() {
+  const status = _sw.syncResult ?? {};
+  const devName = _sw.device?.name ?? 'Device';
+
+  // Hero title
+  const titleEl = document.getElementById('sw-done-title');
+  if (titleEl) titleEl.textContent = `${devName} is up to date`;
+
+  // Hero meta
+  const metaEl = document.getElementById('sw-done-meta');
+  if (metaEl) {
+    const mb  = Number(status.bytes_copied ?? 0) / (1024**2);
+    const dur = _fmtSecs(Number(status.elapsed_seconds ?? 0));
+    const parts = [];
+    if (mb > 0)  parts.push(`${mb.toFixed(0)} MB transferred`);
+    if (dur !== '0s') parts.push(`Took ${dur}`);
+    parts.push('Verified by checksum');
+    metaEl.innerHTML = parts.map((p, i) => i === 0 ? p : `<span class="sw-done-meta-dot"></span>${p}`).join('');
+  }
+
+  // Stat tiles
+  const tilesEl = document.getElementById('sw-stat-tiles');
+  if (tilesEl) {
+    const tiles = [
+      { label: 'Added to device', value: status.added_count ?? 0, unit: 'tracks' },
+      { label: 'Imported',        value: status.imported_count ?? 0, unit: 'tracks' },
+      { label: 'Removed',         value: status.removed_count ?? 0, unit: 'tracks' },
+      { label: 'Playlists synced',value: status.playlists_synced ?? 0, unit: 'playlists' },
+    ];
+    tilesEl.innerHTML = tiles.map(t => `
+      <div class="sw-stat-tile">
+        <div class="sw-stat-tile-label">${esc(t.label)}</div>
+        <div class="sw-stat-tile-value">${t.value}</div>
+        <div class="sw-stat-tile-unit">${esc(t.unit)}</div>
+      </div>`).join('');
+  }
+
+  // Changelog
+  const changelogEl = document.getElementById('sw-changelog');
+  if (changelogEl) {
+    const groups = [];
+    const added   = Number(status.added_count ?? 0);
+    const imported = Number(status.imported_count ?? 0);
+    const removed  = Number(status.removed_count ?? 0);
+    if (added)    groups.push({ dot: 'accent',   label: `Added ${added} track${added===1?'':'s'} to ${esc(devName)}`,  items: status.added_sample ?? [] });
+    if (imported) groups.push({ dot: 'success',  label: `Imported ${imported} track${imported===1?'':'s'} to library`, items: status.imported_sample ?? [] });
+    if (removed)  groups.push({ dot: 'danger',   label: `Removed ${removed} track${removed===1?'':'s'} from device`,   items: status.removed_sample ?? [] });
+    changelogEl.innerHTML = `<div class="sw-overline" style="margin-bottom:8px">What changed</div>` + (groups.length ? groups.map(g => `
+      <div class="sw-change-group">
+        <div class="sw-change-group-hdr"><span class="sw-change-dot sw-change-dot--${g.dot}"></span>${g.label}</div>
+        ${(g.items.slice(0,4)).map(t => `
+        <div class="sw-change-item">
+          <div class="sw-change-thumb">${_swInitials(t.title ?? t)}</div>
+          <div class="sw-change-text-col">
+            <div class="sw-change-title">${esc(t.title ?? t)}</div>
+            <div class="sw-change-sub">${esc(t.artist ?? '')}</div>
+          </div>
+          <span class="sw-change-size">${t.size ? t.size + ' MB' : ''}</span>
+        </div>`).join('')}
+        ${g.items.length > 4 ? `<div class="sw-change-more">+${g.items.length - 4} more</div>` : ''}
+      </div>`).join('') : '<p style="color:var(--text-muted);font-size:13px">No file changes this sync.</p>');
+  }
+
+  // Storage now
+  const storageEl = document.getElementById('sw-storage-now');
+  if (storageEl) {
+    const cap  = _sw.device?.capacity_bytes ?? 0;
+    const used = Number(status.space_used_bytes ?? _sw.device?.used_bytes ?? 0);
+    const free = cap - used;
+    const pct  = cap > 0 ? Math.min(100, (used / cap) * 100) : 0;
+    storageEl.innerHTML = `
+      <div class="sw-overline" style="margin-bottom:8px">Storage now</div>
+      <div class="sw-cap-bar-wrap"><div class="sw-cap-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
+      <div class="sw-storage-bar-label">${_fmtGB(used)} used · ${_fmtGB(free)} free</div>`;
+  }
+
+  // Footer
+  const footerMsg = document.getElementById('sw-footer-msg');
+  if (footerMsg) footerMsg.textContent = 'Safe to disconnect.';
+  document.getElementById('sw-footer-status')?.classList.add('sw-footer-status--success');
+}
+
+function swFinish() {
+  _swClearTimers();
+  loadSyncView();
+}
+
+/* ── Shared progress helpers ─────────────────────────────── */
+
+function _swSetProgress(which, pct) {
+  const bar = document.getElementById(`sw-${which}-bar`);
+  const txt = document.getElementById(`sw-${which}-pct`);
+  const v = Math.max(0, Math.min(100, pct));
+  if (bar) bar.style.width = `${v.toFixed(1)}%`;
+  if (txt) txt.textContent = `${Math.round(v)}%`;
+}
+
+function _swRenderPhases(containerId, phases, activeIndex) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = phases.map((p, i) => {
+    let state = 'pending';
+    if (i < activeIndex)  state = 'done';
+    if (i === activeIndex) state = 'active';
+    const icon = state === 'done'
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>`
+      : state === 'active'
+      ? `<svg class="sw-spinner-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>`
+      : `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="3" opacity="0.4"/></svg>`;
+    return `<div class="sw-phase-row sw-phase-row--${state}">
+      <span class="sw-phase-icon">${icon}</span>
+      <span>${esc(p)}</span>
+    </div>`;
   }).join('');
 }
 
-function _syncRenderPlaylistRows(rows) {
-  if (!rows.length) return `<div class="sync-empty">No playlists need syncing.</div>`;
-  const deviceLabel = _syncDeviceNameLabel();
-  return rows.map((row, idx) => `
-    <label class="sync-file-row sync-file-row--preview">
-      <div class="sync-file-main">
-        <span class="sync-file-thumb sync-file-thumb--playlist" aria-hidden="true"><img src="/icons/playlist.svg" alt="" aria-hidden="true" loading="lazy" /></span>
-        <span class="sync-file-name">${esc(row.name || 'Playlist')}</span>
-        <span class="sync-file-folder">${Number(row.track_count || 0)} track${Number(row.track_count || 0) === 1 ? '' : 's'}</span>
-        ${row.reason ? `<span class="sync-file-reason">${esc(row.reason)}</span>` : ''}
-      </div>
-      <div class="sync-file-origin">Local Playlists → ${esc(deviceLabel)}</div>
-      <input type="checkbox" class="sync-chk sync-chk-playlists" data-index="${idx}" ${row.selected ? 'checked' : ''} onchange="App.syncRowSelectedChanged('playlists', ${idx}, this.checked)" />
-    </label>
-  `).join('');
+function _swAppendLog(logId, text) {
+  const el = document.getElementById(logId);
+  if (!el) return;
+  _sw.logLines.push(text);
+  if (_sw.logLines.length > 60) _sw.logLines.shift();
+  const idx = _sw.logLines.length;
+  const isLast = true;
+  // Remove last-line highlight from previous
+  el.querySelectorAll('.sw-log-arrow--active').forEach(a => a.classList.remove('sw-log-arrow--active'));
+  const line = document.createElement('div');
+  line.className = 'sw-log-line';
+  line.innerHTML = `<span class="sw-log-idx">${String(idx).padStart(2,'0')}</span><span class="sw-log-arrow sw-log-arrow--active">▸</span><span class="sw-log-text">${esc(text)}</span>`;
+  el.appendChild(line);
+  const countEl = document.getElementById(logId.replace('sw-', 'sw-') + '-count');
+  const countId = logId === 'sw-scan-log' ? 'sw-scan-log-count' : 'sw-sync-log-count';
+  const cEl = document.getElementById(countId);
+  if (cEl) cEl.textContent = `${_sw.logLines.length} entries`;
+  el.scrollTop = el.scrollHeight;
 }
 
-function _syncRenderIgnoredRows(rows) {
-  if (!rows.length) return `<div class="sync-empty">No ignored tracks on this DAP.</div>`;
-  return rows.map((row, idx) => `
-    <label class="sync-file-row sync-file-row--preview">
-      <div class="sync-file-main">
-        <span class="sync-file-thumb" aria-hidden="true"><img src="/icons/empty-song.svg" alt="" aria-hidden="true" loading="lazy" /></span>
-        <span class="sync-file-name">${esc(_syncDisplayTrackName(row, 'ignored', String(row.rel_path || '')))}</span>
-        <span class="sync-file-path" title="${esc(String(row.full_path || row.path || row.abs_path || row.local_path || row.device_path || row.rel_path || ''))}">${esc(String(row.full_path || row.path || row.abs_path || row.local_path || row.device_path || row.rel_path || ''))}</span>
-        <span class="sync-file-reason">${esc(_syncFormatReason(row.reason || 'Ignored'))}</span>
-      </div>
-      <div class="sync-file-origin"><span class="sync-ignored-tag">Ignored</span></div>
-      <input type="checkbox" class="sync-chk sync-chk-ignored" data-index="${idx}" ${row.selected ? 'checked' : ''} onchange="App.syncIgnoredSelectionChanged(${idx}, this.checked)" />
-    </label>
-  `).join('');
-}
+// Legacy stubs (no-op) to prevent errors from any remaining references
+function closeSyncModal() {}
+function syncScanAgain() { loadSyncView(); }
 
-function _syncBuildExecutePayload() {
-  const add_to_device_paths = [];
-  const copy_to_local_paths = [];
-  const delete_on_device_paths = [];
-  const ignore_upserts = [];
-  const ignore_removals = [];
-  const playlist_ids = [];
-  (_syncPreviewModel?.toDevice || []).forEach((row) => {
-    if (row.selected && row.action === 'sync_to_dap') add_to_device_paths.push(String(row.rel_path || ''));
-  });
-  (_syncPreviewModel?.libraryDeleted || []).forEach((row) => {
-    if (!row.selected) return;
-    if (row.action === 'delete_on_dap') delete_on_device_paths.push(String(row.rel_path || ''));
-    if (row.action === 'dont_remind') ignore_upserts.push({ rel_path: String(row.rel_path || ''), discrepancy_type: 'library_deleted_on_source' });
-  });
-  (_syncPreviewModel?.deviceOnly || []).forEach((row) => {
-    if (!row.selected) return;
-    if (row.action === 'copy_to_library') copy_to_local_paths.push(String(row.rel_path || ''));
-    if (row.action === 'delete_on_dap') delete_on_device_paths.push(String(row.rel_path || ''));
-    if (row.action === 'dont_remind') ignore_upserts.push({ rel_path: String(row.rel_path || ''), discrepancy_type: 'device_only_not_in_library' });
-  });
-  (_syncPreviewModel?.playlists || []).forEach((row) => {
-    if (row.selected && row.id) playlist_ids.push(String(row.id));
-  });
-  (_syncPreviewModel?.ignored || []).forEach((row) => {
-    if (row.selected) ignore_removals.push({ rel_path: String(row.rel_path || ''), discrepancy_type: String(row.discrepancy_type || '') });
-  });
-  return { dap_id: _syncSelectedDapId, add_to_device_paths, copy_to_local_paths, delete_on_device_paths, ignore_upserts, ignore_removals, playlist_ids };
-}
-
-function renderSyncPreview(status) {
-  _syncLastStatus = status || null;
-  _syncScannedAt = Date.now();
-  _syncPreviewModel = _syncInitPreviewModel(status || {});
-  _syncUpdatePreviewDirectionLabels();
-  document.getElementById('sync-list-to-device').innerHTML =
-    _syncRenderDecisionRows('to-device', _syncPreviewModel.toDevice, 'No new local tracks to add.');
-  document.getElementById('sync-list-library-deleted').innerHTML =
-    _syncRenderDecisionRows('library-deleted', _syncPreviewModel.libraryDeleted, 'No deleted-from-library tracks found on device.');
-  document.getElementById('sync-list-device-only').innerHTML =
-    _syncRenderDecisionRows('device-only', _syncPreviewModel.deviceOnly, 'No device-only tracks found.');
-  document.getElementById('sync-list-playlists').innerHTML = _syncRenderPlaylistRows(_syncPreviewModel.playlists);
-  document.getElementById('sync-list-ignored').innerHTML = _syncRenderIgnoredRows(_syncPreviewModel.ignored);
-  const fmtCount = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
-  document.getElementById('sync-to-device-count').textContent = fmtCount(_syncPreviewModel.toDevice.length, 'track');
-  document.getElementById('sync-library-deleted-count').textContent = fmtCount(_syncPreviewModel.libraryDeleted.length, 'track');
-  document.getElementById('sync-device-only-count').textContent = fmtCount(_syncPreviewModel.deviceOnly.length, 'track');
-  document.getElementById('sync-playlist-count').textContent = fmtCount(_syncPreviewModel.playlists.length, 'change');
-  document.getElementById('sync-ignored-count').textContent = fmtCount(_syncPreviewModel.ignored.length, 'track');
-
-  const warnings = Array.isArray(status.warnings) ? status.warnings : [];
-  _syncPreviewWarningCount = warnings.length;
-  document.getElementById('sync-warning-count').textContent = warnings.length;
-  document.getElementById('sync-list-warnings').innerHTML = _syncWarningRows(warnings);
-  document.getElementById('sync-warnings-wrap').style.display = 'none';
-
-  document.getElementById('sync-section-to-device').style.display = _syncPreviewModel.toDevice.length ? 'block' : 'none';
-  document.getElementById('sync-section-library-deleted').style.display = _syncPreviewModel.libraryDeleted.length ? 'block' : 'none';
-  document.getElementById('sync-section-device-only').style.display = _syncPreviewModel.deviceOnly.length ? 'block' : 'none';
-  document.getElementById('sync-section-playlists').style.display = _syncPreviewModel.playlists.length ? 'block' : 'none';
-  document.getElementById('sync-section-ignored').style.display = _syncPreviewModel.ignored.length ? 'block' : 'none';
-
-  _syncSectionCollapsed['to-device'] = true;
-  _syncSectionCollapsed['library-deleted'] = true;
-  _syncSectionCollapsed['device-only'] = true;
-  _syncSectionCollapsed['playlists'] = true;
-  _syncSectionCollapsed['ignored'] = true;
-  Object.keys(_syncSectionMapping()).forEach(_syncApplySectionCollapse);
-
-  const deletedBulk = document.getElementById('sync-bulk-action-library-deleted');
-  const deviceOnlyBulk = document.getElementById('sync-bulk-action-device-only');
-  if (deletedBulk) deletedBulk.value = 'keep_on_dap';
-  if (deviceOnlyBulk) deviceOnlyBulk.value = 'copy_to_library';
-  const allToDevice = document.getElementById('chk-all-to-device');
-  const allDeleted = document.getElementById('chk-all-library-deleted');
-  const allDeviceOnly = document.getElementById('chk-all-device-only');
-  const allPlaylists = document.getElementById('chk-all-playlists');
-  const allIgnored = document.getElementById('chk-all-ignored');
-  if (allToDevice) allToDevice.checked = true;
-  if (allDeleted) allDeleted.checked = true;
-  if (allDeviceOnly) allDeviceOnly.checked = true;
-  if (allPlaylists) allPlaylists.checked = true;
-  if (allIgnored) allIgnored.checked = false;
-  syncSelectionChanged();
-  _syncPhase('preview');
-}
-
-function syncSectionBulkActionChanged(section, action) {
-  if (!_syncPreviewModel) return;
-  const rows = section === 'library-deleted'
-    ? _syncPreviewModel.libraryDeleted
-    : (section === 'device-only' ? _syncPreviewModel.deviceOnly : []);
-  rows.forEach((row) => { row.action = action; });
-  if (section === 'library-deleted') {
-    document.getElementById('sync-list-library-deleted').innerHTML =
-      _syncRenderDecisionRows('library-deleted', _syncPreviewModel.libraryDeleted, 'No deleted-from-library tracks found on device.');
-  } else if (section === 'device-only') {
-    document.getElementById('sync-list-device-only').innerHTML =
-      _syncRenderDecisionRows('device-only', _syncPreviewModel.deviceOnly, 'No device-only tracks found.');
-  }
-  syncSelectionChanged();
-}
-
-function syncToggleAll(section, checked) {
-  if (!_syncPreviewModel) return;
-  if (section === 'to-device') {
-    _syncPreviewModel.toDevice.forEach((row) => { row.selected = checked; row.action = 'sync_to_dap'; });
-    document.getElementById('sync-list-to-device').innerHTML =
-      _syncRenderDecisionRows('to-device', _syncPreviewModel.toDevice, 'No new local tracks to add.');
-  } else if (section === 'library-deleted') {
-    const action = String(document.getElementById('sync-bulk-action-library-deleted')?.value || 'keep_on_dap');
-    _syncPreviewModel.libraryDeleted.forEach((row) => { row.selected = checked; row.action = action; });
-    document.getElementById('sync-list-library-deleted').innerHTML =
-      _syncRenderDecisionRows('library-deleted', _syncPreviewModel.libraryDeleted, 'No deleted-from-library tracks found on device.');
-  } else if (section === 'device-only') {
-    const action = String(document.getElementById('sync-bulk-action-device-only')?.value || 'copy_to_library');
-    _syncPreviewModel.deviceOnly.forEach((row) => { row.selected = checked; row.action = action; });
-    document.getElementById('sync-list-device-only').innerHTML =
-      _syncRenderDecisionRows('device-only', _syncPreviewModel.deviceOnly, 'No device-only tracks found.');
-  } else if (section === 'playlists') {
-    _syncPreviewModel.playlists.forEach((row) => { row.selected = checked; });
-    document.getElementById('sync-list-playlists').innerHTML = _syncRenderPlaylistRows(_syncPreviewModel.playlists);
-  } else if (section === 'ignored') {
-    _syncPreviewModel.ignored.forEach((row) => { row.selected = checked; });
-    document.getElementById('sync-list-ignored').innerHTML = _syncRenderIgnoredRows(_syncPreviewModel.ignored);
-  }
-  syncSelectionChanged();
-}
-
-function syncRowSelectedChanged(section, index, checked) {
-  if (!_syncPreviewModel) return;
-  const idx = Number(index);
-  if (!Number.isFinite(idx) || idx < 0) return;
-  if (section === 'to-device' && _syncPreviewModel.toDevice[idx]) _syncPreviewModel.toDevice[idx].selected = !!checked;
-  if (section === 'library-deleted' && _syncPreviewModel.libraryDeleted[idx]) _syncPreviewModel.libraryDeleted[idx].selected = !!checked;
-  if (section === 'device-only' && _syncPreviewModel.deviceOnly[idx]) _syncPreviewModel.deviceOnly[idx].selected = !!checked;
-  if (section === 'playlists' && _syncPreviewModel.playlists[idx]) _syncPreviewModel.playlists[idx].selected = !!checked;
-  syncSelectionChanged();
-}
-
-function syncRowActionChanged(section, index, action) {
-  if (!_syncPreviewModel) return;
-  const idx = Number(index);
-  if (!Number.isFinite(idx) || idx < 0) return;
-  if (section === 'to-device' && _syncPreviewModel.toDevice[idx]) _syncPreviewModel.toDevice[idx].action = action;
-  if (section === 'library-deleted' && _syncPreviewModel.libraryDeleted[idx]) _syncPreviewModel.libraryDeleted[idx].action = action;
-  if (section === 'device-only' && _syncPreviewModel.deviceOnly[idx]) _syncPreviewModel.deviceOnly[idx].action = action;
-  if (section === 'to-device') {
-    document.getElementById('sync-list-to-device').innerHTML =
-      _syncRenderDecisionRows('to-device', _syncPreviewModel.toDevice, 'No new local tracks to add.');
-  } else if (section === 'library-deleted') {
-    document.getElementById('sync-list-library-deleted').innerHTML =
-      _syncRenderDecisionRows('library-deleted', _syncPreviewModel.libraryDeleted, 'No deleted-from-library tracks found on device.');
-  } else if (section === 'device-only') {
-    document.getElementById('sync-list-device-only').innerHTML =
-      _syncRenderDecisionRows('device-only', _syncPreviewModel.deviceOnly, 'No device-only tracks found.');
-  }
-  syncSelectionChanged();
-}
-
-function syncIgnoredSelectionChanged(index, checked) {
-  if (!_syncPreviewModel) return;
-  const idx = Number(index);
-  if (!Number.isFinite(idx) || idx < 0 || !_syncPreviewModel.ignored[idx]) return;
-  _syncPreviewModel.ignored[idx].selected = !!checked;
-  syncSelectionChanged();
-}
-
-function syncSelectionChanged() {
-  const panel = document.getElementById('sync-space-summary');
-  const estTime = document.getElementById('sync-est-time');
-  const status = _syncLastStatus;
-  if (!panel || !status || !_syncPreviewModel) return;
-  const payload = _syncBuildExecutePayload();
-  const localSizes = status.local_only_sizes || {};
-  const required = payload.add_to_device_paths.reduce((sum, rel) => sum + Number(localSizes[rel] || 0), 0);
-  const available = (status.space_available_bytes === null || status.space_available_bytes === undefined)
-    ? null
-    : Number(status.space_available_bytes);
-  const shortfall = (available !== null && required > available) ? (required - available) : 0;
-  const executeBtn = document.getElementById('sync-execute-btn');
-  const unignoreCount = payload.ignore_removals.length;
-  _syncPreviewModel.rescanRequired = unignoreCount > 0;
-  const rescanReq = document.getElementById('sync-rescan-required');
-  if (rescanReq) rescanReq.style.display = _syncPreviewModel.rescanRequired ? '' : 'none';
-
-  // Local disk space for device→local direction.
-  const deviceOnlySizes = status.device_only_sizes || {};
-  const localRequired = payload.copy_to_local_paths.reduce((sum, rel) => sum + Number(deviceOnlySizes[rel] || 0), 0);
-  const localFree = (status.local_free_bytes === null || status.local_free_bytes === undefined)
-    ? null : Number(status.local_free_bytes);
-  const localShortfall = (localFree !== null && localRequired > localFree) ? (localRequired - localFree) : 0;
-
-  const elapsedSec = _syncScannedAt ? Math.floor((Date.now() - _syncScannedAt) / 1000) : 0;
-  const stalenessHint = elapsedSec >= 60
-    ? ` (checked ${elapsedSec < 3600 ? `${Math.floor(elapsedSec / 60)}m` : `${Math.floor(elapsedSec / 3600)}h`} ago)`
-    : '';
-
-  const addCount = payload.add_to_device_paths.length;
-  const copyToLocalCount = payload.copy_to_local_paths.length;
-  const deleteCount = payload.delete_on_device_paths.length;
-  const playlistCount = payload.playlist_ids.length;
-  const ignoreCount = payload.ignore_upserts.length;
-  const noSelection = addCount === 0 && copyToLocalCount === 0 && deleteCount === 0 && playlistCount === 0 && ignoreCount === 0;
-  const tracksLine = `Tracks: ${addCount} to add • ${copyToLocalCount} to import • ${deleteCount} to remove • ${ignoreCount} skipped • ${playlistCount} playlists synced`;
-  const spaceLines = [];
-  let className = 'sync-space-summary';
-  let blocked = false;
-
-  if (noSelection) {
-    if (available !== null) {
-      spaceLines.push(`Device has ${_fmtBytes(available)} free${stalenessHint}`);
-      className += ' sync-space-summary--ok';
-    }
-  } else {
-    if (available === null) {
-      if (addCount) spaceLines.push(`Device space: unavailable • ${_fmtBytes(required)} needed`);
-    } else if (shortfall > 0) {
-      spaceLines.push(`Device: not enough space — ${_fmtBytes(available)} free, ${_fmtBytes(required)} needed (short ${_fmtBytes(shortfall)})${stalenessHint}`);
-      className += ' sync-space-summary--danger';
-      blocked = true;
-    } else if (addCount > 0) {
-      const remaining = Math.max(0, available - required);
-      const lowSpace = remaining < 0.1 * Number(status.space_total_bytes || 0);
-      className += lowSpace ? ' sync-space-summary--warn' : ' sync-space-summary--ok';
-      spaceLines.push(`Device: ${_fmtBytes(available)} free • ${_fmtBytes(required)} needed • ${_fmtBytes(remaining)} after sync${stalenessHint}`);
-    }
-    if (copyToLocalCount > 0) {
-      if (localFree === null) {
-        spaceLines.push(`Local: space unavailable${localRequired ? ` • ${_fmtBytes(localRequired)} needed` : ''}`);
-      } else if (localShortfall > 0) {
-        spaceLines.push(`Local: not enough space — ${_fmtBytes(localFree)} free, ${_fmtBytes(localRequired)} needed (short ${_fmtBytes(localShortfall)})`);
-        if (!className.includes('danger')) className += ' sync-space-summary--danger';
-        blocked = true;
-      } else {
-        spaceLines.push(`Local: ${_fmtBytes(localFree)} free • ${_fmtBytes(localRequired)} needed`);
-      }
-    }
-  }
-
-  panel.className = className;
-  panel.innerHTML = `<div>${esc(tracksLine)}</div>${spaceLines.map(l => `<div>${esc(l)}</div>`).join('')}`;
-  if (estTime) {
-    const totalBytes = required + localRequired;
-    if (noSelection || totalBytes === 0) {
-      estTime.textContent = '';
-    } else {
-      const throughputBytesPerSec = 12 * 1024 * 1024;
-      const estSeconds = Math.max(10, Math.round(totalBytes / throughputBytesPerSec));
-      const mins = Math.floor(estSeconds / 60);
-      const secs = estSeconds % 60;
-      estTime.textContent = `Est. time ~${mins}m ${secs}s`;
-    }
-  }
-  if (executeBtn) {
-    executeBtn.classList.toggle('is-blocked', blocked || _syncPreviewModel.rescanRequired || noSelection);
-    executeBtn.disabled = false;
-    if (_syncPreviewModel.rescanRequired) {
-      executeBtn.textContent = 'Re-scan Required';
-      executeBtn.title = 'Re-run scan after un-ignoring tracks';
-      executeBtn.onclick = () => App.syncScanAgain();
-    } else if (blocked) {
-      const shortAmt = shortfall > 0 ? shortfall : localShortfall;
-      executeBtn.textContent = `Free ${_fmtBytes(shortAmt)}`;
-      executeBtn.title = `Not enough space: short by ${_fmtBytes(shortAmt)}`;
-      executeBtn.onclick = () => toast(`Sync is blocked: not enough space. Free ${_fmtBytes(shortAmt)} or deselect tracks.`);
-    } else if (noSelection) {
-      executeBtn.textContent = 'Nothing Selected';
-      executeBtn.title = 'Select at least one change to sync';
-      executeBtn.onclick = () => toast('Select at least one change to sync.');
-    } else {
-      executeBtn.textContent = 'Start Sync';
-      executeBtn.title = '';
-      executeBtn.onclick = () => App.executeSync();
-    }
-  }
-}
-
-async function executeSync() {
-  if (!_syncPreviewModel) {
-    toast('Scan first.');
-    return;
-  }
-  const payload = _syncBuildExecutePayload();
-  const opCount = payload.add_to_device_paths.length
-    + payload.copy_to_local_paths.length
-    + payload.delete_on_device_paths.length
-    + payload.ignore_upserts.length
-    + payload.ignore_removals.length
-    + payload.playlist_ids.length;
-
-  if (_syncPreviewModel.rescanRequired) {
-    toast('Re-run scan after un-ignoring skipped tracks.');
-    return;
-  }
-  if (opCount === 0) {
-    toast('No operations selected.');
-    return;
-  }
-  if (payload.delete_on_device_paths.length > 0) {
-    const sample = payload.delete_on_device_paths.slice(0, 6).join('\n');
-    const more = payload.delete_on_device_paths.length > 6 ? `\n...and ${payload.delete_on_device_paths.length - 6} more` : '';
-    const ok = window.confirm(`Delete ${payload.delete_on_device_paths.length} file(s) from device?\n\n${sample}${more}`);
-    if (!ok) return;
-  }
-
-  _syncPhase('copying');
-  const copyMode = document.getElementById('sync-copying-mode');
-  if (copyMode) copyMode.textContent = 'Syncing';
-  document.getElementById('sync-copying-msg').textContent = `Preparing to sync 0 / ${opCount} items…`;
-  _syncSetCopyVisualProgress(0);
-  const copyPctEl = document.getElementById('sync-copy-percent');
-  if (copyPctEl) copyPctEl.textContent = '0%';
-  document.getElementById('sync-copying-current').textContent = '';
-
-  const execRes = await fetch('/api/sync/execute', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!execRes.ok) {
-    const err = await execRes.json().catch(() => ({}));
-    if (err.space_required_bytes !== undefined) {
-      toast(`Not enough device space: need ${_fmtBytes(err.space_required_bytes)}, available ${_fmtBytes(err.space_available_bytes)}.`);
-    } else {
-      toast(err.error || 'Sync failed to start.');
-    }
-    _syncPhase('preview');
-    return;
-  }
-
-  clearInterval(_syncPollTimer);
-  _syncPollTimer = setInterval(async () => {
-    const status = await api('/sync/status').catch(() => null);
-    if (!status) return;
-
-    const pct = status.total > 0 ? Math.round((status.progress / status.total) * 100) : 0;
-    _syncSetCopyVisualProgress(pct);
-    if (copyPctEl) copyPctEl.textContent = pct + '%';
-    document.getElementById('sync-copying-msg').textContent = _formatSyncPhaseMessage(status.message, 'copy');
-    document.getElementById('sync-copying-current').textContent = status.current || '';
-
-    if (status.status === 'done') {
-      clearInterval(_syncPollTimer);
-      _showSyncDone(status);
-    } else if (status.status === 'error') {
-      clearInterval(_syncPollTimer);
-      _syncScanInFlight = false;
-      toast('Sync failed: ' + status.message);
-    }
-  }, 600);
-}
-
-function _showSyncDone(status) {
-  const issueCount = Array.isArray(status.errors) ? status.errors.length : 0;
-  const baseDone = _formatSyncPhaseMessage(status.message, 'done') || 'Sync complete.';
-  const titleEl = document.getElementById('sync-done-title');
-  const copyEl = document.getElementById('sync-done-copy');
-  const detailEl = document.getElementById('sync-done-detail');
-  if (titleEl) {
-    titleEl.textContent = issueCount ? 'Sync Completed with Issues' : 'Sync Complete';
-  }
-  if (copyEl) {
-    copyEl.textContent = issueCount
-      ? `Finished syncing with ${issueCount} issue${issueCount === 1 ? '' : 's'}.`
-      : 'Your library and DAP are now in harmony.';
-  }
-  if (detailEl) {
-    detailEl.textContent = baseDone;
-  }
-  const errWrap = document.getElementById('sync-errors-wrap');
-  if (status.errors?.length) {
-    errWrap.style.display = 'block';
-    document.getElementById('sync-errors-list').innerHTML = status.errors.map(e =>
-      `<div class="sync-file-row" style="color:var(--text-muted)">${esc(e)}</div>`
-    ).join('');
-  } else {
-    errWrap.style.display = 'none';
-  }
-  _syncPhase('done');
-  // Refresh DAP sync badges/details so Gear reflects post-sync state immediately.
-  loadDapsView().catch(() => {});
-  if (state.view === 'dap-detail' && _currentDapId) {
-    showDapDetail(_currentDapId).catch(() => {});
-  }
-}
-
-async function syncScanAgain() {
-  await api('/sync/reset', { method: 'POST' }).catch(() => {});
-  _syncScanInFlight = false;
-  _syncPreviewWarningCount = 0;
-  _syncPreviewModel = null;
-  _syncPhase('pick');
-}
 
 /* ── DAP management ─────────────────────────────────────────────────── */
 
@@ -14168,20 +13988,17 @@ const App = {
   removeSelectedFromPlaylist,
   showSync,
   closeSyncModal,
-  selectSyncDevice,
-  syncUpdatePickNextCta,
-  startSyncFromSelection,
-  startSyncScan,
-  syncBackToPick,
-  syncGoToPreview,
-  syncToggleAll,
-  syncSectionBulkActionChanged,
-  syncRowSelectedChanged,
-  syncRowActionChanged,
-  syncIgnoredSelectionChanged,
-  toggleSyncSection,
-  syncSelectionChanged,
-  executeSync,
+  loadSyncView,
+  swSelectDevice,
+  swPrimaryAction,
+  swCancel,
+  swStartScan,
+  swStartSync,
+  swFinish,
+  swToggleItem,
+  swToggleGroup,
+  swToggleGroupCollapse,
+  swSetFilter,
   syncScanAgain,
   sortTracks,
   // Songs

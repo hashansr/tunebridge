@@ -8776,8 +8776,21 @@ def get_dap(did):
     dap['active_mount_path'] = str(resolved_mount) if resolved_mount else ''
     if matched_mount:
         dap['active_mount_label'] = matched_mount.get('label') or str(resolved_mount)
-    playlists = load_playlists()
+    if dap.get('mounted') and dap.get('active_mount_path'):
+        try:
+            st = os.statvfs(dap['active_mount_path'])
+            dap['capacity_bytes'] = st.f_blocks * st.f_frsize
+            dap['used_bytes'] = (st.f_blocks - st.f_bfree) * st.f_frsize
+        except OSError:
+            dap['capacity_bytes'] = None
+            dap['used_bytes'] = None
+    else:
+        dap['capacity_bytes'] = None
+        dap['used_bytes'] = None
     exports = dap.get('playlist_exports', {})
+    export_timestamps = [v for v in exports.values() if isinstance(v, (int, float)) and v > 0]
+    dap['last_sync_at'] = max(export_timestamps) if export_timestamps else None
+    playlists = load_playlists()
     stale_count = sum(
         1 for pl in playlists.values()
         if pl['id'] in exports and pl.get('updated_at', 0) > exports[pl['id']]

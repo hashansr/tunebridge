@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Sync Music replaced with 5-step inline wizard (device select, scan, review, sync, done); sidebar and player bar remain accessible throughout
+- Add: Device capacity and last-sync-at fields on GET /api/daps/<id> via statvfs
 
 ## v0.233-rc.130526-1522 · 2026-05-13
 
