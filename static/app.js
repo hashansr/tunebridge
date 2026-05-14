@@ -6599,12 +6599,14 @@ let _sw = {
   selection: {},
   filter: 'all',
   pages: {},
+  expanded: {},
   scanPollTimer: null,
   syncPollTimer: null,
   scanStartTs: 0,
   syncStartTs: 0,
   logLines: [],
   syncResult: null,
+  executedPayload: null,
 };
 
 const _SW_STEPS = [
@@ -6647,8 +6649,10 @@ async function loadSyncView() {
   // Reset state
   _sw = {
     step: 1, device: null, proposal: null, selection: {},
-    filter: 'all', scanPollTimer: null, syncPollTimer: null,
+    filter: 'all', pages: {}, expanded: {},
+    scanPollTimer: null, syncPollTimer: null,
     scanStartTs: 0, syncStartTs: 0, logLines: [], syncResult: null,
+    executedPayload: null,
   };
   showViewEl('sync');
   // Highlight sync nav button
@@ -6707,13 +6711,6 @@ function _swGoTo(step) {
   const el = n => document.getElementById(n);
   el('sw-counter').textContent = `${step} / 5`;
   el('sw-title').textContent = meta.title;
-  const devName = _sw.device?.name || 'device';
-  const subMap = {
-    2: `Comparing this Mac with ${devName}…`,
-    3: `Pick what to send to ${devName}, keep, or remove.`,
-    4: `Transferring to ${devName}…`,
-  };
-  el('sw-sub').textContent = meta.sub ?? subMap[step] ?? '';
   // Footer per step
   _swUpdateFooter(step);
   // Show/hide back button based on step
@@ -6944,7 +6941,9 @@ function _swResetToStep1() {
   _sw.selection = {};
   _sw.filter = 'all';
   _sw.pages = {};
+  _sw.expanded = {};
   _sw.syncResult = null;
+  _sw.executedPayload = null;
   _swGoTo(1);
   _updateNavButtonStates();
 }
@@ -7193,8 +7192,10 @@ function _swBuildGroupCard(gid, group) {
   const pageEnd = Math.min((page + 1) * REVIEW_PAGE_SIZE, total);
 
   const card = document.createElement('div');
-  // Start collapsed — user expands to see items
-  card.className = 'sw-group-card' + (isOnDevice ? ' sw-group-card--on-device' : '');
+  const isExpanded = !!(_sw.expanded?.[gid]);
+  card.className = 'sw-group-card'
+    + (isOnDevice ? ' sw-group-card--on-device' : '')
+    + (isExpanded ? ' sw-group-card--expanded' : '');
   card.dataset.gid = gid;
 
   const paginationBar = total > REVIEW_PAGE_SIZE ? `
@@ -7231,7 +7232,6 @@ function _swBuildGroupCard(gid, group) {
         <div class="sw-group-label-col">
           <span class="sw-group-title">${esc(group.label)}</span>
           <span class="sw-group-count-text">${total} item${total===1?'':'s'}</span>
-          <span class="sw-group-hint">${esc(group.hint)}</span>
         </div>
         <div class="sw-group-bulk-btns">
           <button class="sw-bulk-btn sw-bulk-btn--copy" onclick="event.stopPropagation();App.swBulkAction('onDevice','copy')">Copy all</button>
@@ -7245,7 +7245,7 @@ function _swBuildGroupCard(gid, group) {
           const action = sel[item.id] || 'keep';
           return `
         <div class="sw-review-row sw-review-row--actions" data-gid="${gid}" data-id="${esc(item.id)}">
-          <div class="sw-row-thumb" style="background:${_swThumbColor(item.title)}">${_swInitials(item.title)}</div>
+          ${_swRowThumb(item)}
           <div class="sw-row-info">
             <div class="sw-row-title" title="${esc(item.title)}">${esc(item.title)}</div>
             <div class="sw-row-sub">${[item.artist, item.album].filter(Boolean).map(esc).join(' · ')}</div>
@@ -7276,16 +7276,15 @@ function _swBuildGroupCard(gid, group) {
 
     card.innerHTML = `
       <div class="sw-group-hdr" onclick="App.swToggleGroupCollapse('${gid}')">
-        <input type="checkbox" class="sw-check" id="sw-grp-chk-${gid}"
-          ${allSelected ? 'checked' : ''} onclick="event.stopPropagation();App.swToggleGroup('${gid}', this.checked)"
-          data-indeterminate="${someSelected}" />
         <div class="sw-group-chev">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
         </div>
+        <input type="checkbox" class="sw-check" id="sw-grp-chk-${gid}"
+          ${allSelected ? 'checked' : ''} onclick="event.stopPropagation();App.swToggleGroup('${gid}', this.checked)"
+          data-indeterminate="${someSelected}" />
         <div class="sw-group-label-col">
           <span class="sw-group-title">${esc(group.label)}</span>
           <span class="sw-group-count-text">${total} item${total===1?'':'s'}</span>
-          <span class="sw-group-hint">${esc(group.hint)}</span>
         </div>
         <span class="sw-group-sel-pill">${selectedCount} selected</span>
         <button class="sw-group-selall-btn" onclick="event.stopPropagation();App.swToggleGroup('${gid}', ${!allSelected})">
@@ -7298,16 +7297,13 @@ function _swBuildGroupCard(gid, group) {
           <input type="checkbox" class="sw-check sw-item-check" data-gid="${gid}" data-id="${esc(item.id)}"
             ${sel[item.id] ? 'checked' : ''}
             onclick="event.stopPropagation();App.swToggleItemEl(this)" />
-          <div class="sw-row-thumb" style="background:${_swThumbColor(item.title)}">${_swInitials(item.title)}</div>
+          ${_swRowThumb(item)}
           <div class="sw-row-info">
             <div class="sw-row-title" title="${esc(item.title)}">${esc(item.title)}</div>
             <div class="sw-row-sub">${item.kind === 'playlist' ? esc(item.meta || '') : [item.artist, item.album].filter(Boolean).map(esc).join(' · ')}</div>
           </div>
           <span class="sw-action-chip">${esc(actionLabel)}</span>
           <span class="sw-row-size">${item.size ? `${item.size} MB` : ''}${item.size && item.dur ? ' · ' : ''}${item.dur ?? ''}</span>
-          <button class="sw-row-kebab" title="More options" onclick="event.stopPropagation()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-          </button>
         </div>`).join('')}
       </div>
       ${paginationBar}
@@ -7341,6 +7337,30 @@ function _swThumbColor(name) {
   return `linear-gradient(135deg, hsl(${hue},35%,28%), hsl(${(hue+30)%360},40%,22%))`;
 }
 
+function _swRowThumb(item) {
+  const initials = _swInitials(item.title);
+  const bg = _swThumbColor(item.title);
+
+  if (item.kind === 'playlist') {
+    const src = `/api/playlists/${encodeURIComponent(item.id)}/artwork`;
+    return `<div class="sw-row-thumb" style="background:${bg}">${initials}<img src="${src}" alt="" onerror="this.style.display='none'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit" /></div>`;
+  }
+
+  // Track: look up artwork from loaded album list
+  if (item.album && state.albums?.length) {
+    const al = state.albums.find(a =>
+      a.name?.toLowerCase() === item.album.toLowerCase() &&
+      a.artist?.toLowerCase() === (item.artist || '').toLowerCase()
+    );
+    if (al?.artwork_key) {
+      const src = `/api/artwork/${al.artwork_key}`;
+      return `<div class="sw-row-thumb" style="background:${bg}">${initials}<img src="${src}" alt="" onerror="this.style.display='none'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit" /></div>`;
+    }
+  }
+
+  return `<div class="sw-row-thumb" style="background:${bg}">${initials}</div>`;
+}
+
 function _swInitials(name) {
   const parts = String(name || '?').trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
@@ -7348,8 +7368,10 @@ function _swInitials(name) {
 }
 
 function swToggleGroupCollapse(gid) {
+  if (!_sw.expanded) _sw.expanded = {};
+  _sw.expanded[gid] = !_sw.expanded[gid];
   const card = document.querySelector(`.sw-group-card[data-gid="${gid}"]`);
-  if (card) card.classList.toggle('sw-group-card--expanded');
+  if (card) card.classList.toggle('sw-group-card--expanded', !!_sw.expanded[gid]);
 }
 
 function swToggleItem(gid, itemId) {
@@ -7492,8 +7514,9 @@ function _swInitSyncStep() {
   const pct = document.getElementById('sw-sync-pct');
   if (pct) pct.textContent = '0%';
 
-  // Build execute payload from selection
+  // Build execute payload from selection — store for Step 5 summary
   const payload = _swBuildExecutePayload();
+  _sw.executedPayload = payload;
 
   api('/sync/execute', { method: 'POST', body: payload })
     .catch(e => _swHandleSyncError(String(e)));
@@ -7613,8 +7636,21 @@ function _swHandleSyncError(msg) {
 /* ── Step 5: Done ────────────────────────────────────────── */
 
 function _swRenderDone() {
-  const status = _sw.syncResult ?? {};
-  const devName = _sw.device?.name ?? 'Device';
+  const status   = _sw.syncResult ?? {};
+  const payload  = _sw.executedPayload ?? {};
+  const devName  = _sw.device?.name ?? 'Device';
+  const errors   = status.errors ?? [];
+
+  // Derive actual counts from what was submitted
+  const addedItems   = (_sw.proposal?.toDevice?.items ?? [])
+    .filter(i => (payload.add_to_device_paths ?? []).includes(i.id));
+  const copyItems    = (_sw.proposal?.onDevice?.items ?? [])
+    .filter(i => (payload.copy_to_local_paths ?? []).includes(i.id));
+  const deleteItems  = (_sw.proposal?.onDevice?.items ?? [])
+    .filter(i => (payload.delete_on_device_paths ?? []).includes(i.id));
+  const plCount      = (payload.playlist_ids ?? []).length;
+  const totalOps     = addedItems.length + copyItems.length + deleteItems.length + plCount;
+  const doneOps      = Math.max(0, totalOps - errors.length);
 
   // Hero title
   const titleEl = document.getElementById('sw-done-title');
@@ -7623,12 +7659,10 @@ function _swRenderDone() {
   // Hero meta
   const metaEl = document.getElementById('sw-done-meta');
   if (metaEl) {
-    const mb  = Number(status.bytes_copied ?? 0) / (1024**2);
-    const dur = _fmtSecs(Number(status.elapsed_seconds ?? 0));
     const parts = [];
-    if (mb > 0)  parts.push(`${mb.toFixed(0)} MB transferred`);
-    if (dur !== '0s') parts.push(`Took ${dur}`);
-    parts.push('Verified by checksum');
+    if (doneOps > 0) parts.push(`${doneOps} item${doneOps===1?'':'s'} synced`);
+    if (errors.length) parts.push(`${errors.length} error${errors.length===1?'':'s'}`);
+    if (!parts.length) parts.push('Nothing to sync');
     metaEl.innerHTML = parts.map((p, i) => i === 0 ? p : `<span class="sw-done-meta-dot"></span>${p}`).join('');
   }
 
@@ -7636,10 +7670,10 @@ function _swRenderDone() {
   const tilesEl = document.getElementById('sw-stat-tiles');
   if (tilesEl) {
     const tiles = [
-      { label: 'Added to device', value: status.added_count ?? 0, unit: 'tracks' },
-      { label: 'Imported',        value: status.imported_count ?? 0, unit: 'tracks' },
-      { label: 'Removed',         value: status.removed_count ?? 0, unit: 'tracks' },
-      { label: 'Playlists synced',value: status.playlists_synced ?? 0, unit: 'playlists' },
+      { label: 'Added to device', value: addedItems.length,  unit: addedItems.length === 1 ? 'track' : 'tracks' },
+      { label: 'Copied to library', value: copyItems.length, unit: copyItems.length === 1 ? 'track' : 'tracks' },
+      { label: 'Removed',         value: deleteItems.length, unit: deleteItems.length === 1 ? 'track' : 'tracks' },
+      { label: 'Playlists synced', value: plCount,           unit: plCount === 1 ? 'playlist' : 'playlists' },
     ];
     tilesEl.innerHTML = tiles.map(t => `
       <div class="sw-stat-tile">
@@ -7653,18 +7687,16 @@ function _swRenderDone() {
   const changelogEl = document.getElementById('sw-changelog');
   if (changelogEl) {
     const groups = [];
-    const added   = Number(status.added_count ?? 0);
-    const imported = Number(status.imported_count ?? 0);
-    const removed  = Number(status.removed_count ?? 0);
-    if (added)    groups.push({ dot: 'accent',   label: `Added ${added} track${added===1?'':'s'} to ${esc(devName)}`,  items: status.added_sample ?? [] });
-    if (imported) groups.push({ dot: 'success',  label: `Imported ${imported} track${imported===1?'':'s'} to library`, items: status.imported_sample ?? [] });
-    if (removed)  groups.push({ dot: 'danger',   label: `Removed ${removed} track${removed===1?'':'s'} from device`,   items: status.removed_sample ?? [] });
-    changelogEl.innerHTML = `<div class="sw-overline" style="margin-bottom:8px">What changed</div>` + (groups.length ? groups.map(g => `
+    if (addedItems.length)  groups.push({ dot: 'accent',   label: `Added ${addedItems.length} track${addedItems.length===1?'':'s'} to ${devName}`, items: addedItems });
+    if (copyItems.length)   groups.push({ dot: 'success',  label: `Copied ${copyItems.length} track${copyItems.length===1?'':'s'} to library`,       items: copyItems });
+    if (deleteItems.length) groups.push({ dot: 'danger',   label: `Removed ${deleteItems.length} track${deleteItems.length===1?'':'s'} from device`,  items: deleteItems });
+    changelogEl.innerHTML = `<div class="sw-overline" style="margin-bottom:8px">What changed</div>`
+      + (groups.length ? groups.map(g => `
       <div class="sw-change-group">
-        <div class="sw-change-group-hdr"><span class="sw-change-dot sw-change-dot--${g.dot}"></span>${g.label}</div>
-        ${(g.items.slice(0,4)).map(t => `
+        <div class="sw-change-group-hdr"><span class="sw-change-dot sw-change-dot--${g.dot}"></span>${esc(g.label)}</div>
+        ${g.items.slice(0, 4).map(t => `
         <div class="sw-change-item">
-          <div class="sw-change-thumb">${_swInitials(t.title ?? t)}</div>
+          ${_swRowThumb(t)}
           <div class="sw-change-text-col">
             <div class="sw-change-title">${esc(t.title ?? t)}</div>
             <div class="sw-change-sub">${esc(t.artist ?? '')}</div>
@@ -7672,7 +7704,8 @@ function _swRenderDone() {
           <span class="sw-change-size">${t.size ? t.size + ' MB' : ''}</span>
         </div>`).join('')}
         ${g.items.length > 4 ? `<div class="sw-change-more">+${g.items.length - 4} more</div>` : ''}
-      </div>`).join('') : '<p style="color:var(--text-muted);font-size:13px">No file changes this sync.</p>');
+      </div>`).join('')
+      : '<p style="color:var(--text-muted);font-size:13px">No file changes this sync.</p>');
   }
 
   // Storage now
