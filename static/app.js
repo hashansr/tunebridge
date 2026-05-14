@@ -6832,8 +6832,8 @@ async function loadSyncView() {
       if (!state.albums?.length) {
         state.albums = await api('/library/albums').catch(() => []);
       }
-      _swBuildProposal(status);
       _swGoTo(3);
+      _swBuildProposal(status);
       return;
     }
     if (status.status === 'copying') {
@@ -6890,11 +6890,11 @@ function _swUpdateFooter(step) {
   const msgs = {
     1: 'You can keep using the app while the scan runs.',
     2: 'Scanning usually finishes in under a minute.',
-    3: '',
+    // 3: handled by _swUpdateReviewFooter after proposal is built
     4: 'Do not disconnect the device.',
     5: 'Safe to disconnect.',
   };
-  msgEl.textContent = msgs[step] ?? '';
+  if (step !== 3) msgEl.textContent = msgs[step] ?? '';
 
   if (step === 5) statusEl.classList.add('sw-footer-status--success');
 
@@ -7202,8 +7202,8 @@ async function _swPollScan() {
       state.albums = await api('/library/albums').catch(() => []);
     }
     setTimeout(() => {
-      _swBuildProposal(status);
       _swGoTo(3);
+      _swBuildProposal(status);
     }, 400);
   }
 }
@@ -7635,18 +7635,28 @@ function _swUpdateReviewFooter() {
     const statusEl = document.getElementById('sw-footer-status');
     if (t.outOfSpace) {
       const over = _fmtGB(t.afterUsed - t.capBytes);
-      msgEl.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;margin-right:5px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Not enough space. Deselect ${over} to continue.`;
-      msgEl.style.cssText = 'color:var(--accent-warning);font-weight:600;font-size:13px';
-      if (statusEl) statusEl.className = 'sw-footer-status sw-footer-status--warn';
+      msgEl.textContent = '⚠ Not enough space — deselect ' + over + ' to continue.';
+      msgEl.style.color = '#fbbf24';
+      msgEl.style.fontWeight = '600';
+      msgEl.style.fontSize = '13px';
+      if (statusEl) {
+        statusEl.style.color = '#fbbf24';
+        statusEl.className = 'sw-footer-status sw-footer-status--warn';
+      }
     } else {
       const parts = [];
       if (t.toDeviceCount)  parts.push(`${t.toDeviceCount} to device`);
       if (t.copyCount)      parts.push(`${t.copyCount} to library`);
       if (t.deleteCount)    parts.push(`${t.deleteCount} deleted from device`);
       if (t.playlistCount)  parts.push(`${t.playlistCount} playlist${t.playlistCount===1?'':'s'}`);
-      msgEl.innerHTML = parts.length ? parts.join(' &middot; ') : 'No changes selected.';
-      msgEl.style.cssText = '';
-      if (statusEl) statusEl.className = 'sw-footer-status';
+      msgEl.textContent = parts.length ? parts.join(' · ') : 'No changes selected.';
+      msgEl.style.color = '';
+      msgEl.style.fontWeight = '';
+      msgEl.style.fontSize = '';
+      if (statusEl) {
+        statusEl.style.color = '';
+        statusEl.className = 'sw-footer-status';
+      }
     }
   }
 
