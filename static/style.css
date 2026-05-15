@@ -19416,12 +19416,12 @@ body.is-col-resizing {
 }
 .search-artist-name {
   width: 100%;
-  color: var(--tb-text-primary);
+  color: var(--text);
   font-family: var(--tb-font-sans);
-  font-size: var(--text-md);
-  font-weight: 700;
-  letter-spacing: 0;
-  line-height: 1.25;
+  font-size: 12px;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -19429,12 +19429,12 @@ body.is-col-resizing {
 .search-artist-album {
   width: 100%;
   margin-top: 5px;
-  color: var(--tb-text-muted);
+  color: var(--text-muted);
   font-family: var(--tb-font-sans);
-  font-size: var(--text-base);
-  font-weight: 600;
-  letter-spacing: 0;
-  line-height: 1.25;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
