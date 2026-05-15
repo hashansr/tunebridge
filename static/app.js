@@ -6332,7 +6332,7 @@ function _renderSearchTopGrid(items) {
       onclick = `App.showAlbum('${esc(item.artist)}','${esc(item.name)}')`;
       onplay = `event.stopPropagation();App.homePlayItem(event,'album','','${esc(item.artist)}','${esc(item.name)}','')`;
     } else if (type === 'artist') {
-      title = (item.name || item.title || '').toUpperCase();
+      title = item.name || item.title;
       subtitle = item.subtitle || 'Artist';
       onclick = `App.showArtist('${esc(item.name)}')`;
       onplay = `event.stopPropagation();App.homePlayItem(event,'artist','','${esc(item.name)}','','')`;
@@ -6342,9 +6342,7 @@ function _renderSearchTopGrid(items) {
       onclick = `App.openPlaylist('${esc(item.playlist_id || item.id)}')`;
       onplay = `event.stopPropagation();App.homePlayItem(event,'playlist','','','','${esc(item.playlist_id || item.id)}')`;
     }
-    const displaySubtitle = (type === 'track' || type === 'album')
-      ? subtitle.replace(/ · (.*)$/u, (_, name) => ` · ${name.toUpperCase()}`)
-      : subtitle;
+    const displaySubtitle = subtitle;
 
     return `
       <div class="search-top-card" onclick="${onclick}" role="button" tabindex="0">
