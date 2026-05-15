@@ -1652,6 +1652,21 @@ def global_search():
     total_tracks = len(matched_tracks)
     matched_tracks = matched_tracks[:10]
 
+    albums_map = {}
+    for t in tracks:
+        album_name = t.get('album') or 'Unknown Album'
+        artist = t.get('album_artist') or t.get('artist') or 'Unknown Artist'
+        key = artist.lower() + '|' + album_name.lower()
+        if key not in albums_map:
+            albums_map[key] = {'name': album_name, 'artist': artist, 'artwork_key': t.get('artwork_key') or '', 'track_count': 0}
+        albums_map[key]['track_count'] += 1
+        if not albums_map[key]['artwork_key'] and t.get('artwork_key'):
+            albums_map[key]['artwork_key'] = t['artwork_key']
+    matched_albums = [v for v in albums_map.values() if q in v['name'].lower() or q in v['artist'].lower()]
+    matched_albums.sort(key=lambda a: artist_sort_key(a['name']))
+    total_albums = len(matched_albums)
+    matched_albums = matched_albums[:10]
+
     playlists = load_playlists()
     with library_lock:
         lib_map = {t['id']: t for t in library}
@@ -1679,7 +1694,9 @@ def global_search():
 
     return jsonify({
         'artists': matched_artists, 'tracks': matched_tracks, 'playlists': matched_playlists,
+        'albums': matched_albums,
         'total_artists': total_artists, 'total_tracks': total_tracks, 'total_playlists': total_playlists,
+        'total_albums': total_albums,
     })
 
 

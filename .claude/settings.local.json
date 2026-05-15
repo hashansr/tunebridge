@@ -291,7 +291,13 @@
       "Bash(kill 43649)",
       "Bash(\"/Users/hashan/Documents/Claude/Projects/Playlist Creator/venv/bin/python\" app.py)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(cat \"/Users/hashan/Documents/Claude/Projects/Playlist Creator/.claude/launch.json\")",
+      "Bash(curl -s \"http://localhost:5003/api/search?q=meteora\")",
+      "Bash(curl -s \"http://localhost:5003/api/health\")",
+      "Bash(curl -s \"http://localhost:5004/api/search?q=meteora\")",
+      "Bash(curl -s \"http://localhost:5004/api/search?q=linkin\")",
+      "Bash(cat ~/playlist_proxy.py | head -20)"
     ]
   }
 }
