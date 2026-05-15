@@ -2401,8 +2401,15 @@ tbody tr:hover .remove-btn { opacity: 1; }
   font-size: 11px; line-height: 1;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  pointer-events: none;
   z-index: 2;
-  transition: background 0.15s;
+  transition: opacity 0.2s, background 0.15s;
+}
+.playlist-cover-wrap:hover .cover-remove-btn,
+.cover-remove-btn:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 .cover-remove-btn:hover { background: var(--accent-secondary); color: #131313; }
 
@@ -12768,11 +12775,9 @@ tr.player-active .track-title { color: var(--accent); }
   height: clamp(164px, 16vw, 214px);
   border-radius: 50%;
   background: rgba(8, 12, 20, 0.42);
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 0;
   box-shadow:
-    0 26px 60px rgba(0, 0, 0, 0.42),
-    0 0 0 1px rgba(var(--album-hero-accent), 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    0 26px 60px rgba(0, 0, 0, 0.42);
 }
 
 #view-albums #artist-hero.artist-detail-hero .artist-detail-portrait img,
@@ -12790,11 +12795,9 @@ tr.player-active .track-title { color: var(--accent); }
   height: clamp(164px, 16vw, 214px);
   border-radius: 16px;
   background: rgba(8, 12, 20, 0.42);
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 0;
   box-shadow:
-    0 26px 60px rgba(0, 0, 0, 0.42),
-    0 0 0 1px rgba(var(--album-hero-accent), 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    0 26px 60px rgba(0, 0, 0, 0.42);
 }
 
 #view-playlist #playlist-hero.playlist-detail-hero .playlist-cover,
