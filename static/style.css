@@ -2204,9 +2204,12 @@ tbody tr:hover .remove-btn { opacity: 1; }
 }
 #view-playlist .view-header {
   padding: 14px 0 0;
-  margin-bottom: 8px;
+  margin-bottom: calc(-1 * (var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 42px));
+  min-height: 42px;
   justify-content: space-between;
   flex-wrap: nowrap;
+  position: relative;
+  z-index: 30;
 }
 #view-playlist .breadcrumb {
   font-size: var(--text-sm);
@@ -6878,6 +6881,8 @@ tbody tr:hover {
   align-items: center;
   gap: 4px;
   margin-left: auto;
+  position: relative;
+  z-index: 31;
 }
 .pl-toolbar-btn {
   width: 32px; height: 32px;
@@ -12718,6 +12723,12 @@ tr.player-active .track-title { color: var(--accent); }
     radial-gradient(860px 520px at 88% 4%, rgba(var(--album-hero-secondary), 0.34), transparent 72%),
     linear-gradient(135deg, rgba(var(--album-hero-primary), 0.92), rgba(var(--album-hero-secondary), 0.78) 54%, rgba(7, 10, 16, 0.94));
   box-shadow: none;
+}
+
+#view-playlist .view-header + #playlist-hero.playlist-detail-hero {
+  margin-top: calc(-1 * (var(--main-nav-top-inset) + var(--main-nav-overlay-clearance)));
+  padding-top: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 34px);
+  z-index: 0;
 }
 
 #view-albums #artist-hero.artist-detail-hero {
