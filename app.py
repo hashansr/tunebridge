@@ -2636,6 +2636,7 @@ def _home_listen_next(events, artists_map, albums, limit=10):
       B4 – Cold library artists: artists you own but have never played (artist cards)
     """
     import datetime as _dt
+    import random as _random
     now = int(time.time())
 
     # --- pre-compute per-event signals ---
@@ -6823,6 +6824,7 @@ def save_player_state():
     data = request.get_json(force=True) or {}
     try:
         _db.db_save_player_state(data)
+        _invalidate_home_cache()
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     return jsonify({'ok': True})
@@ -6884,6 +6886,7 @@ def player_events():
         return jsonify({'ok': True, 'stored': 0, 'tracking_enabled': True})
 
     _db.db_insert_play_events(rows)
+    _invalidate_home_cache()
     return jsonify({'ok': True, 'stored': len(rows), 'tracking_enabled': True})
 
 
