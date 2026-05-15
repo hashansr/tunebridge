@@ -6235,6 +6235,21 @@ async function _renderSearchResults() {
   const tracks = results.tracks || [];
   const playlists = results.playlists || [];
   const topItems = (results.top_results || []).map(item => ({ ...item, _type: item.kind || item._type }));
+  const playableTracks = new Map();
+  tracks.forEach(t => { if (t?.id) playableTracks.set(String(t.id), t); });
+  topItems
+    .filter(item => (item.kind || item._type) === 'track' && item.id)
+    .forEach(item => {
+      const id = String(item.id);
+      if (!playableTracks.has(id)) playableTracks.set(id, item);
+    });
+  const playableSearchTracks = Array.from(playableTracks.values());
+  Player.registerTracks?.(playableSearchTracks);
+  Player.setPlaybackContext?.(playableSearchTracks, {
+    sourceType: 'songs',
+    sourceId: `search:${q}`,
+    sourceLabel: `Search · ${q}`,
+  });
   const has = artists.length || tracks.length || playlists.length || albums.length || topItems.length;
   if (!has) {
     content.style.display = 'none';
