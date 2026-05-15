@@ -5782,12 +5782,16 @@ function homeRailStep(railId, direction = 1) {
 }
 
 function _renderHomeTopPicks(items) {
-  return _renderHomeRailSection(
-    'home-because-section',
-    'home-because',
-    items || [],
-    'Keep listening to unlock personalised recommendations.'
-  );
+  const rail = document.getElementById('home-because');
+  if (!rail) return false;
+  if (!Array.isArray(items) || !items.length) {
+    _homeSectionVisible('home-because-section', false);
+    return false;
+  }
+  _homeSectionVisible('home-because-section', true);
+  rail.innerHTML = items.map(_homePickCardHtml).join('');
+  _homeBindRailUX('home-because');
+  return true;
 }
 
 function _renderHomeDataHealth(data) {

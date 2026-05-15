@@ -2598,21 +2598,81 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
     if not scored:
         return []
 
-    # Diversity: shuffle top-10, then pick ≤2 per artist
-    scored.sort(key=lambda x: x['score'], reverse=True)
-    pool = scored[:10]
-    _random.shuffle(pool)
-    pool.sort(key=lambda x: x['score'], reverse=True)
+    import datetime as _dt
 
-    picks, artist_counts = [], {}
-    for s in pool:
+    # Discovery pool: albums never played in the history window
+    played_artists = {key.split('||')[0] for key in profiles}
+    discovery = []
+    for key, info in albums.items():
+        if key in exclude or key in profiles:
+            continue
+        ak = (info.get('artist') or '').lower()
+        g = _norm_genre_text(info.get('genre'))
+        genre_aff = min((recent_genre_counts.get(g, 0) / total_recent_genre) * 5.0, 1.0) if g else 0.0
+        artist_boost = 0.7 if ak in played_artists else 0.0
+        disc_score = 0.50 * genre_aff + 0.50 * artist_boost
+        if disc_score <= 0.0:
+            continue
+        artist_name = info.get('artist') or 'Unknown Artist'
+        genre_label = _genre_display_label(g)
+        if artist_boost > genre_aff:
+            disc_reason = f"More from {artist_name} — an artist you love"
+        elif genre_aff > 0 and genre_label:
+            disc_reason = f"Fits your recent {genre_label} taste — you haven't heard this one"
+        else:
+            disc_reason = "Something new from your library"
+        discovery.append({'key': key, 'score': disc_score, 'info': info, 'reason': disc_reason})
+
+    # Daily rotation: shuffle each pool with a date seed so the carousel varies day-to-day
+    day_seed = _dt.date.today().toordinal()
+    scored.sort(key=lambda x: x['score'], reverse=True)
+    familiar_pool = scored[:12]
+    _random.seed(day_seed)
+    _random.shuffle(familiar_pool)
+
+    discovery.sort(key=lambda x: x['score'], reverse=True)
+    disc_pool = discovery[:30]
+    _random.seed(day_seed + 1)
+    _random.shuffle(disc_pool)
+
+    _random.seed()  # restore system entropy
+
+    # Slot allocation: ~60% familiar, ~40% discovery; backfill if discovery is sparse
+    disc_slots = min(4, limit // 2)
+    familiar_slots = limit - disc_slots
+
+    picks, artist_counts, picked_keys = [], {}, set()
+    for s in familiar_pool:
+        if len(picks) >= familiar_slots:
+            break
         ak = (s['info'].get('artist') or '').lower()
         if artist_counts.get(ak, 0) >= 2:
             continue
         artist_counts[ak] = artist_counts.get(ak, 0) + 1
         picks.append(s)
+        picked_keys.add(s['key'])
+
+    for s in disc_pool:
+        if len(picks) >= familiar_slots + disc_slots:
+            break
+        ak = (s['info'].get('artist') or '').lower()
+        if artist_counts.get(ak, 0) >= 2:
+            continue
+        artist_counts[ak] = artist_counts.get(ak, 0) + 1
+        picks.append(s)
+        picked_keys.add(s['key'])
+
+    for s in familiar_pool:
         if len(picks) >= limit:
             break
+        if s['key'] in picked_keys:
+            continue
+        ak = (s['info'].get('artist') or '').lower()
+        if artist_counts.get(ak, 0) >= 2:
+            continue
+        artist_counts[ak] = artist_counts.get(ak, 0) + 1
+        picks.append(s)
+        picked_keys.add(s['key'])
 
     return [{
         'kind': 'album',
