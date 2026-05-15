@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: "Listen to Next" rail now drives discovery — replaced most-played artist list with a mixed artist/album rail: unplayed albums from loved artists, dormant favourites with "Last heard N months ago" labels, under-explored genre picks ("Explore Jazz"), and never-played library artists ("In your library")
 
 ## v0.285-rc.150526-1928 · 2026-05-15
 
