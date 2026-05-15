@@ -12557,9 +12557,9 @@ tr.player-active .track-title { color: var(--accent); }
   --album-hero-accent: 95, 128, 188;
   position: relative;
   align-items: center;
-  min-height: 312px;
+  min-height: 220px;
   margin: calc(-1 * (var(--main-nav-top-inset) + var(--main-nav-overlay-clearance))) calc(-1 * var(--page-content-inset)) 0;
-  padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 28px) var(--page-content-inset) 36px;
+  padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 16px) var(--page-content-inset) 24px;
   overflow: hidden;
   isolation: isolate;
   background:
@@ -12596,8 +12596,8 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 #view-tracks #album-hero.album-detail-hero.is-album-context .hero-art-sq {
-  width: clamp(164px, 16vw, 214px);
-  height: clamp(164px, 16vw, 214px);
+  width: clamp(140px, 14vw, 178px);
+  height: clamp(140px, 14vw, 178px);
   border-radius: 16px;
   background: rgba(8, 12, 20, 0.42);
   border: 0;
@@ -12720,9 +12720,9 @@ tr.player-active .track-title { color: var(--accent); }
   --album-hero-accent: 95, 128, 188;
   position: relative;
   align-items: center;
-  min-height: 312px;
+  min-height: 220px;
   margin: 0 calc(-1 * var(--page-content-inset)) 0;
-  padding: 34px var(--page-content-inset) 36px;
+  padding: 20px var(--page-content-inset) 24px;
   overflow: hidden;
   isolation: isolate;
   background:
@@ -12735,7 +12735,7 @@ tr.player-active .track-title { color: var(--accent); }
 
 #view-playlist .view-header + #playlist-hero.playlist-detail-hero {
   margin-top: calc(-1 * (8px + var(--main-nav-overlay-clearance)));
-  padding-top: calc(8px + var(--main-nav-overlay-clearance) + 28px);
+  padding-top: calc(8px + var(--main-nav-overlay-clearance) + 16px);
   z-index: 0;
 }
 
@@ -12771,8 +12771,8 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 #view-albums #artist-hero.artist-detail-hero .artist-detail-portrait {
-  width: clamp(164px, 16vw, 214px);
-  height: clamp(164px, 16vw, 214px);
+  width: clamp(140px, 14vw, 178px);
+  height: clamp(140px, 14vw, 178px);
   border-radius: 50%;
   background: rgba(8, 12, 20, 0.42);
   border: 0;
@@ -12791,8 +12791,8 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 #view-playlist #playlist-hero.playlist-detail-hero .playlist-cover-wrap {
-  width: clamp(164px, 16vw, 214px);
-  height: clamp(164px, 16vw, 214px);
+  width: clamp(140px, 14vw, 178px);
+  height: clamp(140px, 14vw, 178px);
   border-radius: 16px;
   background: rgba(8, 12, 20, 0.42);
   border: 0;
@@ -12832,7 +12832,7 @@ tr.player-active .track-title { color: var(--accent); }
   color: rgba(224, 232, 248, 0.72);
   font-size: 13px;
   font-weight: 600;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 #view-albums #artist-hero.artist-detail-hero .btn-hero-play,
@@ -12934,13 +12934,13 @@ tr.player-active .track-title { color: var(--accent); }
 
   #view-albums #artist-hero.artist-detail-hero .artist-detail-portrait,
   #view-playlist #playlist-hero.playlist-detail-hero .playlist-cover-wrap {
-    width: 156px;
-    height: 156px;
+    width: 136px;
+    height: 136px;
   }
 
   #view-tracks #album-hero.album-detail-hero.is-album-context .hero-art-sq {
-    width: 156px;
-    height: 156px;
+    width: 136px;
+    height: 136px;
   }
 
   #view-tracks #album-hero.album-detail-hero.is-album-context .hero-title,
@@ -19417,20 +19417,24 @@ body.is-col-resizing {
 .search-artist-name {
   width: 100%;
   color: var(--tb-text-primary);
-  font-size: 18px;
-  font-weight: 750;
-  line-height: 1.2;
+  font-family: var(--tb-font-sans);
+  font-size: var(--text-md);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .search-artist-album {
   width: 100%;
-  margin-top: 7px;
+  margin-top: 5px;
   color: var(--tb-text-muted);
-  font-size: 15px;
-  font-weight: 650;
-  line-height: 1.2;
+  font-family: var(--tb-font-sans);
+  font-size: var(--text-base);
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
