@@ -19138,19 +19138,19 @@ body.is-col-resizing {
   position: relative;
   display: flex;
   align-items: center;
-  background: var(--tb-surface-1);
-  border: 1px solid var(--tb-border-soft);
+  background: rgba(173, 198, 255, 0.055);
+  border: 0;
   border-radius: var(--tb-radius-pill);
-  transition: border-color var(--tb-motion-base), background var(--tb-motion-base);
+  transition: background var(--tb-motion-base), box-shadow var(--tb-motion-base);
 }
 #sidebar-search-field:focus-within {
-  border-color: rgba(173,198,255,0.45);
-  background: rgba(30,38,56,0.9);
+  background: rgba(173, 198, 255, 0.095);
+  box-shadow: 0 0 0 1px rgba(173, 198, 255, 0.08);
 }
 .sidebar-search-icon {
   position: absolute;
   left: 10px;
-  color: var(--tb-text-muted);
+  color: rgba(173, 198, 255, 0.52);
   pointer-events: none;
 }
 #sidebar-search-input {
@@ -19160,10 +19160,10 @@ body.is-col-resizing {
   outline: none;
   padding: 7px 28px 7px 30px;
   font-size: 13px;
-  color: var(--tb-text-primary);
+  color: var(--tb-text-secondary);
   -webkit-appearance: none;
 }
-#sidebar-search-input::placeholder { color: var(--tb-text-muted); }
+#sidebar-search-input::placeholder { color: rgba(126, 137, 168, 0.82); }
 #sidebar-search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
 .sidebar-search-clear {
   position: absolute;
@@ -19171,7 +19171,7 @@ body.is-col-resizing {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: rgba(173,198,255,0.12);
+  background: rgba(173,198,255,0.08);
   color: var(--tb-text-muted);
   border: none;
   cursor: pointer;
@@ -19180,7 +19180,7 @@ body.is-col-resizing {
   justify-content: center;
   transition: background var(--tb-motion-base), color var(--tb-motion-base);
 }
-.sidebar-search-clear:hover { background: rgba(173,198,255,0.22); color: var(--tb-text-primary); }
+.sidebar-search-clear:hover { background: rgba(173,198,255,0.16); color: var(--tb-text-secondary); }
 
 /* ── Search results view ─────────────────────────────────────────────────── */
 #view-search { padding: 56px 28px 48px; }
