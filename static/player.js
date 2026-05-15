@@ -2272,7 +2272,7 @@ const Player = (function () {
       requestAnimationFrame(() => {
         const overflow = artistEl.scrollWidth - artistEl.clientWidth;
         if (overflow > 6) {
-          const dur = Math.max(5, overflow / 25);
+          const dur = Math.min(18, Math.max(8, overflow / 18));
           artistEl.style.setProperty('--marquee-dist', `-${overflow}px`);
           artistEl.style.setProperty('--marquee-dur',  `${dur}s`);
           artistEl.classList.add('marquee');
@@ -2872,7 +2872,7 @@ const Player = (function () {
     requestAnimationFrame(() => {
       const overflow = el.scrollWidth - el.clientWidth;
       if (overflow > 6) {
-        const dur = Math.max(5, overflow / 25); // ~25px/s
+        const dur = Math.min(18, Math.max(8, overflow / 18));
         el.style.setProperty('--marquee-dist', `-${overflow}px`);
         el.style.setProperty('--marquee-dur',  `${dur}s`);
         el.classList.add('marquee');

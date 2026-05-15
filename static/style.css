@@ -8609,13 +8609,13 @@ tbody tr:hover {
 .player-artist.marquee {
   overflow: visible;  /* allow full text to paint; parent .player-track-info clips */
   text-overflow: clip;
-  animation: player-marquee var(--marquee-dur, 8s) ease-in-out 1.5s infinite;
+  animation: player-marquee var(--marquee-dur, 10s) ease-in-out 1.25s infinite;
   will-change: transform;
 }
 @keyframes player-marquee {
-  0%, 15%  { transform: translateX(0); }
-  65%, 80% { transform: translateX(var(--marquee-dist, 0)); }
-  95%, 100%{ transform: translateX(0); }
+  0%, 18%  { transform: translateX(0); }
+  58%, 76% { transform: translateX(var(--marquee-dist, 0)); }
+  100%     { transform: translateX(0); }
 }
 
 /* Clickable artist / album links in the player bar */
