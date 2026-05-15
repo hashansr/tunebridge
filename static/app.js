@@ -6233,7 +6233,7 @@ async function _renderSearchResults() {
     sections.push(`
       <div class="search-section">
         <div class="search-section-header">
-          <h2 class="search-section-title search-section-title--top">Top Results <span aria-hidden="true">›</span></h2>
+          <h2 class="search-section-title">Top Results</h2>
         </div>
         <div class="search-top-grid" id="search-top-grid"></div>
       </div>`);
@@ -6247,9 +6247,20 @@ async function _renderSearchResults() {
           <h2 class="search-section-title">Songs</h2>
           ${extra}
         </div>
-        <div id="search-songs-list" class="search-songs-list">
-          <div class="search-songs-header">
-            <span></span><span>Title</span><span>Artist</span><span>Album</span><span></span>
+        <div id="search-songs-list" class="search-songs-list tb-table-shell">
+          <div class="tb-table-scroll-area">
+            <table class="search-songs-table tb-table">
+              <thead>
+                <tr>
+                  <th data-col="title">Title</th>
+                  <th data-col="artist">Artist</th>
+                  <th data-col="album">Album</th>
+                  <th data-col="duration">Time</th>
+                  <th data-col="genre">Genre</th>
+                </tr>
+              </thead>
+              <tbody id="search-songs-tbody"></tbody>
+            </table>
           </div>
         </div>
       </div>`);
@@ -6359,19 +6370,33 @@ function _renderSearchTopGrid(items) {
 }
 
 function _renderSearchSongs(tracks) {
-  const list = document.getElementById('search-songs-list');
-  if (!list) return;
-  list.insertAdjacentHTML('beforeend', tracks.map(t => `
-    <div class="search-song-row" ondblclick="Player.playTrackById('${esc(t.id)}')"
-         oncontextmenu="App.showTrackCtxMenu(event,'${esc(t.id)}')">
-      <div class="search-song-art">${thumbImg(t.artwork_key, 38, '4px')}</div>
-      <div class="search-song-title">${esc(t.title || 'Unknown')}</div>
-      <div class="search-song-artist">${esc(t.artist || '')}</div>
-      <div class="search-song-album">${esc(t.album || '')}</div>
-      <div class="search-song-actions">
-        <button class="add-btn" onclick="event.stopPropagation();App.showAddDropdown(event,'${esc(t.id)}')" title="Add to playlist">+</button>
-      </div>
-    </div>`).join(''));
+  const tbody = document.getElementById('search-songs-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = tracks.map(t => `
+    <tr data-id="${esc(t.id)}" ondblclick="Player.playTrackById('${esc(t.id)}')"
+        oncontextmenu="App.showTrackCtxMenu(event,'${esc(t.id)}')">
+      <td data-col="title">
+        <div class="title-cell">
+          <div class="thumb-wrap">
+            <div class="thumb">${thumbImg(t.artwork_key, 38, '4px')}</div>
+            <button class="thumb-play-btn" onclick="event.stopPropagation();Player.playTrackById('${esc(t.id)}')" title="Play">
+              <span class="thumb-play-icon">${playSvg(12)}</span>
+              <span class="thumb-now-playing">${nowPlayingSvg(11)}</span>
+            </button>
+          </div>
+          <div class="track-info">
+            <div class="track-title-line">
+              <div class="track-title" title="${esc(t.title || 'Unknown')}">${esc(t.title || 'Unknown')}</div>
+            </div>
+            <div class="track-artist" title="${esc(t.artist || '')}">${esc(t.artist || '')}</div>
+          </div>
+        </div>
+      </td>
+      <td data-col="artist" class="cell-artist" title="${esc(t.artist || '')}">${esc(t.artist || '')}</td>
+      <td data-col="album" class="cell-album" title="${esc(t.album || '')}">${esc(t.album || '')}</td>
+      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
+      <td data-col="genre" class="col-genre" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
+    </tr>`).join('');
 }
 
 function _renderSearchArtists(artists) {
