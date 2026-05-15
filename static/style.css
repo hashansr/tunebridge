@@ -6750,10 +6750,20 @@ nav {
 
 /* Artist detail (within Albums view): tighten search-to-hero spacing */
 #view-albums .view-header.artist-detail-mode {
-  margin-bottom: 6px;
+  justify-content: flex-end;
+  margin-bottom: calc(-1 * (var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 42px));
+  min-height: 42px;
+  position: relative;
+  z-index: 3;
 }
-#view-albums #artist-hero.browse-hero {
-  padding-top: 8px;
+
+#view-albums .view-header.artist-detail-mode .library-toolbar {
+  margin-top: 0;
+}
+
+#view-albums .view-header.artist-detail-mode + #albums-alpha-bar + #artist-hero.artist-detail-hero {
+  margin-top: calc(-1 * (var(--main-nav-top-inset) + var(--main-nav-overlay-clearance)));
+  padding-top: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 34px);
 }
 
 /* Tracks/playlist tables */
