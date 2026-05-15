@@ -12549,7 +12549,7 @@ tr.player-active .track-title { color: var(--accent); }
     radial-gradient(980px 360px at 21% 14%, rgba(var(--album-hero-accent), 0.20), transparent 68%),
     radial-gradient(860px 520px at 88% 4%, rgba(var(--album-hero-secondary), 0.34), transparent 72%),
     linear-gradient(135deg, rgba(var(--album-hero-primary), 0.92), rgba(var(--album-hero-secondary), 0.78) 54%, rgba(7, 10, 16, 0.94));
-  box-shadow: inset 0 -1px 0 rgba(173, 198, 255, 0.08);
+  box-shadow: none;
 }
 
 #view-tracks #album-hero.album-detail-hero.is-album-context::before {
@@ -12571,7 +12571,7 @@ tr.player-active .track-title { color: var(--accent); }
   inset: 0;
   z-index: -1;
   background:
-    linear-gradient(180deg, rgba(7, 10, 16, 0.04) 0%, rgba(7, 10, 16, 0.14) 42%, rgba(7, 10, 16, 0.46) 72%, var(--bg) 100%),
+    linear-gradient(180deg, rgba(7, 10, 16, 0.04) 0%, rgba(7, 10, 16, 0.14) 42%, rgba(7, 10, 16, 0.42) 72%, rgba(var(--album-hero-secondary), 0.08) 100%),
     radial-gradient(760px 340px at 24% 66%, rgba(255, 255, 255, 0.075), transparent 72%),
     radial-gradient(1100px 240px at 48% 100%, rgba(var(--album-hero-primary), 0.26), transparent 72%);
   pointer-events: none;
@@ -12714,7 +12714,7 @@ tr.player-active .track-title { color: var(--accent); }
     radial-gradient(980px 360px at 21% 14%, rgba(var(--album-hero-accent), 0.20), transparent 68%),
     radial-gradient(860px 520px at 88% 4%, rgba(var(--album-hero-secondary), 0.34), transparent 72%),
     linear-gradient(135deg, rgba(var(--album-hero-primary), 0.92), rgba(var(--album-hero-secondary), 0.78) 54%, rgba(7, 10, 16, 0.94));
-  box-shadow: inset 0 -1px 0 rgba(173, 198, 255, 0.08);
+  box-shadow: none;
 }
 
 #view-albums #artist-hero.artist-detail-hero::before,
@@ -12738,7 +12738,7 @@ tr.player-active .track-title { color: var(--accent); }
   inset: 0;
   z-index: -1;
   background:
-    linear-gradient(180deg, rgba(7, 10, 16, 0.04) 0%, rgba(7, 10, 16, 0.14) 42%, rgba(7, 10, 16, 0.46) 72%, var(--bg) 100%),
+    linear-gradient(180deg, rgba(7, 10, 16, 0.04) 0%, rgba(7, 10, 16, 0.14) 42%, rgba(7, 10, 16, 0.42) 72%, rgba(var(--album-hero-secondary), 0.08) 100%),
     radial-gradient(760px 340px at 24% 66%, rgba(255, 255, 255, 0.075), transparent 72%),
     radial-gradient(1100px 240px at 48% 100%, rgba(var(--album-hero-primary), 0.26), transparent 72%);
   pointer-events: none;
