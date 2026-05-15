@@ -1603,6 +1603,86 @@ def library_songs():
     return jsonify(tracks)
 
 
+@app.route('/api/search')
+def global_search():
+    q = request.args.get('q', '').strip().lower()
+    if not q:
+        return jsonify({
+            'artists': [], 'tracks': [], 'playlists': [],
+            'total_artists': 0, 'total_tracks': 0, 'total_playlists': 0
+        })
+
+    with library_lock:
+        tracks = library[:]
+
+    artist_image_keys = _db.db_get_all_artist_image_keys()
+    artists_map = {}
+    for t in tracks:
+        name = t.get('album_artist') or t.get('artist') or 'Unknown Artist'
+        key = name.lower()
+        if key not in artists_map:
+            artists_map[key] = {'name': name, 'albums': set(), 'track_count': 0, 'artwork_key': None}
+        artists_map[key]['albums'].add(t.get('album'))
+        artists_map[key]['track_count'] += 1
+        if not artists_map[key]['artwork_key'] and t.get('artwork_key'):
+            artists_map[key]['artwork_key'] = t['artwork_key']
+
+    matched_artists = []
+    for v in artists_map.values():
+        if q in v['name'].lower():
+            img_key = get_artist_image_key(v['name'])
+            matched_artists.append({
+                'name': v['name'],
+                'album_count': len(v['albums']),
+                'track_count': v['track_count'],
+                'artwork_key': v['artwork_key'],
+                'image_key': img_key if img_key in artist_image_keys else None,
+            })
+    matched_artists.sort(key=lambda a: artist_sort_key(a['name']))
+    total_artists = len(matched_artists)
+    matched_artists = matched_artists[:6]
+
+    matched_tracks = [
+        t for t in tracks
+        if q in (t.get('title') or '').lower()
+        or q in (t.get('artist') or '').lower()
+        or q in (t.get('album') or '').lower()
+    ]
+    matched_tracks.sort(key=lambda t: (t.get('title') or '').lower())
+    total_tracks = len(matched_tracks)
+    matched_tracks = matched_tracks[:10]
+
+    playlists = load_playlists()
+    with library_lock:
+        lib_map = {t['id']: t for t in library}
+    matched_playlists = []
+    for p in playlists.values():
+        if q not in (p.get('name') or '').lower():
+            continue
+        p_out = dict(p)
+        p_out['has_artwork'] = has_playlist_artwork(p['id'])
+        p_out['track_count'] = len(p.get('tracks', []))
+        seen = []
+        for entry in p.get('tracks', []):
+            tid = entry if isinstance(entry, str) else entry.get('id')
+            track = lib_map.get(tid)
+            if track and track.get('artwork_key') and track['artwork_key'] not in seen:
+                seen.append(track['artwork_key'])
+                if len(seen) >= 4:
+                    break
+        p_out['artwork_keys'] = seen
+        p_out['is_smart'] = _db.db_is_smart_playlist(p['id'])
+        matched_playlists.append(p_out)
+    matched_playlists.sort(key=lambda p: (p.get('name') or '').lower())
+    total_playlists = len(matched_playlists)
+    matched_playlists = matched_playlists[:6]
+
+    return jsonify({
+        'artists': matched_artists, 'tracks': matched_tracks, 'playlists': matched_playlists,
+        'total_artists': total_artists, 'total_tracks': total_tracks, 'total_playlists': total_playlists,
+    })
+
+
 # ── Home / listening history ────────────────────────────────────────────────
 
 def _to_bool(v):

@@ -63,9 +63,11 @@ const state = {
   _albumRenderToken: 0,
   collectionLayouts: _cloneCollectionLayoutDefaults(),
   collectionPages: { artists: 0, albums: 0, playlists: 0, fav_artists: 0, fav_albums: 0 },
+  searchQuery: '',
 };
 let _homeLoading = false;
 let _homeAutoRefreshTimer = null;
+let _searchDebounceTimer = null;
 let _homeTrackRefreshTimer = null;
 
 let _currentGearTab = 'daps';
@@ -6126,6 +6128,185 @@ async function homePlayItem(event, kind, trackIdEnc = '', artistEnc = '', albumE
 }
 
 /* ── View navigation ────────────────────────────────────────────────── */
+// ── Global search ────────────────────────────────────────────────────────────
+
+function onSidebarSearchInput(value) {
+  const trimmed = value.trim();
+  const clearBtn = document.getElementById('sidebar-search-clear');
+  if (clearBtn) clearBtn.style.display = trimmed ? '' : 'none';
+  clearTimeout(_searchDebounceTimer);
+  _searchDebounceTimer = setTimeout(() => {
+    if (trimmed) { state.searchQuery = trimmed; showView('search'); }
+    else if (state.view === 'search') showView('home');
+  }, 260);
+}
+
+function onSidebarSearchKeydown(event) {
+  if (event.key === 'Enter') {
+    clearTimeout(_searchDebounceTimer);
+    const v = event.target.value.trim();
+    if (v) { state.searchQuery = v; showView('search'); }
+  } else if (event.key === 'Escape') {
+    clearSidebarSearch();
+  }
+}
+
+function clearSidebarSearch() {
+  const input = document.getElementById('sidebar-search-input');
+  const clear = document.getElementById('sidebar-search-clear');
+  if (input) input.value = '';
+  if (clear) clear.style.display = 'none';
+  state.searchQuery = '';
+  clearTimeout(_searchDebounceTimer);
+  if (state.view === 'search') showView('home');
+}
+
+function focusSidebarSearch() {
+  const input = document.getElementById('sidebar-search-input');
+  if (input) { input.focus(); input.select(); }
+}
+
+async function _renderSearchResults() {
+  const q = state.searchQuery;
+  const content = document.getElementById('search-results-content');
+  const emptyEl = document.getElementById('search-results-empty');
+  if (!q) { if (content) content.innerHTML = ''; return; }
+  content.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
+  content.style.display = '';
+  emptyEl.style.display = 'none';
+
+  let results;
+  try { results = await api(`/search?q=${encodeURIComponent(q)}`); }
+  catch (e) { content.innerHTML = `<div class="library-error-banner"><p>Search failed</p></div>`; return; }
+
+  if (state.searchQuery !== q) return;
+
+  const has = results.artists.length || results.tracks.length || results.playlists.length;
+  if (!has) {
+    content.style.display = 'none';
+    const hint = document.getElementById('search-no-results-hint');
+    if (hint) hint.textContent = `No matches for "${q}"`;
+    emptyEl.style.display = 'flex';
+    return;
+  }
+
+  content.innerHTML = `
+    ${results.artists.length ? `
+    <div class="search-section">
+      <div class="search-section-header">
+        <h2 class="search-section-title">Artists</h2>
+        ${results.total_artists > 6 ? `<a class="search-see-all" href="#" onclick="event.preventDefault();App.searchSeeAll('artists')">See all ${results.total_artists} →</a>` : ''}
+      </div>
+      <div id="search-artists-grid" class="search-artists-grid"></div>
+    </div>` : ''}
+    ${results.tracks.length ? `
+    <div class="search-section">
+      <div class="search-section-header">
+        <h2 class="search-section-title">Songs</h2>
+        ${results.total_tracks > 10 ? `<a class="search-see-all" href="#" onclick="event.preventDefault();App.searchSeeAll('tracks')">See all ${results.total_tracks} →</a>` : ''}
+      </div>
+      <div id="search-tracks-list" class="search-tracks-list"></div>
+    </div>` : ''}
+    ${results.playlists.length ? `
+    <div class="search-section">
+      <div class="search-section-header">
+        <h2 class="search-section-title">Playlists</h2>
+        ${results.total_playlists > 6 ? `<a class="search-see-all" href="#" onclick="event.preventDefault();App.searchSeeAll('playlists')">See all ${results.total_playlists} →</a>` : ''}
+      </div>
+      <div id="search-playlists-grid" class="search-playlists-grid"></div>
+    </div>` : ''}
+  `;
+
+  if (results.artists.length) _renderSearchArtists(results.artists);
+  if (results.tracks.length) _renderSearchTracks(results.tracks);
+  if (results.playlists.length) _renderSearchPlaylists(results.playlists);
+}
+
+function _renderSearchArtists(artists) {
+  const grid = document.getElementById('search-artists-grid');
+  if (!grid) return;
+  grid.innerHTML = artists.map(a => `
+    <div class="artist-card search-artist-card" data-artist="${esc(a.name)}" ${_artistCardStyle(a)}
+         onclick="App.showArtist(this.dataset.artist)">
+      <div class="artist-thumb${a.image_key || a.artwork_key ? '' : ' artist-thumb--placeholder'}">
+        ${_artistThumbHtml(a, 120)}
+      </div>
+      <div class="artist-name" title="${esc(a.name)}">${esc(a.name)}</div>
+      <div class="artist-meta">${a.album_count} album${a.album_count !== 1 ? 's' : ''} · ${a.track_count} song${a.track_count !== 1 ? 's' : ''}</div>
+    </div>
+  `).join('');
+}
+
+function _renderSearchTracks(tracks) {
+  const list = document.getElementById('search-tracks-list');
+  if (!list) return;
+  list.innerHTML = tracks.map(t => {
+    const dur = t.duration ? _fmtDuration(t.duration) : '—';
+    return `
+      <div class="search-track-row" ondblclick="Player.playTrackById('${t.id}')"
+           oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
+        <div class="thumb">${thumbImg(t.artwork_key, 38, '4px')}</div>
+        <div class="search-track-info">
+          <div class="search-track-title">${esc(t.title || 'Unknown')}</div>
+          <div class="search-track-meta">${esc(t.artist || '')}${t.album ? ' · ' + esc(t.album) : ''}</div>
+        </div>
+        <div class="search-track-dur">${dur}</div>
+        <div class="search-track-actions">
+          <button class="add-btn" onclick="event.stopPropagation();App.showAddDropdown(event,'${t.id}')" title="Add to playlist">+</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function _renderSearchPlaylists(playlists) {
+  const grid = document.getElementById('search-playlists-grid');
+  if (!grid) return;
+  grid.innerHTML = playlists.map(pl => {
+    let coverHtml;
+    if (pl.has_artwork) {
+      coverHtml = `<img src="/api/playlists/${pl.id}/artwork?t=${Date.now()}" style="width:100%;height:100%;object-fit:cover" loading="lazy" />`;
+    } else {
+      const keys = (pl.artwork_keys || []).slice(0, 4);
+      coverHtml = !keys.length
+        ? coverPlaceholder('playlist', 40, '8px', true)
+        : keys.length === 1
+          ? `<img src="/api/artwork/${keys[0]}" style="width:100%;height:100%;object-fit:cover" loading="lazy" />`
+          : keys.map(k => `<img src="/api/artwork/${k}" loading="lazy" />`).join('');
+    }
+    const count = pl.track_count ?? 0;
+    const isSingle = pl.has_artwork || (pl.artwork_keys && pl.artwork_keys.length === 1);
+    return `
+      <div class="pl-view-card" onclick="App.openPlaylist('${pl.id}')">
+        <div class="pl-view-cover${isSingle ? ' playlist-cover-single' : ''}">${coverHtml}</div>
+        <div class="pl-view-info">
+          <div class="pl-view-info-text">
+            <div class="pl-view-name" title="${esc(pl.name)}">${esc(pl.name)}</div>
+            <div class="pl-view-meta">${count} track${count !== 1 ? 's' : ''}</div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function searchSeeAll(category) {
+  const q = state.searchQuery;
+  if (category === 'artists') {
+    showView('artists');
+    setTimeout(() => {
+      const inp = document.getElementById('artists-filter-input');
+      if (inp) { inp.value = q; setArtistSearch(q); }
+    }, 100);
+  } else if (category === 'tracks') {
+    showView('songs');
+    setTimeout(() => {
+      const inp = document.getElementById('songs-filter-input');
+      if (inp) { inp.value = q; filterSongs(q); }
+    }, 100);
+  } else if (category === 'playlists') {
+    showView('playlists');
+  }
+}
+
 function showView(viewName) {
   if (!_guardMlGeneratorNavigation()) return;
   if (!_guardPeqEditorNavigation()) return;
@@ -6168,6 +6349,7 @@ function showView(viewName) {
   else if (viewName === 'history') loadHistoryView();
   else if (viewName === 'duplicates') loadDuplicatesView();
   else if (viewName === 'sync') loadSyncView();
+  else if (viewName === 'search') _renderSearchResults();
 
   if (viewName === 'home') {
     if (_homeAutoRefreshTimer) clearInterval(_homeAutoRefreshTimer);
@@ -6182,7 +6364,7 @@ function showView(viewName) {
 
 function showViewEl(name) {
   closeLyricsView();
-  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync'];
+  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync', 'search'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.style.display = v === name ? (['playlist', 'sync'].includes(v) ? 'flex' : 'block') : 'none';
@@ -14344,6 +14526,11 @@ function _updateLyricsBulkBanner(s) {
 
 const App = {
   showView,
+  onSidebarSearchInput,
+  onSidebarSearchKeydown,
+  clearSidebarSearch,
+  focusSidebarSearch,
+  searchSeeAll,
   loadHome,
   homeOpenItem,
   homePlayItem,
@@ -18371,6 +18558,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Keyboard shortcut: Escape closes dropdown and context menu
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { hideDropdown(); hideCtxMenu(); closePlaylistDapMenu(); _closeFrOverlayMenu(); }
+    const tag = document.activeElement?.tagName?.toLowerCase();
+    const inInput = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
+    if ((e.key === '/' && !inInput) || (e.key === 'k' && (e.metaKey || e.ctrlKey))) {
+      e.preventDefault();
+      focusSidebarSearch();
+    }
   });
 
   // Close context menu on outside click or scroll

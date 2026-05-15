@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Add: Global search bar in sidebar (above Home) — searches artists, songs, and playlists in one view; Cmd+K or / to focus; debounced with 260ms delay; × to clear and return home
 
 ## v0.269-rc.150526-1407 · 2026-05-15
 

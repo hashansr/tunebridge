@@ -19128,3 +19128,150 @@ body.is-col-resizing {
   background: rgba(173,198,255,0.08);
   border-radius: 8px;
 }
+
+/* ── Sidebar global search ──────────────────────────────────────────────── */
+#sidebar-search-wrap {
+  padding: 0 10px 8px;
+  flex-shrink: 0;
+}
+#sidebar-search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--tb-surface-1);
+  border: 1px solid var(--tb-border-soft);
+  border-radius: var(--tb-radius-pill);
+  transition: border-color var(--tb-motion-base), background var(--tb-motion-base);
+}
+#sidebar-search-field:focus-within {
+  border-color: rgba(173,198,255,0.45);
+  background: rgba(30,38,56,0.9);
+}
+.sidebar-search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--tb-text-muted);
+  pointer-events: none;
+}
+#sidebar-search-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 7px 28px 7px 30px;
+  font-size: 13px;
+  color: var(--tb-text-primary);
+  -webkit-appearance: none;
+}
+#sidebar-search-input::placeholder { color: var(--tb-text-muted); }
+#sidebar-search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.sidebar-search-clear {
+  position: absolute;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(173,198,255,0.12);
+  color: var(--tb-text-muted);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--tb-motion-base), color var(--tb-motion-base);
+}
+.sidebar-search-clear:hover { background: rgba(173,198,255,0.22); color: var(--tb-text-primary); }
+
+/* ── Search results view ─────────────────────────────────────────────────── */
+#view-search { padding: 24px 28px 48px; }
+.search-results-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 32px;
+  text-align: center;
+  gap: 14px;
+}
+.search-section { margin-bottom: 36px; }
+.search-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.search-section-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--tb-text-primary);
+}
+.search-see-all {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--tb-accent);
+  text-decoration: none;
+  opacity: 0.8;
+  transition: opacity var(--tb-motion-base);
+  white-space: nowrap;
+}
+.search-see-all:hover { opacity: 1; }
+
+/* Artist cards in search — circular portraits */
+.search-artists-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 16px;
+}
+#view-search .artist-thumb,
+.search-artist-card .artist-thumb { border-radius: 50%; }
+.search-artist-card .card-more-btn,
+.search-artist-card .artist-img-btn,
+.search-artist-card .card-fav-btn { display: none; }
+
+/* Song rows */
+.search-tracks-list { display: flex; flex-direction: column; gap: 2px; }
+.search-track-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: var(--tb-radius-xs);
+  cursor: default;
+  transition: background var(--tb-motion-base);
+}
+.search-track-row:hover { background: rgba(255,255,255,0.04); }
+.search-track-info { flex: 1; min-width: 0; }
+.search-track-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--tb-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-track-meta {
+  font-size: 12px;
+  color: var(--tb-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+.search-track-dur {
+  font-size: 12px;
+  color: var(--tb-text-muted);
+  flex-shrink: 0;
+  min-width: 36px;
+  text-align: right;
+}
+.search-track-actions { flex-shrink: 0; opacity: 0; transition: opacity var(--tb-motion-base); }
+.search-track-row:hover .search-track-actions { opacity: 1; }
+
+/* Playlist cards in search */
+.search-playlists-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
