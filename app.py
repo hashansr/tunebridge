@@ -1608,22 +1608,37 @@ def global_search():
     q = request.args.get('q', '').strip().lower()
     if not q:
         return jsonify({
-            'artists': [], 'tracks': [], 'playlists': [],
-            'total_artists': 0, 'total_tracks': 0, 'total_playlists': 0
+            'artists': [], 'tracks': [], 'playlists': [], 'albums': [], 'top_results': [],
+            'total_artists': 0, 'total_tracks': 0, 'total_playlists': 0, 'total_albums': 0
         })
 
     with library_lock:
         tracks = library[:]
 
+    def match_rank(value):
+        s = (value or '').strip().lower()
+        if not s:
+            return 99
+        if s == q:
+            return 0
+        if s.startswith(q):
+            return 1
+        if q in s:
+            return 2
+        return 99
+
     artist_image_keys = _db.db_get_all_artist_image_keys()
     artists_map = {}
+    artist_tracks_map = {}
     for t in tracks:
         name = t.get('album_artist') or t.get('artist') or 'Unknown Artist'
         key = name.lower()
         if key not in artists_map:
             artists_map[key] = {'name': name, 'albums': set(), 'track_count': 0, 'artwork_key': None}
+            artist_tracks_map[key] = []
         artists_map[key]['albums'].add(t.get('album'))
         artists_map[key]['track_count'] += 1
+        artist_tracks_map[key].append(t)
         if not artists_map[key]['artwork_key'] and t.get('artwork_key'):
             artists_map[key]['artwork_key'] = t['artwork_key']
 
@@ -1692,9 +1707,130 @@ def global_search():
     total_playlists = len(matched_playlists)
     matched_playlists = matched_playlists[:6]
 
+    top_buckets = {'track': [], 'album': [], 'artist': [], 'playlist': []}
+    top_seen = set()
+
+    def add_top(kind, item, score):
+        if kind == 'track':
+            key = f"track:{item.get('id')}"
+            out = {
+                'kind': 'track',
+                'id': item.get('id'),
+                'title': item.get('title') or 'Unknown',
+                'artist': item.get('artist') or '',
+                'album_artist': item.get('album_artist') or item.get('artist') or '',
+                'album': item.get('album') or '',
+                'artwork_key': item.get('artwork_key') or '',
+                'subtitle': f"Song · {item.get('artist') or ''}".strip(),
+            }
+        elif kind == 'album':
+            album_artist = item.get('artist') or 'Unknown Artist'
+            album_name = item.get('name') or item.get('album') or 'Unknown Album'
+            key = f"album:{album_artist.lower()}|{album_name.lower()}"
+            out = {
+                'kind': 'album',
+                'name': album_name,
+                'title': album_name,
+                'artist': album_artist,
+                'artwork_key': item.get('artwork_key') or '',
+                'track_count': item.get('track_count') or 0,
+                'subtitle': f"Album · {album_artist}",
+            }
+        elif kind == 'artist':
+            name = item.get('name') or 'Unknown Artist'
+            key = f"artist:{name.lower()}"
+            img_key = get_artist_image_key(name)
+            out = {
+                'kind': 'artist',
+                'name': name,
+                'title': name,
+                'album_count': item.get('album_count') or len(item.get('albums') or []),
+                'track_count': item.get('track_count') or 0,
+                'artwork_key': item.get('artwork_key') or '',
+                'image_key': img_key if img_key in artist_image_keys else None,
+                'subtitle': 'Artist',
+            }
+        else:
+            pid = item.get('id')
+            key = f"playlist:{pid}"
+            count = item.get('track_count')
+            if count is None:
+                count = len(item.get('tracks') or [])
+            out = {
+                'kind': 'playlist',
+                'id': pid,
+                'playlist_id': pid,
+                'name': item.get('name') or 'Untitled Playlist',
+                'title': item.get('name') or 'Untitled Playlist',
+                'track_count': count,
+                'has_artwork': item.get('has_artwork', False),
+                'artwork_keys': item.get('artwork_keys') or [],
+                'subtitle': 'Playlist',
+            }
+        if key in top_seen:
+            return
+        top_seen.add(key)
+        top_buckets[kind].append((score, out))
+
+    title_matches = [t for t in tracks if match_rank(t.get('title')) < 99]
+    title_matches.sort(key=lambda t: (match_rank(t.get('title')), (t.get('title') or '').lower(), (t.get('artist') or '').lower()))
+    for idx, t in enumerate(title_matches[:8]):
+        score = (match_rank(t.get('title')), idx)
+        add_top('track', t, score)
+        artist_key = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').lower()
+        if artist_key in artists_map:
+            add_top('artist', artists_map[artist_key], (score[0], idx + 20))
+        album_key = artist_key + '|' + (t.get('album') or 'Unknown Album').lower()
+        if album_key in albums_map:
+            add_top('album', albums_map[album_key], (score[0], idx + 10))
+
+    for idx, artist in enumerate([a for a in artists_map.values() if match_rank(a.get('name')) < 99]):
+        artist_rank = match_rank(artist.get('name'))
+        artist_key = (artist.get('name') or '').lower()
+        add_top('artist', artist, (artist_rank, idx))
+        artist_tracks = artist_tracks_map.get(artist_key, [])
+        artist_albums = {}
+        for t in artist_tracks:
+            album_name = t.get('album') or 'Unknown Album'
+            key = (t.get('album_artist') or t.get('artist') or artist.get('name') or 'Unknown Artist').lower() + '|' + album_name.lower()
+            if key in albums_map:
+                artist_albums[key] = albums_map[key]
+        for album in sorted(artist_albums.values(), key=lambda a: (-(a.get('track_count') or 0), (a.get('name') or '').lower()))[:3]:
+            add_top('album', album, (artist_rank + 1, idx))
+        for t in sorted(artist_tracks, key=lambda t: (match_rank(t.get('title')), (t.get('title') or '').lower()))[:3]:
+            add_top('track', t, (artist_rank + 1, idx))
+
+    for idx, playlist in enumerate(matched_playlists):
+        playlist_rank = match_rank(playlist.get('name'))
+        add_top('playlist', playlist, (playlist_rank, idx))
+        playlist_tracks = []
+        for entry in playlist.get('tracks', []):
+            tid = entry if isinstance(entry, str) else entry.get('id')
+            track = lib_map.get(tid)
+            if track:
+                playlist_tracks.append(track)
+        for t in playlist_tracks[:4]:
+            add_top('track', t, (playlist_rank + 1, idx))
+            artist_key = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').lower()
+            if artist_key in artists_map:
+                add_top('artist', artists_map[artist_key], (playlist_rank + 2, idx))
+            album_key = artist_key + '|' + (t.get('album') or 'Unknown Album').lower()
+            if album_key in albums_map:
+                add_top('album', albums_map[album_key], (playlist_rank + 2, idx))
+
+    for kind in top_buckets:
+        top_buckets[kind].sort(key=lambda pair: pair[0])
+
+    top_results = []
+    while len(top_results) < 8 and any(top_buckets.values()):
+        for kind in ('track', 'album', 'artist', 'playlist'):
+            if top_buckets[kind] and len(top_results) < 8:
+                top_results.append(top_buckets[kind].pop(0)[1])
+
     return jsonify({
         'artists': matched_artists, 'tracks': matched_tracks, 'playlists': matched_playlists,
         'albums': matched_albums,
+        'top_results': top_results,
         'total_artists': total_artists, 'total_tracks': total_tracks, 'total_playlists': total_playlists,
         'total_albums': total_albums,
     })

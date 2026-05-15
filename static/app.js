@@ -6205,7 +6205,11 @@ async function _renderSearchResults() {
   if (state.searchQuery !== q) return;
 
   const albums = results.albums || [];
-  const has = results.artists.length || results.tracks.length || results.playlists.length || albums.length;
+  const artists = results.artists || [];
+  const tracks = results.tracks || [];
+  const playlists = results.playlists || [];
+  const topItems = (results.top_results || []).map(item => ({ ...item, _type: item.kind || item._type }));
+  const has = artists.length || tracks.length || playlists.length || albums.length || topItems.length;
   if (!has) {
     content.style.display = 'none';
     const hint = document.getElementById('search-no-results-hint');
@@ -6214,17 +6218,18 @@ async function _renderSearchResults() {
     return;
   }
 
-  // Collect top results: up to 2 of each type
-  const topItems = [
-    ...results.tracks.slice(0, 2).map(t => ({ ...t, _type: 'track' })),
-    ...albums.slice(0, 2).map(a => ({ ...a, _type: 'album' })),
-    ...results.artists.slice(0, 2).map(a => ({ ...a, _type: 'artist' })),
-    ...results.playlists.slice(0, 2).map(p => ({ ...p, _type: 'playlist' })),
-  ];
+  if (!topItems.length) {
+    topItems.push(
+      ...tracks.slice(0, 2).map(t => ({ ...t, _type: 'track' })),
+      ...albums.slice(0, 2).map(a => ({ ...a, _type: 'album' })),
+      ...artists.slice(0, 2).map(a => ({ ...a, _type: 'artist' })),
+      ...playlists.slice(0, 2).map(p => ({ ...p, _type: 'playlist' })),
+    );
+  }
 
   const sections = [];
 
-  if (topItems.length >= 2) {
+  if (topItems.length) {
     sections.push(`
       <div class="search-section">
         <div class="search-section-header">
@@ -6234,7 +6239,7 @@ async function _renderSearchResults() {
       </div>`);
   }
 
-  if (results.tracks.length) {
+  if (tracks.length) {
     const extra = results.total_tracks > 5 ? `<a class="search-see-all" href="#" onclick="event.preventDefault();App.searchSeeAll('tracks')">See all ${results.total_tracks} →</a>` : '';
     sections.push(`
       <div class="search-section">
@@ -6254,7 +6259,7 @@ async function _renderSearchResults() {
     sections.push(_searchRailSectionHtml('search-albums-rail', 'Albums', results.total_albums > 6 ? results.total_albums : 0, 'albums'));
   }
 
-  if (results.artists.length) {
+  if (artists.length) {
     const extra = results.total_artists > 6 ? `<a class="search-see-all" href="#" onclick="event.preventDefault();App.searchSeeAll('artists')">See all ${results.total_artists} →</a>` : '';
     sections.push(`
       <div class="search-section">
@@ -6266,44 +6271,45 @@ async function _renderSearchResults() {
       </div>`);
   }
 
-  if (results.playlists.length) {
+  if (playlists.length) {
     sections.push(_searchRailSectionHtml('search-playlists-rail', 'Playlists', results.total_playlists > 6 ? results.total_playlists : 0, 'playlists'));
   }
 
   content.innerHTML = sections.join('');
 
-  if (topItems.length >= 2) _renderSearchTopGrid(topItems);
-  if (results.tracks.length) _renderSearchSongs(results.tracks.slice(0, 5));
+  if (topItems.length) _renderSearchTopGrid(topItems.slice(0, 8));
+  if (tracks.length) _renderSearchSongs(tracks.slice(0, 5));
   if (albums.length) {
     const railItems = albums.map(a => ({ kind: 'album', title: a.name, subtitle: a.artist, artwork_key: a.artwork_key, artist: a.artist, album: a.name, artist_filter: a.artist }));
     const rail = document.getElementById('search-albums-rail');
     if (rail) { rail.innerHTML = railItems.map(_homeRailCardHtml).join(''); _homeBindRailUX('search-albums-rail'); }
   }
-  if (results.artists.length) _renderSearchArtists(results.artists);
-  if (results.playlists.length) {
-    const railItems = results.playlists.map(pl => ({ kind: 'playlist', title: pl.name, subtitle: `${pl.track_count} track${pl.track_count !== 1 ? 's' : ''}`, artwork_key: (pl.artwork_keys || [])[0] || '', playlist_id: pl.id }));
+  if (artists.length) _renderSearchArtists(artists);
+  if (playlists.length) {
+    const railItems = playlists.map(pl => ({ kind: 'playlist', title: pl.name, subtitle: `${pl.track_count} track${pl.track_count !== 1 ? 's' : ''}`, artwork_key: (pl.artwork_keys || [])[0] || '', playlist_id: pl.id }));
     const rail = document.getElementById('search-playlists-rail');
     if (rail) { rail.innerHTML = railItems.map(_homeRailCardHtml).join(''); _homeBindRailUX('search-playlists-rail'); }
   }
 }
 
 function _searchTopArtHtml(item) {
-  if (item._type === 'track' || item._type === 'album') {
-    const key = item._type === 'track' ? item.artwork_key : item.artwork_key;
+  const type = item.kind || item._type;
+  if (type === 'track' || type === 'album') {
+    const key = item.artwork_key;
     return key
-      ? `<img src="/api/artwork/${esc(key)}" style="width:100%;height:100%;object-fit:cover" loading="lazy" onerror="this.style.display='none'" />`
-      : coverPlaceholder(item._type === 'track' ? 'song' : 'album', 60, '0px');
+      ? `<img src="/api/artwork/${esc(key)}" loading="lazy" onerror="this.style.display='none'" />`
+      : coverPlaceholder(type === 'track' ? 'song' : 'album', 42, '8px');
   }
-  if (item._type === 'artist') {
-    return _artistThumbHtml({ name: item.name, image_key: item.image_key, artwork_key: item.artwork_key }, 140);
+  if (type === 'artist') {
+    return _artistThumbHtml({ name: item.name || item.title, image_key: item.image_key, artwork_key: item.artwork_key }, 64);
   }
   // playlist
   if (item.has_artwork) {
-    return `<img src="/api/playlists/${esc(item.id)}/artwork?t=${Date.now()}" style="width:100%;height:100%;object-fit:cover" loading="lazy" />`;
+    return `<img src="/api/playlists/${esc(item.playlist_id || item.id)}/artwork?t=${Date.now()}" loading="lazy" />`;
   }
   const keys = item.artwork_keys || [];
-  if (!keys.length) return coverPlaceholder('playlist', 60, '0px', true);
-  if (keys.length === 1) return `<img src="/api/artwork/${esc(keys[0])}" style="width:100%;height:100%;object-fit:cover" loading="lazy" />`;
+  if (!keys.length) return coverPlaceholder('playlist', 42, '8px', true);
+  if (keys.length === 1) return `<img src="/api/artwork/${esc(keys[0])}" loading="lazy" />`;
   return `<div class="pl-mosaic">${keys.slice(0, 4).map(k => `<img src="/api/artwork/${esc(k)}" loading="lazy" />`).join('')}</div>`;
 }
 
@@ -6312,28 +6318,29 @@ function _renderSearchTopGrid(items) {
   if (!grid) return;
   grid.innerHTML = items.map(item => {
     let title, subtitle, onclick, onplay;
-    const isArtist = item._type === 'artist';
+    const type = item.kind || item._type;
+    const isArtist = type === 'artist';
 
-    if (item._type === 'track') {
+    if (type === 'track') {
       title = item.title || 'Unknown';
-      subtitle = `Song · ${esc(item.artist || '')}`;
+      subtitle = item.subtitle || `Song · ${item.artist || ''}`;
       onclick = `App.showAlbum('${esc(item.album_artist || item.artist || '')}','${esc(item.album || '')}')`;
       onplay = `event.stopPropagation();Player.playTrackById('${esc(item.id)}')`;
-    } else if (item._type === 'album') {
-      title = item.name;
-      subtitle = `Album · ${esc(item.artist || '')}`;
+    } else if (type === 'album') {
+      title = item.name || item.title;
+      subtitle = item.subtitle || `Album · ${item.artist || ''}`;
       onclick = `App.showAlbum('${esc(item.artist)}','${esc(item.name)}')`;
       onplay = `event.stopPropagation();App.homePlayItem(event,'album','','${esc(item.artist)}','${esc(item.name)}','')`;
-    } else if (item._type === 'artist') {
-      title = item.name;
-      subtitle = 'Artist';
+    } else if (type === 'artist') {
+      title = item.name || item.title;
+      subtitle = item.subtitle || 'Artist';
       onclick = `App.showArtist('${esc(item.name)}')`;
       onplay = `event.stopPropagation();App.homePlayItem(event,'artist','','${esc(item.name)}','','')`;
     } else {
-      title = item.name;
-      subtitle = `Playlist · ${item.track_count} track${item.track_count !== 1 ? 's' : ''}`;
-      onclick = `App.openPlaylist('${esc(item.id)}')`;
-      onplay = `event.stopPropagation();App.homePlayItem(event,'playlist','','','','${esc(item.id)}')`;
+      title = item.name || item.title;
+      subtitle = item.subtitle || `Playlist · ${item.track_count} track${item.track_count !== 1 ? 's' : ''}`;
+      onclick = `App.openPlaylist('${esc(item.playlist_id || item.id)}')`;
+      onplay = `event.stopPropagation();App.homePlayItem(event,'playlist','','','','${esc(item.playlist_id || item.id)}')`;
     }
 
     return `
@@ -6342,8 +6349,10 @@ function _renderSearchTopGrid(items) {
           ${_searchTopArtHtml(item)}
           <div class="search-top-card-play" onclick="${onplay}" title="Play">${playSvg(16)}</div>
         </div>
-        <div class="search-top-card-title" title="${esc(title)}">${esc(title)}</div>
-        <div class="search-top-card-sub">${subtitle}</div>
+        <div class="search-top-card-copy">
+          <div class="search-top-card-title" title="${esc(title)}">${esc(title)}</div>
+          <div class="search-top-card-sub">${esc(subtitle)}</div>
+        </div>
       </div>`;
   }).join('');
 }

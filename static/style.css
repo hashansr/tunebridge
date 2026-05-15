@@ -19183,7 +19183,7 @@ body.is-col-resizing {
 .sidebar-search-clear:hover { background: rgba(173,198,255,0.22); color: var(--tb-text-primary); }
 
 /* ── Search results view ─────────────────────────────────────────────────── */
-#view-search { padding: 24px 28px 48px; }
+#view-search { padding: 56px 28px 48px; }
 .search-results-empty {
   display: flex;
   flex-direction: column;
@@ -19222,29 +19222,41 @@ body.is-col-resizing {
 .search-top-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
+  gap: 16px;
 }
 .search-top-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
   cursor: pointer;
-  border: none;
-  background: transparent;
+  border: 1px solid rgba(255,255,255,0.045);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.105);
   text-align: left;
-  padding: 0;
+  padding: 16px;
   color: inherit;
   min-width: 0; /* allow grid item to shrink below img intrinsic size */
   width: 100%;
+  height: 112px;
+  overflow: hidden;
+  transition: background var(--tb-motion-base), border-color var(--tb-motion-base), transform var(--tb-motion-base);
+}
+.search-top-card:hover {
+  background: rgba(255,255,255,0.145);
+  border-color: rgba(173,198,255,0.18);
+  transform: translateY(-1px);
 }
 .search-top-card-art {
   position: relative;
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: 10px;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  border-radius: 8px;
   overflow: hidden;
-  background: var(--tb-surface-2);
-  margin-bottom: 9px;
-  transition: transform 0.25s ease;
+  background: rgba(0,0,0,0.22);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
 }
-.search-top-card:hover .search-top-card-art { transform: scale(1.02); }
 .search-top-card-art img {
   width: 100%;
   height: 100%;
@@ -19262,14 +19274,27 @@ body.is-col-resizing {
   width: 100% !important;
   height: 100% !important;
   object-fit: cover;
-  border-radius: 0;
+  border-radius: inherit;
+}
+.search-top-card-art .pl-mosaic {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  width: 100%;
+  height: 100%;
+}
+.search-top-card-art .pl-mosaic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  min-width: 0;
 }
 .search-top-card-play {
   position: absolute;
-  bottom: 10px;
-  right: 10px;
-  width: 38px;
-  height: 38px;
+  bottom: 8px;
+  right: 8px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.72);
   backdrop-filter: blur(10px);
@@ -19284,22 +19309,39 @@ body.is-col-resizing {
 }
 .search-top-card:hover .search-top-card-play { opacity: 1; }
 .search-top-card-play:hover { background: rgba(0, 0, 0, 0.88); }
+.search-top-card-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .search-top-card-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--tb-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.4;
+  line-height: 1.2;
 }
 .search-top-card-sub {
-  font-size: 11.5px;
-  color: var(--tb-text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tb-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 2px;
+  line-height: 1.25;
+}
+@media (max-width: 1280px) {
+  .search-top-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  #view-search { padding: 48px 18px 40px; }
+  .search-top-grid { grid-template-columns: 1fr; }
+  .search-top-card { height: 96px; padding: 14px; }
+  .search-top-card-title { font-size: 16px; }
+  .search-top-card-sub { font-size: 13px; }
 }
 
 /* ── Songs table ──────────────────────────────────────────────────────────── */
