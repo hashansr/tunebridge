@@ -6166,6 +6166,29 @@ function focusSidebarSearch() {
   if (input) { input.focus(); input.select(); }
 }
 
+const _SEARCH_RAIL_NAV_SVG = {
+  left: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>`,
+  right: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>`,
+};
+
+function _searchRailSectionHtml(railId, title, seeAllCount, seeAllCat) {
+  const seeAll = seeAllCount > 0
+    ? `<a class="search-see-all" href="#" onclick="event.preventDefault();App.searchSeeAll('${seeAllCat}')">See all ${seeAllCount} →</a>`
+    : '';
+  return `
+    <div class="search-section">
+      <div class="search-section-header">
+        <h2 class="search-section-title">${title}</h2>
+        ${seeAll}
+      </div>
+      <div class="home-rail-shell" data-rail-id="${railId}">
+        <button class="home-rail-nav home-rail-nav-left" type="button" title="Scroll left" onclick="App.homeRailStep('${railId}',-1)" hidden>${_SEARCH_RAIL_NAV_SVG.left}</button>
+        <div id="${railId}" class="home-rail"></div>
+        <button class="home-rail-nav home-rail-nav-right" type="button" title="Scroll right" onclick="App.homeRailStep('${railId}',1)" hidden>${_SEARCH_RAIL_NAV_SVG.right}</button>
+      </div>
+    </div>`;
+}
+
 async function _renderSearchResults() {
   const q = state.searchQuery;
   const content = document.getElementById('search-results-content');
@@ -6181,7 +6204,8 @@ async function _renderSearchResults() {
 
   if (state.searchQuery !== q) return;
 
-  const has = results.artists.length || results.tracks.length || results.playlists.length;
+  const albums = results.albums || [];
+  const has = results.artists.length || results.tracks.length || results.playlists.length || albums.length;
   if (!has) {
     content.style.display = 'none';
     const hint = document.getElementById('search-no-results-hint');
@@ -6190,36 +6214,154 @@ async function _renderSearchResults() {
     return;
   }
 
-  content.innerHTML = `
-    ${results.artists.length ? `
-    <div class="search-section">
-      <div class="search-section-header">
-        <h2 class="search-section-title">Artists</h2>
-        ${results.total_artists > 6 ? `<a class="search-see-all" href="#" onclick="event.preventDefault();App.searchSeeAll('artists')">See all ${results.total_artists} →</a>` : ''}
-      </div>
-      <div id="search-artists-grid" class="search-artists-grid"></div>
-    </div>` : ''}
-    ${results.tracks.length ? `
-    <div class="search-section">
-      <div class="search-section-header">
-        <h2 class="search-section-title">Songs</h2>
-        ${results.total_tracks > 10 ? `<a class="search-see-all" href="#" onclick="event.preventDefault();App.searchSeeAll('tracks')">See all ${results.total_tracks} →</a>` : ''}
-      </div>
-      <div id="search-tracks-list" class="search-tracks-list"></div>
-    </div>` : ''}
-    ${results.playlists.length ? `
-    <div class="search-section">
-      <div class="search-section-header">
-        <h2 class="search-section-title">Playlists</h2>
-        ${results.total_playlists > 6 ? `<a class="search-see-all" href="#" onclick="event.preventDefault();App.searchSeeAll('playlists')">See all ${results.total_playlists} →</a>` : ''}
-      </div>
-      <div id="search-playlists-grid" class="search-playlists-grid"></div>
-    </div>` : ''}
-  `;
+  // Collect top results: up to 2 of each type
+  const topItems = [
+    ...results.tracks.slice(0, 2).map(t => ({ ...t, _type: 'track' })),
+    ...albums.slice(0, 2).map(a => ({ ...a, _type: 'album' })),
+    ...results.artists.slice(0, 2).map(a => ({ ...a, _type: 'artist' })),
+    ...results.playlists.slice(0, 2).map(p => ({ ...p, _type: 'playlist' })),
+  ];
 
+  const sections = [];
+
+  if (topItems.length >= 2) {
+    sections.push(`
+      <div class="search-section">
+        <div class="search-section-header">
+          <h2 class="search-section-title">Top Results</h2>
+        </div>
+        <div class="search-top-grid" id="search-top-grid"></div>
+      </div>`);
+  }
+
+  if (results.tracks.length) {
+    const extra = results.total_tracks > 5 ? `<a class="search-see-all" href="#" onclick="event.preventDefault();App.searchSeeAll('tracks')">See all ${results.total_tracks} →</a>` : '';
+    sections.push(`
+      <div class="search-section">
+        <div class="search-section-header">
+          <h2 class="search-section-title">Songs</h2>
+          ${extra}
+        </div>
+        <div id="search-songs-list" class="search-songs-list">
+          <div class="search-songs-header">
+            <span></span><span>Title</span><span>Artist</span><span>Album</span><span></span>
+          </div>
+        </div>
+      </div>`);
+  }
+
+  if (albums.length) {
+    sections.push(_searchRailSectionHtml('search-albums-rail', 'Albums', results.total_albums > 6 ? results.total_albums : 0, 'albums'));
+  }
+
+  if (results.artists.length) {
+    const extra = results.total_artists > 6 ? `<a class="search-see-all" href="#" onclick="event.preventDefault();App.searchSeeAll('artists')">See all ${results.total_artists} →</a>` : '';
+    sections.push(`
+      <div class="search-section">
+        <div class="search-section-header">
+          <h2 class="search-section-title">Artists</h2>
+          ${extra}
+        </div>
+        <div id="search-artists-grid" class="search-artists-grid"></div>
+      </div>`);
+  }
+
+  if (results.playlists.length) {
+    sections.push(_searchRailSectionHtml('search-playlists-rail', 'Playlists', results.total_playlists > 6 ? results.total_playlists : 0, 'playlists'));
+  }
+
+  content.innerHTML = sections.join('');
+
+  if (topItems.length >= 2) _renderSearchTopGrid(topItems);
+  if (results.tracks.length) _renderSearchSongs(results.tracks.slice(0, 5));
+  if (albums.length) {
+    const railItems = albums.map(a => ({ kind: 'album', title: a.name, subtitle: a.artist, artwork_key: a.artwork_key, artist: a.artist, album: a.name, artist_filter: a.artist }));
+    const rail = document.getElementById('search-albums-rail');
+    if (rail) { rail.innerHTML = railItems.map(_homeRailCardHtml).join(''); _homeBindRailUX('search-albums-rail'); }
+  }
   if (results.artists.length) _renderSearchArtists(results.artists);
-  if (results.tracks.length) _renderSearchTracks(results.tracks);
-  if (results.playlists.length) _renderSearchPlaylists(results.playlists);
+  if (results.playlists.length) {
+    const railItems = results.playlists.map(pl => ({ kind: 'playlist', title: pl.name, subtitle: `${pl.track_count} track${pl.track_count !== 1 ? 's' : ''}`, artwork_key: (pl.artwork_keys || [])[0] || '', playlist_id: pl.id }));
+    const rail = document.getElementById('search-playlists-rail');
+    if (rail) { rail.innerHTML = railItems.map(_homeRailCardHtml).join(''); _homeBindRailUX('search-playlists-rail'); }
+  }
+}
+
+function _searchTopArtHtml(item) {
+  if (item._type === 'track' || item._type === 'album') {
+    const key = item._type === 'track' ? item.artwork_key : item.artwork_key;
+    return key
+      ? `<img src="/api/artwork/${esc(key)}" style="width:100%;height:100%;object-fit:cover" loading="lazy" onerror="this.style.display='none'" />`
+      : coverPlaceholder(item._type === 'track' ? 'song' : 'album', 60, '0px');
+  }
+  if (item._type === 'artist') {
+    return _artistThumbHtml({ name: item.name, image_key: item.image_key, artwork_key: item.artwork_key }, 140);
+  }
+  // playlist
+  if (item.has_artwork) {
+    return `<img src="/api/playlists/${esc(item.id)}/artwork?t=${Date.now()}" style="width:100%;height:100%;object-fit:cover" loading="lazy" />`;
+  }
+  const keys = item.artwork_keys || [];
+  if (!keys.length) return coverPlaceholder('playlist', 60, '0px', true);
+  if (keys.length === 1) return `<img src="/api/artwork/${esc(keys[0])}" style="width:100%;height:100%;object-fit:cover" loading="lazy" />`;
+  return `<div class="pl-mosaic">${keys.slice(0, 4).map(k => `<img src="/api/artwork/${esc(k)}" loading="lazy" />`).join('')}</div>`;
+}
+
+function _renderSearchTopGrid(items) {
+  const grid = document.getElementById('search-top-grid');
+  if (!grid) return;
+  grid.innerHTML = items.map(item => {
+    let title, subtitle, onclick, onplay;
+    const isArtist = item._type === 'artist';
+
+    if (item._type === 'track') {
+      title = item.title || 'Unknown';
+      subtitle = `Song · ${esc(item.artist || '')}`;
+      onclick = `App.showAlbum('${esc(item.album_artist || item.artist || '')}','${esc(item.album || '')}')`;
+      onplay = `event.stopPropagation();Player.playTrackById('${esc(item.id)}')`;
+    } else if (item._type === 'album') {
+      title = item.name;
+      subtitle = `Album · ${esc(item.artist || '')}`;
+      onclick = `App.showAlbum('${esc(item.artist)}','${esc(item.name)}')`;
+      onplay = `event.stopPropagation();App.homePlayItem(event,'album','','${esc(item.artist)}','${esc(item.name)}','')`;
+    } else if (item._type === 'artist') {
+      title = item.name;
+      subtitle = 'Artist';
+      onclick = `App.showArtist('${esc(item.name)}')`;
+      onplay = `event.stopPropagation();App.homePlayItem(event,'artist','','${esc(item.name)}','','')`;
+    } else {
+      title = item.name;
+      subtitle = `Playlist · ${item.track_count} track${item.track_count !== 1 ? 's' : ''}`;
+      onclick = `App.openPlaylist('${esc(item.id)}')`;
+      onplay = `event.stopPropagation();App.homePlayItem(event,'playlist','','','','${esc(item.id)}')`;
+    }
+
+    return `
+      <div class="search-top-card" onclick="${onclick}" role="button" tabindex="0">
+        <div class="search-top-card-art${isArtist ? ' search-top-card-art--artist' : ''}">
+          ${_searchTopArtHtml(item)}
+          <div class="search-top-card-play" onclick="${onplay}" title="Play">${playSvg(16)}</div>
+        </div>
+        <div class="search-top-card-title" title="${esc(title)}">${esc(title)}</div>
+        <div class="search-top-card-sub">${subtitle}</div>
+      </div>`;
+  }).join('');
+}
+
+function _renderSearchSongs(tracks) {
+  const list = document.getElementById('search-songs-list');
+  if (!list) return;
+  list.insertAdjacentHTML('beforeend', tracks.map(t => `
+    <div class="search-song-row" ondblclick="Player.playTrackById('${esc(t.id)}')"
+         oncontextmenu="App.showTrackCtxMenu(event,'${esc(t.id)}')">
+      <div class="search-song-art">${thumbImg(t.artwork_key, 38, '4px')}</div>
+      <div class="search-song-title">${esc(t.title || 'Unknown')}</div>
+      <div class="search-song-artist">${esc(t.artist || '')}</div>
+      <div class="search-song-album">${esc(t.album || '')}</div>
+      <div class="search-song-actions">
+        <button class="add-btn" onclick="event.stopPropagation();App.showAddDropdown(event,'${esc(t.id)}')" title="Add to playlist">+</button>
+      </div>
+    </div>`).join(''));
 }
 
 function _renderSearchArtists(artists) {
@@ -6237,71 +6379,17 @@ function _renderSearchArtists(artists) {
   `).join('');
 }
 
-function _renderSearchTracks(tracks) {
-  const list = document.getElementById('search-tracks-list');
-  if (!list) return;
-  list.innerHTML = tracks.map(t => {
-    const dur = t.duration ? _fmtDuration(t.duration) : '—';
-    return `
-      <div class="search-track-row" ondblclick="Player.playTrackById('${t.id}')"
-           oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
-        <div class="thumb">${thumbImg(t.artwork_key, 38, '4px')}</div>
-        <div class="search-track-info">
-          <div class="search-track-title">${esc(t.title || 'Unknown')}</div>
-          <div class="search-track-meta">${esc(t.artist || '')}${t.album ? ' · ' + esc(t.album) : ''}</div>
-        </div>
-        <div class="search-track-dur">${dur}</div>
-        <div class="search-track-actions">
-          <button class="add-btn" onclick="event.stopPropagation();App.showAddDropdown(event,'${t.id}')" title="Add to playlist">+</button>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-function _renderSearchPlaylists(playlists) {
-  const grid = document.getElementById('search-playlists-grid');
-  if (!grid) return;
-  grid.innerHTML = playlists.map(pl => {
-    let coverHtml;
-    if (pl.has_artwork) {
-      coverHtml = `<img src="/api/playlists/${pl.id}/artwork?t=${Date.now()}" style="width:100%;height:100%;object-fit:cover" loading="lazy" />`;
-    } else {
-      const keys = (pl.artwork_keys || []).slice(0, 4);
-      coverHtml = !keys.length
-        ? coverPlaceholder('playlist', 40, '8px', true)
-        : keys.length === 1
-          ? `<img src="/api/artwork/${keys[0]}" style="width:100%;height:100%;object-fit:cover" loading="lazy" />`
-          : keys.map(k => `<img src="/api/artwork/${k}" loading="lazy" />`).join('');
-    }
-    const count = pl.track_count ?? 0;
-    const isSingle = pl.has_artwork || (pl.artwork_keys && pl.artwork_keys.length === 1);
-    return `
-      <div class="pl-view-card" onclick="App.openPlaylist('${pl.id}')">
-        <div class="pl-view-cover${isSingle ? ' playlist-cover-single' : ''}">${coverHtml}</div>
-        <div class="pl-view-info">
-          <div class="pl-view-info-text">
-            <div class="pl-view-name" title="${esc(pl.name)}">${esc(pl.name)}</div>
-            <div class="pl-view-meta">${count} track${count !== 1 ? 's' : ''}</div>
-          </div>
-        </div>
-      </div>`;
-  }).join('');
-}
-
 function searchSeeAll(category) {
   const q = state.searchQuery;
   if (category === 'artists') {
     showView('artists');
-    setTimeout(() => {
-      const inp = document.getElementById('artists-filter-input');
-      if (inp) { inp.value = q; setArtistSearch(q); }
-    }, 100);
+    setTimeout(() => { const inp = document.getElementById('artists-filter-input'); if (inp) { inp.value = q; setArtistSearch(q); } }, 100);
   } else if (category === 'tracks') {
     showView('songs');
-    setTimeout(() => {
-      const inp = document.getElementById('songs-filter-input');
-      if (inp) { inp.value = q; filterSongs(q); }
-    }, 100);
+    setTimeout(() => { const inp = document.getElementById('songs-filter-input'); if (inp) { inp.value = q; filterSongs(q); } }, 100);
+  } else if (category === 'albums') {
+    showView('albums');
+    setTimeout(() => { const inp = document.getElementById('albums-filter-input'); if (inp) { inp.value = q; setAlbumSearch(q); } }, 100);
   } else if (category === 'playlists') {
     showView('playlists');
   }
