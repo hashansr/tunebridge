@@ -6754,16 +6754,19 @@ nav {
   margin-bottom: calc(-1 * (var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 42px));
   min-height: 42px;
   position: relative;
-  z-index: 3;
+  z-index: 30;
 }
 
 #view-albums .view-header.artist-detail-mode .library-toolbar {
   margin-top: 0;
+  position: relative;
+  z-index: 31;
 }
 
 #view-albums .view-header.artist-detail-mode + #albums-alpha-bar + #artist-hero.artist-detail-hero {
   margin-top: calc(-1 * (var(--main-nav-top-inset) + var(--main-nav-overlay-clearance)));
   padding-top: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 34px);
+  z-index: 0;
 }
 
 /* Tracks/playlist tables */
