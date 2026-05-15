@@ -13747,7 +13747,11 @@ body.is-col-resizing {
   scrollbar-width: none;
   scroll-snap-type: x proximity;
   -webkit-overflow-scrolling: touch;
-  /* Mask the right edge so cards fade to transparent, blending with any bg */
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.home-rail-shell.can-scroll-right .home-rail {
+  /* Fade only when more cards exist off the right edge. */
   -webkit-mask-image: linear-gradient(to right, black 0%, black calc(100% - 160px), transparent 100%);
   mask-image: linear-gradient(to right, black 0%, black calc(100% - 160px), transparent 100%);
 }
