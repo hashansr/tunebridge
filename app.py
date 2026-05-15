@@ -1603,6 +1603,64 @@ def library_songs():
     return jsonify(tracks)
 
 
+# ── Search ranking helpers ───────────────────────────────────────────────────
+
+_COVER_PATTERN = re.compile(
+    r'\btribute\b|\bkaraoke\b|\bhomage\b|\bsalute\b'
+    r'|\bas made famous\b|\boriginally performed\b'
+    r'|\(cover\)|\(covers\)',
+    re.IGNORECASE
+)
+_LIVE_PATTERN = re.compile(r'\blive\b|\(live\)', re.IGNORECASE)
+
+
+def _title_match_score(title: str, query: str) -> int:
+    """Fine-grained title match quality. Lower = better match."""
+    t = (title or '').strip().lower()
+    if not t:
+        return 99
+    if t == query:
+        return 0
+    if re.search(r'\b' + re.escape(query) + r'\b', t):
+        return 10
+    if t.startswith(query):
+        return 15
+    if query in t:
+        return 20
+    return 99
+
+
+def _track_relevance_score(track: dict, query: str, play_stats: dict) -> float:
+    """
+    Composite relevance score for sorting search results. Lower = better.
+    Signals: title match quality, cover/tribute penalty, play count boost,
+    metadata completeness boost, title length tiebreak.
+    """
+    title = (track.get('title') or '').strip()
+    album = (track.get('album') or '').strip()
+
+    ts = _title_match_score(title, query)
+    if ts == 99:
+        return 999.0
+
+    searchable = f"{title} {album}".lower()
+    cover_penalty = 50 if _COVER_PATTERN.search(searchable) else 0
+    live_penalty = 8 if _LIVE_PATTERN.search(searchable) else 0
+    title_length_tb = max(0.0, (len(title) - len(query)) / 100.0)
+
+    tid = track.get('id')
+    play_count = (play_stats.get(tid) or {}).get('count', 0)
+    play_boost = min(play_count, 500) / 500.0 * 20.0
+
+    metadata_boost = 0.0
+    if track.get('year'):    metadata_boost += 1.0
+    if track.get('genre'):   metadata_boost += 1.0
+    if track.get('bitrate'): metadata_boost += 1.0
+
+    return (ts + cover_penalty + live_penalty + title_length_tb
+            - play_boost - metadata_boost)
+
+
 @app.route('/api/search')
 def global_search():
     q = request.args.get('q', '').strip().lower()
@@ -1614,6 +1672,8 @@ def global_search():
 
     with library_lock:
         tracks = library[:]
+
+    _play_stats = _db.db_load_play_stats()
 
     def match_rank(value):
         s = (value or '').strip().lower()
@@ -1663,7 +1723,7 @@ def global_search():
         or q in (t.get('artist') or '').lower()
         or q in (t.get('album') or '').lower()
     ]
-    matched_tracks.sort(key=lambda t: (t.get('title') or '').lower())
+    matched_tracks.sort(key=lambda t: _track_relevance_score(t, q, _play_stats))
     total_tracks = len(matched_tracks)
     matched_tracks = matched_tracks[:10]
 
@@ -1772,17 +1832,17 @@ def global_search():
         top_seen.add(key)
         top_buckets[kind].append((score, out))
 
-    title_matches = [t for t in tracks if match_rank(t.get('title')) < 99]
-    title_matches.sort(key=lambda t: (match_rank(t.get('title')), (t.get('title') or '').lower(), (t.get('artist') or '').lower()))
+    title_matches = [t for t in tracks if _title_match_score((t.get('title') or ''), q) < 99]
+    title_matches.sort(key=lambda t: _track_relevance_score(t, q, _play_stats))
     for idx, t in enumerate(title_matches[:8]):
-        score = (match_rank(t.get('title')), idx)
-        add_top('track', t, score)
+        rel = _track_relevance_score(t, q, _play_stats)
+        add_top('track', t, (rel, idx))
         artist_key = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').lower()
         if artist_key in artists_map:
-            add_top('artist', artists_map[artist_key], (score[0], idx + 20))
+            add_top('artist', artists_map[artist_key], (rel, idx + 20))
         album_key = artist_key + '|' + (t.get('album') or 'Unknown Album').lower()
         if album_key in albums_map:
-            add_top('album', albums_map[album_key], (score[0], idx + 10))
+            add_top('album', albums_map[album_key], (rel, idx + 10))
 
     for idx, artist in enumerate([a for a in artists_map.values() if match_rank(a.get('name')) < 99]):
         artist_rank = match_rank(artist.get('name'))
@@ -1797,7 +1857,7 @@ def global_search():
                 artist_albums[key] = albums_map[key]
         for album in sorted(artist_albums.values(), key=lambda a: (-(a.get('track_count') or 0), (a.get('name') or '').lower()))[:3]:
             add_top('album', album, (artist_rank + 1, idx))
-        for t in sorted(artist_tracks, key=lambda t: (match_rank(t.get('title')), (t.get('title') or '').lower()))[:3]:
+        for t in sorted(artist_tracks, key=lambda t: _track_relevance_score(t, q, _play_stats))[:3]:
             add_top('track', t, (artist_rank + 1, idx))
 
     for idx, playlist in enumerate(matched_playlists):
