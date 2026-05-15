@@ -12720,6 +12720,10 @@ tr.player-active .track-title { color: var(--accent); }
   box-shadow: none;
 }
 
+#view-albums #artist-hero.artist-detail-hero {
+  margin-bottom: var(--tb-space-8);
+}
+
 #view-albums #artist-hero.artist-detail-hero::before,
 #view-playlist #playlist-hero.playlist-detail-hero::before {
   content: "";
