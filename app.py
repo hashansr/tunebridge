@@ -1558,7 +1558,13 @@ def get_albums():
                 'year': t.get('year'), 'genre': t.get('genre'),
                 'track_count': 0, 'artwork_key': t.get('artwork_key'),
             }
+            if artist_filter:
+                albums[key]['track_titles'] = []
         albums[key]['track_count'] += 1
+        if artist_filter:
+            title = (t.get('title') or '').strip()
+            if title:
+                albums[key]['track_titles'].append(title)
         if not albums[key]['artwork_key'] and t.get('artwork_key'):
             albums[key]['artwork_key'] = t['artwork_key']
 

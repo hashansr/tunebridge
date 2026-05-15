@@ -1983,7 +1983,10 @@ function _filteredAlbumsData() {
   const q = state.albumSearch.trim().toLowerCase();
   const base = Array.isArray(state.albums) ? state.albums : [];
   const searched = q
-    ? base.filter(al => _librarySearchMatch(`${al.name} ${artistFilter ? '' : al.artist || ''}`, q))
+    ? base.filter(al => {
+        const trackTitles = artistFilter && Array.isArray(al.track_titles) ? al.track_titles.join(' ') : '';
+        return _librarySearchMatch(`${al.name} ${artistFilter ? trackTitles : al.artist || ''}`, q);
+      })
     : base;
   const presentLetters = new Set(searched.map(al => _libraryLetter(al.name)));
   if (artistFilter) state.albumAlpha = '';
@@ -2248,7 +2251,10 @@ async function loadAlbums(artistFilter = null) {
   }
 
   const albumFilterInput = document.getElementById('albums-filter-input');
-  if (albumFilterInput) albumFilterInput.value = state.albumSearch || '';
+  if (albumFilterInput) {
+    albumFilterInput.value = state.albumSearch || '';
+    albumFilterInput.placeholder = artistFilter ? 'Search albums or songs...' : 'Search albums...';
+  }
   const albumClearBtn = document.getElementById('albums-filter-clear');
   if (albumClearBtn) albumClearBtn.style.display = state.albumSearch ? 'block' : 'none';
 
