@@ -399,14 +399,25 @@ let _albumHeroColorToken = 0;
 
 function _setAlbumHeroColors(hero, colors = _ALBUM_HERO_FALLBACK_COLORS) {
   if (!hero) return;
-  hero.style.setProperty('--album-hero-primary', colors.primary || _ALBUM_HERO_FALLBACK_COLORS.primary);
-  hero.style.setProperty('--album-hero-secondary', colors.secondary || _ALBUM_HERO_FALLBACK_COLORS.secondary);
-  hero.style.setProperty('--album-hero-accent', colors.accent || _ALBUM_HERO_FALLBACK_COLORS.accent);
+  const primary = colors.primary || _ALBUM_HERO_FALLBACK_COLORS.primary;
+  const secondary = colors.secondary || _ALBUM_HERO_FALLBACK_COLORS.secondary;
+  const accent = colors.accent || _ALBUM_HERO_FALLBACK_COLORS.accent;
+  [hero, hero.closest('.view')].filter(Boolean).forEach(el => {
+    el.style.setProperty('--album-hero-primary', primary);
+    el.style.setProperty('--album-hero-secondary', secondary);
+    el.style.setProperty('--album-hero-accent', accent);
+  });
 }
 
 function _clearAlbumHeroAtmosphere(hero) {
   if (!hero) return;
   hero.style.removeProperty('--album-hero-art-url');
+  const view = hero.closest('.view');
+  if (view) {
+    view.style.removeProperty('--album-hero-primary');
+    view.style.removeProperty('--album-hero-secondary');
+    view.style.removeProperty('--album-hero-accent');
+  }
   _setAlbumHeroColors(hero);
 }
 
@@ -499,6 +510,13 @@ function _applyAlbumHeroAtmosphere(hero, artKey) {
   if (!artKey) return;
 
   const artUrl = artworkUrl(artKey);
+  _applyDetailHeroAtmosphere(hero, artUrl, token);
+}
+
+function _applyDetailHeroAtmosphere(hero, artUrl, token = ++_albumHeroColorToken) {
+  if (!hero) return;
+  _clearAlbumHeroAtmosphere(hero);
+  if (!artUrl) return;
   hero.style.setProperty('--album-hero-art-url', `url("${artUrl}")`);
 
   const img = new Image();
@@ -532,6 +550,26 @@ function _applyAlbumHeroAtmosphere(hero, artKey) {
     if (token === _albumHeroColorToken) _clearAlbumHeroAtmosphere(hero);
   };
   img.src = artUrl;
+}
+
+function _artistHeroPortraitHtml(name, artistData = {}, fallbackArtworkKey = '') {
+  const artistName = String(name || '').trim();
+  const src = _artistImageSrc({
+    name: artistName,
+    image_key: artistData?.image_key || '',
+    artwork_key: artistData?.artwork_key || fallbackArtworkKey || '',
+  });
+  if (src) {
+    return `<img src="${src}" alt="${esc(artistName)}" loading="eager" decoding="async" onerror="this.style.display='none'" />`;
+  }
+  return coverPlaceholder('artist', 120, '50%', true);
+}
+
+function _playlistHeroArtUrl(pl = state.playlist, tracks = []) {
+  if (pl?.is_favourites) return _FAV_PLAYLIST_COVER;
+  if (pl?.has_artwork && pl?.id) return `/api/playlists/${pl.id}/artwork?t=${Date.now()}`;
+  const firstKey = (tracks || []).map(t => t?.artwork_key).find(Boolean);
+  return firstKey ? artworkUrl(firstKey) : '';
 }
 
 function _artistImageSrc(a) {
@@ -2140,13 +2178,15 @@ async function loadAlbums(artistFilter = null) {
     const artistData = state.artists?.find(a => a.name === artistFilter);
     const heroArt = document.getElementById('artist-hero-art');
     if (heroArt) {
-      heroArt.className = 'hero-art-sq artist-detail-art-card';
-      heroArt.style.setProperty('--artist-card-accent', _artistCardAccent(artistFilter));
-      heroArt.innerHTML = _artistThumbHtml({
+      const fallbackArtworkKey = albums[0]?.artwork_key || artistData?.artwork_key || '';
+      const portraitUrl = _artistImageSrc({
         name: artistFilter,
         image_key: artistData?.image_key || '',
-        artwork_key: albums[0]?.artwork_key || artistData?.artwork_key || '',
-      }, 200);
+        artwork_key: artistData?.artwork_key || fallbackArtworkKey,
+      });
+      heroArt.className = 'hero-art-sq artist-detail-portrait';
+      heroArt.innerHTML = _artistHeroPortraitHtml(artistFilter, artistData, fallbackArtworkKey);
+      _applyDetailHeroAtmosphere(hero, portraitUrl || artworkUrl(fallbackArtworkKey));
     }
     document.getElementById('artist-hero-name').textContent = artistFilter;
     const totalSongs = albums.reduce((s, al) => s + (al.track_count || 0), 0);
@@ -2203,6 +2243,7 @@ async function loadAlbums(artistFilter = null) {
     if (albumsViewTitle) albumsViewTitle.style.display = '';
     if (albumsViewCount) albumsViewCount.style.display = '';
     hero.oncontextmenu = null;
+    _clearAlbumHeroAtmosphere(hero);
     hero.style.display = 'none';
   }
 
@@ -2776,6 +2817,7 @@ async function openPlaylist(pid) {
 
   renderPlaylistTracks(pl.tracks);
   updatePlaylistCover(pl.tracks);
+  _applyDetailHeroAtmosphere(document.getElementById('playlist-hero'), _playlistHeroArtUrl(pl, pl.tracks));
   updatePlaylistStats(pl.tracks);
   renderDapExportPills(pid);
   _resetPlaylistDetailScroll();
@@ -2849,6 +2891,7 @@ async function openFavouriteSongsPlaylist() {
     cover.className = 'playlist-cover playlist-cover-single';
     cover.innerHTML = `<img src="${_FAV_PLAYLIST_COVER}" style="width:100%;height:100%;object-fit:cover;border-radius:8px" />`;
   }
+  _applyDetailHeroAtmosphere(document.getElementById('playlist-hero'), _FAV_PLAYLIST_COVER);
   updatePlaylistStats(pl.tracks);
   renderDapExportPills(pl.id);
   _resetPlaylistDetailScroll();
@@ -3263,12 +3306,14 @@ async function removeSelectedFromPlaylist() {
 function updatePlaylistCover(tracks) {
   const cover = document.getElementById('pl-cover');
   const removeBtn = document.getElementById('pl-cover-remove');
+  const playlistHero = document.getElementById('playlist-hero');
 
   // Custom artwork takes priority
   if (state.playlist && state.playlist.has_artwork) {
     cover.className = 'playlist-cover playlist-cover-single';
     cover.innerHTML = `<img src="/api/playlists/${state.playlist.id}/artwork?t=${Date.now()}" style="width:100%;height:100%;object-fit:cover;border-radius:8px" />`;
     if (removeBtn) removeBtn.style.display = 'flex';
+    _applyDetailHeroAtmosphere(playlistHero, _playlistHeroArtUrl(state.playlist, tracks));
     return;
   }
 
@@ -3279,6 +3324,7 @@ function updatePlaylistCover(tracks) {
   if (!keys.length) {
     cover.className = 'playlist-cover';
     cover.innerHTML = coverPlaceholder('playlist', 56, '8px', true);
+    _clearAlbumHeroAtmosphere(playlistHero);
     return;
   }
 
@@ -3289,6 +3335,7 @@ function updatePlaylistCover(tracks) {
     cover.className = 'playlist-cover';
     cover.innerHTML = keys.map(k => `<img src="${artworkUrl(k)}" />`).join('');
   }
+  _applyDetailHeroAtmosphere(playlistHero, artworkUrl(keys[0]));
 }
 
 /* ── Playlist artwork upload ─────────────────────────────────────────── */
