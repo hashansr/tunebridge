@@ -2625,48 +2625,227 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
     } for s in picks]
 
 
-def _home_listen_next_artists(events, artists_map, limit=10):
+def _home_listen_next(events, artists_map, albums, limit=10):
     """
-    Recency-weighted artist ranking from valid listening events.
-    Returns artist cards for the Home "Listen Next" rail.
+    Discovery-oriented "Listen to Next" rail.
+
+    Four buckets mixed together:
+      B1 – Unplayed albums from artists you love (album cards)
+      B2 – Dormant favourites: high historical score, nothing played in 75 days (artist/album cards)
+      B3 – Genre gap: genres with lots of library albums but low play coverage (album cards)
+      B4 – Cold library artists: artists you own but have never played (artist cards)
     """
+    import datetime as _dt
     now = int(time.time())
-    scores = {}
+
+    # --- pre-compute per-event signals ---
+    artist_score = {}       # recency-weighted (recent taste signal)
+    artist_total = {}       # lifetime score without decay (dormant detection)
+    artist_last = {}        # most recent played_at per artist
+    album_played_keys = set()
+    album_last = {}
+    album_plays = {}
+    genre_play_secs = {}    # total play seconds per normalised genre
+
     for e in events:
         if not int(e.get('valid_listen') or 0):
             continue
         name = (e.get('artist') or '').strip()
-        if not name:
-            continue
+        album_name = (e.get('album') or '').strip()
         played_at = int(e.get('played_at') or 0)
-        if played_at <= 0:
+        play_secs = max(1.0, float(e.get('play_seconds') or 0.0))
+        if not name or played_at <= 0:
             continue
+
+        dur_w = min(play_secs / 240.0, 1.5)
         days_since = max(0.0, (now - played_at) / 86400.0)
-        # 30-day decay keeps recent taste strong while still considering older habits.
-        recency_weight = math.exp(-days_since / 30.0)
-        play_seconds = max(1.0, float(e.get('play_seconds') or 0.0))
-        # Damp very long tracks; avoid one track dominating artist rank.
-        duration_weight = min(play_seconds / 240.0, 1.5)
-        key = name.lower()
-        scores[key] = scores.get(key, 0.0) + recency_weight * duration_weight
+        rec_w = math.exp(-days_since / 30.0)
+        ak = name.lower()
 
-    if not scores:
-        return []
+        artist_score[ak] = artist_score.get(ak, 0.0) + rec_w * dur_w
+        artist_total[ak] = artist_total.get(ak, 0.0) + dur_w
+        if played_at > artist_last.get(ak, 0):
+            artist_last[ak] = played_at
 
-    ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[: max(1, int(limit))]
-    out = []
-    for artist_key, _score in ranked:
-        info = artists_map.get(artist_key) or {}
-        artist_name = info.get('artist') or artist_key
-        out.append({
-            'kind': 'artist',
+        if album_name:
+            albk = f"{ak}||{album_name.lower()}"
+            album_played_keys.add(albk)
+            if played_at > album_last.get(albk, 0):
+                album_last[albk] = played_at
+            album_plays[albk] = album_plays.get(albk, 0) + 1
+
+            # Accumulate play seconds per genre using library album metadata
+            lib_albk = f"{ak}||{album_name.lower()}"
+            alb_info = albums.get(lib_albk) or {}
+            raw_genre = alb_info.get('genre') or ''
+            genre = _norm_genre_text(raw_genre)
+            if genre:
+                genre_play_secs[genre] = genre_play_secs.get(genre, 0.0) + play_secs
+
+    # --- Bucket 1: unplayed albums from artists you love ---
+    b1 = []
+    top_artists = sorted(artist_score.items(), key=lambda kv: kv[1], reverse=True)[:8]
+    for ak, _sc in top_artists:
+        artist_info = artists_map.get(ak) or {}
+        artist_name = artist_info.get('artist') or ak
+        # Find all library albums for this artist, prefer newest unplayed
+        candidate_albums = [
+            (albk, info) for albk, info in albums.items()
+            if albk.startswith(ak + '||') and albk not in album_played_keys
+        ]
+        if not candidate_albums:
+            continue
+        # Pick newest by date_added
+        candidate_albums.sort(key=lambda x: int(x[1].get('date_added') or 0), reverse=True)
+        _, alb = candidate_albums[0]
+        b1.append({
+            'kind': 'album',
             'artist': artist_name,
-            'title': artist_name,
-            'subtitle': 'Artist',
+            'album': alb.get('album') or alb.get('name') or '',
+            'title': alb.get('album') or alb.get('name') or '',
+            'subtitle': artist_name,
+            'artwork_key': alb.get('artwork_key'),
+        })
+        if len(b1) >= 5:
+            break
+
+    # --- Bucket 2: dormant favourites ---
+    DORMANT_DAYS = 75
+    dormant_cutoff = now - DORMANT_DAYS * 86400
+
+    def _time_delta_label(ts):
+        days = max(1, int((now - ts) / 86400))
+        if days < 14:
+            return f"Last heard {days} days ago"
+        if days < 60:
+            return f"Last heard {days // 7} weeks ago"
+        months = round(days / 30.4)
+        return f"Last heard {months} month{'s' if months != 1 else ''} ago"
+
+    dormant = []
+    for ak, total_sc in artist_total.items():
+        if total_sc > 1.5 and artist_last.get(ak, now) < dormant_cutoff:
+            info = artists_map.get(ak) or {}
+            name = info.get('artist') or ak
+            dormant.append({
+                'kind': 'artist',
+                'artist': name,
+                'title': name,
+                'subtitle': _time_delta_label(artist_last[ak]),
+                'image_key': info.get('image_key'),
+                'artwork_key': info.get('artwork_key'),
+                '_sort': total_sc,
+            })
+    for albk, plays in album_plays.items():
+        if plays >= 3 and album_last.get(albk, now) < dormant_cutoff:
+            alb_info = albums.get(albk) or {}
+            if not alb_info:
+                continue
+            artist_name = alb_info.get('artist') or ''
+            dormant.append({
+                'kind': 'album',
+                'artist': artist_name,
+                'album': alb_info.get('album') or '',
+                'title': alb_info.get('album') or '',
+                'subtitle': _time_delta_label(album_last[albk]),
+                'artwork_key': alb_info.get('artwork_key'),
+                '_sort': float(plays),
+            })
+    dormant.sort(key=lambda x: x['_sort'], reverse=True)
+    b2 = [{k: v for k, v in d.items() if k != '_sort'} for d in dormant[:3]]
+
+    # --- Bucket 3: genre gap ---
+    genre_lib_count = {}
+    genre_lib_albums = {}  # genre -> list of (albk, alb_info)
+    for albk, alb_info in albums.items():
+        genre = _norm_genre_text(alb_info.get('genre') or '')
+        if not genre:
+            continue
+        genre_lib_count[genre] = genre_lib_count.get(genre, 0) + 1
+        genre_lib_albums.setdefault(genre, []).append((albk, alb_info))
+
+    genre_coverage = {
+        g: genre_play_secs.get(g, 0.0) / cnt
+        for g, cnt in genre_lib_count.items()
+        if cnt >= 3
+    }
+    # Sort by coverage ascending = most under-explored first
+    under_explored = sorted(genre_coverage.items(), key=lambda kv: kv[1])
+
+    b3 = []
+    seen_genres = set()
+    for genre, _cov in under_explored:
+        if genre in seen_genres:
+            continue
+        # Pick one unplayed album from this genre
+        candidates = [
+            (albk, info) for albk, info in genre_lib_albums.get(genre, [])
+            if albk not in album_played_keys
+        ]
+        if not candidates:
+            continue
+        # Prefer recently added
+        candidates.sort(key=lambda x: int(x[1].get('date_added') or 0), reverse=True)
+        albk, alb_info = candidates[0]
+        label = _genre_display_label(genre)
+        artist_name = alb_info.get('artist') or ''
+        b3.append({
+            'kind': 'album',
+            'artist': artist_name,
+            'album': alb_info.get('album') or '',
+            'title': alb_info.get('album') or '',
+            'subtitle': f"Explore {label}",
+            'artwork_key': alb_info.get('artwork_key'),
+        })
+        seen_genres.add(genre)
+        if len(b3) >= 3:
+            break
+
+    # --- Bucket 4: cold library artists (never played) ---
+    never_played = [
+        (ak, info) for ak, info in artists_map.items()
+        if ak not in artist_score
+    ]
+    # Weight by track_count so artists with more music float up; use stable-random rotation
+    never_played.sort(key=lambda x: int((x[1].get('track_count') or 0)), reverse=True)
+    seed = _dt.date.today().toordinal() // 3
+    rng = _random.Random(seed)
+    pool = never_played[:max(30, len(never_played))]
+    rng.shuffle(pool)
+    pool.sort(key=lambda x: int((x[1].get('track_count') or 0)), reverse=True)
+    b4 = []
+    for ak, info in pool:
+        name = info.get('artist') or ak
+        b4.append({
+            'kind': 'artist',
+            'artist': name,
+            'title': name,
+            'subtitle': 'In your library',
             'image_key': info.get('image_key'),
             'artwork_key': info.get('artwork_key'),
         })
-    return out
+        if len(b4) >= 3:
+            break
+
+    # --- Interleave and deduplicate ---
+    seen_keys = set()
+    result = []
+    buckets = [b1, b2, b3, b4]
+    max_len = max((len(b) for b in buckets), default=0)
+    for i in range(max_len):
+        for b in buckets:
+            if i >= len(b):
+                continue
+            item = b[i]
+            dedup_key = f"{(item.get('artist') or '').lower()}||{(item.get('album') or '').lower()}"
+            if dedup_key in seen_keys:
+                continue
+            seen_keys.add(dedup_key)
+            result.append(item)
+            if len(result) >= limit:
+                return result
+
+    return result
 
 
 def _home_stats_aggregate(events, albums):
@@ -2753,7 +2932,7 @@ def home():
                     f"{(item.get('artist') or '').lower()}||{(item.get('album') or '').lower()}")
 
         top_picks = _home_top_picks(events, albums, track_by_id, continue_keys=continue_keys, limit=10)
-        listen_next_artists = _home_listen_next_artists(events, artists_map, limit=10)
+        listen_next_artists = _home_listen_next(events, artists_map, albums, limit=10)
         because_you_listened = top_picks[:10]
         recently_added = _recently_added_items(tracks, albums, playlists, limit=10)
 
