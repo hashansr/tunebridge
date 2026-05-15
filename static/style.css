@@ -17292,6 +17292,15 @@ thead th:hover .table-col-resizer::after {
   position: relative;
 }
 
+#view-artists .artist-thumb.artist-thumb--placeholder,
+#view-favourites .artist-thumb.artist-thumb--placeholder,
+#view-fav-artists .artist-thumb.artist-thumb--placeholder {
+  --artist-card-accent: rgb(45, 54, 54);
+  background:
+    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.055) 0, rgba(255, 255, 255, 0) 28%),
+    linear-gradient(180deg, #303838 0%, #222829 100%);
+}
+
 #view-artists .artist-card--palette-ready .artist-thumb,
 #view-favourites .artist-card--palette-ready .artist-thumb,
 #view-fav-artists .artist-card--palette-ready .artist-thumb,
@@ -17355,6 +17364,16 @@ thead th:hover .table-col-resizer::after {
 .history-artist-art-card .cover-placeholder {
   background: color-mix(in srgb, var(--artist-card-accent) 36%, rgba(255, 255, 255, 0.08));
   color: rgba(255, 255, 255, 0.62);
+}
+
+#view-artists .artist-portrait .cover-placeholder-artist img,
+#view-favourites .artist-portrait .cover-placeholder-artist img,
+#view-fav-artists .artist-portrait .cover-placeholder-artist img,
+.artist-detail-art-card .cover-placeholder-artist img,
+.home-artist-art-card .cover-placeholder-artist img,
+.history-artist-art-card .cover-placeholder-artist img {
+  height: 68%;
+  width: 68%;
 }
 
 #view-artists .artist-card:hover .artist-thumb,
