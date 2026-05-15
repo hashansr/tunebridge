@@ -393,9 +393,9 @@ function thumbImg(key, size = 38, rounded = '4px') {
 }
 
 const _ALBUM_HERO_FALLBACK_COLORS = {
-  primary: '45, 67, 111',
-  secondary: '24, 102, 118',
-  accent: '173, 198, 255',
+  primary: '19, 28, 50',
+  secondary: '9, 44, 52',
+  accent: '95, 128, 188',
 };
 let _albumHeroColorToken = 0;
 
@@ -493,10 +493,10 @@ function _premiumAlbumHeroPalette(samples) {
 
   const base = sum.map(v => v / total);
   const [h, s] = _rgbToHsl(base[0], base[1], base[2]);
-  const primary = _hslToRgb(h, Math.min(0.62, Math.max(0.3, s * 0.9)), 0.28);
-  const secondary = _hslToRgb((h + 0.08) % 1, Math.min(0.58, Math.max(0.26, s * 0.8)), 0.22);
+  const primary = _hslToRgb(h, Math.min(0.62, Math.max(0.3, s * 0.9)), 0.15);
+  const secondary = _hslToRgb((h + 0.08) % 1, Math.min(0.58, Math.max(0.26, s * 0.8)), 0.11);
   const [ah, as] = _rgbToHsl(accent[0], accent[1], accent[2]);
-  const accentRgb = _hslToRgb(ah, Math.min(0.7, Math.max(0.38, as)), 0.64);
+  const accentRgb = _hslToRgb(ah, Math.min(0.7, Math.max(0.38, as)), 0.50);
 
   return {
     primary: _rgbToCss(primary),
@@ -584,7 +584,7 @@ function _artistCardAccent(name = '') {
   let hash = 0;
   for (let i = 0; i < name.length; i += 1) hash = ((hash << 5) - hash) + name.charCodeAt(i);
   const hue = Math.abs(hash) % 360;
-  return `hsl(${hue} 34% 38%)`;
+  return `hsl(${hue} 24% 17%)`;
 }
 
 function _artistCardStyle(a) {

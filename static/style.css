@@ -12552,9 +12552,9 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 #view-tracks #album-hero.album-detail-hero.is-album-context {
-  --album-hero-primary: 45, 67, 111;
-  --album-hero-secondary: 24, 102, 118;
-  --album-hero-accent: 173, 198, 255;
+  --album-hero-primary: 19, 28, 50;
+  --album-hero-secondary: 9, 44, 52;
+  --album-hero-accent: 95, 128, 188;
   position: relative;
   align-items: center;
   min-height: 312px;
@@ -12578,8 +12578,8 @@ tr.player-active .track-title { color: var(--accent); }
   background-image: var(--album-hero-art-url);
   background-size: cover;
   background-position: center;
-  filter: blur(54px) saturate(1.25);
-  opacity: 0.20;
+  filter: blur(54px) saturate(0.9);
+  opacity: 0.10;
   transform: scale(1.08);
 }
 
@@ -12715,9 +12715,9 @@ tr.player-active .track-title { color: var(--accent); }
 
 #view-albums #artist-hero.artist-detail-hero,
 #view-playlist #playlist-hero.playlist-detail-hero {
-  --album-hero-primary: 45, 67, 111;
-  --album-hero-secondary: 24, 102, 118;
-  --album-hero-accent: 173, 198, 255;
+  --album-hero-primary: 19, 28, 50;
+  --album-hero-secondary: 9, 44, 52;
+  --album-hero-accent: 95, 128, 188;
   position: relative;
   align-items: center;
   min-height: 312px;
@@ -12752,8 +12752,8 @@ tr.player-active .track-title { color: var(--accent); }
   background-image: var(--album-hero-art-url);
   background-size: cover;
   background-position: center;
-  filter: blur(54px) saturate(1.25);
-  opacity: 0.20;
+  filter: blur(54px) saturate(0.9);
+  opacity: 0.10;
   transform: scale(1.08);
 }
 
@@ -17280,11 +17280,11 @@ thead th:hover .table-col-resizer::after {
   --artist-portrait-size: 74%;
   background: var(--artist-card-accent);
   background:
-    radial-gradient(circle at 50% 37%, rgba(255, 255, 255, 0.16) 0, rgba(255, 255, 255, 0) 32%),
+    radial-gradient(circle at 50% 37%, rgba(255, 255, 255, 0.07) 0, rgba(255, 255, 255, 0) 26%),
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--artist-card-accent) 58%, #2b2d31 42%) 0%,
-      color-mix(in srgb, var(--artist-card-accent) 82%, #151515 18%) 100%
+      color-mix(in srgb, var(--artist-card-accent) 36%, #181a1d 64%) 0%,
+      color-mix(in srgb, var(--artist-card-accent) 58%, #0e0e0e 42%) 100%
     );
   border-radius: 10px;
   display: block;
@@ -17300,11 +17300,11 @@ thead th:hover .table-col-resizer::after {
 .history-artist-art-card--palette-ready {
   background: var(--artist-card-accent);
   background:
-    radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.18) 0, rgba(255, 255, 255, 0) 30%),
+    radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.07) 0, rgba(255, 255, 255, 0) 24%),
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--artist-card-accent) 50%, #303236 50%) 0%,
-      color-mix(in srgb, var(--artist-card-accent) 88%, #111 12%) 100%
+      color-mix(in srgb, var(--artist-card-accent) 26%, #181a1d 74%) 0%,
+      color-mix(in srgb, var(--artist-card-accent) 52%, #0a0a0a 48%) 100%
     );
 }
 
