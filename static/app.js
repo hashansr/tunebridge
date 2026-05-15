@@ -6233,7 +6233,7 @@ async function _renderSearchResults() {
     sections.push(`
       <div class="search-section">
         <div class="search-section-header">
-          <h2 class="search-section-title">Top Results</h2>
+          <h2 class="search-section-title search-section-title--top">Top Results <span aria-hidden="true">›</span></h2>
         </div>
         <div class="search-top-grid" id="search-top-grid"></div>
       </div>`);
@@ -6323,16 +6323,16 @@ function _renderSearchTopGrid(items) {
 
     if (type === 'track') {
       title = item.title || 'Unknown';
-      subtitle = item.subtitle || `Song · ${item.artist || ''}`;
+      subtitle = `Song · ${item.artist || ''}`;
       onclick = `App.showAlbum('${esc(item.album_artist || item.artist || '')}','${esc(item.album || '')}')`;
       onplay = `event.stopPropagation();Player.playTrackById('${esc(item.id)}')`;
     } else if (type === 'album') {
       title = item.name || item.title;
-      subtitle = item.subtitle || `Album · ${item.artist || ''}`;
+      subtitle = `Album · ${item.artist || ''}`;
       onclick = `App.showAlbum('${esc(item.artist)}','${esc(item.name)}')`;
       onplay = `event.stopPropagation();App.homePlayItem(event,'album','','${esc(item.artist)}','${esc(item.name)}','')`;
     } else if (type === 'artist') {
-      title = item.name || item.title;
+      title = (item.name || item.title || '').toUpperCase();
       subtitle = item.subtitle || 'Artist';
       onclick = `App.showArtist('${esc(item.name)}')`;
       onplay = `event.stopPropagation();App.homePlayItem(event,'artist','','${esc(item.name)}','','')`;
@@ -6342,6 +6342,9 @@ function _renderSearchTopGrid(items) {
       onclick = `App.openPlaylist('${esc(item.playlist_id || item.id)}')`;
       onplay = `event.stopPropagation();App.homePlayItem(event,'playlist','','','','${esc(item.playlist_id || item.id)}')`;
     }
+    const displaySubtitle = (type === 'track' || type === 'album')
+      ? subtitle.replace(/ · (.*)$/u, (_, name) => ` · ${name.toUpperCase()}`)
+      : subtitle;
 
     return `
       <div class="search-top-card" onclick="${onclick}" role="button" tabindex="0">
@@ -6351,7 +6354,7 @@ function _renderSearchTopGrid(items) {
         </div>
         <div class="search-top-card-copy">
           <div class="search-top-card-title" title="${esc(title)}">${esc(title)}</div>
-          <div class="search-top-card-sub">${esc(subtitle)}</div>
+          <div class="search-top-card-sub">${esc(displaySubtitle)}</div>
         </div>
       </div>`;
   }).join('');

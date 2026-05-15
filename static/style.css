@@ -19207,6 +19207,17 @@ body.is-col-resizing {
   letter-spacing: -0.02em;
   color: var(--tb-text-primary);
 }
+.search-section-title--top {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.search-section-title--top span {
+  color: rgba(255,255,255,0.58);
+  font-size: 30px;
+  line-height: 0.7;
+  transform: translateY(1px);
+}
 .search-see-all {
   font-size: 13px;
   font-weight: 500;
@@ -19222,40 +19233,38 @@ body.is-col-resizing {
 .search-top-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: 22px 34px;
 }
 .search-top-card {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 22px;
   cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.045);
-  border-radius: 8px;
-  background: rgba(255,255,255,0.105);
+  border: none;
+  border-radius: 12px;
+  background: rgb(51,51,51);
   text-align: left;
-  padding: 16px;
+  padding: 22px 24px;
   color: inherit;
   min-width: 0; /* allow grid item to shrink below img intrinsic size */
   width: 100%;
-  height: 112px;
+  height: 118px;
   overflow: hidden;
-  transition: background var(--tb-motion-base), border-color var(--tb-motion-base), transform var(--tb-motion-base);
+  transition: background var(--tb-motion-base);
 }
 .search-top-card:hover {
-  background: rgba(255,255,255,0.145);
-  border-color: rgba(173,198,255,0.18);
-  transform: translateY(-1px);
+  background: rgb(59,59,59);
 }
 .search-top-card-art {
   position: relative;
-  width: 56px;
-  height: 56px;
-  flex: 0 0 56px;
-  border-radius: 8px;
+  width: 70px;
+  height: 70px;
+  flex: 0 0 70px;
+  border-radius: 6px;
   overflow: hidden;
-  background: rgba(0,0,0,0.22);
-  box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+  background: rgba(0,0,0,0.18);
+  box-shadow: none;
 }
 .search-top-card-art img {
   width: 100%;
@@ -19291,47 +19300,48 @@ body.is-col-resizing {
 }
 .search-top-card-play {
   position: absolute;
-  bottom: 8px;
-  right: 8px;
-  width: 30px;
-  height: 30px;
+  inset: 0;
+  margin: auto;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.72);
-  backdrop-filter: blur(10px);
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.18s ease;
   cursor: pointer;
   border: none;
 }
-.search-top-card:hover .search-top-card-play { opacity: 1; }
+.search-top-card:hover .search-top-card-play { opacity: 1; pointer-events: auto; }
 .search-top-card-play:hover { background: rgba(0, 0, 0, 0.88); }
 .search-top-card-copy {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 .search-top-card-title {
+  font-size: 23px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.14;
+}
+.search-top-card-sub {
   font-size: 18px;
-  font-weight: 700;
-  color: var(--tb-text-primary);
+  font-weight: 600;
+  color: rgba(255,255,255,0.58);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.2;
-}
-.search-top-card-sub {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--tb-text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.25;
 }
 @media (max-width: 1280px) {
   .search-top-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -19339,9 +19349,10 @@ body.is-col-resizing {
 @media (max-width: 720px) {
   #view-search { padding: 48px 18px 40px; }
   .search-top-grid { grid-template-columns: 1fr; }
-  .search-top-card { height: 96px; padding: 14px; }
-  .search-top-card-title { font-size: 16px; }
-  .search-top-card-sub { font-size: 13px; }
+  .search-top-card { height: 96px; padding: 16px 18px; gap: 16px; }
+  .search-top-card-art { width: 58px; height: 58px; flex-basis: 58px; }
+  .search-top-card-title { font-size: 18px; }
+  .search-top-card-sub { font-size: 14px; }
 }
 
 /* ── Songs table ──────────────────────────────────────────────────────────── */
