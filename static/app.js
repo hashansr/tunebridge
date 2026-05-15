@@ -6428,14 +6428,14 @@ function _renderSearchSongs(tracks) {
 function _renderSearchArtists(artists) {
   const grid = document.getElementById('search-artists-grid');
   if (!grid) return;
+  const relatedLabel = (a) => a.related_album || a.album || '';
   grid.innerHTML = artists.map(a => `
-    <div class="artist-card search-artist-card" data-artist="${esc(a.name)}" ${_artistCardStyle(a)}
-         onclick="App.showArtist(this.dataset.artist)">
-      <div class="artist-thumb${a.image_key || a.artwork_key ? '' : ' artist-thumb--placeholder'}">
+    <div class="search-artist-card" data-artist="${esc(a.name)}" onclick="App.showArtist(this.dataset.artist)">
+      <div class="search-artist-thumb${a.image_key || a.artwork_key ? '' : ' search-artist-thumb--placeholder'}">
         ${_artistThumbHtml(a, 120)}
       </div>
-      <div class="artist-name" title="${esc(a.name)}">${esc(a.name)}</div>
-      <div class="artist-meta">${a.album_count} album${a.album_count !== 1 ? 's' : ''} · ${a.track_count} song${a.track_count !== 1 ? 's' : ''}</div>
+      <div class="search-artist-name" title="${esc(a.name)}">${esc(a.name)}</div>
+      <div class="search-artist-album" title="${esc(relatedLabel(a))}">${esc(relatedLabel(a))}</div>
     </div>
   `).join('');
 }

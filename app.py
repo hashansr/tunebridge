@@ -1776,18 +1776,30 @@ def global_search():
             artists_map[key]['artwork_key'] = t['artwork_key']
 
     artist_scores = {}
+    artist_related_albums = {}
 
-    def add_artist_candidate(key, score):
+    def add_artist_candidate(key, score, related_album=None):
         if key not in artists_map:
             return
         current = artist_scores.get(key)
         if current is None or score < current:
             artist_scores[key] = score
+            if related_album:
+                artist_related_albums[key] = related_album
+        elif related_album and key not in artist_related_albums:
+            artist_related_albums[key] = related_album
 
     for key, v in artists_map.items():
         artist_rank = _field_match_rank(v['name'], q)
         if artist_rank < 99:
-            add_artist_candidate(key, (artist_rank, artist_sort_key(v['name'])))
+            artist_tracks = artist_tracks_map.get(key, [])
+            related_album = ''
+            if artist_tracks:
+                related_album = sorted(
+                    {track.get('album') or 'Unknown Album' for track in artist_tracks},
+                    key=artist_sort_key
+                )[0]
+            add_artist_candidate(key, (artist_rank, artist_sort_key(v['name'])), related_album)
 
     for t in tracks:
         title_score = _title_match_score(t.get('title') or '', q)
@@ -1795,7 +1807,11 @@ def global_search():
             continue
         artist_key = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').lower()
         rel = _track_relevance_score(t, q, _play_stats)
-        add_artist_candidate(artist_key, (10 + title_score, rel, artist_sort_key(artists_map.get(artist_key, {}).get('name'))))
+        add_artist_candidate(
+            artist_key,
+            (10 + title_score, rel, artist_sort_key(artists_map.get(artist_key, {}).get('name'))),
+            t.get('album') or 'Unknown Album'
+        )
 
     matched_artists = []
     for key, _score in sorted(artist_scores.items(), key=lambda pair: pair[1]):
@@ -1807,6 +1823,7 @@ def global_search():
             'track_count': v['track_count'],
             'artwork_key': v['artwork_key'],
             'image_key': img_key if img_key in artist_image_keys else None,
+            'related_album': artist_related_albums.get(key) or '',
         })
     total_artists = len(matched_artists)
     matched_artists = matched_artists[:6]

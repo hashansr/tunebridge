@@ -19385,11 +19385,53 @@ body.is-col-resizing {
 /* ── Artist cards in search — circular portraits ──────────────────────────── */
 .search-artists-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 24px;
 }
-#view-search .artist-thumb,
-.search-artist-card .artist-thumb { border-radius: 50%; }
-.search-artist-card .card-more-btn,
-.search-artist-card .artist-img-btn,
-.search-artist-card .card-fav-btn { display: none; }
+.search-artist-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  cursor: pointer;
+  color: inherit;
+  text-align: center;
+}
+.search-artist-thumb {
+  width: min(120px, 100%);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(255,255,255,0.06);
+  margin-bottom: 14px;
+}
+.search-artist-thumb .artist-portrait,
+.search-artist-thumb .artist-portrait img,
+.search-artist-thumb .artist-portrait .cover-placeholder {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50% !important;
+  object-fit: cover;
+}
+.search-artist-name {
+  width: 100%;
+  color: var(--tb-text-primary);
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-artist-album {
+  width: 100%;
+  margin-top: 7px;
+  color: var(--tb-text-muted);
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
