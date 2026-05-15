@@ -559,6 +559,21 @@ function _artistThumbHtml(a, size = 120) {
   return `<span class="artist-portrait artist-portrait--placeholder">${coverPlaceholder('artist', size, '50%')}</span>`;
 }
 
+function _albumHeroArtistHtml(name, fallbackArtworkKey = '') {
+  const artistName = String(name || '').trim();
+  if (!artistName) return '';
+  const artistData = (state.artists || []).find(a => _normArtistId(a?.name) === _normArtistId(artistName));
+  const src = _artistImageSrc({
+    name: artistName,
+    image_key: artistData?.image_key || '',
+    artwork_key: artistData?.artwork_key || fallbackArtworkKey || '',
+  });
+  const avatar = src
+    ? `<img src="${src}" alt="" loading="lazy" decoding="async" onerror="this.closest('.album-hero-artist-avatar')?.classList.add('is-empty'); this.remove();" />`
+    : coverPlaceholder('artist', 22, '50%', true);
+  return `<span class="album-hero-artist-link link" data-artist="${esc(artistName)}" onclick="App.showArtist(this.dataset.artist)"><span class="album-hero-artist-avatar">${avatar}</span><span class="album-hero-artist-name">${esc(artistName)}</span></span>`;
+}
+
 function _applyArtistCardPalette(img) {
   const card = img?.closest?.('.artist-card, .artist-detail-art-card, .home-artist-art-card, .history-artist-art-card');
   if (!card || !img.naturalWidth || !img.naturalHeight) return;
@@ -2224,8 +2239,7 @@ async function loadTracks(artist = null, album = null, displayArtist = '') {
       artKey ? `<img src="${artworkUrl(artKey)}" />` : coverPlaceholder('album', 64, 'var(--radius)', true);
     _applyAlbumHeroAtmosphere(albumHero, artKey);
     document.getElementById('album-hero-name').textContent = album;
-    document.getElementById('album-hero-artist').innerHTML = heroArtist
-      ? `<span class="link" data-artist="${esc(heroArtist)}" onclick="App.showArtist(this.dataset.artist)">${esc(heroArtist)}</span>` : '';
+    document.getElementById('album-hero-artist').innerHTML = _albumHeroArtistHtml(heroArtist, artKey);
     const totalSecs = tracks.reduce((s, t) => s + (t.duration || 0), 0);
     const yr = tracks[0].year;
     const genre = tracks[0].genre;

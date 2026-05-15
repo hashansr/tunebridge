@@ -12592,20 +12592,67 @@ tr.player-active .track-title { color: var(--accent); }
 #view-tracks #album-hero.album-detail-hero.is-album-context .hero-title {
   color: #f4f7ff;
   font-size: clamp(30px, 4vw, 54px);
-  line-height: 1.02;
+  line-height: 1.12;
+  padding-bottom: 0.04em;
   white-space: normal;
   text-wrap: balance;
 }
 
 #view-tracks #album-hero.album-detail-hero.is-album-context .hero-sub {
+  align-items: center;
   color: rgba(239, 244, 255, 0.9);
+  display: flex;
   font-size: 15px;
   font-weight: 700;
+  min-height: 28px;
 }
 
 #view-tracks #album-hero.album-detail-hero.is-album-context .hero-sub a,
 #view-tracks #album-hero.album-detail-hero.is-album-context .hero-sub span.link {
   color: rgba(239, 244, 255, 0.94);
+}
+
+#view-tracks #album-hero.album-detail-hero.is-album-context .album-hero-artist-link {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+#view-tracks #album-hero.album-detail-hero.is-album-context .album-hero-artist-avatar {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.26);
+  color: rgba(246, 249, 255, 0.74);
+  display: inline-flex;
+  flex: 0 0 26px;
+  height: 26px;
+  justify-content: center;
+  overflow: hidden;
+  width: 26px;
+}
+
+#view-tracks #album-hero.album-detail-hero.is-album-context .album-hero-artist-avatar img,
+#view-tracks #album-hero.album-detail-hero.is-album-context .album-hero-artist-avatar .cover-placeholder {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  height: 100% !important;
+  object-fit: cover;
+  width: 100% !important;
+}
+
+#view-tracks #album-hero.album-detail-hero.is-album-context .album-hero-artist-avatar.is-empty {
+  display: none;
+}
+
+#view-tracks #album-hero.album-detail-hero.is-album-context .album-hero-artist-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #view-tracks #album-hero.album-detail-hero.is-album-context .hero-meta {
