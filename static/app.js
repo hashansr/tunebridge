@@ -61,6 +61,7 @@ const state = {
   albumAlpha: '',
   _albumScope: '__all__',
   _albumRenderToken: 0,
+  albumSearchResultKeys: null,
   collectionLayouts: _cloneCollectionLayoutDefaults(),
   collectionPages: { artists: 0, albums: 0, playlists: 0, fav_artists: 0, fav_albums: 0 },
   searchQuery: '',
@@ -1504,6 +1505,10 @@ function _librarySearchMatch(haystack, query) {
   return String(haystack || '').toLowerCase().includes(query);
 }
 
+function _searchAlbumResultKey(album) {
+  return `${String(album?.artist || '').toLowerCase()}|${String(album?.name || album?.album || '').toLowerCase()}`;
+}
+
 function _scrollMainTop() {
   const main = document.getElementById('main');
   if (main) main.scrollTop = 0;
@@ -1956,6 +1961,7 @@ function scrollToLetter(letter) {
 const _debouncedRenderAlbumsGrid = _debounce(() => { renderAlbumsGrid(); _scrollMainTop(); }, 200);
 function setAlbumSearch(query) {
   state.albumSearch = String(query || '');
+  state.albumSearchResultKeys = null;
   _resetCollectionPage('albums');
   const clearBtn = document.getElementById('albums-filter-clear');
   if (clearBtn) clearBtn.style.display = state.albumSearch ? 'block' : 'none';
@@ -1964,6 +1970,7 @@ function setAlbumSearch(query) {
 
 function clearAlbumSearch() {
   state.albumSearch = '';
+  state.albumSearchResultKeys = null;
   _resetCollectionPage('albums');
   const inp = document.getElementById('albums-filter-input');
   if (inp) inp.value = '';
@@ -1984,7 +1991,13 @@ function _filteredAlbumsData() {
   const artistFilter = state.artist || null;
   const q = state.albumSearch.trim().toLowerCase();
   const base = Array.isArray(state.albums) ? state.albums : [];
-  const searched = q
+  const searchResultKeys = Array.isArray(state.albumSearchResultKeys) ? state.albumSearchResultKeys : null;
+  const searched = searchResultKeys
+    ? (() => {
+        const byKey = new Map(base.map(al => [_searchAlbumResultKey(al), al]));
+        return searchResultKeys.map(key => byKey.get(key)).filter(Boolean);
+      })()
+    : q
     ? base.filter(al => {
         const trackTitles = artistFilter && Array.isArray(al.track_titles) ? al.track_titles.join(' ') : '';
         return _librarySearchMatch(`${al.name} ${artistFilter ? trackTitles : al.artist || ''}`, q);
@@ -2166,7 +2179,16 @@ async function loadAlbums(artistFilter = null) {
   if (state._albumScope !== scope) {
     state._albumScope = scope;
     state.albumSearch = '';
+    state.albumSearchResultKeys = null;
     state.albumAlpha = '';
+    _resetCollectionPage('albums');
+  }
+  if (!artistFilter && Array.isArray(state._pendingAlbumSearchResultKeys)) {
+    state.albumSearchResultKeys = state._pendingAlbumSearchResultKeys;
+    state.albumSearch = state._pendingAlbumSearchQuery || state.albumSearch || '';
+    state.albumAlpha = '';
+    state._pendingAlbumSearchResultKeys = null;
+    state._pendingAlbumSearchQuery = '';
     _resetCollectionPage('albums');
   }
 
@@ -6152,13 +6174,17 @@ function onSidebarSearchKeydown(event) {
 }
 
 function clearSidebarSearch() {
+  clearSidebarSearchValue();
+  clearTimeout(_searchDebounceTimer);
+  if (state.view === 'search') showView('home');
+}
+
+function clearSidebarSearchValue() {
   const input = document.getElementById('sidebar-search-input');
   const clear = document.getElementById('sidebar-search-clear');
   if (input) input.value = '';
   if (clear) clear.style.display = 'none';
   state.searchQuery = '';
-  clearTimeout(_searchDebounceTimer);
-  if (state.view === 'search') showView('home');
 }
 
 function focusSidebarSearch() {
@@ -6414,7 +6440,7 @@ function _renderSearchArtists(artists) {
   `).join('');
 }
 
-function searchSeeAll(category) {
+async function searchSeeAll(category) {
   const q = state.searchQuery;
   if (category === 'artists') {
     showView('artists');
@@ -6423,8 +6449,25 @@ function searchSeeAll(category) {
     showView('songs');
     setTimeout(() => { const inp = document.getElementById('songs-filter-input'); if (inp) { inp.value = q; filterSongs(q); } }, 100);
   } else if (category === 'albums') {
+    let resultKeys = [];
+    try {
+      const results = await api(`/search?q=${encodeURIComponent(q)}`);
+      resultKeys = (results.albums || []).map(_searchAlbumResultKey);
+    } catch (_) {}
+    state._pendingAlbumSearchResultKeys = resultKeys;
+    state._pendingAlbumSearchQuery = q;
+    state.albumSearchResultKeys = resultKeys;
     showView('albums');
-    setTimeout(() => { const inp = document.getElementById('albums-filter-input'); if (inp) { inp.value = q; setAlbumSearch(q); } }, 100);
+    setTimeout(() => {
+      state.albumSearchResultKeys = resultKeys;
+      state.albumSearch = q;
+      const inp = document.getElementById('albums-filter-input');
+      if (inp) inp.value = q;
+      const clearBtn = document.getElementById('albums-filter-clear');
+      if (clearBtn) clearBtn.style.display = q ? 'block' : 'none';
+      _resetCollectionPage('albums');
+      renderAlbumsGrid();
+    }, 100);
   } else if (category === 'playlists') {
     showView('playlists');
   }
@@ -6560,6 +6603,7 @@ function _captureNavSnapshot() {
     historyPeriod: _historyPeriod,
     historyValidOnly: !!document.getElementById('history-valid-only')?.checked,
     historyOpenDays: Array.from(_historyOpenDays || []),
+    searchQuery: state.searchQuery || '',
     scrollTop: document.getElementById('main')?.scrollTop || 0,
   };
 }
@@ -6572,7 +6616,8 @@ function _pushToNavHistory() {
     const last = _navHistory[_navHistory.length - 1];
     if (last.view === snap.view && last.artist === snap.artist &&
         last.album === snap.album && last.playlistId === snap.playlistId &&
-        last.dapId === snap.dapId && last.iemId === snap.iemId) return;
+        last.dapId === snap.dapId && last.iemId === snap.iemId &&
+        last.searchQuery === snap.searchQuery) return;
   }
   if (_navHistory.length >= 50) _navHistory.shift();
   _navHistory.push(snap);
@@ -6673,6 +6718,17 @@ async function _restoreNavSnapshot(snap) {
       await loadHistoryView();
       break;
     }
+    case 'search': {
+      state.view = 'search'; state.playlist = null; clearSelection();
+      state.searchQuery = snap.searchQuery || '';
+      const input = document.getElementById('sidebar-search-input');
+      const clear = document.getElementById('sidebar-search-clear');
+      if (input) input.value = state.searchQuery;
+      if (clear) clear.style.display = state.searchQuery ? '' : 'none';
+      setActiveNav('search'); renderSidebarPlaylists(); showViewEl('search');
+      await _renderSearchResults();
+      break;
+    }
     case 'missing-tags':
       await openMissingTagsEditor();
       return;
@@ -6694,9 +6750,16 @@ async function navBack() {
   if (!_guardPeqEditorNavigation()) return;
   if (!_guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
+  const leavingSearch = state.view === 'search';
   const prevSnap = _navHistory.pop();
   _isNavigatingBack = true;
-  try { await _restoreNavSnapshot(prevSnap); } finally { _isNavigatingBack = false; }
+  try {
+    if (leavingSearch) {
+      clearTimeout(_searchDebounceTimer);
+      clearSidebarSearchValue();
+    }
+    await _restoreNavSnapshot(prevSnap);
+  } finally { _isNavigatingBack = false; }
   _updateNavButtonStates();
 }
 

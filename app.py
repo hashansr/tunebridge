@@ -1775,18 +1775,39 @@ def global_search():
         if not artists_map[key]['artwork_key'] and t.get('artwork_key'):
             artists_map[key]['artwork_key'] = t['artwork_key']
 
+    artist_scores = {}
+
+    def add_artist_candidate(key, score):
+        if key not in artists_map:
+            return
+        current = artist_scores.get(key)
+        if current is None or score < current:
+            artist_scores[key] = score
+
+    for key, v in artists_map.items():
+        artist_rank = _field_match_rank(v['name'], q)
+        if artist_rank < 99:
+            add_artist_candidate(key, (artist_rank, artist_sort_key(v['name'])))
+
+    for t in tracks:
+        title_score = _title_match_score(t.get('title') or '', q)
+        if title_score >= 99:
+            continue
+        artist_key = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').lower()
+        rel = _track_relevance_score(t, q, _play_stats)
+        add_artist_candidate(artist_key, (10 + title_score, rel, artist_sort_key(artists_map.get(artist_key, {}).get('name'))))
+
     matched_artists = []
-    for v in artists_map.values():
-        if _field_match_rank(v['name'], q) < 99:
-            img_key = get_artist_image_key(v['name'])
-            matched_artists.append({
-                'name': v['name'],
-                'album_count': len(v['albums']),
-                'track_count': v['track_count'],
-                'artwork_key': v['artwork_key'],
-                'image_key': img_key if img_key in artist_image_keys else None,
-            })
-    matched_artists.sort(key=lambda a: artist_sort_key(a['name']))
+    for key, _score in sorted(artist_scores.items(), key=lambda pair: pair[1]):
+        v = artists_map[key]
+        img_key = get_artist_image_key(v['name'])
+        matched_artists.append({
+            'name': v['name'],
+            'album_count': len(v['albums']),
+            'track_count': v['track_count'],
+            'artwork_key': v['artwork_key'],
+            'image_key': img_key if img_key in artist_image_keys else None,
+        })
     total_artists = len(matched_artists)
     matched_artists = matched_artists[:6]
 
