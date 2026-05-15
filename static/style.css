@@ -2201,14 +2201,17 @@ tbody tr:hover .remove-btn { opacity: 1; }
   padding: calc(8px + var(--main-nav-overlay-clearance)) var(--view-gutter) 24px;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 #view-playlist .view-header {
-  padding: 14px 0 0;
-  margin-bottom: calc(-1 * (var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 42px));
-  min-height: 42px;
+  position: absolute;
+  top: calc(var(--main-nav-top-inset) + 4px);
+  right: var(--view-gutter);
+  margin: 0;
+  padding: 0;
+  min-height: 0;
   justify-content: space-between;
   flex-wrap: nowrap;
-  position: relative;
   z-index: 30;
 }
 #view-playlist .breadcrumb {
@@ -12724,8 +12727,8 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 #view-playlist .view-header + #playlist-hero.playlist-detail-hero {
-  margin-top: calc(-1 * (var(--main-nav-top-inset) + var(--main-nav-overlay-clearance)));
-  padding-top: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 34px);
+  margin-top: calc(-1 * (8px + var(--main-nav-overlay-clearance)));
+  padding-top: calc(8px + var(--main-nav-overlay-clearance) + 28px);
   z-index: 0;
 }
 
