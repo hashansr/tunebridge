@@ -6778,7 +6778,7 @@ nav {
 
 #view-albums .view-header.artist-detail-mode + #albums-alpha-bar + #artist-hero.artist-detail-hero {
   margin-top: calc(-1 * (var(--main-nav-top-inset) + var(--main-nav-overlay-clearance)));
-  padding-top: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 34px);
+  padding-top: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 8px);
   z-index: 0;
 }
 
