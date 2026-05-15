@@ -6326,7 +6326,8 @@ async function _restoreNavSnapshot(snap) {
 
 async function navBack() {
   // Sync wizard intercept — back navigates between wizard steps
-  if (state.view === 'sync') {
+  // Step 1: fall through to regular nav history (exits sync view)
+  if (state.view === 'sync' && _sw.step !== 1) {
     swNavBack();
     return;
   }
