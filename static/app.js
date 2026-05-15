@@ -6266,10 +6266,6 @@ async function _renderSearchResults() {
       </div>`);
   }
 
-  if (albums.length) {
-    sections.push(_searchRailSectionHtml('search-albums-rail', 'Albums', results.total_albums > 6 ? results.total_albums : 0, 'albums'));
-  }
-
   if (artists.length) {
     const extra = results.total_artists > 6 ? `<a class="search-see-all" href="#" onclick="event.preventDefault();App.searchSeeAll('artists')">See all ${results.total_artists} →</a>` : '';
     sections.push(`
@@ -6280,6 +6276,10 @@ async function _renderSearchResults() {
         </div>
         <div id="search-artists-grid" class="search-artists-grid"></div>
       </div>`);
+  }
+
+  if (albums.length) {
+    sections.push(_searchRailSectionHtml('search-albums-rail', 'Albums', results.total_albums > 6 ? results.total_albums : 0, 'albums'));
   }
 
   if (playlists.length) {

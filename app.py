@@ -22,6 +22,7 @@ import shutil
 import math
 import random
 import requests
+from difflib import SequenceMatcher
 from pathlib import Path
 from urllib.request import urlopen
 from urllib.parse import urlparse, parse_qs, quote as urlquote
@@ -1612,21 +1613,87 @@ _COVER_PATTERN = re.compile(
     re.IGNORECASE
 )
 _LIVE_PATTERN = re.compile(r'\blive\b|\(live\)', re.IGNORECASE)
+_SEARCH_TOKEN_PATTERN = re.compile(r'[\w]+', re.UNICODE)
+
+
+def _normalize_search_text(value: str) -> str:
+    """Lowercase and collapse text for field-aware search comparisons."""
+    text = unicodedata.normalize('NFKD', str(value or '')).lower()
+    text = ''.join(ch for ch in text if not unicodedata.combining(ch))
+    return re.sub(r'\s+', ' ', text).strip()
+
+
+def _search_tokens(value: str) -> list:
+    return _SEARCH_TOKEN_PATTERN.findall(_normalize_search_text(value))
+
+
+def _bounded_phrase_match(value: str, query: str) -> bool:
+    if not value or not query:
+        return False
+    return bool(re.search(r'(?<!\w)' + re.escape(query) + r'(?!\w)', value))
+
+
+def _fuzzy_album_title_rank(title: str, query: str) -> int:
+    """Small typo tolerance for direct album-title searches only."""
+    if len(query) < 5:
+        return 99
+
+    title_tokens = [tok for tok in _search_tokens(title) if len(tok) >= 5]
+    query_tokens = [tok for tok in _search_tokens(query) if len(tok) >= 5]
+    if not title_tokens or not query_tokens:
+        return 99
+
+    if len(query_tokens) == 1:
+        qtok = query_tokens[0]
+        for ttok in title_tokens:
+            if abs(len(ttok) - len(qtok)) > 2:
+                continue
+            if SequenceMatcher(None, ttok, qtok).ratio() >= 0.84:
+                return 4
+
+    title_prefix = ' '.join(title_tokens[:len(query_tokens)])
+    query_phrase = ' '.join(query_tokens)
+    if len(query_phrase) >= 5 and SequenceMatcher(None, title_prefix, query_phrase).ratio() >= 0.86:
+        return 4
+    return 99
+
+
+def _field_match_rank(value: str, query: str, *, allow_fuzzy_album=False) -> int:
+    """
+    Field-aware search rank. Lower is better; 99 means no match.
+    Avoids substring-inside-word matches such as numb -> number.
+    """
+    s = _normalize_search_text(value)
+    q = _normalize_search_text(query)
+    if not s or not q:
+        return 99
+    if s == q:
+        return 0
+    if s.startswith(q):
+        return 1
+    if _bounded_phrase_match(s, q):
+        return 2
+    if len(q) <= 3 and any(tok.startswith(q) for tok in _search_tokens(s)):
+        return 3
+    if allow_fuzzy_album:
+        return _fuzzy_album_title_rank(s, q)
+    return 99
 
 
 def _title_match_score(title: str, query: str) -> int:
     """Fine-grained title match quality. Lower = better match."""
-    t = (title or '').strip().lower()
+    t = _normalize_search_text(title)
+    q = _normalize_search_text(query)
     if not t:
         return 99
-    if t == query:
+    if t == q:
         return 0
-    if re.search(r'\b' + re.escape(query) + r'\b', t):
+    if t.startswith(q):
+        return 8
+    if _bounded_phrase_match(t, q):
         return 10
-    if t.startswith(query):
+    if len(q) <= 3 and any(tok.startswith(q) for tok in _search_tokens(t)):
         return 15
-    if query in t:
-        return 20
     return 99
 
 
@@ -1663,7 +1730,7 @@ def _track_relevance_score(track: dict, query: str, play_stats: dict) -> float:
 
 @app.route('/api/search')
 def global_search():
-    q = request.args.get('q', '').strip().lower()
+    q = _normalize_search_text(request.args.get('q', ''))
     if not q:
         return jsonify({
             'artists': [], 'tracks': [], 'playlists': [], 'albums': [], 'top_results': [],
@@ -1676,16 +1743,22 @@ def global_search():
     _play_stats = _db.db_load_play_stats()
 
     def match_rank(value):
-        s = (value or '').strip().lower()
-        if not s:
-            return 99
-        if s == q:
-            return 0
-        if s.startswith(q):
-            return 1
-        if q in s:
-            return 2
-        return 99
+        return _field_match_rank(value, q)
+
+    def track_search_rank(track):
+        title_rank = _title_match_score(track.get('title') or '', q)
+        artist_rank = min(
+            _field_match_rank(track.get('artist') or '', q),
+            _field_match_rank(track.get('album_artist') or '', q),
+        )
+        album_rank = _field_match_rank(track.get('album') or '', q)
+        return min(title_rank, artist_rank + 30, album_rank + 40)
+
+    def track_search_sort_key(track):
+        title_score = _track_relevance_score(track, q, _play_stats)
+        if title_score < 999:
+            return (0, title_score, (track.get('title') or '').lower())
+        return (1, track_search_rank(track), (track.get('artist') or '').lower(), (track.get('album') or '').lower(), (track.get('title') or '').lower())
 
     artist_image_keys = _db.db_get_all_artist_image_keys()
     artists_map = {}
@@ -1704,7 +1777,7 @@ def global_search():
 
     matched_artists = []
     for v in artists_map.values():
-        if q in v['name'].lower():
+        if _field_match_rank(v['name'], q) < 99:
             img_key = get_artist_image_key(v['name'])
             matched_artists.append({
                 'name': v['name'],
@@ -1717,16 +1790,6 @@ def global_search():
     total_artists = len(matched_artists)
     matched_artists = matched_artists[:6]
 
-    matched_tracks = [
-        t for t in tracks
-        if q in (t.get('title') or '').lower()
-        or q in (t.get('artist') or '').lower()
-        or q in (t.get('album') or '').lower()
-    ]
-    matched_tracks.sort(key=lambda t: _track_relevance_score(t, q, _play_stats))
-    total_tracks = len(matched_tracks)
-    matched_tracks = matched_tracks[:10]
-
     albums_map = {}
     for t in tracks:
         album_name = t.get('album') or 'Unknown Album'
@@ -1737,17 +1800,54 @@ def global_search():
         albums_map[key]['track_count'] += 1
         if not albums_map[key]['artwork_key'] and t.get('artwork_key'):
             albums_map[key]['artwork_key'] = t['artwork_key']
-    matched_albums = [v for v in albums_map.values() if q in v['name'].lower() or q in v['artist'].lower()]
-    matched_albums.sort(key=lambda a: artist_sort_key(a['name']))
+
+    matched_tracks = [
+        t for t in tracks
+        if track_search_rank(t) < 99
+    ]
+    matched_tracks.sort(key=track_search_sort_key)
+    total_tracks = len(matched_tracks)
+    matched_tracks = matched_tracks[:10]
+
+    album_scores = {}
+
+    def add_album_candidate(key, score):
+        if key not in albums_map:
+            return
+        current = album_scores.get(key)
+        if current is None or score < current:
+            album_scores[key] = score
+
+    for t in tracks:
+        album_name = t.get('album') or 'Unknown Album'
+        artist = t.get('album_artist') or t.get('artist') or 'Unknown Artist'
+        key = artist.lower() + '|' + album_name.lower()
+
+        album_rank = _field_match_rank(album_name, q, allow_fuzzy_album=True)
+        if album_rank < 99:
+            add_album_candidate(key, (album_rank, 0, artist_sort_key(album_name), artist_sort_key(artist)))
+
+        artist_rank = _field_match_rank(artist, q)
+        if artist_rank < 99:
+            add_album_candidate(key, (30 + artist_rank, 0, artist_sort_key(album_name), artist_sort_key(artist)))
+
+        title_score = _title_match_score(t.get('title') or '', q)
+        if title_score < 99:
+            rel = _track_relevance_score(t, q, _play_stats)
+            add_album_candidate(key, (10 + title_score, rel, artist_sort_key(album_name), artist_sort_key(artist)))
+
+    matched_album_items = [(album_scores[key], albums_map[key]) for key in album_scores]
+    matched_album_items.sort(key=lambda pair: pair[0])
+    matched_albums = [album for _score, album in matched_album_items]
     total_albums = len(matched_albums)
-    matched_albums = matched_albums[:10]
+    matched_albums = matched_albums[:20]
 
     playlists = load_playlists()
     with library_lock:
         lib_map = {t['id']: t for t in library}
     matched_playlists = []
     for p in playlists.values():
-        if q not in (p.get('name') or '').lower():
+        if _field_match_rank(p.get('name') or '', q) >= 99:
             continue
         p_out = dict(p)
         p_out['has_artwork'] = has_playlist_artwork(p['id'])
