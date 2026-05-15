@@ -2587,11 +2587,11 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
         dominant = max(factors, key=lambda k: factors[k])
         genre_label = _genre_display_label(_norm_genre_text(info.get('genre')))
         reasons = {
-            'recency':   "You've been listening to similar albums lately",
-            'frequency': "One of your most-played albums recently",
-            'genre':     f"Matches your recent {genre_label} listening" if genre_label else "Fits your recent listening taste",
-            'novelty':   "Worth revisiting — you haven't listened in a while",
-            'sonic':     "Similar tonal profile to your recent listening",
+            'recency':   "In your recent rotation",
+            'frequency': "A recent favourite",
+            'genre':     f"More {genre_label}" if genre_label else "Matches your taste",
+            'novelty':   "Time to revisit",
+            'sonic':     "Matches your sound",
         }
         scored.append({'key': key, 'score': score, 'info': info, 'reason': reasons[dominant]})
 
@@ -2616,11 +2616,11 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
         artist_name = info.get('artist') or 'Unknown Artist'
         genre_label = _genre_display_label(g)
         if artist_boost > genre_aff:
-            disc_reason = f"More from {artist_name} — an artist you love"
+            disc_reason = f"More from {artist_name}"
         elif genre_aff > 0 and genre_label:
-            disc_reason = f"Fits your recent {genre_label} taste — you haven't heard this one"
+            disc_reason = f"New {genre_label} pick"
         else:
-            disc_reason = "Something new from your library"
+            disc_reason = "From your library"
         discovery.append({'key': key, 'score': disc_score, 'info': info, 'reason': disc_reason})
 
     # Daily rotation: shuffle each pool with a date seed so the carousel varies day-to-day
