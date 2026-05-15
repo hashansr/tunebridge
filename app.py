@@ -2821,7 +2821,7 @@ def _home_listen_next(events, artists_map, albums, limit=10):
             'kind': 'artist',
             'artist': name,
             'title': name,
-            'subtitle': 'In your library',
+            'subtitle': 'Artist',
             'image_key': info.get('image_key'),
             'artwork_key': info.get('artwork_key'),
         })
