@@ -18891,12 +18891,16 @@ async function _suppressDonate() {
   } catch { /* non-blocking */ }
 }
 
+function _openExternalUrl(url) {
+  fetch('/api/open-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+}
+
 function _openKofi() {
-  window.open(DONATE_URL, '_blank');
+  _openExternalUrl(DONATE_URL);
 }
 
 function _openFeedback() {
-  window.open(FEEDBACK_URL, '_blank');
+  _openExternalUrl(FEEDBACK_URL);
 }
 
 // Called after license is accepted (or was already accepted) to run the rest

@@ -13023,6 +13023,22 @@ def library_duplicates_delete_folders():
     return jsonify({'deleted': deleted, 'errors': errors})
 
 
+_ALLOWED_OPEN_URL_PREFIXES = (
+    'https://ko-fi.com/',
+    'https://github.com/hashansr/tunebridge-releases/',
+)
+
+@app.route('/api/open-url', methods=['POST'])
+def open_url():
+    """Open a whitelisted external URL in the system browser (macOS open command)."""
+    data = request.get_json() or {}
+    url = str(data.get('url', '') or '').strip()
+    if not any(url.startswith(p) for p in _ALLOWED_OPEN_URL_PREFIXES):
+        return jsonify({'error': 'URL not allowed'}), 403
+    subprocess.Popen(['open', url])
+    return jsonify({'ok': True})
+
+
 @app.route('/api/open-in-finder', methods=['POST'])
 def open_in_finder():
     """Reveal a file or directory in macOS Finder (open -R)."""
