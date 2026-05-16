@@ -13662,30 +13662,10 @@ async function refreshHistoryView() {
 async function _renderHistoryCharts(validOnly) {
   const container = document.getElementById('history-charts');
   if (!container) return;
-  if (_historyChart) { _historyChart.destroy(); _historyChart = null; }
   try {
     const d = await api(`/history/charts?since=${_historyPeriod}&valid_only=${validOnly}`);
     container.style.display = 'grid';
-
-    const timelineHtml = (d.daily_plays && d.daily_plays.length > 0) ? `
-      <div class="history-chart-card history-timeline-card">
-        <div class="history-chart-title">Plays per day</div>
-        <canvas id="history-timeline-canvas" height="80"></canvas>
-      </div>` : '';
-
-    const hourHtml = (d.hourly_plays && d.hourly_plays.some(v => v > 0)) ? `
-      <div class="history-chart-card">
-        <div class="history-chart-title">Time of day</div>
-        <canvas id="history-hour-canvas" height="80"></canvas>
-      </div>` : '';
-
-    const dowHtml = (d.dow_plays && d.dow_plays.some(v => v > 0)) ? `
-      <div class="history-chart-card">
-        <div class="history-chart-title">Day of week</div>
-        <canvas id="history-dow-canvas" height="80"></canvas>
-      </div>` : '';
-
-    container.innerHTML = timelineHtml + `
+    container.innerHTML = `
       <div class="history-chart-card history-rank-card">
         <div class="history-chart-title">Top artists</div>
         ${_historyRankRows(d.top_artists, 'artist')}
@@ -13693,72 +13673,9 @@ async function _renderHistoryCharts(validOnly) {
       <div class="history-chart-card history-rank-card">
         <div class="history-chart-title">Top songs</div>
         ${_historyRankRows(d.top_tracks, 'track')}
-      </div>` + hourHtml + dowHtml;
-
-    const chartDefaults = {
-      type: 'bar',
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: {
-          label: ctx => ` ${ctx.parsed.y} play${ctx.parsed.y !== 1 ? 's' : ''}`,
-        }}},
-        scales: {
-          x: { grid: { display: false }, ticks: { color: 'rgba(173,198,255,0.5)', font: { size: 10 }, maxRotation: 0 } },
-          y: { grid: { color: 'rgba(173,198,255,0.08)' }, ticks: { color: 'rgba(173,198,255,0.5)', font: { size: 10 }, maxTicksLimit: 4 }, beginAtZero: true },
-        },
-      },
-    };
-
-    const accentColor = 'rgba(173,198,255,0.7)';
-    const accentBorder = 'rgba(173,198,255,0.9)';
-
-    if (d.daily_plays && d.daily_plays.length > 0) {
-      const tlCanvas = document.getElementById('history-timeline-canvas');
-      if (tlCanvas) {
-        _historyChart = new Chart(tlCanvas, {
-          ...chartDefaults,
-          data: {
-            labels: d.daily_plays.map(p => {
-              const dt = new Date(p.date);
-              return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-            }),
-            datasets: [{ data: d.daily_plays.map(p => p.count), backgroundColor: accentColor, borderColor: accentBorder, borderWidth: 1, borderRadius: 3 }],
-          },
-          options: { ...chartDefaults.options, scales: { ...chartDefaults.options.scales,
-            x: { ...chartDefaults.options.scales.x, ticks: { ...chartDefaults.options.scales.x.ticks,
-              maxTicksLimit: Math.min(d.daily_plays.length, 14),
-            }},
-          }},
-        });
-      }
-    }
-
-    if (d.hourly_plays && d.hourly_plays.some(v => v > 0)) {
-      const hourCanvas = document.getElementById('history-hour-canvas');
-      if (hourCanvas) {
-        new Chart(hourCanvas, {
-          ...chartDefaults,
-          data: {
-            labels: Array.from({length: 24}, (_, h) => h % 6 === 0 ? `${h}:00` : ''),
-            datasets: [{ data: d.hourly_plays, backgroundColor: accentColor, borderColor: accentBorder, borderWidth: 1, borderRadius: 2 }],
-          },
-        });
-      }
-    }
-
-    if (d.dow_plays && d.dow_plays.some(v => v > 0)) {
-      const dowCanvas = document.getElementById('history-dow-canvas');
-      if (dowCanvas) {
-        new Chart(dowCanvas, {
-          ...chartDefaults,
-          data: {
-            labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-            datasets: [{ data: d.dow_plays, backgroundColor: accentColor, borderColor: accentBorder, borderWidth: 1, borderRadius: 2 }],
-          },
-        });
-      }
-    }
+      </div>
+    `;
+    if (_historyChart) { _historyChart.destroy(); _historyChart = null; }
   } catch (_) {
     container.style.display = 'none';
   }

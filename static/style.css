@@ -15923,9 +15923,6 @@ tr:hover .track-edit-btn:hover {
 .history-rank-card {
   min-height: 0;
 }
-.history-timeline-card {
-  grid-column: 1 / -1;
-}
 .history-top-row {
   display: flex; justify-content: space-between; align-items: center;
   gap: 10px;
