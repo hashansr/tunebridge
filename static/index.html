@@ -1278,6 +1278,32 @@
 
           <!-- App section -->
           <div class="settings-section settings-panel" id="settings-app-restart-section" data-settings-panel="app">
+
+            <!-- Support card -->
+            <div class="settings-support-card">
+              <div class="settings-support-card-body">
+                <div class="settings-support-card-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                </div>
+                <div class="settings-support-card-text">
+                  <div class="settings-support-card-label">Support TuneBridge</div>
+                  <div class="settings-support-card-hint">TuneBridge is free and built by one person. If it's been useful, consider a Ko-fi donation — it helps keep the app alive and fund new features.</div>
+                </div>
+              </div>
+              <div class="settings-support-card-actions">
+                <button class="btn-primary settings-kofi-btn" onclick="App._openKofi()">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;flex-shrink:0"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+                  Support on Ko-fi
+                </button>
+                <a class="settings-feedback-link" onclick="App._openFeedback()" href="#">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  Report a bug or share feedback
+                </a>
+              </div>
+            </div>
+
+            <div class="settings-rg-divider"></div>
+
             <!-- Version + channel — compact single row -->
             <div class="settings-app-row settings-version-row settings-app-row-clean">
               <div class="settings-app-main">
@@ -3416,6 +3442,111 @@
           <button class="btn-secondary" onclick="App.closeArtistImageModal()">Cancel</button>
           <button class="btn-primary" id="ai-use-btn" onclick="App.saveArtistImage()" disabled>Save Photo</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- License + Privacy modal (first launch — no close button, must accept) -->
+  <div id="license-modal" class="modal-overlay license-modal-overlay" style="display:none">
+    <div class="license-modal-shell">
+      <div class="license-modal-logo">
+        <img src="/logo.png" alt="TuneBridge" width="48" height="48" style="border-radius:12px;opacity:.9">
+        <span class="license-modal-app-name">TuneBridge</span>
+      </div>
+      <h2 class="license-modal-title">Before You Start</h2>
+      <p class="license-modal-subtitle">Please read and agree to the license and privacy policy to continue.</p>
+
+      <div class="license-tabs">
+        <button class="license-tab active" onclick="App._switchLicenseTab('license', this)">License</button>
+        <button class="license-tab" onclick="App._switchLicenseTab('privacy', this)">Privacy Policy</button>
+      </div>
+
+      <div id="license-tab-license" class="license-scroll-body">
+        <pre class="license-text">TuneBridge — License
+
+Copyright © 2025 Hashan Ranatunga. All Rights Reserved.
+
+GRANT OF LICENSE
+You are granted a non-exclusive, non-transferable, revocable license to
+install and use TuneBridge solely for personal, non-commercial purposes
+on macOS devices that you own or control.
+
+RESTRICTIONS
+You may NOT:
+  • Redistribute, sell, sublicense, or transfer this application
+  • Decompile, reverse-engineer, or extract the source code
+  • Use this application commercially without written permission
+  • Create derivative works based on this application
+
+DISCLAIMER OF WARRANTIES
+THIS APPLICATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DAMAGES ARISING FROM
+USE OF THIS SOFTWARE, INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR
+BUSINESS INTERRUPTION.
+
+Third-party components: see NOTICES file bundled with the application.</pre>
+      </div>
+
+      <div id="license-tab-privacy" class="license-scroll-body" style="display:none">
+        <pre class="license-text">TuneBridge — Privacy Policy
+
+TuneBridge runs entirely on your Mac. No data is ever sent to the
+developer.
+
+WHAT WE COLLECT
+Nothing. TuneBridge does not collect, store, or transmit any personal
+data to external servers operated by the developer.
+
+NETWORK REQUESTS
+Network requests only happen when you initiate them:
+  • squig.link — when you import IEM frequency response measurements
+  • Last.fm — when you provide your own API key for artist images
+  • Fanart.tv — when you provide your own API key for artist images
+
+TuneBridge sends no additional personal information alongside these
+requests beyond what is necessary to fetch the data you asked for.
+
+THIRD-PARTY SERVICES
+Last.fm, Fanart.tv, and squig.link have their own privacy policies.
+Please review them before providing API keys. TuneBridge has no
+control over how these services handle the data you send them.
+
+DATA STORAGE
+All your data (playlists, settings, listening history) is stored
+locally on this device in:
+  ~/Library/Application Support/TuneBridge/
+
+Questions: hashan.sr@gmail.com</pre>
+      </div>
+
+      <div class="license-modal-actions">
+        <button class="btn-primary license-agree-btn" onclick="App._acceptLicense()">I Agree &amp; Continue</button>
+        <button class="license-decline-link" onclick="App._declineLicense()">Decline</button>
+      </div>
+
+      <div id="license-declined-msg" class="license-declined-msg" style="display:none">
+        TuneBridge requires accepting the license to continue. Please re-launch the app and click "I Agree &amp; Continue".
+      </div>
+    </div>
+  </div>
+
+  <!-- Donate modal (count-triggered: launches 2, 5, 15, 25) -->
+  <div id="donate-modal" class="modal-overlay tb-modal-overlay" style="display:none" onclick="if(event.target===this)App._dismissDonate()">
+    <div class="modal donate-modal-inner tb-modal-shell tb-modal--sm">
+      <div class="donate-modal-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </svg>
+      </div>
+      <h3 id="donate-modal-title" class="donate-modal-title"></h3>
+      <p id="donate-modal-msg" class="donate-modal-msg"></p>
+      <div class="donate-modal-actions">
+        <button class="btn-primary donate-kofi-btn" onclick="App._openKofi()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;flex-shrink:0"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+          Support on Ko-fi
+        </button>
+        <button class="confirm-cancel-link donate-later-link" onclick="App._dismissDonate()">Maybe later</button>
+        <button class="donate-never-link" onclick="App._suppressDonate()">Don't ask again</button>
       </div>
     </div>
   </div>

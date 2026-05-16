@@ -246,6 +246,11 @@ DEFAULT_SETTINGS = {
     'table_column_config': {},      # UI table visible-column preferences, persisted outside WebView storage
     'table_column_widths': {},      # UI table resized-column widths, persisted outside WebView storage
     'table_column_order': {},       # UI table column ordering preferences, persisted outside WebView storage
+    # Distribution / legal
+    'launch_count':         0,      # incremented on each app start; drives donate popup milestones
+    'license_accepted':     False,  # True once user accepts the license on first launch
+    'license_accepted_at':  None,   # Unix timestamp of acceptance
+    'donate_suppressed':    False,  # True when user clicks "Don't ask again" on donate popup
 }
 
 _DEFAULT_GEAR_PROFILES = {
@@ -6124,6 +6129,28 @@ def put_settings():
             settings[key] = data[key]
     save_settings(settings)
     return jsonify(settings)
+
+
+@app.route('/api/startup/ping', methods=['POST'])
+def startup_ping():
+    """Increment launch_count and return distribution-gate settings."""
+    settings = load_settings()
+    settings['launch_count'] = int(settings.get('launch_count') or 0) + 1
+    _db.db_set_setting('launch_count', settings['launch_count'])
+    return jsonify({
+        'launch_count':      settings['launch_count'],
+        'license_accepted':  bool(settings.get('license_accepted', False)),
+        'donate_suppressed': bool(settings.get('donate_suppressed', False)),
+    })
+
+
+@app.route('/api/license/accept', methods=['POST'])
+def license_accept():
+    """Record the user's acceptance of the license agreement."""
+    now = int(time.time())
+    _db.db_set_setting('license_accepted', True)
+    _db.db_set_setting('license_accepted_at', now)
+    return jsonify({'ok': True, 'accepted_at': now})
 
 
 @app.route('/api/health')

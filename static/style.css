@@ -19587,3 +19587,242 @@ body.is-col-resizing {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── License modal (first-launch gate) ──────────────────────────────────── */
+.license-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20000; /* above everything */
+  background: rgba(10, 10, 10, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  backdrop-filter: blur(8px);
+}
+.license-modal-shell {
+  background: var(--surface-2, #1c1b1b);
+  border-radius: 18px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 24px 64px rgba(0,0,0,0.6);
+  width: 520px;
+  max-width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  padding: 36px 36px 28px;
+  gap: 0;
+}
+.license-modal-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.license-modal-app-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.license-modal-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 6px;
+  letter-spacing: -0.02em;
+}
+.license-modal-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+.license-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.license-tab {
+  background: none;
+  border: none;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.license-tab:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+.license-tab.active { background: rgba(255,255,255,0.1); color: var(--text); }
+.license-scroll-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: rgba(0,0,0,0.25);
+  border-radius: 10px;
+  margin-bottom: 20px;
+  padding: 16px;
+}
+.license-text {
+  font-family: var(--tb-font-mono, 'SF Mono', Menlo, monospace);
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--text-dim, rgba(255,255,255,0.55));
+  white-space: pre-wrap;
+  margin: 0;
+}
+.license-modal-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.license-agree-btn {
+  width: 100%;
+  padding: 13px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.license-decline-link {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px;
+  transition: color 0.15s;
+}
+.license-decline-link:hover { color: var(--text); }
+.license-declined-msg {
+  margin-top: 16px;
+  padding: 14px;
+  background: rgba(255, 100, 100, 0.08);
+  border-radius: 10px;
+  font-size: 13px;
+  color: rgba(255, 179, 181, 0.9);
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ── Donate modal ────────────────────────────────────────────────────────── */
+.donate-modal-inner {
+  width: 340px;
+  max-width: 90vw;
+  text-align: center;
+  padding: 32px 28px 28px;
+}
+.donate-modal-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: rgba(20, 19, 19, 0.9);
+  margin: 0 auto 20px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 8px 24px rgba(0,0,0,0.4);
+}
+.donate-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 10px;
+  letter-spacing: -0.01em;
+}
+.donate-modal-msg {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 24px;
+  line-height: 1.6;
+  text-align: left;
+}
+.donate-modal-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.donate-kofi-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 11px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.donate-later-link {
+  font-size: 13px;
+  padding: 4px;
+}
+.donate-never-link {
+  background: none;
+  border: none;
+  color: var(--text-dim, rgba(255,255,255,0.3));
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: color 0.15s;
+}
+.donate-never-link:hover { color: var(--text-muted); }
+
+/* ── Settings support card (donate + feedback) ───────────────────────────── */
+.settings-support-card {
+  padding: 18px 20px;
+  margin-bottom: 4px;
+}
+.settings-support-card-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.settings-support-card-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(173, 198, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  margin-top: 1px;
+}
+.settings-support-card-text { flex: 1; min-width: 0; }
+.settings-support-card-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.settings-support-card-hint {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+.settings-support-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.settings-kofi-btn {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.settings-feedback-link {
+  display: flex;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.15s;
+  cursor: pointer;
+}
+.settings-feedback-link:hover { color: var(--text); }
