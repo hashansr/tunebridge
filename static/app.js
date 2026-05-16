@@ -4902,8 +4902,8 @@ async function openMlPlaylistGenerator(context = 'global', options = {}) {
   }
 }
 
-function closeMlPlaylistGenerator() {
-  if (!_confirmMlDiscard()) return;
+async function closeMlPlaylistGenerator() {
+  if (!await _confirmMlDiscard()) return;
   _resetMlPreviewState();
   closeMlReferenceBrowser();
   const modal = document.getElementById('ml-gen-modal');
