@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.293-rc.160526-1545 · 2026-05-16
 - Fix: "Because You Listened" no longer surfaces albums you consistently skip — skip rate and completion rate now factor into recommendation scoring
 - Fix: Genre gap discovery now measures how many albums you've explored in a genre, not total listening time — one long session no longer hides 19 unexplored albums
 - Add: History view now shows three charts — Plays per Day timeline, Time of Day distribution, and Day of Week distribution
