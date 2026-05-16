@@ -63,12 +63,27 @@ if PROJECT_DIR not in sys.path:
     sys.path.insert(0, PROJECT_DIR)
 os.chdir(PROJECT_DIR)
 
+import subprocess  # noqa: E402
 import webview  # noqa: E402 — must come after sys.path setup
 
 BASE_PORT = int(os.environ.get("TUNEBRIDGE_PORT", 5001))
 PORT = BASE_PORT
 URL  = f"http://localhost:{PORT}"
 _SERVER_STARTUP_ERROR = None
+
+
+_ALLOWED_OPEN_URL_PREFIXES = (
+    'https://ko-fi.com/',
+    'https://github.com/hashansr/tunebridge-releases/',
+)
+
+
+class _TuneBridgeApi:
+    """Exposed to JavaScript as window.pywebview.api — provides native macOS actions."""
+
+    def open_url(self, url):
+        if isinstance(url, str) and any(url.startswith(p) for p in _ALLOWED_OPEN_URL_PREFIXES):
+            subprocess.Popen(['open', url])
 
 
 def _set_port(port: int):
@@ -346,6 +361,7 @@ def main():
         height=800,
         min_size=(900, 600),
         background_color="#131313",
+        js_api=_TuneBridgeApi(),
     )
 
     # ── Player state persistence ─────────────────────────────────────────────

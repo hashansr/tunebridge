@@ -2823,7 +2823,10 @@ function trackRow(t, num, inPlaylist) {
 
 /* ── Playlist view ──────────────────────────────────────────────────── */
 async function openPlaylist(pid) {
-  if (!_guardMlGeneratorNavigation()) return;
+  if (!await _guardMlGeneratorNavigation()) return;
+  if (!await _guardPeqEditorNavigation()) return;
+  if (!await _guardModalNavigation()) return;
+  _closeModalOverlaysForNavigation();
   _pushToNavHistory();
   let pl = await api(`/playlists/${pid}`);
   state.playlist = pl;
@@ -2906,7 +2909,10 @@ function _applyPlaylistDetailMode(isFavouriteVirtual) {
 }
 
 async function openFavouriteSongsPlaylist() {
-  if (!_guardMlGeneratorNavigation()) return;
+  if (!await _guardMlGeneratorNavigation()) return;
+  if (!await _guardPeqEditorNavigation()) return;
+  if (!await _guardModalNavigation()) return;
+  _closeModalOverlaysForNavigation();
   _pushToNavHistory();
   const res = await api('/favourites/songs/tracks').catch(() => ({ tracks: [] }));
   const tracks = Array.isArray(res?.tracks) ? res.tracks : [];
@@ -4263,6 +4269,34 @@ function _isSmartRulesModalDirty() {
   return _isOverlayOpen('sr-modal') && _srDirty;
 }
 
+function _isTagEditorModalDirty() {
+  return _isOverlayOpen('tag-editor-modal') && _tagEditorDirty();
+}
+
+function _isAlbumTagModalDirty() {
+  return _isOverlayOpen('album-tag-modal') && _albumTagDirty();
+}
+
+function _isArtistRenameModalDirty() {
+  if (!_isOverlayOpen('artist-rename-modal')) return false;
+  const cur = document.getElementById('ar-new-name')?.value.trim() || '';
+  return cur !== _artistRenameOriginal;
+}
+
+function _isMissingTagsBulkModalDirty() {
+  if (!_isOverlayOpen('missing-tags-bulk-modal')) return false;
+  return ['mtb-artist', 'mtb-album-artist', 'mtb-album', 'mtb-year', 'mtb-genre']
+    .some(id => !!(document.getElementById(id)?.value || '').trim());
+}
+
+function _isAlbumArtModalDirty() {
+  return _isOverlayOpen('album-art-modal') && !!(_albumArtSelectedUrl || _albumArtSelectedFile);
+}
+
+function _isArtistImageModalDirty() {
+  return _isOverlayOpen('artist-image-modal') && !!(_selectedImageUrl || _selectedImageFile);
+}
+
 function _isSyncBusy() {
   if (!_isOverlayOpen('sync-modal')) return false;
   const modal = document.getElementById('sync-modal');
@@ -4270,17 +4304,29 @@ function _isSyncBusy() {
   return phase === 'scanning' || phase === 'copying';
 }
 
-function _guardModalNavigation() {
+async function _guardModalNavigation() {
   if (_isOverlayOpen('confirm-modal')) return false;
-  if (_isSyncBusy() && !window.confirm('Sync is in progress. Leave this screen and stop monitoring sync?')) {
+  if (_isSyncBusy() && !await _showConfirm({
+    title: 'Sync In Progress',
+    message: 'Leave this screen and stop monitoring sync?',
+    okText: 'Leave',
+    cancelText: 'Stay',
+    danger: false,
+  })) {
     return false;
   }
-  if (_isDapModalDirty() && !window.confirm('Discard unsaved Device changes?')) return false;
-  if (_isIemModalDirty() && !window.confirm('Discard unsaved IEM changes?')) return false;
-  if (_isPeqUploadModalDirty() && !window.confirm('Discard unsaved PEQ upload details?')) return false;
-  if (_isCreatePlaylistModalDirty() && !window.confirm('Discard new playlist name?')) return false;
-  if (_isImportModalDirty() && !window.confirm('Discard current playlist import mapping?')) return false;
-  if (_isSmartRulesModalDirty() && !window.confirm('Discard Smart Rules changes?')) return false;
+  if (_isDapModalDirty() && !await _showConfirm({ title: 'Discard Changes?', message: 'Discard unsaved Device changes?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
+  if (_isIemModalDirty() && !await _showConfirm({ title: 'Discard Changes?', message: 'Discard unsaved IEM changes?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
+  if (_isPeqUploadModalDirty() && !await _showConfirm({ title: 'Discard Upload?', message: 'Discard unsaved PEQ upload details?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
+  if (_isCreatePlaylistModalDirty() && !await _showConfirm({ title: 'Discard Playlist?', message: 'Discard the new playlist name?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
+  if (_isImportModalDirty() && !await _showConfirm({ title: 'Discard Import?', message: 'Discard the current playlist import mapping?', okText: 'Discard', cancelText: 'Keep Mapping', danger: true })) return false;
+  if (_isSmartRulesModalDirty() && !await _showConfirm({ title: 'Discard Smart Rules?', message: 'Discard Smart Rules changes?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
+  if (_isTagEditorModalDirty() && !await _showConfirm({ title: 'Discard Tag Edits?', message: 'Your track tag edits have not been saved.', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
+  if (_isAlbumTagModalDirty() && !await _showConfirm({ title: 'Discard Album Edits?', message: 'Your album tag edits have not been saved.', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
+  if (_isArtistRenameModalDirty() && !await _showConfirm({ title: 'Discard Rename?', message: 'The new artist name has not been saved.', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
+  if (_isMissingTagsBulkModalDirty() && !await _showConfirm({ title: 'Discard Bulk Tags?', message: 'Discard the bulk tag values you entered?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
+  if (_isAlbumArtModalDirty() && !await _showConfirm({ title: 'Discard Album Art?', message: 'Discard the selected album artwork?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
+  if (_isArtistImageModalDirty() && !await _showConfirm({ title: 'Discard Artist Image?', message: 'Discard the selected artist image?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
   return true;
 }
 
@@ -4305,6 +4351,33 @@ function _closeModalOverlaysForNavigation() {
   if (_isOverlayOpen('iem-blindspot-modal')) closeAllBlindspots();
   if (_isOverlayOpen('iem-compare-modal')) closeIemCompare();
   if (_isOverlayOpen('create-playlist-modal')) closeCreatePlaylistModal();
+  if (_isOverlayOpen('dup-action-modal')) _closeDupActionModal();
+  if (_isOverlayOpen('missing-tags-bulk-modal')) closeMissingTagsBulkEditor();
+  if (_isOverlayOpen('tag-editor-modal')) {
+    document.getElementById('tag-editor-modal').style.display = 'none';
+    _tagEditorTrackId = null;
+    _tagEditorOriginal = {};
+  }
+  if (_isOverlayOpen('album-tag-modal')) {
+    document.getElementById('album-tag-modal').style.display = 'none';
+    _albumTagOriginal = {};
+  }
+  if (_isOverlayOpen('artist-rename-modal')) {
+    document.getElementById('artist-rename-modal').style.display = 'none';
+    _artistRenameOriginal = '';
+  }
+  if (_isOverlayOpen('album-art-modal')) closeAlbumArtModal();
+  if (_isOverlayOpen('artist-image-modal')) closeArtistImageModal();
+  if (_isOverlayOpen('donate-modal')) _dismissDonate();
+}
+
+async function _closeTopModalFromEscape() {
+  if (_isOverlayOpen('license-modal') || _isOverlayOpen('onboarding-modal')) return;
+  const openModal = Array.from(document.querySelectorAll('.tb-modal-overlay'))
+    .find(el => el.style.display && el.style.display !== 'none');
+  if (!openModal) return;
+  if (!await _guardModalNavigation()) return;
+  _closeModalOverlaysForNavigation();
 }
 
 async function submitCreatePlaylist() {
@@ -4350,14 +4423,20 @@ function _resetMlPreviewState() {
   if (regenBtn) regenBtn.disabled = true;
 }
 
-function _confirmMlDiscard() {
+async function _confirmMlDiscard() {
   if (!_hasUnsavedMlPreview()) return true;
-  return window.confirm('You have an unsaved generated playlist preview. Click OK to discard it and continue.');
+  return _showConfirm({
+    title: 'Discard Preview?',
+    message: 'You have an unsaved generated playlist preview. Discard it and continue?',
+    okText: 'Discard',
+    cancelText: 'Keep Editing',
+    danger: true,
+  });
 }
 
-function _guardMlGeneratorNavigation() {
+async function _guardMlGeneratorNavigation() {
   if (!_isMlModalOpen()) return true;
-  if (!_confirmMlDiscard()) return false;
+  if (!await _confirmMlDiscard()) return false;
   _resetMlPreviewState();
   const modal = document.getElementById('ml-gen-modal');
   if (modal) modal.style.display = 'none';
@@ -6548,10 +6627,10 @@ async function searchSeeAll(category) {
   }
 }
 
-function showView(viewName) {
-  if (!_guardMlGeneratorNavigation()) return;
-  if (!_guardPeqEditorNavigation()) return;
-  if (!_guardModalNavigation()) return;
+async function showView(viewName) {
+  if (!await _guardMlGeneratorNavigation()) return;
+  if (!await _guardPeqEditorNavigation()) return;
+  if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
   _pushToNavHistory();
   if (viewName === 'fav-artists') {
@@ -6640,10 +6719,10 @@ function setActiveNav(view) {
   });
 }
 
-function backToArtists() {
-  if (!_guardMlGeneratorNavigation()) return;
-  if (!_guardPeqEditorNavigation()) return;
-  if (!_guardModalNavigation()) return;
+async function backToArtists() {
+  if (!await _guardMlGeneratorNavigation()) return;
+  if (!await _guardPeqEditorNavigation()) return;
+  if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
   state.view = 'artists';
   clearSelection();
@@ -6653,10 +6732,10 @@ function backToArtists() {
   loadArtists(); // restores _artistsScrollTop if set
 }
 
-function backToGear() {
-  if (!_guardMlGeneratorNavigation()) return;
-  if (!_guardPeqEditorNavigation()) return;
-  if (!_guardModalNavigation()) return;
+async function backToGear() {
+  if (!await _guardMlGeneratorNavigation()) return;
+  if (!await _guardPeqEditorNavigation()) return;
+  if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
   state.view = 'gear';
   clearSelection();
@@ -6821,9 +6900,9 @@ async function navBack() {
     return;
   }
   if (_navHistory.length === 0) return;
-  if (!_guardMlGeneratorNavigation()) return;
-  if (!_guardPeqEditorNavigation()) return;
-  if (!_guardModalNavigation()) return;
+  if (!await _guardMlGeneratorNavigation()) return;
+  if (!await _guardPeqEditorNavigation()) return;
+  if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
   const leavingSearch = state.view === 'search';
   const prevSnap = _navHistory.pop();
@@ -6840,9 +6919,9 @@ async function navBack() {
 
 
 async function showArtist(artist) {
-  if (!_guardMlGeneratorNavigation()) return;
-  if (!_guardPeqEditorNavigation()) return;
-  if (!_guardModalNavigation()) return;
+  if (!await _guardMlGeneratorNavigation()) return;
+  if (!await _guardPeqEditorNavigation()) return;
+  if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
   _pushToNavHistory();
   const main = document.getElementById('main');
@@ -6861,9 +6940,9 @@ async function showArtist(artist) {
 }
 
 async function showAlbum(artist, album, displayArtist = '') {
-  if (!_guardMlGeneratorNavigation()) return;
-  if (!_guardPeqEditorNavigation()) return;
-  if (!_guardModalNavigation()) return;
+  if (!await _guardMlGeneratorNavigation()) return;
+  if (!await _guardPeqEditorNavigation()) return;
+  if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
   _pushToNavHistory();
   state.artist = artist;
@@ -6877,8 +6956,10 @@ async function showAlbum(artist, album, displayArtist = '') {
 }
 
 async function showArtistTracks(artist) {
-  if (!_guardMlGeneratorNavigation()) return;
-  if (!_guardPeqEditorNavigation()) return;
+  if (!await _guardMlGeneratorNavigation()) return;
+  if (!await _guardPeqEditorNavigation()) return;
+  if (!await _guardModalNavigation()) return;
+  _closeModalOverlaysForNavigation();
   _pushToNavHistory();
   state.artist = artist;
   state.album = null;
@@ -10490,10 +10571,16 @@ function isPeqWorkspaceOpen() {
   return !!_peqWorkspaceOpen;
 }
 
-function _guardPeqEditorNavigation() {
+async function _guardPeqEditorNavigation() {
   if (!_peqWorkspaceOpen) return true;
   if (_peqWorkspaceDirty) {
-    const shouldSave = window.confirm('Save Custom PEQ changes before leaving? Click OK to save, or Cancel to discard.');
+    const shouldSave = await _showConfirm({
+      title: 'Save Custom EQ?',
+      message: 'Save Custom PEQ changes before leaving? Choose Save to keep the live edits, or Discard to leave without them.',
+      okText: 'Save',
+      cancelText: 'Discard',
+      danger: false,
+    });
     if (shouldSave) {
       const st = _saveCustomPeqState();
       st.enabled = true;
@@ -13058,8 +13145,14 @@ function srOpen() {
   _srUpdateActionState();
 }
 
-function srClose(force = false) {
-  if (!force && _srDirty && !window.confirm('Discard Smart Rules changes?')) return;
+async function srClose(force = false) {
+  if (!force && _srDirty && !await _showConfirm({
+    title: 'Discard Smart Rules?',
+    message: 'Discard Smart Rules changes?',
+    okText: 'Discard',
+    cancelText: 'Keep Editing',
+    danger: true,
+  })) return;
   _srDirty = false;
   _srInitialJson = '';
   _srLastPreviewJson = '';
@@ -14177,7 +14270,13 @@ async function _dupDapDelete(key) {
   const { removeIds } = _getDupRowActions(key);
   const relPaths = removeIds.map(id => decodeURIComponent(id));
   if (!relPaths.length) { showToast('Mark at least one track as Remove', 'error'); return; }
-  if (!confirm(`Delete ${relPaths.length} file${relPaths.length !== 1 ? 's' : ''} from the DAP? This cannot be undone.`)) return;
+  if (!await _showConfirm({
+    title: 'Delete From DAP?',
+    message: `Delete ${relPaths.length} file${relPaths.length !== 1 ? 's' : ''} from the DAP? This cannot be undone.`,
+    okText: 'Delete',
+    cancelText: 'Cancel',
+    danger: true,
+  })) return;
   try {
     const res = await api(`/daps/${_dupDapId}/duplicates/delete`, {
       method: 'POST',
@@ -18947,7 +19046,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Keyboard shortcut: Escape closes dropdown and context menu
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { hideDropdown(); hideCtxMenu(); closePlaylistDapMenu(); _closeFrOverlayMenu(); }
+    if (e.key === 'Escape') {
+      hideDropdown();
+      hideCtxMenu();
+      closePlaylistDapMenu();
+      _closeFrOverlayMenu();
+      _closeTopModalFromEscape();
+    }
     const tag = document.activeElement?.tagName?.toLowerCase();
     const inInput = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
     if ((e.key === '/' && !inInput) || (e.key === 'k' && (e.metaKey || e.ctrlKey))) {
