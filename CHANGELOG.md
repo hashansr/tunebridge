@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.296-rc.160526-1830 · 2026-05-16
 - Fix: Ko-fi and bug report links now open in the system browser via pywebview js_api (window.open and fetch-to-Flask are both unreliable in WKWebView)
 
 ## v0.295-rc.160526-1801 · 2026-05-16
