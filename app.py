@@ -2473,11 +2473,13 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
             continue
         key = f"{artist.lower()}||{album_name.lower()}"
         if key not in profiles:
-            profiles[key] = {'plays': 0, 'total_seconds': 0.0, 'last_played_at': 0}
+            profiles[key] = {'plays': 0, 'total_seconds': 0.0, 'last_played_at': 0, 'skips': 0, 'completions': 0}
         p = profiles[key]
         p['plays'] += 1
         p['total_seconds'] += float(e.get('play_seconds') or 0.0)
         p['last_played_at'] = max(p['last_played_at'], int(e.get('played_at') or 0))
+        p['skips'] += int(e.get('skipped') or 0)
+        p['completions'] += int(e.get('completed') or 0)
 
     if not profiles:
         return []
@@ -2508,6 +2510,12 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
                     if recent_bands else None)
 
     # --- Initial scoring (no sonic) to get top 20 candidates ---
+    def _engagement_modifier(p):
+        """Multiplier [0.6, 1.0] based on skip rate and completion rate."""
+        skip_rate = p['skips'] / p['plays']
+        completion_rate = p['completions'] / p['plays']
+        return (1.0 - 0.4 * skip_rate) * (0.7 + 0.3 * completion_rate)
+
     def _basic_score(key, p):
         days_since = max(0.0, (now - p['last_played_at']) / 86400.0)
         recency = math.exp(-days_since / 30.0)
@@ -2516,7 +2524,8 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
         info = albums.get(key)
         g = _norm_genre_text(info.get('genre')) if info else ''
         genre_aff = min((recent_genre_counts.get(g, 0) / total_recent_genre) * 5.0, 1.0) if g else 0.0
-        return 0.30 * recency + 0.25 * frequency + 0.25 * genre_aff + 0.20 * novelty
+        raw = 0.30 * recency + 0.25 * frequency + 0.25 * genre_aff + 0.20 * novelty
+        return raw * _engagement_modifier(p)
 
     candidates = [
         (key, p, _basic_score(key, p))
@@ -2584,16 +2593,25 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
             factors = {'recency': 0.30 * recency, 'frequency': 0.25 * frequency,
                        'genre': 0.25 * genre_aff, 'novelty': 0.20 * novelty, 'sonic': 0.0}
 
+        score *= _engagement_modifier(p)
+
         dominant = max(factors, key=lambda k: factors[k])
         genre_label = _genre_display_label(_norm_genre_text(info.get('genre')))
+        skip_rate = p['skips'] / p['plays']
+        if skip_rate >= 0.5:
+            familiar_reason = "In your library"
+        elif dominant == 'frequency':
+            familiar_reason = "A recent favourite"
+        else:
+            familiar_reason = "In your recent rotation"
         reasons = {
-            'recency':   "In your recent rotation",
-            'frequency': "A recent favourite",
+            'recency':   familiar_reason,
+            'frequency': familiar_reason,
             'genre':     f"More {genre_label}" if genre_label else "Matches your taste",
             'novelty':   "Time to revisit",
             'sonic':     "Matches your sound",
         }
-        scored.append({'key': key, 'score': score, 'info': info, 'reason': reasons[dominant]})
+        scored.append({'key': key, 'score': score, 'info': info, 'reason': reasons[dominant], 'seed_artist': None})
 
     if not scored:
         return []
@@ -2617,11 +2635,14 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
         genre_label = _genre_display_label(g)
         if artist_boost > genre_aff:
             disc_reason = f"More from {artist_name}"
+            seed_artist = artist_name
         elif genre_aff > 0 and genre_label:
             disc_reason = f"New {genre_label} pick"
+            seed_artist = None
         else:
             disc_reason = "From your library"
-        discovery.append({'key': key, 'score': disc_score, 'info': info, 'reason': disc_reason})
+            seed_artist = None
+        discovery.append({'key': key, 'score': disc_score, 'info': info, 'reason': disc_reason, 'seed_artist': seed_artist})
 
     # Daily rotation: shuffle each pool with a date seed so the carousel varies day-to-day
     day_seed = _dt.date.today().toordinal()
@@ -2682,6 +2703,7 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
         'subtitle': s['info'].get('artist') or 'Unknown Artist',
         'artwork_key': s['info'].get('artwork_key'),
         'reason': s['reason'],
+        'seed_artist': s.get('seed_artist'),
     } for s in picks]
 
 
@@ -2706,7 +2728,7 @@ def _home_listen_next(events, artists_map, albums, limit=10):
     album_played_keys = set()
     album_last = {}
     album_plays = {}
-    genre_play_secs = {}    # total play seconds per normalised genre
+    genre_albums_played = {}  # genre -> set of album keys played (breadth coverage)
 
     for e in events:
         if not int(e.get('valid_listen') or 0):
@@ -2735,13 +2757,13 @@ def _home_listen_next(events, artists_map, albums, limit=10):
                 album_last[albk] = played_at
             album_plays[albk] = album_plays.get(albk, 0) + 1
 
-            # Accumulate play seconds per genre using library album metadata
+            # Track album breadth coverage per genre
             lib_albk = f"{ak}||{album_name.lower()}"
             alb_info = albums.get(lib_albk) or {}
             raw_genre = alb_info.get('genre') or ''
             genre = _norm_genre_text(raw_genre)
             if genre:
-                genre_play_secs[genre] = genre_play_secs.get(genre, 0.0) + play_secs
+                genre_albums_played.setdefault(genre, set()).add(lib_albk)
 
     # --- Bucket 1: unplayed albums from artists you love ---
     b1 = []
@@ -2826,7 +2848,7 @@ def _home_listen_next(events, artists_map, albums, limit=10):
         genre_lib_albums.setdefault(genre, []).append((albk, alb_info))
 
     genre_coverage = {
-        g: genre_play_secs.get(g, 0.0) / cnt
+        g: len(genre_albums_played.get(g, set())) / cnt
         for g, cnt in genre_lib_count.items()
         if cnt >= 3
     }
@@ -3090,12 +3112,43 @@ def home_stats():
 
     try:
         tracks, track_by_id, albums, artists_map = _music_meta_maps()
-        # Load enough events to cover both current and previous periods
-        load_since = prev_since_ts if prev_since_ts is not None else since_ts
-        all_events = _db.db_load_play_events_since(load_since, limit=50000)
+        # Load all-time events once; filter in Python for period stats and streak
+        all_events = _db.db_load_play_events_since(0, limit=50000)
 
         current_events = [e for e in all_events if int(e.get('played_at') or 0) >= since_ts]
         current = _home_stats_aggregate(current_events, albums)
+
+        # Streak from all-time valid events so it isn't clipped to the selected period
+        import datetime as _dt_s
+        all_time_days = sorted({
+            time.strftime('%Y-%m-%d', time.localtime(int(e['played_at'])))
+            for e in all_events if int(e.get('valid_listen') or 0)
+        })
+        cur_streak = 0
+        lng_streak = 0
+        if all_time_days:
+            run = 1
+            for i in range(len(all_time_days) - 1, 0, -1):
+                d_c = _dt_s.date.fromisoformat(all_time_days[i])
+                d_p = _dt_s.date.fromisoformat(all_time_days[i - 1])
+                if (d_c - d_p).days == 1:
+                    run += 1
+                else:
+                    lng_streak = max(lng_streak, run)
+                    run = 1
+            lng_streak = max(lng_streak, run)
+            last_d = _dt_s.date.fromisoformat(all_time_days[-1])
+            if (_dt_s.date.today() - last_d).days <= 1:
+                cur_streak = 1
+                for i in range(len(all_time_days) - 1, 0, -1):
+                    d_c = _dt_s.date.fromisoformat(all_time_days[i])
+                    d_p = _dt_s.date.fromisoformat(all_time_days[i - 1])
+                    if (d_c - d_p).days == 1:
+                        cur_streak += 1
+                    else:
+                        break
+        current['current_streak'] = cur_streak
+        current['longest_streak'] = lng_streak
 
         if prev_since_ts is not None and prev_until_ts is not None:
             prev_events = [e for e in all_events
@@ -6991,6 +7044,8 @@ def history_charts():
     sessions = _collapse_history_sessions(rows)
 
     daily_counts = {}
+    hourly_counts = {}
+    dow_counts = {}
     artist_stats = {}
     track_stats = {}
     artist_image_keys = _db.db_get_all_artist_image_keys()
@@ -7009,8 +7064,12 @@ def history_charts():
                 if key and key not in artist_artwork_keys:
                     artist_artwork_keys[key] = artwork_key
     for s in sessions:
-        day = time.strftime('%Y-%m-%d', time.localtime(int(s['played_at'] or 0)))
+        ts = int(s['played_at'] or 0)
+        lt = time.localtime(ts)
+        day = time.strftime('%Y-%m-%d', lt)
         daily_counts[day] = daily_counts.get(day, 0) + 1
+        hourly_counts[lt.tm_hour] = hourly_counts.get(lt.tm_hour, 0) + 1
+        dow_counts[lt.tm_wday] = dow_counts.get(lt.tm_wday, 0) + 1
 
         artist = s['artist'] or 'Unknown'
         artist_slot = artist_stats.setdefault(artist, {
@@ -7056,7 +7115,16 @@ def history_charts():
     ]
     top_tracks = sorted(track_stats.values(), key=lambda x: x['count'], reverse=True)[:5]
 
-    return jsonify({'daily_plays': daily_plays, 'top_artists': top_artists, 'top_tracks': top_tracks})
+    hourly_plays = [hourly_counts.get(h, 0) for h in range(24)]
+    dow_plays = [dow_counts.get(d, 0) for d in range(7)]
+
+    return jsonify({
+        'daily_plays': daily_plays,
+        'top_artists': top_artists,
+        'top_tracks': top_tracks,
+        'hourly_plays': hourly_plays,
+        'dow_plays': dow_plays,
+    })
 
 
 @app.route('/api/library/play-stats')

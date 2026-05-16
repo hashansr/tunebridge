@@ -1839,7 +1839,8 @@ h4.settings-subsection-title {
   pointer-events: none;
 }
 .artist-card:hover .card-thumb-overlay,
-.album-card:hover .card-thumb-overlay { opacity: 1; pointer-events: all; }
+.album-card:hover .card-thumb-overlay,
+.pl-view-card:hover .card-thumb-overlay { opacity: 1; pointer-events: all; }
 
 /* Dark frosted play button */
 .card-play-btn {
@@ -14093,8 +14094,17 @@ body.is-col-resizing {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.home-pick-seed {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.3;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .home-pick-reason {
-  margin-top: 4px;
+  margin-top: 2px;
   color: var(--accent);
   font-weight: 400;
   font-size: 10px;
@@ -14242,6 +14252,23 @@ body.is-col-resizing {
   color: var(--text-muted);
   letter-spacing: -0.005em;
   margin-top: 1px;
+}
+
+.home-stats-delta {
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.home-stats-delta--up {
+  color: #53e16f;
+  background: rgba(83, 225, 111, 0.12);
+}
+.home-stats-delta--down {
+  color: rgba(173, 198, 255, 0.5);
+  background: rgba(173, 198, 255, 0.07);
 }
 
 .home-stat-metric {
@@ -15895,6 +15922,9 @@ tr:hover .track-edit-btn:hover {
 }
 .history-rank-card {
   min-height: 0;
+}
+.history-timeline-card {
+  grid-column: 1 / -1;
 }
 .history-top-row {
   display: flex; justify-content: space-between; align-items: center;
@@ -17599,7 +17629,8 @@ thead th:hover .table-col-resizer::after {
 #view-albums .card-play-btn,
 #view-favourites .card-play-btn,
 #view-fav-artists .card-play-btn,
-#view-fav-albums .card-play-btn {
+#view-fav-albums .card-play-btn,
+#view-playlists .card-play-btn {
   width: 36px;
   height: 36px;
   background: rgba(255, 255, 255, 0.15);
@@ -17612,7 +17643,8 @@ thead th:hover .table-col-resizer::after {
 #view-albums .card-play-btn:hover,
 #view-favourites .card-play-btn:hover,
 #view-fav-artists .card-play-btn:hover,
-#view-fav-albums .card-play-btn:hover {
+#view-fav-albums .card-play-btn:hover,
+#view-playlists .card-play-btn:hover {
   background: rgba(255, 255, 255, 0.28);
 }
 

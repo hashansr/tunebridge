@@ -1461,7 +1461,14 @@ async function loadPlaylistsView() {
     const count = pl.track_count != null ? pl.track_count : (pl.tracks ? pl.tracks.length : 0);
     return `
       <div class="pl-view-card" onclick="App.openPlaylist('${pl.id}')">
-        <div class="pl-view-cover ${pl.has_artwork || (pl.artwork_keys && pl.artwork_keys.length === 1) ? 'playlist-cover-single' : ''}">${coverHtml}</div>
+        <div class="pl-view-cover ${pl.has_artwork || (pl.artwork_keys && pl.artwork_keys.length === 1) ? 'playlist-cover-single' : ''}">
+          ${coverHtml}
+          <div class="card-thumb-overlay">
+            <button class="card-play-btn" onclick="event.stopPropagation();App.playPlaylist('${pl.id}')" title="Play playlist" aria-label="Play ${esc(pl.name)}">
+              ${playSvg(15)}
+            </button>
+          </div>
+        </div>
         <div class="pl-view-info">
           <div class="pl-view-info-text">
             <div class="pl-view-name" title="${esc(pl.name)}">${esc(pl.name)}</div>
@@ -1480,7 +1487,14 @@ async function loadPlaylistsView() {
     const coverHtml = `<img src="${_FAV_PLAYLIST_COVER}" style="width:100%;height:100%;object-fit:cover" loading="lazy" />`;
     favCard = `
       <div class="pl-view-card pl-view-card-fav" onclick="App.showView('fav-songs')">
-        <div class="pl-view-cover playlist-cover-single">${coverHtml}</div>
+        <div class="pl-view-cover playlist-cover-single">
+          ${coverHtml}
+          <div class="card-thumb-overlay">
+            <button class="card-play-btn" onclick="event.stopPropagation();App.playPlaylist('__favourite_songs__')" title="Play Favourite Songs" aria-label="Play Favourite Songs">
+              ${playSvg(15)}
+            </button>
+          </div>
+        </div>
         <div class="pl-view-info">
           <div class="pl-view-info-text">
             <div class="pl-view-name" title="Favourite Songs">Favourite Songs <span class="fav-badge-inline">★</span></div>
@@ -4010,6 +4024,22 @@ async function playAlbum(artist, album) {
   Player.playAll(tracks);
 }
 
+async function playPlaylist(pid) {
+  if (pid === '__favourites__' || pid === '__favourite_songs__') {
+    await playAllFavouriteSongs();
+    return;
+  }
+  const pl = await api(`/playlists/${encodeURIComponent(pid)}`).catch(() => null);
+  const tracks = Array.isArray(pl?.tracks) ? pl.tracks : [];
+  if (!tracks.length) {
+    toast('No tracks found');
+    return;
+  }
+  Player.registerTracks?.(tracks);
+  Player.setPlaybackContext?.(tracks, { sourceType: 'playlist', sourceId: pl.id, sourceLabel: `Playlist · ${pl.name}` });
+  Player.playAll(tracks, 0, `Playlist · ${pl.name}`);
+}
+
 /* ── Duplicate dialog ───────────────────────────────────────────────── */
 let _dupResolve = null;
 let _dupContext = null;
@@ -5672,9 +5702,11 @@ function _homePickCardHtml(item) {
   const title = item.title || 'Unknown';
   const subtitle = item.subtitle || '';
   const reason = item.reason || '';
+  const seedArtist = item.seed_artist || '';
   const isArtist = String(item?.kind || '').toLowerCase() === 'artist';
   const artClass = isArtist ? 'home-pick-art home-artist-art-card' : 'home-pick-art';
   const artStyle = isArtist ? ` style="--artist-card-accent:${_artistCardAccent(item?.artist || item?.title || '')}"` : '';
+  const seedHtml = seedArtist ? `<div class="home-pick-seed">Because you play ${esc(seedArtist)}</div>` : '';
   return `
     <div class="home-pick-card" onclick="${_homeOnClick(item)}" role="button" tabindex="0">
       <div class="${artClass}"${artStyle}>
@@ -5685,6 +5717,7 @@ function _homePickCardHtml(item) {
       </div>
       <div class="home-pick-title" title="${esc(title)}">${esc(title)}</div>
       <div class="home-pick-sub">${esc(subtitle)}</div>
+      ${seedHtml}
       ${reason ? `<div class="home-pick-reason">${esc(reason)}</div>` : ''}
     </div>`;
 }
@@ -5836,6 +5869,7 @@ function _renderHomeListeningStats(data) {
   const el = document.getElementById('home-stats-content');
   if (!el) return;
   const c = (data && data.current) || {};
+  const cmp = (data && data.comparison) || {};
   const periodLabel = {
     week: 'This Week',
     month: 'This Month',
@@ -5848,6 +5882,26 @@ function _renderHomeListeningStats(data) {
   const artists = Number(c.artist_count || 0).toLocaleString();
   const daysActive = Number(c.active_days || 0).toLocaleString();
 
+  // Period-over-period delta badge (only for non-"all" periods)
+  let deltaHtml = '';
+  if (_homeCurrentPeriod !== 'all' && cmp.minutes_change != null) {
+    const pct = Math.round(Number(cmp.minutes_change));
+    if (pct !== 0) {
+      const sign = pct > 0 ? '+' : '';
+      const cls = pct > 0 ? 'home-stats-delta--up' : 'home-stats-delta--down';
+      deltaHtml = `<span class="home-stats-delta ${cls}">${sign}${pct}%</span>`;
+    }
+  }
+
+  // Listening streak card (only shown when >= 2 days)
+  const streak = Number(c.current_streak || 0);
+  const streakHtml = streak >= 2
+    ? `<div class="home-stat-bottom home-stats-card">
+        <span class="home-stat-top-label">Current Streak</span>
+        <span class="home-stat-bottom-value">${streak} days</span>
+      </div>`
+    : '';
+
   el.innerHTML = `
     <div class="home-stats-shell">
       <div class="home-stats-hero home-stats-card">
@@ -5855,6 +5909,7 @@ function _renderHomeListeningStats(data) {
         <div class="home-stats-hero-value">
           <span class="home-stats-hero-minutes">${minutesNum.toLocaleString()}</span>
           <span class="home-stats-hero-unit">min</span>
+          ${deltaHtml}
         </div>
         <div class="home-stats-hero-label">Total listening time</div>
       </div>
@@ -5893,6 +5948,7 @@ function _renderHomeListeningStats(data) {
         <span class="home-stat-top-label">Top Track</span>
         <span class="home-stat-bottom-value" title="${esc(c.top_track || '—')}">${esc(c.top_track || '—')}</span>
       </div>
+      ${streakHtml}
     </div>
   `;
   _homeSectionVisible('home-stats-section', true);
@@ -13606,10 +13662,30 @@ async function refreshHistoryView() {
 async function _renderHistoryCharts(validOnly) {
   const container = document.getElementById('history-charts');
   if (!container) return;
+  if (_historyChart) { _historyChart.destroy(); _historyChart = null; }
   try {
     const d = await api(`/history/charts?since=${_historyPeriod}&valid_only=${validOnly}`);
     container.style.display = 'grid';
-    container.innerHTML = `
+
+    const timelineHtml = (d.daily_plays && d.daily_plays.length > 0) ? `
+      <div class="history-chart-card history-timeline-card">
+        <div class="history-chart-title">Plays per day</div>
+        <canvas id="history-timeline-canvas" height="80"></canvas>
+      </div>` : '';
+
+    const hourHtml = (d.hourly_plays && d.hourly_plays.some(v => v > 0)) ? `
+      <div class="history-chart-card">
+        <div class="history-chart-title">Time of day</div>
+        <canvas id="history-hour-canvas" height="80"></canvas>
+      </div>` : '';
+
+    const dowHtml = (d.dow_plays && d.dow_plays.some(v => v > 0)) ? `
+      <div class="history-chart-card">
+        <div class="history-chart-title">Day of week</div>
+        <canvas id="history-dow-canvas" height="80"></canvas>
+      </div>` : '';
+
+    container.innerHTML = timelineHtml + `
       <div class="history-chart-card history-rank-card">
         <div class="history-chart-title">Top artists</div>
         ${_historyRankRows(d.top_artists, 'artist')}
@@ -13617,9 +13693,72 @@ async function _renderHistoryCharts(validOnly) {
       <div class="history-chart-card history-rank-card">
         <div class="history-chart-title">Top songs</div>
         ${_historyRankRows(d.top_tracks, 'track')}
-      </div>
-    `;
-    if (_historyChart) { _historyChart.destroy(); _historyChart = null; }
+      </div>` + hourHtml + dowHtml;
+
+    const chartDefaults = {
+      type: 'bar',
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: {
+          label: ctx => ` ${ctx.parsed.y} play${ctx.parsed.y !== 1 ? 's' : ''}`,
+        }}},
+        scales: {
+          x: { grid: { display: false }, ticks: { color: 'rgba(173,198,255,0.5)', font: { size: 10 }, maxRotation: 0 } },
+          y: { grid: { color: 'rgba(173,198,255,0.08)' }, ticks: { color: 'rgba(173,198,255,0.5)', font: { size: 10 }, maxTicksLimit: 4 }, beginAtZero: true },
+        },
+      },
+    };
+
+    const accentColor = 'rgba(173,198,255,0.7)';
+    const accentBorder = 'rgba(173,198,255,0.9)';
+
+    if (d.daily_plays && d.daily_plays.length > 0) {
+      const tlCanvas = document.getElementById('history-timeline-canvas');
+      if (tlCanvas) {
+        _historyChart = new Chart(tlCanvas, {
+          ...chartDefaults,
+          data: {
+            labels: d.daily_plays.map(p => {
+              const dt = new Date(p.date);
+              return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            }),
+            datasets: [{ data: d.daily_plays.map(p => p.count), backgroundColor: accentColor, borderColor: accentBorder, borderWidth: 1, borderRadius: 3 }],
+          },
+          options: { ...chartDefaults.options, scales: { ...chartDefaults.options.scales,
+            x: { ...chartDefaults.options.scales.x, ticks: { ...chartDefaults.options.scales.x.ticks,
+              maxTicksLimit: Math.min(d.daily_plays.length, 14),
+            }},
+          }},
+        });
+      }
+    }
+
+    if (d.hourly_plays && d.hourly_plays.some(v => v > 0)) {
+      const hourCanvas = document.getElementById('history-hour-canvas');
+      if (hourCanvas) {
+        new Chart(hourCanvas, {
+          ...chartDefaults,
+          data: {
+            labels: Array.from({length: 24}, (_, h) => h % 6 === 0 ? `${h}:00` : ''),
+            datasets: [{ data: d.hourly_plays, backgroundColor: accentColor, borderColor: accentBorder, borderWidth: 1, borderRadius: 2 }],
+          },
+        });
+      }
+    }
+
+    if (d.dow_plays && d.dow_plays.some(v => v > 0)) {
+      const dowCanvas = document.getElementById('history-dow-canvas');
+      if (dowCanvas) {
+        new Chart(dowCanvas, {
+          ...chartDefaults,
+          data: {
+            labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+            datasets: [{ data: d.dow_plays, backgroundColor: accentColor, borderColor: accentBorder, borderWidth: 1, borderRadius: 2 }],
+          },
+        });
+      }
+    }
   } catch (_) {
     container.style.display = 'none';
   }
@@ -14835,6 +14974,7 @@ const App = {
   addAllArtistSongs,
   addAlbumToPlaylist,
   playAlbum,
+  playPlaylist,
   _commitToPlaylist,
   setArtistSearch,
   clearArtistSearch,
