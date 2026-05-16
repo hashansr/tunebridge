@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Ko-fi and bug report links now open in the system browser (WKWebView cannot use window.open for external URLs)
 
 ## v0.295-rc.160526-1801 · 2026-05-16
 - Add: First-launch license and privacy policy modal — users must agree before the app loads
