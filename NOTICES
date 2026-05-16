@@ -1,0 +1,82 @@
+TuneBridge — Third-Party Notices
+
+This application bundles open-source software. The following notices and
+licenses apply to those components.
+
+────────────────────────────────────────────────────────────────────────────────
+PYTHON PACKAGES
+────────────────────────────────────────────────────────────────────────────────
+
+Flask
+  Copyright © 2010 Pallets
+  License: BSD 3-Clause — https://opensource.org/licenses/BSD-3-Clause
+
+Pillow
+  Copyright © 1997-2011 by Secret Labs AB
+  Copyright © 1995-2011 by Fredrik Lundh and contributors
+  License: Historical Permission Notice and Disclaimer (HPND)
+           https://raw.githubusercontent.com/python-pillow/Pillow/main/LICENSE
+
+Waitress
+  Copyright © 2008 Agendaless Consulting and Contributors
+  License: ZPL 2.1 — https://www.zope.org/Resources/License/ZPL-2.1
+
+pywebview
+  Copyright © 2014-2025 Roman Sirokov
+  License: BSD 3-Clause — https://opensource.org/licenses/BSD-3-Clause
+
+Requests
+  Copyright © 2019 Kenneth Reitz
+  License: Apache 2.0 — https://www.apache.org/licenses/LICENSE-2.0
+
+SoundFile
+  Copyright © 2013-2025 Bastian Bechtold and contributors
+  License: BSD 3-Clause — https://opensource.org/licenses/BSD-3-Clause
+
+NumPy
+  Copyright © 2005-2025 NumPy Developers
+  License: BSD 3-Clause — https://opensource.org/licenses/BSD-3-Clause
+
+scikit-learn
+  Copyright © 2007-2025 The scikit-learn developers
+  License: BSD 3-Clause — https://opensource.org/licenses/BSD-3-Clause
+
+pyloudnorm
+  Copyright © 2019 Christian Steinmetz
+  License: MIT — https://opensource.org/licenses/MIT
+
+send2trash
+  Copyright © 2017 Andrew Senetar
+  License: BSD 3-Clause — https://opensource.org/licenses/BSD-3-Clause
+
+Mutagen
+  Copyright © 2005-2025 Joe Wreschnig, Michael Urman, and contributors
+  License: GNU General Public License v2 or later (GPL-2.0+)
+           https://www.gnu.org/licenses/gpl-2.0.txt
+  Note: Mutagen is distributed under the GPL v2 or later. The full text of
+  the GPL v2 is available at the URL above.
+
+python-mpv
+  Copyright © 2015-2025 Antonio Ospite and contributors
+  License: GNU Lesser General Public License v2.1 or later (LGPL-2.1+)
+           https://www.gnu.org/licenses/lgpl-2.1.txt
+
+────────────────────────────────────────────────────────────────────────────────
+JAVASCRIPT LIBRARIES (bundled via CDN at runtime)
+────────────────────────────────────────────────────────────────────────────────
+
+SortableJS v1.15.2
+  Copyright © 2013-2025 RubaXa and contributors
+  License: MIT — https://opensource.org/licenses/MIT
+  Source: https://github.com/SortableJS/Sortable
+
+Chart.js v4.4.0
+  Copyright © 2014-2025 Chart.js Contributors
+  License: MIT — https://opensource.org/licenses/MIT
+  Source: https://github.com/chartjs/Chart.js
+
+────────────────────────────────────────────────────────────────────────────────
+
+The BSD 3-Clause License requires that the above copyright notices and this
+list of conditions appear in all distributions. This NOTICES file satisfies
+that requirement.

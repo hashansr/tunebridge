@@ -15302,6 +15302,14 @@ const App = {
   _deleteEmptyFolders,
   _dupRowAction,
   _dupOpenFinder,
+  // License + donate
+  _switchLicenseTab,
+  _acceptLicense,
+  _declineLicense,
+  _dismissDonate,
+  _suppressDonate,
+  _openKofi,
+  _openFeedback,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -18862,6 +18870,122 @@ async function saveArtistImageSettings() {
   }
 }
 
+/* ── Distribution: License + Donate ─────────────────────────────────── */
+
+const DONATE_URL   = 'https://ko-fi.com/hashan';
+const FEEDBACK_URL = 'https://github.com/hashansr/tunebridge-releases/issues/new';
+
+const _DONATE_MILESTONES = [2, 5, 15, 25];
+
+const _DONATE_COPY = {
+  2:  {
+    title: 'Enjoying TuneBridge?',
+    msg:   'Thanks for giving it a proper try! If you\'re finding it useful, a small Ko-fi tip goes a long way — it helps me keep the app alive, ship new features, and cover the AI costs that go into building it. No pressure, just a solo dev asking nicely.',
+  },
+  5:  {
+    title: 'TuneBridge Is Working For You',
+    msg:   'Five sessions in — looks like TuneBridge has earned a spot in your routine. I build and maintain this entirely on my own, so if you\'re getting value from it, I\'d love your support on Ko-fi. Every dollar goes directly toward keeping the app running and making it better.',
+  },
+  15: {
+    title: 'Glad You\'re Still Here',
+    msg:   'You\'ve been using TuneBridge for a while, and that genuinely means a lot. Keeping this going — bug fixes, new features, and yes, a somewhat embarrassing AI bill — is a real ongoing cost for one person. If TuneBridge has earned a place in your music life, a Ko-fi donation would help me keep going. Thank you, seriously.',
+  },
+  25: {
+    title: 'Twenty-Five Sessions',
+    msg:   'At this point, you\'re basically part of the project. I\'m committed to keeping TuneBridge alive and growing — more device support, smarter features, fewer rough edges. If it\'s made your music life any easier, consider a Ko-fi donation. You\'d be directly helping a solo developer who\'d rather be shipping features than worrying about the bills. You\'re the reason this exists.',
+  },
+};
+
+// Called once per app start — increments launch count and returns gate state.
+async function _startupPing() {
+  try {
+    const r = await fetch('/api/startup/ping', { method: 'POST' });
+    return await r.json();
+  } catch {
+    return { launch_count: 0, license_accepted: true, donate_suppressed: false };
+  }
+}
+
+// ── License modal ─────────────────────────────────────────────────────────────
+
+function _showLicenseModal() {
+  const el = document.getElementById('license-modal');
+  if (el) el.style.display = 'flex';
+}
+
+function _hideLicenseModal() {
+  const el = document.getElementById('license-modal');
+  if (el) el.style.display = 'none';
+}
+
+function _switchLicenseTab(tab, btn) {
+  document.getElementById('license-tab-license').style.display  = tab === 'license'  ? '' : 'none';
+  document.getElementById('license-tab-privacy').style.display  = tab === 'privacy'  ? '' : 'none';
+  document.querySelectorAll('.license-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+async function _acceptLicense() {
+  try {
+    await fetch('/api/license/accept', { method: 'POST' });
+  } catch { /* non-blocking */ }
+  _hideLicenseModal();
+  _continueInit();
+}
+
+function _declineLicense() {
+  const actions = document.querySelector('.license-modal-actions');
+  if (actions) actions.style.display = 'none';
+  const msg = document.getElementById('license-declined-msg');
+  if (msg) msg.style.display = '';
+}
+
+// ── Donate popup ──────────────────────────────────────────────────────────────
+
+function _showDonateIfNeeded(launchCount, donateSuppressed) {
+  if (donateSuppressed) return;
+  const copy = _DONATE_COPY[launchCount];
+  if (!copy) return;
+
+  const titleEl = document.getElementById('donate-modal-title');
+  const msgEl   = document.getElementById('donate-modal-msg');
+  if (titleEl) titleEl.textContent = copy.title;
+  if (msgEl)   msgEl.textContent   = copy.msg;
+
+  setTimeout(() => {
+    const el = document.getElementById('donate-modal');
+    if (el) el.style.display = 'flex';
+  }, 3000);
+}
+
+function _dismissDonate() {
+  const el = document.getElementById('donate-modal');
+  if (el) el.style.display = 'none';
+}
+
+async function _suppressDonate() {
+  _dismissDonate();
+  try {
+    await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ donate_suppressed: true }),
+    });
+  } catch { /* non-blocking */ }
+}
+
+function _openKofi() {
+  window.open(DONATE_URL, '_blank');
+}
+
+function _openFeedback() {
+  window.open(FEEDBACK_URL, '_blank');
+}
+
+// Called after license is accepted (or was already accepted) to run the rest
+// of DOMContentLoaded. Separated so the license modal can gate it.
+let _continueInit = () => {};
+
 /* ── Init ───────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
   _initFrOverlaySelection();
@@ -18940,22 +19064,38 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && state.view === 'home') _homeBackgroundRefresh();
   });
-  await loadGearProfiles();
-  // Enter submits create playlist modal
-  const cpInput = document.getElementById('create-playlist-input');
-  if (cpInput) cpInput.addEventListener('keydown', e => { if (e.key === 'Enter') App.submitCreatePlaylist(); });
-  const settings = await loadSettings();
-  await loadFavourites();
-  await loadPlaylists();
-  _enhanceTableSystem();
-  refreshSidebarSyncIndicator();
-  pollScanStatus();
-  showView('home');
-  refreshPlayerFavouriteButton();
+  // ── Startup ping: increment launch count + check license gate ──────────────
+  const pingData = await _startupPing();
 
-  // Show first-run onboarding only when settings file does not exist yet.
-  if (!settings._settings_exists && !settings.onboarding_completed) {
-    _showOnboarding(settings);
+  // Core init logic — extracted so the license modal can defer it.
+  _continueInit = async () => {
+    await loadGearProfiles();
+    // Enter submits create playlist modal
+    const cpInput = document.getElementById('create-playlist-input');
+    if (cpInput) cpInput.addEventListener('keydown', e => { if (e.key === 'Enter') App.submitCreatePlaylist(); });
+    const settings = await loadSettings();
+    await loadFavourites();
+    await loadPlaylists();
+    _enhanceTableSystem();
+    refreshSidebarSyncIndicator();
+    pollScanStatus();
+    showView('home');
+    refreshPlayerFavouriteButton();
+
+    // Show first-run onboarding only when settings file does not exist yet.
+    if (!settings._settings_exists && !settings.onboarding_completed) {
+      _showOnboarding(settings);
+    }
+
+    // Show donate popup at milestone launch counts.
+    _showDonateIfNeeded(pingData.launch_count, pingData.donate_suppressed);
+  };
+
+  if (!pingData.license_accepted) {
+    _showLicenseModal();
+    // _continueInit() will be called by _acceptLicense() when the user agrees.
+  } else {
+    await _continueInit();
   }
 });
 
