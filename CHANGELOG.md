@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.295-rc.160526-1801 · 2026-05-16
 - Add: First-launch license and privacy policy modal — users must agree before the app loads
 - Add: Ko-fi donation popup appears at launch milestones (2nd, 5th, 15th, 25th session) with contextual messages; dismissable and suppressable
 - Add: Support card in Settings → App with Ko-fi donation button and bug report link to GitHub Issues
