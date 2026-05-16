@@ -76,8 +76,9 @@ _git_prepare() {
     -m "build-auto-stash-$(date +%s)" 2>&1) || true
   echo "$stash_out" | grep -q "Saved working directory" && _DID_STASH=1
 
-  # Switch to main and bring in the current branch
+  # Switch to main, sync with origin, then bring in the current branch
   git -C "$PROJECT_DIR" checkout main
+  git -C "$PROJECT_DIR" pull --ff-only origin main 2>/dev/null || true
   git -C "$PROJECT_DIR" merge "$_ORIGINAL_BRANCH" --no-edit
 }
 
