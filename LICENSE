@@ -2,6 +2,14 @@ TuneBridge — License
 
 Copyright © 2025 Hashan Ranatunga. All Rights Reserved.
 
+IMPORTANT — PLEASE READ BEFORE USING THIS APPLICATION
+TuneBridge is a free, personal, experimental project provided at no cost and
+with no guarantees. It interacts with your music library and local file system.
+While every effort has been made to ensure it works safely, you use it entirely
+at your own risk. The author accepts no responsibility for any data loss, file
+corruption, or other damage caused by using this application. Always keep
+backups of your music library and playlists.
+
 GRANT OF LICENSE
 You are granted a non-exclusive, non-transferable, revocable license to
 install and use TuneBridge solely for personal, non-commercial purposes on
@@ -34,9 +42,6 @@ CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF DATA,
 LOSS OF PROFITS, OR BUSINESS INTERRUPTION, ARISING OUT OF OR IN CONNECTION
 WITH THE USE OR INABILITY TO USE THIS APPLICATION, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGES.
-
-To the extent permitted by applicable law, the total liability of the author
-shall not exceed the amount paid by you for the application.
 
 CONTACT
 hashan.sr@gmail.com
