@@ -19610,7 +19610,7 @@ body.is-col-resizing {
   background: var(--surface-2, #1c1b1b);
   border-radius: 18px;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 24px 64px rgba(0,0,0,0.6);
-  width: 520px;
+  width: 640px;
   max-width: 100%;
   max-height: 90vh;
   display: flex;
@@ -20235,7 +20235,7 @@ body.is-col-resizing {
   z-index: 20000 !important;
 }
 #license-modal .license-modal-shell {
-  width: min(560px, 94vw) !important;
+  width: min(640px, 94vw) !important;
   max-height: min(90vh, 760px) !important;
   padding: 28px !important;
 }
