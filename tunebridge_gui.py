@@ -281,11 +281,13 @@ def _start_media_key_bridge(window):
         from AppKit import NSEvent
 
         # System-defined events include hardware media keys.
+        # Local monitor only: addGlobalMonitorForEventsMatchingMask on
+        # NSEventMaskSystemDefined triggers kTCCServiceMediaLibrary on macOS 12+
+        # because the OS routes media-key interception through the Now Playing
+        # framework. The local monitor fires whenever TuneBridge is frontmost,
+        # which is the only context where keyboard shortcuts are useful anyway.
         system_mask = 1 << 14
         refs['local'] = NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
-            system_mask, _handle_event
-        )
-        refs['global'] = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
             system_mask, _handle_event
         )
         print('TuneBridge: media key bridge enabled (Play/Pause, Next, Previous)')
