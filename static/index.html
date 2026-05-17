@@ -3573,10 +3573,11 @@ Questions: mail@hashanr.com</pre>
   <!-- Donate modal (count-triggered: launches 2, 5, 15, 25) -->
   <div id="donate-modal" class="modal-overlay tb-modal-overlay" style="display:none" onclick="if(event.target===this)App._dismissDonate()">
     <div class="modal donate-modal-inner tb-modal-shell tb-modal--sm">
+      <button class="modal-x-btn donate-close-btn" type="button" onclick="App._dismissDonate()" title="Close" aria-label="Close support modal">
+        <span aria-hidden="true"></span>
+      </button>
       <div class="donate-modal-icon">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-        </svg>
+        <span class="home-donate-icon donate-modal-heart" aria-hidden="true"></span>
       </div>
       <h3 id="donate-modal-title" class="donate-modal-title"></h3>
       <p id="donate-modal-msg" class="donate-modal-msg"></p>
@@ -3586,7 +3587,6 @@ Questions: mail@hashanr.com</pre>
           Support on Ko-fi
         </button>
         <button class="confirm-cancel-link donate-later-link" onclick="App._dismissDonate()">Maybe later</button>
-        <button class="donate-never-link" onclick="App._suppressDonate()">Don't ask again</button>
       </div>
     </div>
   </div>

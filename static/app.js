@@ -15557,7 +15557,6 @@ const App = {
   _declineLicense,
   _showDonateFromHome,
   _dismissDonate,
-  _suppressDonate,
   _openKofi,
   _openFeedback,
 };
@@ -19130,19 +19129,19 @@ const _DONATE_MILESTONES = [2, 5, 15, 25];
 const _DONATE_COPY = {
   2:  {
     title: 'Enjoying TuneBridge?',
-    msg:   'Thanks for giving it a proper try! If you\'re finding it useful, a small Ko-fi tip goes a long way — it helps me keep the app alive, ship new features, and cover the AI costs that go into building it. No pressure, just a solo dev asking nicely.',
+    msg:   'Thanks for giving it a proper try. If you are finding it useful, a small tip goes a long way. It helps me keep the app alive, ship new features, and cover the AI costs that go into building it. No pressure, just a solo dev asking nicely.',
   },
   5:  {
     title: 'TuneBridge Is Working For You',
-    msg:   'Five sessions in — looks like TuneBridge has earned a spot in your routine. I build and maintain this entirely on my own, so if you\'re getting value from it, I\'d love your support on Ko-fi. Every dollar goes directly toward keeping the app running and making it better.',
+    msg:   'Five sessions in, and TuneBridge looks like it has earned a spot in your routine. I build and maintain this entirely on my own, so if you are getting value from it, I would love your support. Every dollar goes directly toward keeping the app running and making it better.',
   },
   15: {
     title: 'Glad You\'re Still Here',
-    msg:   'You\'ve been using TuneBridge for a while, and that genuinely means a lot. Keeping this going — bug fixes, new features, and yes, a somewhat embarrassing AI bill — is a real ongoing cost for one person. If TuneBridge has earned a place in your music life, a Ko-fi donation would help me keep going. Thank you, seriously.',
+    msg:   'You have been using TuneBridge for a while, and that genuinely means a lot. Keeping this going means bug fixes, new features, and yes, a somewhat embarrassing AI bill. If TuneBridge has earned a place in your music life, a small donation would help me keep going. Thank you, seriously.',
   },
   25: {
-    title: 'Twenty-Five Sessions',
-    msg:   'At this point, you\'re basically part of the project. I\'m committed to keeping TuneBridge alive and growing — more device support, smarter features, fewer rough edges. If it\'s made your music life any easier, consider a Ko-fi donation. You\'d be directly helping a solo developer who\'d rather be shipping features than worrying about the bills. You\'re the reason this exists.',
+    title: 'Twenty Five Sessions',
+    msg:   'At this point, you are basically part of the project. I am committed to keeping TuneBridge alive and growing with more device support, smarter features, and fewer rough edges. If it has made your music life any easier, a small donation would directly help a solo developer keep shipping. You are the reason this exists.',
   },
 };
 
@@ -19152,7 +19151,7 @@ async function _startupPing() {
     const r = await fetch('/api/startup/ping', { method: 'POST' });
     return await r.json();
   } catch {
-    return { launch_count: 0, license_accepted: true, donate_suppressed: false };
+    return { launch_count: 0, license_accepted: true };
   }
 }
 
@@ -19192,8 +19191,7 @@ function _declineLicense() {
 
 // ── Donate popup ──────────────────────────────────────────────────────────────
 
-function _showDonateIfNeeded(launchCount, donateSuppressed) {
-  if (donateSuppressed) return;
+function _showDonateIfNeeded(launchCount) {
   const copy = _DONATE_COPY[launchCount];
   if (!copy) return;
 
@@ -19213,24 +19211,13 @@ function _showDonateModal(copy) {
 function _showDonateFromHome() {
   _showDonateModal({
     title: 'Support TuneBridge',
-    msg:   'TuneBridge is free and built by one person. If it has made your music library easier to enjoy, a small Ko-fi donation helps keep the app alive and funds the next round of improvements. Thank you for listening with it.',
+    msg:   'TuneBridge is free and built by one person. If it has made your music library easier to enjoy, a small donation helps keep the app alive and funds the next round of improvements. Thank you for listening with it.',
   });
 }
 
 function _dismissDonate() {
   const el = document.getElementById('donate-modal');
   if (el) el.style.display = 'none';
-}
-
-async function _suppressDonate() {
-  _dismissDonate();
-  try {
-    await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ donate_suppressed: true }),
-    });
-  } catch { /* non-blocking */ }
 }
 
 function _openExternalUrl(url) {
@@ -19360,7 +19347,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Show donate popup at milestone launch counts.
-    _showDonateIfNeeded(pingData.launch_count, pingData.donate_suppressed);
+    _showDonateIfNeeded(pingData.launch_count);
   };
 
   if (!pingData.license_accepted) {

@@ -19757,6 +19757,20 @@ body.is-col-resizing {
   max-width: 90vw;
   text-align: center;
   padding: 32px 28px 28px;
+  position: relative;
+}
+.donate-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+.donate-close-btn span {
+  width: 12px;
+  height: 12px;
+  display: block;
+  background: currentColor;
+  -webkit-mask: url("/icons/close.svg") center / contain no-repeat;
+  mask: url("/icons/close.svg") center / contain no-repeat;
 }
 .donate-modal-icon {
   display: flex;
@@ -19769,11 +19783,16 @@ body.is-col-resizing {
   margin: 0 auto 20px;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 8px 24px rgba(0,0,0,0.4);
 }
+.donate-modal-heart {
+  width: 28px;
+  height: 28px;
+  color: rgba(255, 179, 181, 0.9);
+}
 .donate-modal-title {
   font-size: 18px;
   font-weight: 700;
   color: var(--text);
-  margin: 0 0 10px;
+  margin: 0 0 16px;
   letter-spacing: -0.01em;
 }
 .donate-modal-msg {
@@ -19802,16 +19821,6 @@ body.is-col-resizing {
   font-size: 13px;
   padding: 4px;
 }
-.donate-never-link {
-  background: none;
-  border: none;
-  color: var(--text-dim, rgba(255,255,255,0.3));
-  font-size: 11px;
-  cursor: pointer;
-  padding: 2px 4px;
-  transition: color 0.15s;
-}
-.donate-never-link:hover { color: var(--text-muted); }
 
 /* ── Settings support card (donate + feedback) ───────────────────────────── */
 .settings-support-card {
@@ -19943,6 +19952,10 @@ body.is-col-resizing {
 #iem-compare-modal .iem-compare-dialog { --tb-modal-w: 680px; }
 #confirm-modal .confirm-modal-inner,
 #donate-modal .donate-modal-inner { --tb-modal-w: 360px; }
+
+#donate-modal.tb-modal-overlay {
+  align-items: center !important;
+}
 
 .tb-modal-overlay .modal > *,
 .tb-modal-overlay .tb-modal-shell > *,

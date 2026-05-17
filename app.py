@@ -256,7 +256,6 @@ DEFAULT_SETTINGS = {
     'launch_count':         0,      # incremented on each app start; drives donate popup milestones
     'license_accepted':     False,  # True once user accepts the license on first launch
     'license_accepted_at':  None,   # Unix timestamp of acceptance
-    'donate_suppressed':    False,  # True when user clicks "Don't ask again" on donate popup
 }
 
 _DEFAULT_GEAR_PROFILES = {
@@ -6249,7 +6248,6 @@ def startup_ping():
     return jsonify({
         'launch_count':      settings['launch_count'],
         'license_accepted':  bool(settings.get('license_accepted', False)),
-        'donate_suppressed': bool(settings.get('donate_suppressed', False)),
         'test_mode':         TEST_MODE,
         'channel':           _effective_channel(),
     })
