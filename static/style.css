@@ -13761,7 +13761,7 @@ body.is-col-resizing {
   mask-image: none;
 }
 #home-because-section .home-rail {
-  padding-bottom: 22px;
+  padding-bottom: 48px;
 }
 .home-rail-shell.can-scroll-right .home-rail {
   /* Fade only when more cards exist off the right edge. */
