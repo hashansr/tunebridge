@@ -3590,31 +3590,35 @@ Questions: mail@hashanr.com</pre>
 
   <!-- Test mode confirm modal -->
   <div id="testmode-confirm-modal" class="modal-overlay tb-modal-overlay" style="display:none" onclick="if(event.target===this)App._closeTestModeConfirm()">
-    <div class="modal tb-modal-shell tb-modal--sm confirm-modal testmode-confirm-shell">
-      <div class="confirm-icon-wrap" style="background:rgba(255,196,0,.1)">
+    <div class="modal confirm-modal-inner">
+      <div class="confirm-modal-icon icon-neutral" style="background:rgba(255,196,0,.12);box-shadow:0 0 0 1px rgba(255,196,0,.2),0 8px 24px rgba(0,0,0,.4)">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffc400" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/>
         </svg>
       </div>
-      <h3 class="confirm-title">Enter Test Mode?</h3>
-      <p class="confirm-message">This creates a blank-slate database so you can experience TuneBridge as a first-time user. <strong>Your real data is never touched.</strong> The test session is deleted automatically when you exit.</p>
-      <button class="btn-primary confirm-ok-btn" id="testmode-confirm-ok" onclick="App._confirmEnterTestMode()">Enter Test Mode</button>
-      <button class="confirm-cancel-link" onclick="App._closeTestModeConfirm()">Cancel</button>
+      <h3 class="confirm-modal-title">Enter Test Mode?</h3>
+      <p class="confirm-modal-msg">This creates a blank-slate database so you can experience TuneBridge as a first-time user. <strong>Your real data is never touched.</strong> The test session is deleted automatically when you exit.</p>
+      <div class="confirm-modal-actions">
+        <button class="btn-danger-pill btn-danger-pill--neutral" id="testmode-confirm-ok" onclick="App._confirmEnterTestMode()">Enter Test Mode</button>
+        <button class="confirm-cancel-link" onclick="App._closeTestModeConfirm()">Cancel</button>
+      </div>
     </div>
   </div>
 
   <!-- Test mode relaunch modal (shown when running inside .app where auto-restart is unavailable) -->
   <div id="testmode-relaunch-modal" class="modal-overlay tb-modal-overlay" style="display:none">
-    <div class="modal tb-modal-shell tb-modal--sm confirm-modal testmode-confirm-shell">
-      <div class="confirm-icon-wrap" style="background:rgba(255,196,0,.1)">
+    <div class="modal confirm-modal-inner">
+      <div class="confirm-modal-icon icon-neutral" style="background:rgba(255,196,0,.12);box-shadow:0 0 0 1px rgba(255,196,0,.2),0 8px 24px rgba(0,0,0,.4)">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffc400" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/>
         </svg>
       </div>
-      <h3 class="confirm-title">Test Mode Ready</h3>
-      <p class="confirm-message" id="testmode-relaunch-msg">Quit and relaunch TuneBridge to begin the test session.</p>
-      <button class="btn-primary confirm-ok-btn" onclick="App._quitForTestMode()">Quit TuneBridge</button>
-      <button class="confirm-cancel-link" onclick="document.getElementById('testmode-relaunch-modal').style.display='none'">Close</button>
+      <h3 class="confirm-modal-title">Test Mode Ready</h3>
+      <p class="confirm-modal-msg" id="testmode-relaunch-msg">Quit and relaunch TuneBridge to begin the test session.</p>
+      <div class="confirm-modal-actions">
+        <button class="btn-danger-pill btn-danger-pill--neutral" onclick="App._quitForTestMode()">Quit &amp; Restart in Test Mode</button>
+        <button class="confirm-cancel-link" onclick="document.getElementById('testmode-relaunch-modal').style.display='none'">Close</button>
+      </div>
     </div>
   </div>
 

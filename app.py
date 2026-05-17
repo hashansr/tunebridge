@@ -6325,6 +6325,26 @@ def testmode_exit():
     return jsonify({'ok': True, 'needs_relaunch': False})
 
 
+@app.route('/api/testmode/relaunch', methods=['POST'])
+def testmode_relaunch():
+    """Relaunch TuneBridge.app into test mode (bundled only).
+
+    The flag file is already written by /api/testmode/enter. This endpoint
+    launches a new app instance via `open -a TuneBridge` then exits the
+    current process so the fresh launch picks up the flag.
+    """
+    def _do_relaunch():
+        time.sleep(0.4)
+        try:
+            subprocess.Popen(['open', '-a', 'TuneBridge'])
+        except Exception:
+            pass
+        time.sleep(0.3)
+        os._exit(0)
+    threading.Thread(target=_do_relaunch, daemon=False).start()
+    return jsonify({'ok': True})
+
+
 @app.route('/api/health')
 def health():
     version_info = {}

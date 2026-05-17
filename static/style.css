@@ -20843,9 +20843,3 @@ body.is-col-resizing {
   vertical-align: middle;
 }
 
-/* Test mode confirm / relaunch modal shell */
-.testmode-confirm-shell {
-  text-align: center;
-  padding: 32px 28px 24px;
-  gap: 0;
-}

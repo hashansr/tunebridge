@@ -12923,7 +12923,7 @@ async function exitTestMode() {
 }
 
 function _quitForTestMode() {
-  fetch('/api/quit', { method: 'POST' }).catch(() => {});
+  fetch('/api/testmode/relaunch', { method: 'POST' }).catch(() => {});
 }
 
 function _applyTestModeUI(isTestMode, channel) {
