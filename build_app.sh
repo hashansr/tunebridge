@@ -406,8 +406,6 @@ p.update({
     'NSAppTransportSecurity': {'NSAllowsLocalNetworking': True},
     'NSDocumentsFolderUsageDescription':
         'TuneBridge needs access to your Documents folder to reach your music library and playlists.',
-    'NSMusicFolderUsageDescription':
-        'TuneBridge needs access to your Music folder for your music library.',
 })
 
 with open(plist_path, 'wb') as f:
