@@ -2727,6 +2727,19 @@ const Player = (function () {
     ps.isPlaying = false;
     _updatePlayBtn();
 
+    // Establish a session_id for the restored track so that any heartbeats fired
+    // before the user explicitly presses Play (e.g. in mpv mode where the poll can
+    // set ps.isPlaying=true within 250 ms) UPDATE a single row instead of each
+    // INSERTing their own row due to an empty session_id.
+    //
+    // Also sync _trackSessionStartPos to the restored seek position so that
+    // beforeunload doesn't count unplayed restores as valid listens (elapsed would
+    // otherwise be seekTime - 0 = seekTime, which can be >= 30 s).
+    if (currentTrack()) {
+      _markTrackSessionStart();
+      if (seekTime > 0) _trackSessionStartPos = seekTime;
+    }
+
     if (restoredCustom.enabled) {
       if (_isMpvActive()) {
         _applyCustomPeq(restoredCustom);
