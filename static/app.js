@@ -5948,87 +5948,223 @@ function _renderHomeDataHealth(data) {
 function _renderHomeListeningStats(data) {
   const el = document.getElementById('home-stats-content');
   if (!el) return;
-  const c = (data && data.current) || {};
+  const c   = (data && data.current)    || {};
   const cmp = (data && data.comparison) || {};
-  const periodLabel = {
-    week: 'This Week',
-    month: 'This Month',
-    year: 'This Year',
-    all: 'All Time',
-  }[_homeCurrentPeriod] || 'This Period';
-  const minutesNum = Math.max(0, Math.round(Number(c.total_minutes || 0)));
-  const plays = Number(c.track_count || 0).toLocaleString();
-  const albums = Number(c.album_count || 0).toLocaleString();
-  const artists = Number(c.artist_count || 0).toLocaleString();
-  const daysActive = Number(c.active_days || 0).toLocaleString();
 
-  // Period-over-period delta badge (only for non-"all" periods)
+  const periodLabel = {
+    week: 'This Week', month: 'This Month', year: 'This Year', all: 'All Time',
+  }[_homeCurrentPeriod] || 'This Period';
+
+  const minutesNum  = Math.max(0, Math.round(Number(c.total_minutes || 0)));
+  const playsNum    = Number(c.total_plays  || c.track_count || 0); // total play events
+  const albumsNum   = Number(c.album_count  || 0);
+  const artistsNum  = Number(c.artist_count || 0);
+  const daysActive  = Number(c.active_days  || 0);
+  const streak      = Number(c.current_streak || 0);
+
+  // Empty state — no data at all
+  const hasData = playsNum > 0 || minutesNum > 0;
+  if (!hasData) {
+    el.innerHTML = `<div class="ls-empty">Start listening — your stats will appear here.</div>`;
+    _homeSectionVisible('home-stats-section', true);
+    return;
+  }
+
+  // ── Delta badge ────────────────────────────────────────────────────────────
   let deltaHtml = '';
   if (_homeCurrentPeriod !== 'all' && cmp.minutes_change != null) {
     const pct = Math.round(Number(cmp.minutes_change));
     if (pct !== 0) {
-      const sign = pct > 0 ? '+' : '';
-      const cls = pct > 0 ? 'home-stats-delta--up' : 'home-stats-delta--down';
-      deltaHtml = `<span class="home-stats-delta ${cls}">${sign}${pct}%</span>`;
+      const up   = pct > 0;
+      const cls  = up ? 'ls-delta--up' : 'ls-delta--down';
+      const arrow = `<svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor"
+          stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+          style="transform:${up ? 'none' : 'rotate(180deg)'}">
+          <path d="M4 6V2M2 4l2-2 2 2"/></svg>`;
+      deltaHtml = `<span class="ls-delta ${cls}">${arrow}${up ? '+' : ''}${pct}%</span>`;
     }
   }
 
-  // Listening streak card (only shown when >= 2 days)
-  const streak = Number(c.current_streak || 0);
-  const streakHtml = streak >= 2
-    ? `<div class="home-stat-bottom home-stats-card">
-        <span class="home-stat-top-label">Current Streak</span>
-        <span class="home-stat-bottom-value">${streak} days</span>
-      </div>`
-    : '';
+  // ── Cover art helper ───────────────────────────────────────────────────────
+  const _cover = (key, name, isArtist) => {
+    const size    = 96;
+    const radius  = isArtist ? '50%' : '6px';
+    const glyph   = esc((name || '?')[0].toUpperCase());
+    const imgHtml = key
+      ? `<img src="/api/artwork/${esc(key)}" width="${size}" height="${size}"
+             style="width:100%;height:100%;object-fit:cover;display:block;"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
+             alt="">`
+      : '';
+    const fallbackDisplay = key ? 'none' : 'flex';
+    return `<div class="ls-cover" style="width:${size}px;height:${size}px;border-radius:${radius};">
+      ${imgHtml}
+      <div class="ls-cover-fallback" style="display:${fallbackDisplay};">${glyph}</div>
+      <div class="ls-cover-inner-border" style="border-radius:${radius};"></div>
+    </div>`;
+  };
 
+  // ── Feature card builder ───────────────────────────────────────────────────
+  const _featureCard = ({ eyebrow, coverKey, coverName, isArtist, title, subtitle,
+                           plays, minutes, accent, extra, dataAttrs, clickHandler }) => {
+    const accentWash = accent
+      ? `background:radial-gradient(420px 240px at 0% 0%, ${accent}33, transparent 62%);`
+      : '';
+    const dataStr = dataAttrs
+      ? Object.entries(dataAttrs).map(([k, v]) => `data-${k}="${esc(v)}"`).join(' ')
+      : '';
+    const clickStr = clickHandler ? `onclick="${clickHandler}"` : '';
+    return `
+    <div class="ls-card ls-glass" role="button" tabindex="0" ${dataStr} ${clickStr}>
+      <div class="ls-card-accent-wash" style="${accentWash}"></div>
+      <div class="ls-card-top-sheen"></div>
+      <div class="ls-card-eyebrow">${esc(eyebrow)}</div>
+      <div class="ls-card-body">
+        ${_cover(coverKey, coverName, isArtist)}
+        <div class="ls-card-stats">
+          <div class="ls-plays-block">
+            <div class="ls-plays-row">
+              <span class="ls-plays-num">${plays}</span>
+              <span class="ls-plays-label">plays</span>
+            </div>
+            <div class="ls-plays-mins">${minutes} min listened</div>
+          </div>
+          ${extra ? `<div class="ls-extra">
+            <div class="ls-extra-label">${esc(extra.label)}</div>
+            <div class="ls-extra-value">${esc(extra.value)}</div>
+          </div>` : ''}
+        </div>
+      </div>
+      <div class="ls-card-footer">
+        <div class="ls-card-title" title="${esc(title)}">${esc(title)}</div>
+        ${subtitle ? `<div class="ls-card-subtitle" title="${esc(subtitle)}">${esc(subtitle)}</div>` : ''}
+      </div>
+    </div>`;
+  };
+
+  // ── Top Artist card ────────────────────────────────────────────────────────
+  const ta = c.top_artist;
+  const artistCardHtml = ta ? _featureCard({
+    eyebrow:      'Top Artist',
+    coverKey:     ta.artwork_key,
+    coverName:    ta.name,
+    isArtist:     true,
+    title:        ta.name,
+    subtitle:     `${ta.albums_count || 0} album${ta.albums_count !== 1 ? 's' : ''} · ${ta.tracks_count || 0} tracks`,
+    plays:        ta.plays,
+    minutes:      Math.round(ta.minutes),
+    accent:       'var(--accent)',
+    extra:        playsNum > 0 ? {
+      label: 'Of all plays',
+      value: `${Math.round((ta.plays / playsNum) * 100)}%`,
+    } : null,
+    dataAttrs:    { artist: ta.name },
+    clickHandler: 'App.showArtist(this.dataset.artist)',
+  }) : '';
+
+  // ── Top Album card ─────────────────────────────────────────────────────────
+  const tal = c.top_album;
+  const albumCardHtml = tal ? _featureCard({
+    eyebrow:      'Top Album',
+    coverKey:     tal.artwork_key,
+    coverName:    tal.name,
+    isArtist:     false,
+    title:        tal.name,
+    subtitle:     tal.artist,
+    plays:        tal.plays,
+    minutes:      Math.round(tal.minutes),
+    accent:       'var(--accent-secondary)',
+    extra:        {
+      label: 'Tracks heard',
+      value: tal.tracks_total > 0
+        ? `${tal.tracks_heard} of ${tal.tracks_total}`
+        : `${tal.tracks_heard}`,
+    },
+    dataAttrs:    { artist: tal.artist, album: tal.name },
+    clickHandler: 'App.showAlbum(this.dataset.artist, this.dataset.album)',
+  }) : '';
+
+  // ── Top Track card ─────────────────────────────────────────────────────────
+  const tt = c.top_track;
+  const trackCardHtml = tt ? _featureCard({
+    eyebrow:   'Top Track',
+    coverKey:  tt.artwork_key,
+    coverName: tt.name,
+    isArtist:  false,
+    title:     tt.name,
+    subtitle:  tt.artist,
+    plays:     tt.plays,
+    minutes:   Math.round(tt.minutes),
+    accent:    'var(--accent-success)',
+    extra:     tt.duration ? { label: 'Duration', value: tt.duration } : null,
+  }) : '';
+
+  // ── Days active suffix (/ N only for week) ─────────────────────────────────
+  const daysSuffix = _homeCurrentPeriod === 'week' ? '/ 7'
+    : _homeCurrentPeriod === 'month' ? '/ 30' : '';
+
+  // ── Assemble ───────────────────────────────────────────────────────────────
   el.innerHTML = `
-    <div class="home-stats-shell">
-      <div class="home-stats-hero home-stats-card">
-        <div class="home-stats-hero-kicker">${esc(periodLabel)}</div>
-        <div class="home-stats-hero-value">
-          <span class="home-stats-hero-minutes">${minutesNum.toLocaleString()}</span>
-          <span class="home-stats-hero-unit">min</span>
+    <div class="ls-strip ls-glass">
+      <div class="ls-strip-period">
+        <div class="ls-strip-kicker">${esc(periodLabel)}</div>
+        <div class="ls-strip-value">
+          <span class="ls-strip-minutes">${minutesNum.toLocaleString()}</span>
+          <span class="ls-strip-unit">min</span>
           ${deltaHtml}
         </div>
-        <div class="home-stats-hero-label">Total listening time</div>
       </div>
+      <div class="ls-strip-divider"></div>
+      <div class="ls-chip">
+        <div class="ls-chip-label">Plays</div>
+        <div class="ls-chip-value">${playsNum.toLocaleString()}</div>
+      </div>
+      <div class="ls-chip">
+        <div class="ls-chip-label">Albums</div>
+        <div class="ls-chip-value">${albumsNum.toLocaleString()}</div>
+      </div>
+      <div class="ls-chip">
+        <div class="ls-chip-label">Artists</div>
+        <div class="ls-chip-value">${artistsNum.toLocaleString()}</div>
+      </div>
+      <div class="ls-streak">
+        <div class="ls-streak-label">Streak</div>
+        <div class="ls-streak-value">
+          <span class="ls-streak-num">${streak}</span>
+          <span class="ls-streak-suffix">${streak === 1 ? 'day' : 'days'}</span>
+        </div>
+      </div>
+    </div>
 
-      <div class="home-stat-metric home-stats-card">
-        <div class="home-stat-label">Plays</div>
-        <div class="home-stat-value">${plays}</div>
-      </div>
-      <div class="home-stat-metric home-stats-card">
-        <div class="home-stat-label">Albums</div>
-        <div class="home-stat-value">${albums}</div>
-      </div>
-      <div class="home-stat-metric home-stats-card">
-        <div class="home-stat-label">Artists</div>
-        <div class="home-stat-value">${artists}</div>
-      </div>
+    <div class="ls-cards">
+      ${artistCardHtml}
+      ${albumCardHtml}
+      ${trackCardHtml}
+    </div>
 
-      <div class="home-stat-top-item home-stats-card">
-        <span class="home-stat-top-label">Top Artist</span>
-        <span class="home-stat-top-value" title="${esc(c.top_artist || '—')}">${esc(c.top_artist || '—')}</span>
+    <div class="ls-micro ls-glass">
+      <div class="ls-micro-cell">
+        <div class="ls-micro-label">Top Genre</div>
+        <div class="ls-micro-genre-row">
+          ${c.top_genre
+            ? `<span class="ls-genre-pill">${esc(c.top_genre)}</span>`
+            : `<span class="ls-micro-suffix">—</span>`}
+        </div>
       </div>
-      <div class="home-stat-top-item home-stats-card">
-        <span class="home-stat-top-label">Top Album</span>
-        <span class="home-stat-top-value" title="${esc(c.top_album || '—')}">${esc(c.top_album || '—')}</span>
+      <div class="ls-micro-cell">
+        <div class="ls-micro-label">Days Active</div>
+        <div class="ls-micro-value-row">
+          <span class="ls-micro-num">${daysActive}</span>
+          ${daysSuffix ? `<span class="ls-micro-suffix">${daysSuffix}</span>` : ''}
+        </div>
       </div>
-      <div class="home-stat-top-item home-stats-card">
-        <span class="home-stat-top-label">Top Genre</span>
-        <span class="home-stat-top-value" title="${esc(c.top_genre || '—')}">${esc(c.top_genre || '—')}</span>
+      <div class="ls-micro-cell">
+        <div class="ls-micro-label">Current Streak</div>
+        <div class="ls-micro-value-row">
+          <span class="ls-micro-num">${streak}</span>
+          <span class="ls-micro-suffix">${streak === 1 ? 'day' : 'days'}</span>
+        </div>
       </div>
-
-      <div class="home-stat-bottom home-stats-card">
-        <span class="home-stat-top-label">Days Active</span>
-        <span class="home-stat-bottom-value">${daysActive}</span>
-      </div>
-      <div class="home-stat-bottom home-stat-bottom-wide home-stats-card">
-        <span class="home-stat-top-label">Top Track</span>
-        <span class="home-stat-bottom-value" title="${esc(c.top_track || '—')}">${esc(c.top_track || '—')}</span>
-      </div>
-      ${streakHtml}
     </div>
   `;
   _homeSectionVisible('home-stats-section', true);

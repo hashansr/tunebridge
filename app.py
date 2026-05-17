@@ -2952,33 +2952,133 @@ def _home_stats_aggregate(events, albums):
     active_days    = len({time.strftime('%Y-%m-%d', time.localtime(int(e['played_at']))) for e in valid})
 
     artist_counts, album_counts, track_counts, genre_counts = {}, {}, {}, {}
+    # Per-artist detail
+    artist_secs        = {}  # artist -> total play seconds
+    artist_album_set   = {}  # artist -> set of album names (lower)
+    artist_track_set   = {}  # artist -> set of track_ids
+    artist_sample_al   = {}  # artist -> (artist_lower, album_lower) for artwork lookup
+    # Per-album detail  keyed by (artist_lower, album_lower)
+    album_play_map     = {}
+    album_secs_map     = {}
+    album_tracks_set   = {}
+    album_meta         = {}  # -> {'artist': str, 'album': str}
+    # Per-track detail  keyed by track_id
+    track_play_map     = {}
+    track_secs_map     = {}
+    track_meta         = {}  # -> {title, artist, album, duration}
+
     for e in valid:
-        a = (e.get('artist') or '').strip()
-        al = (e.get('album') or '').strip()
-        ti = (e.get('title') or '').strip()
+        a  = (e.get('artist') or '').strip()
+        al = (e.get('album')  or '').strip()
+        ti = (e.get('title')  or '').strip()
+        tid = str(e.get('track_id') or '')
+        secs = float(e.get('play_seconds') or 0.0)
+        dur  = float(e.get('track_duration_seconds') or 0.0)
+        a_lower  = a.lower()
+        al_lower = al.lower()
+        al_key   = (a_lower, al_lower)
+
         if a:
             artist_counts[a] = artist_counts.get(a, 0) + 1
+            artist_secs[a]   = artist_secs.get(a, 0) + secs
+            if a not in artist_album_set:
+                artist_album_set[a] = set()
+            if al:
+                artist_album_set[a].add(al_lower)
+            if a not in artist_track_set:
+                artist_track_set[a] = set()
+            if tid:
+                artist_track_set[a].add(tid)
+            if al and a not in artist_sample_al:
+                artist_sample_al[a] = (a_lower, al_lower)
+
         if al:
             album_counts[al] = album_counts.get(al, 0) + 1
-        if ti:
-            track_counts[ti] = track_counts.get(ti, 0) + 1
+
         if a and al:
-            info = albums.get(f"{a.lower()}||{al.lower()}")
+            album_play_map[al_key] = album_play_map.get(al_key, 0) + 1
+            album_secs_map[al_key] = album_secs_map.get(al_key, 0) + secs
+            if al_key not in album_tracks_set:
+                album_tracks_set[al_key] = set()
+            if tid:
+                album_tracks_set[al_key].add(tid)
+            if al_key not in album_meta:
+                album_meta[al_key] = {'artist': a, 'album': al}
+            info = albums.get(f"{a_lower}||{al_lower}")
             g = _norm_genre_text(info.get('genre')) if info else ''
             if g:
                 genre_counts[g] = genre_counts.get(g, 0) + 1
 
-    top_genre_key = max(genre_counts,  key=genre_counts.get)  if genre_counts  else None
+        if ti:
+            track_counts[ti] = track_counts.get(ti, 0) + 1
+
+        if tid:
+            track_play_map[tid] = track_play_map.get(tid, 0) + 1
+            track_secs_map[tid] = track_secs_map.get(tid, 0) + secs
+            if tid not in track_meta:
+                track_meta[tid] = {'title': ti, 'artist': a, 'album': al, 'duration': dur}
+
+    top_genre_key = max(genre_counts, key=genre_counts.get) if genre_counts else None
+
+    # ── Build rich top_artist object ─────────────────────────────────────────
+    top_artist_obj = None
+    if artist_counts:
+        top_a  = max(artist_counts, key=artist_counts.get)
+        sample = artist_sample_al.get(top_a)
+        lib_al = albums.get(f"{sample[0]}||{sample[1]}") if sample else None
+        top_artist_obj = {
+            'name':         top_a,
+            'plays':        artist_counts[top_a],
+            'minutes':      round(artist_secs.get(top_a, 0) / 60, 1),
+            'albums_count': len(artist_album_set.get(top_a, [])),
+            'tracks_count': len(artist_track_set.get(top_a, [])),
+            'artwork_key':  lib_al.get('artwork_key') if lib_al else None,
+        }
+
+    # ── Build rich top_album object ──────────────────────────────────────────
+    top_album_obj = None
+    if album_play_map:
+        top_al_key = max(album_play_map, key=album_play_map.get)
+        meta       = album_meta.get(top_al_key, {})
+        lib_al2    = albums.get(f"{top_al_key[0]}||{top_al_key[1]}")
+        top_album_obj = {
+            'name':         meta.get('album', ''),
+            'artist':       meta.get('artist', ''),
+            'plays':        album_play_map[top_al_key],
+            'minutes':      round(album_secs_map.get(top_al_key, 0) / 60, 1),
+            'tracks_heard': len(album_tracks_set.get(top_al_key, [])),
+            'tracks_total': lib_al2.get('track_count', 0) if lib_al2 else 0,
+            'artwork_key':  lib_al2.get('artwork_key') if lib_al2 else None,
+        }
+
+    # ── Build rich top_track object ──────────────────────────────────────────
+    top_track_obj = None
+    if track_play_map:
+        top_tid = max(track_play_map, key=track_play_map.get)
+        tmeta   = track_meta.get(top_tid, {})
+        dur     = tmeta.get('duration', 0)
+        dur_str = f"{int(dur) // 60}:{int(dur) % 60:02d}" if dur else ''
+        al_info = albums.get(
+            f"{(tmeta.get('artist') or '').lower()}||{(tmeta.get('album') or '').lower()}")
+        top_track_obj = {
+            'name':        tmeta.get('title', ''),
+            'artist':      tmeta.get('artist', ''),
+            'plays':       track_play_map[top_tid],
+            'minutes':     round(track_secs_map.get(top_tid, 0) / 60, 1),
+            'duration':    dur_str,
+            'artwork_key': al_info.get('artwork_key') if al_info else None,
+        }
 
     return {
         'total_minutes': round(total_seconds / 60.0, 1),
-        'track_count':   unique_tracks,
+        'total_plays':   len(valid),       # total play events (for % calcs and PLAYS chip)
+        'track_count':   unique_tracks,    # unique tracks heard
         'album_count':   unique_albums,
         'artist_count':  unique_artists,
         'active_days':   active_days,
-        'top_artist':    max(artist_counts, key=artist_counts.get) if artist_counts else None,
-        'top_album':     max(album_counts,  key=album_counts.get)  if album_counts  else None,
-        'top_track':     max(track_counts,  key=track_counts.get)  if track_counts  else None,
+        'top_artist':    top_artist_obj,
+        'top_album':     top_album_obj,
+        'top_track':     top_track_obj,
         'top_genre':     _genre_display_label(top_genre_key) if top_genre_key else None,
     }
 

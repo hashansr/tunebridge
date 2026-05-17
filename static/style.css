@@ -20354,3 +20354,421 @@ body.is-col-resizing {
   min-height: 36px !important;
   justify-content: center !important;
 }
+
+/* ── Listening Stats — Option B (Featured Cards) ───────────────────────────── */
+
+/* Period segmented control — macOS NSSegmentedControl style */
+.home-period-chips {
+  display: inline-flex;
+  background: rgba(0,0,0,0.28);
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.28);
+  border-radius: 7px;
+  padding: 2px;
+  gap: 0;
+}
+.home-period-chip {
+  padding: 4px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--text-sub);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  text-transform: none;
+  cursor: pointer;
+  transition: all 0.12s;
+  font-family: inherit;
+}
+.home-period-chip:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+}
+.home-period-chip.active {
+  background: var(--accent);
+  color: #0a1f47;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18);
+}
+
+/* Glass surface shared by all Option B panels */
+.ls-glass {
+  background: linear-gradient(180deg, rgba(54,54,58,0.72) 0%, rgba(30,30,33,0.78) 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 0 rgba(0,0,0,0.4), 0 12px 32px rgba(0,0,0,0.32);
+}
+
+/* Summary strip */
+.ls-strip {
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+.ls-strip-period {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.ls-strip-kicker {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  line-height: 1;
+}
+.ls-strip-value {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.ls-strip-minutes {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.ls-strip-unit {
+  font-size: 13px;
+  color: var(--text-sub);
+  font-weight: 500;
+}
+.ls-strip-divider {
+  width: 1px;
+  align-self: stretch;
+  background: rgba(255,255,255,0.06);
+  margin: 2px 4px;
+  flex-shrink: 0;
+}
+.ls-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.ls-chip-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  line-height: 1;
+}
+.ls-chip-value {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.ls-streak {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.ls-streak-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.ls-streak-value {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.ls-streak-num {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1;
+}
+.ls-streak-suffix {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Delta badge */
+.ls-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.ls-delta--up {
+  color: var(--accent-success);
+  background: rgba(83,225,111,0.10);
+  border: 1px solid rgba(83,225,111,0.22);
+}
+.ls-delta--down {
+  color: var(--accent-secondary);
+  background: rgba(255,179,181,0.10);
+  border: 1px solid rgba(255,179,181,0.22);
+}
+
+/* Feature cards grid */
+.ls-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.ls-card {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+.ls-card:hover {
+  background: linear-gradient(180deg, rgba(64,64,68,0.78) 0%, rgba(38,38,42,0.82) 100%) !important;
+}
+.ls-card:focus-visible {
+  outline: 2px solid rgba(173,198,255,0.4);
+  outline-offset: 2px;
+}
+.ls-card-accent-wash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ls-card-top-sheen {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 60px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), transparent);
+}
+.ls-card-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  position: relative;
+}
+.ls-card-body {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  position: relative;
+}
+.ls-cover {
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
+.ls-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.ls-cover-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.45);
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  background: rgba(40,40,44,0.9);
+}
+.ls-cover-inner-border {
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+  pointer-events: none;
+}
+.ls-card-stats {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ls-plays-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.ls-plays-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.ls-plays-num {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.ls-plays-label {
+  font-size: 12px;
+  color: var(--text-sub);
+  font-weight: 500;
+}
+.ls-plays-mins {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.ls-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+.ls-extra-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.ls-extra-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.ls-card-footer {
+  border-top: 1px solid rgba(255,255,255,0.07);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  padding-top: 10px;
+  position: relative;
+}
+.ls-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--text);
+  line-height: 1.3;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ls-card-subtitle {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Micro-row */
+.ls-micro {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.ls-micro-cell {
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ls-micro-cell + .ls-micro-cell {
+  border-left: 1px solid rgba(255,255,255,0.06);
+}
+.ls-micro-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  line-height: 1;
+}
+.ls-micro-genre-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.ls-genre-pill {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 8px;
+  background: rgba(173,198,255,0.10);
+  border: 1px solid rgba(173,198,255,0.18);
+  border-radius: 999px;
+  color: var(--accent);
+  letter-spacing: -0.01em;
+}
+.ls-micro-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 2px;
+}
+.ls-micro-num {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.ls-micro-suffix {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Empty state for stats when no history */
+.ls-empty {
+  padding: 28px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Responsive: collapse to 1-col feature cards on narrow views */
+@media (max-width: 900px) {
+  .ls-cards {
+    grid-template-columns: 1fr;
+  }
+  .ls-micro {
+    grid-template-columns: 1fr;
+  }
+  .ls-micro-cell + .ls-micro-cell {
+    border-left: none;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .ls-strip {
+    flex-wrap: wrap;
+  }
+}
