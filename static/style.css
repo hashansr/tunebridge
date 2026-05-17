@@ -8867,15 +8867,14 @@ tbody tr:hover {
   position: absolute;
   bottom: calc(100% + 12px);
   right: 0;
-  width: min(360px, calc(100vw - 16px));
-  background:
-    radial-gradient(440px 150px at 10% -25%, rgba(173,198,255,0.3), transparent 68%),
-    rgba(18, 22, 30, 0.97);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(216,226,255,0.32);
-  border-radius: 18px;
-  padding: 11px;
-  box-shadow: 0 18px 42px rgba(4, 8, 24, 0.36);
+  width: min(420px, calc(100vw - 20px));
+  background: var(--modal-bg, #1d1d1f);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--modal-border, rgba(255,255,255,0.07));
+  border-radius: 12px;
+  padding: 18px 20px 20px;
+  box-shadow: var(--modal-shadow, 0 24px 56px rgba(0,0,0,0.5), 0 4px 10px rgba(0,0,0,0.35));
   z-index: 410;
   opacity: 0;
   transform: translateY(8px) scale(0.985);
@@ -8891,97 +8890,102 @@ tbody tr:hover {
 /* Header row */
 .peq-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 8px;
+  gap: 10px;
+  margin-bottom: 18px;
 }
 .peq-title {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0;
-  color: var(--text);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+  line-height: 1.25;
+  color: var(--modal-text, var(--text));
 }
 .peq-close-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
   border-radius: 50%;
-  border: none;
-  background: rgba(53, 53, 52, 0.78);
-  border: 1px solid rgba(173,198,255,0.12);
-  color: var(--text-muted);
+  border: 1px solid rgba(255,255,255,0.05);
+  background: rgba(255,255,255,0.06);
+  color: var(--modal-text-muted, var(--text-muted));
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
   flex-shrink: 0;
+  padding: 0;
 }
 .peq-close-btn:hover {
-  background: rgba(63, 64, 70, 0.86);
-  border-color: rgba(173,198,255,0.24);
-  color: var(--text);
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.08);
+  color: var(--modal-text, var(--text));
 }
 .peq-close-btn svg {
-  width: 12px;
-  height: 12px;
-  stroke-width: 2.2;
+  width: 9px;
+  height: 9px;
 }
 
 /* Sections */
-.peq-section { margin-bottom: 8px; }
+.peq-section { margin-bottom: 18px; }
 .peq-section:last-of-type { margin-bottom: 0; }
 .peq-popover-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  margin-bottom: 0;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
 .peq-open-workspace-btn {
   width: 100%;
-  min-height: 34px;
-  padding: 7px 10px;
-  border-radius: 9999px;
-  font-size: 11px;
+  min-height: 32px;
+  padding: 0 13px;
+  border-radius: 7px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
+  box-shadow: none;
+  transform: none;
 }
 .peq-popover-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
-  gap: 6px;
-  margin-top: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--modal-hairline, rgba(255,255,255,0.06));
 }
 .peq-create-btn {
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  font-weight: 700;
-  color: #1f2f4f;
-  background: linear-gradient(180deg, rgba(216,226,255,0.95), rgba(173,198,255,0.92));
-  border: 1px solid rgba(173,198,255,0.24);
-  box-shadow: 0 10px 26px rgba(173,198,255,0.22);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--modal-accent-ink, #0a1f47);
+  background: var(--modal-accent, #adc6ff);
+  border: 1px solid var(--modal-accent, #adc6ff);
 }
 .peq-create-btn:hover {
-  filter: brightness(1.05);
-  color: #122342;
+  filter: brightness(1.04);
+  color: var(--modal-accent-ink, #0a1f47);
 }
 .peq-popover .btn-secondary.peq-open-workspace-btn {
-  background: rgba(53,53,52,0.94);
-  border: 1px solid rgba(173,198,255,0.22);
-  color: var(--text-sub);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--modal-border, rgba(255,255,255,0.07));
+  color: var(--modal-text-sub, var(--text-sub));
 }
 .peq-popover .btn-secondary.peq-open-workspace-btn:hover {
-  background: rgba(63,63,61,0.9);
-  color: var(--text);
+  background: rgba(255,255,255,0.1);
+  color: var(--modal-text, var(--text));
 }
 
 .peq-section-label {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(229, 226, 225, 0.72);
-  margin-bottom: 4px;
+  color: var(--modal-text-muted, var(--text-muted));
+  margin-bottom: 6px;
 }
 
 /* Shared PEQ select style (workspace + popover baseline) */
@@ -9011,26 +9015,31 @@ tbody tr:hover {
 
 /* Select */
 .peq-popover .peq-select {
-  border-radius: 9999px;
-  border: 1px solid rgba(173,198,255,0.12);
-  padding: 8px 30px 8px 10px;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1.2;
+  min-height: 34px;
+  border-radius: 7px;
+  border: 1px solid var(--modal-border, rgba(255,255,255,0.07));
+  padding: 7px 34px 7px 11px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--modal-text, var(--text));
+  background-color: var(--modal-row, #2a2a2c);
   background-position: right 10px center;
-  border-color: rgba(173,198,255,0.12);
   transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
+.peq-popover .peq-select:hover {
+  background-color: var(--modal-row-hover, #303032);
+}
 .peq-popover .peq-select:focus {
-  border-color: rgba(173,198,255,0.34);
-  box-shadow: 0 0 0 2px rgba(173,198,255,0.35);
+  border-color: var(--modal-border, rgba(255,255,255,0.07));
+  box-shadow: var(--modal-focus, 0 0 0 3px rgba(173,198,255,0.22), 0 0 0 1px rgba(173,198,255,0.75) inset);
 }
 
 /* Divider between EQ and crossfade */
 .peq-divider {
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(173,198,255,0.2), transparent);
-  margin: 0 0 7px;
+  background: var(--modal-hairline, rgba(255,255,255,0.06));
+  margin: 0 0 18px;
 }
 
 /* Crossfade */
@@ -9038,20 +9047,20 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 .peq-xfade-cat {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--text-muted);
+  letter-spacing: 0.12em;
+  color: var(--modal-text-muted, var(--text-muted));
 }
 .peq-xfade-val {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: var(--accent);
+  color: var(--modal-accent, var(--accent));
   line-height: 1;
   text-transform: uppercase;
 }
@@ -9059,31 +9068,32 @@ tbody tr:hover {
 /* ReplayGain pill toggle */
 .rg-pills {
   display: flex;
-  gap: 4px;
-  margin-top: 2px;
+  gap: 8px;
+  margin-top: 0;
 }
 .rg-pill {
   flex: 1;
-  padding: 4px 0;
-  font-size: 11px;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  background: rgba(255,255,255,0.09);
-  border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 6px;
-  color: var(--text-muted);
+  letter-spacing: 0;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--modal-border, rgba(255,255,255,0.07));
+  border-radius: 7px;
+  color: var(--modal-text-sub, var(--text-sub));
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
   text-align: center;
 }
 .rg-pill:hover {
-  background: rgba(173,198,255,0.1);
-  color: var(--text-secondary);
+  background: rgba(255,255,255,0.1);
+  color: var(--modal-text, var(--text));
 }
 .rg-pill--active {
-  background: rgba(173,198,255,0.18);
-  border-color: rgba(173,198,255,0.35);
-  color: var(--accent);
+  background: var(--modal-accent, #adc6ff);
+  border-color: var(--modal-accent, #adc6ff);
+  color: var(--modal-accent-ink, #0a1f47);
 }
 
 /* Custom crossfade slider */
@@ -9091,60 +9101,61 @@ tbody tr:hover {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 3px;
-  background: rgba(53,53,52,1);
+  height: 4px;
+  background: var(--modal-row, #2a2a2c);
   border-radius: 9999px;
   outline: none;
   cursor: pointer;
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
 }
 .peq-xfade-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 13px;
-  height: 13px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: #adc6ff;
+  background: var(--modal-accent, #adc6ff);
   cursor: pointer;
-  box-shadow: 0 0 6px rgba(173,198,255,0.45), 0 0 0 2px rgba(173,198,255,0.12);
+  border: 3px solid var(--modal-bg, #1d1d1f);
+  box-shadow: 0 0 0 1px rgba(173,198,255,0.28);
   transition: box-shadow 0.15s;
 }
 .peq-xfade-slider::-webkit-slider-thumb:hover {
-  box-shadow: 0 0 9px rgba(173,198,255,0.72), 0 0 0 4px rgba(173,198,255,0.14);
+  box-shadow: 0 0 0 4px rgba(173,198,255,0.14);
 }
 .peq-xfade-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 9px;
+  font-size: 11.5px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--modal-text-dim, var(--text-muted));
 }
 
 @media (max-width: 920px) {
   .peq-popover {
-    width: min(338px, calc(100vw - 12px));
-    padding: 10px 10px 10px;
-    border-radius: 16px;
+    width: min(420px, calc(100vw - 12px));
+    padding: 16px;
+    border-radius: 12px;
   }
   .peq-title {
-    font-size: 12px;
+    font-size: 17px;
   }
   .peq-close-btn {
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
   }
   .peq-popover-fields,
   .peq-popover-actions {
     grid-template-columns: 1fr;
   }
   .peq-popover .peq-select {
-    font-size: 10px;
-    padding-block: 8px;
+    font-size: 13px;
+    padding-block: 7px;
   }
   .peq-xfade-val {
-    font-size: 10px;
+    font-size: 12px;
   }
 }
 
@@ -19883,8 +19894,9 @@ body.is-col-resizing {
 
 .tb-modal-overlay > .modal:not(.modal-wide):not(.modal-help):not(.confirm-modal-inner):not(.donate-modal-inner) { --tb-modal-w: 560px; }
 .tb-modal-overlay > .modal-wide { --tb-modal-w: 620px; }
+#import-modal .modal { --tb-modal-w: 760px; }
 #ml-gen-modal .modal,
-#sr-modal .modal,
+#sr-modal .modal { --tb-modal-w: 820px; }
 #ml-ref-modal .modal,
 #tag-editor-modal .modal,
 #album-tag-modal .modal,
@@ -20282,6 +20294,15 @@ body.is-col-resizing {
 /* Confirm modal sits above parent modals and keeps equal action sizing. */
 #confirm-modal {
   z-index: 11000 !important;
+}
+
+#confirm-modal.tb-modal-overlay {
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 24px !important;
 }
 
 #confirm-modal .confirm-modal-inner {

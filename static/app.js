@@ -4266,7 +4266,8 @@ function _isImportModalDirty() {
 }
 
 function _isSmartRulesModalDirty() {
-  return _isOverlayOpen('sr-modal') && _srDirty;
+  if (!_isOverlayOpen('sr-modal')) return false;
+  return _srDirty || (!!_srInitialJson && _srStateJson() !== _srInitialJson);
 }
 
 function _isTagEditorModalDirty() {
@@ -4343,7 +4344,7 @@ function _closeModalOverlaysForNavigation() {
   if (_isOverlayOpen('settings-modal')) closeSettings();
   if (_isOverlayOpen('help-modal')) closeHelp();
   if (_isOverlayOpen('sync-modal')) closeSyncModal();
-  if (_isOverlayOpen('import-modal')) closeImportModal();
+  if (_isOverlayOpen('import-modal')) closeImportModal(true);
   if (_isOverlayOpen('sr-modal')) srClose(true);
   if (_isOverlayOpen('dup-modal')) document.getElementById('dup-modal').style.display = 'none';
   if (_isOverlayOpen('problem-tracks-modal')) closeProblemTracksModal();
@@ -7206,11 +7207,19 @@ function _renderImportSummary() {
   }
 }
 
-function closeImportModal() {
+async function closeImportModal(force = false) {
+  if (!force && _isImportModalDirty() && !await _showConfirm({
+    title: 'Discard Import?',
+    message: 'Discard the current playlist import mapping?',
+    okText: 'Discard',
+    cancelText: 'Keep Mapping',
+    danger: true,
+  })) return false;
   document.getElementById('import-modal').style.display = 'none';
   _importData = null;
   _importMappings = {};
   Object.keys(_mapSearchTimers).forEach(k => { clearTimeout(_mapSearchTimers[k]); delete _mapSearchTimers[k]; });
+  return true;
 }
 
 async function confirmImport() {
@@ -7230,7 +7239,7 @@ async function confirmImport() {
   });
 
   const totalAdded = allIds.length;
-  closeImportModal();
+  closeImportModal(true);
   await loadPlaylists();
   await openPlaylist(pl.id);
   toast(`Imported "${name}" — ${totalAdded} track${totalAdded !== 1 ? 's' : ''}`);
@@ -13146,7 +13155,7 @@ function srOpen() {
 }
 
 async function srClose(force = false) {
-  if (!force && _srDirty && !await _showConfirm({
+  if (!force && _isSmartRulesModalDirty() && !await _showConfirm({
     title: 'Discard Smart Rules?',
     message: 'Discard Smart Rules changes?',
     okText: 'Discard',
