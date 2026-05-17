@@ -13760,6 +13760,9 @@ body.is-col-resizing {
   -webkit-mask-image: none;
   mask-image: none;
 }
+#home-because-section .home-rail {
+  padding-bottom: 22px;
+}
 .home-rail-shell.can-scroll-right .home-rail {
   /* Fade only when more cards exist off the right edge. */
   -webkit-mask-image: linear-gradient(to right, black 0%, black calc(100% - 160px), transparent 100%);
