@@ -2938,6 +2938,7 @@ def _home_listen_next(events, artists_map, albums, limit=10):
 
 def _home_stats_aggregate(events, albums):
     """Aggregate listening stats from a list of play_events dicts. Returns metrics dict."""
+    artist_image_keys = _db.db_get_all_artist_image_keys()
     valid = [e for e in events if int(e.get('valid_listen') or 0)]
     if not valid:
         return {
@@ -3026,12 +3027,14 @@ def _home_stats_aggregate(events, albums):
         top_a  = max(artist_counts, key=artist_counts.get)
         sample = artist_sample_al.get(top_a)
         lib_al = albums.get(f"{sample[0]}||{sample[1]}") if sample else None
+        image_key = get_artist_image_key(top_a)
         top_artist_obj = {
             'name':         top_a,
             'plays':        artist_counts[top_a],
             'minutes':      round(artist_secs.get(top_a, 0) / 60, 1),
             'albums_count': len(artist_album_set.get(top_a, [])),
             'tracks_count': len(artist_track_set.get(top_a, [])),
+            'image_key':    image_key if image_key in artist_image_keys else None,
             'artwork_key':  lib_al.get('artwork_key') if lib_al else None,
         }
 

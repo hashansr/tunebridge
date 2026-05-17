@@ -5986,17 +5986,20 @@ function _renderHomeListeningStats(data) {
   }
 
   // ── Cover art helper ───────────────────────────────────────────────────────
-  const _cover = (key, name, isArtist) => {
+  const _cover = ({ artworkKey, imageKey, name, isArtist }) => {
     const size    = 96;
     const radius  = isArtist ? '50%' : '6px';
     const glyph   = esc((name || '?')[0].toUpperCase());
-    const imgHtml = key
-      ? `<img src="/api/artwork/${esc(key)}" width="${size}" height="${size}"
+    const src     = isArtist
+      ? (imageKey ? `/api/artists/${encodeURIComponent(imageKey)}/image` : '')
+      : (artworkKey ? `/api/artwork/${esc(artworkKey)}` : '');
+    const imgHtml = src
+      ? `<img src="${src}" width="${size}" height="${size}"
              style="width:100%;height:100%;object-fit:cover;display:block;"
              onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
              alt="">`
       : '';
-    const fallbackDisplay = key ? 'none' : 'flex';
+    const fallbackDisplay = src ? 'none' : 'flex';
     return `<div class="ls-cover" style="width:${size}px;height:${size}px;border-radius:${radius};">
       ${imgHtml}
       <div class="ls-cover-fallback" style="display:${fallbackDisplay};">${glyph}</div>
@@ -6005,7 +6008,7 @@ function _renderHomeListeningStats(data) {
   };
 
   // ── Feature card builder ───────────────────────────────────────────────────
-  const _featureCard = ({ eyebrow, coverKey, coverName, isArtist, title, subtitle,
+  const _featureCard = ({ eyebrow, coverKey, coverImageKey, coverName, isArtist, title, subtitle,
                            plays, minutes, accent, extra, dataAttrs, clickHandler }) => {
     const accentWash = accent
       ? `background:radial-gradient(420px 240px at 0% 0%, ${accent}33, transparent 62%);`
@@ -6020,7 +6023,7 @@ function _renderHomeListeningStats(data) {
       <div class="ls-card-top-sheen"></div>
       <div class="ls-card-eyebrow">${esc(eyebrow)}</div>
       <div class="ls-card-body">
-        ${_cover(coverKey, coverName, isArtist)}
+        ${_cover({ artworkKey: coverKey, imageKey: coverImageKey, name: coverName, isArtist })}
         <div class="ls-card-stats">
           <div class="ls-plays-block">
             <div class="ls-plays-row">
@@ -6046,7 +6049,8 @@ function _renderHomeListeningStats(data) {
   const ta = c.top_artist;
   const artistCardHtml = ta ? _featureCard({
     eyebrow:      'Top Artist',
-    coverKey:     ta.artwork_key,
+    coverKey:     '',
+    coverImageKey: ta.image_key,
     coverName:    ta.name,
     isArtist:     true,
     title:        ta.name,

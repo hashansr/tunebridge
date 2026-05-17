@@ -14182,6 +14182,7 @@ body.is-col-resizing {
 
 .home-stats-content {
   min-width: 0;
+  padding-top: 6px;
 }
 
 .home-stat-loading {
