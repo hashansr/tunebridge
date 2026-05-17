@@ -13638,6 +13638,42 @@ body.is-col-resizing {
   margin-bottom: 28px;
 }
 
+.home-donate-btn {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 179, 181, 0.74);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color .15s ease, background .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+
+.home-donate-btn:hover {
+  color: #ffb3b5;
+  background: rgba(255, 179, 181, 0.10);
+  box-shadow: inset 0 0 0 1px rgba(255, 179, 181, 0.16);
+  transform: translateY(-1px);
+}
+
+.home-donate-btn:focus-visible {
+  outline: 2px solid rgba(255, 179, 181, 0.45);
+  outline-offset: 2px;
+}
+
+.home-donate-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  background: currentColor;
+  -webkit-mask: url("/icons/heart-svgrepo-com.svg") center / contain no-repeat;
+  mask: url("/icons/heart-svgrepo-com.svg") center / contain no-repeat;
+}
+
 .home-header-left {
   display: flex;
   flex-direction: column;
@@ -20842,4 +20878,3 @@ body.is-col-resizing {
   margin-right: 6px;
   vertical-align: middle;
 }
-

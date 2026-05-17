@@ -15555,6 +15555,7 @@ const App = {
   _switchLicenseTab,
   _acceptLicense,
   _declineLicense,
+  _showDonateFromHome,
   _dismissDonate,
   _suppressDonate,
   _openKofi,
@@ -19196,15 +19197,24 @@ function _showDonateIfNeeded(launchCount, donateSuppressed) {
   const copy = _DONATE_COPY[launchCount];
   if (!copy) return;
 
+  setTimeout(() => _showDonateModal(copy), 3000);
+}
+
+function _showDonateModal(copy) {
   const titleEl = document.getElementById('donate-modal-title');
   const msgEl   = document.getElementById('donate-modal-msg');
   if (titleEl) titleEl.textContent = copy.title;
   if (msgEl)   msgEl.textContent   = copy.msg;
 
-  setTimeout(() => {
-    const el = document.getElementById('donate-modal');
-    if (el) el.style.display = 'flex';
-  }, 3000);
+  const el = document.getElementById('donate-modal');
+  if (el) el.style.display = 'flex';
+}
+
+function _showDonateFromHome() {
+  _showDonateModal({
+    title: 'Support TuneBridge',
+    msg:   'TuneBridge is free and built by one person. If it has made your music library easier to enjoy, a small Ko-fi donation helps keep the app alive and funds the next round of improvements. Thank you for listening with it.',
+  });
 }
 
 function _dismissDonate() {
