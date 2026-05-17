@@ -222,6 +222,12 @@ ARTWORK_DIR = DATA_DIR / 'artwork'
 PLAYLIST_ARTWORK_DIR = DATA_DIR / 'playlist_artwork'
 ARTIST_ARTWORK_DIR = DATA_DIR / 'artist_artwork'
 
+# Test mode — paths determined at startup (see bottom of file)
+_TEST_MODE_FLAG   = DATA_DIR / '.testmode_pending'
+_TESTMODE_DB_PATH = DATA_DIR / 'tunebridge_testmode.db'
+_TESTMODE_ARTWORK_DIR = DATA_DIR / 'playlist_artwork_testmode'
+TEST_MODE = False  # reassigned in startup block when flag is present
+
 DEFAULT_SETTINGS = {
     'library_path':     str(Path.home() / 'Music'),
     'library_structure': 'artist_album_track',
@@ -6244,6 +6250,8 @@ def startup_ping():
         'launch_count':      settings['launch_count'],
         'license_accepted':  bool(settings.get('license_accepted', False)),
         'donate_suppressed': bool(settings.get('donate_suppressed', False)),
+        'test_mode':         TEST_MODE,
+        'channel':           _effective_channel(),
     })
 
 
@@ -6254,6 +6262,67 @@ def license_accept():
     _db.db_set_setting('license_accepted', True)
     _db.db_set_setting('license_accepted_at', now)
     return jsonify({'ok': True, 'accepted_at': now})
+
+
+@app.route('/api/testmode/enter', methods=['POST'])
+def testmode_enter():
+    """Prepare a blank-slate test DB and schedule a restart. RC/dev only."""
+    if _effective_channel() == 'prod':
+        return jsonify({'error': 'Test mode is not available in production builds'}), 403
+
+    import sqlite3 as _sqlite3
+
+    # Wipe any leftover test DB and create a fresh one with bare schema
+    _TESTMODE_DB_PATH.unlink(missing_ok=True)
+    (DATA_DIR / 'tunebridge_testmode.db-wal').unlink(missing_ok=True)
+    (DATA_DIR / 'tunebridge_testmode.db-shm').unlink(missing_ok=True)
+    import shutil as _shutil_tm2
+    _shutil_tm2.rmtree(_TESTMODE_ARTWORK_DIR, ignore_errors=True)
+
+    test_conn = _sqlite3.connect(str(_TESTMODE_DB_PATH))
+    test_conn.executescript(_db._SCHEMA_SQL)
+    test_conn.commit()
+    test_conn.close()
+
+    # Write one-shot flag — consumed on next startup
+    _TEST_MODE_FLAG.write_text('1')
+
+    is_bundled = bool(os.environ.get('TUNEBRIDGE_BUNDLED'))
+    if is_bundled:
+        return jsonify({'ok': True, 'needs_relaunch': True})
+
+    def _do_restart():
+        time.sleep(0.6)
+        try:
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        except Exception:
+            os._exit(1)
+    threading.Thread(target=_do_restart, daemon=False).start()
+    return jsonify({'ok': True, 'needs_relaunch': False})
+
+
+@app.route('/api/testmode/exit', methods=['POST'])
+def testmode_exit():
+    """Exit test mode: clean up test artifacts and restart into normal mode."""
+    if not TEST_MODE:
+        return jsonify({'error': 'Not in test mode'}), 400
+
+    # Remove flag (already consumed on start, but ensure clean state)
+    _TEST_MODE_FLAG.unlink(missing_ok=True)
+
+    is_bundled = bool(os.environ.get('TUNEBRIDGE_BUNDLED'))
+    if is_bundled:
+        # Cleanup happens on next normal startup; just signal the client
+        return jsonify({'ok': True, 'needs_relaunch': True})
+
+    def _do_restart():
+        time.sleep(0.6)
+        try:
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        except Exception:
+            os._exit(1)
+    threading.Thread(target=_do_restart, daemon=False).start()
+    return jsonify({'ok': True, 'needs_relaunch': False})
 
 
 @app.route('/api/health')
@@ -13376,8 +13445,27 @@ def dap_duplicates_delete(did):
     return jsonify({'deleted': deleted, 'errors': errors})
 
 
+# ── Test mode detection ───────────────────────────────────────────────────────
+# The flag file is written by POST /api/testmode/enter and consumed once here.
+# Deleting it immediately means a crash during the test session auto-recovers
+# on next startup (no flag → normal mode, leftover test DB cleaned up below).
+if _TEST_MODE_FLAG.exists():
+    _TEST_MODE_FLAG.unlink()
+    TEST_MODE = True
+    PLAYLIST_ARTWORK_DIR = _TESTMODE_ARTWORK_DIR
+    _TESTMODE_ARTWORK_DIR.mkdir(exist_ok=True)
+    _db.init_db(DATA_DIR, 'tunebridge_testmode.db')
+    print('[testmode] Starting in TEST MODE — using tunebridge_testmode.db')
+else:
+    # Clean up leftover test artifacts from a previous test session
+    if _TESTMODE_DB_PATH.exists():
+        import shutil as _shutil_tm
+        _TESTMODE_DB_PATH.unlink(missing_ok=True)
+        (DATA_DIR / 'tunebridge_testmode.db-wal').unlink(missing_ok=True)
+        (DATA_DIR / 'tunebridge_testmode.db-shm').unlink(missing_ok=True)
+        _shutil_tm.rmtree(_TESTMODE_ARTWORK_DIR, ignore_errors=True)
+
 # ── SQLite initialization ─────────────────────────────────────────────────────
-_db.init_db(DATA_DIR)
 if not _migrate.ensure_db(DATA_DIR):
     raise RuntimeError('SQLite migration failed; startup aborted (JSON fallback removed).')
 

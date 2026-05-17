@@ -19,10 +19,10 @@ _local = threading.local()
 DB_PATH: Path = None
 
 
-def init_db(data_dir: Path):
+def init_db(data_dir: Path, db_filename: str = 'tunebridge.db'):
     """Set the database path. Call once at startup before any queries."""
     global DB_PATH
-    DB_PATH = data_dir / 'tunebridge.db'
+    DB_PATH = data_dir / db_filename
 
 
 def get_conn() -> sqlite3.Connection:

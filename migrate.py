@@ -22,7 +22,8 @@ def ensure_db(data_dir: Path) -> bool:
 
     Returns True when ready, False on failure.
     """
-    db.init_db(data_dir)
+    if db.DB_PATH is None:  # Don't overwrite if already set (e.g. test mode uses a different DB)
+        db.init_db(data_dir)
 
     try:
         current_version = db.get_schema_version()

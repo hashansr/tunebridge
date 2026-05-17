@@ -122,6 +122,12 @@
         </div>
         <span id="scan-msg"></span>
       </div>
+
+      <!-- Test mode banner — visible only when server starts in test mode -->
+      <div id="testmode-banner" style="display:none" onclick="App.showView('settings')" title="Click to open Settings → Developer">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
+        <span>TEST MODE</span>
+      </div>
     </aside>
 
     <!-- Main -->
@@ -1343,6 +1349,39 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
                 Restart
               </button>
+            </div>
+
+            <!-- Developer section — hidden on prod builds, shown by JS when channel != prod -->
+            <div id="settings-developer-section" style="display:none">
+              <div class="settings-rg-divider"></div>
+              <div class="settings-section-heading">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
+                Developer
+              </div>
+              <!-- Normal mode: enter test mode -->
+              <div id="testmode-enter-row" class="settings-app-row settings-app-row-clean">
+                <div class="settings-app-main">
+                  <div class="settings-app-row-label">Test Mode</div>
+                  <div class="settings-app-row-hint">Start a sandboxed first-run session with a blank database. Your real data is never touched. The test DB is deleted on exit.</div>
+                </div>
+                <button class="btn-secondary settings-app-control settings-testmode-btn" onclick="App.enterTestMode()">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;flex-shrink:0"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
+                  Enter Test Mode
+                </button>
+              </div>
+              <!-- Test mode active: show status + exit -->
+              <div id="testmode-active-row" class="settings-app-row settings-app-row-clean" style="display:none">
+                <div class="settings-app-main">
+                  <div class="settings-app-row-label">
+                    <span class="testmode-active-badge">ACTIVE</span>
+                    Test Mode is running
+                  </div>
+                  <div class="settings-app-row-hint">You are in a sandboxed session. All changes are temporary and will be discarded when you exit.</div>
+                </div>
+                <button class="btn-secondary settings-app-control" onclick="App.exitTestMode()">
+                  Exit Test Mode
+                </button>
+              </div>
             </div>
           </div>
 
@@ -3546,6 +3585,36 @@ Questions: mail@hashanr.com</pre>
         <button class="confirm-cancel-link donate-later-link" onclick="App._dismissDonate()">Maybe later</button>
         <button class="donate-never-link" onclick="App._suppressDonate()">Don't ask again</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Test mode confirm modal -->
+  <div id="testmode-confirm-modal" class="modal-overlay tb-modal-overlay" style="display:none" onclick="if(event.target===this)App._closeTestModeConfirm()">
+    <div class="modal tb-modal-shell tb-modal--sm confirm-modal testmode-confirm-shell">
+      <div class="confirm-icon-wrap" style="background:rgba(255,196,0,.1)">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffc400" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/>
+        </svg>
+      </div>
+      <h3 class="confirm-title">Enter Test Mode?</h3>
+      <p class="confirm-message">This creates a blank-slate database so you can experience TuneBridge as a first-time user. <strong>Your real data is never touched.</strong> The test session is deleted automatically when you exit.</p>
+      <button class="btn-primary confirm-ok-btn" id="testmode-confirm-ok" onclick="App._confirmEnterTestMode()">Enter Test Mode</button>
+      <button class="confirm-cancel-link" onclick="App._closeTestModeConfirm()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Test mode relaunch modal (shown when running inside .app where auto-restart is unavailable) -->
+  <div id="testmode-relaunch-modal" class="modal-overlay tb-modal-overlay" style="display:none">
+    <div class="modal tb-modal-shell tb-modal--sm confirm-modal testmode-confirm-shell">
+      <div class="confirm-icon-wrap" style="background:rgba(255,196,0,.1)">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffc400" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/>
+        </svg>
+      </div>
+      <h3 class="confirm-title">Test Mode Ready</h3>
+      <p class="confirm-message" id="testmode-relaunch-msg">Quit and relaunch TuneBridge to begin the test session.</p>
+      <button class="btn-primary confirm-ok-btn" onclick="App._quitForTestMode()">Quit TuneBridge</button>
+      <button class="confirm-cancel-link" onclick="document.getElementById('testmode-relaunch-modal').style.display='none'">Close</button>
     </div>
   </div>
 

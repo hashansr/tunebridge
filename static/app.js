@@ -12863,6 +12863,85 @@ async function restartApp() {
   }, 800);
 }
 
+// ── Test Mode ─────────────────────────────────────────────────────────────────
+
+function enterTestMode() {
+  const modal = document.getElementById('testmode-confirm-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function _closeTestModeConfirm() {
+  const modal = document.getElementById('testmode-confirm-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function _confirmEnterTestMode() {
+  const btn = document.getElementById('testmode-confirm-ok');
+  if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
+  try {
+    const r = await fetch('/api/testmode/enter', { method: 'POST' });
+    const data = await r.json();
+    _closeTestModeConfirm();
+    if (data.needs_relaunch) {
+      document.getElementById('testmode-relaunch-msg').textContent =
+        'Test mode is ready. Quit and relaunch TuneBridge to begin your first-run session.';
+      document.getElementById('testmode-relaunch-modal').style.display = 'flex';
+    } else {
+      // Auto-restart: poll until server is back, then reload
+      const poll = setInterval(async () => {
+        try {
+          const h = await fetch('/api/health', { cache: 'no-store' });
+          if (h.ok) { clearInterval(poll); window.location.reload(); }
+        } catch (_) { /* restarting */ }
+      }, 800);
+    }
+  } catch (e) {
+    toast('Could not prepare test mode');
+    if (btn) { btn.disabled = false; btn.textContent = 'Enter Test Mode'; }
+  }
+}
+
+async function exitTestMode() {
+  try {
+    const r = await fetch('/api/testmode/exit', { method: 'POST' });
+    const data = await r.json();
+    if (data.needs_relaunch) {
+      document.getElementById('testmode-relaunch-msg').textContent =
+        'Quit and relaunch TuneBridge to return to your normal session.';
+      document.getElementById('testmode-relaunch-modal').style.display = 'flex';
+    } else {
+      const poll = setInterval(async () => {
+        try {
+          const h = await fetch('/api/health', { cache: 'no-store' });
+          if (h.ok) { clearInterval(poll); window.location.reload(); }
+        } catch (_) { /* restarting */ }
+      }, 800);
+    }
+  } catch (e) {
+    toast('Could not exit test mode');
+  }
+}
+
+function _quitForTestMode() {
+  fetch('/api/quit', { method: 'POST' }).catch(() => {});
+}
+
+function _applyTestModeUI(isTestMode, channel) {
+  // Sidebar banner
+  const banner = document.getElementById('testmode-banner');
+  if (banner) banner.style.display = isTestMode ? 'flex' : 'none';
+
+  // Developer section in Settings — only show on explicit rc/dev channel response
+  const devSection = document.getElementById('settings-developer-section');
+  if (devSection) devSection.style.display = (channel === 'rc' || channel === 'dev') ? '' : 'none';
+
+  // Within developer section: toggle enter vs active rows
+  const enterRow  = document.getElementById('testmode-enter-row');
+  const activeRow = document.getElementById('testmode-active-row');
+  if (enterRow)  enterRow.style.display  = isTestMode ? 'none' : '';
+  if (activeRow) activeRow.style.display = isTestMode ? ''     : 'none';
+}
+
 let _updateDownloadUrl = '';
 
 function _setUpdateStatus(state, text) {
@@ -15256,6 +15335,11 @@ const App = {
   skipOnboarding,
   completeOnboarding,
   restartApp,
+  enterTestMode,
+  exitTestMode,
+  _confirmEnterTestMode,
+  _closeTestModeConfirm,
+  _quitForTestMode,
   setUpdateChannel,
   checkForUpdate,
   confirmUpdate,
@@ -19256,6 +19340,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     pollScanStatus();
     showView('home');
     refreshPlayerFavouriteButton();
+
+    // Apply test mode UI (sidebar banner + developer settings section visibility).
+    _applyTestModeUI(pingData.test_mode, pingData.channel);
 
     // Show first-run onboarding only when settings file does not exist yet.
     if (!settings._settings_exists && !settings.onboarding_completed) {

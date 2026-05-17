@@ -20776,3 +20776,76 @@ body.is-col-resizing {
     flex-wrap: wrap;
   }
 }
+
+/* ── Test Mode ────────────────────────────────────────────────────────────── */
+
+/* Sidebar banner */
+#testmode-banner {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  background: rgba(255, 196, 0, 0.12);
+  border-top: 1px solid rgba(255, 196, 0, 0.25);
+  color: #ffc400;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  animation: testmode-pulse 3s ease-in-out infinite;
+}
+#testmode-banner:hover {
+  background: rgba(255, 196, 0, 0.2);
+}
+@keyframes testmode-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.7; }
+}
+
+/* Settings: Developer section heading */
+.settings-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 4px 0 8px;
+}
+
+/* Settings: Enter Test Mode button accent */
+.settings-testmode-btn {
+  border-color: rgba(255, 196, 0, 0.35) !important;
+  color: #ffc400 !important;
+  white-space: nowrap;
+}
+.settings-testmode-btn:hover {
+  background: rgba(255, 196, 0, 0.1) !important;
+  border-color: rgba(255, 196, 0, 0.6) !important;
+}
+
+/* Settings: Active badge pill */
+.testmode-active-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #ffc400;
+  background: rgba(255, 196, 0, 0.15);
+  border: 1px solid rgba(255, 196, 0, 0.35);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* Test mode confirm / relaunch modal shell */
+.testmode-confirm-shell {
+  text-align: center;
+  padding: 32px 28px 24px;
+  gap: 0;
+}
