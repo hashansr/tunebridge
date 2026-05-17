@@ -8867,13 +8867,13 @@ tbody tr:hover {
   position: absolute;
   bottom: calc(100% + 12px);
   right: 0;
-  width: min(420px, calc(100vw - 20px));
+  width: min(360px, calc(100vw - 20px));
   background: var(--modal-bg, #1d1d1f);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   border: 1px solid var(--modal-border, rgba(255,255,255,0.07));
-  border-radius: 12px;
-  padding: 18px 20px 20px;
+  border-radius: 10px;
+  padding: 14px 16px 16px;
   box-shadow: var(--modal-shadow, 0 24px 56px rgba(0,0,0,0.5), 0 4px 10px rgba(0,0,0,0.35));
   z-index: 410;
   opacity: 0;
@@ -8893,12 +8893,12 @@ tbody tr:hover {
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 18px;
+  margin-bottom: 13px;
 }
 .peq-title {
-  font-size: 17px;
+  font-size: 15.5px;
   font-weight: 600;
-  letter-spacing: -0.014em;
+  letter-spacing: 0;
   line-height: 1.25;
   color: var(--modal-text, var(--text));
 }
@@ -8906,10 +8906,10 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
-  min-height: 22px;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
   border-radius: 50%;
   border: 1px solid rgba(255,255,255,0.05);
   background: rgba(255,255,255,0.06);
@@ -8925,26 +8925,26 @@ tbody tr:hover {
   color: var(--modal-text, var(--text));
 }
 .peq-close-btn svg {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
 }
 
 /* Sections */
-.peq-section { margin-bottom: 18px; }
+.peq-section { margin-bottom: 14px; }
 .peq-section:last-of-type { margin-bottom: 0; }
 .peq-popover-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 18px;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
 .peq-open-workspace-btn {
   width: 100%;
-  min-height: 32px;
-  padding: 0 13px;
+  min-height: 30px;
+  padding: 0 11px;
   border-radius: 7px;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0;
   box-shadow: none;
@@ -8954,8 +8954,8 @@ tbody tr:hover {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 18px;
-  padding-top: 12px;
+  margin-top: 14px;
+  padding-top: 10px;
   border-top: 1px solid var(--modal-hairline, rgba(255,255,255,0.06));
 }
 .peq-create-btn {
@@ -8980,12 +8980,12 @@ tbody tr:hover {
 }
 
 .peq-section-label {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--modal-text-muted, var(--text-muted));
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 /* Shared PEQ select style (workspace + popover baseline) */
@@ -9015,16 +9015,16 @@ tbody tr:hover {
 
 /* Select */
 .peq-popover .peq-select {
-  min-height: 34px;
+  min-height: 30px;
   border-radius: 7px;
   border: 1px solid var(--modal-border, rgba(255,255,255,0.07));
-  padding: 7px 34px 7px 11px;
-  font-size: 13px;
+  padding: 5px 30px 5px 10px;
+  font-size: 12.5px;
   font-weight: 400;
   line-height: 1.35;
   color: var(--modal-text, var(--text));
   background-color: var(--modal-row, #2a2a2c);
-  background-position: right 10px center;
+  background-position: right 9px center;
   transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 .peq-popover .peq-select:hover {
@@ -9039,7 +9039,7 @@ tbody tr:hover {
 .peq-divider {
   height: 1px;
   background: var(--modal-hairline, rgba(255,255,255,0.06));
-  margin: 0 0 18px;
+  margin: 0 0 14px;
 }
 
 /* Crossfade */
@@ -9047,17 +9047,17 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 7px;
 }
 .peq-xfade-cat {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--modal-text-muted, var(--text-muted));
 }
 .peq-xfade-val {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--modal-accent, var(--accent));
@@ -9068,14 +9068,14 @@ tbody tr:hover {
 /* ReplayGain pill toggle */
 .rg-pills {
   display: flex;
-  gap: 8px;
+  gap: 7px;
   margin-top: 0;
 }
 .rg-pill {
   flex: 1;
-  min-height: 34px;
-  padding: 0 12px;
-  font-size: 13px;
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0;
   background: rgba(255,255,255,0.06);
@@ -9107,12 +9107,12 @@ tbody tr:hover {
   outline: none;
   cursor: pointer;
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 .peq-xfade-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--modal-accent, #adc6ff);
   cursor: pointer;
@@ -9126,7 +9126,7 @@ tbody tr:hover {
 .peq-xfade-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 11.5px;
+  font-size: 10.5px;
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
@@ -9135,16 +9135,16 @@ tbody tr:hover {
 
 @media (max-width: 920px) {
   .peq-popover {
-    width: min(420px, calc(100vw - 12px));
-    padding: 16px;
-    border-radius: 12px;
+    width: min(360px, calc(100vw - 12px));
+    padding: 14px;
+    border-radius: 10px;
   }
   .peq-title {
-    font-size: 17px;
+    font-size: 15.5px;
   }
   .peq-close-btn {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
   }
   .peq-popover-fields,
   .peq-popover-actions {
