@@ -5703,7 +5703,27 @@ async function bulkUnfavouriteSelected() {
 /* ── Home ───────────────────────────────────────────────────────────── */
 /* ── Home helpers ───────────────────────────────────────────────────── */
 
-let _homeCurrentPeriod = 'month';
+const _HOME_HISTORY_PERIOD_STORAGE_KEY = 'tb_home_history_period';
+const _HOME_HISTORY_PERIOD_DEFAULT = 'week';
+const _HOME_HISTORY_PERIODS = new Set(['week', 'month', 'year', 'all']);
+
+function _coerceHomeHistoryPeriod(period) {
+  return _HOME_HISTORY_PERIODS.has(period) ? period : _HOME_HISTORY_PERIOD_DEFAULT;
+}
+
+function _readHomeHistoryPeriodPreference() {
+  try {
+    return _coerceHomeHistoryPeriod(localStorage.getItem(_HOME_HISTORY_PERIOD_STORAGE_KEY));
+  } catch (_) {
+    return _HOME_HISTORY_PERIOD_DEFAULT;
+  }
+}
+
+function _saveHomeHistoryPeriodPreference(period) {
+  try { localStorage.setItem(_HOME_HISTORY_PERIOD_STORAGE_KEY, period); } catch (_) {}
+}
+
+let _homeCurrentPeriod = _readHomeHistoryPeriodPreference();
 let _homeStatsLoading = false;
 let _homeLastData = null;
 let _homeLastStatsData = {}; // keyed by period
@@ -6280,33 +6300,34 @@ function _homeApplyData(data, force) {
   // Stats: on initial load fetch them; on background refresh skip (period chips handle updates)
   if (force) {
     _homeSectionVisible('home-stats-section', true);
-    homeChangePeriod(_homeCurrentPeriod, /* skipChipUpdate */ true);
+    homeChangePeriod(_homeCurrentPeriod, /* skipChipUpdate */ false);
   }
 
   _renderHomeDataHealth(data);
 }
 
 async function homeChangePeriod(period, skipChipUpdate) {
-  _homeCurrentPeriod = period;
+  _homeCurrentPeriod = _coerceHomeHistoryPeriod(period);
+  _saveHomeHistoryPeriodPreference(_homeCurrentPeriod);
   if (!skipChipUpdate) {
     document.querySelectorAll('.home-period-chip').forEach(el => {
-      el.classList.toggle('active', el.dataset.period === period);
+      el.classList.toggle('active', el.dataset.period === _homeCurrentPeriod);
     });
   }
   if (_homeStatsLoading) return;
   _homeStatsLoading = true;
 
   // If we have cached stats for this period, render them immediately while we fetch fresh data
-  if (_homeLastStatsData[period]) {
-    _renderHomeListeningStats(_homeLastStatsData[period]);
+  if (_homeLastStatsData[_homeCurrentPeriod]) {
+    _renderHomeListeningStats(_homeLastStatsData[_homeCurrentPeriod]);
   } else {
     const el = document.getElementById('home-stats-content');
     if (el) el.style.opacity = '0.4';
   }
 
   try {
-    const stats = await api(`/home/stats?period=${encodeURIComponent(period)}`);
-    _homeLastStatsData[period] = stats;
+    const stats = await api(`/home/stats?period=${encodeURIComponent(_homeCurrentPeriod)}`);
+    _homeLastStatsData[_homeCurrentPeriod] = stats;
     const el = document.getElementById('home-stats-content');
     if (el) el.style.opacity = '';
     _renderHomeListeningStats(stats);
@@ -7002,11 +7023,9 @@ async function _restoreNavSnapshot(snap) {
       break;
     case 'history': {
       state.view = 'history'; state.playlist = null; clearSelection();
-      _historyPeriod = Number.isFinite(Number(snap.historyPeriod)) ? Number(snap.historyPeriod) : 7;
+      _historyPeriod = _coerceHistoryPeriod(snap.historyPeriod);
       _historyOpenDays = new Set(Array.isArray(snap.historyOpenDays) ? snap.historyOpenDays : []);
-      document.querySelectorAll('[data-period]').forEach(btn => {
-        btn.classList.toggle('active', parseInt(btn.dataset.period) === _historyPeriod);
-      });
+      _syncHistoryPeriodPills();
       const validToggle = document.getElementById('history-valid-only');
       if (validToggle) validToggle.checked = !!snap.historyValidOnly;
       setActiveNav('history'); renderSidebarPlaylists(); showViewEl('history');
@@ -13730,7 +13749,35 @@ function _srUpdateActionState() {
 }
 
 /* ── History view ───────────────────────────────────────────────────── */
-let _historyPeriod = 7;
+const _HISTORY_PERIOD_STORAGE_KEY = 'tb_history_period';
+const _HISTORY_PERIOD_DEFAULT = 7;
+const _HISTORY_PERIODS = new Set([7, 30, 90, 0]);
+
+function _coerceHistoryPeriod(days) {
+  const n = Number(days);
+  return _HISTORY_PERIODS.has(n) ? n : _HISTORY_PERIOD_DEFAULT;
+}
+
+function _readHistoryPeriodPreference() {
+  try {
+    const raw = localStorage.getItem(_HISTORY_PERIOD_STORAGE_KEY);
+    return raw == null ? _HISTORY_PERIOD_DEFAULT : _coerceHistoryPeriod(raw);
+  } catch (_) {
+    return _HISTORY_PERIOD_DEFAULT;
+  }
+}
+
+function _saveHistoryPeriodPreference(days) {
+  try { localStorage.setItem(_HISTORY_PERIOD_STORAGE_KEY, String(days)); } catch (_) {}
+}
+
+function _syncHistoryPeriodPills() {
+  document.querySelectorAll('[data-period]').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.period) === _historyPeriod);
+  });
+}
+
+let _historyPeriod = _readHistoryPeriodPreference();
 let _historyChart = null;
 let _historyOpenDays = new Set();
 let _playStats = {};       // track_id → {count, last_played}
@@ -13745,11 +13792,10 @@ async function _ensurePlayStats() {
 }
 
 function setHistoryPeriod(days) {
-  _historyPeriod = days;
+  _historyPeriod = _coerceHistoryPeriod(days);
+  _saveHistoryPeriodPreference(_historyPeriod);
   _historyOpenDays = new Set();
-  document.querySelectorAll('[data-period]').forEach(btn => {
-    btn.classList.toggle('active', parseInt(btn.dataset.period) === days);
-  });
+  _syncHistoryPeriodPills();
   loadHistoryView();
 }
 
@@ -13868,6 +13914,7 @@ function _historyRankRows(rows, kind) {
 async function loadHistoryView() {
   setActiveNav('history');
   showViewEl('history');
+  _syncHistoryPeriodPills();
   const validOnly = document.getElementById('history-valid-only')?.checked ? 'true' : 'false';
   const listEl = document.getElementById('history-list');
   const statsEl = document.getElementById('history-stats');
