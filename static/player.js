@@ -514,6 +514,7 @@ const Player = (function () {
           album:   prevTrack.album   || '',
           title:   prevTrack.title   || '',
           format:  prevTrack.format  || '',
+          session_id: _trackHistorySessionId || '',
           reason:  'xfade',
         }]);
       }
@@ -615,6 +616,7 @@ const Player = (function () {
           album:  prevTrack.album  || '',
           title:  prevTrack.title  || '',
           format: prevTrack.format || '',
+          session_id: _trackHistorySessionId || '',
           reason: 'xfade',
         }]);
       }
@@ -648,6 +650,7 @@ const Player = (function () {
       if (fillEl) fillEl.style.width      = (pct * 100) + '%';
     }
 
+    _activeHistoryTrack = nextTrack;
     _markTrackSessionStart();
     _highlightActiveRow();
     _saveState();
@@ -1676,6 +1679,8 @@ const Player = (function () {
         _startPlay();
         _updateTrackUI(nextTrack);
         _applyReplayGain(nextTrack);
+        _activeHistoryTrack = nextTrack;
+        _markTrackSessionStart();
         _highlightActiveRow();
         _saveState();
         if (ps.queueOpen) _renderQueue();
