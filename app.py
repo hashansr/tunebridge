@@ -229,7 +229,7 @@ _TESTMODE_ARTWORK_DIR = DATA_DIR / 'playlist_artwork_testmode'
 TEST_MODE = False  # reassigned in startup block when flag is present
 
 DEFAULT_SETTINGS = {
-    'library_path':     str(Path.home() / 'Music'),
+    'library_path':     '',
     'library_structure': 'artist_album_track',
     'preferred_audio_format': 'flac',
     'onboarding_completed': False,
@@ -323,7 +323,7 @@ _DEFAULT_FAVOURITES = {
 
 def get_music_base():
     settings = load_settings()
-    return Path(settings.get('library_path', DEFAULT_SETTINGS['library_path']))
+    return Path(settings.get('library_path') or DEFAULT_SETTINGS['library_path'] or '.')
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 ARTWORK_DIR.mkdir(exist_ok=True)
@@ -1227,6 +1227,9 @@ def do_scan():
     })
 
     music_base = get_music_base()
+    if not music_base or not music_base.is_absolute():
+        scan_state.update({'status': 'error', 'message': 'Music library path not configured. Go to Settings → Library to set it.'})
+        return
     if not music_base.exists():
         scan_state.update({'status': 'error', 'message': f'Music folder not found: {music_base}'})
         return
