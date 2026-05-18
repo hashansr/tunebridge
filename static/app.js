@@ -6171,7 +6171,7 @@ function _renderHomeListeningStats(data) {
         <div class="ls-micro-label">Top Genre</div>
         <div class="ls-micro-genre-row">
           ${c.top_genre
-            ? `<span class="ls-genre-pill">${esc(c.top_genre)}</span>`
+            ? `<span class="ls-micro-text">${esc(c.top_genre)}</span>`
             : `<span class="ls-micro-suffix">—</span>`}
         </div>
       </div>
