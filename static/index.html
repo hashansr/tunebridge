@@ -980,31 +980,6 @@
               </div>
             </div>
 
-            <!-- ReplayGain tagging row -->
-            <div class="settings-rg-divider"></div>
-            <div class="settings-rg-row">
-              <div class="settings-rg-meta">
-                <span class="settings-rg-label">ReplayGain Tags</span>
-                <span id="rg-info-text" class="settings-rg-sub">Loading…</span>
-              </div>
-              <div class="settings-rg-actions">
-                <button id="rg-tag-btn" class="btn-secondary settings-action-with-status" onclick="App.tagReplayGain()">
-                  <span>Tag Missing Tracks</span>
-                  <span class="settings-action-status" data-settings-action-status="library-rg" style="display:none"></span>
-                </button>
-                <button id="rg-cancel-btn" class="btn-secondary" onclick="App.cancelRgTagging()" style="display:none">Cancel</button>
-              </div>
-            </div>
-            <div id="rg-banner" class="rg-banner" style="display:none">
-              <div class="rg-banner-text">
-                <span id="rg-banner-label">Tagging tracks…</span>
-                <span id="rg-banner-sub"></span>
-                <span id="rg-banner-file" class="rg-banner-file"></span>
-              </div>
-              <div class="insights-analysis-bar-wrap" style="flex:1;min-width:80px">
-                <div id="rg-banner-bar" class="insights-analysis-bar" style="width:0%"></div>
-              </div>
-            </div>
           </div>
 
           <!-- Data & Backup section -->
@@ -1245,6 +1220,65 @@
                   <span class="settings-toggle-state" id="listening-tracking-state">On</span>
                 </label>
                 <button class="btn-secondary" id="listening-history-clear-btn" onclick="App.clearListeningHistory()">Clear History</button>
+              </div>
+            </div>
+
+            <div class="settings-subsection-divider"></div>
+
+            <!-- Replay Gain enable toggle -->
+            <div class="settings-app-row settings-playback-row" id="replay-gain-row">
+              <div class="settings-app-main">
+                <div class="settings-app-row-label">Replay Gain</div>
+                <div class="settings-app-row-hint">Normalises playback volume across tracks using embedded gain tags. Off by default.</div>
+              </div>
+              <div class="settings-playback-actions">
+                <label class="settings-toggle">
+                  <input type="checkbox" id="rg-enabled-toggle" onchange="App.onRgEnabledChange(this.checked)">
+                  <span class="settings-toggle-track"></span>
+                  <span class="settings-toggle-state" id="rg-enabled-state">Off</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Mode row — hidden when RG is disabled -->
+            <div class="settings-app-row settings-playback-row settings-playback-dependent-row" id="rg-mode-row" style="display:none">
+              <div class="settings-app-main">
+                <div class="settings-app-row-label">Mode</div>
+                <div class="settings-app-row-hint">Track applies per-track gain. Album preserves relative loudness between tracks on the same album.</div>
+              </div>
+              <div class="settings-playback-actions">
+                <div class="rg-pills">
+                  <button class="rg-pill" data-mode="track" onclick="App.setRgModeFromSettings('track')">Track</button>
+                  <button class="rg-pill" data-mode="album" onclick="App.setRgModeFromSettings('album')">Album</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tagging sub-section — hidden when RG is disabled -->
+            <div id="rg-section" style="display:none">
+              <div class="settings-rg-divider"></div>
+              <div class="settings-rg-row">
+                <div class="settings-rg-meta">
+                  <span class="settings-rg-label">ReplayGain Tags</span>
+                  <span id="rg-info-text" class="settings-rg-sub">Loading…</span>
+                </div>
+                <div class="settings-rg-actions">
+                  <button id="rg-tag-btn" class="btn-secondary settings-action-with-status" onclick="App.tagReplayGain()">
+                    <span>Tag Missing Tracks</span>
+                    <span class="settings-action-status" data-settings-action-status="library-rg" style="display:none"></span>
+                  </button>
+                  <button id="rg-cancel-btn" class="btn-secondary" onclick="App.cancelRgTagging()" style="display:none">Cancel</button>
+                </div>
+              </div>
+              <div id="rg-banner" class="rg-banner" style="display:none">
+                <div class="rg-banner-text">
+                  <span id="rg-banner-label">Tagging tracks…</span>
+                  <span id="rg-banner-sub"></span>
+                  <span id="rg-banner-file" class="rg-banner-file"></span>
+                </div>
+                <div class="insights-analysis-bar-wrap" style="flex:1;min-width:80px">
+                  <div id="rg-banner-bar" class="insights-analysis-bar" style="width:0%"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -2503,18 +2537,6 @@
                 <option value="">— None —</option>
                 <option value="__create__">Create PEQ</option>
               </select>
-            </div>
-          </div>
-
-          <!-- ReplayGain -->
-          <div class="peq-section" id="rg-row">
-            <div class="peq-xfade-meta">
-              <span class="peq-xfade-cat">ReplayGain</span>
-            </div>
-            <div class="rg-pills">
-              <button class="rg-pill rg-pill--active" data-mode="off"   onclick="Player.setRgMode('off')">Off</button>
-              <button class="rg-pill"                 data-mode="track" onclick="Player.setRgMode('track')">Track</button>
-              <button class="rg-pill"                 data-mode="album" onclick="Player.setRgMode('album')">Album</button>
             </div>
           </div>
 

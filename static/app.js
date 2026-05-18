@@ -316,7 +316,10 @@ function _toastShow(item) {
   text.className = 'toast-msg';
   text.textContent = item.msg;
   el.appendChild(text);
-  el.addEventListener('click', () => _toastDismiss(el), { once: true });
+  el.addEventListener('click', () => {
+    _toastDismiss(el);
+    if (typeof item.action === 'function') item.action();
+  }, { once: true });
   container.appendChild(el);
   _toastActive.push(el);
   el.getBoundingClientRect(); // force reflow before adding .show
@@ -1227,7 +1230,7 @@ function _renderSidebarScanStatus(status) {
   bar.style.width = '100%';
   msg.classList.remove('scanning-pulse');
   if (rescanBtn) rescanBtn.classList.remove('is-scanning');
-  if (status?.status !== 'scanning') _loadRgInfo();
+  if (status?.status !== 'scanning' && _settings?.replay_gain_enabled) _loadRgInfo();
 
   if (status?.status === 'done' && status.total_tracks != null) {
     setState('Library Ready');
@@ -1261,16 +1264,10 @@ async function pollScanStatus() {
       if (['artists', 'albums', 'tracks'].includes(state.view)) {
         refreshCurrentLibraryView();
       }
-      // Notify user if newly scanned tracks are missing ReplayGain tags
-      try {
-        const rgInfo = await fetch('/api/library/replaygain/info').then(r => r.json());
-        if (rgInfo.pending > 0) {
-          toast(
-            `${rgInfo.pending.toLocaleString()} track${rgInfo.pending > 1 ? 's are' : ' is'} missing ReplayGain tags — tag them in Settings.`,
-            6000
-          );
-        }
-      } catch (_) {}
+      // Notify user if newly scanned tracks are missing ReplayGain tags (only when RG is enabled)
+      if (_settings && _settings.replay_gain_enabled) {
+        _checkRgMissingAndNotify();
+      }
     }
   }
 }
@@ -12598,8 +12595,8 @@ async function loadSettings() {
     if (batchStatus.status === 'running') _startArtistBatchPolling();
   } catch (_) {}
 
-  // Load ReplayGain tag coverage info
-  _loadRgInfo();
+  // Replay Gain — apply from server settings
+  _initRgFromSettings(settings);
   loadLyricsSettings();
 
   // Display app version + channel picker
@@ -15542,9 +15539,11 @@ const App = {
   saveArtistImageSettings,
   startArtistImageBatch,
   cancelArtistImageBatch,
-  // ReplayGain tagger
+  // ReplayGain tagger + settings
   tagReplayGain,
   cancelRgTagging,
+  onRgEnabledChange,
+  setRgModeFromSettings,
   // Lyrics
   openLyricsView,
   toggleLyricsView,
@@ -19016,10 +19015,10 @@ async function _loadRgInfo() {
       }
     }
     if (d.status === 'running') {
-      _setSettingsStatus('library', { show: true, tone: 'busy', title: 'ReplayGain tagging is running' });
+      _setSettingsStatus('playback', { show: true, tone: 'busy', title: 'ReplayGain tagging is running' });
       _setSettingsActionStatus('library-rg', { show: true, tone: 'busy', title: 'ReplayGain tagging is running' });
     } else if (d.pending > 0) {
-      _setSettingsStatus('library', {
+      _setSettingsStatus('playback', {
         show: true,
         tone: 'warning',
         title: `${d.pending.toLocaleString()} tracks missing ReplayGain tags`,
@@ -19030,7 +19029,7 @@ async function _loadRgInfo() {
         title: `${d.pending.toLocaleString()} tracks missing ReplayGain tags`,
       });
     } else {
-      _setSettingsStatus('library');
+      _setSettingsStatus('playback');
       _setSettingsActionStatus('library-rg');
     }
     // Resume polling and disable button if a job is already running
@@ -19085,7 +19084,7 @@ function _startRgPolling() {
   if (tagBtn)    tagBtn.disabled = true;
   if (cancelBtn) cancelBtn.style.display = '';
   if (banner)    banner.style.display = '';
-  _setSettingsStatus('library', { show: true, tone: 'busy', title: 'ReplayGain tagging is running' });
+  _setSettingsStatus('playback', { show: true, tone: 'busy', title: 'ReplayGain tagging is running' });
   _setSettingsActionStatus('library-rg', { show: true, tone: 'busy', title: 'ReplayGain tagging is running' });
   if (_rgPoller) clearInterval(_rgPoller);
   _rgPoller = setInterval(_pollRgStatus, 1500);
@@ -19127,7 +19126,7 @@ function _updateRgBanner(s) {
   if (bar) bar.style.width = pct + '%';
 
   if (s.status === 'running') {
-    _setSettingsStatus('library', {
+    _setSettingsStatus('playback', {
       show: true,
       tone: 'busy',
       title: `ReplayGain tagging: ${Number(s.done || 0).toLocaleString()} / ${Number(s.total || 0).toLocaleString()}`,
@@ -19141,7 +19140,7 @@ function _updateRgBanner(s) {
     if (sub)   sub.textContent   = `${s.done.toLocaleString()} / ${s.total.toLocaleString()} · ${pct}%${errNote}`;
     if (fileLine) fileLine.textContent = s.current_file || '';
   } else if (s.status === 'done') {
-    _setSettingsStatus('library');
+    _setSettingsStatus('playback');
     _setSettingsActionStatus('library-rg');
     if (label) label.textContent = 'Tagging complete';
     if (sub)   sub.textContent   = `${s.done.toLocaleString()} tracks tagged${errNote}`;
@@ -19152,12 +19151,97 @@ function _updateRgBanner(s) {
     if (sub)   sub.textContent   = `${s.done.toLocaleString()} of ${s.total.toLocaleString()} tracks tagged`;
     if (fileLine) fileLine.textContent = '';
   } else if (s.status === 'error') {
-    _setSettingsStatus('library', { show: true, tone: 'error', title: s.error || 'ReplayGain tagging failed' });
+    _setSettingsStatus('playback', { show: true, tone: 'error', title: s.error || 'ReplayGain tagging failed' });
     _setSettingsActionStatus('library-rg', { show: true, tone: 'error', title: s.error || 'ReplayGain tagging failed' });
     if (label) label.textContent = 'Tagging failed';
     if (sub)   sub.textContent   = s.error || 'Unknown error';
     if (fileLine) fileLine.textContent = '';
   }
+}
+
+// ── Replay Gain settings integration ─────────────────────────────────────────
+
+function _initRgFromSettings(settings) {
+  const enabled = settings.replay_gain_enabled === true;
+  const mode    = settings.replay_gain_mode || 'track';
+  const toggle  = document.getElementById('rg-enabled-toggle');
+  if (toggle) toggle.checked = enabled;
+  _setSettingsToggleState('rg-enabled-toggle', 'rg-enabled-state', enabled, true);
+  _applyRgSettingsUI(enabled, mode);
+  if (typeof Player !== 'undefined') Player.setRgMode(enabled ? mode : 'off');
+  if (enabled) _loadRgInfo();
+}
+
+function _applyRgSettingsUI(enabled, mode) {
+  const modeRow = document.getElementById('rg-mode-row');
+  const section = document.getElementById('rg-section');
+  if (modeRow) modeRow.style.display = enabled ? '' : 'none';
+  if (section) section.style.display = enabled ? '' : 'none';
+  document.querySelectorAll('#rg-mode-row .rg-pill').forEach(b =>
+    b.classList.toggle('rg-pill--active', b.dataset.mode === mode));
+}
+
+async function onRgEnabledChange(enabled) {
+  _setSettingsToggleState('rg-enabled-toggle', 'rg-enabled-state', enabled, true);
+  // Persist the enable flag
+  await api('/settings', { method: 'PUT', body: { replay_gain_enabled: enabled } }).catch(() => {});
+  // Refresh local settings cache
+  const s = await api('/settings').catch(() => ({}));
+  Object.assign(_settings, s);
+  const mode = s.replay_gain_mode || 'track';
+  _applyRgSettingsUI(enabled, mode);
+  if (typeof Player !== 'undefined') Player.setRgMode(enabled ? mode : 'off');
+  if (enabled) _loadRgInfo();
+  // First-time flow: show prompt to tag library
+  if (enabled && !s.replay_gain_prompted) {
+    await _showRgFirstRunModal();
+    await api('/settings', { method: 'PUT', body: { replay_gain_prompted: true } }).catch(() => {});
+    Object.assign(_settings, { replay_gain_prompted: true });
+  } else if (enabled && s.replay_gain_prompted) {
+    _checkRgMissingAndNotify();
+  }
+}
+
+async function setRgModeFromSettings(mode) {
+  const s = await api('/settings').catch(() => ({}));
+  if (!s.replay_gain_enabled) return;
+  await api('/settings', { method: 'PUT', body: { replay_gain_mode: mode } }).catch(() => {});
+  Object.assign(_settings, { replay_gain_mode: mode });
+  _applyRgSettingsUI(true, mode);
+  if (typeof Player !== 'undefined') Player.setRgMode(mode);
+}
+
+async function _showRgFirstRunModal() {
+  const ok = await _showConfirm({
+    title:      'Replay Gain enabled',
+    message:    'Tag your library now so playback volume can be normalised? This analyses each track and may take a few minutes.',
+    okText:     'Tag Library',
+    cancelText: 'Later',
+    danger:     false,
+  });
+  if (ok) tagReplayGain();
+}
+
+async function _checkRgMissingAndNotify() {
+  try {
+    const info = await fetch('/api/library/replaygain/info').then(r => r.json());
+    if (info.pending > 0) {
+      const count  = info.pending.toLocaleString();
+      const plural = info.pending === 1 ? '' : 's';
+      _toastEnqueue({
+        msg:      `${count} track${plural} missing Replay Gain data — tap to fix`,
+        type:     'warning',
+        duration: 6000,
+        action() {
+          showView('settings').then(() => {
+            showSettingsCategory('playback');
+            const el = document.getElementById('rg-section');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+        },
+      });
+    }
+  } catch (_) {}
 }
 
 async function saveArtistImageSettings() {

@@ -3,6 +3,9 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Add: Replay Gain master toggle in Settings → Playback — off by default; prompts to tag the library on first enable
+- Change: Replay Gain mode (Track/Album) and ReplayGain Tags management moved from the PEQ popover and Library settings into Settings → Playback → Replay Gain
+- Add: Clickable warning toast after library rescan if tracks are missing Replay Gain data and RG is enabled — clicking navigates directly to the Replay Gain section in Settings
 
 ## v0.319-rc.190526-0757 · 2026-05-19
 

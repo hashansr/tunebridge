@@ -256,6 +256,10 @@ DEFAULT_SETTINGS = {
     'launch_count':         0,      # incremented on each app start; drives donate popup milestones
     'license_accepted':     False,  # True once user accepts the license on first launch
     'license_accepted_at':  None,   # Unix timestamp of acceptance
+    # Replay Gain playback
+    'replay_gain_enabled':  False,  # master switch; off by default on first load
+    'replay_gain_mode':     'track', # 'track' | 'album'
+    'replay_gain_prompted': False,  # True once user has seen the first-run tagging modal
 }
 
 _DEFAULT_GEAR_PROFILES = {
