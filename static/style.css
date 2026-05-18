@@ -282,6 +282,38 @@ input  { font: inherit; }
   overflow: hidden;
 }
 
+#sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 499;
+  background: rgba(0, 0, 0, 0.54);
+  backdrop-filter: blur(2px);
+  cursor: pointer;
+}
+
+#sidebar-toggle-btn {
+  display: none;
+  width: var(--main-nav-btn-size);
+  height: var(--main-nav-btn-size);
+  border-radius: 50%;
+  background: rgba(28, 27, 27, 0.82);
+  border: 1px solid rgba(173, 198, 255, 0.1);
+  backdrop-filter: blur(16px);
+  color: var(--text-sub);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  pointer-events: auto;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+#sidebar-toggle-btn:hover {
+  background: rgba(42, 42, 42, 0.92);
+  color: var(--text);
+  border-color: rgba(173, 198, 255, 0.24);
+}
+
 #sidebar-header {
   display: flex;
   align-items: center;
@@ -3543,7 +3575,7 @@ tr.track-selected .track-check-indicator {
 
 @media (max-width: 760px) {
   #bulk-bar {
-    bottom: 92px;
+    bottom: 194px;
     padding: 8px 10px;
     gap: 6px;
   }
@@ -7254,13 +7286,45 @@ tbody tr:hover {
 
 @media (max-width: 1040px) {
   .modal-overlay {
-    bottom: 130px;
+    bottom: 192px;
+  }
+}
+
+@media (max-width: 860px) {
+  #sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+    z-index: 500;
+  }
+  #sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+  #sidebar-backdrop {
+    display: block;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  #sidebar.sidebar-open ~ #sidebar-backdrop,
+  #sidebar-backdrop.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  #sidebar-toggle-btn {
+    display: flex;
+  }
+  .modal-overlay {
+    left: 0;
   }
 }
 
 @media (max-width: 620px) {
   .modal-overlay {
-    bottom: 140px;
+    bottom: 192px;
   }
 }
 
@@ -9776,10 +9840,11 @@ tbody tr:hover {
 @media (max-width: 1040px) {
   #main,
   #sidebar {
-    padding-bottom: 132px;
+    padding-bottom: 192px;
   }
   #player-bar {
-    height: 130px;
+    min-height: 130px;
+    height: auto;
     grid-template-columns: 1fr;
     gap: 8px;
     padding: 10px 12px 12px;
@@ -9804,11 +9869,11 @@ tbody tr:hover {
     width: min(180px, 44vw);
   }
   .queue-drawer {
-    bottom: 130px;
+    bottom: 192px;
   }
   .peq-workspace {
     left: 0;
-    bottom: 130px;
+    bottom: 192px;
   }
   .peq-workspace-shell {
     padding: 18px 16px 18px;
@@ -9855,10 +9920,9 @@ tbody tr:hover {
 @media (max-width: 620px) {
   #main,
   #sidebar {
-    padding-bottom: 142px;
+    padding-bottom: 192px;
   }
   #player-bar {
-    height: 140px;
     padding: 10px 10px 12px;
   }
   .player-quality {
@@ -9879,10 +9943,10 @@ tbody tr:hover {
     right: 0;
     border-radius: 16px 16px 0 0;
     transform-origin: bottom center;
-    bottom: 140px;
+    bottom: 192px;
   }
   .peq-workspace {
-    bottom: 140px;
+    bottom: 192px;
   }
 }
 
