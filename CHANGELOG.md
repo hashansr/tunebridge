@@ -6,6 +6,7 @@
 - Fix: Player bar no longer overflows its container when the window is narrower than 1040px — height is now auto-sized to fit all three stacked rows cleanly
 - Fix: Bulk action bar (multi-select floating bar) was hidden behind the player bar at narrow widths; bottom offset corrected
 - Add: Sidebar collapses at ≤860px window width; a hamburger button appears in the nav bar to slide it back in as an overlay with a dimmed backdrop
+- Fix: Play history no longer shows false entries for the first track in a playlist when crossfade is enabled — after each crossfade the active history track is now correctly updated to the new track
 
 ## v0.316-rc.190526-0725 · 2026-05-19
 
