@@ -7237,8 +7237,15 @@ def history_delete_event(event_id):
 
 @app.route('/api/history/clear', methods=['POST'])
 def history_clear():
-    days = int((request.get_json(force=True) or {}).get('days', 0))
+    payload = request.get_json(force=True) or {}
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload or '{}')
+        except json.JSONDecodeError:
+            payload = {}
+    days = int(payload.get('days', 0))
     _db.db_clear_play_events_last_days(days)
+    _invalidate_home_cache()
     return jsonify({'ok': True})
 
 

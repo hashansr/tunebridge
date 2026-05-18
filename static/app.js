@@ -12642,7 +12642,7 @@ async function clearListeningHistory() {
   });
   if (!ok) return;
   try {
-    await api('/history/clear', { method: 'POST', body: JSON.stringify({ days: 0 }) });
+    await api('/history/clear', { method: 'POST', body: { days: 0 } });
     toast('Listening history cleared');
     _playStatsLoaded = false;
     if (state.view === 'home') loadHome();
@@ -14033,7 +14033,7 @@ async function clearHistoryPeriod(days) {
   const ok = await _showConfirm({ title: 'Clear History', message: `Delete ${label}?`, okText: 'Clear', danger: true });
   if (!ok) return;
   try {
-    await api('/history/clear', { method: 'POST', body: JSON.stringify({ days }) });
+    await api('/history/clear', { method: 'POST', body: { days } });
     toast('History cleared');
     _playStatsLoaded = false;
     loadHistoryView();
