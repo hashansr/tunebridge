@@ -19957,6 +19957,18 @@ body.is-col-resizing {
   align-items: center !important;
 }
 
+#donate-modal .donate-modal-title {
+  margin: 0 0 12px !important;
+}
+
+#donate-modal .donate-modal-msg {
+  margin: 0 !important;
+}
+
+#donate-modal .donate-modal-actions {
+  margin: 10px 0 0 !important;
+}
+
 .tb-modal-overlay .modal > *,
 .tb-modal-overlay .tb-modal-shell > *,
 .tb-modal-overlay .iem-compare-dialog > * {
