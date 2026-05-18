@@ -15112,7 +15112,21 @@ function _updateLyricsBulkBanner(s) {
   }
 }
 
+function toggleSidebar(forceClose = false) {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  const isOpen = sidebar.classList.contains('sidebar-open');
+  if (forceClose || isOpen) {
+    sidebar.classList.remove('sidebar-open');
+    backdrop.classList.remove('visible');
+  } else {
+    sidebar.classList.add('sidebar-open');
+    backdrop.classList.add('visible');
+  }
+}
+
 const App = {
+  toggleSidebar,
   showView,
   onSidebarSearchInput,
   onSidebarSearchKeydown,
@@ -19274,6 +19288,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   });
 
+  // Close sidebar when a nav item is clicked at narrow widths
+  document.querySelectorAll('nav .nav-item, nav .nav-child').forEach(el => {
+    el.addEventListener('click', () => {
+      if (window.innerWidth <= 860) toggleSidebar(true);
+    });
+  });
+
   // Keyboard shortcut: Escape closes dropdown and context menu
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -19282,6 +19303,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       closePlaylistDapMenu();
       _closeFrOverlayMenu();
       _closeTopModalFromEscape();
+      if (window.innerWidth <= 860) toggleSidebar(true);
     }
     const tag = document.activeElement?.tagName?.toLowerCase();
     const inInput = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
