@@ -6841,7 +6841,8 @@ async function showView(viewName) {
   }
 }
 
-function showViewEl(name) {
+function showViewEl(name, options = {}) {
+  const { resetScroll = true } = options;
   closeLyricsView();
   const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync', 'search'];
   views.forEach(v => {
@@ -6852,6 +6853,7 @@ function showViewEl(name) {
   if (main) {
     main.classList.toggle('main-home-active', name === 'home');
     main.classList.toggle('main-library-active', name === 'artists' || name === 'albums');
+    if (resetScroll) main.scrollTop = 0;
   }
   // Clear right nav slot for non-home views (loadHome repopulates it)
   if (name !== 'home') {
@@ -6950,23 +6952,23 @@ async function _restoreNavSnapshot(snap) {
   switch (snap.view) {
     case 'home':
       state.view = 'home'; state.playlist = null; clearSelection();
-      setActiveNav('home'); renderSidebarPlaylists(); showViewEl('home');
+      setActiveNav('home'); renderSidebarPlaylists(); showViewEl('home', { resetScroll: false });
       await loadHome();
       break;
     case 'artists':
       state.view = 'artists'; state.playlist = null;
       state._artistsScrollTop = snap.scrollTop || 0;
-      clearSelection(); setActiveNav('artists'); renderSidebarPlaylists(); showViewEl('artists');
+      clearSelection(); setActiveNav('artists'); renderSidebarPlaylists(); showViewEl('artists', { resetScroll: false });
       await loadArtists();
       return; // loadArtists restores scrollTop internally
     case 'albums':
       state.artist = snap.artist; state.view = 'albums'; state.playlist = null;
-      clearSelection(); setActiveNav('albums'); renderSidebarPlaylists(); showViewEl('albums');
+      clearSelection(); setActiveNav('albums'); renderSidebarPlaylists(); showViewEl('albums', { resetScroll: false });
       await loadAlbums(snap.artist || undefined);
       break;
     case 'tracks':
       state.artist = snap.artist; state.album = snap.album; state.view = 'tracks';
-      clearSelection(); setActiveNav(null); renderSidebarPlaylists(); showViewEl('tracks');
+      clearSelection(); setActiveNav(null); renderSidebarPlaylists(); showViewEl('tracks', { resetScroll: false });
       await loadTracks(snap.artist, snap.album);
       break;
     case 'playlist':
@@ -6978,28 +6980,28 @@ async function _restoreNavSnapshot(snap) {
       return;
     case 'songs':
       state.view = 'songs'; state.playlist = null; clearSelection();
-      setActiveNav('songs'); renderSidebarPlaylists(); showViewEl('songs');
+      setActiveNav('songs'); renderSidebarPlaylists(); showViewEl('songs', { resetScroll: false });
       await loadSongsView();
       break;
     case 'favourites':
       state.view = 'favourites'; state.favPanel = snap.favPanel || 'artists';
       state.playlist = null; clearSelection();
-      setActiveNav('favourites'); renderSidebarPlaylists(); showViewEl('favourites');
+      setActiveNav('favourites'); renderSidebarPlaylists(); showViewEl('favourites', { resetScroll: false });
       await loadFavouritesSummary();
       break;
     case 'playlists':
       state.view = 'playlists'; state.playlist = null; clearSelection();
-      setActiveNav('playlists'); renderSidebarPlaylists(); showViewEl('playlists');
+      setActiveNav('playlists'); renderSidebarPlaylists(); showViewEl('playlists', { resetScroll: false });
       await loadPlaylistsView();
       break;
     case 'library-coverage':
       state.view = 'library-coverage'; state.playlist = null; clearSelection();
-      setActiveNav('library-coverage'); renderSidebarPlaylists(); showViewEl('library-coverage');
+      setActiveNav('library-coverage'); renderSidebarPlaylists(); showViewEl('library-coverage', { resetScroll: false });
       await loadInsightsCoverage();
       break;
     case 'gear':
       state.view = 'gear'; state.playlist = null; clearSelection();
-      setActiveNav('gear'); renderSidebarPlaylists(); showViewEl('gear');
+      setActiveNav('gear'); renderSidebarPlaylists(); showViewEl('gear', { resetScroll: false });
       await loadGearView();
       break;
     case 'dap-detail':
@@ -7010,12 +7012,12 @@ async function _restoreNavSnapshot(snap) {
       return;
     case 'settings':
       state.view = 'settings'; state.playlist = null; clearSelection();
-      setActiveNav('settings'); renderSidebarPlaylists(); showViewEl('settings');
+      setActiveNav('settings'); renderSidebarPlaylists(); showViewEl('settings', { resetScroll: false });
       setHealthSectionExpanded(false); await loadSettings();
       break;
     case 'insights':
       state.view = 'insights'; state.playlist = null; clearSelection();
-      setActiveNav('insights'); renderSidebarPlaylists(); showViewEl('insights');
+      setActiveNav('insights'); renderSidebarPlaylists(); showViewEl('insights', { resetScroll: false });
       await loadInsightsView();
       break;
     case 'history': {
@@ -7025,7 +7027,7 @@ async function _restoreNavSnapshot(snap) {
       _syncHistoryPeriodPills();
       const validToggle = document.getElementById('history-valid-only');
       if (validToggle) validToggle.checked = !!snap.historyValidOnly;
-      setActiveNav('history'); renderSidebarPlaylists(); showViewEl('history');
+      setActiveNav('history'); renderSidebarPlaylists(); showViewEl('history', { resetScroll: false });
       await loadHistoryView();
       break;
     }
@@ -7036,7 +7038,7 @@ async function _restoreNavSnapshot(snap) {
       const clear = document.getElementById('sidebar-search-clear');
       if (input) input.value = state.searchQuery;
       if (clear) clear.style.display = state.searchQuery ? '' : 'none';
-      setActiveNav('search'); renderSidebarPlaylists(); showViewEl('search');
+      setActiveNav('search'); renderSidebarPlaylists(); showViewEl('search', { resetScroll: false });
       await _renderSearchResults();
       break;
     }
