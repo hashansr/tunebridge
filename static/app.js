@@ -558,90 +558,6 @@ function _applyDetailHeroAtmosphere(hero, artUrl, token = ++_albumHeroColorToken
   img.src = artUrl;
 }
 
-function _primeArtistHeroLoading(artistName) {
-  const hero = document.getElementById('artist-hero');
-  if (!hero) return;
-  const artistData = state.artists?.find(a => a.name === artistName);
-  const portraitUrl = _artistImageSrc({
-    name: artistName,
-    image_key: artistData?.image_key || '',
-    artwork_key: artistData?.artwork_key || '',
-  });
-  const albumsViewHeader = document.querySelector('#view-albums .view-header');
-  const albumsViewTitle = document.querySelector('#view-albums .view-header h2');
-  const albumsViewCount = document.getElementById('albums-count');
-  if (albumsViewHeader) albumsViewHeader.classList.add('artist-detail-mode');
-  if (albumsViewTitle) albumsViewTitle.style.display = 'none';
-  if (albumsViewCount) albumsViewCount.style.display = 'none';
-  if (portraitUrl) _applyDetailHeroAtmosphere(hero, portraitUrl);
-  else {
-    _albumHeroColorToken++;
-    _clearAlbumHeroAtmosphere(hero);
-  }
-  const heroArt = document.getElementById('artist-hero-art');
-  if (heroArt) {
-    heroArt.className = 'hero-art-sq artist-detail-portrait';
-    heroArt.innerHTML = portraitUrl
-      ? _artistHeroPortraitHtml(artistName, artistData, artistData?.artwork_key || '')
-      : coverPlaceholder('artist', 64, '50%', true);
-  }
-  const nameEl = document.getElementById('artist-hero-name');
-  if (nameEl) nameEl.textContent = artistName || '';
-  const metaEl = document.getElementById('artist-hero-meta');
-  if (metaEl) metaEl.textContent = '';
-  hero.oncontextmenu = null;
-  hero.style.display = 'flex';
-}
-
-function _hideArtistHero() {
-  const hero = document.getElementById('artist-hero');
-  if (!hero) return;
-  const albumsViewHeader = document.querySelector('#view-albums .view-header');
-  const albumsViewTitle = document.querySelector('#view-albums .view-header h2');
-  const albumsViewCount = document.getElementById('albums-count');
-  if (albumsViewHeader) albumsViewHeader.classList.remove('artist-detail-mode');
-  if (albumsViewTitle) albumsViewTitle.style.display = '';
-  if (albumsViewCount) albumsViewCount.style.display = '';
-  _albumHeroColorToken++;
-  _clearAlbumHeroAtmosphere(hero);
-  hero.oncontextmenu = null;
-  hero.style.display = 'none';
-}
-
-function _primeAlbumHeroLoading(artistName, albumName) {
-  const hero = document.getElementById('album-hero');
-  if (!hero) return;
-  const albumData = albumName
-    ? state.albums?.find(al => al.name === albumName && (!artistName || al.artist === artistName))
-    : null;
-  const artKey = albumData?.artwork_key || '';
-  if (artKey) _applyAlbumHeroAtmosphere(hero, artKey);
-  else {
-    _albumHeroColorToken++;
-    _clearAlbumHeroAtmosphere(hero);
-  }
-  hero.classList.toggle('is-album-context', !!albumName);
-  const artEl = document.getElementById('album-hero-art');
-  if (artEl) {
-    artEl.innerHTML = artKey
-      ? `<img src="${artworkUrl(artKey)}" />`
-      : coverPlaceholder(albumName ? 'album' : 'song', 64, 'var(--radius)', true);
-  }
-  const nameEl = document.getElementById('album-hero-name');
-  if (nameEl) nameEl.textContent = albumName || (artistName ? 'All Songs' : '');
-  const artistEl = document.getElementById('album-hero-artist');
-  if (artistEl) artistEl.textContent = artistName || '';
-  const metaEl = document.getElementById('album-hero-meta');
-  if (metaEl) metaEl.textContent = '';
-  const favBtn = document.getElementById('album-hero-fav');
-  if (favBtn) {
-    favBtn.style.display = 'none';
-    favBtn.classList.remove('is-fav');
-  }
-  hero.oncontextmenu = null;
-  hero.style.display = artistName || albumName ? 'flex' : 'none';
-}
-
 function _artistHeroPortraitHtml(name, artistData = {}, fallbackArtworkKey = '') {
   const artistName = String(name || '').trim();
   const src = _artistImageSrc({
@@ -2236,28 +2152,22 @@ function scrollToAlbumLetter(letter) {
 }
 
 async function loadAlbums(artistFilter = null) {
-  const loadToken = (state._albumsLoadToken || 0) + 1;
-  state._albumsLoadToken = loadToken;
   const albumsGrid = document.getElementById('albums-grid');
   if (albumsGrid) { albumsGrid.style.display = ''; albumsGrid.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>'; }
   const listWrap = document.getElementById('albums-list-wrap');
   const paginationEl = document.getElementById('albums-pagination');
   if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
   if (paginationEl) paginationEl.style.display = 'none';
-  if (artistFilter) _primeArtistHeroLoading(artistFilter);
-  else _hideArtistHero();
   const query = artistFilter ? `?artist=${encodeURIComponent(artistFilter)}` : '';
   let albums;
   try {
     albums = await api('/library/albums' + query);
   } catch (e) {
-    if (loadToken !== state._albumsLoadToken) return;
     document.getElementById('albums-grid').innerHTML =
       `<div class="library-error-banner"><p>Could not load library: ${esc(e.message)}</p>
        <p class="library-error-hint">Check that your music folder is accessible, then rescan in Settings.</p></div>`;
     return;
   }
-  if (loadToken !== state._albumsLoadToken) return;
   const _albumYearNum = (al) => {
     const raw = String((al && al.year) || '').trim();
     if (!raw) return Number.POSITIVE_INFINITY;
@@ -2388,10 +2298,7 @@ async function loadAlbums(artistFilter = null) {
 
 /* ── Tracks view ────────────────────────────────────────────────────── */
 async function loadTracks(artist = null, album = null, displayArtist = '') {
-  const loadToken = (state._tracksLoadToken || 0) + 1;
-  state._tracksLoadToken = loadToken;
   _ensurePlayStats();
-  _primeAlbumHeroLoading(displayArtist || artist || '', album || '');
   let q = [];
   if (artist) q.push(`artist=${encodeURIComponent(artist)}`);
   if (album) q.push(`album=${encodeURIComponent(album)}`);
@@ -2399,11 +2306,9 @@ async function loadTracks(artist = null, album = null, displayArtist = '') {
   try {
     tracks = await api('/library/tracks?' + q.join('&'));
   } catch (e) {
-    if (loadToken !== state._tracksLoadToken) return;
     toast('Could not load tracks — check your music folder in Settings');
     return;
   }
-  if (loadToken !== state._tracksLoadToken) return;
   state.tracks = tracks;
 
   // Album / artist hero
@@ -7186,7 +7091,6 @@ async function showArtist(artist) {
   setActiveNav('albums');
   renderSidebarPlaylists();
   showViewEl('albums');
-  _primeArtistHeroLoading(artist);
   try {
     // Keep artist metadata fresh so detail hero uses the latest curated artist image.
     state.artists = await api('/library/artists');
