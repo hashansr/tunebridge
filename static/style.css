@@ -18726,6 +18726,7 @@ body.is-col-resizing {
   background: var(--accent-dim);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
+  transform: rotate(180deg);
   transition: transform 0.18s ease;
   color: var(--accent);
 }
@@ -18733,7 +18734,7 @@ body.is-col-resizing {
   background: rgba(255,179,181,0.06);
   color: var(--accent-secondary);
 }
-.sw-group-card--expanded .sw-group-chev { transform: rotate(180deg); }
+.sw-group-card--expanded .sw-group-chev { transform: rotate(0deg); }
 
 .sw-group-label-col { min-width: 0; }
 .sw-group-title {

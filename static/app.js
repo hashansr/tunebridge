@@ -8002,6 +8002,10 @@ function _swParsePath(rel) {
 // Normalise for fuzzy artwork lookup — strip all non-alphanumeric chars
 function _swNorm(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
+function _swIsLyricsPath(path) {
+  return /\.lrc$/i.test(String(path || '').split('?')[0]);
+}
+
 function _swBuildProposal(status) {
   const sizeToMB = b => b ? (b / (1024 ** 2)).toFixed(1) : '';
 
@@ -8039,20 +8043,29 @@ function _swBuildProposal(status) {
     ...onDeviceItems(status.device_only_not_in_library, 'copy', status.device_only_sizes),
   ];
 
+  const toDeviceAll = toDeviceItems(status.local_only, status.local_only_sizes);
+  const toDeviceSongs = toDeviceAll.filter(item => !_swIsLyricsPath(item.rel || item.id));
+  const toDeviceLyrics = toDeviceAll.filter(item => _swIsLyricsPath(item.rel || item.id))
+    .map(item => ({ ...item, kind: 'lyrics' }));
+
   _sw.proposal = {
-    toDevice:  { label: 'New in Library',               hint: 'Tracks in your library not yet on the device', items: toDeviceItems(status.local_only, status.local_only_sizes) },
-    onDevice:  { label: 'On Device, not in Library',    hint: 'Files on the player with no match in your library', items: onDeviceCombined },
-    playlists: { label: 'New or Updated Playlists',     hint: 'Playlists that have changed since the last sync', items: plItems(status.playlists_out_of_sync) },
+    toDevice:       { label: 'New Songs In Library',      hint: 'Songs in your library not yet on the device', items: toDeviceSongs },
+    toDeviceLyrics: { label: 'New Lyrics in Library',     hint: 'Lyric files in your library not yet on the device', items: toDeviceLyrics },
+    onDevice:       { label: 'On Device, not in Library', hint: 'Files on the player with no match in your library', items: onDeviceCombined },
+    playlists:      { label: 'New or Updated Playlists',  hint: 'Playlists that have changed since the last sync', items: plItems(status.playlists_out_of_sync) },
   };
 
   // Reset pagination
-  _sw.pages = { toDevice: 0, onDevice: 0, playlists: 0 };
+  _sw.pages = { toDevice: 0, toDeviceLyrics: 0, onDevice: 0, playlists: 0 };
 
   // Initialise selection
-  _sw.selection = { toDevice: {}, onDevice: {}, playlists: {} };
+  _sw.selection = { toDevice: {}, toDeviceLyrics: {}, onDevice: {}, playlists: {} };
 
   for (const item of _sw.proposal.toDevice.items) {
     _sw.selection.toDevice[item.id] = true;
+  }
+  for (const item of _sw.proposal.toDeviceLyrics.items) {
+    _sw.selection.toDeviceLyrics[item.id] = true;
   }
   // onDevice: each item gets an action string ('keep'|'copy'|'delete')
   for (const item of _sw.proposal.onDevice.items) {
@@ -8066,7 +8079,7 @@ function _swBuildProposal(status) {
 }
 
 function _swRenderReview() {
-  const ORDER = ['toDevice', 'onDevice', 'playlists'];
+  const ORDER = ['toDevice', 'toDeviceLyrics', 'onDevice', 'playlists'];
   const filter = _sw.filter;
 
   // Update chip counts
@@ -8119,6 +8132,8 @@ function _swBuildGroupCard(gid, group) {
     + (isOnDevice ? ' sw-group-card--on-device' : '')
     + (isExpanded ? ' sw-group-card--expanded' : '');
   card.dataset.gid = gid;
+  const toggleLabel = isExpanded ? 'Click to collapse' : 'Click to expand';
+  const toggleAria = isExpanded ? `Collapse ${group.label}` : `Expand ${group.label}`;
 
   const paginationBar = total > REVIEW_PAGE_SIZE ? `
     <div class="sw-page-bar">
@@ -8147,7 +8162,7 @@ function _swBuildGroupCard(gid, group) {
     if (keepCount)   summaryParts.push(`${keepCount} keep`);
 
     card.innerHTML = `
-      <div class="sw-group-hdr sw-group-hdr--actions" onclick="App.swToggleGroupCollapse('${gid}')">
+      <div class="sw-group-hdr sw-group-hdr--actions" onclick="App.swToggleGroupCollapse('${gid}')" title="${toggleLabel}" aria-label="${esc(toggleAria)}" aria-expanded="${isExpanded ? 'true' : 'false'}">
         <div class="sw-group-chev">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
         </div>
@@ -8197,7 +8212,7 @@ function _swBuildGroupCard(gid, group) {
     const actionLabel = gid === 'playlists' ? 'Sync playlist' : null;
 
     card.innerHTML = `
-      <div class="sw-group-hdr" onclick="App.swToggleGroupCollapse('${gid}')">
+      <div class="sw-group-hdr" onclick="App.swToggleGroupCollapse('${gid}')" title="${toggleLabel}" aria-label="${esc(toggleAria)}" aria-expanded="${isExpanded ? 'true' : 'false'}">
         <div class="sw-group-chev">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
         </div>
@@ -8294,7 +8309,17 @@ function swToggleGroupCollapse(gid) {
   if (!_sw.expanded) _sw.expanded = {};
   _sw.expanded[gid] = !_sw.expanded[gid];
   const card = document.querySelector(`.sw-group-card[data-gid="${gid}"]`);
-  if (card) card.classList.toggle('sw-group-card--expanded', !!_sw.expanded[gid]);
+  if (card) {
+    const isExpanded = !!_sw.expanded[gid];
+    card.classList.toggle('sw-group-card--expanded', isExpanded);
+    const hdr = card.querySelector('.sw-group-hdr');
+    const label = _sw.proposal?.[gid]?.label || 'section';
+    if (hdr) {
+      hdr.title = isExpanded ? 'Click to collapse' : 'Click to expand';
+      hdr.setAttribute('aria-label', isExpanded ? `Collapse ${label}` : `Expand ${label}`);
+      hdr.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+    }
+  }
 }
 
 function swToggleItem(gid, itemId) {
@@ -8352,6 +8377,7 @@ function _swComputeTotals() {
   const selOf  = gid => Object.entries(_sw.selection[gid] ?? {}).filter(([,v]) => v);
 
   const toDev  = selOf('toDevice');
+  const lyricsToDev = selOf('toDeviceLyrics');
   const plists = selOf('playlists');
 
   // onDevice: partition by action
@@ -8362,13 +8388,15 @@ function _swComputeTotals() {
 
   const mbOfItems = items => items.reduce((s, i) => s + (Number(i.size) || 0), 0);
 
-  const toDeviceMB  = mbOfItems((groups.toDevice?.items ?? []).filter(i => _sw.selection.toDevice?.[i.id]));
+  const toDeviceSongItems = (groups.toDevice?.items ?? []).filter(i => _sw.selection.toDevice?.[i.id]);
+  const toDeviceLyricItems = (groups.toDeviceLyrics?.items ?? []).filter(i => _sw.selection.toDeviceLyrics?.[i.id]);
+  const toDeviceMB  = mbOfItems([...toDeviceSongItems, ...toDeviceLyricItems]);
   const copyMB      = mbOfItems(copyItems);
   const deleteMB    = mbOfItems(deleteItems);
   const netMB       = toDeviceMB - deleteMB;
   const netGB       = Math.abs(netMB) / 1024;
   const sign        = netMB >= 0 ? '+' : '−';
-  const totalChanges = toDev.length + copyItems.length + deleteItems.length + plists.length;
+  const totalChanges = toDev.length + lyricsToDev.length + copyItems.length + deleteItems.length + plists.length;
 
   const usedBytes  = _sw.device?.used_bytes ?? 0;
   const capBytes   = _sw.device?.capacity_bytes ?? 0;
@@ -8378,6 +8406,7 @@ function _swComputeTotals() {
 
   return {
     toDeviceCount: toDev.length,
+    toDeviceLyricsCount: lyricsToDev.length,
     copyCount: copyItems.length, deleteCount: deleteItems.length,
     playlistCount: plists.length,
     toDeviceMB, copyMB, deleteMB, netMB, netGB, sign,
@@ -8402,7 +8431,8 @@ function _swUpdateReviewFooter() {
       }
     } else {
       const parts = [];
-      if (t.toDeviceCount)  parts.push(`${t.toDeviceCount} to device`);
+      if (t.toDeviceCount)  parts.push(`${t.toDeviceCount} song${t.toDeviceCount===1?'':'s'} to device`);
+      if (t.toDeviceLyricsCount) parts.push(`${t.toDeviceLyricsCount} lyric${t.toDeviceLyricsCount===1?'':'s'} to device`);
       if (t.copyCount)      parts.push(`${t.copyCount} to library`);
       if (t.deleteCount)    parts.push(`${t.deleteCount} deleted from device`);
       if (t.playlistCount)  parts.push(`${t.playlistCount} playlist${t.playlistCount===1?'':'s'}`);
@@ -8467,7 +8497,10 @@ function _swBuildExecutePayload() {
   const onDeviceSel = _sw.selection.onDevice ?? {};
   const onDeviceItems = proposal.onDevice?.items ?? [];
 
-  const toDevice   = (proposal.toDevice?.items ?? []).filter(i => _sw.selection.toDevice?.[i.id]).map(i => i.id);
+  const toDevice   = [
+    ...(proposal.toDevice?.items ?? []).filter(i => _sw.selection.toDevice?.[i.id]).map(i => i.id),
+    ...(proposal.toDeviceLyrics?.items ?? []).filter(i => _sw.selection.toDeviceLyrics?.[i.id]).map(i => i.id),
+  ];
   const toLibrary  = onDeviceItems.filter(i => onDeviceSel[i.id] === 'copy').map(i => i.id);
   const deletions  = onDeviceItems.filter(i => onDeviceSel[i.id] === 'delete').map(i => i.id);
   const playlists  = (proposal.playlists?.items ?? []).filter(i => _sw.selection.playlists?.[i.id]).map(i => i.id);
@@ -8581,6 +8614,7 @@ function _swRenderDone() {
 
   // Derive actual counts from what was submitted
   const addedItems   = (_sw.proposal?.toDevice?.items ?? [])
+    .concat(_sw.proposal?.toDeviceLyrics?.items ?? [])
     .filter(i => (payload.add_to_device_paths ?? []).includes(i.id));
   const copyItems    = (_sw.proposal?.onDevice?.items ?? [])
     .filter(i => (payload.copy_to_local_paths ?? []).includes(i.id));
