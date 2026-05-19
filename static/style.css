@@ -1643,14 +1643,12 @@ h4.settings-subsection-title {
 }
 
 .view-entering {
-  opacity: 0;
-  transform: translateY(4px);
+  opacity: 1;
 }
 
 .view-entering.view-entering-active {
   opacity: 1;
-  transform: translateY(0);
-  transition: opacity 160ms ease, transform 170ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 120ms ease;
 }
 
 .view-leaving {
@@ -1664,7 +1662,8 @@ h4.settings-subsection-title {
   top: 0;
   z-index: 2200;
   opacity: 1;
-  transition: opacity 160ms ease;
+  transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity;
 }
 
 .view-leaving.is-hiding {
@@ -1678,10 +1677,10 @@ h4.settings-subsection-title {
   pointer-events: none;
   opacity: 0;
   background:
-    radial-gradient(760px 320px at 50% 12%, rgba(173, 198, 255, 0.08), transparent 68%),
-    rgba(7, 10, 16, 0.12);
-  backdrop-filter: blur(1.5px);
-  transition: opacity 140ms ease;
+    radial-gradient(760px 320px at 50% 12%, rgba(173, 198, 255, 0.045), transparent 68%),
+    rgba(7, 10, 16, 0.06);
+  backdrop-filter: blur(0.5px);
+  transition: opacity 160ms ease;
 }
 
 .view-busy-veil.is-visible {
@@ -1697,7 +1696,6 @@ h4.settings-subsection-title {
 @media (prefers-reduced-motion: reduce) {
   .view-entering,
   .view-entering.view-entering-active {
-    transform: none;
     transition: opacity 40ms linear;
   }
   .view-leaving,
