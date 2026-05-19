@@ -75,8 +75,6 @@ let _currentGearTab = 'daps';
 let _currentDapId = null;        // track current DAP being viewed (for nav history)
 let _navHistory = [];             // back stack: array of nav snapshots
 let _isNavigatingBack = false;    // suppresses history push during back/forward restoration
-let _viewTransition = null;
-let _viewTransitionId = 0;
 
 /* ── API helpers ────────────────────────────────────────────────────── */
 /* ── Utilities ──────────────────────────────────────────────────────── */
@@ -2922,9 +2920,6 @@ async function openPlaylist(pid) {
   if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
   _pushToNavHistory();
-  const existingTransition = _viewTransition?.targetName === 'playlist' ? _viewTransition : null;
-  const transition = existingTransition || _beginViewTransition('playlist');
-  try {
   let pl = await api(`/playlists/${pid}`);
   state.playlist = pl;
   state.view = 'playlist';
@@ -2981,11 +2976,6 @@ async function openPlaylist(pid) {
     };
     shuffleBtn.style.display = pl.tracks.length ? '' : 'none';
   }
-  _finishViewTransition(transition, 'playlist');
-  } catch (e) {
-    if (!existingTransition) _cancelViewTransition(transition);
-    throw e;
-  }
 }
 
 function _applyPlaylistDetailMode(isFavouriteVirtual) {
@@ -3016,9 +3006,6 @@ async function openFavouriteSongsPlaylist() {
   if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
   _pushToNavHistory();
-  const existingTransition = _viewTransition?.targetName === 'playlist' ? _viewTransition : null;
-  const transition = existingTransition || _beginViewTransition('playlist');
-  try {
   const res = await api('/favourites/songs/tracks').catch(() => ({ tracks: [] }));
   const tracks = Array.isArray(res?.tracks) ? res.tracks : [];
   const pl = {
@@ -3064,11 +3051,6 @@ async function openFavouriteSongsPlaylist() {
       Player.playCollectionShuffled(pl.tracks, 'Playlist · Favourite Songs');
     };
     favShuffleBtn.style.display = pl.tracks.length ? '' : 'none';
-  }
-  _finishViewTransition(transition, 'playlist');
-  } catch (e) {
-    if (!existingTransition) _cancelViewTransition(transition);
-    throw e;
   }
 }
 
@@ -6921,33 +6903,27 @@ async function showView(viewName) {
   setActiveNav(viewName);
   renderSidebarPlaylists();
 
-  const transitionName = viewName === 'fav-songs' ? 'playlist' : viewName;
-  const transition = _beginViewTransition(transitionName);
-  try {
-    if (viewName === 'home') await loadHome();
-    else if (viewName === 'artists') { state._artistsScrollTop = 0; await loadArtists(); }
-    else if (viewName === 'albums') { state.artist = null; await loadAlbums(); }
-    else if (viewName === 'songs') await loadSongsView();
-    else if (viewName === 'favourites') await loadFavouritesSummary();
-    else if (viewName === 'fav-songs') await openFavouriteSongsPlaylist();
-    else if (viewName === 'gear') await loadGearView();
-    else if (viewName === 'playlists') await loadPlaylistsView();
-    else if (viewName === 'library-coverage') await loadInsightsCoverage();
-    else if (viewName === 'settings') {
-      setHealthSectionExpanded(false);
-      showSettingsCategory('library');
-      await loadSettings();
-    }
-    else if (viewName === 'insights') await loadInsightsView();
-    else if (viewName === 'history') await loadHistoryView();
-    else if (viewName === 'duplicates') await loadDuplicatesView();
-    else if (viewName === 'sync') await loadSyncView();
-    else if (viewName === 'search') await _renderSearchResults();
-    _finishViewTransition(transition, transition.targetName);
-  } catch (e) {
-    _cancelViewTransition(transition);
-    throw e;
+  showViewEl(viewName);
+
+  if (viewName === 'home') loadHome();
+  else if (viewName === 'artists') { state._artistsScrollTop = 0; loadArtists(); }
+  else if (viewName === 'albums') { state.artist = null; loadAlbums(); }
+  else if (viewName === 'songs') loadSongsView();
+  else if (viewName === 'favourites') loadFavouritesSummary();
+  else if (viewName === 'fav-songs') openFavouriteSongsPlaylist();
+  else if (viewName === 'gear') loadGearView();
+  else if (viewName === 'playlists') loadPlaylistsView();
+  else if (viewName === 'library-coverage') loadInsightsCoverage();
+  else if (viewName === 'settings') {
+    setHealthSectionExpanded(false);
+    showSettingsCategory('library');
+    loadSettings();
   }
+  else if (viewName === 'insights') loadInsightsView();
+  else if (viewName === 'history') loadHistoryView();
+  else if (viewName === 'duplicates') loadDuplicatesView();
+  else if (viewName === 'sync') loadSyncView();
+  else if (viewName === 'search') _renderSearchResults();
 
   if (viewName === 'home') {
     if (_homeAutoRefreshTimer) clearInterval(_homeAutoRefreshTimer);
@@ -6960,153 +6936,19 @@ async function showView(viewName) {
   }
 }
 
-const _APP_VIEWS = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync', 'search'];
-
-function _viewDisplayValue(name) {
-  return ['playlist', 'sync'].includes(name) ? 'flex' : 'block';
-}
-
-function _currentVisibleViewName() {
-  return _APP_VIEWS.find(v => {
-    const el = document.getElementById(`view-${v}`);
-    return el && el.style.display !== 'none';
-  }) || null;
-}
-
-function _ensureViewBusyVeil(main) {
-  if (!main) return null;
-  let veil = document.getElementById('view-busy-veil');
-  if (!veil) {
-    veil = document.createElement('div');
-    veil.id = 'view-busy-veil';
-    veil.className = 'view-busy-veil';
-    veil.setAttribute('aria-hidden', 'true');
-    main.appendChild(veil);
-  }
-  return veil;
-}
-
-function _stripTransitionCloneIds(root) {
-  // Keep IDs so existing #view-* and child-ID scoped CSS applies to the
-  // temporary visual clone. The clone is appended after the app tree and is
-  // removed after the transition, so normal getElementById lookups still hit
-  // the live DOM first.
-}
-
-function _makeLeavingViewClone(main) {
-  const currentName = _currentVisibleViewName();
-  const currentEl = currentName ? document.getElementById(`view-${currentName}`) : null;
-  if (!main || !currentEl || currentEl.style.display === 'none') return null;
-  const rect = main.getBoundingClientRect();
-  const clone = currentEl.cloneNode(true);
-  _stripTransitionCloneIds(clone);
-  clone.classList.add('view-leaving');
-  clone.setAttribute('aria-hidden', 'true');
-  clone.style.left = `${rect.left}px`;
-  clone.style.width = `${rect.width}px`;
-  clone.style.transform = `translateY(${-main.scrollTop}px)`;
-  clone.querySelectorAll('button, input, select, textarea, a, [tabindex]').forEach(el => {
-    el.setAttribute('tabindex', '-1');
-  });
-  document.body.appendChild(clone);
-  return clone;
-}
-
-function _beginViewTransition(targetName, options = {}) {
-  if (_viewTransition) _cancelViewTransition(_viewTransition);
-  const main = document.getElementById('main');
-  const transition = {
-    id: ++_viewTransitionId,
-    targetName,
-    resetScroll: options.resetScroll !== false,
-    animate: options.animate !== false && !_isNavigatingBack,
-    busyTimer: null,
-    leavingClone: null,
-  };
-  _viewTransition = transition;
-  if (main) {
-    main.classList.add('view-transitioning');
-    if (transition.animate) transition.leavingClone = _makeLeavingViewClone(main);
-    const veil = _ensureViewBusyVeil(main);
-    if (veil) {
-      veil.classList.remove('is-visible');
-      transition.busyTimer = setTimeout(() => {
-        if (_viewTransition === transition) veil.classList.add('is-visible');
-      }, 120);
-    }
-  }
-  return transition;
-}
-
-function _cancelViewTransition(transition) {
-  if (!transition || _viewTransition !== transition) return;
-  if (transition.busyTimer) clearTimeout(transition.busyTimer);
-  const main = document.getElementById('main');
-  const veil = document.getElementById('view-busy-veil');
-  if (veil) veil.classList.remove('is-visible');
-  if (main) main.classList.remove('view-transitioning');
-  if (transition.leavingClone) transition.leavingClone.remove();
-  _viewTransition = null;
-}
-
-function _finishViewTransition(transition, name = transition?.targetName) {
-  if (!transition || _viewTransition !== transition) {
-    showViewEl(name, { resetScroll: !_isNavigatingBack });
-    return;
-  }
-  if (transition.busyTimer) clearTimeout(transition.busyTimer);
-  const main = document.getElementById('main');
-  const veil = document.getElementById('view-busy-veil');
-  if (veil) veil.classList.remove('is-visible');
-  showViewEl(name, {
-    resetScroll: transition.resetScroll,
-    animate: transition.animate,
-    force: true,
-  });
-  if (main) {
-    setTimeout(() => main.classList.remove('view-transitioning'), transition.animate ? 190 : 40);
-  }
-  if (transition.leavingClone) {
-    transition.leavingClone.classList.add('is-hiding');
-    setTimeout(() => transition.leavingClone?.remove(), transition.animate ? 190 : 40);
-  }
-  _viewTransition = null;
-}
-
 function showViewEl(name, options = {}) {
-  const { resetScroll = true, animate = false, force = false } = options;
-  if (_viewTransition && _viewTransition.targetName === name && !force) {
-    const main = document.getElementById('main');
-    if (main) {
-      main.classList.toggle('main-home-active', name === 'home');
-      main.classList.toggle('main-library-active', name === 'artists' || name === 'albums');
-    }
-    if (name !== 'home') {
-      const navRight = document.getElementById('main-nav-right');
-      if (navRight) navRight.innerHTML = '';
-    }
-    return;
-  }
+  const { resetScroll = true } = options;
   closeLyricsView();
-  _APP_VIEWS.forEach(v => {
+  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync', 'search'];
+  views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
-    if (!el) return;
-    el.classList.remove('view-entering', 'view-entering-active');
-    el.style.display = v === name ? _viewDisplayValue(v) : 'none';
+    if (el) el.style.display = v === name ? (['playlist', 'sync'].includes(v) ? 'flex' : 'block') : 'none';
   });
   const main = document.getElementById('main');
   if (main) {
     main.classList.toggle('main-home-active', name === 'home');
     main.classList.toggle('main-library-active', name === 'artists' || name === 'albums');
     if (resetScroll) main.scrollTop = 0;
-  }
-  const activeEl = document.getElementById(`view-${name}`);
-  if (activeEl && animate) {
-    activeEl.classList.add('view-entering');
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => activeEl.classList.add('view-entering-active'));
-    });
-    setTimeout(() => activeEl.classList.remove('view-entering', 'view-entering-active'), 220);
   }
   // Clear right nav slot for non-home views (loadHome repopulates it)
   if (name !== 'home') {
@@ -7343,17 +7185,13 @@ async function showArtist(artist) {
   clearSelection();
   setActiveNav('albums');
   renderSidebarPlaylists();
-  const transition = _beginViewTransition('albums');
+  showViewEl('albums');
+  _primeArtistHeroLoading(artist);
   try {
-    _primeArtistHeroLoading(artist);
     // Keep artist metadata fresh so detail hero uses the latest curated artist image.
-    try { state.artists = await api('/library/artists'); } catch (_) {}
-    await loadAlbums(artist);
-    _finishViewTransition(transition, 'albums');
-  } catch (e) {
-    _cancelViewTransition(transition);
-    throw e;
-  }
+    state.artists = await api('/library/artists');
+  } catch (_) {}
+  await loadAlbums(artist);
 }
 
 async function showAlbum(artist, album, displayArtist = '') {
@@ -7368,14 +7206,8 @@ async function showAlbum(artist, album, displayArtist = '') {
   clearSelection();
   setActiveNav(null);
   renderSidebarPlaylists();
-  const transition = _beginViewTransition('tracks');
-  try {
-    await loadTracks(artist, album, displayArtist);
-    _finishViewTransition(transition, 'tracks');
-  } catch (e) {
-    _cancelViewTransition(transition);
-    throw e;
-  }
+  showViewEl('tracks');
+  await loadTracks(artist, album, displayArtist);
 }
 
 async function showArtistTracks(artist) {
@@ -7390,14 +7222,8 @@ async function showArtistTracks(artist) {
   clearSelection();
   setActiveNav(null);
   renderSidebarPlaylists();
-  const transition = _beginViewTransition('tracks');
-  try {
-    await loadTracks(artist, null);
-    _finishViewTransition(transition, 'tracks');
-  } catch (e) {
-    _cancelViewTransition(transition);
-    throw e;
-  }
+  showViewEl('tracks');
+  await loadTracks(artist, null);
 }
 
 async function rescan() {
