@@ -1719,6 +1719,9 @@ h4.settings-subsection-title {
 .view--entering {
   animation: view-fade-in 0.12s ease-out forwards;
 }
+#artists-grid, #albums-grid {
+  transition: opacity 0.12s ease-out;
+}
 
 .view-count {
   color: var(--text-muted);

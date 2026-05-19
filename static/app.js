@@ -1937,7 +1937,7 @@ function _openArtistImageForCard(artistName) {
 
 async function loadArtists() {
   const artistsGrid = document.getElementById('artists-grid');
-  if (artistsGrid) { artistsGrid.style.display = ''; artistsGrid.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>'; }
+  if (artistsGrid) { artistsGrid.style.display = ''; artistsGrid.style.opacity = '0'; artistsGrid.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>'; }
   const listWrap = document.getElementById('artists-list-wrap');
   const paginationEl = document.getElementById('artists-pagination');
   if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
@@ -1957,6 +1957,7 @@ async function loadArtists() {
   const clearBtn = document.getElementById('artists-filter-clear');
   if (clearBtn) clearBtn.style.display = state.artistSearch ? 'block' : 'none';
   renderArtistsGrid();
+  if (artistsGrid) requestAnimationFrame(() => { artistsGrid.style.opacity = ''; });
 
   // Restore saved scroll position (breadcrumb back) or reset to top (sidebar nav)
   const main = document.getElementById('main');
@@ -2153,7 +2154,7 @@ function scrollToAlbumLetter(letter) {
 
 async function loadAlbums(artistFilter = null) {
   const albumsGrid = document.getElementById('albums-grid');
-  if (albumsGrid) { albumsGrid.style.display = ''; albumsGrid.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>'; }
+  if (albumsGrid) { albumsGrid.style.display = ''; albumsGrid.style.opacity = '0'; albumsGrid.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>'; }
   const listWrap = document.getElementById('albums-list-wrap');
   const paginationEl = document.getElementById('albums-pagination');
   if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
@@ -2296,6 +2297,7 @@ async function loadAlbums(artistFilter = null) {
   if (albumClearBtn) albumClearBtn.style.display = state.albumSearch ? 'block' : 'none';
 
   renderAlbumsGrid();
+  if (albumsGrid) requestAnimationFrame(() => { albumsGrid.style.opacity = ''; });
 }
 
 /* ── Tracks view ────────────────────────────────────────────────────── */
@@ -7104,6 +7106,12 @@ async function showArtist(artist) {
   setActiveNav('albums');
   renderSidebarPlaylists();
   showViewEl('albums');
+  const _sah = document.getElementById('artist-hero');
+  const _saa = document.getElementById('artist-hero-art');
+  const _sag = document.getElementById('albums-grid');
+  if (_sah) _sah.style.display = 'none';
+  if (_saa) _saa.innerHTML = '';
+  if (_sag) _sag.style.opacity = '0';
   try {
     // Keep artist metadata fresh so detail hero uses the latest curated artist image.
     state.artists = await api('/library/artists');
