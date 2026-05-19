@@ -1712,13 +1712,6 @@ h4.settings-subsection-title {
   min-height: 100%;
   background: var(--app-page-gradient);
 }
-@keyframes view-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-.view--entering {
-  animation: view-fade-in 0.12s ease-out forwards;
-}
 #artists-grid, #albums-grid {
   transition: opacity 0.12s ease-out;
 }

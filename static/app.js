@@ -6857,12 +6857,16 @@ function showViewEl(name) {
     const el = document.getElementById(`view-${v}`);
     if (!el) return;
     if (v === name) {
+      el.style.opacity = '0';
+      el.style.transition = 'none';
       el.style.display = ['playlist', 'sync'].includes(v) ? 'flex' : 'block';
-      el.classList.remove('view--entering');
       void el.offsetWidth;
-      el.classList.add('view--entering');
+      el.style.transition = 'opacity 0.12s ease-out';
+      el.style.opacity = '1';
     } else {
       el.style.display = 'none';
+      el.style.opacity = '';
+      el.style.transition = '';
     }
   });
   const main = document.getElementById('main');
