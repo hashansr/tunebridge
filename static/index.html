@@ -3554,25 +3554,37 @@ Third party components: see the NOTICES file bundled with the application.</pre>
         <pre class="license-text">TuneBridge Privacy Policy
 
 TuneBridge runs entirely on your Mac. No data is ever sent to the
-developer.
+developer. TuneBridge does not collect, track, or transmit any
+personal information.
 
 WHAT WE COLLECT
-Nothing. TuneBridge does not collect, store, or transmit any personal
-data to external servers operated by the developer.
+Nothing. There is no analytics, no telemetry, and no usage tracking
+of any kind.
 
 NETWORK REQUESTS
-Network requests only happen when you initiate them:
-  • squig.link: when you import IEM frequency response measurements
-  • Last.fm: when you provide your own API key for artist images
-  • Fanart.tv: when you provide your own API key for artist images
+TuneBridge fetches data from third-party services to enrich your
+library. All requests are outbound only: TuneBridge pulls data from
+these services and does not share your personal information with them.
 
-TuneBridge sends no additional personal information alongside these
-requests beyond what is necessary to fetch the data you asked for.
+Automatic (no setup required):
+  • iTunes Search API: fetches album artwork and release metadata
+  • MusicBrainz: fetches album and artist metadata
+  • LrcLib: fetches song lyrics
 
-THIRD PARTY SERVICES
-Last.fm, Fanart.tv, and squig.link have their own privacy policies.
-Please review them before providing API keys. TuneBridge has no
-control over how these services handle the data you send them.
+Optional (only when you add an API key in Settings):
+  • Last.fm: fetches artist images and biography
+  • Fanart.tv: fetches high-resolution artist artwork
+
+Gear section only (only when you use the IEM library):
+  • squig.link: fetches headphone frequency response measurements
+
+No personal data (your name, email, location, or listening history)
+is included in any of these requests. Queries contain only the track
+title, artist name, or album name needed to find the right result.
+
+THIRD-PARTY SERVICES
+Each service listed above has its own privacy policy. TuneBridge has
+no control over how they handle requests made to their servers.
 
 DATA STORAGE
 All your data (playlists, settings, listening history) is stored
