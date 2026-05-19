@@ -7060,7 +7060,7 @@ function _finishViewTransition(transition, name = transition?.targetName) {
   if (veil) veil.classList.remove('is-visible');
   showViewEl(name, {
     resetScroll: transition.resetScroll,
-    animate: false,
+    animate: transition.animate,
     force: true,
   });
   if (main) {
@@ -7103,8 +7103,10 @@ function showViewEl(name, options = {}) {
   const activeEl = document.getElementById(`view-${name}`);
   if (activeEl && animate) {
     activeEl.classList.add('view-entering');
-    requestAnimationFrame(() => activeEl.classList.add('view-entering-active'));
-    setTimeout(() => activeEl.classList.remove('view-entering', 'view-entering-active'), 180);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => activeEl.classList.add('view-entering-active'));
+    });
+    setTimeout(() => activeEl.classList.remove('view-entering', 'view-entering-active'), 220);
   }
   // Clear right nav slot for non-home views (loadHome repopulates it)
   if (name !== 'home') {
