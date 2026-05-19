@@ -8201,7 +8201,8 @@ def _build_sync_track_entries(template):
             for mk in _sync_match_keys(rel):
                 lib_by_match.setdefault(mk, t)
 
-    local_files = walk_music_files(get_music_base())
+    music_base = get_music_base()
+    local_files = walk_music_files(music_base)
     entries = []
     for rel in local_files:
         local_rel = _normalize_rel(rel)
@@ -8225,7 +8226,47 @@ def _build_sync_track_entries(template):
             'target_rel': target_rel,
             'warnings': warns,
         })
-    return entries
+
+    # A DAP path template can collapse distinct library files onto one device
+    # path when their metadata is identical. Since the DAP cannot store both at
+    # that path, keep the largest local source as the authoritative candidate.
+    # This supports the common "library file was upgraded in quality" case and
+    # prevents repeated sync loops where smaller/larger duplicates fight.
+    by_target = {}
+    collisions = {}
+    for e in entries:
+        key = _sync_rel_key(e.get('target_rel'))
+        if not key:
+            continue
+        try:
+            size = int((music_base / e['local_rel']).stat().st_size)
+        except Exception:
+            size = 0
+        current = by_target.get(key)
+        if current:
+            collisions.setdefault(key, [current['entry']])
+            collisions[key].append(e)
+        if (
+            not current
+            or size > current['size']
+            or (size == current['size'] and e['local_rel'].casefold() < current['entry']['local_rel'].casefold())
+        ):
+            by_target[key] = {'entry': e, 'size': size}
+
+    deduped = []
+    for key, packed in by_target.items():
+        entry = packed['entry']
+        collided = collisions.get(key)
+        if collided:
+            sources = sorted({_normalize_rel(c.get('local_rel')) for c in collided if c.get('local_rel')})
+            entry.setdefault('warnings', []).append(
+                f"{entry.get('target_rel', '')}: multiple library files map to this DAP path; "
+                f"using largest local source ({entry.get('local_rel', '')}). "
+                f"Sources: {', '.join(sources[:5])}"
+            )
+        deduped.append(entry)
+
+    return sorted(deduped, key=lambda e: str(e.get('local_rel') or '').casefold())
 
 
 def _stat_signature(path: Path):
@@ -8303,6 +8344,9 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
             'available_actions': [str(a) for a in (available_actions or []) if str(a).strip()],
             'ignored': bool(ignored),
         }
+
+    for e in track_entries:
+        warnings.extend(e.get('warnings') or [])
 
     for e in track_entries:
         local_key = e['local_rel'].casefold()

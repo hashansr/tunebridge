@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Sync Music now resolves duplicate library files that render to the same DAP path by choosing the largest local source, so upgraded library files do not repeatedly appear as size mismatches.
 
 ## v0.332-rc.200526-0800 · 2026-05-20
 - Change: Sync Music Step 3 now shows collapsed accordions with a down chevron and expanded accordions with an up chevron, with matching expand/collapse labels.
