@@ -569,10 +569,6 @@ if [ "$BUILD_DMG" = "1" ]; then
     _warn "Releases repo not found at ${RELEASES_REPO} — skipping publish"
     _info "One-time setup:  git clone https://github.com/hashansr/tunebridge-releases ~/tunebridge-releases"
   else
-    printf "  🔄  Syncing releases repo... "
-    git -C "$RELEASES_REPO" pull --rebase origin main
-    echo -e "${GREEN}done ✅${NC}"
-
     # Channel-specific filenames so each channel has its own slot
     case "$BUILD_CHANNEL" in
       prod) DMG_DEST="TuneBridge-latest.dmg";  VER_DEST="version.json" ;;
