@@ -6846,7 +6846,15 @@ function showViewEl(name) {
   const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync', 'search'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
-    if (el) el.style.display = v === name ? (['playlist', 'sync'].includes(v) ? 'flex' : 'block') : 'none';
+    if (!el) return;
+    if (v === name) {
+      el.style.display = ['playlist', 'sync'].includes(v) ? 'flex' : 'block';
+      el.classList.remove('view--entering');
+      void el.offsetWidth;
+      el.classList.add('view--entering');
+    } else {
+      el.style.display = 'none';
+    }
   });
   const main = document.getElementById('main');
   if (main) {
