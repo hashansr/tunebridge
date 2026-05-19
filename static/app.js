@@ -2158,6 +2158,10 @@ async function loadAlbums(artistFilter = null) {
   const paginationEl = document.getElementById('albums-pagination');
   if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
   if (paginationEl) paginationEl.style.display = 'none';
+  const hero = document.getElementById('artist-hero');
+  const heroArt = document.getElementById('artist-hero-art');
+  if (hero) hero.style.display = 'none';
+  if (heroArt) heroArt.innerHTML = '';
   const query = artistFilter ? `?artist=${encodeURIComponent(artistFilter)}` : '';
   let albums;
   try {
@@ -2203,7 +2207,6 @@ async function loadAlbums(artistFilter = null) {
     _resetCollectionPage('albums');
   }
 
-  const hero = document.getElementById('artist-hero');
   const albumsViewHeader = document.querySelector('#view-albums .view-header');
   const albumsViewTitle = document.querySelector('#view-albums .view-header h2');
   const albumsViewCount = document.getElementById('albums-count');
@@ -2214,7 +2217,6 @@ async function loadAlbums(artistFilter = null) {
     if (albumsViewCount) albumsViewCount.style.display = 'none';
     // Populate artist hero
     const artistData = state.artists?.find(a => a.name === artistFilter);
-    const heroArt = document.getElementById('artist-hero-art');
     if (heroArt) {
       const fallbackArtworkKey = albums[0]?.artwork_key || artistData?.artwork_key || '';
       const portraitUrl = _artistImageSrc({
@@ -2299,6 +2301,12 @@ async function loadAlbums(artistFilter = null) {
 /* ── Tracks view ────────────────────────────────────────────────────── */
 async function loadTracks(artist = null, album = null, displayArtist = '') {
   _ensurePlayStats();
+  const albumHero = document.getElementById('album-hero');
+  const albumHeroArt = document.getElementById('album-hero-art');
+  const tracksTbody = document.getElementById('tracks-tbody');
+  if (albumHero) albumHero.style.display = 'none';
+  if (albumHeroArt) albumHeroArt.innerHTML = '';
+  if (tracksTbody) tracksTbody.innerHTML = '';
   let q = [];
   if (artist) q.push(`artist=${encodeURIComponent(artist)}`);
   if (album) q.push(`album=${encodeURIComponent(album)}`);
@@ -2312,7 +2320,6 @@ async function loadTracks(artist = null, album = null, displayArtist = '') {
   state.tracks = tracks;
 
   // Album / artist hero
-  const albumHero = document.getElementById('album-hero');
   if (album && tracks.length) {
     albumHero.classList.add('is-album-context');
     const heroArtist = displayArtist || artist || '';

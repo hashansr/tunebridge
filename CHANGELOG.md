@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Page transitions now fade in smoothly instead of blinking on navigation.
+- Fix: Stale artist/album cover art no longer flashes when navigating between artist or album views.
 
 ## v0.334-rc.200526-0823 · 2026-05-20
 
