@@ -6861,7 +6861,7 @@ function showViewEl(name) {
       el.style.transition = 'none';
       el.style.display = ['playlist', 'sync'].includes(v) ? 'flex' : 'block';
       void el.offsetWidth;
-      el.style.transition = 'opacity 0.12s ease-out';
+      el.style.transition = 'opacity 0.2s ease';
       el.style.opacity = '1';
     } else {
       el.style.display = 'none';
@@ -6972,7 +6972,13 @@ async function _restoreNavSnapshot(snap) {
     case 'home':
       state.view = 'home'; state.playlist = null; clearSelection();
       setActiveNav('home'); renderSidebarPlaylists(); showViewEl('home');
-      await loadHome();
+      if (_homeLastData) {
+        _homeApplyData(_homeLastData, false);
+        _homeLoading = false;
+        _homeBackgroundRefresh();
+      } else {
+        await loadHome();
+      }
       break;
     case 'artists':
       state.view = 'artists'; state.playlist = null;
