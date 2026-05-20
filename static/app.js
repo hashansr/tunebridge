@@ -8735,7 +8735,7 @@ function _swRenderDone() {
   if (ejectWrap && _sw.device?.id) {
     const dId = _sw.device.id;
     const dName = _sw.device.name || 'Device';
-    ejectWrap.innerHTML = `<button id="eject-btn-${dId}" class="btn btn-secondary sw-eject-btn" onclick="App.ejectDap('${dId}', '${dName.replace(/'/g, "\\'")}')">Eject ${esc(dName)}</button>`;
+    ejectWrap.innerHTML = `<button id="eject-btn-${dId}" class="btn btn-secondary sw-eject-btn" onclick="App.ejectDap('${dId}', '${dName.replace(/'/g, "\\'")}')">${_GEAR_ICON_EJECT} Eject ${esc(dName)}</button>`;
   }
 }
 
@@ -9458,7 +9458,10 @@ async function dapExportAllPlaylists(dapId, btn) {
 
 async function ejectDap(dapId, name) {
   const btns = document.querySelectorAll(`#eject-btn-${dapId}`);
-  btns.forEach(b => { b.disabled = true; b.textContent = 'Ejecting…'; });
+  btns.forEach(b => {
+    b.disabled = true;
+    b.innerHTML = `Ejecting<span class="eject-dots"><span>.</span><span>.</span><span>.</span></span>`;
+  });
   try {
     const r = await fetch(`/api/daps/${dapId}/eject`, { method: 'POST' });
     const d = await r.json();
@@ -9468,11 +9471,11 @@ async function ejectDap(dapId, name) {
       if (state.view === 'dap-detail') await showDapDetail(dapId);
     } else {
       toast(d.error || 'Eject failed.', 'error');
-      btns.forEach(b => { b.disabled = false; b.textContent = 'Eject'; });
+      btns.forEach(b => { b.disabled = false; b.innerHTML = 'Eject'; });
     }
   } catch (e) {
     toast('Eject failed.', 'error');
-    btns.forEach(b => { b.disabled = false; b.textContent = 'Eject'; });
+    btns.forEach(b => { b.disabled = false; b.innerHTML = 'Eject'; });
   }
 }
 

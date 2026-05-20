@@ -19254,6 +19254,16 @@ body.is-col-resizing {
   flex-shrink: 0;
 }
 
+/* Eject button — animated dots while ejecting */
+@keyframes eject-dot-blink {
+  0%, 80%, 100% { opacity: 0; }
+  40%            { opacity: 1; }
+}
+.eject-dots { display: inline-flex; gap: 1px; margin-left: 1px; }
+.eject-dots span { animation: eject-dot-blink 1.2s infinite; font-size: 1em; line-height: 1; }
+.eject-dots span:nth-child(2) { animation-delay: 0.2s; }
+.eject-dots span:nth-child(3) { animation-delay: 0.4s; }
+
 /* Eject button in sync Done footer */
 #sw-eject-wrap { display: flex; align-items: center; flex-shrink: 0; }
 .sw-eject-btn {
@@ -19270,6 +19280,10 @@ body.is-col-resizing {
 }
 .sw-eject-btn:hover { background: var(--surface-3); color: var(--text); border-color: var(--text-muted); }
 .sw-eject-btn:disabled { opacity: 0.5; cursor: default; }
+.sw-eject-btn svg { flex-shrink: 0; }
+
+/* DAP detail Eject button — fixed width so "Ejecting..." doesn't reflow neighbours */
+.gear-edit-actions [id^="eject-btn-"] { min-width: 72px; justify-content: center; }
 
 /* Wizard buttons */
 .sw-btn {
