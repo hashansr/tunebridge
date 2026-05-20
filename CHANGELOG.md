@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.343 · 2026-05-20
 - Add: Safely eject connected DAPs from within TuneBridge — eject icon button on connected Gear rows, Eject button in DAP detail view, and Eject button on the Sync wizard Done step
 
 ## v0.342-rc.200526-1451 · 2026-05-20
