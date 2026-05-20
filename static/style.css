@@ -16036,6 +16036,10 @@ tr:hover .track-edit-btn:hover {
 .history-top-row--media:hover {
   background: rgba(36, 38, 45, 0.9);
 }
+.history-top-row--artist {
+  grid-template-columns: 20px 52px minmax(0, 1fr);
+  min-height: 66px;
+}
 .history-top-row:last-child { margin-bottom: 0; }
 .history-top-count { color: var(--text-muted); font-size: 12px; flex-shrink: 0; margin-left: 8px; }
 .history-top-rank {
@@ -16051,6 +16055,10 @@ tr:hover .track-edit-btn:hover {
   border-radius: 10px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.06);
+}
+.history-top-row--artist .history-top-thumb {
+  width: 52px;
+  height: 52px;
 }
 .history-top-thumb img,
 .history-top-thumb-placeholder {
@@ -17592,6 +17600,20 @@ thead th:hover .table-col-resizer::after {
 .history-artist-art-card .cover-placeholder-artist img {
   height: 68%;
   width: 68%;
+}
+
+.history-top-row--artist .history-artist-art-card,
+.history-top-row--artist .history-artist-art-card--palette-ready {
+  --artist-portrait-size: 100%;
+  background: transparent;
+  border-radius: 50%;
+}
+
+.history-top-row--artist .history-artist-art-card .artist-portrait {
+  border: 0;
+  box-shadow: none;
+  height: 100%;
+  width: 100%;
 }
 
 #view-artists .artist-card:hover .artist-thumb,

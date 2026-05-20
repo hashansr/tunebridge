@@ -14021,7 +14021,7 @@ function _historyRankRows(rows, kind) {
       ? `data-artist="${esc(row.artist)}" onclick="App.showArtist(this.dataset.artist)"`
       : `data-track-id="${esc(row.track_id)}" ondblclick="Player.playTrackById(this.dataset.trackId)"`;
     return `
-      <div class="history-top-row history-top-row--media" ${navAttrs}>
+      <div class="history-top-row history-top-row--media${kind === 'artist' ? ' history-top-row--artist' : ''}" ${navAttrs}>
         <div class="history-top-rank">${idx + 1}</div>
         <div class="history-top-thumb${kind === 'artist' ? ' history-artist-art-card' : ''}"${kind === 'artist' ? ` style="--artist-card-accent:${_artistCardAccent(row.artist || '')}"` : ''}>${_historyThumbHtml(row, kind)}</div>
         <div class="history-top-main">
