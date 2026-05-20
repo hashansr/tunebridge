@@ -12927,15 +12927,27 @@ async function completeOnboarding() {
 async function restartApp() {
   const btn = document.getElementById('restart-btn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;animation:spin 1s linear infinite"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>Restarting…'; }
+  let oldPid = null;
   try {
-    await fetch('/api/restart', { method: 'POST' });
+    const resp = await fetch('/api/restart', { method: 'POST' });
+    const data = await resp.json().catch(() => ({}));
+    oldPid = data.pid || null;
   } catch (_) { /* connection may drop before response — expected */ }
 
-  // Poll until the server is back up, then reload
+  // Poll until the server is back up, then hard-navigate to bust all cached assets
+  const startedAt = Date.now();
   const poll = setInterval(async () => {
     try {
       const r = await fetch('/api/health', { cache: 'no-store' });
-      if (r.ok) { clearInterval(poll); window.location.reload(); }
+      if (r.ok) {
+        const health = await r.json().catch(() => ({}));
+        // Accept if PID changed (new process killed+restarted) or after 3s grace period
+        // (os.execv keeps same PID so PID alone can't confirm, but stale-server kills produce new PIDs)
+        if (!oldPid || health.pid !== oldPid || (Date.now() - startedAt) > 3000) {
+          clearInterval(poll);
+          window.location.href = '/?_r=' + Date.now();
+        }
+      }
     } catch (_) { /* still restarting */ }
   }, 800);
 }

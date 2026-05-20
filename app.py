@@ -7590,16 +7590,32 @@ def health_status():
 
 @app.route('/api/restart', methods=['POST'])
 def restart_server():
+    import signal as _signal
+    current_pid = os.getpid()
+    port = int(os.environ.get('TUNEBRIDGE_PORT', 5001))
     def do_restart():
-        # In-place re-exec keeps restart single-instance (no duplicate windows).
-        # The process is replaced with a fresh interpreter running the same args.
         time.sleep(0.6)  # let response flush
+        # Kill any other process on our port (stale worktree servers, old dev instances)
+        try:
+            result = subprocess.run(
+                ['lsof', '-ti', f':{port}'],
+                capture_output=True, text=True, timeout=3
+            )
+            for pid_str in result.stdout.strip().split('\n'):
+                pid = int(pid_str.strip()) if pid_str.strip() else None
+                if pid and pid != current_pid:
+                    try:
+                        os.kill(pid, _signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+        except Exception:
+            pass
         try:
             os.execv(sys.executable, [sys.executable] + sys.argv)
         except Exception:
             os._exit(1)
     threading.Thread(target=do_restart, daemon=False).start()
-    return jsonify({'message': 'Restarting…'})
+    return jsonify({'message': 'Restarting…', 'pid': current_pid})
 
 
 # ── Version & update check ─────────────────────────────────────────────────
