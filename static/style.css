@@ -19254,6 +19254,23 @@ body.is-col-resizing {
   flex-shrink: 0;
 }
 
+/* Eject button in sync Done footer */
+#sw-eject-wrap { display: flex; align-items: center; flex-shrink: 0; }
+.sw-eject-btn {
+  padding: 7px 18px;
+  font-size: 13px;
+  border-radius: 9999px;
+  border: 1.5px solid var(--surface-4);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.sw-eject-btn:hover { background: var(--surface-3); color: var(--text); border-color: var(--text-muted); }
+.sw-eject-btn:disabled { opacity: 0.5; cursor: default; }
+
 /* Wizard buttons */
 .sw-btn {
   display: inline-flex;

@@ -9902,6 +9902,26 @@ def delete_dap(did):
     return '', 204
 
 
+@app.route('/api/daps/<did>/eject', methods=['POST'])
+def eject_dap(did):
+    dap = next((d for d in load_daps() if d['id'] == did), None)
+    if not dap:
+        return jsonify({'error': 'DAP not found'}), 404
+    mount, _, _ = _resolve_dap_mount_with_method(dap)
+    if not mount or not mount.exists():
+        return jsonify({'error': 'Device is not connected'}), 400
+    if sync_state.get('status') in ('scanning', 'copying'):
+        return jsonify({'error': 'A sync operation is in progress — wait for it to finish before ejecting.'}), 409
+    result = subprocess.run(
+        ['diskutil', 'eject', str(mount)],
+        capture_output=True, text=True, timeout=60
+    )
+    if result.returncode == 0:
+        return jsonify({'success': True, 'message': f'{dap["name"]} ejected safely.'})
+    msg = result.stderr.strip() or 'Eject failed — the device may be busy.'
+    return jsonify({'error': msg}), 500
+
+
 @app.route('/api/daps/<did>/export/<pid>/download')
 def dap_download_playlist(did, pid):
     """Return the M3U file as a download, using the DAP's path config."""

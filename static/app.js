@@ -8723,6 +8723,14 @@ function _swRenderDone() {
   const footerMsg = document.getElementById('sw-footer-msg');
   if (footerMsg) footerMsg.textContent = 'Safe to disconnect.';
   document.getElementById('sw-footer-status')?.classList.add('sw-footer-status--success');
+
+  // Eject button
+  const ejectWrap = document.getElementById('sw-eject-wrap');
+  if (ejectWrap && _sw.device?.id) {
+    const dId = _sw.device.id;
+    const dName = _sw.device.name || 'Device';
+    ejectWrap.innerHTML = `<button id="eject-btn-${dId}" class="btn btn-secondary sw-eject-btn" onclick="App.ejectDap('${dId}', '${dName.replace(/'/g, "\\'")}')">Eject ${esc(dName)}</button>`;
+  }
 }
 
 function swFinish() {
@@ -8793,6 +8801,7 @@ const _HEADPHONE_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="n
 const _GEAR_DOTS = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`;
 const _GEAR_ICON_MUSIC = `<span class="gear-mask-icon gear-mask-icon-player" aria-hidden="true"></span>`;
 const _GEAR_ICON_PLAYLIST = `<span class="gear-mask-icon gear-mask-icon-playlist" aria-hidden="true"></span>`;
+const _GEAR_ICON_EJECT = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="7,2 12.5,8 1.5,8" fill="currentColor" stroke="none"/><rect x="1.5" y="9.5" width="11" height="2" rx="1" fill="currentColor" stroke="none"/></svg>`;
 const _GEAR_ICON_EDIT = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2l2.5 2.5-7 7H2.5v-2.5l7-7z"/></svg>`;
 const _GEAR_ICON_TRASH = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M2.5 4h9M5.5 4V2.5h3V4M6 6.5v4M8 6.5v4M3.5 4l.7 8h5.6l.7-8"/></svg>`;
 const _GEAR_ICON_EQ = `<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M3 12V8M3 6V2M7 12V9M7 7V2M11 12V6M11 4V2"/><circle cx="3" cy="7" r="1.2" fill="currentColor"/><circle cx="7" cy="8" r="1.2" fill="currentColor"/><circle cx="11" cy="5" r="1.2" fill="currentColor"/></svg>`;
@@ -8950,6 +8959,7 @@ async function loadDapsView() {
         <span class="gear-status-label gear-status-label--off">${esc(plTxt)}</span>
       </div>
       <div class="gear-row-actions" onclick="event.stopPropagation()">
+        ${connOn ? `<button class="gear-icon-btn" id="eject-btn-${d.id}" title="Safely eject" onclick="App.ejectDap('${d.id}', '${esc(d.name)}')">${_GEAR_ICON_EJECT}</button>` : ''}
         <button class="gear-icon-btn" title="Edit" onclick="App.showEditDapModal('${d.id}')">${_GEAR_ICON_EDIT}</button>
         <button class="gear-icon-btn" title="Delete" onclick="App.deleteDap('${d.id}')">${_GEAR_ICON_TRASH}</button>
       </div>
@@ -9363,6 +9373,7 @@ async function showDapDetail(id) {
           <button class="btn-secondary" onclick="App.dapExportAllPlaylists('${dap.id}', this)" ${dap.mounted ? '' : 'disabled title="Device not mounted"'}>
             ${dap.mounted ? 'Sync All Playlists' : 'Not mounted'}
           </button>
+          ${dap.mounted ? `<button id="eject-btn-${dap.id}" class="btn-secondary" onclick="App.ejectDap('${dap.id}', '${esc(dap.name)}')">Eject</button>` : ''}
           <button class="btn-secondary" onclick="App.showEditDapModal('${dap.id}')">Edit</button>
           <button class="btn-danger-sm" onclick="App.deleteDap('${dap.id}')">Delete</button>
         </div>
@@ -9436,6 +9447,26 @@ async function dapExportAllPlaylists(dapId, btn) {
       btn.disabled = false;
       btn.textContent = 'Sync All Playlists';
     }
+  }
+}
+
+async function ejectDap(dapId, name) {
+  const btns = document.querySelectorAll(`#eject-btn-${dapId}`);
+  btns.forEach(b => { b.disabled = true; b.textContent = 'Ejecting…'; });
+  try {
+    const r = await fetch(`/api/daps/${dapId}/eject`, { method: 'POST' });
+    const d = await r.json();
+    if (r.ok) {
+      toast(`${name} ejected — safe to remove.`);
+      await loadDapsView();
+      if (state.view === 'dap-detail') await showDapDetail(dapId);
+    } else {
+      toast(d.error || 'Eject failed.', 'error');
+      btns.forEach(b => { b.disabled = false; b.textContent = 'Eject'; });
+    }
+  } catch (e) {
+    toast('Eject failed.', 'error');
+    btns.forEach(b => { b.disabled = false; b.textContent = 'Eject'; });
   }
 }
 
@@ -15490,6 +15521,7 @@ const App = {
   // DAP
   checkAllDapSyncStatus,
   checkDapSyncStatus,
+  ejectDap,
   showDapDetail,
   showAddDapModal,
   showEditDapModal,
