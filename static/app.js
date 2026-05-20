@@ -7116,10 +7116,9 @@ async function showArtist(artist) {
   if (_sah) _sah.style.display = 'none';
   if (_saa) _saa.innerHTML = '';
   if (_sag) _sag.style.opacity = '0';
-  try {
-    // Keep artist metadata fresh so detail hero uses the latest curated artist image.
-    state.artists = await api('/library/artists');
-  } catch (_) {}
+  // Refresh artist metadata in the background so the blocking network round-trip
+  // doesn't delay the spinner — state.artists is already current from the artists view.
+  api('/library/artists').then(a => { state.artists = a; }).catch(() => {});
   await loadAlbums(artist);
 }
 
