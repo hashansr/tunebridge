@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Sync Music Step 1 now shows the latest completed music sync time instead of falling back to older playlist export timestamps.
 
 ## v0.344-rc.200526-1534 · 2026-05-20
 

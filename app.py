@@ -9248,7 +9248,7 @@ def sync_execute():
                 stale_count, never_exported = _playlist_sync_counts_for_dap(dap)
                 playlist_out = int(stale_count) + int(never_exported)
                 now_ts = int(time.time())
-                _update_dap_sync_summary(dap_id, {
+                summary_patch = {
                     'playlist_out_of_sync_count': playlist_out,
                     'music_out_of_sync_count': post_copy_diff['music_out_of_sync_count'],
                     'music_to_add_count': post_copy_diff['music_to_add_count'],
@@ -9266,7 +9266,10 @@ def sync_execute():
                         if errors else
                         'Sync complete'
                     ),
-                })
+                }
+                if not errors:
+                    summary_patch['last_sync_at'] = now_ts
+                _update_dap_sync_summary(dap_id, summary_patch)
         except Exception as e:
             diff_error = str(e)
 
@@ -9416,6 +9419,7 @@ def _default_sync_summary():
         'space_ok': True,
         'last_scan_at': 0,
         'last_verified_at': 0,
+        'last_sync_at': 0,
         'sync_status_state': 'estimated',  # estimated | checking | verified | error
         'sync_status_message': '',
     }
@@ -9435,6 +9439,7 @@ def _normalize_sync_summary(summary):
         'space_shortfall_bytes',
         'last_scan_at',
         'last_verified_at',
+        'last_sync_at',
     ):
         try:
             base[k] = int(base.get(k) or 0)
@@ -9455,6 +9460,25 @@ def _normalize_sync_summary(summary):
     base['sync_status_state'] = state
     base['sync_status_message'] = str(base.get('sync_status_message') or '')
     return base
+
+
+def _dap_last_sync_at(dap, summary=None):
+    summary = _normalize_sync_summary(summary if summary is not None else (dap or {}).get('sync_summary'))
+    exports = (dap or {}).get('playlist_exports', {})
+    export_timestamps = [
+        int(v) for v in exports.values()
+        if isinstance(v, (int, float)) and v > 0
+    ]
+    candidates = list(export_timestamps)
+    if summary.get('last_sync_at'):
+        candidates.append(int(summary['last_sync_at']))
+    # Backfill older completed music syncs from the previous schema. Plain status
+    # checks also write last_verified_at, so only trust it when the stored message
+    # came from the execute-sync completion path.
+    message = str(summary.get('sync_status_message') or '').strip().lower()
+    if summary.get('last_verified_at') and message.startswith('sync complete'):
+        candidates.append(int(summary['last_verified_at']))
+    return max(candidates) if candidates else None
 
 
 def _update_dap_sync_summary(dap_id, summary_patch):
@@ -9745,6 +9769,7 @@ def get_daps():
         summary = _normalize_sync_summary(d.get('sync_summary'))
         summary['playlist_out_of_sync_count'] = int(d['stale_count']) + int(d['never_exported'])
         d['sync_summary'] = summary
+        d['last_sync_at'] = _dap_last_sync_at(d, summary)
     return jsonify(daps)
 
 
@@ -9849,8 +9874,6 @@ def get_dap(did):
         dap['capacity_bytes'] = None
         dap['used_bytes'] = None
     exports = dap.get('playlist_exports', {})
-    export_timestamps = [v for v in exports.values() if isinstance(v, (int, float)) and v > 0]
-    dap['last_sync_at'] = max(export_timestamps) if export_timestamps else None
     playlists = load_playlists()
     stale_count = sum(
         1 for pl in playlists.values()
@@ -9864,6 +9887,7 @@ def get_dap(did):
     summary = _normalize_sync_summary(dap.get('sync_summary'))
     summary['playlist_out_of_sync_count'] = int(stale_count) + int(never_exported)
     dap['sync_summary'] = summary
+    dap['last_sync_at'] = _dap_last_sync_at(dap, summary)
     return jsonify(dap)
 
 
