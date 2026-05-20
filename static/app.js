@@ -9460,7 +9460,11 @@ async function ejectDap(dapId, name) {
   const btns = document.querySelectorAll(`#eject-btn-${dapId}`);
   btns.forEach(b => {
     b.disabled = true;
-    b.innerHTML = `Ejecting<span class="eject-dots"><span>.</span><span>.</span><span>.</span></span>`;
+    if (b.classList.contains('gear-icon-btn')) {
+      b.style.opacity = '0.4';  // icon button: just dim, keep icon intact
+    } else {
+      b.innerHTML = `Ejecting<span class="eject-dots"><span>.</span><span>.</span><span>.</span></span>`;
+    }
   });
   try {
     const r = await fetch(`/api/daps/${dapId}/eject`, { method: 'POST' });
@@ -9471,11 +9475,19 @@ async function ejectDap(dapId, name) {
       if (state.view === 'dap-detail') await showDapDetail(dapId);
     } else {
       toast(d.error || 'Eject failed.', 'error');
-      btns.forEach(b => { b.disabled = false; b.innerHTML = 'Eject'; });
+      btns.forEach(b => {
+        b.disabled = false;
+        b.style.opacity = '';
+        if (!b.classList.contains('gear-icon-btn')) b.innerHTML = 'Eject';
+      });
     }
   } catch (e) {
     toast('Eject failed.', 'error');
-    btns.forEach(b => { b.disabled = false; b.innerHTML = 'Eject'; });
+    btns.forEach(b => {
+      b.disabled = false;
+      b.style.opacity = '';
+      if (!b.classList.contains('gear-icon-btn')) b.innerHTML = 'Eject';
+    });
   }
 }
 
