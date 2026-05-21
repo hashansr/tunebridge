@@ -8155,6 +8155,14 @@ function _swIsLyricsPath(path) {
   return /\.lrc$/i.test(String(path || '').split('?')[0]);
 }
 
+function _swFindMatchingLyricId(songRel) {
+  const base = String(songRel || '').replace(/\.[^./\\]+$/, '');
+  const target = (base + '.lrc').toLowerCase();
+  const lyrics = _sw.proposal?.toDeviceLyrics?.items ?? [];
+  const found = lyrics.find(item => String(item.id || item.rel || '').toLowerCase() === target);
+  return found ? (found.id ?? found.rel) : null;
+}
+
 function _swBuildProposal(status) {
   const sizeToMB = b => b ? (b / (1024 ** 2)).toFixed(1) : '';
   const itemSize = (netBytes, fullBytes = netBytes) => {
@@ -8637,6 +8645,13 @@ function swToggleTreeNode(gid, level, key, toState) {
   const items = _swItemsForTreeNode(gid, level, key);
   if (!_sw.selection[gid]) _sw.selection[gid] = {};
   for (const item of items) _sw.selection[gid][item.id] = toState;
+  if (gid === 'toDevice') {
+    if (!_sw.selection.toDeviceLyrics) _sw.selection.toDeviceLyrics = {};
+    for (const item of items) {
+      const lyricId = _swFindMatchingLyricId(item.id);
+      if (lyricId) _sw.selection.toDeviceLyrics[lyricId] = toState;
+    }
+  }
   _swRenderReview();
 }
 
@@ -8711,7 +8726,15 @@ function swToggleGroupCollapse(gid) {
 
 function swToggleItem(gid, itemId) {
   if (!_sw.selection[gid]) _sw.selection[gid] = {};
-  _sw.selection[gid][itemId] = !_sw.selection[gid][itemId];
+  const newState = !_sw.selection[gid][itemId];
+  _sw.selection[gid][itemId] = newState;
+  if (gid === 'toDevice') {
+    const lyricId = _swFindMatchingLyricId(itemId);
+    if (lyricId) {
+      if (!_sw.selection.toDeviceLyrics) _sw.selection.toDeviceLyrics = {};
+      _sw.selection.toDeviceLyrics[lyricId] = newState;
+    }
+  }
   _swRenderReview();
 }
 
@@ -8720,6 +8743,13 @@ function swToggleGroup(gid, toState) {
   if (!group) return;
   _sw.selection[gid] = {};
   for (const item of group.items) _sw.selection[gid][item.id] = toState;
+  if (gid === 'toDevice') {
+    if (!_sw.selection.toDeviceLyrics) _sw.selection.toDeviceLyrics = {};
+    for (const item of group.items) {
+      const lyricId = _swFindMatchingLyricId(item.id);
+      if (lyricId) _sw.selection.toDeviceLyrics[lyricId] = toState;
+    }
+  }
   _swRenderReview();
 }
 
