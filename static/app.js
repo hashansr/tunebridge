@@ -8049,14 +8049,25 @@ function _swIsLyricsPath(path) {
 
 function _swBuildProposal(status) {
   const sizeToMB = b => b ? (b / (1024 ** 2)).toFixed(1) : '';
+  const itemSize = (netBytes, fullBytes = netBytes) => {
+    const net = Math.max(0, Number(netBytes) || 0);
+    const full = Math.max(0, Number(fullBytes) || net);
+    return {
+      size: sizeToMB(net),
+      sizeBytes: net,
+      displaySizeBytes: full,
+      sizeLabel: _fmtBytes(full),
+    };
+  };
 
   // local_only items are plain strings (device rel paths) — going to device
-  const toDeviceItems = (arr, sizeMap) => (arr || []).map((p, i) => {
+  const toDeviceItems = (arr, sizeMap, fullSizeMap) => (arr || []).map((p, i) => {
     const rel = typeof p === 'string' ? p : (p.rel_path || '');
     const { title, artist, album } = _swParsePath(rel);
     const sizeBytes = (sizeMap && sizeMap[rel]) || 0;
+    const fullSizeBytes = (fullSizeMap && fullSizeMap[rel]) || sizeBytes;
     return { id: rel || String(i), kind: 'track', title, artist, album,
-      dur: '', size: sizeToMB(sizeBytes), rel };
+      dur: '', ...itemSize(sizeBytes, fullSizeBytes), rel };
   });
 
   // Items on device but not in library — may be _sync_row dicts or plain strings
@@ -8065,7 +8076,7 @@ function _swBuildProposal(status) {
     const { title, artist, album } = _swParsePath(rel);
     const sizeBytes = (sizeMap && sizeMap[rel]) || 0;
     return { id: rel || String(i), kind: 'track', title, artist, album,
-      dur: '', size: sizeToMB(sizeBytes), rel, defaultAction };
+      dur: '', ...itemSize(sizeBytes), rel, defaultAction };
   });
 
   const plItems = (arr) => (arr || []).map(p => ({
@@ -8084,7 +8095,7 @@ function _swBuildProposal(status) {
     ...onDeviceItems(status.device_only_not_in_library, 'copy', status.device_only_sizes),
   ];
 
-  const toDeviceAll = toDeviceItems(status.local_only, status.local_only_sizes);
+  const toDeviceAll = toDeviceItems(status.local_only, status.local_only_sizes, status.local_only_copy_sizes);
   const toDeviceSongs = toDeviceAll.filter(item => !_swIsLyricsPath(item.rel || item.id));
   const toDeviceLyrics = toDeviceAll.filter(item => _swIsLyricsPath(item.rel || item.id))
     .map(item => ({ ...item, kind: 'lyrics' }));
@@ -8160,6 +8171,7 @@ function _swBuildGroupCard(gid, group) {
   const total = group.items.length;
   const isOnDevice = gid === 'onDevice';
   const isHierarchicalToDevice = gid === 'toDevice' || gid === 'toDeviceLyrics';
+  const totalSizeLabel = _swAggregateSizeLabel(group.items, 'displaySizeBytes');
 
   // Pagination
   const page = _sw.pages?.[gid] ?? 0;
@@ -8240,7 +8252,7 @@ function _swBuildGroupCard(gid, group) {
               data-id="${esc(item.id)}" data-action="delete"
               onclick="event.stopPropagation();App.swSetItemActionEl(this)">Delete from DAP</button>
           </div>
-          <span class="sw-row-size">${item.size ? `${item.size} MB` : ''}</span>
+          <span class="sw-row-size">${esc(_swItemSizeLabel(item))}</span>
         </div>`;
         }).join('')}
       </div>
@@ -8260,7 +8272,7 @@ function _swBuildGroupCard(gid, group) {
           data-indeterminate="${someSelected}" />
         <div class="sw-group-label-col">
           <span class="sw-group-title">${esc(group.label)}</span>
-          <span class="sw-group-count-text">${total} ${itemLabel}${total===1?'':'s'}</span>
+          <span class="sw-group-count-text">${total} ${itemLabel}${total===1?'':'s'}${totalSizeLabel ? ` · ${esc(totalSizeLabel)}` : ''}</span>
           <span class="sw-group-hint">Select artists, albums, or individual ${itemLabel}s to sync.</span>
         </div>
         <span class="sw-group-sel-pill">${selectedCount} selected</span>
@@ -8312,7 +8324,7 @@ function _swBuildGroupCard(gid, group) {
             <div class="sw-row-sub">${item.kind === 'playlist' ? esc(item.meta || '') : [item.artist, item.album].filter(Boolean).map(esc).join(' · ')}</div>
           </div>
           ${actionLabel ? `<span class="sw-action-chip">${esc(actionLabel)}</span>` : '<span></span>'}
-          <span class="sw-row-size">${item.size ? `${item.size} MB` : ''}${item.size && item.dur ? ' · ' : ''}${item.dur ?? ''}</span>
+          <span class="sw-row-size">${esc(_swItemSizeLabel(item))}${item.sizeLabel && item.dur ? ' · ' : ''}${item.dur ?? ''}</span>
         </div>`).join('')}
       </div>
       ${paginationBar}
@@ -8355,6 +8367,7 @@ function _swBuildMediaHierarchy(gid, items, sel) {
     const artistState = _swSelectionState(artist.items, sel);
     const albums = Array.from(artist.albums.values()).sort((a, b) => a.label.localeCompare(b.label));
     const artistExpanded = _swIsTreeExpanded(gid, 'artist', artist.key);
+    const artistSizeLabel = _swAggregateSizeLabel(artist.items, 'displaySizeBytes');
     return `
       <div class="sw-tree-artist${artistExpanded ? ' sw-tree-artist--expanded' : ''}">
         <div class="sw-tree-row sw-tree-row--artist${artistState.selected ? '' : ' sw-tree-row--deselected'}">
@@ -8372,7 +8385,7 @@ function _swBuildMediaHierarchy(gid, items, sel) {
           ${_swArtistThumb(artist.label, artist.items[0])}
           <div class="sw-tree-main">
             <span class="sw-tree-title">${esc(artist.label)}</span>
-            <span class="sw-tree-meta">${artist.items.length} ${itemLabel}${artist.items.length===1?'':'s'} · ${albums.length} album${albums.length===1?'':'s'}</span>
+            <span class="sw-tree-meta">${artist.items.length} ${itemLabel}${artist.items.length===1?'':'s'} · ${albums.length} album${albums.length===1?'':'s'}${artistSizeLabel ? ` · ${esc(artistSizeLabel)}` : ''}</span>
           </div>
           <span class="sw-group-sel-pill">${artistState.count} selected</span>
         </div>
@@ -8380,6 +8393,7 @@ function _swBuildMediaHierarchy(gid, items, sel) {
         ${albums.map(album => {
           const albumState = _swSelectionState(album.items, sel);
           const albumExpanded = _swIsTreeExpanded(gid, 'album', album.key);
+          const albumSizeLabel = _swAggregateSizeLabel(album.items, 'displaySizeBytes');
           return `
         <div class="sw-tree-album${albumExpanded ? ' sw-tree-album--expanded' : ''}">
           <div class="sw-tree-row sw-tree-row--album${albumState.selected ? '' : ' sw-tree-row--deselected'}">
@@ -8397,7 +8411,7 @@ function _swBuildMediaHierarchy(gid, items, sel) {
             ${_swRowThumb(album.items[0])}
             <div class="sw-tree-main">
               <span class="sw-tree-title">${esc(album.label)}</span>
-              <span class="sw-tree-meta">${album.items.length} ${itemLabel}${album.items.length===1?'':'s'}</span>
+              <span class="sw-tree-meta">${album.items.length} ${itemLabel}${album.items.length===1?'':'s'}${albumSizeLabel ? ` · ${esc(albumSizeLabel)}` : ''}</span>
             </div>
             <span class="sw-group-sel-pill">${albumState.count} selected</span>
           </div>
@@ -8415,7 +8429,7 @@ function _swBuildMediaHierarchy(gid, items, sel) {
                 <div class="sw-row-sub">${[item.artist, item.album].filter(Boolean).map(esc).join(' · ')}</div>
               </div>
               <span></span>
-              <span class="sw-row-size">${item.size ? `${item.size} MB` : ''}${item.size && item.dur ? ' · ' : ''}${item.dur ?? ''}</span>
+              <span class="sw-row-size">${esc(_swItemSizeLabel(item))}${item.sizeLabel && item.dur ? ' · ' : ''}${item.dur ?? ''}</span>
             </div>`).join('')}
           </div>
         </div>`;
@@ -8433,6 +8447,19 @@ function _swSelectionState(items, sel) {
     some: count > 0,
     all: count === items.length,
   };
+}
+
+function _swItemSizeLabel(item) {
+  if (item?.sizeLabel) return item.sizeLabel;
+  if (Number.isFinite(Number(item?.displaySizeBytes))) return _fmtBytes(Number(item.displaySizeBytes));
+  if (Number.isFinite(Number(item?.sizeBytes))) return _fmtBytes(Number(item.sizeBytes));
+  if (item?.size) return `${item.size} MB`;
+  return '';
+}
+
+function _swAggregateSizeLabel(items, field = 'sizeBytes') {
+  const bytes = (items || []).reduce((sum, item) => sum + (Number(item?.[field]) || Number(item?.sizeBytes) || 0), 0);
+  return bytes > 0 ? _fmtBytes(bytes) : '';
 }
 
 function _swArtistThumb(artistName, fallbackItem = {}) {
@@ -8622,13 +8649,16 @@ function _swComputeTotals() {
   const copyItems   = onDeviceItems.filter(i => onDeviceSel[i.id] === 'copy');
   const deleteItems = onDeviceItems.filter(i => onDeviceSel[i.id] === 'delete');
 
-  const mbOfItems = items => items.reduce((s, i) => s + (Number(i.size) || 0), 0);
+  const bytesOfItems = items => items.reduce((s, i) => s + (Number(i.sizeBytes) || 0), 0);
 
   const toDeviceSongItems = (groups.toDevice?.items ?? []).filter(i => _sw.selection.toDevice?.[i.id]);
   const toDeviceLyricItems = (groups.toDeviceLyrics?.items ?? []).filter(i => _sw.selection.toDeviceLyrics?.[i.id]);
-  const toDeviceMB  = mbOfItems([...toDeviceSongItems, ...toDeviceLyricItems]);
-  const copyMB      = mbOfItems(copyItems);
-  const deleteMB    = mbOfItems(deleteItems);
+  const toDeviceBytes = bytesOfItems([...toDeviceSongItems, ...toDeviceLyricItems]);
+  const copyBytes     = bytesOfItems(copyItems);
+  const deleteBytes   = bytesOfItems(deleteItems);
+  const toDeviceMB  = toDeviceBytes / (1024 ** 2);
+  const copyMB      = copyBytes / (1024 ** 2);
+  const deleteMB    = deleteBytes / (1024 ** 2);
   const netMB       = toDeviceMB - deleteMB;
   const netGB       = Math.abs(netMB) / 1024;
   const sign        = netMB >= 0 ? '+' : '−';
@@ -8637,8 +8667,7 @@ function _swComputeTotals() {
   const usedBytes  = _sw.device?.used_bytes ?? 0;
   const capBytes   = _sw.device?.capacity_bytes ?? 0;
   const freeBytes  = Math.max(0, capBytes - usedBytes);
-  const requiredBytes = toDeviceMB * 1024 * 1024;
-  const deleteBytes = deleteMB * 1024 * 1024;
+  const requiredBytes = toDeviceBytes;
   const effectiveAvailableBytes = freeBytes + deleteBytes;
   const remainingBytes = effectiveAvailableBytes - requiredBytes;
   const afterUsed  = usedBytes + netMB * 1024 * 1024;
@@ -8926,7 +8955,7 @@ function _swRenderDone() {
             <div class="sw-change-title">${esc(t.title ?? t)}</div>
             <div class="sw-change-sub">${esc(t.artist ?? '')}</div>
           </div>
-          <span class="sw-change-size">${t.size ? t.size + ' MB' : ''}</span>
+          <span class="sw-change-size">${esc(_swItemSizeLabel(t))}</span>
         </div>`).join('')}
         ${g.items.length > 4 ? `<div class="sw-change-more">+${g.items.length - 4} more</div>` : ''}
       </div>`).join('')
