@@ -2734,6 +2734,7 @@
               <div class="peq-band-bulk-actions">
                 <button class="peq-add-band-btn" type="button" onclick="App.setAllPeqBands(true)">Turn all on</button>
                 <button class="peq-add-band-btn" type="button" onclick="App.setAllPeqBands(false)">Turn all off</button>
+                <button class="peq-add-band-btn" type="button" onclick="App.resetCustomPeq()">Reset all</button>
                 <button id="peq-add-band-btn" class="peq-add-band-btn" type="button" onclick="App.addPeqBand()">Add band</button>
               </div>
             </div>
@@ -2754,7 +2755,6 @@
 
         <div id="peq-copy-wrap" class="peq-copy-wrap peq-side-copy-wrap" style="display:none">
           <select id="peq-copy-dap-select" class="peq-select peq-copy-dap-select" style="display:none"></select>
-          <button id="peq-copy-btn" class="peq-side-btn" onclick="App.copyCustomPeqToConnectedDap()">Copy to DAP</button>
         </div>
       </div>
 
@@ -2762,6 +2762,7 @@
         <div id="peq-action-status" class="peq-action-status">0 bands · preamp +0.0 dB</div>
         <div class="peq-action-buttons">
           <button class="btn-secondary peq-workspace-close-btn" onclick="App.closePeqEditor()">Cancel</button>
+          <button id="peq-copy-btn" class="btn-secondary" onclick="App.copyCustomPeqToConnectedDap()" style="display:none">Copy to DAP</button>
           <button id="peq-secondary-action-btn" class="btn-secondary" onclick="App.onPeqSecondaryAction()">Save as profile...</button>
           <button id="peq-primary-action-btn" class="btn-primary" onclick="App.onPeqPrimaryAction()">Save PEQ</button>
         </div>

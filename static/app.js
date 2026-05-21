@@ -723,6 +723,7 @@ let _peqWorkspaceConnectedDaps = [];
 let _peqWorkspaceCopyDapId = '';
 let _peqWorkspaceEditContext = null;
 let _peqWorkspaceIemCache = [];
+let _peqWorkspaceGlobalPeqCache = [];
 let _peqWorkspaceSelectedBandIndex = 0;
 const _FR_OVERLAY_STORAGE_KEY = 'tb.fr_overlays.v1';
 const _FR_OVERLAY_DEFS = [
@@ -11338,11 +11339,13 @@ async function _loadPeqWorkspaceContext() {
     targetSel.innerHTML = '<option value="">No target selected</option>';
   }
   try {
-    const [iems, baselines, daps] = await Promise.all([
+    const [iems, baselines, daps, globalPeqs] = await Promise.all([
       api('/iems').catch(() => []),
       api('/baselines').catch(() => []),
       api('/daps').catch(() => []),
+      api('/peq/profiles').catch(() => []),
     ]);
+    _peqWorkspaceGlobalPeqCache = Array.isArray(globalPeqs) ? globalPeqs : [];
     if (iemSel) {
       _peqWorkspaceIemCache = (iems || []).slice();
       const measured = _peqWorkspaceIemCache.filter(i => i.has_measurement);
@@ -11372,7 +11375,7 @@ function _refreshPeqWorkspacePeqOptions() {
   if (!peqSel) return;
   const iemId = _peqWorkspaceSelectedIemId || document.getElementById('peq-workspace-iem-select')?.value || '';
   const iem = (_peqWorkspaceIemCache || []).find(i => i.id === iemId);
-  const profiles = Array.isArray(iem?.peq_profiles) ? iem.peq_profiles : [];
+  const profiles = iemId ? (Array.isArray(iem?.peq_profiles) ? iem.peq_profiles : []) : (_peqWorkspaceGlobalPeqCache || []);
   peqSel.innerHTML = `<option value="${_WORKSPACE_NEW_PEQ_ID}">New PEQ</option>` +
     profiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
   if (_peqWorkspaceSelectedPeqId && profiles.some(p => p.id === _peqWorkspaceSelectedPeqId)) {
@@ -11393,11 +11396,13 @@ function _refreshPeqWorkspaceCopyTargets(allDaps) {
   _peqWorkspaceConnectedDaps = connected;
   if (!connected.length) {
     wrap.style.display = 'none';
+    btn.style.display = 'none';
     _peqWorkspaceCopyDapId = '';
     _updatePeqWorkspaceSummary();
     return;
   }
   wrap.style.display = '';
+  btn.style.display = '';
   if (connected.length === 1) {
     _peqWorkspaceCopyDapId = connected[0].id;
     sel.style.display = 'none';
@@ -11489,7 +11494,7 @@ async function _guardPeqEditorNavigation() {
 async function _loadPeqSaveIems() {
   const sel = document.getElementById('peq-save-iem-select');
   if (!sel) return;
-  sel.innerHTML = '<option value="">Select IEM</option>';
+  sel.innerHTML = '<option value="">No IEM / global PEQ</option>';
   try {
     const iems = await api('/iems');
     sel.innerHTML += (iems || []).map(iem => `<option value="${esc(iem.id)}">${esc(iem.name)}</option>`).join('');
@@ -11539,9 +11544,11 @@ async function _saveCustomProfileToIem(iemId, name, overwritePeqId = '') {
   const formData = new FormData();
   formData.append('file', new Blob([content], { type: 'text/plain' }), fileName);
   formData.append('name', name);
-  const url = overwritePeqId
-    ? `/api/iems/${encodeURIComponent(iemId)}/peq/${encodeURIComponent(overwritePeqId)}`
-    : `/api/iems/${encodeURIComponent(iemId)}/peq`;
+  const url = iemId
+    ? (overwritePeqId
+      ? `/api/iems/${encodeURIComponent(iemId)}/peq/${encodeURIComponent(overwritePeqId)}`
+      : `/api/iems/${encodeURIComponent(iemId)}/peq`)
+    : (overwritePeqId ? `/api/peq/profiles/${encodeURIComponent(overwritePeqId)}` : '/api/peq/profiles');
   const method = overwritePeqId ? 'PUT' : 'POST';
   const res = await fetch(url, { method, body: formData });
   if (!res.ok) {
@@ -11647,6 +11654,18 @@ async function openPeqEditor(opts = {}) {
       _customPeqEditorState = _loadCustomPeqState();
       toast('Could not load selected PEQ. Opening Custom PEQ workspace with current state.');
     }
+  } else if (opts.mode === 'edit_global' && opts.peqId) {
+    try {
+      const profile = await api(`/peq/profiles/${encodeURIComponent(opts.peqId)}`);
+      _customPeqEditorState = _customStateFromProfile(profile);
+      _saveCustomPeqState();
+      _peqWorkspaceEditContext = { iemId: '', peqId: opts.peqId, peqName: profile.name || 'PEQ Profile' };
+      _peqWorkspaceSelectedIemId = '';
+      _peqWorkspaceSelectedPeqId = opts.peqId;
+    } catch (_) {
+      _customPeqEditorState = _loadCustomPeqState();
+      toast('Could not load selected PEQ. Opening Custom PEQ workspace with current state.');
+    }
   } else if (opts.mode === 'create') {
     _customPeqEditorState = _defaultCustomPeqState();
     _customPeqEditorState.enabled = true;
@@ -11683,51 +11702,47 @@ async function openPeqEditor(opts = {}) {
 }
 
 async function onPeqPrimaryAction() {
-  if (_peqWorkspaceEditContext?.iemId && _peqWorkspaceEditContext?.peqId) {
-    await saveCustomPeqAsProfile({
-      iemId: _peqWorkspaceEditContext.iemId,
-      name: `${_peqWorkspaceEditContext.peqName} Copy`,
-    });
+  if (_peqWorkspaceEditContext?.peqId) {
+    const choice = await _showPeqSaveChoice(_peqWorkspaceEditContext.peqName || 'PEQ Profile');
+    if (choice === 'cancel') return;
+    if (choice === 'save_as') {
+      await saveCustomPeqAsProfile({
+        iemId: _peqWorkspaceEditContext.iemId || '',
+        name: `${_peqWorkspaceEditContext.peqName || 'PEQ Profile'} Copy`,
+      });
+      return;
+    }
+    await overwriteCurrentPeqProfile();
     return;
   }
-  await applyAndClosePeqEditor();
+  await saveCustomPeqAsProfile();
 }
 
 async function overwriteCurrentPeqProfile() {
-  if (!_peqWorkspaceEditContext?.iemId || !_peqWorkspaceEditContext?.peqId) return;
-  const confirmOverwrite = await _showConfirm({
-    title: 'Overwrite Existing PEQ?',
-    message: `This will replace "${_peqWorkspaceEditContext.peqName}" with current values. This cannot be undone.`,
-    okText: 'Overwrite',
-    cancelText: 'Cancel',
-    danger: true,
-    icon: `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>`,
-  });
-  if (!confirmOverwrite) return;
+  if (!_peqWorkspaceEditContext?.peqId) return;
   try {
     await _saveCustomProfileToIem(
-      _peqWorkspaceEditContext.iemId,
+      _peqWorkspaceEditContext.iemId || '',
       _peqWorkspaceEditContext.peqName,
       _peqWorkspaceEditContext.peqId
     );
     if (Player?.onPeqIemChange && Player?.onPeqProfileChange) {
-      await Player.onPeqIemChange(_peqWorkspaceEditContext.iemId);
+      await Player.onPeqIemChange(_peqWorkspaceEditContext.iemId || '');
       await Player.onPeqProfileChange(_peqWorkspaceEditContext.peqId);
     }
     toast(`Overwrote "${_peqWorkspaceEditContext.peqName}".`);
     _snapshotPeqWorkspace();
-    _hidePeqWorkspace({ toast: false });
+    await _loadPeqWorkspaceContext();
   } catch (e) {
     toast('Could not overwrite profile: ' + e.message);
   }
 }
 
 async function onPeqSecondaryAction() {
-  if (_peqWorkspaceEditContext?.iemId && _peqWorkspaceEditContext?.peqId) {
-    await overwriteCurrentPeqProfile();
-    return;
-  }
-  await saveCustomPeqAsProfile();
+  await saveCustomPeqAsProfile({
+    iemId: _peqWorkspaceEditContext?.iemId || _peqWorkspaceSelectedIemId || '',
+    name: _peqWorkspaceEditContext?.peqName ? `${_peqWorkspaceEditContext.peqName} Copy` : '',
+  });
 }
 
 function closePeqEditor() {
@@ -11759,47 +11774,12 @@ function closePeqEditor() {
 }
 
 async function applyAndClosePeqEditor() {
-  if (_peqWorkspaceEditContext?.iemId && _peqWorkspaceEditContext?.peqId) {
-    const overwrite = await _showConfirm({
-      title: 'Save PEQ Changes',
-      message: `Overwrite "${_peqWorkspaceEditContext.peqName}"? Choose Overwrite to replace it, or Cancel to save as a new profile.`,
-      okText: 'Overwrite',
-      danger: false,
-    });
-    if (overwrite) {
-      try {
-        await _saveCustomProfileToIem(
-          _peqWorkspaceEditContext.iemId,
-          _peqWorkspaceEditContext.peqName,
-          _peqWorkspaceEditContext.peqId
-        );
-        if (Player?.onPeqIemChange && Player?.onPeqProfileChange) {
-          await Player.onPeqIemChange(_peqWorkspaceEditContext.iemId);
-          await Player.onPeqProfileChange(_peqWorkspaceEditContext.peqId);
-        }
-        toast(`Updated "${_peqWorkspaceEditContext.peqName}".`);
-        _snapshotPeqWorkspace();
-        _hidePeqWorkspace({ toast: false });
-        return;
-      } catch (e) {
-        toast('Could not overwrite profile: ' + e.message);
-        return;
-      }
-    } else {
-      await saveCustomPeqAsProfile({
-        iemId: _peqWorkspaceEditContext.iemId,
-        name: `${_peqWorkspaceEditContext.peqName} Copy`,
-      });
-      return;
-    }
-  }
   const st = _saveCustomPeqState();
   st.enabled = true;
   _saveCustomPeqState();
   Player?.applyCustomPeq?.(st);
   _snapshotPeqWorkspace();
   toast('Custom PEQ saved.');
-  _hidePeqWorkspace({ toast: false });
 }
 
 async function resetCustomPeq() {
@@ -12003,7 +11983,9 @@ function onPeqWorkspacePeqChange(peqId) {
   }
   const iemId = _peqWorkspaceSelectedIemId || document.getElementById('peq-workspace-iem-select')?.value || '';
   const iem = (_peqWorkspaceIemCache || []).find(i => i.id === iemId);
-  const profile = (iem?.peq_profiles || []).find(p => p.id === _peqWorkspaceSelectedPeqId);
+  const profile = iemId
+    ? (iem?.peq_profiles || []).find(p => p.id === _peqWorkspaceSelectedPeqId)
+    : (_peqWorkspaceGlobalPeqCache || []).find(p => p.id === _peqWorkspaceSelectedPeqId);
   if (!profile) return;
   _customPeqEditorState = _customStateFromProfile(profile);
   _saveCustomPeqState();
@@ -12045,6 +12027,41 @@ function cancelCustomPeqSaveProfile() {
   _renderCustomPeqSavePanel(false);
 }
 
+function _showPeqSaveChoice(profileName) {
+  return new Promise(resolve => {
+    const old = document.getElementById('peq-save-choice-modal');
+    if (old) old.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'peq-save-choice-modal';
+    overlay.className = 'modal-overlay tb-modal-overlay peq-save-choice-overlay';
+    overlay.innerHTML = `
+      <div class="modal confirm-modal-inner tb-modal-shell tb-modal--sm peq-save-choice-modal">
+        <h3 class="confirm-modal-title">Overwrite Existing PEQ?</h3>
+        <p class="confirm-modal-msg">This will replace "${esc(profileName)}" with the current edits.</p>
+        <div class="peq-save-choice-actions">
+          <button class="btn-danger-pill" data-choice="overwrite">Overwrite</button>
+          <button class="btn-secondary" data-choice="save_as">Save as...</button>
+          <button class="confirm-cancel-link" data-choice="cancel">Cancel</button>
+        </div>
+      </div>`;
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) {
+        overlay.remove();
+        resolve('cancel');
+      }
+    });
+    overlay.querySelectorAll('[data-choice]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const choice = btn.getAttribute('data-choice') || 'cancel';
+        overlay.remove();
+        resolve(choice);
+      });
+    });
+    document.body.appendChild(overlay);
+    overlay.style.display = 'flex';
+  });
+}
+
 async function confirmCustomPeqSaveProfile() {
   const iemSel = document.getElementById('peq-save-iem-select');
   const nameEl = document.getElementById('peq-save-name');
@@ -12053,15 +12070,15 @@ async function confirmCustomPeqSaveProfile() {
   errEl.style.display = 'none';
   const iemId = iemSel.value;
   const name = nameEl.value.trim();
-  if (!iemId || !name) {
-    errEl.textContent = 'Pick an IEM and profile name.';
+  if (!name) {
+    errEl.textContent = 'Name your PEQ before saving.';
     errEl.style.display = 'block';
     return;
   }
   const st = _loadCustomPeqState();
   const enabledBands = st.bands.filter(b => b.enabled);
-  if (!enabledBands.length) {
-    errEl.textContent = 'Enable at least one band before saving.';
+  if (!enabledBands.length && Math.abs(Number(st.preamp_db) || 0) < 0.0001) {
+    errEl.textContent = 'Enable at least one band or set a preamp value before saving.';
     errEl.style.display = 'block';
     return;
   }
@@ -12069,9 +12086,10 @@ async function confirmCustomPeqSaveProfile() {
     const created = await _saveCustomProfileToIem(iemId, name);
     _peqWorkspaceSelectedIemId = iemId;
     _peqWorkspaceSelectedPeqId = created?.id || _WORKSPACE_NEW_PEQ_ID;
+    _peqWorkspaceEditContext = created?.id ? { iemId, peqId: created.id, peqName: name } : null;
     await _loadPeqWorkspaceContext();
     _refreshPeqWorkspacePeqOptions();
-    toast(`Saved "${name}" to selected IEM.`);
+    toast(iemId ? `Saved "${name}" to selected IEM.` : `Saved "${name}".`);
     nameEl.value = '';
     _snapshotPeqWorkspace();
     _renderCustomPeqSavePanel(false);

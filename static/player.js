@@ -955,13 +955,18 @@ const Player = (function () {
   }
 
   async function _loadAndApplyPeq(iemId, profileId) {
-    if (!iemId || !profileId) {
+    if (!profileId) {
       _buildPeqChain(null);
       return;
     }
     try {
-      const iem = await fetch(`/api/iems/${iemId}`).then(r => r.json());
-      const profile = (iem.peq_profiles || []).find(p => p.id === profileId);
+      let profile = null;
+      if (iemId) {
+        const iem = await fetch(`/api/iems/${iemId}`).then(r => r.json());
+        profile = (iem.peq_profiles || []).find(p => p.id === profileId);
+      } else {
+        profile = await fetch(`/api/peq/profiles/${profileId}`).then(r => r.json());
+      }
       _buildPeqChain(profile || null);
     } catch (e) {
       console.warn('Player: PEQ load failed', e);
@@ -1875,7 +1880,15 @@ const Player = (function () {
     const base = `<option value="">— None —</option><option value="${_CREATE_PEQ_ID}">Create PEQ</option>`;
     row.style.display = '';
     if (!iemId) {
-      sel.innerHTML = base;
+      try {
+        const profiles = await fetch('/api/peq/profiles').then(r => r.json());
+        sel.innerHTML = base +
+          (profiles || []).map(p =>
+            `<option value="${p.id}"${p.id === activeProfileId ? ' selected' : ''}>${_esc(p.name)}</option>`
+          ).join('');
+      } catch (_) {
+        sel.innerHTML = base;
+      }
       _updatePeqWorkspaceCta();
       return;
     }
@@ -1932,6 +1945,8 @@ const Player = (function () {
     if (typeof App !== 'undefined' && typeof App.openPeqEditor === 'function') {
       if (iemId && profileId && profileId !== _CREATE_PEQ_ID) {
         App.openPeqEditor({ mode: 'edit_profile', iemId, peqId: profileId });
+      } else if (!iemId && profileId && profileId !== _CREATE_PEQ_ID) {
+        App.openPeqEditor({ mode: 'edit_global', peqId: profileId });
       } else {
         App.openPeqEditor({ mode: 'create', iemId });
       }

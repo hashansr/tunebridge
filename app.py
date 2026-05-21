@@ -10413,6 +10413,23 @@ def load_iems():
 def save_iems(iems):
     _db.db_save_iems(iems)
 
+GLOBAL_PEQ_FILE = DATA_DIR / 'peq_profiles.json'
+
+def load_global_peq_profiles():
+    try:
+        with GLOBAL_PEQ_FILE.open('r', encoding='utf-8') as f:
+            data = json.load(f)
+        profiles = data.get('profiles', data if isinstance(data, list) else [])
+        return profiles if isinstance(profiles, list) else []
+    except Exception:
+        return []
+
+
+def save_global_peq_profiles(profiles):
+    GLOBAL_PEQ_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with GLOBAL_PEQ_FILE.open('w', encoding='utf-8') as f:
+        json.dump({'profiles': profiles}, f, indent=2)
+
 
 def load_baselines():
     return _db.db_load_baselines()
@@ -11079,6 +11096,73 @@ def peq_graph_custom_without_iem():
                 'data': _shift(m, offset),
             })
     return jsonify({'curves': curves})
+
+
+@app.route('/api/peq/profiles', methods=['GET'])
+def list_global_peq_profiles():
+    return jsonify([{k: v for k, v in p.items() if k != 'raw_txt'} for p in load_global_peq_profiles()])
+
+
+@app.route('/api/peq/profiles/<peq_id>', methods=['GET'])
+def get_global_peq_profile(peq_id):
+    profile = next((p for p in load_global_peq_profiles() if p.get('id') == peq_id), None)
+    if not profile:
+        return jsonify({'error': 'PEQ profile not found'}), 404
+    return jsonify(profile)
+
+
+@app.route('/api/peq/profiles', methods=['POST'])
+def add_global_peq_profile():
+    if 'file' in request.files:
+        f = request.files['file']
+        text = f.read().decode('utf-8', errors='replace')
+        name = request.form.get('name') or Path(f.filename).stem
+    else:
+        body = request.json or {}
+        text = body.get('content', '')
+        name = body.get('name', 'PEQ Profile')
+
+    if not text.strip():
+        return jsonify({'error': 'No content'}), 400
+    parsed = parse_peq_txt(text)
+    profile = {
+        'id': str(uuid.uuid4()),
+        'name': name,
+        'preamp_db': parsed['preamp_db'],
+        'filters': parsed['filters'],
+        'raw_txt': text,
+    }
+    profiles = load_global_peq_profiles()
+    profiles.append(profile)
+    save_global_peq_profiles(profiles)
+    return jsonify({k: v for k, v in profile.items() if k != 'raw_txt'}), 201
+
+
+@app.route('/api/peq/profiles/<peq_id>', methods=['PUT'])
+def update_global_peq_profile(peq_id):
+    profiles = load_global_peq_profiles()
+    existing = next((p for p in profiles if p.get('id') == peq_id), None)
+    if not existing:
+        return jsonify({'error': 'PEQ profile not found'}), 404
+
+    if 'file' in request.files:
+        f = request.files['file']
+        text = f.read().decode('utf-8', errors='replace')
+        name = request.form.get('name') or Path(f.filename).stem
+    else:
+        body = request.json or {}
+        text = body.get('content', '')
+        name = body.get('name', existing.get('name', 'PEQ Profile'))
+
+    if not text.strip():
+        return jsonify({'error': 'No content'}), 400
+    parsed = parse_peq_txt(text)
+    existing['name'] = name
+    existing['preamp_db'] = parsed['preamp_db']
+    existing['filters'] = parsed['filters']
+    existing['raw_txt'] = text
+    save_global_peq_profiles(profiles)
+    return jsonify({k: v for k, v in existing.items() if k != 'raw_txt'})
 
 
 @app.route('/api/iems/<iid>/peq', methods=['POST'])
