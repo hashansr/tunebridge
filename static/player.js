@@ -1720,10 +1720,10 @@ const Player = (function () {
       ps.isPlaying = false;
       _updatePlayBtn();
       _consecutiveErrors = 0;
-      _toast('Playback stopped — music files may be inaccessible. Check your music folder in Settings.', 5000);
+      _toast('Playback stopped. Music files may be inaccessible. Check Settings.', 'error');
       return;
     }
-    _toast('Playback error — skipping track');
+    _toast('Playback error. Skipping track.');
     if (ps.queue.length > 1) setTimeout(next, 800);
     else { ps.isPlaying = false; _updatePlayBtn(); _consecutiveErrors = 0; }
   }
@@ -2367,7 +2367,7 @@ const Player = (function () {
     let next = Math.max(0, Math.min(12, parseInt(value, 10)));
     if (_mpvAvailable && _exclusiveMode && next > 0) {
       next = 0;
-      _toast('Crossfade is unavailable while bit-perfect output is enabled.');
+      _toast('Crossfade blocked by bit-perfect output.', 'warn');
     }
     ps.crossfadeDuration = next;
     try { localStorage.setItem('tb_xfade', ps.crossfadeDuration); } catch (_) {}

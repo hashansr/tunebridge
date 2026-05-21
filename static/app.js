@@ -2320,7 +2320,7 @@ async function loadTracks(artist = null, album = null, displayArtist = '') {
   try {
     tracks = await api('/library/tracks?' + q.join('&'));
   } catch (e) {
-    toast('Could not load tracks — check your music folder in Settings');
+    toast('Could not load tracks. Check your library folder in Settings.');
     return;
   }
   state.tracks = tracks;
@@ -4533,7 +4533,7 @@ function mlGenAddReference(trackId) {
   if (!trackId) return;
   if (_mlGenSeedTrackIds.includes(trackId)) return;
   if (_mlGenSeedTrackIds.length >= _ML_MAX_REF_TRACKS) {
-    toast(`You can add up to ${_ML_MAX_REF_TRACKS} reference songs.`);
+    toast(`You can add up to ${_ML_MAX_REF_TRACKS} reference songs.`, 'warn');
     return;
   }
   _mlGenSeedTrackIds.push(trackId);
@@ -4609,7 +4609,7 @@ function mlRefBrowserToggle(trackId, checked) {
   if (checked) {
     if (_mlRefDraftIds.includes(trackId)) return;
     if (_mlRefDraftIds.length >= _ML_MAX_REF_TRACKS) {
-      toast(`You can add up to ${_ML_MAX_REF_TRACKS} reference songs.`);
+      toast(`You can add up to ${_ML_MAX_REF_TRACKS} reference songs.`, 'warn');
       _renderMlRefBrowserResults();
       return;
     }
@@ -4932,7 +4932,7 @@ async function runMlPlaylistPreview({ regenerate = false } = {}) {
     const payload = _currentMlPayload();
     if (regenerate) payload.regenerate = true;
     if (payload.mode === 'seed' && !payload.seed_track_ids.length) {
-      toast('Works best when you pick some reference tracks first');
+      toast('Add reference tracks for better results.', 'warn');
     }
     const res = await api('/playlists/generate/preview', { method: 'POST', body: payload });
     _mlGenPreviewTracks = Array.isArray(res.tracks) ? res.tracks : [];
@@ -5073,7 +5073,7 @@ async function exportToDeviceDap(did) {
     const res = await api(`/daps/${did}/export/${state.playlist.id}`, { method: 'POST' });
     const missingCount = Number(res?.missing_on_device_count || 0);
     if (missingCount > 0) {
-      toast(`Playlist synced, but ${missingCount} track${missingCount === 1 ? '' : 's'} are missing on device. Run Sync Music to copy files.`);
+      toast(`Synced. ${missingCount} track${missingCount === 1 ? '' : 's'} missing on device. Use Sync Music to copy.`, 'warn');
     } else {
       toast('Exported to device');
     }
@@ -7434,7 +7434,7 @@ async function confirmImport() {
   closeImportModal(true);
   await loadPlaylists();
   await openPlaylist(pl.id);
-  toast(`Imported "${name}" — ${totalAdded} track${totalAdded !== 1 ? 's' : ''}`);
+  toast(`Imported "${name}" (${totalAdded} track${totalAdded !== 1 ? 's' : ''})`);
 }
 
 /* ── Import mapping helpers ──────────────────────────────────────────── */
@@ -9727,7 +9727,7 @@ async function _pollSyncCheckCompletion(targetIds, onDone) {
     const timeoutMs = 120000;
     const tick = async () => {
       if (Date.now() - startedAt > timeoutMs) {
-        toast('Sync status check timed out. Try again.');
+        toast('Sync check timed out. Try again.', 'error');
         await Promise.resolve(typeof onDone === 'function' ? onDone() : null);
         resolve();
         return;
@@ -9949,7 +9949,7 @@ async function dapExportAllPlaylists(dapId, btn) {
     });
     const exported = Number(res?.exported_count || 0);
     const failed = Number(res?.failed_count || 0);
-    toast(`Playlists synced: ${exported}${failed ? `, failed: ${failed}` : ''}`);
+    toast(`Playlists synced: ${exported}${failed ? `, failed: ${failed}` : ''}`, 'success');
     await showDapDetail(dapId);
     await loadDapsView();
   } catch (e) {
@@ -9975,7 +9975,7 @@ async function ejectDap(dapId, name) {
     const r = await fetch(`/api/daps/${dapId}/eject`, { method: 'POST' });
     const d = await r.json();
     if (r.ok) {
-      toast(`${name} ejected — safe to remove.`);
+      toast(`${name} ejected. Safe to remove.`, 'success');
       await loadDapsView();
       if (state.view === 'dap-detail') await showDapDetail(dapId);
     } else {
@@ -11672,14 +11672,14 @@ async function openPeqEditor(opts = {}) {
         _peqWorkspaceSelectedIemId = opts.iemId;
         _peqWorkspaceSelectedPeqId = opts.peqId;
         if ((profile.filters || []).length > 10) {
-          toast('Only the first 10 filters are editable in Custom PEQ workspace.');
+          toast('Only 10 filters are editable in the PEQ workspace.');
         }
       } else {
         _customPeqEditorState = _loadCustomPeqState();
       }
     } catch (_) {
       _customPeqEditorState = _loadCustomPeqState();
-      toast('Could not load selected PEQ. Opening Custom PEQ workspace with current state.');
+      toast('Could not load selected PEQ. Opening PEQ workspace.');
     }
   } else if (opts.mode === 'edit_global' && opts.peqId) {
     try {
@@ -11691,7 +11691,7 @@ async function openPeqEditor(opts = {}) {
       _peqWorkspaceSelectedPeqId = opts.peqId;
     } catch (_) {
       _customPeqEditorState = _loadCustomPeqState();
-      toast('Could not load selected PEQ. Opening Custom PEQ workspace with current state.');
+      toast('Could not load selected PEQ. Opening PEQ workspace.');
     }
   } else if (opts.mode === 'create') {
     _customPeqEditorState = _defaultCustomPeqState();
@@ -13282,7 +13282,7 @@ async function importBackup(input) {
     const res = await fetch('/api/backup/import', { method: 'POST', body: fd });
     const data = await res.json();
     if (data.ok) {
-      toast('Backup restored successfully — reloading…');
+      toast('Backup restored. Reloading.', 'success');
       setTimeout(() => location.reload(), 1500);
     } else {
       toast('Restore failed. The file may be corrupt.');
@@ -13567,7 +13567,7 @@ async function setExclusiveMode(enabled) {
       );
     }
 
-    toast(data.exclusive_mode ? 'Exclusive mode on — bit-perfect output active' : 'Exclusive mode off');
+    toast(data.exclusive_mode ? 'Exclusive mode on' : 'Exclusive mode off');
   } catch (e) {
     const toggle = document.getElementById('exclusive-mode-toggle');
     if (toggle) _setSettingsToggleState('exclusive-mode-toggle', 'exclusive-mode-state', toggle.checked, !toggle.disabled);
@@ -13601,7 +13601,7 @@ async function setAudioDevice(device) {
       ? Array.from(sel.options).find(opt => opt.value === appliedDevice)
       : null;
     if (data.requested_device && data.requested_device !== appliedDevice) {
-      toast('Requested output unavailable. Using: ' + (label ? label.textContent : appliedDevice));
+      toast('Requested output unavailable. Using: ' + (label ? label.textContent : appliedDevice), 'warn');
     } else {
       toast('Audio output: ' + (label ? label.textContent : appliedDevice));
     }
@@ -13625,7 +13625,7 @@ async function installMpv() {
       throw err;
     }
     await loadSettings();
-    toast('mpv runtime ready. Bit-perfect output is now available.');
+    toast('mpv ready. Bit-perfect output available.');
   } catch (e) {
     let msg = e.message;
     try {
@@ -13634,7 +13634,7 @@ async function installMpv() {
         msg = `${msg} (python-mpv is installed, but libmpv is still missing)`;
       }
     } catch (_) {}
-    toast('mpv install failed. Restart the app and try again.');
+    toast('mpv install failed. Restart to retry.');
     if (btn) {
       btn.disabled = false;
       btn.textContent = 'Install mpv';
@@ -13652,9 +13652,9 @@ async function retryMpvDetection() {
     const cap = await fetch('/api/player/capabilities').then(r => r.json());
     await loadSettings();
     if (cap && cap.mpv_available) {
-      toast(`mpv detected${cap.mpv_version ? ' (' + cap.mpv_version + ')' : ''}.`);
+      toast('mpv ready. Bit-perfect output available.');
     } else {
-      toast('mpv still unavailable. Use Install mpv or restart app after installation.');
+      toast('mpv unavailable. Install mpv or restart.', 'warn');
     }
   } catch (e) {
     toast('mpv detection failed: ' + e.message);
@@ -14177,9 +14177,9 @@ async function addBaseline() {
   const btn    = document.getElementById('baseline-add-btn');
   const name = nameEl.value.trim();
   const url  = urlEl.value.trim();
-  if (!name || !url) { toast('Enter a name and a squig.link URL'); return; }
+  if (!name || !url) { toast('Name and URL required.'); return; }
   if (url && !url.match(/^https?:\/\/(?:[^./]+\.)?squig\.link\//i)) {
-    toast('That doesn\'t look like a squig.link URL');
+    toast('Invalid squig.link URL.');
     return;
   }
   btn.disabled = true;
@@ -14193,7 +14193,7 @@ async function addBaseline() {
     // Cycle to next colour for convenience
     const nextIdx = (BASELINE_COLORS.indexOf(_selectedBaselineColor) + 1) % BASELINE_COLORS.length;
     selectBaselineColor(BASELINE_COLORS[nextIdx]);
-    toast(`Added baseline: ${bl.name}`);
+    toast(`Baseline "${bl.name}" added.`, 'success');
   } catch (e) {
     toast('Error: ' + (e.message || 'Could not fetch measurement'));
   } finally {
@@ -14510,9 +14510,9 @@ async function srSave() {
     _srDirty = false;
     srClose(true);
     await loadPlaylists();
-    toast(`Smart Rules playlist "${res.name}" created (${res.track_count} tracks)`);
+    toast(`Smart Rules playlist "${res.name}" created (${res.track_count} tracks)`, 'success');
     if (res.unanalysed_count > 0) {
-      toast(`${res.unanalysed_count} tracks excluded — run Analyse Library to include them`, 'warn');
+      toast(`${res.unanalysed_count} tracks excluded. Run Analyse Library first.`, 'warn');
     }
     await openPlaylist(res.id);
   } catch (e) {
@@ -14896,7 +14896,7 @@ async function refreshHistoryView() {
     }
     _playStatsLoaded = false;
     await loadHistoryView();
-    toast('History refreshed');
+    toast('History updated');
   } catch (_) {
     await loadHistoryView();
   } finally {
@@ -14994,7 +14994,7 @@ async function refreshSmartPlaylist(pid) {
   try {
     const res = await api(`/playlists/${pid}/smart/refresh`, { method: 'POST' });
     if (res.unanalysed_count > 0) {
-      toast(`${res.unanalysed_count} tracks excluded — run Analyse Library to include them`, 'warn');
+      toast(`${res.unanalysed_count} tracks excluded. Run Analyse Library first.`, 'warn');
     }
     return res.tracks || [];
   } catch (e) {
@@ -17288,15 +17288,15 @@ async function saveMissingTagRow(trackId) {
     if (v) payload[k] = v;
   });
   if (!Object.keys(payload).length) {
-    toast('Add at least one value for this row');
+    toast('Add at least one value.');
     return;
   }
   if (!_validateTrackNum(payload.track_number || '')) {
-    toast('Track # must be a number or N/M format');
+    toast('Invalid track number. Use N or N/M format.');
     return;
   }
   if (!_validateYear(payload.year || '')) {
-    toast('Year must be a 4-digit number');
+    toast('Invalid year. Must be 4 digits.');
     return;
   }
   try {
@@ -19946,7 +19946,7 @@ async function tagReplayGain() {
       return;
     }
     if (resp.error) {
-      toast('RG tagger: ' + resp.error);
+      toast('RG tagger: ' + resp.error, 'error');
       if (btn) btn.disabled = false;
       return;
     }

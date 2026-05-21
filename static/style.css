@@ -2934,6 +2934,10 @@ tbody tr:hover .remove-btn { opacity: 1; }
   display: block;
   background: #f5a742;
 }
+.toast-error::before {
+  display: block;
+  background: #e05c5c;
+}
 @keyframes toast-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: 0.35; transform: scale(0.75); }
