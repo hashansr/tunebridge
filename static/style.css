@@ -14670,6 +14670,9 @@ body.is-col-resizing {
 #home-because-section .home-rail {
   padding-bottom: 48px;
 }
+#home-because-section .home-rail.is-empty {
+  padding-bottom: 8px;
+}
 .home-rail-shell.can-scroll-right .home-rail {
   /* Fade only when more cards exist off the right edge. */
   -webkit-mask-image: linear-gradient(to right, black 0%, black calc(100% - 160px), transparent 100%);
@@ -14677,6 +14680,12 @@ body.is-col-resizing {
 }
 .home-rail::-webkit-scrollbar {
   display: none;
+}
+
+.home-rail.is-empty {
+  display: block;
+  overflow: visible;
+  padding: 0 0 8px;
 }
 
 .home-rail-shell {
@@ -14749,7 +14758,14 @@ body.is-col-resizing {
 .home-rail-empty {
   color: var(--text-muted);
   font-size: 13px;
-  padding: 4px 0 8px;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 18px 20px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(54,54,58,0.58) 0%, rgba(30,30,33,0.64) 100%);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
 /* Rail cards */
@@ -15036,15 +15052,16 @@ body.is-col-resizing {
 }
 
 .home-data-health {
-  margin: -2px 0 2px;
-  padding: 12px 14px;
-  border-radius: 10px;
+  margin: 0 0 24px;
+  padding: 14px 18px;
+  border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
   color: rgba(236, 237, 243, 0.9);
   background: rgba(62, 74, 96, 0.28);
   border: 1px solid rgba(125, 148, 190, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
 }
 .home-data-health.warn {
   background: rgba(127, 61, 71, 0.32);
@@ -21966,10 +21983,19 @@ body.is-col-resizing {
 
 /* Empty state for stats when no history */
 .ls-empty {
-  padding: 28px 20px;
+  min-height: 112px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   color: var(--text-muted);
   font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.ls-empty--warn {
+  color: rgba(255, 211, 218, 0.95);
 }
 
 /* Responsive: collapse to 1-col feature cards on narrow views */

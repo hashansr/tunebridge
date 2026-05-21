@@ -5837,10 +5837,12 @@ function _renderHomeRailSection(sectionId, railId, items, emptyMsg) {
   if (!rail) return false;
   _homeSectionVisible(sectionId, true);
   if (!Array.isArray(items) || !items.length) {
+    rail.classList.add('is-empty');
     rail.innerHTML = `<div class="home-rail-empty">${esc(emptyMsg)}</div>`;
     _homeBindRailUX(railId);
     return false;
   }
+  rail.classList.remove('is-empty');
   rail.innerHTML = items.map(_homeRailCardHtml).join('');
   _homeBindRailUX(railId);
   return true;
@@ -5928,10 +5930,14 @@ function _renderHomeTopPicks(items) {
   const rail = document.getElementById('home-because');
   if (!rail) return false;
   if (!Array.isArray(items) || !items.length) {
-    _homeSectionVisible('home-because-section', false);
+    _homeSectionVisible('home-because-section', true);
+    rail.classList.add('is-empty');
+    rail.innerHTML = '<div class="home-rail-empty">Play a few songs to unlock personalised picks.</div>';
+    _homeBindRailUX('home-because');
     return false;
   }
   _homeSectionVisible('home-because-section', true);
+  rail.classList.remove('is-empty');
   rail.innerHTML = items.map(_homePickCardHtml).join('');
   _homeBindRailUX('home-because');
   return true;
@@ -5995,7 +6001,7 @@ function _renderHomeListeningStats(data) {
   // Empty state — no data at all
   const hasData = playsNum > 0 || minutesNum > 0;
   if (!hasData) {
-    el.innerHTML = `<div class="ls-empty">Start listening — your stats will appear here.</div>`;
+    el.innerHTML = `<div class="ls-empty ls-glass">Start listening - your stats will appear here.</div>`;
     _homeSectionVisible('home-stats-section', true);
     return;
   }
@@ -6343,7 +6349,7 @@ async function homeChangePeriod(period, skipChipUpdate) {
     _renderHomeListeningStats(stats);
   } catch (_) {
     const el = document.getElementById('home-stats-content');
-    if (el) { el.style.opacity = ''; el.innerHTML = '<div class="home-rail-empty">Could not load stats.</div>'; }
+    if (el) { el.style.opacity = ''; el.innerHTML = '<div class="ls-empty ls-glass ls-empty--warn">Could not load stats.</div>'; }
   }
   _homeStatsLoading = false;
 }
