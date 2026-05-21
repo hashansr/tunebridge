@@ -2,7 +2,7 @@
 # 🎵 TuneBridge — Updater
 # Pull the latest version: bash update.sh
 
-set -e
+set -euo pipefail
 
 BOLD='\033[1m'
 DIM='\033[2m'
@@ -74,6 +74,10 @@ GIT_MSG=$(echo "$GIT_OUT" | tail -1)
 echo -e "${GREEN}${GIT_MSG} ✅${NC}"
 
 # ── Update dependencies ───────────────────────────────────────────────────────
+if [ ! -d "venv" ]; then
+  echo -e "  ${RED}venv not found. Run ${BOLD}bash install.sh${NC}${RED} first.${NC}"
+  exit 1
+fi
 source venv/bin/activate
 _spin_start "Updating dependencies..."
 pip install -q --upgrade pip
@@ -102,3 +106,4 @@ echo ""
 echo -e "  Restart TuneBridge to apply changes:"
 echo -e "  ${BOLD}bash run.sh${NC}  ${DIM}(or: bash tunebridge.sh run)${NC}"
 echo ""
+deactivate 2>/dev/null || true

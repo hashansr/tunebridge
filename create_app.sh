@@ -7,7 +7,7 @@
 #
 # Run once after install: bash create_app.sh
 
-set -e
+set -euo pipefail
 
 BOLD='\033[1m'
 DIM='\033[2m'

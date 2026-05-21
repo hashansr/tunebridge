@@ -62,6 +62,8 @@ if [ -z "$BUILD_CHANNEL" ]; then
   echo ""
 fi
 
+T0=$(date +%s)
+
 # ── Git workflow helpers ──────────────────────────────────────────────────────
 _ORIGINAL_BRANCH=""
 _DID_STASH=0
@@ -199,11 +201,14 @@ fi
 
 # ── Design-system guardrail ──────────────────────────────────────────────────
 _phase "🎨 Modal Design Guardrail"
-if ! python3 "${PROJECT_DIR}/scripts/check_modal_design_system.py"; then
+if [ ! -f "${PROJECT_DIR}/scripts/check_modal_design_system.py" ]; then
+  _warn "Design-system guardrail script not found — skipping"
+elif ! python3 "${PROJECT_DIR}/scripts/check_modal_design_system.py"; then
   _err "Modal design-system guardrail failed. Fix violations before building."
   exit 1
+else
+  _ok "Modal design-system guardrail passed"
 fi
-_ok "Modal design-system guardrail passed"
 
 # ── Find Python 3.10+ ─────────────────────────────────────────────────────────
 _phase "🔍 Environment"
@@ -254,7 +259,7 @@ fi
 # ── Build venv + dependencies ─────────────────────────────────────────────────
 _phase "📦 Build Environment"
 
-T0=$(date +%s)
+_DEP_T0=$(date +%s)
 _spin_start "Creating isolated build environment..."
 [ -d "$BUILD_VENV" ] && rm -rf "$BUILD_VENV"
 "$BUILD_PYTHON" -m venv "$BUILD_VENV" 2>/dev/null
@@ -267,7 +272,7 @@ pip install --upgrade pip wheel setuptools --quiet 2>/dev/null
 pip install -r "${PROJECT_DIR}/requirements.txt" --quiet 2>/dev/null
 pip install pyinstaller --quiet 2>/dev/null
 _spin_stop
-DEP_ELAPSED=$(_elapsed "$T0")
+DEP_ELAPSED=$(_elapsed "$_DEP_T0")
 _ok "Dependencies installed  (${DEP_ELAPSED})"
 
 # ── Clean + prepare ───────────────────────────────────────────────────────────
@@ -301,11 +306,16 @@ PYI_ARGS=(
   --collect-submodules pyloudnorm
   --add-data "${PROJECT_DIR}/static:static"
   --add-data "${PROJECT_DIR}/version.json:."
+  --distpath "$DIST_DIR"
+  --workpath "${PROJECT_DIR}/build"
+  --specpath "${PROJECT_DIR}"
 )
 [ -f "$ICON_PATH" ] && PYI_ARGS+=(--icon "$ICON_PATH")
 if [ -d "${PROJECT_DIR}/data/features" ]; then
   PYI_ARGS+=(--add-data "${PROJECT_DIR}/data/features:data/features")
   _info "Bundling data/features/ for first-run migration"
+else
+  _warn "data/features/ not found — IEM Match analysis won't be available on first launch"
 fi
 
 # ── Run PyInstaller ───────────────────────────────────────────────────────────
@@ -471,6 +481,16 @@ print(mp)
   rm -f "$TMP_DMG"
   _spin_stop
 
+  printf "  🔍  Verifying DMG integrity... "
+  if hdiutil verify "$DMG_PATH" -quiet 2>/dev/null; then
+    echo -e "${GREEN}ok ✅${NC}"
+  else
+    echo -e "${RED}failed ❌${NC}"
+    _err "DMG integrity check failed — aborting publish."
+    rm -f "$DMG_PATH"
+    exit 1
+  fi
+
   DMG_SIZE="$(du -sh "$DMG_PATH" | awk '{print $1}')"
   _ok "DMG compressed — ${DMG_SIZE}"
   _info "${DMG_PATH}"
@@ -581,6 +601,8 @@ if [ "$BUILD_DMG" = "1" ]; then
     if GIT_LFS_SKIP_SMUDGE=1 git -C "$RELEASES_REPO" fetch origin --quiet 2>/dev/null; then
       if git -C "$RELEASES_REPO" rebase origin/main --quiet 2>/dev/null; then
         _sync_ok=1
+      else
+        git -C "$RELEASES_REPO" rebase --abort 2>/dev/null || true
       fi
     fi
     if [ "$_sync_ok" = "1" ]; then
