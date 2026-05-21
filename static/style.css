@@ -16980,23 +16980,6 @@ tr:hover .track-edit-btn:hover {
 
 .discover-page { display: flex; flex-direction: column; gap: 20px; }
 
-/* ── Back + header row ── */
-.discover-top-bar { display: flex; align-items: flex-start; gap: 14px; }
-
-.discover-back-btn {
-  flex-shrink: 0;
-  width: 34px; height: 34px;
-  display: grid; place-items: center;
-  border-radius: 50%;
-  background: rgba(28,27,27,0.55);
-  border: 1px solid rgba(65,71,85,0.32);
-  color: var(--text-muted);
-  cursor: pointer;
-  margin-top: 4px;
-  transition: background 0.15s, color 0.15s;
-}
-.discover-back-btn:hover { background: rgba(53,53,52,0.72); color: var(--text); }
-
 .discover-header {
   flex: 1; min-width: 0;
   display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
@@ -17228,7 +17211,6 @@ tr:hover .track-edit-btn:hover {
 @media (max-width: 1280px) { .coverage-album-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 1024px) { .coverage-album-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 720px) {
-  .discover-top-bar     { flex-direction: column; }
   .discover-header      { flex-direction: column; }
   .discover-filter-rail { flex-direction: column; align-items: flex-start; }
   .discover-actions     { flex-wrap: wrap; }
