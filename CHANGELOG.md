@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Insights > Unplayed Albums redesigned as "Discover" — 5-column album grid, cascading filter rail (Genre / Artist / Decade), Sort (Newest · Oldest · A–Z · Z–A · Release year · Random), Save to playlist / Play all / Surprise me actions, procedural gradient artwork fallback, and New badge for recently added albums
 
 ## v0.369 · 2026-05-21
 
