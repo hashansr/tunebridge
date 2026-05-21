@@ -8343,9 +8343,17 @@ function _swBuildSongHierarchy(items, sel) {
   return sortedArtists.map(artist => {
     const artistState = _swSelectionState(artist.items, sel);
     const albums = Array.from(artist.albums.values()).sort((a, b) => a.label.localeCompare(b.label));
+    const artistExpanded = _swIsTreeExpanded('toDevice', 'artist', artist.key);
     return `
-      <div class="sw-tree-artist">
+      <div class="sw-tree-artist${artistExpanded ? ' sw-tree-artist--expanded' : ''}">
         <div class="sw-tree-row sw-tree-row--artist${artistState.selected ? '' : ' sw-tree-row--deselected'}">
+          <button class="sw-tree-expand" type="button"
+            data-gid="toDevice" data-level="artist" data-key="${esc(artist.key)}"
+            onclick="event.stopPropagation();App.swToggleTreeExpandEl(this)"
+            aria-label="${artistExpanded ? 'Collapse' : 'Expand'} ${esc(artist.label)}"
+            aria-expanded="${artistExpanded ? 'true' : 'false'}">
+            <span class="accordion-state-icon" aria-hidden="true"></span>
+          </button>
           <input type="checkbox" class="sw-check sw-tree-check"
             data-gid="toDevice" data-level="artist" data-key="${esc(artist.key)}"
             ${artistState.all ? 'checked' : ''} data-indeterminate="${artistState.some && !artistState.all}"
@@ -8356,11 +8364,20 @@ function _swBuildSongHierarchy(items, sel) {
           </div>
           <span class="sw-group-sel-pill">${artistState.count} selected</span>
         </div>
+        <div class="sw-tree-albums">
         ${albums.map(album => {
           const albumState = _swSelectionState(album.items, sel);
+          const albumExpanded = _swIsTreeExpanded('toDevice', 'album', album.key);
           return `
-        <div class="sw-tree-album">
+        <div class="sw-tree-album${albumExpanded ? ' sw-tree-album--expanded' : ''}">
           <div class="sw-tree-row sw-tree-row--album${albumState.selected ? '' : ' sw-tree-row--deselected'}">
+            <button class="sw-tree-expand" type="button"
+              data-gid="toDevice" data-level="album" data-key="${esc(album.key)}"
+              onclick="event.stopPropagation();App.swToggleTreeExpandEl(this)"
+              aria-label="${albumExpanded ? 'Collapse' : 'Expand'} ${esc(album.label)}"
+              aria-expanded="${albumExpanded ? 'true' : 'false'}">
+              <span class="accordion-state-icon" aria-hidden="true"></span>
+            </button>
             <input type="checkbox" class="sw-check sw-tree-check"
               data-gid="toDevice" data-level="album" data-key="${esc(album.key)}"
               ${albumState.all ? 'checked' : ''} data-indeterminate="${albumState.some && !albumState.all}"
@@ -8392,6 +8409,7 @@ function _swBuildSongHierarchy(items, sel) {
           </div>
         </div>`;
         }).join('')}
+        </div>
       </div>`;
   }).join('');
 }
@@ -8415,6 +8433,21 @@ function _swItemsForTreeNode(gid, level, key) {
     return items.filter(item => `${keyOf(item.artist)}::${keyOf(item.album)}` === key);
   }
   return [];
+}
+
+function _swTreeExpandKey(gid, level, key) {
+  return `${gid}:${level}:${key}`;
+}
+
+function _swIsTreeExpanded(gid, level, key) {
+  return !!_sw.expanded?.[_swTreeExpandKey(gid, level, key)];
+}
+
+function swToggleTreeExpand(gid, level, key) {
+  if (!_sw.expanded) _sw.expanded = {};
+  const expandKey = _swTreeExpandKey(gid, level, key);
+  _sw.expanded[expandKey] = !_sw.expanded[expandKey];
+  _swRenderReview();
 }
 
 function swToggleTreeNode(gid, level, key, toState) {
@@ -8513,6 +8546,9 @@ function swToggleItemEl(el) {
 }
 function swToggleTreeNodeEl(el) {
   swToggleTreeNode(el.dataset.gid, el.dataset.level, el.dataset.key, el.checked);
+}
+function swToggleTreeExpandEl(el) {
+  swToggleTreeExpand(el.dataset.gid, el.dataset.level, el.dataset.key);
 }
 function swSetItemActionEl(el) {
   swSetItemAction(el.dataset.id, el.dataset.action);
@@ -15630,6 +15666,8 @@ const App = {
   swReviewPage,
   swSetItemAction,
   swToggleItemEl,
+  swToggleTreeExpand,
+  swToggleTreeExpandEl,
   swToggleTreeNode,
   swToggleTreeNodeEl,
   swSetItemActionEl,
