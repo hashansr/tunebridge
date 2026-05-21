@@ -10554,7 +10554,7 @@ def _biquad_gain_db(f, ftype, f0, gain_db, Q):
     return 20 * math.log10(mag) if mag > 0 else -120.0
 
 
-def _apply_peq(measurement, peq_profile):
+def _apply_peq(measurement, peq_profile, normalize=True):
     """Return measurement with PEQ filters applied."""
     if not measurement or not peq_profile:
         return measurement
@@ -10915,17 +10915,18 @@ def iem_graph_custom(iid):
             'q': max(0.1, min(10.0, q)),
         })
     custom_profile = {'name': 'Custom EQ', 'preamp_db': preamp_db, 'filters': filters}
-    if filters:
+    has_custom_peq = bool(filters) or abs(preamp_db) > 0.0001
+    if has_custom_peq:
         if mL:
             curves.append({'id': f"{iem['id']}-custom-L",
                            'label': f"{name} + Custom EQ (L)",
                            'color': '#53e16f', 'dash': False,
-                           'data': _apply_peq(mL, custom_profile)})
+                           'data': _apply_peq(_shift(mL, offset), custom_profile, normalize=False)})
         if mR:
             curves.append({'id': f"{iem['id']}-custom-R",
                            'label': f"{name} + Custom EQ (R)",
                            'color': '#53e16f', 'dash': False,
-                           'data': _apply_peq(mR, custom_profile)})
+                           'data': _apply_peq(_shift(mR, offset), custom_profile, normalize=False)})
 
     if baseline_ids:
         for bl in load_baselines():
@@ -11001,7 +11002,7 @@ def peq_graph_custom_without_iem():
         f = 20.0 * ((20000.0 / 20.0) ** (i / (n - 1)))
         points.append([round(f, 2), NORM_REF_DB])
     custom_profile = {'name': 'Custom PEQ', 'preamp_db': preamp_db, 'filters': filters}
-    custom_curve = _apply_peq(points, custom_profile) if filters else points
+    custom_curve = _apply_peq(points, custom_profile, normalize=False) if (filters or abs(preamp_db) > 0.0001) else points
 
     curves = [{
         'id': 'custom-peq-neutral',
@@ -12455,12 +12456,12 @@ def _library_character_label(salience):
     }.get(top, 'balanced')
 
 
-def _apply_peq(measurement, peq_profile):
+def _apply_peq(measurement, peq_profile, normalize=True):
     """
     Apply a PEQ profile to a [[freq, spl], ...] measurement.
     Uses biquad filter math (Audio EQ Cookbook coefficients) evaluated at each
     measurement frequency via z = e^(j·2π·f/Fs) with a high virtual Fs for
-    near-analog accuracy.  Re-normalises to 75 dB at 1 kHz afterwards so the
+    near-analog accuracy. Re-normalises to 75 dB at 1 kHz by default so the
     returned curve stays on the same reference as the base measurement.
     """
     import numpy as np
@@ -12528,9 +12529,10 @@ def _apply_peq(measurement, peq_profile):
         den   = a0 + a1 * zin + a2 * zin**2
         spls += 20 * np.log10(np.abs(num / den) + 1e-12)
 
-    # Re-normalise to 75 dB at 1 kHz (same convention as base measurement)
-    ref_idx = int(np.argmin(np.abs(freqs - 1000.0)))
-    spls   += 75.0 - spls[ref_idx]
+    if normalize:
+        # Re-normalise to 75 dB at 1 kHz (same convention as base measurement)
+        ref_idx = int(np.argmin(np.abs(freqs - 1000.0)))
+        spls   += 75.0 - spls[ref_idx]
 
     return [[float(freqs[i]), float(spls[i])] for i in range(len(freqs))]
 

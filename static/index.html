@@ -2600,9 +2600,6 @@
   <section id="peq-workspace" class="peq-workspace" style="display:none">
     <div class="peq-workspace-shell">
       <div class="peq-workspace-chrome">
-        <button class="peq-chrome-orb" type="button" onclick="App.closePeqEditor()" title="Back" aria-label="Back">
-          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 3L4.5 7l4 4"/></svg>
-        </button>
         <div class="peq-chrome-actions">
           <button class="peq-icon-btn" type="button" onclick="App.togglePeqMoreMenu(event)" title="More PEQ actions" aria-label="More PEQ actions">
             <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg>
@@ -2640,14 +2637,17 @@
         <div class="peq-workspace-field">
           <label class="peq-editor-col-label">Tune for</label>
           <select id="peq-workspace-iem-select" class="peq-select" onchange="App.onPeqWorkspaceIemChange(this.value)"></select>
+          <div id="peq-workspace-iem-custom" class="peq-custom-select" data-select-id="peq-workspace-iem-select"></div>
         </div>
         <div class="peq-workspace-field">
           <label class="peq-editor-col-label">PEQ profile</label>
           <select id="peq-workspace-peq-select" class="peq-select" onchange="App.onPeqWorkspacePeqChange(this.value)"></select>
+          <div id="peq-workspace-peq-custom" class="peq-custom-select" data-select-id="peq-workspace-peq-select"></div>
         </div>
         <div class="peq-workspace-field">
           <label class="peq-editor-col-label">Target</label>
           <select id="peq-workspace-target-select" class="peq-select" onchange="App.onPeqWorkspaceTargetChange(this.value)"></select>
+          <div id="peq-workspace-target-custom" class="peq-custom-select" data-select-id="peq-workspace-target-select"></div>
         </div>
       </div>
 
@@ -2661,7 +2661,7 @@
             <div id="peq-workspace-overlay-host" class="fr-overlay-host peq-graph-overlay-host" data-fr-overlay-host="1" data-fr-overlay-context="peq-workspace"></div>
             <button class="peq-toolbar-pill peq-toolbar-pill-disabled" type="button" disabled title="Smoothing control is visual-only for now">
               <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M2 11V7M6 11V3M10 11V5M12 11V8"/></svg>
-              Smoothing · Off
+              Smoothing · coming soon
             </button>
           </div>
         </div>
@@ -2697,10 +2697,12 @@
                   min="-12" max="6" step="0.1" value="0"
                   oninput="App.onPeqPreampChange(this.value, 'slider')" />
             <div class="peq-param-field peq-param-field-preamp">
+            <button type="button" class="peq-step-btn" onclick="App.stepPeqParam('preamp', null, -1)" aria-label="Decrease preamp">−</button>
             <input type="number" id="peq-preamp" class="peq-editor-num-input peq-preamp-input"
                   min="-12" max="6" step="0.1" value="0"
                   oninput="App.onPeqPreampChange(this.value, 'input')" />
             <span class="peq-editor-unit">dB</span>
+            <button type="button" class="peq-step-btn" onclick="App.stepPeqParam('preamp', null, 1)" aria-label="Increase preamp">+</button>
             </div>
           </div>
           </section>
@@ -2711,7 +2713,11 @@
                 <span>Filter bands</span>
                 <small id="peq-band-count-label">0 of 10 active</small>
               </div>
-              <button id="peq-add-band-btn" class="peq-add-band-btn" type="button" onclick="App.addPeqBand()">Add band</button>
+              <div class="peq-band-bulk-actions">
+                <button class="peq-add-band-btn" type="button" onclick="App.setAllPeqBands(true)">Turn all on</button>
+                <button class="peq-add-band-btn" type="button" onclick="App.setAllPeqBands(false)">Turn all off</button>
+                <button id="peq-add-band-btn" class="peq-add-band-btn" type="button" onclick="App.addPeqBand()">Add band</button>
+              </div>
             </div>
           <div class="peq-editor-table-wrap">
             <div class="peq-editor-band-header">

@@ -10860,6 +10860,85 @@ function _updatePeqWorkspaceSummary() {
   if (moreCopy) moreCopy.disabled = !_peqWorkspaceConnectedDaps.length;
 }
 
+function _peqCustomSelectConfig(selectId) {
+  return {
+    'peq-workspace-iem-select': {
+      hostId: 'peq-workspace-iem-custom',
+      onChange: value => onPeqWorkspaceIemChange(value),
+    },
+    'peq-workspace-peq-select': {
+      hostId: 'peq-workspace-peq-custom',
+      onChange: value => onPeqWorkspacePeqChange(value),
+    },
+    'peq-workspace-target-select': {
+      hostId: 'peq-workspace-target-custom',
+      onChange: value => onPeqWorkspaceTargetChange(value),
+    },
+  }[selectId] || null;
+}
+
+function _closePeqCustomSelects(exceptId = '') {
+  document.querySelectorAll('.peq-custom-select.open').forEach(host => {
+    if (host.id !== exceptId) host.classList.remove('open');
+  });
+}
+
+function _syncPeqCustomSelect(selectId) {
+  const cfg = _peqCustomSelectConfig(selectId);
+  const sel = document.getElementById(selectId);
+  const host = cfg ? document.getElementById(cfg.hostId) : null;
+  if (!cfg || !sel || !host) return;
+  const selected = sel.options[sel.selectedIndex] || sel.options[0];
+  const rows = Array.from(sel.options).map(opt => `
+    <button type="button"
+            class="peq-custom-select-option${opt.value === sel.value ? ' selected' : ''}"
+            data-value="${esc(opt.value)}"
+            onclick="App.choosePeqCustomSelect('${selectId}', this.dataset.value)">
+      <span>${opt.value === sel.value ? '✓' : ''}</span>${esc(opt.textContent || opt.label || opt.value)}
+    </button>`).join('');
+  host.innerHTML = `
+    <button type="button" class="peq-custom-select-button" onclick="App.togglePeqCustomSelect('${selectId}', event)">
+      <span>${esc(selected?.textContent || 'Select')}</span>
+      <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5 7 8.5l3-3"/></svg>
+    </button>
+    <div class="peq-custom-select-menu">${rows}</div>
+  `;
+}
+
+function _syncPeqCustomSelects() {
+  ['peq-workspace-iem-select', 'peq-workspace-peq-select', 'peq-workspace-target-select'].forEach(_syncPeqCustomSelect);
+}
+
+function togglePeqCustomSelect(selectId, event) {
+  if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+  const cfg = _peqCustomSelectConfig(selectId);
+  const host = cfg ? document.getElementById(cfg.hostId) : null;
+  if (!host) return;
+  const willOpen = !host.classList.contains('open');
+  _closePeqCustomSelects(host.id);
+  host.classList.toggle('open', willOpen);
+  if (willOpen) {
+    setTimeout(() => {
+      const close = e => {
+        if (host.contains(e.target)) return;
+        host.classList.remove('open');
+        document.removeEventListener('mousedown', close);
+      };
+      document.addEventListener('mousedown', close);
+    }, 0);
+  }
+}
+
+function choosePeqCustomSelect(selectId, value) {
+  const cfg = _peqCustomSelectConfig(selectId);
+  const sel = document.getElementById(selectId);
+  if (!cfg || !sel) return;
+  sel.value = value;
+  _closePeqCustomSelects();
+  cfg.onChange(value);
+  _syncPeqCustomSelect(selectId);
+}
+
 function _renderPeqWorkspaceLegend(datasets) {
   const el = document.getElementById('peq-editor-curve-legend');
   if (!el) return;
@@ -11067,6 +11146,7 @@ async function _loadPeqWorkspaceContext() {
       _peqWorkspaceSelectedTargetId = targetSel.value || '';
     }
     _refreshPeqWorkspaceCopyTargets(daps || []);
+    _syncPeqCustomSelects();
   } catch (_) {}
 }
 
@@ -11084,6 +11164,7 @@ function _refreshPeqWorkspacePeqOptions() {
     _peqWorkspaceSelectedPeqId = _WORKSPACE_NEW_PEQ_ID;
     peqSel.value = _WORKSPACE_NEW_PEQ_ID;
   }
+  _syncPeqCustomSelect('peq-workspace-peq-select');
 }
 
 function _refreshPeqWorkspaceCopyTargets(allDaps) {
@@ -11276,21 +11357,27 @@ function renderPeqEditorBands() {
           ${typeOptions}
         </select>
         <div class="peq-param-field">
+          <button type="button" class="peq-step-btn" onclick="event.stopPropagation();App.stepPeqParam('fc', ${i}, -1)" aria-label="Decrease band ${i + 1} frequency">−</button>
         <input type="number" class="peq-editor-num-input" value="${Math.round(band.fc)}"
                min="20" max="20000" step="${band.fc >= 1000 ? '10' : '1'}"
                oninput="App.onPeqBandFcChange(${i}, this.value)" onclick="event.stopPropagation()" />
           <span>Hz</span>
+          <button type="button" class="peq-step-btn" onclick="event.stopPropagation();App.stepPeqParam('fc', ${i}, 1)" aria-label="Increase band ${i + 1} frequency">+</button>
         </div>
         <div class="peq-param-field ${gainHidden ? 'peq-input-hidden' : ''}">
+          <button type="button" class="peq-step-btn" onclick="event.stopPropagation();App.stepPeqParam('gain', ${i}, -1)" aria-label="Decrease band ${i + 1} gain">−</button>
         <input type="number" class="peq-editor-num-input ${gainHidden ? 'peq-input-hidden' : ''}"
                value="${band.gain.toFixed(1)}" min="-24" max="24" step="0.1"
                oninput="App.onPeqBandGainChange(${i}, this.value)" onclick="event.stopPropagation()" />
           <span>dB</span>
+          <button type="button" class="peq-step-btn" onclick="event.stopPropagation();App.stepPeqParam('gain', ${i}, 1)" aria-label="Increase band ${i + 1} gain">+</button>
         </div>
         <div class="peq-param-field">
+          <button type="button" class="peq-step-btn" onclick="event.stopPropagation();App.stepPeqParam('q', ${i}, -1)" aria-label="Decrease band ${i + 1} Q">−</button>
         <input type="number" class="peq-editor-num-input" value="${band.q.toFixed(3)}"
                min="0.1" max="10" step="0.05"
                oninput="App.onPeqBandQChange(${i}, this.value)" onclick="event.stopPropagation()" />
+          <button type="button" class="peq-step-btn" onclick="event.stopPropagation();App.stepPeqParam('q', ${i}, 1)" aria-label="Increase band ${i + 1} Q">+</button>
         </div>
         <button class="peq-band-clear-btn" type="button" onclick="event.stopPropagation();App.clearPeqBand(${i})" title="Clear band ${i + 1}" aria-label="Clear band ${i + 1}">
           <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"/></svg>
@@ -11551,6 +11638,41 @@ function clearPeqBand(i) {
   _refreshPeqWorkspaceDirty();
 }
 
+function setAllPeqBands(enabled) {
+  const st = _loadCustomPeqState();
+  st.bands.forEach((band, i) => {
+    if (!band) st.bands[i] = { enabled: !!enabled, type: 'PK', fc: 1000, gain: 0, q: 1.0 };
+    else band.enabled = !!enabled;
+  });
+  st.enabled = true;
+  _saveCustomPeqState();
+  renderPeqEditorBands();
+  Player?.applyCustomPeq?.(st);
+  _schedulePeqWorkspaceGraphRefresh();
+  _refreshPeqWorkspaceDirty();
+}
+
+function stepPeqParam(kind, i, direction) {
+  const st = _loadCustomPeqState();
+  const dir = direction < 0 ? -1 : 1;
+  if (kind === 'preamp') {
+    const next = Math.max(-12, Math.min(6, (Number(st.preamp_db) || 0) + dir * 0.1));
+    onPeqPreampChange(next.toFixed(1), 'step');
+    return;
+  }
+  const band = st.bands[i];
+  if (!band) return;
+  if (kind === 'fc') {
+    const step = band.fc >= 1000 ? 10 : 1;
+    onPeqBandFcChange(i, Math.max(20, Math.min(20000, Math.round((Number(band.fc) || 1000) + dir * step))));
+  } else if (kind === 'gain') {
+    onPeqBandGainChange(i, Math.max(-24, Math.min(24, (Number(band.gain) || 0) + dir * 0.1)).toFixed(1));
+  } else if (kind === 'q') {
+    onPeqBandQChange(i, Math.max(0.1, Math.min(10, (Number(band.q) || 1) + dir * 0.05)).toFixed(2));
+  }
+  renderPeqEditorBands();
+}
+
 function togglePeqBand(i) {
   const st = _loadCustomPeqState();
   if (!st.bands[i]) return;
@@ -11640,6 +11762,7 @@ function onPeqWorkspaceIemChange(iemId) {
   _peqWorkspaceSelectedPeqId = _WORKSPACE_NEW_PEQ_ID;
   _refreshPeqWorkspacePeqOptions();
   onPeqWorkspacePeqChange(_peqWorkspaceSelectedPeqId);
+  _syncPeqCustomSelect('peq-workspace-iem-select');
   _updatePeqWorkspaceSummary();
   _schedulePeqWorkspaceGraphRefresh();
 }
@@ -11657,6 +11780,7 @@ function onPeqWorkspacePeqChange(peqId) {
     _snapshotPeqWorkspace();
     _updatePeqWorkspaceActionLabels();
     _updatePeqWorkspaceSummary();
+    _syncPeqCustomSelect('peq-workspace-peq-select');
     _schedulePeqWorkspaceGraphRefresh();
     return;
   }
@@ -11673,12 +11797,14 @@ function onPeqWorkspacePeqChange(peqId) {
   _snapshotPeqWorkspace();
   _updatePeqWorkspaceActionLabels();
   _updatePeqWorkspaceSummary();
+  _syncPeqCustomSelect('peq-workspace-peq-select');
   _schedulePeqWorkspaceGraphRefresh();
 }
 
 function onPeqWorkspaceTargetChange(targetId) {
   _peqWorkspaceSelectedTargetId = targetId || '';
   _updatePeqWorkspaceSummary();
+  _syncPeqCustomSelect('peq-workspace-target-select');
   _schedulePeqWorkspaceGraphRefresh();
 }
 
@@ -15957,8 +16083,12 @@ const App = {
   selectPeqBand,
   addPeqBand,
   clearPeqBand,
+  setAllPeqBands,
+  stepPeqParam,
   togglePeqBand,
   togglePeqMoreMenu,
+  togglePeqCustomSelect,
+  choosePeqCustomSelect,
   onPeqBandTypeChange,
   onPeqBandFcChange,
   onPeqBandGainChange,

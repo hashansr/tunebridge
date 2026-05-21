@@ -9792,7 +9792,7 @@ tbody tr:hover {
 .peq-workspace-chrome {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
 }
 
 .peq-chrome-orb {
@@ -9941,16 +9941,17 @@ tbody tr:hover {
 
 .peq-workspace-title-block .tb-page-title {
   margin: 0;
-  font-size: 38px;
+  font-size: 34px;
   font-weight: 800;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
   line-height: 1;
 }
 
 .peq-workspace-subtitle {
   margin-top: 9px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-base);
+  font-weight: 500;
 }
 
 .peq-workspace-context {
@@ -9978,7 +9979,14 @@ tbody tr:hover {
   color: var(--text-muted);
 }
 
-.peq-workspace .peq-select,
+.peq-workspace-context .peq-select {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+}
+
 .peq-band-type {
   height: 32px;
   color: var(--text);
@@ -9987,6 +9995,90 @@ tbody tr:hover {
   border-radius: 8px;
   padding: 0 12px 0 14px;
   font-size: 12.5px;
+}
+
+.peq-custom-select {
+  position: relative;
+}
+
+.peq-custom-select-button {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid rgba(65,71,85,0.32);
+  border-radius: 8px;
+  padding: 0 12px 0 14px;
+  font-size: 12.5px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.peq-custom-select-button:hover,
+.peq-custom-select.open .peq-custom-select-button {
+  border-color: rgba(173,198,255,0.34);
+  background: rgba(42,42,42,0.86);
+}
+
+.peq-custom-select-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peq-custom-select-menu {
+  position: absolute;
+  z-index: 70;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: none;
+  padding: 6px;
+  border: 1px solid rgba(65,71,85,0.38);
+  border-radius: 10px;
+  background: rgba(20,20,20,0.98);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+}
+
+.peq-custom-select.open .peq-custom-select-menu {
+  display: block;
+}
+
+.peq-custom-select-option {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  border: 0;
+  border-radius: 7px;
+  padding: 8px 9px;
+  color: var(--text-sub);
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.peq-custom-select-option:hover,
+.peq-custom-select-option.selected {
+  color: var(--text);
+  background: rgba(173,198,255,0.12);
+}
+
+.peq-custom-select-option span {
+  color: var(--accent);
+  font-weight: 800;
 }
 
 .peq-workspace-graph-panel {
@@ -10044,7 +10136,8 @@ tbody tr:hover {
 }
 
 .peq-toolbar-pill-disabled {
-  opacity: 0.62;
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
 .peq-editor-curve-wrap {
@@ -10101,6 +10194,14 @@ tbody tr:hover {
   font-size: 11px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+.peq-band-bulk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .peq-add-band-btn {
@@ -10164,6 +10265,13 @@ tbody tr:hover {
   border: 0;
   background: transparent;
   border-radius: 0;
+  -moz-appearance: textfield;
+}
+
+.peq-param-field input.peq-editor-num-input::-webkit-outer-spin-button,
+.peq-param-field input.peq-editor-num-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .peq-param-field span,
@@ -10175,7 +10283,24 @@ tbody tr:hover {
 }
 
 .peq-param-field-preamp {
-  width: 110px;
+  width: 156px;
+}
+
+.peq-step-btn {
+  width: 28px;
+  align-self: stretch;
+  border: 0;
+  background: rgba(255,255,255,0.045);
+  color: var(--text-sub);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.peq-step-btn:hover {
+  color: var(--text);
+  background: rgba(173,198,255,0.14);
 }
 
 .peq-preamp-input {
@@ -10215,6 +10340,7 @@ tbody tr:hover {
   border-bottom: 1px solid rgba(255,255,255,0.06);
   cursor: pointer;
   transition: background 0.12s, opacity 0.12s;
+  font-size: var(--text-base);
 }
 
 .peq-editor-band-row:last-child {
@@ -10289,6 +10415,7 @@ tbody tr:hover {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, monospace);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  color: var(--text);
 }
 
 .peq-band-clear-btn {
