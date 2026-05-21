@@ -18081,6 +18081,34 @@ thead th:hover .table-col-resizer::after {
   color: var(--text-primary);
 }
 
+/* Lyric Health */
+.lyric-health-result-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  font-size: var(--text-sm);
+}
+.lyric-health-result-row .health-dot { flex-shrink: 0; }
+.lyric-health-result-row > span { flex: 1; }
+.lyric-health-file-list {
+  max-height: 140px;
+  overflow-y: auto;
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+}
+.lyric-health-file {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  padding: 2px 0;
+  font-family: monospace;
+}
+
 /* Lyrics karaoke view */
 .lyrics-view {
   position: fixed;

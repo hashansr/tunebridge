@@ -4700,6 +4700,20 @@ lyrics_state = {
 }
 lyrics_state_lock = threading.Lock()
 
+_AUDIO_SCAN_EXTS = {
+    '.flac', '.mp3', '.m4a', '.aac', '.mp4', '.wav',
+    '.ogg', '.opus', '.wv', '.aiff', '.aif', '.ape', '.wma', '.alac',
+}
+
+_lyric_health_state = {
+    'status': 'idle',   # idle | scanning | ready | error
+    'total_lrc': 0,
+    'orphan_count': 0,
+    'orphans': [],      # relative paths from music_base
+    'message': '',
+}
+_lyric_health_lock = threading.Lock()
+
 
 def _reset_lyrics_state(mode, total):
     lyrics_state.update({
@@ -4867,6 +4881,120 @@ def api_lyrics_settings():
     settings['lyrics_service'] = service
     save_settings(settings)
     return jsonify({'ok': True})
+
+
+# ── Lyric Health ──────────────────────────────────────────────────────────────
+
+def _do_lyric_health_scan():
+    global _lyric_health_state
+    music_base = get_music_base()
+    with _lyric_health_lock:
+        _lyric_health_state.update({
+            'status': 'scanning', 'total_lrc': 0,
+            'orphan_count': 0, 'orphans': [], 'message': '',
+        })
+    orphans = []
+    total_lrc = 0
+    try:
+        for dirpath, dirnames, filenames in os.walk(music_base):
+            dirnames[:] = sorted(
+                d for d in dirnames
+                if not _should_skip_scan_dir(d) and not d.startswith('.')
+            )
+            audio_stems = {
+                Path(fn).stem.lower()
+                for fn in filenames
+                if not fn.startswith('.') and not fn.startswith('._')
+                and Path(fn).suffix.lower() in _AUDIO_SCAN_EXTS
+            }
+            for fn in filenames:
+                if fn.startswith('.') or fn.startswith('._'):
+                    continue
+                p = Path(fn)
+                if p.suffix.lower() != '.lrc':
+                    continue
+                total_lrc += 1
+                if p.stem.lower() not in audio_stems:
+                    rel = os.path.relpath(os.path.join(dirpath, fn), music_base)
+                    orphans.append(rel)
+        with _lyric_health_lock:
+            _lyric_health_state.update({
+                'status': 'ready',
+                'total_lrc': total_lrc,
+                'orphan_count': len(orphans),
+                'orphans': orphans,
+                'message': '',
+            })
+    except Exception as e:
+        with _lyric_health_lock:
+            _lyric_health_state.update({'status': 'error', 'message': str(e)})
+
+
+def _trash_files(abs_paths):
+    """Move files to macOS Trash via AppleScript. Returns (trashed_count, failed_list)."""
+    import subprocess as _sp
+    if not abs_paths:
+        return 0, []
+    posix_list = ', '.join(f'POSIX file "{p}"' for p in abs_paths)
+    script = f'tell application "Finder" to delete {{{posix_list}}}'
+    try:
+        result = _sp.run(['osascript', '-e', script], capture_output=True, timeout=60)
+        if result.returncode == 0:
+            return len(abs_paths), []
+    except Exception:
+        pass
+    # Fallback: one-by-one
+    trashed, failed = 0, []
+    for p in abs_paths:
+        try:
+            r = _sp.run(
+                ['osascript', '-e', f'tell application "Finder" to delete POSIX file "{p}"'],
+                capture_output=True, timeout=10,
+            )
+            if r.returncode == 0:
+                trashed += 1
+            else:
+                failed.append(p)
+        except Exception:
+            failed.append(p)
+    return trashed, failed
+
+
+@app.route('/api/lyrics/health/scan', methods=['POST'])
+def api_lyric_health_scan():
+    with _lyric_health_lock:
+        if _lyric_health_state.get('status') == 'scanning':
+            return jsonify({'error': 'Already scanning'}), 409
+    music_base = get_music_base()
+    if not music_base.exists():
+        return jsonify({'error': 'Music library path not found'}), 400
+    threading.Thread(target=_do_lyric_health_scan, daemon=True).start()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/lyrics/health/status')
+def api_lyric_health_status():
+    with _lyric_health_lock:
+        return jsonify(dict(_lyric_health_state))
+
+
+@app.route('/api/lyrics/health/trash', methods=['POST'])
+def api_lyric_health_trash():
+    with _lyric_health_lock:
+        status = _lyric_health_state.get('status')
+        orphans = list(_lyric_health_state.get('orphans', []))
+    if status != 'ready':
+        return jsonify({'error': 'No scan results available'}), 400
+    if not orphans:
+        return jsonify({'trashed': 0, 'failed': 0})
+    music_base = get_music_base()
+    abs_paths = [str(music_base / rel) for rel in orphans]
+    trashed, failed_abs = _trash_files(abs_paths)
+    failed_rels = [os.path.relpath(p, music_base) for p in failed_abs]
+    with _lyric_health_lock:
+        _lyric_health_state['orphans'] = failed_rels
+        _lyric_health_state['orphan_count'] = len(failed_rels)
+    return jsonify({'trashed': trashed, 'failed': len(failed_rels)})
 
 
 # ── ML Playlist Generation (v1) ───────────────────────────────────────────────

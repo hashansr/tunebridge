@@ -16042,6 +16042,77 @@ function _updateLyricsBulkBanner(s) {
   }
 }
 
+// ── Lyric Health ──────────────────────────────────────────────────────────────
+
+let _lyricHealthPollTimer = null;
+
+async function lyricHealthScan() {
+  const btn = document.getElementById('lyric-health-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Scanning…'; }
+  document.getElementById('lyric-health-result').style.display = 'none';
+  try {
+    await api('/lyrics/health/scan', { method: 'POST' });
+  } catch (e) {
+    toast('Lyric Health scan failed: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Scan for Orphans'; }
+    return;
+  }
+  _lyricHealthPollTimer = setInterval(_lyricHealthPoll, 800);
+}
+
+async function _lyricHealthPoll() {
+  let data;
+  try { data = await api('/lyrics/health/status'); } catch (_) { return; }
+  if (data.status === 'ready' || data.status === 'error') {
+    clearInterval(_lyricHealthPollTimer);
+    _lyricHealthPollTimer = null;
+    const btn = document.getElementById('lyric-health-btn');
+    if (btn) { btn.disabled = false; btn.textContent = 'Scan for Orphans'; }
+    _renderLyricHealthResult(data);
+  }
+}
+
+function _renderLyricHealthResult(data) {
+  const el = document.getElementById('lyric-health-result');
+  if (!el) return;
+  if (data.status === 'error') {
+    el.innerHTML = `<div class="lyric-health-result-row"><div class="health-dot health-dot-err"></div><span>Scan failed: ${data.message}</span></div>`;
+    el.style.display = '';
+    return;
+  }
+  const count = data.orphan_count || 0;
+  const total = data.total_lrc || 0;
+  if (count === 0) {
+    el.innerHTML = `<div class="lyric-health-result-row"><div class="health-dot health-dot-ok"></div><span>No orphaned .lrc files found (${total} lyric file${total !== 1 ? 's' : ''} checked)</span></div>`;
+  } else {
+    const shown = (data.orphans || []).slice(0, 20);
+    const fileRows = shown.map(p => `<div class="lyric-health-file">${p}</div>`).join('');
+    const more = count > 20 ? `<div class="lyric-health-file" style="color:var(--text-muted)">…and ${count - 20} more</div>` : '';
+    el.innerHTML = `<div class="lyric-health-result-row"><div class="health-dot health-dot-warn"></div><span>${count} orphaned .lrc file${count !== 1 ? 's' : ''} found (of ${total} total)</span><button class="btn-secondary btn-sm" onclick="App.lyricHealthTrash()">Move to Trash</button></div><div class="lyric-health-file-list">${fileRows}${more}</div>`;
+  }
+  el.style.display = '';
+}
+
+async function lyricHealthTrash() {
+  const confirmed = await _showConfirm({
+    title: 'Move to Trash',
+    message: 'Move all orphaned .lrc files to the macOS Trash?',
+    okText: 'Move to Trash',
+    danger: true,
+  });
+  if (!confirmed) return;
+  let data;
+  try {
+    data = await api('/lyrics/health/trash', { method: 'POST' });
+  } catch (e) {
+    toast('Failed to move files: ' + e.message);
+    return;
+  }
+  toast(`Moved ${data.trashed} file${data.trashed !== 1 ? 's' : ''} to Trash` + (data.failed > 0 ? ` (${data.failed} failed)` : ''));
+  const status = await api('/lyrics/health/status').catch(() => null);
+  if (status) _renderLyricHealthResult(status);
+}
+
 function toggleSidebar(forceClose = false) {
   const sidebar = document.getElementById('sidebar');
   const backdrop = document.getElementById('sidebar-backdrop');
@@ -16278,6 +16349,8 @@ const App = {
   toggleArtworkAdvanced,
   startLyricsBulk,
   cancelLyricsBulk,
+  lyricHealthScan,
+  lyricHealthTrash,
   saveLibraryPath,
   saveDeviceSettings,
   closeOnboarding,
