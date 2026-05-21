@@ -576,6 +576,20 @@ if [ "$BUILD_DMG" = "1" ]; then
       *)    DMG_DEST="TuneBridge-dev.dmg";     VER_DEST="version-dev.json" ;;
     esac
 
+    printf "  🔄  Syncing releases repo... "
+    _sync_ok=0
+    if GIT_LFS_SKIP_SMUDGE=1 git -C "$RELEASES_REPO" fetch origin --quiet 2>/dev/null; then
+      if git -C "$RELEASES_REPO" rebase origin/main --quiet 2>/dev/null; then
+        _sync_ok=1
+      fi
+    fi
+    if [ "$_sync_ok" = "1" ]; then
+      echo -e "${GREEN}done ✅${NC}"
+    else
+      echo -e "${YELLOW}skipped ⚠️${NC}"
+      _warn "Could not sync releases repo — push may fail if remote has newer commits"
+    fi
+
     printf "  📋  Copying artifacts to releases repo... "
     cp -f "$DISTRO_LATEST" "${RELEASES_REPO}/${DMG_DEST}"
     cp -f "${PROJECT_DIR}/version.json" "${RELEASES_REPO}/${VER_DEST}"
