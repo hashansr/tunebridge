@@ -27,9 +27,9 @@ from pathlib import Path
 from urllib.request import urlopen
 from urllib.parse import urlparse, parse_qs, quote as urlquote
 from urllib.request import Request as UrlRequest
-from mutagen.flac import FLAC
+from mutagen.flac import FLAC, Picture
 from mutagen.mp3 import MP3
-from mutagen.mp4 import MP4
+from mutagen.mp4 import MP4, MP4Cover
 from mutagen.wave import WAVE
 import hashlib
 import re
@@ -767,7 +767,7 @@ def _search_fanart(artist_name: str, api_key: str) -> list:
 
 # ── ID3 tag writing ──────────────────────────────────────────────────────────
 
-from mutagen.id3 import ID3, TIT2, TPE1, TPE2, TALB, TRCK, TDRC, TCON, TCOM, TPOS, COMM, TXXX, error as ID3Error
+from mutagen.id3 import ID3, APIC, TIT2, TPE1, TPE2, TALB, TRCK, TDRC, TCON, TCOM, TPOS, COMM, TXXX, error as ID3Error
 
 
 def _write_tags_to_file(filepath: Path, changes: dict) -> None:
@@ -886,6 +886,40 @@ def _write_tags_to_file(filepath: Path, changes: dict) -> None:
 
     else:
         raise ValueError(f"Unsupported file format: {ext}")
+
+
+def _write_artwork_to_file(filepath: Path, jpeg_bytes: bytes) -> None:
+    """Embed JPEG artwork into a media file's tags, replacing any existing cover art."""
+    ext = filepath.suffix.lower()
+    if ext == '.flac':
+        audio = FLAC(str(filepath))
+        pic = Picture()
+        pic.type = 3
+        pic.mime = 'image/jpeg'
+        pic.data = jpeg_bytes
+        audio.clear_pictures()
+        audio.add_picture(pic)
+        audio.save()
+    elif ext == '.mp3':
+        audio = MP3(str(filepath), ID3=ID3)
+        if audio.tags is None:
+            audio.add_tags()
+        audio.tags.delall('APIC')
+        audio.tags.add(APIC(encoding=3, mime='image/jpeg', type=3, desc='', data=jpeg_bytes))
+        audio.save()
+    elif ext in ('.m4a', '.aac', '.mp4'):
+        audio = MP4(str(filepath))
+        if audio.tags is None:
+            audio.add_tags()
+        audio.tags['covr'] = [MP4Cover(jpeg_bytes, imageformat=MP4Cover.FORMAT_JPEG)]
+        audio.save()
+    elif ext in ('.wav', '.wave'):
+        audio = WAVE(str(filepath))
+        if audio.tags is None:
+            audio.add_tags()
+        audio.tags.delall('APIC')
+        audio.tags.add(APIC(encoding=3, mime='image/jpeg', type=3, desc='', data=jpeg_bytes))
+        audio.save()
 
 
 def _update_library_track(track_id: str, changes: dict):
@@ -3875,13 +3909,27 @@ def set_album_artwork():
 
         # Invalidate in-memory library so next load picks up new artwork_key
         with library_lock:
+            matching_paths = []
             for t in library:
                 ta = (t.get('album_artist') or t.get('artist') or '').strip()
                 tl = (t.get('album') or '').strip()
-                if get_artwork_key(ta, tl) == artwork_key or get_artwork_key(t.get('artist',''), tl) == artwork_key:
+                if get_artwork_key(ta, tl) == artwork_key or get_artwork_key(t.get('artist', ''), tl) == artwork_key:
                     t['artwork_key'] = artwork_key
+                    if t.get('path'):
+                        matching_paths.append(t['path'])
 
-        return jsonify({'artwork_key': artwork_key, 'size_kb': size_kb})
+        # Embed artwork into the actual media files
+        write_ok = write_fail = 0
+        for path_str in matching_paths:
+            try:
+                _write_artwork_to_file(Path(path_str), processed)
+                write_ok += 1
+            except Exception as e:
+                print(f"[album-art] failed to embed into {Path(path_str).name}: {e}")
+                write_fail += 1
+
+        return jsonify({'artwork_key': artwork_key, 'size_kb': size_kb,
+                        'files_updated': write_ok, 'files_failed': write_fail})
     except ValueError as e:
         print(f"[album-art] save error: {e}")
         return jsonify({'error': str(e)}), 400
@@ -13871,6 +13919,49 @@ if not _migrate.ensure_db(DATA_DIR):
     raise RuntimeError('SQLite migration failed; startup aborted (JSON fallback removed).')
 
 load_library()
+
+
+def _artwork_backfill_thread():
+    """One-time background task: embed cached artwork JPEGs into media files.
+    Uses a marker file so it only runs once per installation."""
+    marker = DATA_DIR / '.artwork_backfill_v1'
+    if marker.exists():
+        return
+    import time
+    for _ in range(30):
+        with library_lock:
+            if library:
+                break
+        time.sleep(1)
+
+    ok = fail = 0
+    with library_lock:
+        snapshot = list(library)
+
+    for t in snapshot:
+        ak = t.get('artwork_key')
+        path_str = t.get('path')
+        if not ak or not path_str:
+            continue
+        cached = ARTWORK_DIR / f"{ak}.jpg"
+        if not cached.exists():
+            continue
+        fp = Path(path_str)
+        if not fp.exists():
+            continue
+        try:
+            _write_artwork_to_file(fp, cached.read_bytes())
+            ok += 1
+        except Exception as e:
+            print(f"[artwork-backfill] {fp.name}: {e}")
+            fail += 1
+
+    marker.touch()
+    print(f"[artwork-backfill] done — embedded: {ok}, failed: {fail}")
+
+
+threading.Thread(target=_artwork_backfill_thread, daemon=True).start()
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('TUNEBRIDGE_PORT', 5001))
