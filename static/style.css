@@ -18083,6 +18083,14 @@ thead th:hover .table-col-resizer::after {
 }
 
 /* Lyric Health */
+.lyric-health-tool-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+.lyric-health-tool-row .settings-rg-meta { flex: 1; min-width: 0; }
 .lyric-health-result-row {
   display: flex;
   align-items: center;

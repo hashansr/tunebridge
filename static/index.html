@@ -1319,21 +1319,17 @@
                   </select>
                 </div>
                 <p class="settings-hint settings-hint-inline-start">Local <code>.lrc</code> files beside tracks are also detected during library scans.</p>
+                <!-- Lyric Health -->
+                <div class="lyric-health-tool-row">
+                  <div class="settings-rg-meta">
+                    <span class="settings-rg-label" style="font-size:var(--text-sm)">Lyric Health</span>
+                    <span class="settings-rg-sub">Find .lrc files with no matching music file in your library</span>
+                  </div>
+                  <button class="btn-secondary" id="lyric-health-btn" onclick="App.lyricHealthScan()">Scan for Orphans</button>
+                </div>
+                <div id="lyric-health-result" style="display:none"></div>
               </div>
             </div>
-
-            <!-- Lyric Health -->
-            <div class="settings-rg-divider"></div>
-            <div class="settings-rg-row">
-              <div class="settings-rg-meta">
-                <span class="settings-rg-label">Lyric Health</span>
-                <span class="settings-rg-sub">Find .lrc files with no matching music file in your library</span>
-              </div>
-              <div class="settings-rg-actions">
-                <button class="btn-secondary" id="lyric-health-btn" onclick="App.lyricHealthScan()">Scan for Orphans</button>
-              </div>
-            </div>
-            <div id="lyric-health-result" style="display:none"></div>
           </div>
 
           <!-- App section -->
