@@ -7616,19 +7616,26 @@ async function loadSyncView() {
   if (!state.artists?.length) {
     api('/library/artists').then(a => { state.artists = a; }).catch(() => {});
   }
-  // Fetch DAP list
-  try {
-    const daps = await api('/daps');
-    _swRenderDeviceList(daps);
-  } catch (e) {
-    _swRenderDeviceList([]);
-  }
-  // Check if a scan is already running — resume
+  // Check backend status first — skip the device list entirely when resuming an active/recent session
   try {
     const status = await api('/sync/status');
     if (status.status === 'scanning' || status.status === 'scan_running') {
       _sw.device = { id: status.dap_id, name: status.dap_name || 'Device' };
+      await _swLoadDapListSilent();
       _swResumeScan(); // re-attach poller without re-POSTing to /sync/scan
+      return;
+    }
+    if (status.status === 'copying') {
+      _sw.device = { id: status.dap_id, name: status.dap_name || 'Device' };
+      await _swLoadDapListSilent();
+      _swResumeSync(); // resume poller only — do NOT re-post to execute
+      return;
+    }
+    if (status.status === 'done' && status.dap_id) {
+      _sw.device = { id: status.dap_id, name: status.dap_name || 'Device' };
+      _sw.syncResult = status;
+      await _swLoadDapListSilent();
+      _swGoTo(5);
       return;
     }
     if (status.status === 'ready' && status.dap_id) {
@@ -7639,17 +7646,30 @@ async function loadSyncView() {
       if (!state.artists?.length) {
         state.artists = await api('/library/artists').catch(() => []);
       }
+      try {
+        const daps = await api('/daps');
+        _swRenderDeviceList(daps);
+      } catch (e) { _swRenderDeviceList([]); }
       _swGoTo(3);
       _swBuildProposal(status);
       return;
     }
-    if (status.status === 'copying') {
-      _sw.device = { id: status.dap_id, name: status.dap_name || 'Device' };
-      _swResumeSync(); // resume poller only — do NOT re-post to execute
-      return;
-    }
   } catch (_) {}
+  // Idle / error / unknown — show device picker (step 1)
+  try {
+    const daps = await api('/daps');
+    _swRenderDeviceList(daps);
+  } catch (e) {
+    _swRenderDeviceList([]);
+  }
   _swGoTo(1);
+}
+
+async function _swLoadDapListSilent() {
+  try {
+    const daps = await api('/daps');
+    _swRenderDeviceList(daps);
+  } catch (_) { _swRenderDeviceList([]); }
 }
 
 function _swClearTimers() {
@@ -8962,6 +8982,8 @@ function _swBuildExecutePayload() {
 async function _swPollSync() {
   // Self-terminate if user navigated away from the sync step
   if (_sw.step !== 4) { clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null; return; }
+  // User navigated away from the sync view — hand off to background indicator
+  if (state.view !== 'sync') _syncBgStart();
   let status;
   try { status = await api('/sync/status'); } catch (_) { return; }
 
