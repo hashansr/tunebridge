@@ -9956,6 +9956,7 @@ tbody tr:hover {
   color: var(--text-muted);
   background: transparent;
   padding: 0;
+  margin-top: 8px;
 }
 
 .peq-workspace-dirty {
