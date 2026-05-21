@@ -432,23 +432,33 @@ def main():
             os._exit(0)
         threading.Thread(target=_delayed_exit, daemon=True).start()
 
+    # Mutable flag so the background dialog thread can re-trigger close after confirmation.
+    _close_state = {'quit_confirmed': False}
+
     def _on_window_closing():
         import app as flask_app
         sync_active = flask_app.sync_state.get('status') in ('scanning', 'copying')
-        if sync_active:
-            try:
-                result = subprocess.run(
-                    ['osascript', '-e',
-                     'display dialog "A sync is in progress.\\n\\nQuitting now may leave '
-                     'incomplete files on your device. Quit anyway?" '
-                     'buttons {"Cancel", "Quit"} default button "Cancel" with icon caution'],
-                    capture_output=True, text=True, timeout=30
-                )
-                # osascript stdout: "button returned:Quit\n" on confirm
-                if result.returncode != 0 or 'Quit' not in (result.stdout or ''):
-                    return True  # Cancel the close
-            except Exception:
-                pass  # Dialog failed — allow close rather than hanging
+        if sync_active and not _close_state['quit_confirmed']:
+            # Run the dialog off the main AppKit thread so returning True here
+            # is processed before the thread blocks — this is what allows
+            # pywebview to actually cancel the close.
+            def _ask_and_maybe_quit():
+                try:
+                    result = subprocess.run(
+                        ['osascript', '-e',
+                         'display dialog "A sync is in progress.\\n\\nQuitting now may leave '
+                         'incomplete files on your device. Quit anyway?" '
+                         'buttons {"Go Back", "Quit App"} default button "Go Back" with icon caution'],
+                        capture_output=True, text=True, timeout=30
+                    )
+                    if result.returncode == 0 and 'Quit App' in (result.stdout or ''):
+                        _close_state['quit_confirmed'] = True
+                        _stop_playback_best_effort()
+                        window.destroy()
+                except Exception:
+                    pass  # Dialog failed — do nothing; app stays open
+            threading.Thread(target=_ask_and_maybe_quit, daemon=True).start()
+            return True  # Cancel this close attempt; thread handles quit if confirmed
         _stop_playback_best_effort()
         _force_exit_failsafe()
 

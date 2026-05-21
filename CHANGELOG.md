@@ -19,6 +19,7 @@
 
 ## v0.361-rc.210526-1506 · 2026-05-21
 - Add: "Sync in progress..." toast with animated dots appears when navigating away during an active sync; changes to "Sync complete" when finished
+- Fix: "Go Back" in the sync close-guard dialog now correctly keeps the app open instead of closing it; dialog buttons renamed to "Go Back" and "Quit App"
 
 ## v0.360-rc.210526-1424 · 2026-05-21
 - Add: Sync nav button pulses blue while a scan or copy runs in the background (off the sync screen)
