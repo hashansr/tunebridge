@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.360-rc.210526-1424 · 2026-05-21
 - Add: Sync nav button pulses blue while a scan or copy runs in the background (off the sync screen)
 - Fix: Navigating away during a sync scan and returning no longer restarts the scan from scratch
 - Add: Current file path shown below the progress bar during sync copy, with a per-file progress bar
