@@ -2689,20 +2689,6 @@
         <div id="peq-editor-curve-legend" class="curve-legend"></div>
       </div>
 
-      <div id="peq-save-profile-panel" class="peq-save-profile-panel" style="display:none">
-        <div class="peq-save-profile-grid">
-          <select id="peq-save-iem-select" class="peq-select">
-            <option value="">Select IEM</option>
-          </select>
-          <input id="peq-save-name" type="text" class="peq-editor-num-input peq-save-name-input" placeholder="Profile name" />
-          <div class="peq-save-profile-actions">
-            <button class="btn-secondary" onclick="App.cancelCustomPeqSaveProfile()">Cancel</button>
-            <button class="btn-primary" onclick="App.confirmCustomPeqSaveProfile()">Save as Profile</button>
-          </div>
-        </div>
-        <div id="peq-save-profile-error" class="peq-save-profile-error" style="display:none"></div>
-      </div>
-
       <div class="peq-workspace-edit-layout">
         <div class="peq-workspace-editor-main">
           <section class="peq-editor-section peq-editor-section-preamp">
@@ -2759,6 +2745,19 @@
       </div>
 
       <div class="peq-action-bar">
+        <div id="peq-save-profile-panel" class="peq-save-profile-panel" style="display:none">
+          <div class="peq-save-profile-grid">
+            <select id="peq-save-iem-select" class="peq-select">
+              <option value="">Select IEM</option>
+            </select>
+            <input id="peq-save-name" type="text" class="peq-editor-num-input peq-save-name-input" placeholder="Profile name" />
+            <div class="peq-save-profile-actions">
+              <button class="btn-secondary" onclick="App.cancelCustomPeqSaveProfile()">Cancel</button>
+              <button class="btn-primary" onclick="App.confirmCustomPeqSaveProfile()">Save as Profile</button>
+            </div>
+          </div>
+          <div id="peq-save-profile-error" class="peq-save-profile-error" style="display:none"></div>
+        </div>
         <div id="peq-action-status" class="peq-action-status">0 bands · preamp +0.0 dB</div>
         <div class="peq-action-buttons">
           <button class="btn-secondary peq-workspace-close-btn" onclick="App.closePeqEditor()">Cancel</button>

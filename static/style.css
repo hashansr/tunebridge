@@ -9595,12 +9595,17 @@ tbody tr:hover {
 }
 
 .peq-save-profile-panel {
+  position: absolute;
+  right: 22px;
+  bottom: calc(100% + 10px);
+  width: min(680px, calc(100vw - 96px));
   border-radius: 14px;
   background: rgba(28,27,27,0.92);
   padding: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
   border: 1px solid rgba(173,198,255,0.16);
   box-shadow: 0 18px 46px rgba(0,0,0,0.32);
+  z-index: 40;
 }
 
 .peq-save-profile-grid {
@@ -10461,6 +10466,7 @@ tbody tr:hover {
 }
 
 .peq-action-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 16px;
