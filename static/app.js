@@ -8144,11 +8144,16 @@ function _swIsLyricsPath(path) {
   return /\.lrc$/i.test(String(path || '').split('?')[0]);
 }
 
-function _swFindMatchingLyricId(songRel) {
-  const base = String(songRel || '').replace(/\.[^./\\]+$/, '');
-  const target = (base + '.lrc').toLowerCase();
+function _swFindMatchingLyricId(songItem) {
   const lyrics = _sw.proposal?.toDeviceLyrics?.items ?? [];
-  const found = lyrics.find(item => String(item.id || item.rel || '').toLowerCase() === target);
+  if (!lyrics.length) return null;
+  const norm = s => (s || '').toLowerCase().trim();
+  const sa = norm(songItem.artist);
+  const sl = norm(songItem.album);
+  const st = norm(songItem.title);
+  const found = lyrics.find(item =>
+    norm(item.artist) === sa && norm(item.album) === sl && norm(item.title) === st
+  );
   return found ? (found.id ?? found.rel) : null;
 }
 
@@ -8637,7 +8642,7 @@ function swToggleTreeNode(gid, level, key, toState) {
   if (gid === 'toDevice') {
     if (!_sw.selection.toDeviceLyrics) _sw.selection.toDeviceLyrics = {};
     for (const item of items) {
-      const lyricId = _swFindMatchingLyricId(item.id);
+      const lyricId = _swFindMatchingLyricId(item);
       if (lyricId) _sw.selection.toDeviceLyrics[lyricId] = toState;
     }
   }
@@ -8718,10 +8723,13 @@ function swToggleItem(gid, itemId) {
   const newState = !_sw.selection[gid][itemId];
   _sw.selection[gid][itemId] = newState;
   if (gid === 'toDevice') {
-    const lyricId = _swFindMatchingLyricId(itemId);
-    if (lyricId) {
-      if (!_sw.selection.toDeviceLyrics) _sw.selection.toDeviceLyrics = {};
-      _sw.selection.toDeviceLyrics[lyricId] = newState;
+    const songItem = (_sw.proposal?.toDevice?.items ?? []).find(it => it.id === itemId);
+    if (songItem) {
+      const lyricId = _swFindMatchingLyricId(songItem);
+      if (lyricId) {
+        if (!_sw.selection.toDeviceLyrics) _sw.selection.toDeviceLyrics = {};
+        _sw.selection.toDeviceLyrics[lyricId] = newState;
+      }
     }
   }
   _swRenderReview();
@@ -8735,7 +8743,7 @@ function swToggleGroup(gid, toState) {
   if (gid === 'toDevice') {
     if (!_sw.selection.toDeviceLyrics) _sw.selection.toDeviceLyrics = {};
     for (const item of group.items) {
-      const lyricId = _swFindMatchingLyricId(item.id);
+      const lyricId = _swFindMatchingLyricId(item);
       if (lyricId) _sw.selection.toDeviceLyrics[lyricId] = toState;
     }
   }
