@@ -17104,70 +17104,6 @@ tr:hover .track-edit-btn:hover {
   box-shadow: 0 6px 24px rgba(173,198,255,0.30), inset 0 1px 0 rgba(255,255,255,0.25);
 }
 
-/* ── Album grid ── */
-.coverage-album-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 16px;
-}
-
-/* ── Discover card overrides (on top of .album-card base styles) ── */
-#view-library-coverage .discover-album-card {
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  padding: 0;
-  overflow: visible;
-  transition: transform 0.2s ease;
-  contain: none;
-  width: 100%;
-}
-#view-library-coverage .discover-album-card:hover {
-  background: transparent;
-  border-color: transparent;
-  transform: scale(1.03);
-}
-
-.discover-album-card .album-thumb {
-  background-size: cover;
-  background-position: center;
-}
-
-.discover-album-card .card-thumb-overlay {
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-
-.discover-overlay-add {
-  width: 34px; height: 34px; flex-shrink: 0;
-  display: grid; place-items: center;
-  border-radius: 50%;
-  background: rgba(10,10,10,0.55);
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(255,255,255,0.14);
-  color: #fff; cursor: pointer;
-  transition: background 0.14s, transform 0.14s;
-}
-.discover-overlay-add:hover { background: rgba(50,50,50,0.80); transform: scale(1.08); }
-
-.discover-album-card .card-more-btn.discover-overlay-more {
-  position: static;
-  width: 34px; height: 34px;
-  font-size: 16px; line-height: 1;
-  background: rgba(10,10,10,0.55);
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(255,255,255,0.14);
-  color: #fff;
-}
-.discover-album-card .card-more-btn.discover-overlay-more:hover {
-  background: rgba(50,50,50,0.80) !important;
-  transform: scale(1.08);
-}
-
-
 /* ── Shared empty / error / show-more ── */
 .coverage-teaser {
   display: flex;
@@ -17212,15 +17148,11 @@ tr:hover .track-edit-btn:hover {
 .coverage-show-more-btn:hover { background: rgba(173,198,255,0.12); color: var(--text); }
 
 /* ── Responsive ── */
-@media (max-width: 1280px) { .coverage-album-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@media (max-width: 1024px) { .coverage-album-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 720px) {
   .discover-header      { flex-direction: column; }
   .discover-filter-rail { flex-direction: column; align-items: flex-start; }
   .discover-actions     { flex-wrap: wrap; }
-  .coverage-album-grid  { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-@media (max-width: 460px) { .coverage-album-grid { grid-template-columns: 1fr; } }
 
 /* ── Duplicate Tracks View ──────────────────────────────────────────── */
 #view-duplicates .view-header { justify-content: space-between; align-items: flex-start; }
@@ -18177,6 +18109,7 @@ thead th:hover .table-col-resizer::after {
 /* ── Library cards: Home-style artwork cards ───────────────────────────── */
 #view-artists .artist-grid,
 #view-albums .album-grid,
+#view-library-coverage .coverage-album-grid,
 #view-favourites .favourites-fixed-grid,
 #view-fav-artists .favourites-fixed-grid,
 #view-fav-albums .favourites-fixed-grid,
@@ -18202,6 +18135,7 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .artist-card,
 #view-albums .album-card,
+#view-library-coverage .discover-album-card,
 #view-favourites .artist-card,
 #view-favourites .album-card,
 #view-fav-artists .artist-card,
@@ -18234,6 +18168,7 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .artist-card:hover,
 #view-albums .album-card:hover,
+#view-library-coverage .discover-album-card:hover,
 #view-favourites .artist-card:hover,
 #view-favourites .album-card:hover,
 #view-fav-artists .artist-card:hover,
@@ -18246,6 +18181,7 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .artist-thumb,
 #view-albums .album-thumb,
+#view-library-coverage .discover-album-card .album-thumb,
 #view-favourites .artist-thumb,
 #view-favourites .album-thumb,
 #view-fav-artists .artist-thumb,
@@ -18382,6 +18318,7 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .artist-card:hover .artist-thumb,
 #view-albums .album-card:hover .album-thumb,
+#view-library-coverage .discover-album-card:hover .album-thumb,
 #view-favourites .artist-card:hover .artist-thumb,
 #view-favourites .album-card:hover .album-thumb,
 #view-fav-artists .artist-card:hover .artist-thumb,
@@ -18397,6 +18334,7 @@ thead th:hover .table-col-resizer::after {
 
   #view-artists .artist-grid,
   #view-albums .album-grid,
+  #view-library-coverage .coverage-album-grid,
   #view-favourites .favourites-fixed-grid,
   #view-fav-artists .favourites-fixed-grid,
   #view-fav-albums .favourites-fixed-grid,
@@ -18412,6 +18350,7 @@ thead th:hover .table-col-resizer::after {
 
   #view-artists .artist-grid,
   #view-albums .album-grid,
+  #view-library-coverage .coverage-album-grid,
   #view-favourites .favourites-fixed-grid,
   #view-fav-artists .favourites-fixed-grid,
   #view-fav-albums .favourites-fixed-grid,
@@ -18427,6 +18366,7 @@ thead th:hover .table-col-resizer::after {
 
   #view-artists .artist-grid,
   #view-albums .album-grid,
+  #view-library-coverage .coverage-album-grid,
   #view-favourites .favourites-fixed-grid,
   #view-fav-artists .favourites-fixed-grid,
   #view-fav-albums .favourites-fixed-grid,
@@ -18442,6 +18382,7 @@ thead th:hover .table-col-resizer::after {
 
   #view-artists .artist-grid,
   #view-albums .album-grid,
+  #view-library-coverage .coverage-album-grid,
   #view-favourites .favourites-fixed-grid,
   #view-fav-artists .favourites-fixed-grid,
   #view-fav-albums .favourites-fixed-grid,
@@ -18452,6 +18393,7 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .artist-name,
 #view-albums .album-name,
+#view-library-coverage .discover-album-card .album-name,
 #view-favourites .artist-name,
 #view-favourites .album-name,
 #view-fav-artists .artist-name,
@@ -18466,6 +18408,7 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .artist-name,
 #view-albums .album-name,
+#view-library-coverage .discover-album-card .album-name,
 #view-favourites .artist-name,
 #view-favourites .album-name,
 #view-fav-artists .artist-name,
@@ -18480,6 +18423,8 @@ thead th:hover .table-col-resizer::after {
 #view-artists .artist-meta,
 #view-albums .album-artist,
 #view-albums .album-year,
+#view-library-coverage .discover-album-card .album-artist,
+#view-library-coverage .discover-album-card .album-year,
 #view-favourites .artist-meta,
 #view-favourites .album-artist,
 #view-favourites .album-year,
@@ -18504,6 +18449,7 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .card-play-btn,
 #view-albums .card-play-btn,
+#view-library-coverage .discover-album-card .card-play-btn,
 #view-favourites .card-play-btn,
 #view-fav-artists .card-play-btn,
 #view-fav-albums .card-play-btn,
@@ -18518,6 +18464,7 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .card-play-btn:hover,
 #view-albums .card-play-btn:hover,
+#view-library-coverage .discover-album-card .card-play-btn:hover,
 #view-favourites .card-play-btn:hover,
 #view-fav-artists .card-play-btn:hover,
 #view-fav-albums .card-play-btn:hover,
@@ -18527,6 +18474,7 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .card-more-btn,
 #view-albums .card-more-btn,
+#view-library-coverage .discover-album-card .card-more-btn,
 #view-favourites .card-more-btn,
 #view-fav-artists .card-more-btn,
 #view-fav-albums .card-more-btn {
@@ -18538,6 +18486,7 @@ thead th:hover .table-col-resizer::after {
 
 #view-artists .artist-card:hover .card-more-btn,
 #view-albums .album-card:hover .card-more-btn,
+#view-library-coverage .discover-album-card:hover .card-more-btn,
 #view-favourites .artist-card:hover .card-more-btn,
 #view-favourites .album-card:hover .card-more-btn,
 #view-fav-artists .artist-card:hover .card-more-btn,

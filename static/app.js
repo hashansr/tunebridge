@@ -16954,16 +16954,13 @@ function _discoverCardHtml(a) {
     <div class="album-thumb" style="background:${bg}">
       ${img}
       <div class="card-thumb-overlay">
-        <button class="discover-overlay-add" onclick="event.stopPropagation();App._coverageAddAlbumToPlaylist(this.closest('.album-card'),event)" title="Add to playlist" aria-label="Add to playlist">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
         <button class="card-play-btn" onclick="event.stopPropagation();App._coveragePlayAlbum(this.closest('.album-card'),event)" title="Play album" aria-label="Play album">${playSvg(14)}</button>
-        <button class="card-more-btn discover-overlay-more" onclick="event.stopPropagation();App.showAlbumCtxMenu(event,this.closest('.album-card').dataset.artist,this.closest('.album-card').dataset.album)" title="More options" aria-label="More options">···</button>
       </div>
     </div>
     <div class="album-name">${esc(a.album || 'Unknown Album')}</div>
     <div class="album-artist">${esc(a.artist || 'Unknown Artist')}</div>
     <div class="album-year">${esc(meta)}</div>
+    <button class="card-more-btn" onclick="event.stopPropagation();App.showAlbumCtxMenu(event,this.closest('.album-card').dataset.artist,this.closest('.album-card').dataset.album)" title="More options" aria-label="More options">⋮</button>
   </div>`;
 }
 
@@ -17085,7 +17082,7 @@ function _renderInsightsCoverage() {
           </div>
         </div>
 
-        ${showGrid ? `<div class="coverage-album-grid">${cards}</div>` : emptyBody}
+        ${showGrid ? `<div class="album-grid coverage-album-grid">${cards}</div>` : emptyBody}
         ${hasMore ? `<button class="coverage-show-more-btn" onclick="App.coverageShowMore()">Load ${Math.min(_coverageState.pageSize, rows.length - _coverageState.visibleCount)} more</button>` : ''}
       ` : emptyBody}
     </div>
