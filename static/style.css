@@ -8853,6 +8853,20 @@ tbody tr:hover {
   color: var(--primary);
   background: transparent;
 }
+.player-autoplay-btn {
+  width: 27px;
+  height: 27px;
+}
+.player-autoplay-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+}
 .player-btn-sm { padding: 4px; }
 .player-btn-text {
   padding: 4px 9px;
@@ -10538,6 +10552,10 @@ tbody tr:hover {
   color: var(--text-muted);
   font-size: var(--text-sm);
   padding: 32px 16px;
+}
+.queue-empty-compact {
+  text-align: left;
+  padding: 12px 16px;
 }
 .queue-overflow-note {
   text-align: center;

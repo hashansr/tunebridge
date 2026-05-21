@@ -5586,6 +5586,166 @@ def playlist_generate_preview():
     return jsonify(result)
 
 
+@app.route('/api/player/autoplay/recommend', methods=['POST'])
+def player_autoplay_recommend():
+    data = request.json or {}
+    limit = int(_safe_float(data.get('limit'), 10) or 10)
+    limit = max(1, min(limit, 10))
+
+    with library_lock:
+        lib_tracks = list(library)
+    lib_map = {str(t.get('id')): t for t in lib_tracks if t.get('id')}
+
+    seed_ids = [str(x) for x in (data.get('seed_track_ids') or []) if str(x) in lib_map]
+    current_track_id = str(data.get('current_track_id') or '')
+    previous_track_id = str(data.get('previous_track_id') or current_track_id or '')
+    if current_track_id and current_track_id in lib_map and current_track_id not in seed_ids:
+        seed_ids.insert(0, current_track_id)
+    seed_ids = seed_ids[:6]
+
+    excluded = {str(x) for x in (data.get('exclude_track_ids') or []) if str(x)}
+    excluded.update(seed_ids)
+
+    if not lib_tracks:
+        return jsonify({'tracks': [], 'explanations': [], 'summary': {'reason': 'Library is empty.'}})
+
+    feat_map = _load_track_feature_map()
+    families = load_genre_families()
+    cfg = load_playlist_gen_config()
+    tw = cfg.get('transition_weights', {})
+
+    seed_tracks = [lib_map[sid] for sid in seed_ids if sid in lib_map]
+    seed_vec = None
+    if seed_tracks:
+        vectors = [_track_numeric_features(t, feat_map) for t in seed_tracks]
+        seed_vec = {
+            'energy': sum(v['energy'] for v in vectors) / len(vectors),
+            'brightness': sum(v['brightness'] for v in vectors) / len(vectors),
+            'year_norm': sum(v['year_norm'] for v in vectors) / len(vectors),
+            'dur_norm': sum(v['dur_norm'] for v in vectors) / len(vectors),
+        }
+
+    genre_counts = {}
+    for t in seed_tracks:
+        for g in _split_track_genres(t.get('genre')):
+            genre_counts[g] = genre_counts.get(g, 0) + 1
+    target_genre = max(genre_counts, key=genre_counts.get) if genre_counts else ''
+
+    conn = _db.get_conn()
+    stat_rows = conn.execute(
+        """SELECT track_id,
+                  COUNT(*) AS plays,
+                  SUM(CASE WHEN skipped = 1 THEN 1 ELSE 0 END) AS skips,
+                  SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) AS completions,
+                  SUM(CASE WHEN valid_listen = 1 THEN 1 ELSE 0 END) AS valid_plays,
+                  MAX(played_at) AS last_played
+           FROM play_events
+           GROUP BY track_id"""
+    ).fetchall()
+    play_stats = {str(r['track_id']): dict(r) for r in stat_rows}
+
+    prev_track = lib_map.get(previous_track_id) or (seed_tracks[0] if seed_tracks else None)
+    prev_vec = _track_numeric_features(prev_track, feat_map) if prev_track else None
+
+    candidates = []
+    for t in lib_tracks:
+        tid = str(t.get('id') or '')
+        if not tid or tid in excluded:
+            continue
+
+        vec = _track_numeric_features(t, feat_map)
+        sim = _similarity_score(vec, seed_vec)
+        gm = _genre_match_score(_split_track_genres(t.get('genre')), target_genre, 'relaxed', families)
+        trans = _transition_score(prev_track, prev_vec, t, vec, tw, 0.82)
+
+        stats = play_stats.get(tid, {})
+        plays = int(stats.get('plays') or 0)
+        valid_plays = int(stats.get('valid_plays') or 0)
+        skips = int(stats.get('skips') or 0)
+        completions = int(stats.get('completions') or 0)
+        skip_rate = skips / plays if plays else 0.0
+        completion_rate = completions / plays if plays else 0.5
+        engagement = _clamp((0.72 + 0.32 * completion_rate) - (0.38 * skip_rate), 0.25, 1.08)
+        discovery = 1.0 / (1.0 + valid_plays)
+        metadata = 1.0 - vec.get('missing_penalty', 0.0)
+
+        score = (
+            0.34 * sim
+            + 0.22 * gm
+            + 0.20 * trans
+            + 0.12 * discovery
+            + 0.08 * engagement
+            + 0.04 * metadata
+        )
+        candidates.append({
+            'track': t,
+            'vec': vec,
+            'score': score,
+            'artist_key': _norm_text_key(t.get('artist')),
+            'album_key': _norm_text_key(t.get('album')),
+            'explain': {
+                'similarity': round(sim, 4),
+                'genre_match': round(gm, 4),
+                'transition': round(trans, 4),
+                'discovery': round(discovery, 4),
+                'engagement': round(engagement, 4),
+            },
+        })
+
+    if not candidates:
+        return jsonify({
+            'tracks': [],
+            'explanations': [],
+            'summary': {'reason': 'No candidates matched filters.', 'seed_count': len(seed_ids)}
+        })
+
+    rng = random.Random(time.time_ns())
+    selected = []
+    selected_ids = set()
+    artist_counts = {}
+    album_counts = {}
+    while len(selected) < limit and candidates:
+        best_i = -1
+        best_score = -1e9
+        for i, c in enumerate(candidates):
+            if c['track'].get('id') in selected_ids:
+                continue
+            diversity_penalty = 0.0
+            diversity_penalty += 0.18 * artist_counts.get(c['artist_key'], 0)
+            diversity_penalty += 0.08 * album_counts.get(c['album_key'], 0)
+            jitter = rng.uniform(-0.012, 0.012)
+            placement = c['score'] - diversity_penalty + jitter
+            if placement > best_score:
+                best_score = placement
+                best_i = i
+        if best_i < 0:
+            break
+        picked = candidates.pop(best_i)
+        t = picked['track']
+        selected.append((t, picked, best_score))
+        selected_ids.add(t.get('id'))
+        artist_counts[picked['artist_key']] = artist_counts.get(picked['artist_key'], 0) + 1
+        album_counts[picked['album_key']] = album_counts.get(picked['album_key'], 0) + 1
+        prev_track = t
+        prev_vec = picked['vec']
+
+    return jsonify({
+        'tracks': [t for t, _picked, _placement in selected],
+        'explanations': [{
+            'track_id': t.get('id'),
+            'placement_score': round(placement, 4),
+            'reason': 'Auto Play fit',
+            'score_components': picked['explain'],
+        } for t, picked, placement in selected],
+        'summary': {
+            'seed_count': len(seed_ids),
+            'target_genre': _genre_display_label(target_genre) if target_genre else '',
+            'generated_length': len(selected),
+            'candidate_pool_size': len(candidates) + len(selected),
+        }
+    })
+
+
 @app.route('/api/playlists/generate/save', methods=['POST'])
 def playlist_generate_save():
     data = request.json or {}

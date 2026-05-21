@@ -36,6 +36,10 @@ const Player = (function () {
     playbackContext: { sourceType: 'unknown', sourceId: '', sourceLabel: '' },
     recentContexts: [],
     lastShuffleFirstIdx: -1,
+    autoplayEnabled: false,
+    autoplayQueue: [],
+    autoplaySessionId: '',
+    autoplayExcludedTrackIds: [],
   };
 
   /* ── mpv backend state ──────────────────────────────────────────────── */
@@ -114,10 +118,14 @@ const Player = (function () {
   let _lastPauseEventAt = 0;
   let _suppressPauseFlush = false;
   let _startupRestoreGuardActive = true;
+  let _autoplayFetchInFlight = false;
+  let _autoplayFetchPromise = null;
 
   const _CUSTOM_PEQ_KEY = 'tb_custom_peq';
   const _CUSTOM_EQ_ID = '__custom__';
   const _CREATE_PEQ_ID = '__create__';
+  const _AUTOPLAY_VISIBLE_LIMIT = 10;
+  const _AUTOPLAY_LOW_WATERMARK = 5;
   const _NO_GAIN_TYPES = new Set(['LPQ', 'HPQ', 'NO', 'AP']);
   const _LOSSLESS_FORMATS = new Set(['FLAC', 'ALAC', 'WAV', 'AIFF', 'AIF', 'APE', 'WV', 'DSF', 'DFF']);
   const _LOSSY_FORMATS = new Set(['MP3', 'AAC', 'M4A', 'MP4', 'OGG', 'OPUS', 'WMA']);
@@ -387,11 +395,30 @@ const Player = (function () {
       }
     } else {
       // End of queue, no repeat
-      ps.isPlaying = false;
-      _activeHistoryTrack = null;
-      _updatePlayBtn();
-      _highlightActiveRow();
-      if (ps.queueOpen) _renderQueue();
+      _ensureAutoplayQueue('queue-end', { force: true }).then((added) => {
+        if (added && ps.queueIdx < ps.queue.length - 1 && ps.repeatMode === 'off') {
+          ps.queueIdx = ps.queueIdx + 1;
+          const t = currentTrack();
+          if (t) {
+            _activeHistoryTrack = t;
+            _updateTrackUI(t);
+            _highlightActiveRow();
+            _mpvCmd('play', { track_id: t.id }).then(() => {
+              ps.isPlaying = true;
+              _updatePlayBtn();
+            });
+            _markTrackSessionStart();
+            if (ps.queueOpen) _renderQueue();
+            _saveState();
+            return;
+          }
+        }
+        ps.isPlaying = false;
+        _activeHistoryTrack = null;
+        _updatePlayBtn();
+        _highlightActiveRow();
+        if (ps.queueOpen) _renderQueue();
+      });
     }
   }
 
@@ -531,6 +558,7 @@ const Player = (function () {
         _markTrackSessionStart();
         _saveState();
         if (ps.queueOpen) _renderQueue();
+        _ensureAutoplayQueue('crossfade-complete');
         _mpvXfadeTriggered = false;
         _mpvXfadeQueueIdx  = -1;
       });
@@ -655,6 +683,7 @@ const Player = (function () {
     _highlightActiveRow();
     _saveState();
     if (ps.queueOpen) _renderQueue();
+    _ensureAutoplayQueue('crossfade-complete');
 
     _xfadeTriggered = false;
     _xfadeTimeout   = null;
@@ -984,14 +1013,93 @@ const Player = (function () {
   }
 
   // Returns the actual queue array index for the current position
-  function _realIdx() {
-    if (!ps.shuffle || ps.shuffleOrder.length === 0) return ps.queueIdx;
-    return ps.shuffleOrder[ps.queueIdx] ?? ps.queueIdx;
+  function _realIdx(pos = ps.queueIdx) {
+    if (!ps.shuffle || ps.shuffleOrder.length === 0) return pos;
+    return ps.shuffleOrder[pos] ?? pos;
   }
 
   function currentTrack() {
     const idx = _realIdx();
     return (idx >= 0 && idx < ps.queue.length) ? ps.queue[idx] : null;
+  }
+
+  function _isAutoplayTrack(track) {
+    return !!(track && track.__autoplay);
+  }
+
+  function _markAutoplayTrack(track) {
+    return { ...track, __autoplay: true };
+  }
+
+  function _stripInternalTrackFields(track) {
+    if (!track || typeof track !== 'object') return track;
+    const clean = { ...track };
+    delete clean.__autoplay;
+    return clean;
+  }
+
+  function _pendingAutoplayEntries() {
+    if (!ps.queue.length) return [];
+    if (ps.shuffle && ps.shuffleOrder.length > 0) {
+      return ps.shuffleOrder
+        .slice(Math.max(0, ps.queueIdx + 1))
+        .map(i => ({ t: ps.queue[i], realIdx: i }))
+        .filter(({ t }) => _isAutoplayTrack(t));
+    }
+    const curRealIdx = _realIdx();
+    return ps.queue
+      .slice(Math.max(0, curRealIdx + 1))
+      .map((t, i) => ({ t, realIdx: curRealIdx + 1 + i }))
+      .filter(({ t }) => _isAutoplayTrack(t));
+  }
+
+  function _syncAutoplayQueueState() {
+    ps.autoplayQueue = _pendingAutoplayEntries().slice(0, _AUTOPLAY_VISIBLE_LIMIT).map(({ t }) => _stripInternalTrackFields(t));
+    const excluded = new Set(Array.isArray(ps.autoplayExcludedTrackIds) ? ps.autoplayExcludedTrackIds : []);
+    ps.queue.forEach(t => { if (_isAutoplayTrack(t) && t.id) excluded.add(String(t.id)); });
+    ps.autoplayExcludedTrackIds = Array.from(excluded).slice(-250);
+  }
+
+  function _removePendingAutoplayTracks() {
+    if (!ps.queue.length) {
+      ps.autoplayQueue = [];
+      return;
+    }
+    const curRealIdx = _realIdx();
+    const keep = [];
+    const oldToNew = new Map();
+    ps.queue.forEach((t, idx) => {
+      const pending = _isAutoplayTrack(t) && idx !== curRealIdx;
+      if (!pending) {
+        oldToNew.set(idx, keep.length);
+        keep.push(t);
+      }
+    });
+    ps.queue = keep;
+    if (ps.shuffle && ps.shuffleOrder.length > 0) {
+      ps.shuffleOrder = ps.shuffleOrder
+        .map(i => oldToNew.get(i))
+        .filter(i => typeof i === 'number');
+      const mappedCur = oldToNew.get(curRealIdx);
+      ps.queueIdx = Math.max(0, ps.shuffleOrder.indexOf(mappedCur));
+    } else {
+      ps.queueIdx = oldToNew.get(curRealIdx) ?? Math.min(ps.queueIdx, ps.queue.length - 1);
+    }
+    ps.autoplayQueue = [];
+    _invalidatePreload();
+  }
+
+  function _firstPendingAutoplayRealIdx() {
+    const pending = _pendingAutoplayEntries();
+    if (!pending.length) return -1;
+    return Math.min(...pending.map(({ realIdx }) => realIdx));
+  }
+
+  function _startNewAutoplaySession() {
+    ps.autoplaySessionId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const current = currentTrack();
+    ps.autoplayExcludedTrackIds = current && current.id ? [String(current.id)] : [];
+    _removePendingAutoplayTracks();
   }
 
   /* ── Playback core ──────────────────────────────────────────────────── */
@@ -1026,6 +1134,116 @@ const Player = (function () {
     _saveState();
     // Start buffering next track for gapless playback (no-op when crossfade > 0 or mpv active)
     _preloadNext();
+    _ensureAutoplayQueue('track-load');
+  }
+
+  function _collectAutoplaySeedIds() {
+    const ids = [];
+    const cur = currentTrack();
+    if (cur && cur.id) ids.push(String(cur.id));
+    (ps.recentContexts || []).forEach(ctx => {
+      const tid = String(ctx?.track_id || '');
+      if (tid && !ids.includes(tid)) ids.push(tid);
+    });
+    return ids.slice(0, 6);
+  }
+
+  function _collectAutoplayExcludeIds() {
+    const ids = new Set();
+    ps.queue.forEach(t => { if (t && t.id) ids.add(String(t.id)); });
+    (ps.autoplayExcludedTrackIds || []).forEach(id => { if (id) ids.add(String(id)); });
+    return Array.from(ids).slice(-400);
+  }
+
+  function _appendAutoplayTracks(tracks) {
+    if (!Array.isArray(tracks) || tracks.length === 0) return 0;
+    const existing = new Set(ps.queue.map(t => String(t?.id || '')).filter(Boolean));
+    const excluded = new Set(Array.isArray(ps.autoplayExcludedTrackIds) ? ps.autoplayExcludedTrackIds.map(String) : []);
+    const clean = [];
+    tracks.forEach(track => {
+      if (!track || !track.id) return;
+      const id = String(track.id);
+      if (existing.has(id) || excluded.has(id)) return;
+      existing.add(id);
+      excluded.add(id);
+      _registry.set(id, track);
+      clean.push(_markAutoplayTrack(track));
+    });
+    if (!clean.length) return 0;
+
+    const insertAt = ps.queue.length;
+    ps.queue.push(...clean);
+    if (ps.shuffle) {
+      const indices = clean.map((_, i) => insertAt + i);
+      ps.shuffleOrder.push(...indices);
+    }
+    ps.autoplayExcludedTrackIds = Array.from(excluded).slice(-250);
+    _syncAutoplayQueueState();
+    _preloadNext();
+    if (ps.queueOpen) _renderQueue();
+    return clean.length;
+  }
+
+  async function _ensureAutoplayQueue(reason = 'refill', options = {}) {
+    if (!ps.autoplayEnabled) return false;
+    if (_autoplayFetchInFlight) return _autoplayFetchPromise || false;
+    if (ps.repeatMode !== 'off') return false;
+    const cur = currentTrack();
+    if (!cur || !cur.id) return false;
+
+    _syncAutoplayQueueState();
+    const pending = _pendingAutoplayEntries().length;
+    if (!options.force && pending >= _AUTOPLAY_LOW_WATERMARK) return false;
+    if (pending >= _AUTOPLAY_VISIBLE_LIMIT) return false;
+
+    _autoplayFetchInFlight = true;
+    _autoplayFetchPromise = (async () => {
+      const res = await fetch('/api/player/autoplay/recommend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          seed_track_ids: _collectAutoplaySeedIds(),
+          current_track_id: cur.id,
+          previous_track_id: cur.id,
+          exclude_track_ids: _collectAutoplayExcludeIds(),
+          limit: Math.max(1, _AUTOPLAY_VISIBLE_LIMIT - pending),
+          reason,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const added = _appendAutoplayTracks(data.tracks || []);
+      if (added > 0) _saveState();
+      return added > 0;
+    })();
+    try {
+      return await _autoplayFetchPromise;
+    } catch (e) {
+      console.warn('Player: Auto Play refill failed', e);
+      return false;
+    } finally {
+      _autoplayFetchInFlight = false;
+      _autoplayFetchPromise = null;
+    }
+  }
+
+  function setAutoplayEnabled(enabled) {
+    ps.autoplayEnabled = !!enabled;
+    if (ps.autoplayEnabled) {
+      if (!ps.autoplaySessionId) _startNewAutoplaySession();
+      _ensureAutoplayQueue('enabled', { force: true });
+    } else {
+      _removePendingAutoplayTracks();
+      ps.autoplayQueue = [];
+    }
+    _updateAutoplayBtn();
+    _renderQueue();
+    _saveState();
+  }
+
+  function toggleAutoplay() {
+    _startupRestoreGuardActive = false;
+    setAutoplayEnabled(!ps.autoplayEnabled);
   }
 
   function _startPlay() {
@@ -1219,6 +1437,7 @@ const Player = (function () {
   }
 
   function toggleShuffle() {
+    if (ps.autoplayEnabled) _removePendingAutoplayTracks();
     // If queue is only a single track but we have a richer active context
     // (playlist/artist/album/songs), promote that context into queue first.
     if (ps.queue.length <= 1 && ps.playbackContextTracks.length > 1 && currentTrack()) {
@@ -1255,11 +1474,17 @@ const Player = (function () {
     _renderQueue();
     _saveState();
     _preloadNext();  // re-buffer with new shuffle order
+    _ensureAutoplayQueue('shuffle-change', { force: true });
   }
 
   function cycleRepeat() {
     const modes = ['off', 'all', 'one'];
     ps.repeatMode = modes[(modes.indexOf(ps.repeatMode) + 1) % modes.length];
+    if (ps.repeatMode !== 'off') {
+      _removePendingAutoplayTracks();
+    } else {
+      _ensureAutoplayQueue('repeat-off', { force: true });
+    }
     _updateRepeatBtn();
     _saveState();
     _preloadNext();  // repeat mode change may change which track is next
@@ -1283,6 +1508,7 @@ const Player = (function () {
       }
     }
     // Insert at current position + 1 (or at start)
+    if (ps.autoplayEnabled) _startNewAutoplaySession();
     const insertAt = ps.queueIdx >= 0 ? ps.queueIdx + 1 : 0;
     ps.queue.splice(insertAt, 0, track);
     ps.queueIdx = insertAt;
@@ -1337,6 +1563,7 @@ const Player = (function () {
       ps.lastShuffleFirstIdx = firstRealIdx;
       ps.queueIdx = 0;
     }
+    if (ps.autoplayEnabled) _startNewAutoplaySession();
     _loadTrack(currentTrack());
     _startPlay();
     _renderQueue();
@@ -1356,6 +1583,7 @@ const Player = (function () {
     ps.shuffle = false;
     ps.shuffleOrder = [];
     _updateShuffleBtn();
+    if (ps.autoplayEnabled) _startNewAutoplaySession();
     _loadTrack(currentTrack());
     _startPlay();
     _renderQueue();
@@ -1367,10 +1595,15 @@ const Player = (function () {
     if (!Array.isArray(tracks)) tracks = [tracks];
     if (tracks.length === 0) return;
     tracks.forEach(t => _registry.set(t.id, t));
-    ps.queue.push(...tracks);
+    const firstAuto = _firstPendingAutoplayRealIdx();
+    const insertAt = firstAuto >= 0 ? firstAuto : ps.queue.length;
+    ps.queue.splice(insertAt, 0, ...tracks);
     if (ps.shuffle) {
-      const newIndices = tracks.map((_, i) => ps.queue.length - tracks.length + i);
-      ps.shuffleOrder.push(..._fisherYates(newIndices));
+      ps.shuffleOrder = ps.shuffleOrder.map(i => i >= insertAt ? i + tracks.length : i);
+      const newIndices = tracks.map((_, i) => insertAt + i);
+      const firstAutoPos = ps.shuffleOrder.findIndex((idx, pos) => pos > ps.queueIdx && _isAutoplayTrack(ps.queue[idx]));
+      const shuffleInsertAt = firstAutoPos >= 0 ? firstAutoPos : ps.shuffleOrder.length;
+      ps.shuffleOrder.splice(shuffleInsertAt, 0, ..._fisherYates(newIndices));
     }
     // Start playing if nothing was loaded
     if (ps.queueIdx < 0) {
@@ -1378,6 +1611,7 @@ const Player = (function () {
       _loadTrack(currentTrack());
     }
     _renderQueue();
+    _syncAutoplayQueueState();
     _saveState();
     _invalidatePreload();  // queue changed — pre-buffered next may no longer be correct
     const n = tracks.length;
@@ -1417,6 +1651,7 @@ const Player = (function () {
     }
 
     _renderQueue();
+    _syncAutoplayQueueState();
     _saveState();
     _invalidatePreload();  // inserted after current — pre-buffered next is now wrong
     _preloadNext();
@@ -1466,6 +1701,7 @@ const Player = (function () {
       _invalidatePreload();
       _preloadNext();
     }
+    _syncAutoplayQueueState();
     _renderQueue();
     _saveState();
   }
@@ -1476,6 +1712,7 @@ const Player = (function () {
       ps.queue        = [];
       ps.queueIdx     = -1;
       ps.shuffleOrder = [];
+      ps.autoplayQueue = [];
       if (_isMpvActive()) {
         _mpvCmd('stop', {});
       } else {
@@ -1495,6 +1732,7 @@ const Player = (function () {
     ps.queue = [keep];
     ps.queueIdx = 0;
     ps.shuffleOrder = ps.shuffle ? [0] : [];
+    ps.autoplayQueue = [];
     _invalidatePreload();  // no next track after clear
     _highlightActiveRow();
     _renderQueue();
@@ -1511,6 +1749,7 @@ const Player = (function () {
       else if (fromIdx < ps.queueIdx && toIdx >= ps.queueIdx) ps.queueIdx--;
       else if (fromIdx > ps.queueIdx && toIdx <= ps.queueIdx) ps.queueIdx++;
     }
+    _syncAutoplayQueueState();
     _saveState();
     _invalidatePreload();
     _preloadNext();
@@ -1690,6 +1929,7 @@ const Player = (function () {
         _saveState();
         if (ps.queueOpen) _renderQueue();
         _preloadNext();  // buffer the track after next
+        _ensureAutoplayQueue('gapless-advance');
       } else {
         // Fallback: normal load (pre-buffer wasn't ready or crossfade > 0)
         _resetStandbyBuffer();
@@ -1699,10 +1939,19 @@ const Player = (function () {
         if (ps.queueOpen) _renderQueue();
       }
     } else {
-      ps.isPlaying = false;
-      _updatePlayBtn();
-      _highlightActiveRow();
-      if (ps.queueOpen) _renderQueue();
+      _ensureAutoplayQueue('queue-end', { force: true }).then((added) => {
+        if (added && ps.queueIdx < ps.queue.length - 1 && ps.repeatMode === 'off') {
+          ps.queueIdx = ps.queueIdx + 1;
+          _loadTrack(currentTrack());
+          _startPlay();
+          if (ps.queueOpen) _renderQueue();
+          return;
+        }
+        ps.isPlaying = false;
+        _updatePlayBtn();
+        _highlightActiveRow();
+        if (ps.queueOpen) _renderQueue();
+      });
     }
   }
 
@@ -2103,6 +2352,9 @@ const Player = (function () {
       historyItems  = ps.queue.slice(0, curRealIdx).map((t, i) => ({ t, realIdx: i }));
       upcomingItems = ps.queue.slice(curRealIdx + 1).map((t, i) => ({ t, realIdx: curRealIdx + 1 + i }));
     }
+    const explicitUpcomingItems = upcomingItems.filter(({ t }) => !_isAutoplayTrack(t));
+    const autoplayItems = upcomingItems.filter(({ t }) => _isAutoplayTrack(t)).slice(0, _AUTOPLAY_VISIBLE_LIMIT);
+    const hiddenAutoplayCount = Math.max(0, upcomingItems.filter(({ t }) => _isAutoplayTrack(t)).length - autoplayItems.length);
     const currentTrackObj = ps.queue[curRealIdx];
 
     let html = '';
@@ -2156,10 +2408,10 @@ const Player = (function () {
       </div>`;
     }
 
-    // Upcoming tracks (draggable in non-shuffle mode) — capped at 200 for perf
+    // Upcoming explicit tracks (draggable) — capped at 200 for perf
     const QUEUE_CAP = 200;
-    const visibleUpcoming = upcomingItems.slice(0, QUEUE_CAP);
-    const hiddenCount     = upcomingItems.length - visibleUpcoming.length;
+    const visibleUpcoming = explicitUpcomingItems.slice(0, QUEUE_CAP);
+    const hiddenCount     = explicitUpcomingItems.length - visibleUpcoming.length;
     html += `<div id="queue-upcoming-list">`;
     visibleUpcoming.forEach(({ t, realIdx }) => {
       html += _queueItemHtml(t, realIdx, true, false);
@@ -2169,11 +2421,31 @@ const Player = (function () {
     }
     html += `</div></div>`;  // close upcoming list + section
 
+    if (ps.autoplayEnabled || autoplayItems.length > 0) {
+      html += `<div class="queue-section queue-section-autoplay">
+        <div class="queue-section-hdr queue-section-hdr-plain">
+          <span class="queue-section-title">Auto Play</span>
+          <span class="queue-section-from">${ps.autoplayEnabled ? 'similar songs' : 'off'}</span>
+        </div>
+        <div class="queue-autoplay-list">`;
+      if (autoplayItems.length > 0) {
+        autoplayItems.forEach(({ t, realIdx }) => {
+          html += _queueItemHtml(t, realIdx, false, false);
+        });
+        if (hiddenAutoplayCount > 0) {
+          html += `<div class="queue-overflow-note">+ ${hiddenAutoplayCount} more Auto Play track${hiddenAutoplayCount !== 1 ? 's' : ''}</div>`;
+        }
+      } else {
+        html += `<div class="queue-empty queue-empty-compact">${_autoplayFetchInFlight ? 'Finding similar songs…' : 'Auto Play will add similar songs at the end.'}</div>`;
+      }
+      html += `</div></div>`;
+    }
+
     list.innerHTML = html;
 
     // Drag-and-drop on upcoming list (both normal and shuffle mode)
     const upcomingList = document.getElementById('queue-upcoming-list');
-    if (upcomingList && typeof Sortable !== 'undefined' && upcomingItems.length > 1) {
+    if (upcomingList && typeof Sortable !== 'undefined' && explicitUpcomingItems.length > 1) {
       _queueSortable = Sortable.create(upcomingList, {
         animation: 150,
         handle: '.queue-drag-handle',
@@ -2218,6 +2490,7 @@ const Player = (function () {
       ps.queueIdx = 0;
     }
     _renderQueue();
+    _syncAutoplayQueueState();
     _saveState();
   }
 
@@ -2466,6 +2739,14 @@ const Player = (function () {
       : `<span class="tb-icon tb-icon-repeat-list" aria-hidden="true"></span>`;
   }
 
+  function _updateAutoplayBtn() {
+    const btn = document.getElementById('player-autoplay-btn');
+    if (!btn) return;
+    btn.classList.toggle('active', !!ps.autoplayEnabled);
+    btn.title = ps.autoplayEnabled ? 'Auto Play: on' : 'Auto Play: off';
+    btn.setAttribute('aria-pressed', ps.autoplayEnabled ? 'true' : 'false');
+  }
+
   function _updateVolumeUI() {
     const slider = document.getElementById('player-volume');
     const btn    = document.getElementById('player-mute-btn');
@@ -2524,6 +2805,7 @@ const Player = (function () {
   }
 
   function getStateJSON() {
+    _syncAutoplayQueueState();
     const seekTime = _isMpvActive() ? _mpvPosition : (_audio.currentTime || 0);
     return JSON.stringify({
       queue:        ps.queue,
@@ -2537,6 +2819,10 @@ const Player = (function () {
       peqIem:       ps.activePeqIemId     || '',
       peqProfile:   ps.activePeqProfileId || '',
       recentContexts: Array.isArray(ps.recentContexts) ? ps.recentContexts.slice(0, 30) : [],
+      autoplayEnabled: !!ps.autoplayEnabled,
+      autoplayQueue: Array.isArray(ps.autoplayQueue) ? ps.autoplayQueue.slice(0, _AUTOPLAY_VISIBLE_LIMIT) : [],
+      autoplaySessionId: ps.autoplaySessionId || '',
+      autoplayExcludedTrackIds: Array.isArray(ps.autoplayExcludedTrackIds) ? ps.autoplayExcludedTrackIds.slice(-250) : [],
       seekTime,
     });
   }
@@ -2564,6 +2850,10 @@ const Player = (function () {
     peqIem:     'tb_peq_iem',
     peqProfile: 'tb_peq_profile',
     seekTime:   'tb_seek_time',
+    autoplay:   'tb_autoplay_enabled',
+    autoplayQueue: 'tb_autoplay_queue',
+    autoplaySession: 'tb_autoplay_session',
+    autoplayExcluded: 'tb_autoplay_excluded',
   };
 
   function _saveState() {
@@ -2580,6 +2870,11 @@ const Player = (function () {
       localStorage.setItem(_LS.peqProfile, ps.activePeqProfileId || '');
       localStorage.setItem(_LS.seekTime,   _isMpvActive() ? _mpvPosition : (_audio.currentTime || 0));
       localStorage.setItem('tb_recent_contexts', JSON.stringify(ps.recentContexts || []));
+      _syncAutoplayQueueState();
+      localStorage.setItem(_LS.autoplay, ps.autoplayEnabled);
+      localStorage.setItem(_LS.autoplayQueue, JSON.stringify(ps.autoplayQueue || []));
+      localStorage.setItem(_LS.autoplaySession, ps.autoplaySessionId || '');
+      localStorage.setItem(_LS.autoplayExcluded, JSON.stringify(ps.autoplayExcludedTrackIds || []));
     } catch (_) { /* quota exceeded — ignore */ }
     _scheduleRemoteSave();
   }
@@ -2611,6 +2906,20 @@ const Player = (function () {
         ps.recentContexts = rcRaw ? JSON.parse(rcRaw) : [];
       } catch (_) {
         ps.recentContexts = [];
+      }
+      ps.autoplayEnabled = _boolFromState(localStorage.getItem(_LS.autoplay), false);
+      ps.autoplaySessionId = localStorage.getItem(_LS.autoplaySession) || '';
+      try {
+        const aqRaw = localStorage.getItem(_LS.autoplayQueue);
+        ps.autoplayQueue = aqRaw ? JSON.parse(aqRaw) : [];
+      } catch (_) {
+        ps.autoplayQueue = [];
+      }
+      try {
+        const aeRaw = localStorage.getItem(_LS.autoplayExcluded);
+        ps.autoplayExcludedTrackIds = aeRaw ? JSON.parse(aeRaw) : [];
+      } catch (_) {
+        ps.autoplayExcludedTrackIds = [];
       }
 
       const xfade = parseInt(localStorage.getItem('tb_xfade') ?? '0', 10);
@@ -2650,6 +2959,18 @@ const Player = (function () {
     ps.activePeqProfileId = sv.peqProfile || sv.activePeqProfileId || null;
     if (Array.isArray(sv.recentContexts)) {
       ps.recentContexts = sv.recentContexts.slice(0, 30);
+    }
+    if (typeof sv.autoplayEnabled !== 'undefined') {
+      ps.autoplayEnabled = _boolFromState(sv.autoplayEnabled, false);
+    }
+    if (Array.isArray(sv.autoplayQueue)) {
+      ps.autoplayQueue = sv.autoplayQueue.slice(0, _AUTOPLAY_VISIBLE_LIMIT);
+    }
+    if (typeof sv.autoplaySessionId !== 'undefined') {
+      ps.autoplaySessionId = String(sv.autoplaySessionId || '');
+    }
+    if (Array.isArray(sv.autoplayExcludedTrackIds)) {
+      ps.autoplayExcludedTrackIds = sv.autoplayExcludedTrackIds.map(String).slice(-250);
     }
     ps.queue.forEach(t => { if (t && t.id) _registry.set(t.id, t); });
     return seekTimeOverride ?? sv.seekTime ?? 0;
@@ -2697,6 +3018,7 @@ const Player = (function () {
     _updateVolumeUI();
     _updateShuffleBtn();
     _updateRepeatBtn();
+    _updateAutoplayBtn();
     _updatePlayBtn();
     _updatePeqBtn();
     _updateRgModeUI();
@@ -3088,6 +3410,8 @@ const Player = (function () {
     toggleMute,
     toggleShuffle,
     cycleRepeat,
+    toggleAutoplay,
+    setAutoplayEnabled,
     // Queue
     playTrack,
     playTrackById,
