@@ -8841,6 +8841,12 @@ tbody tr:hover {
   mask-image: url('/icons/peq.svg');
   -webkit-mask-image: url('/icons/peq.svg');
 }
+.tb-icon-infinity {
+  width: 16px;
+  height: 16px;
+  mask-image: url('/icons/infinity-symbol-svgrepo-com.svg');
+  -webkit-mask-image: url('/icons/infinity-symbol-svgrepo-com.svg');
+}
 .player-btn:hover {
   color: rgba(225,230,245,0.95);
   background: transparent;
@@ -8856,16 +8862,6 @@ tbody tr:hover {
 .player-autoplay-btn {
   width: 27px;
   height: 27px;
-}
-.player-autoplay-glyph {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  font-size: 22px;
-  font-weight: 500;
-  line-height: 1;
 }
 .player-btn-sm { padding: 4px; }
 .player-btn-text {

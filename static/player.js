@@ -36,7 +36,7 @@ const Player = (function () {
     playbackContext: { sourceType: 'unknown', sourceId: '', sourceLabel: '' },
     recentContexts: [],
     lastShuffleFirstIdx: -1,
-    autoplayEnabled: false,
+    autoplayEnabled: true,
     autoplayQueue: [],
     autoplaySessionId: '',
     autoplayExcludedTrackIds: [],
@@ -2907,7 +2907,7 @@ const Player = (function () {
       } catch (_) {
         ps.recentContexts = [];
       }
-      ps.autoplayEnabled = _boolFromState(localStorage.getItem(_LS.autoplay), false);
+      ps.autoplayEnabled = _boolFromState(localStorage.getItem(_LS.autoplay), true);
       ps.autoplaySessionId = localStorage.getItem(_LS.autoplaySession) || '';
       try {
         const aqRaw = localStorage.getItem(_LS.autoplayQueue);
