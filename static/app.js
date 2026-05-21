@@ -136,7 +136,7 @@ function _normalizeContentSortPrefs(raw = {}) {
       mode: _pickAllowed(playlistTracks.mode, ['original', 'az', 'album', 'year'], defaults.playlistTracks.mode),
       dir: _pickAllowed(playlistTracks.dir, ['asc', 'desc'], defaults.playlistTracks.dir),
     },
-    libraryTracks: _normalizeSortState(source.libraryTracks, ['track_number', 'title', 'album', 'duration'], defaults.libraryTracks),
+    libraryTracks: _normalizeSortState(source.libraryTracks, ['track_number', 'title', 'album', 'duration', 'plays'], defaults.libraryTracks),
     songs: _normalizeSortState(source.songs, ['title', 'artist', 'album', 'duration', 'plays', 'genre', 'year', 'album_artist', 'format', 'bitrate', 'date_added'], defaults.songs),
     favourites: {
       songs: _pickAllowed(favourites.songs, ['my', 'recent', 'az', 'album'], defaults.favourites.songs),
@@ -2607,6 +2607,12 @@ function _tracksSortedRows(rows) {
       if (ad !== bd) return (ad - bd) * dir;
       return String(a?.title || '').localeCompare(String(b?.title || ''));
     }
+    if (col === 'plays') {
+      const ap = Number(_playStats?.[a?.id]?.count || 0);
+      const bp = Number(_playStats?.[b?.id]?.count || 0);
+      if (ap !== bp) return (ap - bp) * dir;
+      return String(a?.title || '').localeCompare(String(b?.title || ''));
+    }
     if (col === 'album') {
       const cmpAlbum = String(a?.album || '').localeCompare(String(b?.album || ''));
       if (cmpAlbum !== 0) return cmpAlbum * dir;
@@ -2784,10 +2790,8 @@ function trackRow(t, num, inPlaylist) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div></td>
-      <td data-col="duration" class="col-dur">
-        ${esc(t.duration_fmt || '')}
-        ${_playStats[t.id]?.count ? `<span class="track-play-badge" title="Last played ${new Date(_playStats[t.id].last_played * 1000).toLocaleDateString()}">${_playStats[t.id].count}×</span>` : ''}
-      </td>
+      <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
+      <td data-col="plays" title="${_playStats[t.id]?.last_played ? `Last played ${new Date(_playStats[t.id].last_played * 1000).toLocaleDateString()}` : 'No plays yet'}">${Number(_playStats[t.id]?.count || 0).toLocaleString()}</td>
       <td data-col="year" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.year || '')}</td>
       <td data-col="disc_number" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.disc_number || '')}</td>
       <td data-col="album_artist" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.album_artist || '')}">${esc(t.album_artist || '')}</td>
@@ -12482,6 +12486,9 @@ function _defaultColumnOrderForContext(ctx) {
   }
   if (ctx === 'fav_songs') {
     return ['track_number', 'title', 'artist', 'album', 'duration', 'genre', 'lyrics', 'favourite', 'actions'];
+  }
+  if (ctx === 'tracks') {
+    return ['track_number', 'title', 'artist', 'album', 'duration', 'plays', 'genre', 'lyrics', 'favourite', 'actions', 'year', 'disc_number', 'album_artist', 'format', 'bitrate', 'sample_rate', 'bit_depth', 'date_added', 'filename'];
   }
   return ['track_number', 'title', 'artist', 'album', 'duration', 'genre', 'lyrics', 'favourite', 'actions', 'plays', 'year', 'disc_number', 'album_artist', 'format', 'bitrate', 'sample_rate', 'bit_depth', 'date_added', 'filename'];
 }

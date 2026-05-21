@@ -16970,13 +16970,6 @@ tr:hover .track-edit-btn:hover {
   .history-charts-row { grid-template-columns: 1fr; }
 }
 
-/* Track play count badge */
-.track-play-badge {
-  font-size: 10px; color: var(--text-muted); background: rgba(255,255,255,.06);
-  border-radius: 4px; padding: 1px 5px; margin-left: 4px;
-  white-space: nowrap; vertical-align: middle; cursor: default;
-}
-
 /* ── Library Coverage ───────────────────────────────────────────────── */
 .library-coverage-view { background: var(--app-page-gradient); padding-bottom: 90px; }
 .library-coverage-page-header {
