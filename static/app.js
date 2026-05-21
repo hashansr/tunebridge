@@ -8636,9 +8636,14 @@ function _swComputeTotals() {
 
   const usedBytes  = _sw.device?.used_bytes ?? 0;
   const capBytes   = _sw.device?.capacity_bytes ?? 0;
+  const freeBytes  = Math.max(0, capBytes - usedBytes);
+  const requiredBytes = toDeviceMB * 1024 * 1024;
+  const deleteBytes = deleteMB * 1024 * 1024;
+  const effectiveAvailableBytes = freeBytes + deleteBytes;
+  const remainingBytes = effectiveAvailableBytes - requiredBytes;
   const afterUsed  = usedBytes + netMB * 1024 * 1024;
   const tight      = capBytes > 0 && (afterUsed / capBytes) > 0.95;
-  const outOfSpace = capBytes > 0 && afterUsed > capBytes;
+  const outOfSpace = capBytes > 0 && remainingBytes < 0;
 
   return {
     toDeviceCount: toDev.length,
@@ -8646,8 +8651,36 @@ function _swComputeTotals() {
     copyCount: copyItems.length, deleteCount: deleteItems.length,
     playlistCount: plists.length,
     toDeviceMB, copyMB, deleteMB, netMB, netGB, sign,
-    totalChanges, usedBytes, capBytes, afterUsed, tight, outOfSpace,
+    totalChanges, usedBytes, capBytes, freeBytes, requiredBytes, deleteBytes,
+    effectiveAvailableBytes, remainingBytes, afterUsed, tight, outOfSpace,
   };
+}
+
+function _swStoragePhrase(t) {
+  const selectedSummary = [];
+  if (t.toDeviceCount) selectedSummary.push(`${t.toDeviceCount} song${t.toDeviceCount===1?'':'s'}`);
+  if (t.toDeviceLyricsCount) selectedSummary.push(`${t.toDeviceLyricsCount} lyric${t.toDeviceLyricsCount===1?'':'s'}`);
+  if (t.copyCount) selectedSummary.push(`${t.copyCount} to library`);
+  if (t.deleteCount) selectedSummary.push(`${t.deleteCount} deleted from device`);
+  if (t.playlistCount) selectedSummary.push(`${t.playlistCount} playlist${t.playlistCount===1?'':'s'}`);
+
+  const selectionText = selectedSummary.length ? selectedSummary.join(' · ') : 'No changes selected';
+  if (!t.capBytes) return esc(selectionText);
+
+  const diffText = t.remainingBytes >= 0
+    ? `${_fmtBytes(t.remainingBytes)} remaining`
+    : `${_fmtBytes(Math.abs(t.remainingBytes))} over`;
+  const stateClass = t.remainingBytes < 0 ? 'is-over' : (t.tight ? 'is-tight' : 'is-ok');
+  const availableLabel = t.deleteBytes > 0 ? 'Available after deletes' : 'Available';
+
+  return `
+    <span class="sw-storage-summary" aria-label="${esc(`${availableLabel} ${_fmtBytes(t.effectiveAvailableBytes)}, required ${_fmtBytes(t.requiredBytes)}, ${diffText}`)}">
+      <span><strong>${esc(_fmtBytes(t.effectiveAvailableBytes))}</strong> ${availableLabel}</span>
+      <span><strong>${esc(_fmtBytes(t.requiredBytes))}</strong> Required</span>
+      <span class="${stateClass}"><strong>${esc(_fmtBytes(Math.abs(t.remainingBytes)))}</strong> ${t.remainingBytes >= 0 ? 'Remaining' : 'Over'}</span>
+    </span>
+    <span class="sw-storage-selection">${esc(selectionText)}</span>
+  `;
 }
 
 function _swUpdateReviewFooter() {
@@ -8655,31 +8688,15 @@ function _swUpdateReviewFooter() {
   const msgEl = document.getElementById('sw-footer-msg');
   if (msgEl) {
     const statusEl = document.getElementById('sw-footer-status');
-    if (t.outOfSpace) {
-      const over = _fmtGB(t.afterUsed - t.capBytes);
-      msgEl.textContent = '⚠ Not enough space — deselect ' + over + ' to continue.';
-      msgEl.style.color = '#fbbf24';
-      msgEl.style.fontWeight = '600';
-      msgEl.style.fontSize = '13px';
-      if (statusEl) {
-        statusEl.style.color = '#fbbf24';
-        statusEl.className = 'sw-footer-status sw-footer-status--warn';
-      }
-    } else {
-      const parts = [];
-      if (t.toDeviceCount)  parts.push(`${t.toDeviceCount} song${t.toDeviceCount===1?'':'s'} to device`);
-      if (t.toDeviceLyricsCount) parts.push(`${t.toDeviceLyricsCount} lyric${t.toDeviceLyricsCount===1?'':'s'} to device`);
-      if (t.copyCount)      parts.push(`${t.copyCount} to library`);
-      if (t.deleteCount)    parts.push(`${t.deleteCount} deleted from device`);
-      if (t.playlistCount)  parts.push(`${t.playlistCount} playlist${t.playlistCount===1?'':'s'}`);
-      msgEl.textContent = parts.length ? parts.join(' · ') : 'No changes selected.';
-      msgEl.style.color = '';
-      msgEl.style.fontWeight = '';
-      msgEl.style.fontSize = '';
-      if (statusEl) {
-        statusEl.style.color = '';
-        statusEl.className = 'sw-footer-status';
-      }
+    msgEl.innerHTML = _swStoragePhrase(t);
+    msgEl.style.color = '';
+    msgEl.style.fontWeight = '';
+    msgEl.style.fontSize = '';
+    if (statusEl) {
+      statusEl.style.color = '';
+      statusEl.className = 'sw-footer-status'
+        + (t.outOfSpace ? ' sw-footer-status--warn' : '')
+        + (!t.outOfSpace && t.tight ? ' sw-footer-status--tight' : '');
     }
   }
 
