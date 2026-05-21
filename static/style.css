@@ -575,6 +575,17 @@ nav {
 #sync-nav-btn.has-connected-dap .sync-nav-ready-dot {
   display: block;
 }
+/* Sync in-progress pulse — shown when scan/copy is running and user is elsewhere */
+#sync-nav-btn[data-sync-active="1"] .sync-nav-ready-dot {
+  display: block;
+  background: var(--accent);
+  box-shadow: 0 0 5px rgba(173, 198, 255, 0.7);
+  animation: sync-active-pulse 1.4s ease-in-out infinite;
+}
+@keyframes sync-active-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
 
 #scan-status {
   flex-shrink: 0;
@@ -19406,6 +19417,68 @@ body.is-col-resizing {
   box-shadow: 0 0 24px rgba(83,225,111,0.32);
 }
 
+/* Per-file current label + thin secondary bar */
+.sw-sync-current-wrap {
+  padding: 5px 2px 4px;
+}
+.sw-sync-current-label {
+  font-size: 11px;
+  font-family: var(--tb-font-mono, monospace);
+  color: var(--text-muted);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 4px;
+}
+.sw-bar-wrap--thin { height: 3px; border-radius: 9999px; background: var(--surface-3); overflow: hidden; }
+.sw-bar--file { background: var(--accent); opacity: 0.6; transition: width 0.2s linear; border-radius: 9999px; height: 100%; }
+
+/* Step 4 caution bar — don't eject / close app */
+.sw-sync-caution-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(255, 185, 90, 0.1);
+  border-bottom: 1px solid rgba(255, 185, 90, 0.18);
+  border-radius: 12px 12px 0 0;
+  font-size: 12px;
+  color: #ffb95a;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+.sw-sync-caution-bar svg { flex-shrink: 0; }
+.sw-sync-caution-bar strong { color: var(--text); }
+
+/* Step 3 mismatch warning banner */
+.sw-mismatch-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255, 185, 90, 0.1);
+  border: 1px solid rgba(255, 185, 90, 0.3);
+  border-radius: 10px;
+  margin-bottom: 12px;
+  font-size: 12.5px;
+  color: var(--text-sub);
+  line-height: 1.5;
+}
+.sw-mismatch-icon { flex-shrink: 0; margin-top: 1px; color: #ffb95a; }
+.sw-mismatch-text { flex: 1; }
+.sw-mismatch-count { font-weight: 600; }
+.sw-mismatch-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  color: var(--text-muted);
+  line-height: 1;
+}
+.sw-mismatch-dismiss:hover { color: var(--text); }
+
 .sw-progress-body {
   display: grid;
   grid-template-columns: 280px 1fr;
@@ -19576,6 +19649,17 @@ body.is-col-resizing {
   font-size: 11.5px;
   color: var(--text-muted);
   display: block;
+}
+
+.sw-group-template-hint {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  display: block;
+}
+.sw-group-template-path {
+  font-family: var(--tb-font-mono, monospace);
+  color: var(--text-sub);
 }
 
 .sw-group-sel-pill {

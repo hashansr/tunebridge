@@ -383,6 +383,10 @@ sync_state = {
     'space_ok': True,
     'playlists_out_of_sync': [],
     'playlists_out_of_sync_count': 0,
+    'cancel_requested': False,
+    'current_file_done': 0,
+    'current_file_total': 0,
+    'path_template': '',
 }
 sync_check_lock = threading.Lock()
 sync_check_inflight = set()
@@ -8862,6 +8866,9 @@ def sync_scan():
         'playlists_out_of_sync': [],
         'playlists_out_of_sync_count': 0,
         'cancel_requested': False,
+        'current_file_done': 0,
+        'current_file_total': 0,
+        'path_template': '',
     }
 
     def do_scan():
@@ -8915,6 +8922,7 @@ def sync_scan():
                 'playlists_out_of_sync': playlists_out,
                 'playlists_out_of_sync_count': len(playlists_out),
                 'message': diff['message'],
+                'path_template': dap.get('path_template') or DEFAULT_DAP_PATH_TEMPLATE,
             })
             _pending_manifest_by_device_rel = diff.get('pending_manifest_by_device_rel', {})
             _update_dap_sync_summary(dap_id, {
@@ -9003,6 +9011,36 @@ def _safe_delete_device_rel_file(device_root: Path, rel_path: str):
         except OSError:
             break
         parent = parent.parent
+
+
+_COPY_CHUNK_SIZE = 4 * 1024 * 1024  # 4 MB
+
+
+def _chunked_copy(src, dst, state_ref):
+    """Copy src→dst in 4 MB chunks, updating state_ref for per-file progress.
+    Returns True on success, False if cancel was requested mid-file (dst unlinked)."""
+    file_size = src.stat().st_size
+    state_ref['current_file_total'] = file_size
+    state_ref['current_file_done'] = 0
+    cancelled = False
+    with open(src, 'rb') as fsrc, open(dst, 'wb') as fdst:
+        while True:
+            if state_ref.get('cancel_requested'):
+                cancelled = True
+                break
+            chunk = fsrc.read(_COPY_CHUNK_SIZE)
+            if not chunk:
+                break
+            fdst.write(chunk)
+            state_ref['current_file_done'] = fsrc.tell()
+    if cancelled:
+        try:
+            dst.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return False
+    shutil.copystat(src, dst)
+    return True
 
 
 @app.route('/api/sync/execute', methods=['POST'])
@@ -9126,6 +9164,8 @@ def sync_execute():
         'total': total,
         'errors': [],
         'current': '',
+        'current_file_done': 0,
+        'current_file_total': 0,
         'message': f'Syncing 0 / {total} items…',
     })
 
@@ -9149,10 +9189,6 @@ def sync_execute():
             sync_state['message'] = f'Syncing {progress} / {total} items…'
 
         for device_rel in add_to_device_paths:
-            if sync_state.get('cancel_requested'):
-                sync_state['status'] = 'cancelled'
-                sync_state['message'] = 'Sync cancelled by user.'
-                return
             local_rel = local_copy_map.get(device_rel)
             if not local_rel:
                 errors.append(f'{device_rel}: no local source mapping found')
@@ -9163,16 +9199,31 @@ def sync_execute():
             src = get_music_base() / local_rel
             dst = device_path / device_rel
             sync_state['current'] = f'→ Device: {device_rel}'
+            sync_state['current_file_done'] = 0
+            sync_state['current_file_total'] = 0
             try:
                 dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
+                ok = _chunked_copy(src, dst, sync_state)
+                if not ok:
+                    # Cancelled mid-file — dst already cleaned up by _chunked_copy
+                    sync_state['status'] = 'cancelled'
+                    sync_state['message'] = 'Sync cancelled by user.'
+                    return
                 if device_rel in pending_manifest:
                     mkey, mentry = pending_manifest[device_rel]
                     _update_dap_sync_manifest(dap_id, {mkey: mentry})
             except Exception as e:
                 errors.append(f'{device_rel}: {e}')
+                # Clean up any partial file left by a failed copy
+                try:
+                    if dst.exists() and dst.stat().st_size < src.stat().st_size:
+                        dst.unlink(missing_ok=True)
+                except Exception:
+                    pass
             progress += 1
             sync_state['progress'] = progress
+            sync_state['current_file_done'] = 0
+            sync_state['current_file_total'] = 0
             sync_state['message'] = f'Syncing {progress} / {total} items…'
 
         for rel in copy_to_local_paths:

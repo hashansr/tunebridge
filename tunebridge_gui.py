@@ -14,6 +14,7 @@ import os
 import sys
 import json
 import socket
+import subprocess
 import threading
 import time
 import traceback
@@ -432,6 +433,22 @@ def main():
         threading.Thread(target=_delayed_exit, daemon=True).start()
 
     def _on_window_closing():
+        import app as flask_app
+        sync_active = flask_app.sync_state.get('status') in ('scanning', 'copying')
+        if sync_active:
+            try:
+                result = subprocess.run(
+                    ['osascript', '-e',
+                     'display dialog "A sync is in progress.\\n\\nQuitting now may leave '
+                     'incomplete files on your device. Quit anyway?" '
+                     'buttons {"Cancel", "Quit"} default button "Cancel" with icon caution'],
+                    capture_output=True, text=True, timeout=30
+                )
+                # osascript stdout: "button returned:Quit\n" on confirm
+                if result.returncode != 0 or 'Quit' not in (result.stdout or ''):
+                    return True  # Cancel the close
+            except Exception:
+                pass  # Dialog failed — allow close rather than hanging
         _stop_playback_best_effort()
         _force_exit_failsafe()
 

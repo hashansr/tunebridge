@@ -1892,6 +1892,14 @@
 
           <!-- ── Step 3: Review changes ── -->
           <div id="sw-step-3" class="sw-step" style="display:none">
+            <!-- Mismatch warning: shown when many device files aren't matched to the library -->
+            <div id="sw-mismatch-warning" class="sw-mismatch-banner" style="display:none" role="alert">
+              <svg class="sw-mismatch-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <span class="sw-mismatch-text"><strong class="sw-mismatch-count">0</strong> files on your device don't match the library. If music was loaded with a different folder structure, these files won't be recognised. Review carefully before deleting.</span>
+              <button class="sw-mismatch-dismiss" onclick="App.swDismissMismatchWarning()" aria-label="Dismiss warning">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
             <div class="sw-filter-chips" id="sw-filter-chips">
               <button class="sw-chip sw-chip--active" data-filter="all" onclick="App.swSetFilter('all')">All <span class="sw-chip-badge" id="sw-chip-all">0</span></button>
               <button class="sw-chip" data-filter="toDevice" onclick="App.swSetFilter('toDevice')">New Songs <span class="sw-chip-badge" id="sw-chip-toDevice">0</span></button>
@@ -1905,6 +1913,10 @@
           <!-- ── Step 4: Syncing ── -->
           <div id="sw-step-4" class="sw-step" style="display:none">
             <div class="sw-progress-card sw-card" id="sw-sync-card">
+              <div class="sw-sync-caution-bar" id="sw-sync-caution-bar">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span>Don't eject <strong id="sw-caution-device-name">your device</strong> or close the app until sync is complete.</span>
+              </div>
               <div class="sw-progress-hdr">
                 <div class="sw-progress-hdr-left">
                   <span class="sw-overline">syncing</span>
@@ -1918,6 +1930,12 @@
               <div class="sw-big-pct" id="sw-sync-pct">0%</div>
               <div class="sw-bar-wrap">
                 <div class="sw-bar sw-bar--sync" id="sw-sync-bar" style="width:0%"></div>
+              </div>
+              <div class="sw-sync-current-wrap" id="sw-sync-current-wrap" style="display:none">
+                <span class="sw-sync-current-label" id="sw-sync-current"></span>
+                <div class="sw-bar-wrap sw-bar-wrap--thin">
+                  <div class="sw-bar sw-bar--file" id="sw-sync-file-bar" style="width:0%"></div>
+                </div>
               </div>
               <div class="sw-progress-body">
                 <div class="sw-phases-col" id="sw-sync-phases"><!-- populated by JS --></div>

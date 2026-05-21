@@ -7595,6 +7595,7 @@ function showSync() {
 async function loadSyncView() {
   // Clear active pollers from any previous session
   _swClearTimers();
+  _syncBgStop(); // user is now on sync view — clear background indicator
   // Reset state
   _sw = {
     step: 1, device: null, proposal: null, selection: {},
@@ -7602,6 +7603,7 @@ async function loadSyncView() {
     scanPollTimer: null, syncPollTimer: null,
     scanStartTs: 0, syncStartTs: 0, logLines: [], syncResult: null,
     executedPayload: null,
+    mismatchWarning: 0, mismatchWarningDismissed: false,
   };
   showViewEl('sync');
   // Highlight sync nav button
@@ -7626,7 +7628,7 @@ async function loadSyncView() {
     const status = await api('/sync/status');
     if (status.status === 'scanning' || status.status === 'scan_running') {
       _sw.device = { id: status.dap_id, name: status.dap_name || 'Device' };
-      _swGoTo(2);
+      _swResumeScan(); // re-attach poller without re-POSTing to /sync/scan
       return;
     }
     if (status.status === 'ready' && status.dap_id) {
@@ -7914,6 +7916,30 @@ function swCancel() {
   _swResetToStep1();
 }
 
+// Resume scan polling after user navigated away and back — do NOT re-post to /sync/scan
+function _swResumeScan() {
+  _sw.step = 2;
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById(`sw-step-${i}`);
+    if (el) el.style.display = i === 2 ? '' : 'none';
+  }
+  const activeEl = document.getElementById('sw-step-2');
+  if (activeEl) {
+    activeEl.classList.remove('sw-step-enter');
+    void activeEl.offsetWidth;
+    activeEl.classList.add('sw-step-enter');
+  }
+  const meta = _SW_STEPS[1];
+  document.getElementById('sw-counter').textContent = '2 / 5';
+  document.getElementById('sw-title').textContent = meta.title;
+  document.getElementById('sw-sub').textContent = `Scanning ${_sw.device?.name || 'device'}…`;
+  _swUpdateFooter(2);
+  _updateNavButtonStates();
+  _sw.scanStartTs = Date.now() / 1000;
+  _sw.logLines = [];
+  _sw.scanPollTimer = setInterval(_swPollScan, 600);
+}
+
 // Resume polling mid-sync after user navigated away and back — do NOT re-post execute
 function _swResumeSync() {
   _sw.step = 4;
@@ -7929,6 +7955,8 @@ function _swResumeSync() {
   _updateNavButtonStates();
   _sw.syncStartTs = Date.now() / 1000;
   _sw.logLines = [];
+  _swResetCurrentFileUI();
+  _swRegisterUnloadGuard();
   _sw.syncPollTimer = setInterval(_swPollSync, 600);
 }
 
@@ -7958,8 +7986,9 @@ function _swInitScanStep() {
   api('/sync/scan', { method: 'POST', body: { dap_id: _sw.device.id } })
     .catch(e => _swHandleScanError(String(e)));
 
-  // Poll for progress
+  // Poll for progress; start bg indicator in case user navigates away
   _sw.scanPollTimer = setInterval(_swPollScan, 600);
+  _syncBgStart();
 }
 
 async function _swPollScan() {
@@ -8053,6 +8082,20 @@ function _swParsePath(rel) {
 // Normalise for fuzzy artwork lookup — strip all non-alphanumeric chars
 function _swNorm(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
+// Convert a DAP path template like '%artist%/%album%/%track% - %title%' into a
+// readable example: 'Artist / Album / 01 - Title'
+function _swFormatPathTemplate(tpl) {
+  if (!tpl) return null;
+  const MAP = {
+    '%artist%': 'Artist', '%albumartist%': 'Album Artist', '%album%': 'Album',
+    '%track%': '01', '%discnumber%': '1', '%title%': 'Title',
+    '%year%': '2024', '%genre%': 'Genre',
+  };
+  let r = tpl;
+  for (const [k, v] of Object.entries(MAP)) r = r.split(k).join(v);
+  return r.split('/').join(' / ');
+}
+
 function _swIsLyricsPath(path) {
   return /\.lrc$/i.test(String(path || '').split('?')[0]);
 }
@@ -8110,12 +8153,20 @@ function _swBuildProposal(status) {
   const toDeviceLyrics = toDeviceAll.filter(item => _swIsLyricsPath(item.rel || item.id))
     .map(item => ({ ...item, kind: 'lyrics' }));
 
+  const pathTemplateFormatted = _swFormatPathTemplate(status.path_template || null);
+
   _sw.proposal = {
     toDevice:       { label: 'New Songs In Library',      hint: 'Songs in your library not yet on the device', items: toDeviceSongs },
     toDeviceLyrics: { label: 'New Lyrics in Library',     hint: 'Lyric files in your library not yet on the device', items: toDeviceLyrics },
     onDevice:       { label: 'On Device, not in Library', hint: 'Files on the player with no match in your library', items: onDeviceCombined },
     playlists:      { label: 'New or Updated Playlists',  hint: 'Playlists that have changed since the last sync', items: plItems(status.playlists_out_of_sync) },
+    pathTemplateFormatted,
   };
+
+  // Mismatch warning: many device files not in library at all → possible folder-structure mismatch
+  const notInLib = (status.device_only_not_in_library || []).length;
+  const totalUnmatched = (status.device_only || []).length;
+  _sw.mismatchWarning = (notInLib > 10 && totalUnmatched > 0 && (notInLib / totalUnmatched) > 0.2) ? notInLib : 0;
 
   // Reset pagination
   _sw.pages = { toDevice: 0, toDeviceLyrics: 0, onDevice: 0, playlists: 0 };
@@ -8143,6 +8194,17 @@ function _swBuildProposal(status) {
 function _swRenderReview() {
   const ORDER = ['toDevice', 'toDeviceLyrics', 'onDevice', 'playlists'];
   const filter = _sw.filter;
+
+  // Mismatch warning banner
+  const warnEl = document.getElementById('sw-mismatch-warning');
+  if (warnEl) {
+    const show = (_sw.mismatchWarning > 0) && !_sw.mismatchWarningDismissed;
+    warnEl.style.display = show ? '' : 'none';
+    if (show) {
+      const cnt = warnEl.querySelector('.sw-mismatch-count');
+      if (cnt) cnt.textContent = _sw.mismatchWarning;
+    }
+  }
 
   // Update chip counts
   for (const gid of ORDER) {
@@ -8316,6 +8378,9 @@ function _swBuildGroupCard(gid, group) {
         <div class="sw-group-label-col">
           <span class="sw-group-title">${esc(group.label)}</span>
           <span class="sw-group-count-text">${total} item${total===1?'':'s'}</span>
+          ${gid === 'toDevice' && _sw.proposal?.pathTemplateFormatted
+            ? `<span class="sw-group-template-hint">Structure: <span class="sw-group-template-path">${esc(_sw.proposal.pathTemplateFormatted)}.flac</span></span>`
+            : ''}
         </div>
         <span class="sw-group-sel-pill">${selectedCount} selected</span>
         <button class="sw-group-selall-btn" onclick="event.stopPropagation();App.swToggleGroup('${gid}', ${!allSelected})">
@@ -8761,6 +8826,61 @@ async function swStartSync() {
   _swGoTo(4);
 }
 
+// Background poll — shows a pulse on the Sync nav button while scan/copy runs off-screen
+let _syncBgPollTimer = null;
+
+function _syncBgPollTick() {
+  if (state.view === 'sync') { _syncBgStop(); return; }
+  api('/sync/status').then(s => {
+    const active = s.status === 'scanning' || s.status === 'copying';
+    const btn = document.getElementById('sync-nav-btn');
+    if (btn) btn.dataset.syncActive = active ? '1' : '';
+    if (!active) _syncBgStop();
+  }).catch(() => {});
+}
+
+function _syncBgStart() {
+  if (_syncBgPollTimer || state.view === 'sync') return;
+  _syncBgPollTimer = setInterval(_syncBgPollTick, 3000);
+  _syncBgPollTick(); // fire immediately
+}
+
+function _syncBgStop() {
+  clearInterval(_syncBgPollTimer);
+  _syncBgPollTimer = null;
+  const btn = document.getElementById('sync-nav-btn');
+  if (btn) btn.dataset.syncActive = '';
+}
+
+let _swBeforeUnloadHandler = null;
+
+function _swRegisterUnloadGuard() {
+  if (_swBeforeUnloadHandler) return;
+  _swBeforeUnloadHandler = (e) => {
+    e.preventDefault();
+    e.returnValue = '';
+    return '';
+  };
+  window.addEventListener('beforeunload', _swBeforeUnloadHandler);
+}
+
+function _swUnregisterUnloadGuard() {
+  if (!_swBeforeUnloadHandler) return;
+  window.removeEventListener('beforeunload', _swBeforeUnloadHandler);
+  _swBeforeUnloadHandler = null;
+}
+
+function _swResetCurrentFileUI() {
+  const wrap = document.getElementById('sw-sync-current-wrap');
+  if (wrap) wrap.style.display = 'none';
+  const cur = document.getElementById('sw-sync-current');
+  if (cur) cur.textContent = '';
+  const fb = document.getElementById('sw-sync-file-bar');
+  if (fb) fb.style.width = '0%';
+  const cautionName = document.getElementById('sw-caution-device-name');
+  if (cautionName) cautionName.textContent = _sw.device?.name || 'your device';
+}
+
 function _swInitSyncStep() {
   _swClearTimers();
   _sw.logLines = [];
@@ -8773,6 +8893,9 @@ function _swInitSyncStep() {
   if (bar) bar.style.width = '0%';
   const pct = document.getElementById('sw-sync-pct');
   if (pct) pct.textContent = '0%';
+  _swResetCurrentFileUI();
+  _swRegisterUnloadGuard();
+  _syncBgStart();
 
   // Build execute payload from selection — store for Step 5 summary
   const payload = _swBuildExecutePayload();
@@ -8826,23 +8949,43 @@ async function _swPollSync() {
     _swAppendLog('sw-sync-log', phase);
   }
 
+  // Per-file current path + thin secondary progress bar
+  const curWrap = document.getElementById('sw-sync-current-wrap');
+  const curEl   = document.getElementById('sw-sync-current');
+  if (status.current && curEl) {
+    curEl.textContent = status.current;
+    if (curWrap) curWrap.style.display = '';
+    const fileTotal = Number(status.current_file_total ?? 0);
+    const fileDone  = Number(status.current_file_done  ?? 0);
+    const fileBar   = document.getElementById('sw-sync-file-bar');
+    if (fileBar) {
+      fileBar.style.width = fileTotal > 0 ? `${Math.round((fileDone / fileTotal) * 100)}%` : '0%';
+    }
+  }
+
   const phaseIndex = Math.floor((progress / 100) * (_SW_SYNC_PHASES.length - 1));
   _swRenderPhases('sw-sync-phases', _SW_SYNC_PHASES, phaseIndex);
 
   if (status.status === 'cancelled') {
     clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null;
+    _swUnregisterUnloadGuard();
+    _syncBgStop();
     _swHandleSyncCancelled();
     return;
   }
 
   if (status.status === 'error') {
     clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null;
+    _swUnregisterUnloadGuard();
+    _syncBgStop();
     _swHandleSyncError(status.message || 'Sync failed.');
     return;
   }
 
   if (status.status === 'done' || progress >= 100) {
     clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null;
+    _swUnregisterUnloadGuard();
+    _syncBgStop();
     _swSetProgress('sync', 100);
     _swRenderPhases('sw-sync-phases', _SW_SYNC_PHASES, _SW_SYNC_PHASES.length);
     _sw.syncResult = status;
@@ -8880,6 +9023,12 @@ async function swCancelSync() {
     _swResetToStep1();
   }
   // Poller will detect 'cancelled' status and call _swHandleSyncCancelled
+}
+
+function swDismissMismatchWarning() {
+  _sw.mismatchWarningDismissed = true;
+  const el = document.getElementById('sw-mismatch-warning');
+  if (el) el.style.display = 'none';
 }
 
 function _swHandleSyncError(msg) {
@@ -15988,6 +16137,7 @@ const App = {
   swToggleTreeNodeEl,
   swSetItemActionEl,
   swCancelSync,
+  swDismissMismatchWarning,
   swBulkAction,
   syncScanAgain,
   sortTracks,
