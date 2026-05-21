@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.361-rc.210526-1506 · 2026-05-21
 - Add: "Sync in progress..." toast with animated dots appears when navigating away during an active sync; changes to "Sync complete" when finished
 
 ## v0.360-rc.210526-1424 · 2026-05-21
