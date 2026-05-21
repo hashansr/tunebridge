@@ -346,34 +346,23 @@ function _showLiveToast(msg) {
   const container = document.getElementById('toast-container');
   if (!container) return { finish: (m, t) => toast(m, t) };
   const el = document.createElement('div');
-  el.className = 'toast-item toast-info';
+  el.className = 'toast-item toast-progress';
   const text = document.createElement('span');
   text.className = 'toast-msg';
-  const label = document.createTextNode(msg);
-  const dotsEl = document.createElement('span');
-  dotsEl.className = 'toast-live-dots';
-  dotsEl.textContent = '.';
-  text.append(label, dotsEl);
+  text.textContent = msg;
   el.appendChild(text);
   container.appendChild(el);
   _toastActive.push(el);
   el.getBoundingClientRect();
   el.classList.add('show');
-  let dots = 1;
-  const ticker = setInterval(() => {
-    dots = (dots % 3) + 1;
-    dotsEl.textContent = '.'.repeat(dots);
-  }, 400);
   return {
     finish(finalMsg, type = null) {
-      clearInterval(ticker);
       const resolved = type || _toastClassify(finalMsg);
       el.className = `toast-item toast-${resolved} show`;
       text.textContent = finalMsg;
       el._toastTimer = setTimeout(() => _toastDismiss(el), 3200);
     },
     dismiss() {
-      clearInterval(ticker);
       _toastDismiss(el);
     },
   };
