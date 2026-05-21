@@ -7972,6 +7972,36 @@ function _swInitScanStep() {
   _sw.logLines = [];
   _sw.scanStartTs = Date.now() / 1000;
 
+  // Restore normal scan card content if an error card replaced it on a prior attempt
+  if (!document.getElementById('sw-scan-phases')) {
+    const card = document.getElementById('sw-scan-card');
+    if (card) card.innerHTML = `
+      <div class="sw-progress-hdr">
+        <div class="sw-progress-hdr-left">
+          <span class="sw-overline">scanning</span>
+          <span class="sw-progress-phase-label" id="sw-scan-phase-label">Preparing…</span>
+        </div>
+        <div class="sw-progress-stats">
+          <span class="sw-stat-chip"><span class="sw-stat-val" id="sw-scan-items">0</span> <span class="sw-stat-lbl">items compared</span></span>
+          <span class="sw-stat-chip"><span class="sw-stat-val" id="sw-scan-elapsed">0s</span> <span class="sw-stat-lbl">elapsed</span></span>
+        </div>
+      </div>
+      <div class="sw-big-pct" id="sw-scan-pct">0%</div>
+      <div class="sw-bar-wrap">
+        <div class="sw-bar sw-bar--scan" id="sw-scan-bar" style="width:0%"></div>
+      </div>
+      <div class="sw-progress-body">
+        <div class="sw-phases-col" id="sw-scan-phases"></div>
+        <div class="sw-log-col">
+          <div class="sw-log-hdr">
+            <span class="sw-overline">Live log</span>
+            <span class="sw-log-count" id="sw-scan-log-count">0 entries</span>
+          </div>
+          <div class="sw-log" id="sw-scan-log"></div>
+        </div>
+      </div>`;
+  }
+
   // Render phase list
   _swRenderPhases('sw-scan-phases', _SW_SCAN_PHASES, -1);
   // Clear log and bar

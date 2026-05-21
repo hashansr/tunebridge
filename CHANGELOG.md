@@ -13,6 +13,7 @@
 - Add: Step 4 shows an amber caution bar reminding users not to eject the device or close the app during sync
 - Add: Browser tab shows a "Leave site?" dialog if user tries to close while a sync copy is running
 - Add: TuneBridge.app shows a native macOS confirmation dialog if the window is closed during an active sync
+- Fix: Scan error card now clears correctly on Retry — normal scan progress UI is restored instead of staying stuck
 
 ## v0.359-rc.210526-1338 · 2026-05-21
 
