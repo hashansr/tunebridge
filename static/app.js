@@ -16698,8 +16698,8 @@ const _coverageState = {
   category: 'all',          // 'all' | 'genre' | 'artist' | 'decade'
   value: 'all',             // 'all' | specific string value
   sort: _CONTENT_SORT_DEFAULTS.coverage.sort,
-  visibleCount: 24,
-  pageSize: 24,
+  visibleCount: 20,
+  pageSize: 20,
   openDropdown: null,       // null | 'category' | 'value' | 'sort'
   _lastSurprisePick: null,  // excluded from next surprise pick
   _outsideClickHandler: null,
@@ -16943,19 +16943,16 @@ function _discoverRenderFilterRail() {
   </div>`;
 }
 
-function _discoverCardHtml(a, maxDateAdded = 0) {
-  const isNew = maxDateAdded > 0 && Number(a.date_added || 0) >= maxDateAdded - 30 * 86400;
+function _discoverCardHtml(a) {
   const bg = _discoverArtworkGradient(a.album, a.artist);
   const img = a.artwork_key
     ? `<img src="/api/artwork/${esc(a.artwork_key)}" loading="lazy" alt="${esc(a.album)}" onerror="this.style.display='none'">`
     : '';
-  const newBadge = isNew ? `<div class="discover-new-dot-badge"></div>` : '';
   const trackCount = Number(a.track_count || 0);
   const meta = [a.year, a.genre, `${trackCount} track${trackCount === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
   return `<div class="album-card discover-album-card" data-artist="${esc(a.artist)}" data-album="${esc(a.album)}" onclick="App._coverageOpenAlbum(this)" title="${esc(a.artist)} — ${esc(a.album)}">
     <div class="album-thumb" style="background:${bg}">
       ${img}
-      ${newBadge}
       <div class="card-thumb-overlay">
         <button class="discover-overlay-add" onclick="event.stopPropagation();App._coverageAddAlbumToPlaylist(this.closest('.album-card'),event)" title="Add to playlist" aria-label="Add to playlist">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -17045,8 +17042,7 @@ function _renderInsightsCoverage() {
        </div>`;
 
   const showGrid = albums.unheard && visibleRows.length > 0;
-  const maxDateAdded = Math.max(0, ...(data.unheard_albums || []).map(a => Number(a.date_added || 0)));
-  const cards = showGrid ? visibleRows.map(a => _discoverCardHtml(a, maxDateAdded)).join('') : '';
+  const cards = showGrid ? visibleRows.map(_discoverCardHtml).join('') : '';
 
   const refreshSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`;
   const saveSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;

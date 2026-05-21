@@ -17112,6 +17112,23 @@ tr:hover .track-edit-btn:hover {
 }
 
 /* ── Discover card overrides (on top of .album-card base styles) ── */
+#view-library-coverage .discover-album-card {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  overflow: visible;
+  transition: transform 0.2s ease;
+  contain: none;
+  width: 100%;
+}
+#view-library-coverage .discover-album-card:hover {
+  background: transparent;
+  border-color: transparent;
+  transform: scale(1.03);
+}
+
 .discover-album-card .album-thumb {
   background-size: cover;
   background-position: center;
@@ -17150,19 +17167,6 @@ tr:hover .track-edit-btn:hover {
   transform: scale(1.08);
 }
 
-/* "New" badge — top-left of artwork */
-.discover-new-dot-badge {
-  position: absolute; top: 8px; left: 8px; z-index: 2;
-  width: 8px; height: 8px; border-radius: 50%;
-  background: #adc6ff;
-  box-shadow: 0 0 0 2px rgba(0,0,0,0.5), 0 0 8px rgba(173,198,255,0.5);
-  pointer-events: none;
-  animation: discover-pulse 2s ease-in-out infinite;
-}
-@keyframes discover-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.55; transform: scale(0.82); }
-}
 
 /* ── Shared empty / error / show-more ── */
 .coverage-teaser {
