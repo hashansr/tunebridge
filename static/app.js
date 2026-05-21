@@ -695,6 +695,15 @@ const _CUSTOM_PEQ_KEY = 'tb_custom_peq';
 const _CREATE_PEQ_ID = '__create__';
 const _WORKSPACE_NEW_PEQ_ID = '__new_peq__';
 const _CUSTOM_NO_GAIN_TYPES = new Set(['LPQ', 'HPQ', 'NO', 'AP']);
+const _CUSTOM_PEQ_TYPE_LABELS = {
+  PK: 'Peak',
+  LSC: 'Low shelf',
+  HSC: 'High shelf',
+  LPQ: 'Low pass',
+  HPQ: 'High pass',
+  NO: 'Notch',
+  AP: 'All pass',
+};
 let _customPeqEditorState = null;
 let _peqWorkspaceOpen = false;
 let _peqWorkspaceInitialJson = '';
@@ -710,6 +719,7 @@ let _peqWorkspaceConnectedDaps = [];
 let _peqWorkspaceCopyDapId = '';
 let _peqWorkspaceEditContext = null;
 let _peqWorkspaceIemCache = [];
+let _peqWorkspaceSelectedBandIndex = 0;
 const _FR_OVERLAY_STORAGE_KEY = 'tb.fr_overlays.v1';
 const _FR_OVERLAY_DEFS = [
   { id: 'sub_bass',      label: 'Sub Bass',      f1: 20,   f2: 50,    tier: 'primary', defaultOn: true },
@@ -10736,7 +10746,7 @@ function _sanitizeCustomPeqState(raw) {
   if (!raw || typeof raw !== 'object') return base;
   const bands = Array.isArray(raw.bands) ? raw.bands : [];
   base.enabled = !!raw.enabled;
-  base.preamp_db = Math.max(-30, Math.min(30, Number(raw.preamp_db) || 0));
+  base.preamp_db = Math.max(-12, Math.min(6, Number(raw.preamp_db) || 0));
   for (let i = 0; i < 10; i++) {
     const src = bands[i] || {};
     const type = String(src.type || 'PK').toUpperCase();
@@ -10744,7 +10754,7 @@ function _sanitizeCustomPeqState(raw) {
       enabled: !!src.enabled,
       type: ['PK', 'LSC', 'HSC', 'LPQ', 'HPQ', 'NO', 'AP'].includes(type) ? type : 'PK',
       fc: Math.max(20, Math.min(20000, Number(src.fc) || 1000)),
-      gain: Math.max(-30, Math.min(30, Number(src.gain) || 0)),
+      gain: Math.max(-24, Math.min(24, Number(src.gain) || 0)),
       q: Math.max(0.1, Math.min(10, Number(src.q) || 1.0)),
     };
   }
@@ -10796,6 +10806,8 @@ function _setPeqWorkspaceDirty(isDirty) {
   _peqWorkspaceDirty = !!isDirty;
   const chip = document.getElementById('peq-workspace-dirty');
   if (chip) chip.style.display = _peqWorkspaceDirty ? '' : 'none';
+  const clean = document.getElementById('peq-workspace-clean');
+  if (clean) clean.style.display = _peqWorkspaceDirty ? 'none' : '';
 }
 
 function _refreshPeqWorkspaceDirty() {
@@ -10816,6 +10828,36 @@ function _destroyPeqWorkspaceChart() {
   }
   const el = document.getElementById('peq-editor-curve-legend');
   if (el) el.innerHTML = '';
+}
+
+function _peqActiveBandCount(state = _customPeqEditorState) {
+  return (state?.bands || []).filter(b => b && b.enabled).length;
+}
+
+function _formatSignedDb(value) {
+  const n = Number(value) || 0;
+  return `${n >= 0 ? '+' : ''}${n.toFixed(1)} dB`;
+}
+
+function _selectedPeqWorkspaceIemName() {
+  const iemId = _peqWorkspaceSelectedIemId || document.getElementById('peq-workspace-iem-select')?.value || '';
+  return ((_peqWorkspaceIemCache || []).find(i => i.id === iemId)?.name) || 'No IEM';
+}
+
+function _updatePeqWorkspaceSummary() {
+  const st = _sanitizeCustomPeqState(_customPeqEditorState || _defaultCustomPeqState());
+  const active = _peqActiveBandCount(st);
+  const preamp = _formatSignedDb(st.preamp_db);
+  const caption = document.getElementById('peq-graph-caption');
+  if (caption) caption.textContent = `${_selectedPeqWorkspaceIemName()} · ${active} band${active === 1 ? '' : 's'} · preamp ${preamp}`;
+  const count = document.getElementById('peq-band-count-label');
+  if (count) count.textContent = `${active} of 10 active`;
+  const actionStatus = document.getElementById('peq-action-status');
+  if (actionStatus) actionStatus.innerHTML = `<strong>${active}</strong> band${active === 1 ? '' : 's'} · preamp ${preamp}`;
+  const addBtn = document.getElementById('peq-add-band-btn');
+  if (addBtn) addBtn.disabled = active >= 10;
+  const moreCopy = document.getElementById('peq-more-copy-btn');
+  if (moreCopy) moreCopy.disabled = !_peqWorkspaceConnectedDaps.length;
 }
 
 function _renderPeqWorkspaceLegend(datasets) {
@@ -10839,6 +10881,7 @@ function _renderPeqWorkspaceLegend(datasets) {
         <span style="opacity:${isHidden ? '0.45' : '1'}">${esc(ds.label)}</span>
       </div>`;
   }).join('');
+  _updatePeqWorkspaceSummary();
 }
 
 function togglePeqWorkspaceCurve(idx) {
@@ -10899,20 +10942,22 @@ async function _refreshPeqWorkspaceGraph() {
   if (_peqWorkspaceChart) _destroyPeqWorkspaceChart();
   const regionPlugin = _createFrOverlayPlugin('peqWorkspaceFreqRegions');
   function _workspaceCurveColor(id, backendColor) {
-    if (id.startsWith('baseline-')) return backendColor || '#f0b429';
-    if (id.includes('-custom-')) return '#53e16f';
-    if (id.endsWith('-R')) return '#e05c5c';
-    return '#5b8dee';
+    if (id.startsWith('baseline-')) return backendColor || '#ffb3b5';
+    if (id.includes('-custom-') || id === 'custom-peq-neutral') return '#adc6ff';
+    if (id.endsWith('-R')) return '#d98a8c';
+    return '#c1c6d7';
   }
   const datasets = curves.map(c => ({
     label: c.label,
     _curveId: c.id,
     data: c.data.map(([f, spl]) => ({ x: f, y: spl })),
     borderColor: _workspaceCurveColor(c.id, c.color),
-    borderWidth: c.id.startsWith('baseline-') ? 1.35 : c.dash ? 1.25 : 1.85,
+    borderWidth: (c.id.includes('-custom-') || c.id === 'custom-peq-neutral') ? 2.2 : c.id.startsWith('baseline-') ? 1.55 : c.dash ? 1.25 : 1.65,
     borderDash: c.dash ? [6, 4] : undefined,
+    fill: c.id.includes('-custom-') || c.id === 'custom-peq-neutral' ? 'origin' : false,
+    backgroundColor: c.id.includes('-custom-') || c.id === 'custom-peq-neutral' ? 'rgba(173,198,255,0.10)' : 'transparent',
     pointRadius: 0,
-    tension: 0.28,
+    tension: 0.22,
     hidden: _peqWorkspaceCurveVisibility[c.id] === false,
   }));
   _peqWorkspaceChart = new Chart(canvas, {
@@ -10928,10 +10973,11 @@ async function _refreshPeqWorkspaceGraph() {
           type: 'logarithmic',
           min: 20,
           max: 20000,
-          title: { display: true, text: 'Frequency (Hz)', color: '#6b6b7b', font: { size: 11, family: 'Inter, sans-serif' } },
+          border: { color: 'rgba(255,255,255,0.06)' },
+          title: { display: false },
           ticks: {
-            color: '#6b6b7b',
-            font: { size: 10, family: 'Inter, sans-serif' },
+            color: 'rgba(255,255,255,0.55)',
+            font: { size: 11, family: 'ui-monospace, SFMono-Regular, Menlo, Monaco, monospace' },
             callback: function(v) {
               const labeled = [20,50,100,200,500,1000,2000,5000,10000,20000];
               if (!labeled.includes(v)) return '';
@@ -10943,20 +10989,20 @@ async function _refreshPeqWorkspaceGraph() {
           grid: {
             color: function(ctx) {
               const v = ctx.tick && ctx.tick.value;
-              const major = [100, 1000, 10000];
-              return major.includes(v) ? 'rgba(173,198,255,.12)' : 'rgba(173,198,255,.04)';
+              return v === 1000 ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.05)';
             },
           },
           afterBuildTicks(axis) {
-            axis.ticks = [20,30,40,50,60,80,100,150,200,300,400,500,600,800,1000,1500,2000,3000,4000,5000,6000,8000,10000,15000,20000].map(v => ({ value: v }));
+            axis.ticks = [20,50,100,200,500,1000,2000,5000,10000,20000].map(v => ({ value: v }));
           },
         },
         y: {
           min: 50,
           max: 110,
-          title: { display: true, text: 'dB', color: '#6b6b7b', font: { size: 11, family: 'Inter, sans-serif' } },
-          ticks: { color: '#6b6b7b', font: { size: 10, family: 'Inter, sans-serif' }, stepSize: 10 },
-          grid: { color: 'rgba(173,198,255,.06)' },
+          border: { color: 'rgba(255,255,255,0.06)' },
+          title: { display: true, text: 'dB', color: 'rgba(255,255,255,0.45)', font: { size: 11, family: 'ui-monospace, SFMono-Regular, Menlo, Monaco, monospace' } },
+          ticks: { color: 'rgba(255,255,255,0.55)', font: { size: 11, family: 'ui-monospace, SFMono-Regular, Menlo, Monaco, monospace' }, stepSize: 10 },
+          grid: { color: ctx => ctx.tick?.value === 75 ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)' },
         },
       },
       plugins: {
@@ -10985,17 +11031,6 @@ async function _loadPeqWorkspaceContext() {
   const iemSel = document.getElementById('peq-workspace-iem-select');
   const peqSel = document.getElementById('peq-workspace-peq-select');
   const targetSel = document.getElementById('peq-workspace-target-select');
-  const ctx = document.querySelector('#peq-workspace .peq-workspace-context');
-  if (ctx && !document.getElementById('peq-workspace-overlay-field')) {
-    const field = document.createElement('div');
-    field.id = 'peq-workspace-overlay-field';
-    field.className = 'peq-workspace-field';
-    field.innerHTML = `
-      <label class="peq-editor-col-label">Overlays</label>
-      <div id="peq-workspace-overlay-host" class="fr-overlay-host" data-fr-overlay-host="1" data-fr-overlay-context="peq-workspace"></div>
-    `;
-    ctx.appendChild(field);
-  }
   _refreshFrOverlayControls();
   if (iemSel) {
     iemSel.innerHTML = '<option value="">No IEM / Headphone selected</option>';
@@ -11061,6 +11096,7 @@ function _refreshPeqWorkspaceCopyTargets(allDaps) {
   if (!connected.length) {
     wrap.style.display = 'none';
     _peqWorkspaceCopyDapId = '';
+    _updatePeqWorkspaceSummary();
     return;
   }
   wrap.style.display = '';
@@ -11068,6 +11104,7 @@ function _refreshPeqWorkspaceCopyTargets(allDaps) {
     _peqWorkspaceCopyDapId = connected[0].id;
     sel.style.display = 'none';
     btn.textContent = `Copy to ${connected[0].name}`;
+    _updatePeqWorkspaceSummary();
     return;
   }
   btn.textContent = 'Copy to Selected DAP';
@@ -11079,11 +11116,13 @@ function _refreshPeqWorkspaceCopyTargets(allDaps) {
     _peqWorkspaceCopyDapId = connected[0].id;
     sel.value = _peqWorkspaceCopyDapId;
   }
+  _updatePeqWorkspaceSummary();
 }
 
 function _hidePeqWorkspace(opts = {}) {
   const panel = document.getElementById('peq-workspace');
   if (panel) panel.style.display = 'none';
+  togglePeqMoreMenu(null, false);
   _renderCustomPeqSavePanel(false);
   _destroyPeqWorkspaceChart();
   if (_peqWorkspaceGraphTimer) {
@@ -11092,6 +11131,25 @@ function _hidePeqWorkspace(opts = {}) {
   }
   _peqWorkspaceOpen = false;
   _peqWorkspaceEditContext = null;
+}
+
+function togglePeqMoreMenu(event, force) {
+  if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+  const menu = document.getElementById('peq-more-menu');
+  if (!menu) return;
+  const shouldOpen = typeof force === 'boolean' ? force : menu.style.display === 'none';
+  menu.style.display = shouldOpen ? 'block' : 'none';
+  if (shouldOpen) {
+    setTimeout(() => {
+      const close = e => {
+        if (menu.contains(e.target) || e.target.closest?.('.peq-icon-btn')) return;
+        menu.style.display = 'none';
+        document.removeEventListener('mousedown', close);
+      };
+      document.addEventListener('mousedown', close);
+    }, 0);
+  }
+  _updatePeqWorkspaceSummary();
 }
 
 function isPeqWorkspaceOpen() {
@@ -11160,7 +11218,7 @@ function _customStateFromProfile(profile) {
   const st = _defaultCustomPeqState();
   if (!profile || typeof profile !== 'object') return st;
   st.enabled = true;
-  st.preamp_db = Math.max(-30, Math.min(30, Number(profile.preamp_db) || 0));
+  st.preamp_db = Math.max(-12, Math.min(6, Number(profile.preamp_db) || 0));
   const filters = Array.isArray(profile.filters) ? profile.filters : [];
   for (let i = 0; i < Math.min(10, filters.length); i++) {
     const f = filters[i] || {};
@@ -11169,7 +11227,7 @@ function _customStateFromProfile(profile) {
       enabled: f.enabled !== false,
       type: ['PK', 'LSC', 'HSC', 'LPQ', 'HPQ', 'NO', 'AP'].includes(t) ? t : 'PK',
       fc: Math.max(20, Math.min(20000, Number(f.fc) || 1000)),
-      gain: Math.max(-30, Math.min(30, Number(f.gain) || 0)),
+      gain: Math.max(-24, Math.min(24, Number(f.gain) || 0)),
       q: Math.max(0.1, Math.min(10, Number(f.q) || 1.0)),
     };
   }
@@ -11199,42 +11257,56 @@ function renderPeqEditorBands() {
   const wrap = document.getElementById('peq-editor-bands');
   if (!wrap) return;
   const st = _loadCustomPeqState();
+  if (_peqWorkspaceSelectedBandIndex < 0 || _peqWorkspaceSelectedBandIndex >= st.bands.length) {
+    _peqWorkspaceSelectedBandIndex = 0;
+  }
   wrap.innerHTML = st.bands.map((band, i) => {
     const gainHidden = _CUSTOM_NO_GAIN_TYPES.has(String(band.type || '').toUpperCase());
+    const isSelected = i === _peqWorkspaceSelectedBandIndex;
+    const typeOptions = ['PK', 'LSC', 'HSC', 'LPQ', 'HPQ', 'NO', 'AP'].map(type =>
+      `<option value="${type}" ${band.type === type ? 'selected' : ''}>${esc(_CUSTOM_PEQ_TYPE_LABELS[type] || type)}</option>`
+    ).join('');
     return `
-      <div class="peq-editor-band-row" data-band="${i}">
-        <span class="peq-editor-band-num">${i + 1}</span>
-        <button class="peq-band-toggle ${band.enabled ? 'active' : ''}" onclick="App.togglePeqBand(${i})">
-          ${band.enabled ? 'ON' : 'OFF'}
+      <div class="peq-editor-band-row${isSelected ? ' selected' : ''}${band.enabled ? '' : ' inactive'}" data-band="${i}" onclick="App.selectPeqBand(${i})">
+        <span class="peq-editor-band-num">${String(i + 1).padStart(2, '0')}</span>
+        <button class="peq-band-toggle ${band.enabled ? 'active' : ''}" onclick="event.stopPropagation();App.togglePeqBand(${i})" aria-label="${band.enabled ? 'Disable' : 'Enable'} band ${i + 1}">
+          <span></span>
         </button>
-        <select class="peq-band-type" onchange="App.onPeqBandTypeChange(${i}, this.value)">
-          <option value="PK" ${band.type === 'PK' ? 'selected' : ''}>PK</option>
-          <option value="LSC" ${band.type === 'LSC' ? 'selected' : ''}>LSC</option>
-          <option value="HSC" ${band.type === 'HSC' ? 'selected' : ''}>HSC</option>
-          <option value="LPQ" ${band.type === 'LPQ' ? 'selected' : ''}>LPQ</option>
-          <option value="HPQ" ${band.type === 'HPQ' ? 'selected' : ''}>HPQ</option>
-          <option value="NO" ${band.type === 'NO' ? 'selected' : ''}>NO</option>
-          <option value="AP" ${band.type === 'AP' ? 'selected' : ''}>AP</option>
+        <select class="peq-band-type" onchange="App.onPeqBandTypeChange(${i}, this.value)" onclick="event.stopPropagation()">
+          ${typeOptions}
         </select>
+        <div class="peq-param-field">
         <input type="number" class="peq-editor-num-input" value="${Math.round(band.fc)}"
-               min="20" max="20000" step="1"
-               oninput="App.onPeqBandFcChange(${i}, this.value)" />
+               min="20" max="20000" step="${band.fc >= 1000 ? '10' : '1'}"
+               oninput="App.onPeqBandFcChange(${i}, this.value)" onclick="event.stopPropagation()" />
+          <span>Hz</span>
+        </div>
+        <div class="peq-param-field ${gainHidden ? 'peq-input-hidden' : ''}">
         <input type="number" class="peq-editor-num-input ${gainHidden ? 'peq-input-hidden' : ''}"
-               value="${band.gain.toFixed(1)}" min="-30" max="30" step="0.1"
-               oninput="App.onPeqBandGainChange(${i}, this.value)" />
+               value="${band.gain.toFixed(1)}" min="-24" max="24" step="0.1"
+               oninput="App.onPeqBandGainChange(${i}, this.value)" onclick="event.stopPropagation()" />
+          <span>dB</span>
+        </div>
+        <div class="peq-param-field">
         <input type="number" class="peq-editor-num-input" value="${band.q.toFixed(3)}"
-               min="0.1" max="10" step="0.001"
-               oninput="App.onPeqBandQChange(${i}, this.value)" />
+               min="0.1" max="10" step="0.05"
+               oninput="App.onPeqBandQChange(${i}, this.value)" onclick="event.stopPropagation()" />
+        </div>
+        <button class="peq-band-clear-btn" type="button" onclick="event.stopPropagation();App.clearPeqBand(${i})" title="Clear band ${i + 1}" aria-label="Clear band ${i + 1}">
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"/></svg>
+        </button>
       </div>`;
   }).join('');
+  _updatePeqWorkspaceSummary();
 }
 
 function _syncPeqPreampInputs(value, source = '') {
-  const val = Math.max(-30, Math.min(30, Number(value) || 0));
+  const val = Math.max(-12, Math.min(6, Number(value) || 0));
   const numInput = document.getElementById('peq-preamp');
   const slider = document.getElementById('peq-preamp-slider');
   if (numInput && source !== 'input') numInput.value = val.toFixed(1);
   if (slider) slider.value = String(val);
+  _updatePeqWorkspaceSummary();
 }
 
 function _updatePeqWorkspaceActionLabels() {
@@ -11242,8 +11314,8 @@ function _updatePeqWorkspaceActionLabels() {
   const secondary = document.getElementById('peq-secondary-action-btn');
   if (!primary || !secondary) return;
   const isEditingExisting = !!(_peqWorkspaceEditContext?.iemId && _peqWorkspaceEditContext?.peqId);
-  primary.textContent = isEditingExisting ? 'Save As' : 'Save';
-  secondary.textContent = isEditingExisting ? 'Override Existing' : 'Save Profile';
+  primary.textContent = isEditingExisting ? 'Save as copy' : 'Save PEQ';
+  secondary.textContent = isEditingExisting ? 'Overwrite existing' : 'Save as profile...';
 }
 
 async function openPeqEditor(opts = {}) {
@@ -11282,6 +11354,7 @@ async function openPeqEditor(opts = {}) {
     _customPeqEditorState.enabled = true;
     _saveCustomPeqState();
   }
+  _peqWorkspaceSelectedBandIndex = 0;
   if (Player?.setCustomPeqEnabled) Player.setCustomPeqEnabled(true);
   await _loadPeqWorkspaceContext();
   _refreshPeqWorkspacePeqOptions();
@@ -11301,6 +11374,7 @@ async function openPeqEditor(opts = {}) {
   panel.style.display = 'block';
   _peqWorkspaceOpen = true;
   _snapshotPeqWorkspace();
+  _updatePeqWorkspaceSummary();
   _schedulePeqWorkspaceGraphRefresh();
 }
 
@@ -11434,8 +11508,43 @@ async function resetCustomPeq() {
   if (!ok) return;
   _customPeqEditorState = _defaultCustomPeqState();
   _customPeqEditorState.enabled = true;
+  _peqWorkspaceSelectedBandIndex = 0;
   const st = _saveCustomPeqState();
   _syncPeqPreampInputs(st.preamp_db);
+  renderPeqEditorBands();
+  Player?.applyCustomPeq?.(st);
+  _schedulePeqWorkspaceGraphRefresh();
+  _refreshPeqWorkspaceDirty();
+}
+
+function selectPeqBand(i) {
+  const st = _loadCustomPeqState();
+  if (!st.bands[i]) return;
+  _peqWorkspaceSelectedBandIndex = i;
+  renderPeqEditorBands();
+}
+
+function addPeqBand() {
+  const st = _loadCustomPeqState();
+  const idx = st.bands.findIndex(b => !b.enabled);
+  if (idx < 0) return;
+  st.bands[idx] = { enabled: true, type: 'PK', fc: 1000, gain: 0, q: 1.0 };
+  st.enabled = true;
+  _peqWorkspaceSelectedBandIndex = idx;
+  _saveCustomPeqState();
+  renderPeqEditorBands();
+  Player?.applyCustomPeq?.(st);
+  _schedulePeqWorkspaceGraphRefresh();
+  _refreshPeqWorkspaceDirty();
+}
+
+function clearPeqBand(i) {
+  const st = _loadCustomPeqState();
+  if (!st.bands[i]) return;
+  st.bands[i] = { enabled: false, type: 'PK', fc: 1000, gain: 0, q: 1.0 };
+  st.enabled = true;
+  _peqWorkspaceSelectedBandIndex = i;
+  _saveCustomPeqState();
   renderPeqEditorBands();
   Player?.applyCustomPeq?.(st);
   _schedulePeqWorkspaceGraphRefresh();
@@ -11447,6 +11556,7 @@ function togglePeqBand(i) {
   if (!st.bands[i]) return;
   st.bands[i].enabled = !st.bands[i].enabled;
   st.enabled = true;
+  _peqWorkspaceSelectedBandIndex = i;
   _saveCustomPeqState();
   renderPeqEditorBands();
   Player?.applyCustomPeq?.(st);
@@ -11460,6 +11570,7 @@ function onPeqBandTypeChange(i, val) {
   if (!band) return;
   band.type = String(val || 'PK').toUpperCase();
   st.enabled = true;
+  _peqWorkspaceSelectedBandIndex = i;
   _saveCustomPeqState();
   renderPeqEditorBands();
   Player?.applyCustomPeq?.(st);
@@ -11473,6 +11584,7 @@ function onPeqBandFcChange(i, val) {
   if (!band) return;
   band.fc = Math.max(20, Math.min(20000, Math.round(_parseNum(val, band.fc))));
   st.enabled = true;
+  _peqWorkspaceSelectedBandIndex = i;
   _saveCustomPeqState();
   const enabledIdx = _enabledBandIndex(i);
   if (enabledIdx >= 0) Player?.updateBandParam?.(enabledIdx, band.fc, band.gain, band.q);
@@ -11484,8 +11596,9 @@ function onPeqBandGainChange(i, val) {
   const st = _loadCustomPeqState();
   const band = st.bands[i];
   if (!band) return;
-  band.gain = Math.max(-30, Math.min(30, _parseNum(val, band.gain)));
+  band.gain = Math.max(-24, Math.min(24, _parseNum(val, band.gain)));
   st.enabled = true;
+  _peqWorkspaceSelectedBandIndex = i;
   _saveCustomPeqState();
   const enabledIdx = _enabledBandIndex(i);
   if (enabledIdx >= 0 && !_CUSTOM_NO_GAIN_TYPES.has(String(band.type || '').toUpperCase())) {
@@ -11501,6 +11614,7 @@ function onPeqBandQChange(i, val) {
   if (!band) return;
   band.q = Math.max(0.1, Math.min(10, _parseNum(val, band.q)));
   st.enabled = true;
+  _peqWorkspaceSelectedBandIndex = i;
   _saveCustomPeqState();
   const enabledIdx = _enabledBandIndex(i);
   if (enabledIdx >= 0) Player?.updateBandParam?.(enabledIdx, band.fc, band.gain, band.q);
@@ -11510,7 +11624,7 @@ function onPeqBandQChange(i, val) {
 
 function onPeqPreampChange(val, source = '') {
   const st = _loadCustomPeqState();
-  st.preamp_db = Math.max(-30, Math.min(30, _parseNum(val, st.preamp_db)));
+  st.preamp_db = Math.max(-12, Math.min(6, _parseNum(val, st.preamp_db)));
   st.enabled = true;
   _saveCustomPeqState();
   _syncPeqPreampInputs(st.preamp_db, source);
@@ -11526,6 +11640,7 @@ function onPeqWorkspaceIemChange(iemId) {
   _peqWorkspaceSelectedPeqId = _WORKSPACE_NEW_PEQ_ID;
   _refreshPeqWorkspacePeqOptions();
   onPeqWorkspacePeqChange(_peqWorkspaceSelectedPeqId);
+  _updatePeqWorkspaceSummary();
   _schedulePeqWorkspaceGraphRefresh();
 }
 
@@ -11541,6 +11656,7 @@ function onPeqWorkspacePeqChange(peqId) {
     Player?.applyCustomPeq?.(_customPeqEditorState);
     _snapshotPeqWorkspace();
     _updatePeqWorkspaceActionLabels();
+    _updatePeqWorkspaceSummary();
     _schedulePeqWorkspaceGraphRefresh();
     return;
   }
@@ -11556,11 +11672,13 @@ function onPeqWorkspacePeqChange(peqId) {
   Player?.applyCustomPeq?.(_customPeqEditorState);
   _snapshotPeqWorkspace();
   _updatePeqWorkspaceActionLabels();
+  _updatePeqWorkspaceSummary();
   _schedulePeqWorkspaceGraphRefresh();
 }
 
 function onPeqWorkspaceTargetChange(targetId) {
   _peqWorkspaceSelectedTargetId = targetId || '';
+  _updatePeqWorkspaceSummary();
   _schedulePeqWorkspaceGraphRefresh();
 }
 
@@ -15836,7 +15954,11 @@ const App = {
   applyAndClosePeqEditor,
   resetCustomPeq,
   renderPeqEditorBands,
+  selectPeqBand,
+  addPeqBand,
+  clearPeqBand,
   togglePeqBand,
+  togglePeqMoreMenu,
   onPeqBandTypeChange,
   onPeqBandFcChange,
   onPeqBandGainChange,

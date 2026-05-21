@@ -2599,30 +2599,72 @@
 
   <section id="peq-workspace" class="peq-workspace" style="display:none">
     <div class="peq-workspace-shell">
-      <div class="peq-workspace-header">
+      <div class="peq-workspace-chrome">
+        <button class="peq-chrome-orb" type="button" onclick="App.closePeqEditor()" title="Back" aria-label="Back">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 3L4.5 7l4 4"/></svg>
+        </button>
+        <div class="peq-chrome-actions">
+          <button class="peq-icon-btn" type="button" onclick="App.togglePeqMoreMenu(event)" title="More PEQ actions" aria-label="More PEQ actions">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg>
+          </button>
+          <div id="peq-more-menu" class="peq-more-menu" style="display:none">
+            <button type="button" onclick="App.saveCustomPeqAsProfile();App.togglePeqMoreMenu(null, false)">Save as profile...</button>
+            <button type="button" onclick="App.downloadCustomPeqTxt();App.togglePeqMoreMenu(null, false)">Export to AutoEq...</button>
+            <button id="peq-more-copy-btn" type="button" onclick="App.copyCustomPeqToConnectedDap();App.togglePeqMoreMenu(null, false)">Copy to DAP</button>
+            <button type="button" class="danger" onclick="App.resetCustomPeq();App.togglePeqMoreMenu(null, false)">Reset all bands</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="peq-workspace-identity">
+        <div class="peq-identity-badge" aria-hidden="true">
+          <svg width="42" height="42" viewBox="0 0 42 42" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M11 34V9M21 34V6M31 34V12"/>
+            <circle cx="11" cy="24" r="4" fill="currentColor" stroke="none"/>
+            <circle cx="21" cy="17" r="4" fill="currentColor" stroke="none"/>
+            <circle cx="31" cy="26" r="4" fill="currentColor" stroke="none"/>
+          </svg>
+        </div>
         <div class="peq-workspace-title-block">
-          <div class="peq-workspace-overline">Tune for immersion</div>
-          <h2 class="tb-page-title">Custom PEQ</h2>
-          <div class="peq-workspace-subtitle">Sculpt your acoustic signature while playback controls stay active.</div>
+          <div class="peq-identity-meta">
+            <span class="peq-identity-chip">Custom PEQ</span>
+            <span id="peq-workspace-dirty" class="peq-workspace-dirty" style="display:none">Draft · unsaved</span>
+            <span id="peq-workspace-clean" class="peq-workspace-clean">Draft · saved</span>
+          </div>
+          <h2 class="tb-page-title">Create PEQ</h2>
+          <div class="peq-workspace-subtitle">Shape your acoustic signature. Playback keeps running while you tune.</div>
         </div>
       </div>
 
       <div class="peq-workspace-context">
         <div class="peq-workspace-field">
-          <label class="peq-editor-col-label">Tune for IEM/Headphone</label>
+          <label class="peq-editor-col-label">Tune for</label>
           <select id="peq-workspace-iem-select" class="peq-select" onchange="App.onPeqWorkspaceIemChange(this.value)"></select>
         </div>
         <div class="peq-workspace-field">
-          <label class="peq-editor-col-label">Select PEQ</label>
+          <label class="peq-editor-col-label">PEQ profile</label>
           <select id="peq-workspace-peq-select" class="peq-select" onchange="App.onPeqWorkspacePeqChange(this.value)"></select>
         </div>
         <div class="peq-workspace-field">
-          <label class="peq-editor-col-label">Reference Target (Optional)</label>
+          <label class="peq-editor-col-label">Target</label>
           <select id="peq-workspace-target-select" class="peq-select" onchange="App.onPeqWorkspaceTargetChange(this.value)"></select>
         </div>
       </div>
 
       <div class="peq-workspace-graph-panel">
+        <div class="peq-graph-toolbar">
+          <div>
+            <div class="peq-graph-overline">Response</div>
+            <div id="peq-graph-caption" class="peq-graph-caption">No IEM · 0 bands · preamp +0.0 dB</div>
+          </div>
+          <div class="peq-graph-toolbar-actions">
+            <div id="peq-workspace-overlay-host" class="fr-overlay-host peq-graph-overlay-host" data-fr-overlay-host="1" data-fr-overlay-context="peq-workspace"></div>
+            <button class="peq-toolbar-pill peq-toolbar-pill-disabled" type="button" disabled title="Smoothing control is visual-only for now">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M2 11V7M6 11V3M10 11V5M12 11V8"/></svg>
+              Smoothing · Off
+            </button>
+          </div>
+        </div>
         <div class="peq-editor-curve-wrap">
           <canvas id="peq-editor-canvas" width="660" height="260"></canvas>
         </div>
@@ -2643,47 +2685,62 @@
         <div id="peq-save-profile-error" class="peq-save-profile-error" style="display:none"></div>
       </div>
 
-      <div class="peq-editor-toolbar">
-        <span id="peq-workspace-dirty" class="peq-workspace-dirty" style="display:none">Unsaved changes</span>
-      </div>
-
       <div class="peq-workspace-edit-layout">
         <div class="peq-workspace-editor-main">
+          <section class="peq-editor-section peq-editor-section-preamp">
+            <div class="peq-editor-section-head">
+              <span>Preamp</span>
+              <small>Negative pre-gain prevents clipping when boosting bands</small>
+            </div>
           <div class="peq-editor-preamp-row">
-            <span class="peq-editor-col-label">Preamp Gain</span>
             <input type="range" id="peq-preamp-slider" class="peq-preamp-slider"
-                  min="-30" max="30" step="0.1" value="0"
+                  min="-12" max="6" step="0.1" value="0"
                   oninput="App.onPeqPreampChange(this.value, 'slider')" />
+            <div class="peq-param-field peq-param-field-preamp">
             <input type="number" id="peq-preamp" class="peq-editor-num-input peq-preamp-input"
-                  min="-30" max="30" step="0.1" value="0"
+                  min="-12" max="6" step="0.1" value="0"
                   oninput="App.onPeqPreampChange(this.value, 'input')" />
             <span class="peq-editor-unit">dB</span>
+            </div>
           </div>
+          </section>
 
+          <section class="peq-editor-section peq-editor-section-bands">
+            <div class="peq-editor-section-head peq-editor-section-head-actions">
+              <div>
+                <span>Filter bands</span>
+                <small id="peq-band-count-label">0 of 10 active</small>
+              </div>
+              <button id="peq-add-band-btn" class="peq-add-band-btn" type="button" onclick="App.addPeqBand()">Add band</button>
+            </div>
           <div class="peq-editor-table-wrap">
             <div class="peq-editor-band-header">
               <span class="peq-editor-col-label">#</span>
-              <span class="peq-editor-col-label">Active</span>
-              <span class="peq-editor-col-label">Filter Type</span>
-              <span class="peq-editor-col-label">Fc (Hz)</span>
-              <span class="peq-editor-col-label">Gain (dB)</span>
+              <span class="peq-editor-col-label">On</span>
+              <span class="peq-editor-col-label">Type</span>
+              <span class="peq-editor-col-label">Frequency</span>
+              <span class="peq-editor-col-label">Gain</span>
               <span class="peq-editor-col-label">Q</span>
+              <span class="peq-editor-col-label"></span>
             </div>
             <div id="peq-editor-bands"></div>
           </div>
+          </section>
         </div>
 
-        <aside class="peq-workspace-actions-panel">
-          <button id="peq-primary-action-btn" class="btn-primary peq-side-btn peq-side-btn-primary" onclick="App.onPeqPrimaryAction()">Save</button>
-          <button id="peq-secondary-action-btn" class="btn-secondary peq-side-btn" onclick="App.onPeqSecondaryAction()">Save Profile</button>
-          <button class="btn-secondary peq-side-btn" onclick="App.resetCustomPeq()">Reset</button>
-          <button class="btn-secondary peq-side-btn" onclick="App.downloadCustomPeqTxt()">Export</button>
-          <div id="peq-copy-wrap" class="peq-copy-wrap peq-side-copy-wrap" style="display:none">
-            <select id="peq-copy-dap-select" class="peq-select peq-copy-dap-select" style="display:none"></select>
-            <button id="peq-copy-btn" class="btn-secondary peq-side-btn" onclick="App.copyCustomPeqToConnectedDap()">Copy to DAP</button>
-          </div>
-          <button class="btn-secondary peq-side-btn peq-workspace-close-btn" onclick="App.closePeqEditor()">Close</button>
-        </aside>
+        <div id="peq-copy-wrap" class="peq-copy-wrap peq-side-copy-wrap" style="display:none">
+          <select id="peq-copy-dap-select" class="peq-select peq-copy-dap-select" style="display:none"></select>
+          <button id="peq-copy-btn" class="peq-side-btn" onclick="App.copyCustomPeqToConnectedDap()">Copy to DAP</button>
+        </div>
+      </div>
+
+      <div class="peq-action-bar">
+        <div id="peq-action-status" class="peq-action-status">0 bands · preamp +0.0 dB</div>
+        <div class="peq-action-buttons">
+          <button class="btn-secondary peq-workspace-close-btn" onclick="App.closePeqEditor()">Cancel</button>
+          <button id="peq-secondary-action-btn" class="btn-secondary" onclick="App.onPeqSecondaryAction()">Save as profile...</button>
+          <button id="peq-primary-action-btn" class="btn-primary" onclick="App.onPeqPrimaryAction()">Save PEQ</button>
+        </div>
       </div>
     </div>
   </section>
