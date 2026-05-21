@@ -16943,15 +16943,13 @@ function _discoverRenderFilterRail() {
   </div>`;
 }
 
-function _discoverCardHtml(a) {
-  const isNew = a.date_added && (Date.now() / 1000 - Number(a.date_added)) < 30 * 86400;
+function _discoverCardHtml(a, maxDateAdded = 0) {
+  const isNew = maxDateAdded > 0 && Number(a.date_added || 0) >= maxDateAdded - 30 * 86400;
   const bg = _discoverArtworkGradient(a.album, a.artist);
   const img = a.artwork_key
     ? `<img src="/api/artwork/${esc(a.artwork_key)}" loading="lazy" alt="${esc(a.album)}" onerror="this.style.display='none'">`
     : '';
-  const newBadge = isNew
-    ? `<div class="discover-new-badge"><span class="discover-new-dot"></span>New</div>`
-    : '';
+  const newBadge = isNew ? `<div class="discover-new-dot-badge"></div>` : '';
   const trackCount = Number(a.track_count || 0);
   const meta = [a.year, a.genre, `${trackCount} track${trackCount === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
   return `<div class="album-card discover-album-card" data-artist="${esc(a.artist)}" data-album="${esc(a.album)}" onclick="App._coverageOpenAlbum(this)" title="${esc(a.artist)} — ${esc(a.album)}">
@@ -17047,7 +17045,8 @@ function _renderInsightsCoverage() {
        </div>`;
 
   const showGrid = albums.unheard && visibleRows.length > 0;
-  const cards = showGrid ? visibleRows.map(_discoverCardHtml).join('') : '';
+  const maxDateAdded = Math.max(0, ...(data.unheard_albums || []).map(a => Number(a.date_added || 0)));
+  const cards = showGrid ? visibleRows.map(a => _discoverCardHtml(a, maxDateAdded)).join('') : '';
 
   const refreshSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`;
   const backSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 18 9 12 15 6"/></svg>`;

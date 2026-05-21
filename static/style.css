@@ -17168,19 +17168,13 @@ tr:hover .track-edit-btn:hover {
 }
 
 /* "New" badge — top-left of artwork */
-.discover-new-badge {
-  position: absolute; top: 7px; left: 7px; z-index: 2;
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 8px 3px 6px; border-radius: 9999px;
-  background: rgba(0,0,0,0.55); backdrop-filter: blur(12px);
-  font-size: 10px; font-weight: 600; color: #e5e2e1;
-  pointer-events: none; user-select: none;
-}
-.discover-new-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: #adc6ff; flex-shrink: 0;
-  box-shadow: 0 0 0 3px rgba(173,198,255,0.15);
-  animation: discover-pulse 1.8s ease-in-out infinite;
+.discover-new-dot-badge {
+  position: absolute; top: 8px; left: 8px; z-index: 2;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #adc6ff;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.5), 0 0 8px rgba(173,198,255,0.5);
+  pointer-events: none;
+  animation: discover-pulse 2s ease-in-out infinite;
 }
 @keyframes discover-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
