@@ -11,6 +11,7 @@
 ## v0.352-rc.210526-1127 · 2026-05-21
 - Change: Sync Music Step 3 now groups new songs by Artist > Album > Song with selectable artist, album, and individual song checkboxes.
 - Change: Sync Music Step 3 song hierarchy now expands progressively from artists to albums to songs instead of opening every level at once.
+- Change: Sync Music Step 3 now applies the same artist/album/item hierarchy to lyrics, improves indentation, adds circular artist portraits, and removes song connector marks.
 
 ## v0.351 · 2026-05-20
 

@@ -18971,13 +18971,13 @@ body.is-col-resizing {
   opacity: 0.6;
 }
 .sw-tree-row--artist {
-  grid-template-columns: 20px 18px 1fr auto;
-  padding: 9px 14px;
+  grid-template-columns: 20px 18px 28px 1fr auto;
+  padding: 9px 14px 9px 58px;
   background: rgba(255,255,255,0.018);
 }
 .sw-tree-row--album {
   grid-template-columns: 20px 18px 28px 1fr auto;
-  padding: 8px 14px 8px 34px;
+  padding: 8px 14px 8px 94px;
 }
 .sw-tree-expand {
   width: 20px;
@@ -19004,6 +19004,31 @@ body.is-col-resizing {
 .sw-tree-artist--expanded > .sw-tree-row .sw-tree-expand .accordion-state-icon,
 .sw-tree-album--expanded > .sw-tree-row .sw-tree-expand .accordion-state-icon {
   background-image: url('/icons/accordion-expanded.svg');
+}
+.sw-artist-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  position: relative;
+  flex-shrink: 0;
+}
+.sw-artist-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+.sw-artist-thumb--placeholder {
+  border: 1px solid rgba(255,255,255,0.08);
 }
 .sw-tree-main {
   min-width: 0;
@@ -19032,16 +19057,8 @@ body.is-col-resizing {
   border-top: 1px solid rgba(255,255,255,0.035);
 }
 .sw-tree-song {
-  grid-template-columns: 18px 28px 1fr 110px auto;
-  padding-left: 58px;
-}
-.sw-tree-connector {
-  width: 16px;
-  height: 16px;
-  border-left: 1px solid rgba(173,198,255,0.20);
-  border-bottom: 1px solid rgba(173,198,255,0.20);
-  justify-self: center;
-  transform: translateY(-3px);
+  grid-template-columns: 18px 1fr 110px auto;
+  padding-left: 132px;
 }
 
 /* onDevice group — header with action buttons */

@@ -7601,6 +7601,9 @@ async function loadSyncView() {
   if (!state.albums?.length) {
     api('/library/albums').then(a => { state.albums = a; }).catch(() => {});
   }
+  if (!state.artists?.length) {
+    api('/library/artists').then(a => { state.artists = a; }).catch(() => {});
+  }
   // Fetch DAP list
   try {
     const daps = await api('/daps');
@@ -7620,6 +7623,9 @@ async function loadSyncView() {
       _sw.device = { id: status.dap_id, name: status.dap_name || 'Device' };
       if (!state.albums?.length) {
         state.albums = await api('/library/albums').catch(() => []);
+      }
+      if (!state.artists?.length) {
+        state.artists = await api('/library/artists').catch(() => []);
       }
       _swGoTo(3);
       _swBuildProposal(status);
@@ -7990,6 +7996,9 @@ async function _swPollScan() {
     if (!state.albums?.length) {
       state.albums = await api('/library/albums').catch(() => []);
     }
+    if (!state.artists?.length) {
+      state.artists = await api('/library/artists').catch(() => []);
+    }
     setTimeout(() => {
       _swGoTo(3);
       _swBuildProposal(status);
@@ -8150,7 +8159,7 @@ function _swBuildGroupCard(gid, group) {
   const sel = _sw.selection[gid] ?? {};
   const total = group.items.length;
   const isOnDevice = gid === 'onDevice';
-  const isHierarchicalToDevice = gid === 'toDevice';
+  const isHierarchicalToDevice = gid === 'toDevice' || gid === 'toDeviceLyrics';
 
   // Pagination
   const page = _sw.pages?.[gid] ?? 0;
@@ -8241,6 +8250,7 @@ function _swBuildGroupCard(gid, group) {
     const selectedCount = Object.values(sel).filter(Boolean).length;
     const allSelected = selectedCount === total;
     const someSelected = selectedCount > 0 && !allSelected;
+    const itemLabel = gid === 'toDeviceLyrics' ? 'lyric' : 'song';
 
     card.innerHTML = `
       <div class="sw-group-hdr" onclick="App.swToggleGroupCollapse('${gid}')" title="${toggleLabel}" aria-label="${esc(toggleAria)}" aria-expanded="${isExpanded ? 'true' : 'false'}">
@@ -8250,8 +8260,8 @@ function _swBuildGroupCard(gid, group) {
           data-indeterminate="${someSelected}" />
         <div class="sw-group-label-col">
           <span class="sw-group-title">${esc(group.label)}</span>
-          <span class="sw-group-count-text">${total} song${total===1?'':'s'}</span>
-          <span class="sw-group-hint">Select artists, albums, or individual songs to sync.</span>
+          <span class="sw-group-count-text">${total} ${itemLabel}${total===1?'':'s'}</span>
+          <span class="sw-group-hint">Select artists, albums, or individual ${itemLabel}s to sync.</span>
         </div>
         <span class="sw-group-sel-pill">${selectedCount} selected</span>
         <button class="sw-group-selall-btn" onclick="event.stopPropagation();App.swToggleGroup('${gid}', ${!allSelected})">
@@ -8259,7 +8269,7 @@ function _swBuildGroupCard(gid, group) {
         </button>
       </div>
       <div class="sw-group-rows sw-tree">
-        ${_swBuildSongHierarchy(pageItems, sel)}
+        ${_swBuildMediaHierarchy(gid, pageItems, sel)}
       </div>
     `;
 
@@ -8315,10 +8325,11 @@ function _swBuildGroupCard(gid, group) {
   return card;
 }
 
-function _swBuildSongHierarchy(items, sel) {
+function _swBuildMediaHierarchy(gid, items, sel) {
   const artists = new Map();
   const labelOf = value => (value || '').trim() || 'Unknown';
   const keyOf = value => labelOf(value).toLowerCase();
+  const itemLabel = gid === 'toDeviceLyrics' ? 'lyric' : 'song';
 
   for (const item of items) {
     const artistLabel = labelOf(item.artist);
@@ -8343,49 +8354,50 @@ function _swBuildSongHierarchy(items, sel) {
   return sortedArtists.map(artist => {
     const artistState = _swSelectionState(artist.items, sel);
     const albums = Array.from(artist.albums.values()).sort((a, b) => a.label.localeCompare(b.label));
-    const artistExpanded = _swIsTreeExpanded('toDevice', 'artist', artist.key);
+    const artistExpanded = _swIsTreeExpanded(gid, 'artist', artist.key);
     return `
       <div class="sw-tree-artist${artistExpanded ? ' sw-tree-artist--expanded' : ''}">
         <div class="sw-tree-row sw-tree-row--artist${artistState.selected ? '' : ' sw-tree-row--deselected'}">
           <button class="sw-tree-expand" type="button"
-            data-gid="toDevice" data-level="artist" data-key="${esc(artist.key)}"
+            data-gid="${esc(gid)}" data-level="artist" data-key="${esc(artist.key)}"
             onclick="event.stopPropagation();App.swToggleTreeExpandEl(this)"
             aria-label="${artistExpanded ? 'Collapse' : 'Expand'} ${esc(artist.label)}"
             aria-expanded="${artistExpanded ? 'true' : 'false'}">
             <span class="accordion-state-icon" aria-hidden="true"></span>
           </button>
           <input type="checkbox" class="sw-check sw-tree-check"
-            data-gid="toDevice" data-level="artist" data-key="${esc(artist.key)}"
+            data-gid="${esc(gid)}" data-level="artist" data-key="${esc(artist.key)}"
             ${artistState.all ? 'checked' : ''} data-indeterminate="${artistState.some && !artistState.all}"
             onclick="event.stopPropagation();App.swToggleTreeNodeEl(this)" />
+          ${_swArtistThumb(artist.label, artist.items[0])}
           <div class="sw-tree-main">
             <span class="sw-tree-title">${esc(artist.label)}</span>
-            <span class="sw-tree-meta">${artist.items.length} song${artist.items.length===1?'':'s'} · ${albums.length} album${albums.length===1?'':'s'}</span>
+            <span class="sw-tree-meta">${artist.items.length} ${itemLabel}${artist.items.length===1?'':'s'} · ${albums.length} album${albums.length===1?'':'s'}</span>
           </div>
           <span class="sw-group-sel-pill">${artistState.count} selected</span>
         </div>
         <div class="sw-tree-albums">
         ${albums.map(album => {
           const albumState = _swSelectionState(album.items, sel);
-          const albumExpanded = _swIsTreeExpanded('toDevice', 'album', album.key);
+          const albumExpanded = _swIsTreeExpanded(gid, 'album', album.key);
           return `
         <div class="sw-tree-album${albumExpanded ? ' sw-tree-album--expanded' : ''}">
           <div class="sw-tree-row sw-tree-row--album${albumState.selected ? '' : ' sw-tree-row--deselected'}">
             <button class="sw-tree-expand" type="button"
-              data-gid="toDevice" data-level="album" data-key="${esc(album.key)}"
+              data-gid="${esc(gid)}" data-level="album" data-key="${esc(album.key)}"
               onclick="event.stopPropagation();App.swToggleTreeExpandEl(this)"
               aria-label="${albumExpanded ? 'Collapse' : 'Expand'} ${esc(album.label)}"
               aria-expanded="${albumExpanded ? 'true' : 'false'}">
               <span class="accordion-state-icon" aria-hidden="true"></span>
             </button>
             <input type="checkbox" class="sw-check sw-tree-check"
-              data-gid="toDevice" data-level="album" data-key="${esc(album.key)}"
+              data-gid="${esc(gid)}" data-level="album" data-key="${esc(album.key)}"
               ${albumState.all ? 'checked' : ''} data-indeterminate="${albumState.some && !albumState.all}"
               onclick="event.stopPropagation();App.swToggleTreeNodeEl(this)" />
             ${_swRowThumb(album.items[0])}
             <div class="sw-tree-main">
               <span class="sw-tree-title">${esc(album.label)}</span>
-              <span class="sw-tree-meta">${album.items.length} song${album.items.length===1?'':'s'}</span>
+              <span class="sw-tree-meta">${album.items.length} ${itemLabel}${album.items.length===1?'':'s'}</span>
             </div>
             <span class="sw-group-sel-pill">${albumState.count} selected</span>
           </div>
@@ -8394,11 +8406,10 @@ function _swBuildSongHierarchy(items, sel) {
               .slice()
               .sort((a, b) => a.title.localeCompare(b.title))
               .map(item => `
-            <div class="sw-review-row sw-tree-song${sel[item.id] ? '' : ' sw-review-row--deselected'}" data-gid="toDevice" data-id="${esc(item.id)}">
-              <input type="checkbox" class="sw-check sw-item-check" data-gid="toDevice" data-id="${esc(item.id)}"
+            <div class="sw-review-row sw-tree-song${sel[item.id] ? '' : ' sw-review-row--deselected'}" data-gid="${esc(gid)}" data-id="${esc(item.id)}">
+              <input type="checkbox" class="sw-check sw-item-check" data-gid="${esc(gid)}" data-id="${esc(item.id)}"
                 ${sel[item.id] ? 'checked' : ''}
                 onclick="event.stopPropagation();App.swToggleItemEl(this)" />
-              <span class="sw-tree-connector" aria-hidden="true"></span>
               <div class="sw-row-info">
                 <div class="sw-row-title" title="${esc(item.title)}">${esc(item.title)}</div>
                 <div class="sw-row-sub">${[item.artist, item.album].filter(Boolean).map(esc).join(' · ')}</div>
@@ -8422,6 +8433,21 @@ function _swSelectionState(items, sel) {
     some: count > 0,
     all: count === items.length,
   };
+}
+
+function _swArtistThumb(artistName, fallbackItem = {}) {
+  const artist = (state.artists || []).find(a => _normArtistId(a?.name) === _normArtistId(artistName));
+  const src = _artistImageSrc({
+    name: artistName,
+    image_key: artist?.image_key || '',
+    artwork_key: artist?.artwork_key || fallbackItem?.artwork_key || '',
+  });
+  const initials = _swInitials(artistName);
+  const bg = _swThumbColor(artistName);
+  if (src) {
+    return `<span class="sw-artist-thumb" style="background:${bg}">${initials}<img src="${src}" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'" /></span>`;
+  }
+  return `<span class="sw-artist-thumb sw-artist-thumb--placeholder" style="background:${bg}">${initials}</span>`;
 }
 
 function _swItemsForTreeNode(gid, level, key) {
