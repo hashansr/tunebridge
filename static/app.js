@@ -372,6 +372,10 @@ function _showLiveToast(msg) {
       text.textContent = finalMsg;
       el._toastTimer = setTimeout(() => _toastDismiss(el), 3200);
     },
+    dismiss() {
+      clearInterval(ticker);
+      _toastDismiss(el);
+    },
   };
 }
 
@@ -8878,6 +8882,7 @@ async function swStartSync() {
 
 // Background poll — shows a pulse on the Sync nav button while scan/copy runs off-screen
 let _syncBgPollTimer = null;
+let _syncBgLiveToast = null;
 
 function _syncBgPollTick() {
   if (state.view === 'sync') { _syncBgStop(); return; }
@@ -8885,7 +8890,7 @@ function _syncBgPollTick() {
     const active = s.status === 'scanning' || s.status === 'copying';
     const btn = document.getElementById('sync-nav-btn');
     if (btn) btn.dataset.syncActive = active ? '1' : '';
-    if (!active) _syncBgStop();
+    if (!active) _syncBgStop(s.status === 'done' ? 'done' : null);
   }).catch(() => {});
 }
 
@@ -8893,13 +8898,24 @@ function _syncBgStart() {
   if (_syncBgPollTimer || state.view === 'sync') return;
   _syncBgPollTimer = setInterval(_syncBgPollTick, 3000);
   _syncBgPollTick(); // fire immediately
+  if (!_syncBgLiveToast) {
+    _syncBgLiveToast = _showLiveToast('Sync in progress');
+  }
 }
 
-function _syncBgStop() {
+function _syncBgStop(finishAs = null) {
   clearInterval(_syncBgPollTimer);
   _syncBgPollTimer = null;
   const btn = document.getElementById('sync-nav-btn');
   if (btn) btn.dataset.syncActive = '';
+  if (_syncBgLiveToast) {
+    if (finishAs === 'done') {
+      _syncBgLiveToast.finish('Sync complete', 'success');
+    } else {
+      _syncBgLiveToast.dismiss();
+    }
+    _syncBgLiveToast = null;
+  }
 }
 
 let _swBeforeUnloadHandler = null;
@@ -9037,7 +9053,7 @@ async function _swPollSync() {
   if (status.status === 'done' || progress >= 100) {
     clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null;
     _swUnregisterUnloadGuard();
-    _syncBgStop();
+    _syncBgStop('done');
     _swSetProgress('sync', 100);
     _swRenderPhases('sw-sync-phases', _SW_SYNC_PHASES, _SW_SYNC_PHASES.length);
     _sw.syncResult = status;
