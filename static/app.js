@@ -144,7 +144,7 @@ function _normalizeContentSortPrefs(raw = {}) {
       albums: _pickAllowed(favourites.albums, ['recent', 'az'], defaults.favourites.albums),
     },
     coverage: {
-      sort: _pickAllowed(coverage.sort, ['recent', 'oldest', 'artist', 'album'], defaults.coverage.sort),
+      sort: _pickAllowed(coverage.sort, ['recent', 'oldest', 'az', 'za', 'release', 'random'], defaults.coverage.sort),
     },
   };
 }
@@ -16560,17 +16560,20 @@ const App = {
   toggleHistoryClearMenu,
   clearHistoryPeriod,
   deleteHistoryEvent,
-  // Coverage
+  // Discover (Unplayed Albums)
   loadInsightsCoverage,
+  coverageSetCategory,
+  coverageSetValue,
   coverageSetFilter,
   coverageSetSort,
   coverageShowMore,
+  coveragePlayAll,
+  coverageSurpriseMe,
+  _discoverToggleDropdown,
   _coverageOpenAlbum,
   _coveragePlayAlbum,
   _coverageAddAlbumToPlaylist,
   _coverageAddVisibleToPlaylist,
-  _coverageAddToPlaylist,
-  _coverageFilterGenre,
   // Duplicates
   loadDuplicatesView,
   switchDupScope,
@@ -16692,12 +16695,74 @@ async function loadInsightsView() {
 
 const _coverageState = {
   data: null,
-  filterType: 'all',
-  filterValue: '',
+  category: 'all',          // 'all' | 'genre' | 'artist' | 'decade'
+  value: 'all',             // 'all' | specific string value
   sort: _CONTENT_SORT_DEFAULTS.coverage.sort,
   visibleCount: 24,
   pageSize: 24,
+  openDropdown: null,       // null | 'category' | 'value' | 'sort'
+  _lastSurprisePick: null,  // excluded from next surprise pick
+  _outsideClickHandler: null,
+  _keydownHandler: null,
 };
+
+function _discoverArtworkGradient(album, artist) {
+  const str = String(album || '') + String(artist || '');
+  let h1 = 0, h2 = 0;
+  for (let i = 0; i < str.length; i++) {
+    h1 = ((h1 * 31) + str.charCodeAt(i)) >>> 0;
+    h2 = ((h2 * 17) + str.charCodeAt(i > 0 ? i - 1 : 0)) >>> 0;
+  }
+  const families = {
+    cool:   [220, 232, 244, 198, 210, 256, 268],
+    warm:   [16, 28, 40, 4, 350, 340],
+    forest: [148, 160, 132, 172],
+    mixed:  [220, 232, 198, 268, 16, 340, 148, 28],
+  };
+  const keys = Object.keys(families);
+  const palette = families[keys[(h2 >>> 8) % keys.length]];
+  const hue = palette[h1 % palette.length];
+  const hue2 = (hue + 60 + (h2 % 80)) % 360;
+  return `linear-gradient(135deg, oklch(0.32 0.08 ${hue}), oklch(0.22 0.06 ${hue2}))`;
+}
+
+function _coverageValueOptions(category) {
+  const albums = (_coverageState.data && _coverageState.data.unheard_albums) || [];
+  if (category === 'genre') {
+    const counts = {};
+    for (const a of albums) {
+      const g = String(a.genre || '').trim();
+      if (g) counts[g] = (counts[g] || 0) + 1;
+    }
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name, count]) => ({ label: name, value: name, count }));
+  }
+  if (category === 'artist') {
+    const counts = {};
+    for (const a of albums) {
+      const ar = String(a.artist || '').trim();
+      if (ar) counts[ar] = (counts[ar] || 0) + 1;
+    }
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name, count]) => ({ label: name, value: name, count }));
+  }
+  if (category === 'decade') {
+    const counts = {};
+    for (const a of albums) {
+      const yr = Number(a.year || 0);
+      if (yr >= 1900) {
+        const dec = `${Math.floor(yr / 10) * 10}s`;
+        counts[dec] = (counts[dec] || 0) + 1;
+      }
+    }
+    return Object.entries(counts)
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([name, count]) => ({ label: name, value: name, count }));
+  }
+  return [];
+}
 
 function _coverageSummaryMetric(summary, key) {
   return (summary && summary[key]) || { heard: 0, unheard: 0, total: 0, pct: 0 };
@@ -16720,17 +16785,31 @@ function _coverageDateLabel(ts) {
 
 function _coverageAlbumRows() {
   const rows = [...((_coverageState.data && _coverageState.data.unheard_albums) || [])];
-  const filterValue = String(_coverageState.filterValue || '').toLowerCase();
+  const val = String(_coverageState.value || 'all');
   const filtered = rows.filter(a => {
-    if (_coverageState.filterType === 'genre') return String(a.genre || '').toLowerCase() === filterValue;
-    if (_coverageState.filterType === 'artist') return String(a.artist || '').toLowerCase() === filterValue;
+    if (val === 'all') return true;
+    if (_coverageState.category === 'genre')  return String(a.genre || '').trim() === val;
+    if (_coverageState.category === 'artist') return String(a.artist || '').trim() === val;
+    if (_coverageState.category === 'decade') {
+      const yr = Number(a.year || 0);
+      if (yr < 1900) return false;
+      return `${Math.floor(yr / 10) * 10}s` === val;
+    }
     return true;
   });
   const key = (v) => _nameSortKey(v || '');
+  if (_coverageState.sort === 'random') {
+    for (let i = filtered.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [filtered[i], filtered[j]] = [filtered[j], filtered[i]];
+    }
+    return filtered;
+  }
   filtered.sort((a, b) => {
-    if (_coverageState.sort === 'oldest') return Number(a.date_added || 0) - Number(b.date_added || 0);
-    if (_coverageState.sort === 'artist') return key(a.artist).localeCompare(key(b.artist)) || key(a.album).localeCompare(key(b.album));
-    if (_coverageState.sort === 'album') return key(a.album).localeCompare(key(b.album)) || key(a.artist).localeCompare(key(b.artist));
+    if (_coverageState.sort === 'oldest')  return Number(a.date_added || 0) - Number(b.date_added || 0);
+    if (_coverageState.sort === 'az')      return key(a.album).localeCompare(key(b.album)) || key(a.artist).localeCompare(key(b.artist));
+    if (_coverageState.sort === 'za')      return key(b.album).localeCompare(key(a.album)) || key(b.artist).localeCompare(key(a.artist));
+    if (_coverageState.sort === 'release') return Number(b.year || 0) - Number(a.year || 0);
     return Number(b.date_added || 0) - Number(a.date_added || 0);
   });
   return filtered;
@@ -16748,33 +16827,172 @@ function _coverageInsightLine(data) {
   return `${albums.unheard.toLocaleString()} album${albums.unheard === 1 ? '' : 's'} in your library have no plays yet.${genreText}`;
 }
 
-function _coverageRenderFilterChip(type, value, label, count = null) {
-  const active = _coverageState.filterType === type && String(_coverageState.filterValue || '') === String(value || '');
-  return `<button class="coverage-filter-chip${active ? ' active' : ''}" data-filter-type="${esc(type)}" data-filter-value="${esc(value || '')}" onclick="App.coverageSetFilter(this.dataset.filterType,this.dataset.filterValue)">
-    <span>${esc(label)}</span>${count != null ? `<b>${count}</b>` : ''}
-  </button>`;
+function _discoverToggleDropdown(which) {
+  _coverageState.openDropdown = _coverageState.openDropdown === which ? null : which;
+  _renderInsightsCoverage();
 }
 
-function _coverageRenderCard(a) {
-  const meta = [a.year, a.genre].filter(Boolean).join(' · ');
-  const dateLabel = _coverageDateLabel(a.date_added);
-  const artHtml = a.artwork_key
-    ? `<img src="/api/artwork/${esc(a.artwork_key)}" loading="lazy" onerror="this.style.display='none'" />`
-    : coverPlaceholder('album', 96, '8px', true);
-  return `<div class="coverage-album-card" data-artist="${esc(a.artist)}" data-album="${esc(a.album)}" onclick="App._coverageOpenAlbum(this)" title="${esc(a.artist)} — ${esc(a.album)}">
-    <div class="coverage-album-art">${artHtml}</div>
-    <div class="coverage-album-body">
-      <div class="coverage-album-name">${esc(a.album || 'Unknown Album')}</div>
-      <div class="coverage-album-artist">${esc(a.artist || 'Unknown Artist')}</div>
-      <div class="coverage-album-meta">${esc(meta || 'Unknown year · Untagged')}</div>
-      <div class="coverage-track-count">${Number(a.track_count || 0)} track${Number(a.track_count || 0) === 1 ? '' : 's'}${dateLabel ? ` · ${esc(dateLabel)}` : ''}</div>
+function _discoverCloseDropdowns() {
+  if (_coverageState.openDropdown !== null) {
+    _coverageState.openDropdown = null;
+    _renderInsightsCoverage();
+  }
+}
+
+function coverageSetCategory(category) {
+  _coverageState.category = category || 'all';
+  _coverageState.value = 'all';
+  _coverageState.visibleCount = _coverageState.pageSize;
+  _coverageState.openDropdown = null;
+  _renderInsightsCoverage();
+}
+
+function coverageSetValue(value) {
+  _coverageState.value = value || 'all';
+  _coverageState.visibleCount = _coverageState.pageSize;
+  _coverageState.openDropdown = null;
+  _renderInsightsCoverage();
+}
+
+function _discoverCheckSvg() {
+  return `<svg class="discover-check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+}
+
+function _discoverChevronSvg(open) {
+  return `<svg class="discover-pill-chevron${open ? ' open' : ''}" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>`;
+}
+
+function _discoverRenderFilterRail() {
+  const { category, value, sort, openDropdown } = _coverageState;
+  const catLabels = { all: 'All', genre: 'Genre', artist: 'Artist', decade: 'Decade' };
+  const catOptions = [
+    { label: 'All', value: 'all' },
+    { label: 'Genre', value: 'genre' },
+    { label: 'Artist', value: 'artist' },
+    { label: 'Decade', value: 'decade' },
+  ];
+  const sortLabels = {
+    recent:  'Newest added',
+    oldest:  'Oldest added',
+    az:      'A – Z',
+    za:      'Z – A',
+    release: 'Release year',
+    random:  'Random',
+  };
+
+  const catOpen = openDropdown === 'category';
+  const catMenu = catOpen ? `<div class="discover-dropdown-menu" role="listbox">${
+    catOptions.map(o => `<div class="discover-dropdown-item${category === o.value ? ' selected' : ''}" role="option" onclick="event.stopPropagation();App.coverageSetCategory('${esc(o.value)}')">
+      <span>${esc(o.label)}</span>${category === o.value ? _discoverCheckSvg() : ''}
+    </div>`).join('')
+  }</div>` : '';
+
+  const valOpen = openDropdown === 'value';
+  let valuePillHtml = '';
+  if (category !== 'all') {
+    const opts = _coverageValueOptions(category);
+    const totalCount = (_coverageState.data?.unheard_albums || []).length;
+    const selectedLabel = value === 'all' ? `All ${catLabels[category]}s` : value;
+    const valMenu = valOpen ? `<div class="discover-dropdown-menu" role="listbox">
+      <div class="discover-dropdown-item${value === 'all' ? ' selected' : ''}" role="option" onclick="event.stopPropagation();App.coverageSetValue('all')">
+        <span>All</span>${value === 'all' ? _discoverCheckSvg() : ''}
+        <span class="discover-item-count${value === 'all' ? ' selected' : ''}">${totalCount}</span>
+      </div>
+      ${opts.map(o => `<div class="discover-dropdown-item${value === o.value ? ' selected' : ''}" role="option" onclick="event.stopPropagation();App.coverageSetValue('${esc(o.value).replace(/'/g, "\\'")}')">
+        <span>${esc(o.label)}</span>${value === o.value ? _discoverCheckSvg() : ''}
+        <span class="discover-item-count${value === o.value ? ' selected' : ''}">${o.count}</span>
+      </div>`).join('')}
+    </div>` : '';
+    valuePillHtml = `<div class="discover-pill-wrap${valOpen ? ' open' : ''}" data-which="value">
+      <button class="discover-pill" onclick="event.stopPropagation();App._discoverToggleDropdown('value')" aria-haspopup="listbox" aria-expanded="${valOpen}">
+        <span class="discover-pill-eyebrow">${esc(catLabels[category] || 'Filter')}</span>
+        <span class="discover-pill-value">${esc(selectedLabel)}</span>
+        ${_discoverChevronSvg(valOpen)}
+      </button>
+      ${valMenu}
+    </div>`;
+  }
+
+  const sortOpen = openDropdown === 'sort';
+  const sortMenu = sortOpen ? `<div class="discover-dropdown-menu discover-dropdown-menu--right" role="listbox">${
+    Object.entries(sortLabels).map(([k, label]) => `<div class="discover-dropdown-item${sort === k ? ' selected' : ''}" role="option" onclick="event.stopPropagation();App.coverageSetSort('${k}')">
+      <span>${esc(label)}</span>${sort === k ? _discoverCheckSvg() : ''}
+    </div>`).join('')
+  }</div>` : '';
+
+  return `<div class="discover-filter-rail" id="discover-filter-rail">
+    <div class="discover-filter-rail-left">
+      <div class="discover-pill-wrap${catOpen ? ' open' : ''}" data-which="category">
+        <button class="discover-pill" onclick="event.stopPropagation();App._discoverToggleDropdown('category')" aria-haspopup="listbox" aria-expanded="${catOpen}">
+          <span class="discover-pill-eyebrow">Filter</span>
+          <span class="discover-pill-value">${esc(catLabels[category] || 'All')}</span>
+          ${_discoverChevronSvg(catOpen)}
+        </button>
+        ${catMenu}
+      </div>
+      ${valuePillHtml}
     </div>
-    <div class="coverage-card-actions">
-      <button class="coverage-icon-btn coverage-play-btn" onclick="App._coveragePlayAlbum(this.closest('.coverage-album-card'),event)" title="Play album" aria-label="Play album">${playSvg(13)}</button>
-      <button class="btn-secondary coverage-card-btn" onclick="App._coverageAddAlbumToPlaylist(this.closest('.coverage-album-card'),event)" title="Add album to playlist">+ Playlist</button>
-      <button class="btn-secondary coverage-card-btn" onclick="App._coverageOpenAlbum(this.closest('.coverage-album-card'),event)" title="Open album">Open</button>
+    <div class="discover-pill-wrap${sortOpen ? ' open' : ''}" data-which="sort">
+      <button class="discover-pill" onclick="event.stopPropagation();App._discoverToggleDropdown('sort')" aria-haspopup="listbox" aria-expanded="${sortOpen}">
+        <span class="discover-pill-eyebrow">Sort</span>
+        <span class="discover-pill-value">${esc(sortLabels[sort] || 'Newest added')}</span>
+        ${_discoverChevronSvg(sortOpen)}
+      </button>
+      ${sortMenu}
     </div>
   </div>`;
+}
+
+function _discoverCardHtml(a) {
+  const isNew = a.date_added && (Date.now() / 1000 - Number(a.date_added)) < 30 * 86400;
+  const bg = _discoverArtworkGradient(a.album, a.artist);
+  const img = a.artwork_key
+    ? `<img src="/api/artwork/${esc(a.artwork_key)}" loading="lazy" alt="${esc(a.album)}" onerror="this.style.display='none'">`
+    : '';
+  const newBadge = isNew
+    ? `<div class="discover-new-badge"><span class="discover-new-dot"></span>New</div>`
+    : '';
+  const trackCount = Number(a.track_count || 0);
+  const meta = [a.year, a.genre, `${trackCount} track${trackCount === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
+  return `<div class="album-card discover-album-card" data-artist="${esc(a.artist)}" data-album="${esc(a.album)}" onclick="App._coverageOpenAlbum(this)" title="${esc(a.artist)} — ${esc(a.album)}">
+    <div class="album-thumb" style="background:${bg}">
+      ${img}
+      ${newBadge}
+      <div class="card-thumb-overlay">
+        <button class="discover-overlay-add" onclick="event.stopPropagation();App._coverageAddAlbumToPlaylist(this.closest('.album-card'),event)" title="Add to playlist" aria-label="Add to playlist">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button class="card-play-btn" onclick="event.stopPropagation();App._coveragePlayAlbum(this.closest('.album-card'),event)" title="Play album" aria-label="Play album">${playSvg(14)}</button>
+        <button class="card-more-btn discover-overlay-more" onclick="event.stopPropagation();App.showAlbumCtxMenu(event,this.closest('.album-card').dataset.artist,this.closest('.album-card').dataset.album)" title="More options" aria-label="More options">···</button>
+      </div>
+    </div>
+    <div class="album-name">${esc(a.album || 'Unknown Album')}</div>
+    <div class="album-artist">${esc(a.artist || 'Unknown Artist')}</div>
+    <div class="album-year">${esc(meta)}</div>
+  </div>`;
+}
+
+async function coveragePlayAll() {
+  const rows = _coverageAlbumRows().slice(0, _coverageState.visibleCount);
+  if (!rows.length) { toast('No albums to play'); return; }
+  toast('Building queue…');
+  const groups = await Promise.all(
+    rows.map(a => api(`/library/tracks?artist=${encodeURIComponent(a.artist)}&album=${encodeURIComponent(a.album)}`).catch(() => []))
+  );
+  const flat = groups.flat().filter(Boolean);
+  if (!flat.length) { toast('No tracks found'); return; }
+  Player.playAll(flat);
+}
+
+async function coverageSurpriseMe() {
+  const rows = _coverageAlbumRows();
+  if (!rows.length) { toast('Nothing to pick'); return; }
+  const pool = rows.length > 1
+    ? rows.filter(a => `${a.artist}||${a.album}` !== _coverageState._lastSurprisePick)
+    : rows;
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  _coverageState._lastSurprisePick = `${pick.artist}||${pick.album}`;
+  await playAlbum(pick.artist, pick.album);
 }
 
 function _renderInsightsCoverage() {
@@ -16784,89 +17002,100 @@ function _renderInsightsCoverage() {
 
   const summary = data.summary || {};
   const albums = _coverageSummaryMetric(summary, 'albums');
-  const artists = _coverageSummaryMetric(summary, 'artists');
   const tracks = _coverageSummaryMetric(summary, 'tracks');
+  const loadedCount = (data.unheard_albums || []).length;
+  const totalUnheard = data.unheard_albums_total || albums.unheard || loadedCount;
+  const totalLibrary = albums.total || 0;
   const rows = _coverageAlbumRows();
   const visibleRows = rows.slice(0, _coverageState.visibleCount);
   const hasMore = rows.length > visibleRows.length;
-  const loadedAlbumCount = ((_coverageState.data && _coverageState.data.unheard_albums) || []).length;
-  const totalUnheardAlbums = data.unheard_albums_total || albums.unheard || loadedAlbumCount;
 
-  const genreChips = (data.top_unheard_genres || []).slice(0, 5).map(g =>
-    _coverageRenderFilterChip('genre', g.name, g.name, g.album_count)
-  ).join('');
-  const artistChips = (data.top_unheard_artists || []).slice(0, 4).map(a =>
-    _coverageRenderFilterChip('artist', a.name, a.name, a.album_count)
-  ).join('');
+  const genres = (data.top_unheard_genres || []).slice(0, 2).map(g => g.name).filter(Boolean);
+  const metaParts = [
+    totalUnheard ? `${totalUnheard.toLocaleString()} unplayed` : null,
+    albums.total ? `${_coveragePctText(albums.pct)}% tried` : null,
+    genres.length ? genres.join(', ') : null,
+  ].filter(Boolean);
 
-  const cards = visibleRows.map(_coverageRenderCard).join('');
-  const emptyBody = !tracks.total
+  const noData = !tracks.total;
+  const noHistory = tracks.total && !tracks.heard;
+  const allPlayed = tracks.heard && !albums.unheard;
+  const noMatch = albums.unheard && !visibleRows.length;
+
+  const emptyBody = noData
     ? `<div class="coverage-empty-state">
-         ${coverPlaceholder('album', 52, '10px')}
-         <strong>No library scanned yet</strong>
-         <span>Scan your music folder and TuneBridge will show albums you have not played.</span>
+        ${coverPlaceholder('album', 52, '10px')}
+        <strong>No library scanned yet</strong>
+        <span>Scan your music folder and TuneBridge will show albums you have not played.</span>
        </div>`
-    : (!tracks.heard
-      ? `<div class="coverage-empty-state">
-           ${coverPlaceholder('song', 52, '10px')}
-           <strong>No listening history yet</strong>
-           <span>Play a few albums in TuneBridge. Albums move out of this list once a play is long enough to count.</span>
-         </div>`
-      : (!albums.unheard
-        ? `<div class="coverage-empty-state">
-             ${coverPlaceholder('album', 52, '10px')}
-             <strong>You have tried every album</strong>
-             <span>Every album has at least one play. Refresh this page after importing new music.</span>
-           </div>`
-        : `<div class="coverage-empty-state">
-             ${coverPlaceholder('album', 52, '10px')}
-             <strong>No albums match this filter</strong>
-             <span>Try All, or choose a different genre or artist.</span>
-           </div>`));
+    : noHistory
+    ? `<div class="coverage-empty-state">
+        ${coverPlaceholder('song', 52, '10px')}
+        <strong>No listening history yet</strong>
+        <span>Play a few albums in TuneBridge. Albums move out of this list once a play is long enough to count.</span>
+       </div>`
+    : allPlayed
+    ? `<div class="coverage-empty-state">
+        ${coverPlaceholder('album', 52, '10px')}
+        <strong>You have tried every album</strong>
+        <span>Every album has at least one play. Refresh after importing new music.</span>
+       </div>`
+    : `<div class="coverage-empty-state">
+        ${coverPlaceholder('album', 52, '10px')}
+        <strong>No albums match this filter</strong>
+        <span>Try All, or choose a different filter.</span>
+       </div>`;
+
+  const showGrid = albums.unheard && visibleRows.length > 0;
+  const cards = showGrid ? visibleRows.map(_discoverCardHtml).join('') : '';
+
+  const refreshSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`;
+  const backSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 18 9 12 15 6"/></svg>`;
+  const saveSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;
+  const playSvgSmall = `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+
+  const isUnfiltered = _coverageState.category === 'all' && _coverageState.value === 'all';
+  const displayTotal = isUnfiltered ? totalUnheard : rows.length;
+  const countText = visibleRows.length
+    ? `Showing <strong>${visibleRows.length.toLocaleString()}</strong> of <strong>${displayTotal.toLocaleString()}</strong> unplayed album${displayTotal === 1 ? '' : 's'}${totalLibrary ? ` · <strong>${totalLibrary.toLocaleString()}</strong> total in library` : ''}`
+    : 'No albums match this filter';
 
   el.innerHTML = `
-    <div class="coverage-hub">
-      <div class="coverage-focus-panel">
-        <div class="coverage-focus-copy">
-          <span class="coverage-focus-label">Unplayed in TuneBridge</span>
-          <strong>${esc(_coverageInsightLine(data))}</strong>
-          <p>Choose an album to play now, or filter by mood and add the shown albums to a playlist for later.</p>
-        </div>
-        <div class="coverage-focus-stats">
-          <div>
-            <span>Unplayed</span>
-            <strong>${albums.unheard}</strong>
+    <div class="discover-page">
+      <div class="discover-top-bar">
+        <button class="discover-back-btn" onclick="App.navBack()" title="Back" aria-label="Back">${backSvg}</button>
+        <div class="discover-header">
+          <div class="discover-header-left">
+            <h2 class="discover-title">Discover</h2>
+            <p class="discover-subtitle">Albums in your library with no counted plays yet.</p>
+            ${metaParts.length ? `<p class="discover-meta">${metaParts.join(' · ')}</p>` : ''}
           </div>
-          <div>
-            <span>Albums tried</span>
-            <strong>${_coveragePctText(albums.pct)}%</strong>
+          <div class="discover-header-right">
+            <button class="discover-refresh-btn" onclick="App.loadInsightsCoverage()" title="Refresh" aria-label="Refresh">${refreshSvg}</button>
           </div>
         </div>
       </div>
 
       ${albums.unheard ? `
-        <div class="coverage-toolbar">
-          <div class="coverage-toolbar-main">
-            <div class="coverage-control-label">Filter by genre or artist</div>
-            <div class="coverage-filter-row">
-              ${_coverageRenderFilterChip('all', '', 'All', loadedAlbumCount)}
-              ${genreChips}
-              ${artistChips}
-            </div>
-          </div>
-          <div class="coverage-toolbar-actions">
-            <select class="coverage-sort-select" onchange="App.coverageSetSort(this.value)" title="Sort unplayed albums">
-              <option value="recent"${_coverageState.sort === 'recent' ? ' selected' : ''}>Newest added</option>
-              <option value="oldest"${_coverageState.sort === 'oldest' ? ' selected' : ''}>Oldest added</option>
-              <option value="artist"${_coverageState.sort === 'artist' ? ' selected' : ''}>Artist A-Z</option>
-              <option value="album"${_coverageState.sort === 'album' ? ' selected' : ''}>Album A-Z</option>
-            </select>
-            <button class="btn-secondary coverage-visible-add-btn" onclick="App._coverageAddVisibleToPlaylist(event)" ${visibleRows.length ? '' : 'disabled'}>Add Shown to Playlist</button>
+        ${_discoverRenderFilterRail()}
+
+        <div class="discover-results-bar">
+          <span class="discover-results-count">${countText}</span>
+          <div class="discover-actions">
+            <button class="discover-action-btn discover-action-save" onclick="App._coverageAddVisibleToPlaylist(event)" ${visibleRows.length ? '' : 'disabled'}>
+              ${saveSvg} Save to playlist
+            </button>
+            <button class="discover-action-btn discover-action-play" onclick="App.coveragePlayAll()" ${visibleRows.length ? '' : 'disabled'}>
+              <span class="discover-play-badge">${playSvgSmall}</span> Play all
+            </button>
+            <button class="discover-action-btn discover-action-surprise" onclick="App.coverageSurpriseMe()">
+              Surprise me
+            </button>
           </div>
         </div>
-        <div class="coverage-results-meta">${visibleRows.length ? `Showing ${visibleRows.length} of ${rows.length} unplayed album${rows.length === 1 ? '' : 's'}${totalUnheardAlbums > loadedAlbumCount ? ` (${totalUnheardAlbums.toLocaleString()} total)` : ''}` : 'No albums match this filter'}</div>
-        ${visibleRows.length ? `<div class="coverage-album-grid">${cards}</div>` : emptyBody}
-        ${hasMore ? `<button class="coverage-show-more-btn" onclick="App.coverageShowMore()">Show more</button>` : ''}
+
+        ${showGrid ? `<div class="coverage-album-grid">${cards}</div>` : emptyBody}
+        ${hasMore ? `<button class="coverage-show-more-btn" onclick="App.coverageShowMore()">Load ${Math.min(_coverageState.pageSize, rows.length - _coverageState.visibleCount)} more</button>` : ''}
       ` : emptyBody}
     </div>
   `;
@@ -16876,6 +17105,14 @@ async function loadInsightsCoverage() {
   const el = document.getElementById('insights-coverage-content');
   if (!el) return;
   el.innerHTML = '<div class="insights-spinner-wrap"><div class="spinner"></div></div>';
+
+  if (_coverageState._outsideClickHandler) {
+    document.removeEventListener('click', _coverageState._outsideClickHandler);
+    document.removeEventListener('keydown', _coverageState._keydownHandler);
+    _coverageState._outsideClickHandler = null;
+    _coverageState._keydownHandler = null;
+  }
+
   const data = await api('/insights/coverage').catch(() => null);
   if (!data) {
     el.innerHTML = `<div class="coverage-error-state">
@@ -16884,24 +17121,38 @@ async function loadInsightsCoverage() {
     </div>`;
     return;
   }
+
   _coverageState.data = data;
-  _coverageState.filterType = 'all';
-  _coverageState.filterValue = '';
+  _coverageState.category = 'all';
+  _coverageState.value = 'all';
   _coverageState.sort = _contentSortPrefs.coverage?.sort || _CONTENT_SORT_DEFAULTS.coverage.sort;
   _coverageState.visibleCount = _coverageState.pageSize;
+  _coverageState.openDropdown = null;
+  _coverageState._lastSurprisePick = null;
+
+  _coverageState._outsideClickHandler = (e) => {
+    if (!e.target.closest('#discover-filter-rail')) _discoverCloseDropdowns();
+  };
+  _coverageState._keydownHandler = (e) => {
+    if (e.key === 'Escape') _discoverCloseDropdowns();
+  };
+  document.addEventListener('click', _coverageState._outsideClickHandler);
+  document.addEventListener('keydown', _coverageState._keydownHandler);
+
   _renderInsightsCoverage();
 }
 
 function coverageSetFilter(type, value = '') {
-  _coverageState.filterType = type || 'all';
-  _coverageState.filterValue = value || '';
+  _coverageState.category = type || 'all';
+  _coverageState.value = value || 'all';
   _coverageState.visibleCount = _coverageState.pageSize;
   _renderInsightsCoverage();
 }
 
 function coverageSetSort(sort) {
-  _coverageState.sort = _pickAllowed(sort, ['recent', 'oldest', 'artist', 'album'], _CONTENT_SORT_DEFAULTS.coverage.sort);
+  _coverageState.sort = _pickAllowed(sort, ['recent', 'oldest', 'az', 'za', 'release', 'random'], _CONTENT_SORT_DEFAULTS.coverage.sort);
   _coverageState.visibleCount = _coverageState.pageSize;
+  _coverageState.openDropdown = null;
   _queueSaveContentSortPrefs();
   _renderInsightsCoverage();
 }
