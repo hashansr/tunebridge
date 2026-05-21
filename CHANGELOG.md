@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Sync Music Step 3 now groups new songs by Artist > Album > Song with selectable artist, album, and individual song checkboxes.
 
 ## v0.351 · 2026-05-20
 

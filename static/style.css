@@ -4399,17 +4399,37 @@ tr.track-selected .track-check-indicator {
 .sync-accordion-toggle:hover .sync-section-title {
   filter: brightness(1.08);
 }
+.accordion-state-icon,
 .sync-accordion-chevron {
-  width: 8px;
-  height: 8px;
-  border-right: 1.5px solid rgba(193, 198, 215, 0.82);
-  border-bottom: 1.5px solid rgba(193, 198, 215, 0.82);
-  transform: rotate(45deg) translateY(-1px);
-  transition: transform 0.14s ease;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  background-color: currentColor;
+  -webkit-mask: url('/static/icons/accordion-collapsed.svg') center / contain no-repeat;
+  mask: url('/static/icons/accordion-collapsed.svg') center / contain no-repeat;
+}
+.accordion-state-icon.is-open,
+[open] > summary .accordion-state-icon,
+.is-open > .history-date-toggle .accordion-state-icon,
+.iemfit-iem-card--open .accordion-state-icon {
+  -webkit-mask-image: url('/static/icons/accordion-expanded.svg');
+  mask-image: url('/static/icons/accordion-expanded.svg');
+}
+.sync-accordion-chevron {
+  width: 12px;
+  height: 12px;
+  color: rgba(193, 198, 215, 0.82);
   margin-left: 2px;
 }
 .sync-section.is-collapsed .sync-accordion-chevron {
-  transform: rotate(-45deg) translateY(0);
+  -webkit-mask-image: url('/static/icons/accordion-collapsed.svg');
+  mask-image: url('/static/icons/accordion-collapsed.svg');
+}
+.sync-section:not(.is-collapsed) .sync-accordion-chevron {
+  -webkit-mask-image: url('/static/icons/accordion-expanded.svg');
+  mask-image: url('/static/icons/accordion-expanded.svg');
 }
 .sync-section-icon {
   width: 18px;
@@ -7732,16 +7752,16 @@ tbody tr:hover {
 }
 #dap-modal .dap-form-section-summary::after {
   content: '';
-  width: 7px;
-  height: 7px;
-  border-right: 1.5px solid rgba(173, 198, 255, 0.78);
-  border-bottom: 1.5px solid rgba(173, 198, 255, 0.78);
-  transform: rotate(45deg) translateY(-2px);
-  transition: transform 0.16s ease;
+  width: 14px;
+  height: 14px;
+  background-color: rgba(173, 198, 255, 0.78);
+  -webkit-mask: url('/static/icons/accordion-collapsed.svg') center / contain no-repeat;
+  mask: url('/static/icons/accordion-collapsed.svg') center / contain no-repeat;
   margin-left: 10px;
 }
 #dap-modal details[open] > .dap-form-section-summary::after {
-  transform: rotate(225deg) translateY(-1px);
+  -webkit-mask-image: url('/static/icons/accordion-expanded.svg');
+  mask-image: url('/static/icons/accordion-expanded.svg');
 }
 #dap-modal .dap-collapsible .settings-row:last-child {
   margin-bottom: 0;
@@ -8203,13 +8223,16 @@ tbody tr:hover {
   letter-spacing: 0.08em;
 }
 .ml-gen-advanced-wrap .ml-gen-accordion summary::after {
-  content: '+';
-  color: rgba(173, 198, 255, 0.82);
-  font-size: 15px;
-  line-height: 1;
+  content: '';
+  width: 14px;
+  height: 14px;
+  background-color: rgba(173, 198, 255, 0.82);
+  -webkit-mask: url('/static/icons/accordion-collapsed.svg') center / contain no-repeat;
+  mask: url('/static/icons/accordion-collapsed.svg') center / contain no-repeat;
 }
 .ml-gen-advanced-wrap .ml-gen-accordion[open] summary::after {
-  content: '-';
+  -webkit-mask-image: url('/static/icons/accordion-expanded.svg');
+  mask-image: url('/static/icons/accordion-expanded.svg');
 }
 .ml-gen-modal .ml-gen-row label {
   width: 100%;
@@ -13389,9 +13412,7 @@ body.is-col-resizing {
 .iemfit-chevron {
   color: var(--text-muted);
   flex-shrink: 0;
-  transition: transform 0.2s ease;
 }
-.iemfit-iem-card--open .iemfit-chevron { transform: rotate(180deg); }
 
 /* Detail accordion panel */
 .iemfit-detail-panel {
@@ -15628,13 +15649,16 @@ tr:hover .track-edit-btn:hover {
   display: none;
 }
 .sr-accordion summary::after {
-  content: '+';
-  color: rgba(173, 198, 255, 0.82);
-  font-size: 15px;
-  line-height: 1;
+  content: '';
+  width: 14px;
+  height: 14px;
+  background-color: rgba(173, 198, 255, 0.82);
+  -webkit-mask: url('/static/icons/accordion-collapsed.svg') center / contain no-repeat;
+  mask: url('/static/icons/accordion-collapsed.svg') center / contain no-repeat;
 }
 .sr-accordion[open] summary::after {
-  content: '-';
+  -webkit-mask-image: url('/static/icons/accordion-expanded.svg');
+  mask-image: url('/static/icons/accordion-expanded.svg');
 }
 .sr-preview-section {
   padding-bottom: 4px;
@@ -15906,14 +15930,8 @@ tr:hover .track-edit-btn:hover {
 }
 .history-date-chevron {
   color: rgba(173, 198, 255, 0.74);
-  font-size: 24px;
-  line-height: 1;
-  transform: rotate(0deg);
-  transition: transform .14s ease;
-  text-align: center;
-}
-.history-date-group.is-open .history-date-chevron {
-  transform: rotate(90deg);
+  width: 16px;
+  height: 16px;
 }
 .history-date-events {
   padding: 4px 10px 10px;
@@ -18751,15 +18769,21 @@ body.is-col-resizing {
   background: var(--accent-dim);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
-  transform: rotate(180deg);
-  transition: transform 0.18s ease;
   color: var(--accent);
+}
+.sw-group-chev .accordion-state-icon {
+  width: 12px;
+  height: 12px;
+  color: currentColor;
 }
 .sw-group-card--danger .sw-group-chev {
   background: rgba(255,179,181,0.06);
   color: var(--accent-secondary);
 }
-.sw-group-card--expanded .sw-group-chev { transform: rotate(0deg); }
+.sw-group-card--expanded .sw-group-chev .accordion-state-icon {
+  -webkit-mask-image: url('/static/icons/accordion-expanded.svg');
+  mask-image: url('/static/icons/accordion-expanded.svg');
+}
 
 .sw-group-label-col { min-width: 0; }
 .sw-group-title {
@@ -18928,6 +18952,80 @@ body.is-col-resizing {
 }
 .sw-review-row:hover .sw-row-kebab { opacity: 1; }
 .sw-row-kebab:hover { background: rgba(255,255,255,0.06); }
+
+/* Song hierarchy for sync-to-device review */
+.sw-tree {
+  background: rgba(255,255,255,0.01);
+}
+.sw-tree-artist {
+  border-top: 1px solid var(--border);
+}
+.sw-tree-artist:first-child {
+  border-top: none;
+}
+.sw-tree-album {
+  border-top: 1px solid rgba(255,255,255,0.045);
+}
+.sw-tree-row {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.12s ease, opacity 0.15s ease;
+}
+.sw-tree-row:hover,
+.sw-tree-song:hover {
+  background: rgba(255,255,255,0.025);
+}
+.sw-tree-row--deselected {
+  opacity: 0.6;
+}
+.sw-tree-row--artist {
+  grid-template-columns: 18px 1fr auto;
+  padding: 9px 14px;
+  background: rgba(255,255,255,0.018);
+}
+.sw-tree-row--album {
+  grid-template-columns: 18px 28px 1fr auto;
+  padding: 8px 14px 8px 34px;
+}
+.sw-tree-main {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.sw-tree-title {
+  min-width: 0;
+  color: var(--text);
+  font-size: 12.75px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sw-tree-row--artist .sw-tree-title {
+  font-size: 13px;
+}
+.sw-tree-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.sw-tree-songs {
+  border-top: 1px solid rgba(255,255,255,0.035);
+}
+.sw-tree-song {
+  grid-template-columns: 18px 28px 1fr 110px auto;
+  padding-left: 58px;
+}
+.sw-tree-connector {
+  width: 16px;
+  height: 16px;
+  border-left: 1px solid rgba(173,198,255,0.20);
+  border-bottom: 1px solid rgba(173,198,255,0.20);
+  justify-self: center;
+  transform: translateY(-3px);
+}
 
 /* onDevice group — header with action buttons */
 .sw-group-hdr--actions {

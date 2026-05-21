@@ -8150,11 +8150,14 @@ function _swBuildGroupCard(gid, group) {
   const sel = _sw.selection[gid] ?? {};
   const total = group.items.length;
   const isOnDevice = gid === 'onDevice';
+  const isHierarchicalToDevice = gid === 'toDevice';
 
   // Pagination
   const page = _sw.pages?.[gid] ?? 0;
   const totalPages = Math.ceil(total / REVIEW_PAGE_SIZE);
-  const pageItems = group.items.slice(page * REVIEW_PAGE_SIZE, (page + 1) * REVIEW_PAGE_SIZE);
+  const pageItems = isHierarchicalToDevice
+    ? group.items
+    : group.items.slice(page * REVIEW_PAGE_SIZE, (page + 1) * REVIEW_PAGE_SIZE);
   const pageStart = page * REVIEW_PAGE_SIZE + 1;
   const pageEnd = Math.min((page + 1) * REVIEW_PAGE_SIZE, total);
 
@@ -8167,7 +8170,7 @@ function _swBuildGroupCard(gid, group) {
   const toggleLabel = isExpanded ? 'Click to collapse' : 'Click to expand';
   const toggleAria = isExpanded ? `Collapse ${group.label}` : `Expand ${group.label}`;
 
-  const paginationBar = total > REVIEW_PAGE_SIZE ? `
+  const paginationBar = !isHierarchicalToDevice && total > REVIEW_PAGE_SIZE ? `
     <div class="sw-page-bar">
       <span class="sw-page-info">Showing ${pageStart}–${pageEnd} of ${total}</span>
       <div class="sw-page-btns">
@@ -8195,9 +8198,7 @@ function _swBuildGroupCard(gid, group) {
 
     card.innerHTML = `
       <div class="sw-group-hdr sw-group-hdr--actions" onclick="App.swToggleGroupCollapse('${gid}')" title="${toggleLabel}" aria-label="${esc(toggleAria)}" aria-expanded="${isExpanded ? 'true' : 'false'}">
-        <div class="sw-group-chev">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
-        </div>
+        <div class="sw-group-chev"><span class="accordion-state-icon" aria-hidden="true"></span></div>
         <div class="sw-group-label-col">
           <span class="sw-group-title">${esc(group.label)}</span>
           <span class="sw-group-count-text">${total} item${total===1?'':'s'}</span>
@@ -8236,6 +8237,37 @@ function _swBuildGroupCard(gid, group) {
       </div>
       ${paginationBar}
     `;
+  } else if (isHierarchicalToDevice) {
+    const selectedCount = Object.values(sel).filter(Boolean).length;
+    const allSelected = selectedCount === total;
+    const someSelected = selectedCount > 0 && !allSelected;
+
+    card.innerHTML = `
+      <div class="sw-group-hdr" onclick="App.swToggleGroupCollapse('${gid}')" title="${toggleLabel}" aria-label="${esc(toggleAria)}" aria-expanded="${isExpanded ? 'true' : 'false'}">
+        <div class="sw-group-chev"><span class="accordion-state-icon" aria-hidden="true"></span></div>
+        <input type="checkbox" class="sw-check" id="sw-grp-chk-${gid}"
+          ${allSelected ? 'checked' : ''} onclick="event.stopPropagation();App.swToggleGroup('${gid}', this.checked)"
+          data-indeterminate="${someSelected}" />
+        <div class="sw-group-label-col">
+          <span class="sw-group-title">${esc(group.label)}</span>
+          <span class="sw-group-count-text">${total} song${total===1?'':'s'}</span>
+          <span class="sw-group-hint">Select artists, albums, or individual songs to sync.</span>
+        </div>
+        <span class="sw-group-sel-pill">${selectedCount} selected</span>
+        <button class="sw-group-selall-btn" onclick="event.stopPropagation();App.swToggleGroup('${gid}', ${!allSelected})">
+          ${allSelected ? 'Deselect all' : 'Select all'}
+        </button>
+      </div>
+      <div class="sw-group-rows sw-tree">
+        ${_swBuildSongHierarchy(pageItems, sel)}
+      </div>
+    `;
+
+    const chk = card.querySelector(`#sw-grp-chk-${gid}`);
+    if (chk && someSelected) chk.indeterminate = true;
+    card.querySelectorAll('.sw-tree-check[data-indeterminate="true"]').forEach(input => {
+      input.indeterminate = true;
+    });
   } else {
     // toDevice / playlists: checkbox rows
     const selectedCount = Object.values(sel).filter(Boolean).length;
@@ -8245,9 +8277,7 @@ function _swBuildGroupCard(gid, group) {
 
     card.innerHTML = `
       <div class="sw-group-hdr" onclick="App.swToggleGroupCollapse('${gid}')" title="${toggleLabel}" aria-label="${esc(toggleAria)}" aria-expanded="${isExpanded ? 'true' : 'false'}">
-        <div class="sw-group-chev">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
-        </div>
+        <div class="sw-group-chev"><span class="accordion-state-icon" aria-hidden="true"></span></div>
         <input type="checkbox" class="sw-check" id="sw-grp-chk-${gid}"
           ${allSelected ? 'checked' : ''} onclick="event.stopPropagation();App.swToggleGroup('${gid}', this.checked)"
           data-indeterminate="${someSelected}" />
@@ -8283,6 +8313,115 @@ function _swBuildGroupCard(gid, group) {
   }
 
   return card;
+}
+
+function _swBuildSongHierarchy(items, sel) {
+  const artists = new Map();
+  const labelOf = value => (value || '').trim() || 'Unknown';
+  const keyOf = value => labelOf(value).toLowerCase();
+
+  for (const item of items) {
+    const artistLabel = labelOf(item.artist);
+    const artistKey = keyOf(item.artist);
+    const albumLabel = labelOf(item.album);
+    const albumKey = `${artistKey}::${keyOf(item.album)}`;
+
+    if (!artists.has(artistKey)) {
+      artists.set(artistKey, { key: artistKey, label: artistLabel, items: [], albums: new Map() });
+    }
+    const artist = artists.get(artistKey);
+    artist.items.push(item);
+
+    if (!artist.albums.has(albumKey)) {
+      artist.albums.set(albumKey, { key: albumKey, label: albumLabel, items: [] });
+    }
+    artist.albums.get(albumKey).items.push(item);
+  }
+
+  const sortedArtists = Array.from(artists.values()).sort((a, b) => a.label.localeCompare(b.label));
+
+  return sortedArtists.map(artist => {
+    const artistState = _swSelectionState(artist.items, sel);
+    const albums = Array.from(artist.albums.values()).sort((a, b) => a.label.localeCompare(b.label));
+    return `
+      <div class="sw-tree-artist">
+        <div class="sw-tree-row sw-tree-row--artist${artistState.selected ? '' : ' sw-tree-row--deselected'}">
+          <input type="checkbox" class="sw-check sw-tree-check"
+            data-gid="toDevice" data-level="artist" data-key="${esc(artist.key)}"
+            ${artistState.all ? 'checked' : ''} data-indeterminate="${artistState.some && !artistState.all}"
+            onclick="event.stopPropagation();App.swToggleTreeNodeEl(this)" />
+          <div class="sw-tree-main">
+            <span class="sw-tree-title">${esc(artist.label)}</span>
+            <span class="sw-tree-meta">${artist.items.length} song${artist.items.length===1?'':'s'} · ${albums.length} album${albums.length===1?'':'s'}</span>
+          </div>
+          <span class="sw-group-sel-pill">${artistState.count} selected</span>
+        </div>
+        ${albums.map(album => {
+          const albumState = _swSelectionState(album.items, sel);
+          return `
+        <div class="sw-tree-album">
+          <div class="sw-tree-row sw-tree-row--album${albumState.selected ? '' : ' sw-tree-row--deselected'}">
+            <input type="checkbox" class="sw-check sw-tree-check"
+              data-gid="toDevice" data-level="album" data-key="${esc(album.key)}"
+              ${albumState.all ? 'checked' : ''} data-indeterminate="${albumState.some && !albumState.all}"
+              onclick="event.stopPropagation();App.swToggleTreeNodeEl(this)" />
+            ${_swRowThumb(album.items[0])}
+            <div class="sw-tree-main">
+              <span class="sw-tree-title">${esc(album.label)}</span>
+              <span class="sw-tree-meta">${album.items.length} song${album.items.length===1?'':'s'}</span>
+            </div>
+            <span class="sw-group-sel-pill">${albumState.count} selected</span>
+          </div>
+          <div class="sw-tree-songs">
+            ${album.items
+              .slice()
+              .sort((a, b) => a.title.localeCompare(b.title))
+              .map(item => `
+            <div class="sw-review-row sw-tree-song${sel[item.id] ? '' : ' sw-review-row--deselected'}" data-gid="toDevice" data-id="${esc(item.id)}">
+              <input type="checkbox" class="sw-check sw-item-check" data-gid="toDevice" data-id="${esc(item.id)}"
+                ${sel[item.id] ? 'checked' : ''}
+                onclick="event.stopPropagation();App.swToggleItemEl(this)" />
+              <span class="sw-tree-connector" aria-hidden="true"></span>
+              <div class="sw-row-info">
+                <div class="sw-row-title" title="${esc(item.title)}">${esc(item.title)}</div>
+                <div class="sw-row-sub">${[item.artist, item.album].filter(Boolean).map(esc).join(' · ')}</div>
+              </div>
+              <span></span>
+              <span class="sw-row-size">${item.size ? `${item.size} MB` : ''}${item.size && item.dur ? ' · ' : ''}${item.dur ?? ''}</span>
+            </div>`).join('')}
+          </div>
+        </div>`;
+        }).join('')}
+      </div>`;
+  }).join('');
+}
+
+function _swSelectionState(items, sel) {
+  const count = items.reduce((sum, item) => sum + (sel[item.id] ? 1 : 0), 0);
+  return {
+    count,
+    selected: count > 0,
+    some: count > 0,
+    all: count === items.length,
+  };
+}
+
+function _swItemsForTreeNode(gid, level, key) {
+  const items = _sw.proposal?.[gid]?.items ?? [];
+  const labelOf = value => (value || '').trim() || 'Unknown';
+  const keyOf = value => labelOf(value).toLowerCase();
+  if (level === 'artist') return items.filter(item => keyOf(item.artist) === key);
+  if (level === 'album') {
+    return items.filter(item => `${keyOf(item.artist)}::${keyOf(item.album)}` === key);
+  }
+  return [];
+}
+
+function swToggleTreeNode(gid, level, key, toState) {
+  const items = _swItemsForTreeNode(gid, level, key);
+  if (!_sw.selection[gid]) _sw.selection[gid] = {};
+  for (const item of items) _sw.selection[gid][item.id] = toState;
+  _swRenderReview();
 }
 
 function swReviewPage(gid, page) {
@@ -8371,6 +8510,9 @@ function swToggleGroup(gid, toState) {
 // Bridge: reads id/gid from data attributes — avoids JS string escaping issues with special chars
 function swToggleItemEl(el) {
   swToggleItem(el.dataset.gid, el.dataset.id);
+}
+function swToggleTreeNodeEl(el) {
+  swToggleTreeNode(el.dataset.gid, el.dataset.level, el.dataset.key, el.checked);
 }
 function swSetItemActionEl(el) {
   swSetItemAction(el.dataset.id, el.dataset.action);
@@ -10242,7 +10384,7 @@ function _renderPeqList(profiles) {
     return `
     <div class="peq-card${_activePeqId === p.id ? ' active' : ''}" id="peq-row-${p.id}">
       <div class="peq-card-header" onclick="App.togglePeqAccordion('${p.id}')">
-        <svg class="peq-chevron" id="peq-chevron-${p.id}" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M8.08586 5.41412C7.69534 5.80465 7.69534 6.43781 8.08586 6.82834L13.3788 12.1212L8.08586 17.4141C7.69534 17.8046 7.69534 18.4378 8.08586 18.8283L8.79297 19.5354C9.18349 19.926 9.81666 19.926 10.2072 19.5354L16.5607 13.1819C17.1465 12.5961 17.1465 11.6464 16.5607 11.0606L10.2072 4.70702C9.81666 4.31649 9.18349 4.31649 8.79297 4.70702L8.08586 5.41412Z"/></svg>
+        <span class="peq-chevron accordion-state-icon" id="peq-chevron-${p.id}" aria-hidden="true"></span>
         <span class="peq-row-name">${esc(p.name)}</span>
         <span class="peq-row-meta">${esc(meta)}</span>
         <div class="peq-row-actions" onclick="event.stopPropagation()">
@@ -10269,7 +10411,7 @@ function togglePeqAccordion(peqId) {
   if (!accordion) return;
   const isOpen = accordion.style.display !== 'none';
   accordion.style.display = isOpen ? 'none' : 'block';
-  if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(90deg)';
+  if (chevron) chevron.classList.toggle('is-open', !isOpen);
 }
 
 async function downloadPeq(peqId, name) {
@@ -14100,7 +14242,7 @@ async function loadHistoryView() {
         <button class="history-date-toggle" onclick="App.toggleHistoryDay('${esc(key)}')" aria-expanded="${isOpen ? 'true' : 'false'}">
           <span class="history-date-label">${esc(group.label)}</span>
           <span class="history-date-summary">${evs.length} plays · ${uniqueTracks} tracks · ${_fmtDuration(totalSeconds)}</span>
-          <span class="history-date-chevron">›</span>
+          <span class="history-date-chevron accordion-state-icon" aria-hidden="true"></span>
         </button>
         <div class="history-date-events" style="display:${isOpen ? 'block' : 'none'}">
         ${evs.map(ev => `
@@ -14827,7 +14969,7 @@ function _toggleSkippedSection() {
   if (!body) return;
   const open = body.style.display === 'block';
   body.style.display = open ? 'none' : 'block';
-  if (chevron) chevron.style.transform = open ? '' : 'rotate(180deg)';
+  if (chevron) chevron.classList.toggle('is-open', !open);
 }
 
 // ── Empty folder cleanup ─────────────────────────────────────────────
@@ -15115,7 +15257,7 @@ function toggleLyricsAdvanced() {
   if (!body) return;
   const open = body.style.display === 'none';
   body.style.display = open ? '' : 'none';
-  if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
+  if (chevron) chevron.classList.toggle('is-open', open);
 }
 
 function toggleArtworkAdvanced() {
@@ -15124,7 +15266,7 @@ function toggleArtworkAdvanced() {
   if (!body) return;
   const open = body.style.display === 'none';
   body.style.display = open ? '' : 'none';
-  if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
+  if (chevron) chevron.classList.toggle('is-open', open);
 }
 
 async function startLyricsBulk(mode = 'new') {
@@ -15488,6 +15630,8 @@ const App = {
   swReviewPage,
   swSetItemAction,
   swToggleItemEl,
+  swToggleTreeNode,
+  swToggleTreeNodeEl,
   swSetItemActionEl,
   swCancelSync,
   swBulkAction,
@@ -17596,7 +17740,7 @@ function _renderInsightsMatchOverview(d, errMsg) {
                   ${iem.genres_total ? ` · <span>${iem.genres_above_70} of ${iem.genres_total} genres at strong fit</span>` : ''}
                 </div>
               </div>
-              <svg class="iemfit-chevron" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M18.5861 8.0858C18.1956 7.69528 17.5624 7.69528 17.1719 8.0858L11.879 13.3787L6.58609 8.0858C6.19556 7.69528 5.5624 7.69528 5.17187 8.0858L4.46477 8.79291C4.07424 9.18343 4.07424 9.8166 4.46477 10.2071L10.8183 16.5607C11.4041 17.1465 12.3539 17.1465 12.9396 16.5607L19.2932 10.2071C19.6837 9.8166 19.6837 9.18343 19.2932 8.79291L18.5861 8.0858Z"/></svg>
+              <span class="iemfit-chevron accordion-state-icon" aria-hidden="true"></span>
             </div>
             <div class="iemfit-detail-panel" id="iemfit-detail-${esc(iem.iem_id)}" style="display:none"></div>
           </div>`;
