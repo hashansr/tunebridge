@@ -10590,15 +10590,9 @@ tbody tr:hover {
   overflow-y: auto;
   flex: 1;
   padding: 0;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.16) transparent;
+  scrollbar-width: none;
 }
-.queue-list::-webkit-scrollbar { width: 6px; }
-.queue-list::-webkit-scrollbar-track { background: transparent; }
-.queue-list::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.14);
-  border-radius: 999px;
-}
+.queue-list::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .queue-empty {
   text-align: center;
   color: #8a8a96;
@@ -10925,6 +10919,8 @@ tbody tr:hover {
   cursor: default;
   contain: layout paint;
 }
+.queue-item-reorderable { cursor: grab; }
+.queue-item-reorderable:active { cursor: grabbing; }
 .queue-item:hover { background: rgba(255,255,255,0.06); }
 .queue-item:focus-visible {
   outline: 1px solid rgba(173,198,255,0.45);

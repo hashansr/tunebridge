@@ -2352,7 +2352,7 @@ const Player = (function () {
       'queue-item',
       isPlaying ? 'queue-item-active' : '',
       isPlaying && !ps.isPlaying ? 'queue-item-paused' : '',
-      isQueue ? 'queue-item-reorderable' : '',
+      isQueue || isAutoplay ? 'queue-item-reorderable' : '',
       isAutoplay ? 'queue-item-autoplay' : '',
       mode === 'history' ? 'queue-item-history' : '',
     ].filter(Boolean).join(' ');
@@ -2464,7 +2464,7 @@ const Player = (function () {
           <span class="queue-section-title">Autoplay</span>
           <span class="queue-section-from">Similar songs</span>
         </div>
-        <div class="queue-autoplay-list">`;
+        <div id="queue-autoplay-list" class="queue-autoplay-list">`;
       if (autoplayItems.length > 0) {
         autoplayItems.forEach(({ t, realIdx }) => {
           html += _queueItemHtml(t, realIdx, 'autoplay');
@@ -2494,29 +2494,34 @@ const Player = (function () {
         handle: '.queue-drag-handle',
         draggable: '.queue-item',
         onEnd(evt) {
-          if (evt.oldIndex === evt.newIndex) return;
+          const oldIndex = typeof evt.oldDraggableIndex === 'number' ? evt.oldDraggableIndex : evt.oldIndex;
+          const newIndex = typeof evt.newDraggableIndex === 'number' ? evt.newDraggableIndex : evt.newIndex;
+          if (oldIndex === newIndex) return;
           if (ps.shuffle) {
-            moveShuffleItem(explicitUpcomingItems[evt.oldIndex].queuePos, explicitUpcomingItems[evt.newIndex].queuePos);
+            moveShuffleItem(explicitUpcomingItems[oldIndex].queuePos, explicitUpcomingItems[newIndex].queuePos);
           } else {
-            moveQueueItem(explicitUpcomingItems[evt.oldIndex].realIdx, explicitUpcomingItems[evt.newIndex].realIdx);
+            moveQueueItem(explicitUpcomingItems[oldIndex].realIdx, explicitUpcomingItems[newIndex].realIdx);
           }
           _renderQueue();
         },
       }));
     }
 
-    const autoplayList = list.querySelector('.queue-autoplay-list');
+    const autoplayList = document.getElementById('queue-autoplay-list');
     if (autoplayList && typeof Sortable !== 'undefined' && autoplayItems.length > 1) {
       _addQueueSortable(Sortable.create(autoplayList, {
         animation: 150,
-        handle: '.queue-drag-handle',
         draggable: '.queue-item',
+        filter: '.queue-item-remove',
+        preventOnFilter: false,
         onEnd(evt) {
-          if (evt.oldIndex === evt.newIndex) return;
+          const oldIndex = typeof evt.oldDraggableIndex === 'number' ? evt.oldDraggableIndex : evt.oldIndex;
+          const newIndex = typeof evt.newDraggableIndex === 'number' ? evt.newDraggableIndex : evt.newIndex;
+          if (oldIndex === newIndex) return;
           if (ps.shuffle) {
-            moveShuffleItem(autoplayItems[evt.oldIndex].queuePos, autoplayItems[evt.newIndex].queuePos);
+            moveShuffleItem(autoplayItems[oldIndex].queuePos, autoplayItems[newIndex].queuePos);
           } else {
-            moveQueueItem(autoplayItems[evt.oldIndex].realIdx, autoplayItems[evt.newIndex].realIdx);
+            moveQueueItem(autoplayItems[oldIndex].realIdx, autoplayItems[newIndex].realIdx);
           }
           _renderQueue();
         },
