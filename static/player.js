@@ -323,7 +323,10 @@ const Player = (function () {
     if (!_seekDragging && !_seeking) {
       const wasPlaying = ps.isPlaying;
       ps.isPlaying = !!state.playing;
-      if (wasPlaying !== ps.isPlaying) _updatePlayBtn();
+      if (wasPlaying !== ps.isPlaying) {
+        _updatePlayBtn();
+        if (ps.queueOpen) _renderQueue();
+      }
 
       // Update seek bar + time display
       if (_mpvDuration > 0) {
@@ -1262,6 +1265,7 @@ const Player = (function () {
       _markTrackSessionStart();
       ps.isPlaying = true;
       _updatePlayBtn();
+      if (ps.queueOpen) _renderQueue();
       return;
     }
     _initAudioContext();
@@ -1274,6 +1278,7 @@ const Player = (function () {
     if (promise) promise.catch(e => console.warn('Player: play() rejected', e));
     ps.isPlaying = true;
     _updatePlayBtn();
+    if (ps.queueOpen) _renderQueue();
   }
 
   function _pauseAudio() {
@@ -1284,6 +1289,7 @@ const Player = (function () {
     }
     ps.isPlaying = false;
     _updatePlayBtn();
+    if (ps.queueOpen) _renderQueue();
   }
 
   /* ── Public playback controls ───────────────────────────────────────── */
@@ -1983,12 +1989,14 @@ const Player = (function () {
     ps.isPlaying = true;
     _updatePlayBtn();
     _highlightActiveRow();
+    if (ps.queueOpen) _renderQueue();
   }
   function _onPause() {
     if (this !== _audio) return;
     if (_suppressPauseFlush) {
       ps.isPlaying = false;
       _updatePlayBtn();
+      if (ps.queueOpen) _renderQueue();
       return;
     }
     const now = Date.now();
@@ -1998,6 +2006,7 @@ const Player = (function () {
     }
     ps.isPlaying = false;
     _updatePlayBtn();
+    if (ps.queueOpen) _renderQueue();
   }
 
   [_audioA, _audioB].forEach(el => {
@@ -2297,14 +2306,7 @@ const Player = (function () {
   /* ── Queue item HTML helper ─────────────────────────────────────────── */
   function _queueGripHtml() {
     return `<div class="queue-drag-handle" title="Drag to reorder">
-      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-        <circle cx="2" cy="2" r="0.9" fill="currentColor"/>
-        <circle cx="2" cy="5" r="0.9" fill="currentColor"/>
-        <circle cx="2" cy="8" r="0.9" fill="currentColor"/>
-        <circle cx="8" cy="2" r="0.9" fill="currentColor"/>
-        <circle cx="8" cy="5" r="0.9" fill="currentColor"/>
-        <circle cx="8" cy="8" r="0.9" fill="currentColor"/>
-      </svg>
+      <span class="queue-drag-icon" aria-hidden="true"></span>
     </div>`;
   }
 
@@ -2322,9 +2324,11 @@ const Player = (function () {
     const isPlaying = mode === 'playing';
     const isQueue = mode === 'queue';
     const isAutoplay = mode === 'autoplay';
+    const isRemovable = isQueue || isAutoplay;
     const classes = [
       'queue-item',
       isPlaying ? 'queue-item-active' : '',
+      isPlaying && !ps.isPlaying ? 'queue-item-paused' : '',
       isQueue ? 'queue-item-reorderable' : '',
       isAutoplay ? 'queue-item-autoplay' : '',
       mode === 'history' ? 'queue-item-history' : '',
@@ -2332,7 +2336,7 @@ const Player = (function () {
     const leading = isPlaying
       ? _queueEqHtml()
       : (isQueue ? _queueGripHtml() : '<div class="queue-drag-spacer"></div>');
-    const remove = isAutoplay
+    const remove = isRemovable
       ? `<button class="queue-item-remove" onclick="event.stopPropagation();Player.removeFromQueue(${realIdx})" title="Remove from queue" aria-label="Remove from queue">
           <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
@@ -2390,15 +2394,16 @@ const Player = (function () {
 
     // ── History section ──────────────────────────────────────────────
     if (historyItems.length > 0) {
+      const visibleHistoryItems = historyItems.slice(-10);
       html += `<div class="queue-section queue-section-history">
         <button class="queue-history-row" onclick="Player.toggleHistory()" oncontextmenu="event.preventDefault();event.stopPropagation();if(confirm('Clear queue history?'))Player.clearHistory()" title="Right-click to clear history">
           ${_queueChevronHtml(ps.historyExpanded)}
           <span class="queue-section-title">History</span>
-          <span class="queue-history-count">${historyItems.length}</span>
+          <span class="queue-history-count">${Math.min(historyItems.length, 10)}</span>
         </button>
         <div class="queue-history-items" style="display:${ps.historyExpanded ? 'block' : 'none'}">`;
-      // Most-recently-played at top (reversed)
-      [...historyItems].reverse().forEach(({ t, realIdx }) => {
+      // Most-recently-played at top, limited to the latest 10 tracks.
+      [...visibleHistoryItems].reverse().forEach(({ t, realIdx }) => {
         html += _queueItemHtml(t, realIdx, 'history');
       });
       html += `</div></div>`;
