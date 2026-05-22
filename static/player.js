@@ -2295,23 +2295,56 @@ const Player = (function () {
   }
 
   /* ── Queue item HTML helper ─────────────────────────────────────────── */
-  function _queueItemHtml(t, realIdx, draggable, isHistory) {
-    const dragHandle = draggable
-      ? `<div class="queue-drag-handle">
-           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-             <circle cx="9" cy="6" r="1.2" fill="currentColor" stroke="none"/>
-             <circle cx="15" cy="6" r="1.2" fill="currentColor" stroke="none"/>
-             <circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/>
-             <circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/>
-             <circle cx="9" cy="18" r="1.2" fill="currentColor" stroke="none"/>
-             <circle cx="15" cy="18" r="1.2" fill="currentColor" stroke="none"/>
-           </svg>
-         </div>`
-      : `<div class="queue-drag-spacer"></div>`;
+  function _queueGripHtml() {
+    return `<div class="queue-drag-handle" title="Drag to reorder">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+        <circle cx="2" cy="2" r="0.9" fill="currentColor"/>
+        <circle cx="2" cy="5" r="0.9" fill="currentColor"/>
+        <circle cx="2" cy="8" r="0.9" fill="currentColor"/>
+        <circle cx="8" cy="2" r="0.9" fill="currentColor"/>
+        <circle cx="8" cy="5" r="0.9" fill="currentColor"/>
+        <circle cx="8" cy="8" r="0.9" fill="currentColor"/>
+      </svg>
+    </div>`;
+  }
+
+  function _queueEqHtml() {
+    return `<div class="queue-equalizer" aria-hidden="true"><span></span><span></span><span></span></div>`;
+  }
+
+  function _queueChevronHtml(expanded) {
+    return expanded
+      ? `<svg class="queue-section-chevron queue-section-chevron-down" width="11" height="8" viewBox="0 0 12 8" fill="none" aria-hidden="true"><path d="M1 1.5L6 6L11 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+      : `<svg class="queue-section-chevron" width="8" height="11" viewBox="0 0 8 12" fill="none" aria-hidden="true"><path d="M1.5 1L6 6L1.5 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }
+
+  function _queueItemHtml(t, realIdx, mode = 'autoplay') {
+    const isPlaying = mode === 'playing';
+    const isQueue = mode === 'queue';
+    const isAutoplay = mode === 'autoplay';
+    const classes = [
+      'queue-item',
+      isPlaying ? 'queue-item-active' : '',
+      isQueue ? 'queue-item-reorderable' : '',
+      isAutoplay ? 'queue-item-autoplay' : '',
+      mode === 'history' ? 'queue-item-history' : '',
+    ].filter(Boolean).join(' ');
+    const leading = isPlaying
+      ? _queueEqHtml()
+      : (isQueue ? _queueGripHtml() : '<div class="queue-drag-spacer"></div>');
+    const remove = isAutoplay
+      ? `<button class="queue-item-remove" onclick="event.stopPropagation();Player.removeFromQueue(${realIdx})" title="Remove from queue" aria-label="Remove from queue">
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+        </button>`
+      : '';
     return `
-      <div class="queue-item${isHistory ? ' queue-item-history' : ''}" data-idx="${realIdx}"
-           ondblclick="Player.playTrackById('${_esc(t.id)}')">
-        ${dragHandle}
+      <div class="${classes}" data-idx="${realIdx}" data-queue-mode="${mode}"
+           tabindex="0"
+           ondblclick="Player.playTrackById('${_esc(t.id)}')"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Player.playTrackById('${_esc(t.id)}')}">
+        ${leading}
         <div class="queue-item-art">
           ${t.artwork_key ? `<img src="/api/artwork/${t.artwork_key}" loading="lazy" onerror="this.style.display='none'">` : ''}
         </div>
@@ -2319,19 +2352,15 @@ const Player = (function () {
           <div class="queue-item-title">${_esc(t.title)}</div>
           <div class="queue-item-artist">${_esc(t.artist)}</div>
         </div>
-        <div class="queue-item-dur">${_esc(t.duration_fmt || '')}</div>
-        <button class="queue-item-remove" onclick="Player.removeFromQueue(${realIdx})" title="Remove">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <div class="queue-item-trailing">
+          <span class="queue-item-dur">${_esc(t.duration_fmt || '')}</span>
+          ${remove}
+        </div>
       </div>`;
   }
 
   function _renderQueue() {
     const list    = document.getElementById('queue-list');
-    const countEl = document.getElementById('queue-count');
-    if (countEl) countEl.textContent = `${ps.queue.length} track${ps.queue.length !== 1 ? 's' : ''}`;
     if (!list) return;
 
     if (_queueSortable) { _queueSortable.destroy(); _queueSortable = null; }
@@ -2361,51 +2390,31 @@ const Player = (function () {
 
     // ── History section ──────────────────────────────────────────────
     if (historyItems.length > 0) {
-      const chevronDir = ps.historyExpanded ? '90' : '-90';
-      html += `<div class="queue-section">
-        <div class="queue-section-hdr" onclick="Player.toggleHistory()">
-          <svg class="queue-section-chevron" width="12" height="12" viewBox="0 0 24 24"
-               fill="none" stroke="currentColor" stroke-width="2.5"
-               style="transform:rotate(${chevronDir}deg);transition:transform .2s">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
+      html += `<div class="queue-section queue-section-history">
+        <button class="queue-history-row" onclick="Player.toggleHistory()" oncontextmenu="event.preventDefault();event.stopPropagation();if(confirm('Clear queue history?'))Player.clearHistory()" title="Right-click to clear history">
+          ${_queueChevronHtml(ps.historyExpanded)}
           <span class="queue-section-title">History</span>
-          <button class="queue-clear-history" onclick="event.stopPropagation();Player.clearHistory()" title="Clear history">Clear</button>
-        </div>
+          <span class="queue-history-count">${historyItems.length}</span>
+        </button>
         <div class="queue-history-items" style="display:${ps.historyExpanded ? 'block' : 'none'}">`;
       // Most-recently-played at top (reversed)
       [...historyItems].reverse().forEach(({ t, realIdx }) => {
-        html += _queueItemHtml(t, realIdx, false, true);
+        html += _queueItemHtml(t, realIdx, 'history');
       });
       html += `</div></div>`;
     }
 
     // ── Continue Playing section ─────────────────────────────────────
     const fromLabel = ps.playbackContextLabel || currentTrackObj?.album || upcomingItems[0]?.t?.album || '';
-    html += `<div class="queue-section">
-      <div class="queue-section-hdr queue-section-hdr-plain">
+    html += `<div class="queue-section queue-section-continue">
+      <div class="queue-section-hdr queue-section-hdr-plain" oncontextmenu="event.preventDefault();event.stopPropagation();if(confirm('Clear upcoming queue?'))Player.clearQueue()" title="Right-click to clear queue">
         <span class="queue-section-title">Continue Playing</span>
         ${fromLabel ? `<span class="queue-section-from">from ${_esc(fromLabel)}</span>` : ''}
       </div>`;
 
     // Current track (highlighted, not draggable, no remove)
     if (currentTrackObj) {
-      html += `<div class="queue-item queue-item-active" data-idx="${curRealIdx}"
-                    ondblclick="Player.playTrackById('${_esc(currentTrackObj.id)}')">
-        <div class="queue-drag-spacer"></div>
-        <div class="queue-item-playing-icon">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
-        </div>
-        <div class="queue-item-art">
-          ${currentTrackObj.artwork_key ? `<img src="/api/artwork/${currentTrackObj.artwork_key}" loading="lazy" onerror="this.style.display='none'">` : ''}
-        </div>
-        <div class="queue-item-info">
-          <div class="queue-item-title">${_esc(currentTrackObj.title)}</div>
-          <div class="queue-item-artist">${_esc(currentTrackObj.artist)}</div>
-        </div>
-        <div class="queue-item-dur">${_esc(currentTrackObj.duration_fmt || '')}</div>
-        <div class="queue-item-remove" style="opacity:0;pointer-events:none"></div>
-      </div>`;
+      html += _queueItemHtml(currentTrackObj, curRealIdx, 'playing');
     }
 
     // Upcoming explicit tracks (draggable) — capped at 200 for perf
@@ -2414,31 +2423,37 @@ const Player = (function () {
     const hiddenCount     = explicitUpcomingItems.length - visibleUpcoming.length;
     html += `<div id="queue-upcoming-list">`;
     visibleUpcoming.forEach(({ t, realIdx }) => {
-      html += _queueItemHtml(t, realIdx, true, false);
+      html += _queueItemHtml(t, realIdx, 'queue');
     });
     if (hiddenCount > 0) {
       html += `<div class="queue-overflow-note">+ ${hiddenCount} more track${hiddenCount !== 1 ? 's' : ''}</div>`;
     }
     html += `</div></div>`;  // close upcoming list + section
 
-    if (ps.autoplayEnabled || autoplayItems.length > 0) {
+    if (ps.autoplayEnabled) {
       html += `<div class="queue-section queue-section-autoplay">
         <div class="queue-section-hdr queue-section-hdr-plain">
-          <span class="queue-section-title">Auto Play</span>
-          <span class="queue-section-from">${ps.autoplayEnabled ? 'similar songs' : 'off'}</span>
+          <span class="queue-section-title">Autoplay</span>
+          <span class="queue-section-from">Similar songs</span>
         </div>
         <div class="queue-autoplay-list">`;
       if (autoplayItems.length > 0) {
         autoplayItems.forEach(({ t, realIdx }) => {
-          html += _queueItemHtml(t, realIdx, false, false);
+          html += _queueItemHtml(t, realIdx, 'autoplay');
         });
         if (hiddenAutoplayCount > 0) {
-          html += `<div class="queue-overflow-note">+ ${hiddenAutoplayCount} more Auto Play track${hiddenAutoplayCount !== 1 ? 's' : ''}</div>`;
+          html += `<div class="queue-overflow-note">+ ${hiddenAutoplayCount} more Autoplay track${hiddenAutoplayCount !== 1 ? 's' : ''}</div>`;
         }
       } else {
-        html += `<div class="queue-empty queue-empty-compact">${_autoplayFetchInFlight ? 'Finding similar songs…' : 'Auto Play will add similar songs at the end.'}</div>`;
+        html += `<div class="queue-empty queue-empty-compact">${_autoplayFetchInFlight ? 'Finding similar songs...' : 'Autoplay will add similar songs at the end.'}</div>`;
       }
       html += `</div></div>`;
+    } else {
+      html += `<div class="queue-autoplay-off">
+        <div class="queue-autoplay-off-title">Autoplay off</div>
+        <div class="queue-autoplay-off-copy">Playback stops after the queue ends.</div>
+        <button onclick="Player.setAutoplayEnabled(true)">Turn on</button>
+      </div>`;
     }
 
     list.innerHTML = html;
@@ -2743,7 +2758,7 @@ const Player = (function () {
     const btn = document.getElementById('player-autoplay-btn');
     if (!btn) return;
     btn.classList.toggle('active', !!ps.autoplayEnabled);
-    btn.title = ps.autoplayEnabled ? 'Auto Play: on' : 'Auto Play: off';
+    btn.title = ps.autoplayEnabled ? 'Autoplay on - click to turn off' : 'Autoplay off - click to turn on';
     btn.setAttribute('aria-pressed', ps.autoplayEnabled ? 'true' : 'false');
   }
 
