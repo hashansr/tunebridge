@@ -51,6 +51,7 @@ const Player = (function () {
   let _lastMpvActive = false;
   let _lastMpvPlaying = false;
   let _mpvIdleAdvanceHandled = false;
+  let _lastManualPlayAt = 0;
 
   function _isMpvActive() {
     if (!_mpvAvailable) return false;
@@ -99,7 +100,7 @@ const Player = (function () {
   let _mpvXfadeTriggered = false;  // true after crossfade_start sent to backend
   let _mpvXfadeQueueIdx  = -1;     // queue index of the fading-in track
 
-  let _queueSortable        = null;
+  let _queueSortables       = [];
   let _seekDragging         = false;
   let _seeking              = false;
   let _seekRestored         = false;
@@ -322,10 +323,11 @@ const Player = (function () {
     // Sync play/pause indicator (only when not seek-dragging)
     if (!_seekDragging && !_seeking) {
       const wasPlaying = ps.isPlaying;
-      ps.isPlaying = !!state.playing;
+      const optimisticPlay = !state.playing && currentTrack() && Date.now() - _lastManualPlayAt < 1000;
+      ps.isPlaying = !!state.playing || optimisticPlay;
       if (wasPlaying !== ps.isPlaying) {
         _updatePlayBtn();
-        if (ps.queueOpen) _renderQueue();
+        if (ps.queueOpen) _syncQueuePlaybackAnimation();
       }
 
       // Update seek bar + time display
@@ -1250,6 +1252,7 @@ const Player = (function () {
   }
 
   function _startPlay() {
+    _lastManualPlayAt = Date.now();
     if (_isMpvActive()) {
       // If mpv has no file loaded yet (e.g. first play after app restore),
       // _mpvDuration will be 0. Send a full loadfile instead of just unpause.
@@ -1282,6 +1285,7 @@ const Player = (function () {
   }
 
   function _pauseAudio() {
+    _lastManualPlayAt = 0;
     if (_isMpvActive()) {
       _mpvCmd('pause', { paused: true });
     } else {
@@ -1766,7 +1770,10 @@ const Player = (function () {
     if (fromPos === toPos) return;
     const [item] = ps.shuffleOrder.splice(fromPos, 1);
     ps.shuffleOrder.splice(toPos, 0, item);
+    _syncAutoplayQueueState();
     _saveState();
+    _invalidatePreload();
+    _preloadNext();
   }
 
   /* ── Register tracks from app.js views ─────────────────────────────── */
@@ -2320,6 +2327,22 @@ const Player = (function () {
       : `<svg class="queue-section-chevron" width="8" height="11" viewBox="0 0 8 12" fill="none" aria-hidden="true"><path d="M1.5 1L6 6L1.5 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   }
 
+  function _destroyQueueSortables() {
+    _queueSortables.forEach(sortable => {
+      if (sortable && typeof sortable.destroy === 'function') sortable.destroy();
+    });
+    _queueSortables = [];
+  }
+
+  function _addQueueSortable(sortable) {
+    if (sortable) _queueSortables.push(sortable);
+  }
+
+  function _syncQueuePlaybackAnimation() {
+    const activeEl = document.querySelector('#queue-list .queue-item-active');
+    if (activeEl) activeEl.classList.toggle('queue-item-paused', !ps.isPlaying);
+  }
+
   function _queueItemHtml(t, realIdx, mode = 'autoplay') {
     const isPlaying = mode === 'playing';
     const isQueue = mode === 'queue';
@@ -2335,7 +2358,7 @@ const Player = (function () {
     ].filter(Boolean).join(' ');
     const leading = isPlaying
       ? _queueEqHtml()
-      : (isQueue ? _queueGripHtml() : '<div class="queue-drag-spacer"></div>');
+      : (isQueue || isAutoplay ? _queueGripHtml() : '<div class="queue-drag-spacer"></div>');
     const remove = isRemovable
       ? `<button class="queue-item-remove" onclick="event.stopPropagation();Player.removeFromQueue(${realIdx})" title="Remove from queue" aria-label="Remove from queue">
           <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -2367,7 +2390,7 @@ const Player = (function () {
     const list    = document.getElementById('queue-list');
     if (!list) return;
 
-    if (_queueSortable) { _queueSortable.destroy(); _queueSortable = null; }
+    _destroyQueueSortables();
 
     if (ps.queue.length === 0) {
       list.innerHTML = '<div class="queue-empty">Your queue is empty</div>';
@@ -2379,11 +2402,11 @@ const Player = (function () {
     // Split queue into history / current / upcoming
     let historyItems, upcomingItems;
     if (ps.shuffle && ps.shuffleOrder.length > 0) {
-      historyItems  = ps.shuffleOrder.slice(0, ps.queueIdx).map(i => ({ t: ps.queue[i], realIdx: i }));
-      upcomingItems = ps.shuffleOrder.slice(ps.queueIdx + 1).map(i => ({ t: ps.queue[i], realIdx: i }));
+      historyItems  = ps.shuffleOrder.slice(0, ps.queueIdx).map((i, pos) => ({ t: ps.queue[i], realIdx: i, queuePos: pos }));
+      upcomingItems = ps.shuffleOrder.slice(ps.queueIdx + 1).map((i, offset) => ({ t: ps.queue[i], realIdx: i, queuePos: ps.queueIdx + 1 + offset }));
     } else {
-      historyItems  = ps.queue.slice(0, curRealIdx).map((t, i) => ({ t, realIdx: i }));
-      upcomingItems = ps.queue.slice(curRealIdx + 1).map((t, i) => ({ t, realIdx: curRealIdx + 1 + i }));
+      historyItems  = ps.queue.slice(0, curRealIdx).map((t, i) => ({ t, realIdx: i, queuePos: i }));
+      upcomingItems = ps.queue.slice(curRealIdx + 1).map((t, i) => ({ t, realIdx: curRealIdx + 1 + i, queuePos: curRealIdx + 1 + i }));
     }
     const explicitUpcomingItems = upcomingItems.filter(({ t }) => !_isAutoplayTrack(t));
     const autoplayItems = upcomingItems.filter(({ t }) => _isAutoplayTrack(t)).slice(0, _AUTOPLAY_VISIBLE_LIMIT);
@@ -2463,26 +2486,41 @@ const Player = (function () {
 
     list.innerHTML = html;
 
-    // Drag-and-drop on upcoming list (both normal and shuffle mode)
+    // Drag-and-drop on upcoming lists (normal and shuffle mode)
     const upcomingList = document.getElementById('queue-upcoming-list');
     if (upcomingList && typeof Sortable !== 'undefined' && explicitUpcomingItems.length > 1) {
-      _queueSortable = Sortable.create(upcomingList, {
+      _addQueueSortable(Sortable.create(upcomingList, {
         animation: 150,
         handle: '.queue-drag-handle',
+        draggable: '.queue-item',
         onEnd(evt) {
+          if (evt.oldIndex === evt.newIndex) return;
           if (ps.shuffle) {
-            // Reorder shuffleOrder positions (don't touch ps.queue array)
-            const fromPos = ps.queueIdx + 1 + evt.oldIndex;
-            const toPos   = ps.queueIdx + 1 + evt.newIndex;
-            moveShuffleItem(fromPos, toPos);
+            moveShuffleItem(explicitUpcomingItems[evt.oldIndex].queuePos, explicitUpcomingItems[evt.newIndex].queuePos);
           } else {
-            const from = curRealIdx + 1 + evt.oldIndex;
-            const to   = curRealIdx + 1 + evt.newIndex;
-            moveQueueItem(from, to);
+            moveQueueItem(explicitUpcomingItems[evt.oldIndex].realIdx, explicitUpcomingItems[evt.newIndex].realIdx);
           }
           _renderQueue();
         },
-      });
+      }));
+    }
+
+    const autoplayList = list.querySelector('.queue-autoplay-list');
+    if (autoplayList && typeof Sortable !== 'undefined' && autoplayItems.length > 1) {
+      _addQueueSortable(Sortable.create(autoplayList, {
+        animation: 150,
+        handle: '.queue-drag-handle',
+        draggable: '.queue-item',
+        onEnd(evt) {
+          if (evt.oldIndex === evt.newIndex) return;
+          if (ps.shuffle) {
+            moveShuffleItem(autoplayItems[evt.oldIndex].queuePos, autoplayItems[evt.newIndex].queuePos);
+          } else {
+            moveQueueItem(autoplayItems[evt.oldIndex].realIdx, autoplayItems[evt.newIndex].realIdx);
+          }
+          _renderQueue();
+        },
+      }));
     }
 
     // Scroll current track into view
