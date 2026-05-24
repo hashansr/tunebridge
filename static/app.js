@@ -6888,6 +6888,7 @@ function showViewEl(name) {
     main.classList.toggle('main-home-active', name === 'home');
     main.classList.toggle('main-library-active', name === 'artists' || name === 'albums');
   }
+  document.body.classList.toggle('show-library-scrollbars', ['artists', 'albums', 'songs'].includes(name));
   // Clear right nav slot for non-home views (loadHome repopulates it)
   if (name !== 'home') {
     const navRight = document.getElementById('main-nav-right');
