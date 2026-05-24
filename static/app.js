@@ -1236,7 +1236,10 @@ function _renderSidebarScanStatus(status) {
   if (rescanBtn) rescanBtn.classList.remove('is-scanning');
   if (status?.status !== 'scanning' && _settings?.replay_gain_enabled) _loadRgInfo();
 
-  if (status?.status === 'done' && status.total_tracks != null) {
+  if (status?.status === 'done' && status.path_accessible === false) {
+    setState('Library Offline', 'is-error');
+    msg.innerHTML = `<span class="scan-error">Library folder not found — is the drive connected?</span>`;
+  } else if (status?.status === 'done' && status.total_tracks != null) {
     setState('Library Ready');
     msg.innerHTML = `
       <span class="scan-stats">

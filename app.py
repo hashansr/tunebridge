@@ -1470,7 +1470,11 @@ def index():
 
 @app.route('/api/library/status')
 def library_status():
-    return jsonify(scan_state)
+    result = dict(scan_state)
+    if result.get('status') == 'done':
+        music_base = get_music_base()
+        result['path_accessible'] = bool(music_base and music_base.is_absolute() and music_base.exists())
+    return jsonify(result)
 
 
 @app.route('/api/library/scan', methods=['POST'])
