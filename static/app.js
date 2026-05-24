@@ -13073,6 +13073,13 @@ function _getSongsFilteredTracks() {
   return tracks;
 }
 
+function showRecentlyAddedSongs() {
+  _songsSort = { col: 'date_added', order: 'desc' };
+  _songsFilter = '';
+  _songsPage = 0;
+  showView('songs');
+}
+
 async function loadSongsView() {
   _ensurePlayStats();
   try {
@@ -16343,6 +16350,7 @@ const App = {
   syncScanAgain,
   sortTracks,
   // Songs
+  showRecentlyAddedSongs,
   sortSongs,
   filterSongs,
   clearSongsFilter,
