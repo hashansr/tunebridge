@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.384-rc.250526-0746 · 2026-05-25
 - Fix: Sidebar now shows "Library Offline" when the music drive is not connected, instead of falsely reporting "Library Ready"
 
 ## v0.383 · 2026-05-22
