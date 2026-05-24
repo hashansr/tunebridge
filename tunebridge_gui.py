@@ -298,6 +298,168 @@ def _start_media_key_bridge(window):
     return refs
 
 
+# ── Native macOS menu bar & dock menu ────────────────────────────────────────
+
+_TB_MENU_HANDLER = None  # held in module scope so PyObjC GC does not collect it
+
+
+def _js(window, script: str) -> None:
+    """Dispatch evaluate_js safely from any thread (deadlocks if called on main AppKit thread)."""
+    threading.Thread(target=lambda: window.evaluate_js(script), daemon=True).start()
+
+
+def _show_about_alert():
+    """Show a native About dialog. Must be called on the main AppKit thread."""
+    from AppKit import NSAlert
+    info = _bundled_version_info()
+    version = info.get('version_full') or info.get('version') or 'Development Build'
+    alert = NSAlert.alloc().init()
+    alert.setMessageText_('TuneBridge')
+    alert.setInformativeText_(
+        f'Version {version}\n\nA local music manager for FLAC libraries.'
+    )
+    alert.runModal()
+
+
+def _setup_native_menus(window):
+    """
+    Build the native macOS menu bar and dock menu using PyObjC (pure NSMenu).
+
+    Runs in a background thread (pywebview func= callback). All NSApplication
+    mutations are dispatched to the main thread via callAfter().
+    """
+    global _TB_MENU_HANDLER
+    try:
+        from AppKit import (
+            NSApplication, NSMenu, NSMenuItem, NSObject,
+            NSEventModifierFlagCommand, NSEventModifierFlagShift, NSEventModifierFlagOption,
+        )
+        try:
+            from PyObjCTools.AppHelper import callAfter
+        except ImportError:
+            def callAfter(fn, *args):  # fallback: call inline (safe at startup)
+                fn(*args)
+    except ImportError as exc:
+        print(f'TuneBridge: native menus unavailable: {exc}')
+        return
+
+    CMD   = NSEventModifierFlagCommand   # ⌘
+    SHIFT = NSEventModifierFlagShift     # ⇧
+    OPT   = NSEventModifierFlagOption    # ⌥
+    RIGHT = ''                     # NSRightArrowFunctionKey  →
+    LEFT  = ''                     # NSLeftArrowFunctionKey   ←
+
+    # ── Action handler ────────────────────────────────────────────────────────
+    class _TBMenuHandler(NSObject):
+        """Receives all menu item actions; routes them to the web Player/App API."""
+
+        def playPause_(self, sender):   _js(window, 'Player.togglePlay()')
+        def nextTrack_(self, sender):   _js(window, 'Player.next()')
+        def prevTrack_(self, sender):   _js(window, 'Player.prev()')
+        def muteToggle_(self, sender):  _js(window, 'Player.toggleMute()')
+        def shuffle_(self, sender):     _js(window, 'Player.toggleShuffle()')
+        def cycleRepeat_(self, sender): _js(window, 'Player.cycleRepeat()')
+        def newPlaylist_(self, sender): _js(window, 'App.showCreatePlaylistModal()')
+        def importPl_(self, sender):    _js(window, 'App.triggerImport()')
+        def prefs_(self, sender):       _js(window, 'App.loadSettings()')
+        def helpModal_(self, sender):   _js(window, 'App.showHelp()')
+        def github_(self, sender):      subprocess.Popen(['open', 'https://github.com/hashansr/tunebridge-releases/'])
+        def kofi_(self, sender):        subprocess.Popen(['open', 'https://ko-fi.com/hashansr'])
+        def aboutApp_(self, sender):    _show_about_alert()
+
+    handler = _TBMenuHandler.alloc().init()
+
+    # ── Menu item factory ─────────────────────────────────────────────────────
+    def mi(title, action=None, key='', mask=CMD, target=None):
+        item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            title, action, key
+        )
+        if key:
+            item.setKeyEquivalentModifierMask_(mask)
+        if target is not None:
+            item.setTarget_(target)
+        return item
+
+    sep = NSMenuItem.separatorItem
+
+    # ── TuneBridge (app) menu ─────────────────────────────────────────────────
+    app_m = NSMenu.alloc().initWithTitle_('TuneBridge')
+    app_m.addItem_(mi('About TuneBridge', 'aboutApp:', target=handler))
+    app_m.addItem_(sep())
+    app_m.addItem_(mi('Preferences…', 'prefs:', ',', target=handler))
+    app_m.addItem_(sep())
+    svc_m = NSMenu.alloc().initWithTitle_('Services')
+    svc_i = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_('Services', None, '')
+    svc_i.setSubmenu_(svc_m)
+    app_m.addItem_(svc_i)
+    app_m.addItem_(sep())
+    app_m.addItem_(mi('Hide TuneBridge', 'hide:', 'h'))
+    app_m.addItem_(mi('Hide Others', 'hideOtherApplications:', 'h', mask=CMD | OPT))
+    app_m.addItem_(mi('Show All', 'unhideAllApplications:', ''))
+    app_m.addItem_(sep())
+    app_m.addItem_(mi('Quit TuneBridge', 'terminate:', 'q'))
+
+    # ── File menu ─────────────────────────────────────────────────────────────
+    file_m = NSMenu.alloc().initWithTitle_('File')
+    file_m.addItem_(mi('New Playlist', 'newPlaylist:', 'n', target=handler))
+    file_m.addItem_(sep())
+    file_m.addItem_(mi('Import Playlist…', 'importPl:', 'i', target=handler))
+    file_m.addItem_(sep())
+    file_m.addItem_(mi('Close Window', 'performClose:', 'w'))
+
+    # ── Edit menu (standard NSResponder selectors — WKWebView handles these) ──
+    edit_m = NSMenu.alloc().initWithTitle_('Edit')
+    edit_m.addItem_(mi('Undo', 'undo:', 'z'))
+    edit_m.addItem_(mi('Redo', 'redo:', 'z', mask=CMD | SHIFT))
+    edit_m.addItem_(sep())
+    edit_m.addItem_(mi('Cut', 'cut:', 'x'))
+    edit_m.addItem_(mi('Copy', 'copy:', 'c'))
+    edit_m.addItem_(mi('Paste', 'paste:', 'v'))
+    edit_m.addItem_(sep())
+    edit_m.addItem_(mi('Select All', 'selectAll:', 'a'))
+
+    # ── Play menu ─────────────────────────────────────────────────────────────
+    play_m = NSMenu.alloc().initWithTitle_('Play')
+    play_m.addItem_(mi('Play/Pause', 'playPause:', 'p', target=handler))
+    play_m.addItem_(mi('Next Track', 'nextTrack:', RIGHT, target=handler))
+    play_m.addItem_(mi('Previous Track', 'prevTrack:', LEFT, target=handler))
+    play_m.addItem_(sep())
+    play_m.addItem_(mi('Mute', 'muteToggle:', target=handler))  # no ⌘M — that minimises
+    play_m.addItem_(sep())
+    play_m.addItem_(mi('Shuffle', 'shuffle:', 's', mask=CMD | SHIFT, target=handler))
+    play_m.addItem_(mi('Repeat', 'cycleRepeat:', 'r', mask=CMD | SHIFT, target=handler))
+
+    # ── Help menu ─────────────────────────────────────────────────────────────
+    help_m = NSMenu.alloc().initWithTitle_('Help')
+    help_m.addItem_(mi('TuneBridge Help', 'helpModal:', '?', target=handler))
+    help_m.addItem_(sep())
+    help_m.addItem_(mi('View on GitHub', 'github:', target=handler))
+    help_m.addItem_(mi('Support on Ko‑fi', 'kofi:', target=handler))
+
+    # ── Dock right-click menu ─────────────────────────────────────────────────
+    dock_m = NSMenu.alloc().init()
+    dock_m.addItem_(mi('Play/Pause', 'playPause:', target=handler))
+    dock_m.addItem_(mi('Next Track', 'nextTrack:', target=handler))
+    dock_m.addItem_(mi('Previous Track', 'prevTrack:', target=handler))
+
+    # ── Assemble menu bar & apply on main thread ──────────────────────────────
+    bar = NSMenu.alloc().init()
+    for menu in (app_m, file_m, edit_m, play_m, help_m):
+        top = NSMenuItem.alloc().init()
+        top.setSubmenu_(menu)
+        bar.addItem_(top)
+
+    def _apply():
+        app = NSApplication.sharedApplication()
+        app.setMainMenu_(bar)
+        app.setServicesMenu_(svc_m)
+        app.setDockMenu_(dock_m)
+
+    callAfter(_apply)
+    _TB_MENU_HANDLER = handler
+    print('TuneBridge: native menu bar installed')
+
+
 def main():
     # If the same TuneBridge build is already running, reuse it. If an older
     # dev/app server is still on the default port, start this bundle on a
@@ -472,6 +634,8 @@ def main():
     webview.start(
         debug=False,
         http_server=False,
+        func=_setup_native_menus,
+        args=(window,),
     )
 
 
