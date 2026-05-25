@@ -21394,7 +21394,7 @@ body.is-col-resizing {
   left: var(--sidebar-w) !important;
   z-index: 10000;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   overflow-y: auto;
   padding: clamp(14px, 2.8vh, 28px) !important;
@@ -21438,6 +21438,66 @@ body.is-col-resizing {
 
 #donate-modal.tb-modal-overlay {
   align-items: center !important;
+}
+
+#dup-modal.tb-modal-overlay {
+  align-items: center !important;
+}
+
+#dup-modal .dup-playlist-modal {
+  --tb-modal-w: 440px;
+  padding: 22px !important;
+}
+
+#dup-modal .modal-head {
+  margin-bottom: 18px !important;
+}
+
+#dup-modal .modal-head-group {
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+#dup-modal .dup-playlist-icon {
+  width: 24px !important;
+  height: 24px !important;
+  flex-basis: 24px !important;
+  margin: 0 !important;
+  color: #ffb340 !important;
+}
+
+#dup-modal .dup-playlist-icon svg {
+  width: 22px !important;
+  height: 22px !important;
+}
+
+#dup-modal .dup-playlist-message {
+  margin: 0 0 14px !important;
+  color: var(--modal-text-sub) !important;
+  font-size: 13.5px !important;
+  font-weight: 500 !important;
+  line-height: 1.48 !important;
+}
+
+#dup-modal .dup-playlist-list {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 18px !important;
+}
+
+#dup-modal .dup-playlist-row {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--modal-text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#dup-modal .modal-actions {
+  margin-top: 0 !important;
 }
 
 #donate-modal .donate-modal-title {

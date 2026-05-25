@@ -4479,15 +4479,16 @@ function showDupDialog(res, pid, plName) {
     // Show up to 5 duplicate titles
     const shown = dups.slice(0, 5);
     document.getElementById('dup-modal-list').innerHTML = shown.map(d =>
-      `<div style="font-size:12px;color:var(--text-muted);padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+      `<div class="dup-playlist-row">
         ${esc(d.title)} <span style="opacity:0.6">— ${esc(d.artist)}</span>
       </div>`
     ).join('') + (dups.length > 5
-      ? `<div style="font-size:12px;color:var(--text-muted);padding:2px 0">…and ${dups.length - 5} more</div>`
+      ? `<div class="dup-playlist-row">…and ${dups.length - 5} more</div>`
       : '');
 
-    // "Skip Duplicates" only makes sense when there are also new tracks to add
-    document.getElementById('dup-skip-btn').style.display = hasMixed ? 'inline-flex' : 'none';
+    const skipBtn = document.getElementById('dup-skip-btn');
+    skipBtn.textContent = hasMixed ? 'Skip Duplicates' : 'Skip';
+    skipBtn.onclick = hasMixed ? dupSkip : dupCancel;
 
     document.getElementById('dup-modal').style.display = 'flex';
   });
