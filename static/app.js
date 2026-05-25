@@ -3417,6 +3417,17 @@ function _getCurrentSelectionScopeTracks() {
   return _getCurrentViewTrackList();
 }
 
+function _getCurrentSelectionScopeIds() {
+  return [...new Set((_getCurrentSelectionScopeTracks() || [])
+    .map((track) => String(track?.id || ''))
+    .filter(Boolean))];
+}
+
+function _isCurrentScopeFullySelected() {
+  const scopeIds = _getCurrentSelectionScopeIds();
+  return scopeIds.length > 0 && scopeIds.every((id) => state.selectedTrackIds.has(id));
+}
+
 function _selectionMetadataKey(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -3484,13 +3495,21 @@ function updateSelectionUI() {
   const countEl = document.getElementById('bulk-count');
   const removeBtn = document.getElementById('bulk-remove-btn');
   const addBtn = document.getElementById('bulk-add-btn');
+  const selectAllBtn = document.getElementById('bulk-select-all-btn');
   const favBtn = document.getElementById('bulk-fav-btn');
   const editTagsBtn = document.getElementById('bulk-edit-tags-btn');
   const selectedTracks = _getSelectedTracksInCurrentView();
+  const scopeFullySelected = _isCurrentScopeFullySelected();
 
   countEl.textContent = `${count} song${count !== 1 ? 's' : ''} selected`;
   bar.classList.toggle('visible', count > 0);
   if (removeBtn) removeBtn.style.display = 'none';
+  if (selectAllBtn) {
+    const label = scopeFullySelected ? 'Deselect All' : 'Select All';
+    selectAllBtn.textContent = label;
+    selectAllBtn.title = label;
+    selectAllBtn.setAttribute('aria-label', label);
+  }
   if (favBtn) favBtn.style.display = count > 0 ? 'inline-flex' : 'none';
   if (editTagsBtn) editTagsBtn.style.display = _canEditSelectedTags(selectedTracks, count) ? 'inline-flex' : 'none';
 
@@ -3537,6 +3556,10 @@ function clearSelection() {
 }
 
 function selectAllCurrentScope() {
+  if (_isCurrentScopeFullySelected()) {
+    clearSelection();
+    return;
+  }
   const tracks = _getCurrentSelectionScopeTracks();
   state.selectedTrackIds.clear();
   (tracks || []).forEach((track) => {
