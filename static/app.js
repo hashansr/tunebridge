@@ -1291,6 +1291,7 @@ let _ctxFavTarget = null;
 let _ctxFinderTarget = null;
 let _ctxDetailMode = null; // 'album' | 'artist' | null
 let _playlistCtxTarget = null;
+let _playlistExportSubmenuTimer = null;
 
 /* ── Create playlist modal state ────────────────────────────────────── */
 let _createPlPendingIds = [];
@@ -1479,13 +1480,8 @@ async function loadPlaylistsView() {
             <div class="pl-view-name" title="${esc(pl.name)}">${esc(pl.name)}</div>
             <div class="pl-view-meta">${count} track${count !== 1 ? 's' : ''}</div>
           </div>
-          <button class="pl-card-delete-btn" onclick="event.stopPropagation();App.showPlaylistCtxMenu(event,this.closest('.pl-view-card').dataset.playlistId,this.closest('.pl-view-card').dataset.playlistName)" title="More actions" aria-label="More actions">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
-          </button>
-          <button class="pl-card-delete-btn" onclick="event.stopPropagation();App.deletePlaylist('${pl.id}')" title="Delete playlist">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-          </button>
         </div>
+        <button class="card-more-btn" onclick="event.stopPropagation();App.showPlaylistCtxMenu(event,this.closest('.pl-view-card').dataset.playlistId,this.closest('.pl-view-card').dataset.playlistName)" title="More options" aria-label="More options">⋮</button>
       </div>
     `;
   }).join('');
@@ -1508,10 +1504,8 @@ async function loadPlaylistsView() {
             <div class="pl-view-name" title="Favourite Songs">Favourite Songs <span class="fav-badge-inline">★</span></div>
             <div class="pl-view-meta">${favCount} track${favCount !== 1 ? 's' : ''}</div>
           </div>
-          <button class="pl-card-delete-btn" onclick="event.stopPropagation();App.showPlaylistCtxMenu(event,this.closest('.pl-view-card').dataset.playlistId,this.closest('.pl-view-card').dataset.playlistName)" title="More actions" aria-label="More actions">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
-          </button>
         </div>
+        <button class="card-more-btn" onclick="event.stopPropagation();App.showPlaylistCtxMenu(event,this.closest('.pl-view-card').dataset.playlistId,this.closest('.pl-view-card').dataset.playlistName)" title="More options" aria-label="More options">⋮</button>
       </div>
     `;
   }
@@ -3701,11 +3695,18 @@ function showPlaylistCtxMenu(e, playlistId, playlistName = '') {
   hideCtxMenu();
   const exportId = _playlistExportId(playlistId);
   if (!exportId) return;
-  _playlistCtxTarget = { id: exportId, name: playlistName || 'Playlist' };
+  const canEdit = exportId !== '__favourite_songs__';
+  _playlistCtxTarget = { id: exportId, name: playlistName || 'Playlist', canEdit };
   const menu = document.getElementById('playlist-ctx-menu');
   const labelEl = document.getElementById('playlist-ctx-label');
+  const renameItem = document.getElementById('playlist-ctx-rename-item');
+  const deleteItem = document.getElementById('playlist-ctx-delete-item');
+  const manageSep = document.getElementById('playlist-ctx-manage-sep');
   if (!menu) return;
   if (labelEl) labelEl.textContent = _playlistCtxTarget.name;
+  if (renameItem) renameItem.style.display = canEdit ? '' : 'none';
+  if (deleteItem) deleteItem.style.display = canEdit ? '' : 'none';
+  if (manageSep) manageSep.style.display = canEdit ? '' : 'none';
   menu.style.display = 'block';
   menu.style.left = '-9999px';
   menu.style.top = '-9999px';
@@ -3729,13 +3730,116 @@ function showPlaylistCtxMenu(e, playlistId, playlistName = '') {
 function hidePlaylistCtxMenu() {
   const menu = document.getElementById('playlist-ctx-menu');
   if (menu) menu.style.display = 'none';
+  closePlaylistExportSubmenu();
   _playlistCtxTarget = null;
+}
+
+async function _playlistActionTracks(target = _playlistCtxTarget) {
+  if (!target?.id) return [];
+  if (target.id === '__favourite_songs__') {
+    const res = await api('/favourites/songs/tracks').catch(() => ({ tracks: [] }));
+    return Array.isArray(res?.tracks) ? res.tracks : [];
+  }
+  const pl = await api(`/playlists/${encodeURIComponent(target.id)}`).catch(() => null);
+  return Array.isArray(pl?.tracks) ? pl.tracks : [];
+}
+
+function _playlistActionLabel(target = _playlistCtxTarget) {
+  return `Playlist · ${target?.name || 'Playlist'}`;
+}
+
+async function ctxPlaylistPlay() {
+  const target = _playlistCtxTarget;
+  hidePlaylistCtxMenu();
+  if (!target?.id) return;
+  await playPlaylist(target.id);
+}
+
+async function ctxPlaylistShuffle() {
+  const target = _playlistCtxTarget;
+  hidePlaylistCtxMenu();
+  const tracks = await _playlistActionTracks(target);
+  if (!tracks.length) return toast('No tracks found');
+  Player.registerTracks?.(tracks);
+  Player.setPlaybackContext?.(tracks, { sourceType: 'playlist', sourceId: target.id, sourceLabel: _playlistActionLabel(target) });
+  Player.playCollectionShuffled(tracks, _playlistActionLabel(target));
+}
+
+async function ctxPlaylistPlayNext() {
+  const target = _playlistCtxTarget;
+  hidePlaylistCtxMenu();
+  const tracks = await _playlistActionTracks(target);
+  if (!tracks.length) return toast('No tracks found');
+  Player.playNext(tracks);
 }
 
 function ctxPlaylistExport(fmt) {
   const pid = _playlistCtxTarget?.id;
   if (!pid) return;
+  closePlaylistExportSubmenu();
   downloadPlaylist(fmt, pid);
+}
+
+function openPlaylistExportSubmenu() {
+  clearTimeout(_playlistExportSubmenuTimer);
+  if (!_playlistCtxTarget) return;
+  const sub = document.getElementById('playlist-export-submenu');
+  const item = document.getElementById('playlist-ctx-export-item');
+  const menu = document.getElementById('playlist-ctx-menu');
+  if (!sub || !item || !menu) return;
+  item.classList.add('active');
+  sub.style.display = 'block';
+  sub.style.left = '-9999px';
+  sub.style.top = '-9999px';
+  const itemRect = item.getBoundingClientRect();
+  requestAnimationFrame(() => {
+    const sw = sub.offsetWidth;
+    const sh = sub.offsetHeight;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const pad = 8;
+    let left = itemRect.right + 4;
+    let top = itemRect.top;
+    if (left + sw > vw - pad) left = itemRect.left - sw - 4;
+    if (left < pad) left = pad;
+    if (top + sh > vh - pad) top = vh - sh - pad;
+    if (top < pad) top = pad;
+    sub.style.left = `${left}px`;
+    sub.style.top = `${top}px`;
+  });
+}
+
+function closePlaylistExportSubmenu() {
+  const sub = document.getElementById('playlist-export-submenu');
+  const item = document.getElementById('playlist-ctx-export-item');
+  if (sub) sub.style.display = 'none';
+  if (item) item.classList.remove('active');
+}
+
+function _playlistExportSubmenuLeaveItem() {
+  _playlistExportSubmenuTimer = setTimeout(() => closePlaylistExportSubmenu(), 150);
+}
+
+function _playlistExportSubmenuEnter() {
+  clearTimeout(_playlistExportSubmenuTimer);
+}
+
+function _playlistExportSubmenuLeave() {
+  _playlistExportSubmenuTimer = setTimeout(() => closePlaylistExportSubmenu(), 120);
+}
+
+function ctxPlaylistRename() {
+  const target = _playlistCtxTarget;
+  hidePlaylistCtxMenu();
+  if (!target?.canEdit) return;
+  openRenameModal(target.id, target.name);
+}
+
+async function ctxPlaylistDelete() {
+  const target = _playlistCtxTarget;
+  hidePlaylistCtxMenu();
+  if (!target?.canEdit) return;
+  await deletePlaylist(target.id);
 }
 
 function hideCtxMenu() {
@@ -5132,6 +5236,46 @@ async function deleteCurrentPlaylist() {
 }
 
 let renameTarget = null;
+function openRenameModal(pid, currentName = '') {
+  if (!pid || pid === '__favourite_songs__' || pid === '__favourites__') return;
+  renameTarget = { id: pid, name: currentName || 'Playlist' };
+  const modal = document.getElementById('rename-modal');
+  const input = document.getElementById('rename-input');
+  if (!modal || !input) return;
+  input.value = renameTarget.name;
+  modal.style.display = 'flex';
+  setTimeout(() => {
+    input.focus();
+    input.select();
+  }, 60);
+}
+
+function closeRenameModal() {
+  const modal = document.getElementById('rename-modal');
+  if (modal) modal.style.display = 'none';
+  renameTarget = null;
+}
+
+async function confirmRename() {
+  const input = document.getElementById('rename-input');
+  const name = (input?.value || '').trim();
+  const target = renameTarget;
+  if (!target?.id || !name) return;
+  if (name === target.name) {
+    closeRenameModal();
+    return;
+  }
+  await api(`/playlists/${target.id}`, { method: 'PUT', body: { name } });
+  if (state.playlist?.id === target.id) {
+    state.playlist.name = name;
+    const nameEl = document.getElementById('pl-name');
+    if (nameEl) nameEl.textContent = name;
+  }
+  closeRenameModal();
+  await loadPlaylists();
+  toast('Playlist renamed');
+}
+
 function renamePlaylist(newName) {
   if (!state.playlist || !newName.trim()) return;
   if (state.playlist.is_favourites) return;
@@ -16328,13 +16472,26 @@ const App = {
   _confirmNo,
   deletePlaylist,
   deleteCurrentPlaylist,
+  openRenameModal,
+  closeRenameModal,
+  confirmRename,
   renamePlaylist,
   removeSongFromFavourites,
   showAddDropdown,
   showTrackCtxMenu,
   showPlaylistCtxMenu,
   hidePlaylistCtxMenu,
+  ctxPlaylistPlay,
+  ctxPlaylistShuffle,
+  ctxPlaylistPlayNext,
   ctxPlaylistExport,
+  openPlaylistExportSubmenu,
+  closePlaylistExportSubmenu,
+  _playlistExportSubmenuLeaveItem,
+  _playlistExportSubmenuEnter,
+  _playlistExportSubmenuLeave,
+  ctxPlaylistRename,
+  ctxPlaylistDelete,
   playArtistCard,
   showArtistCtxMenu,
   showAlbumCtxMenu,

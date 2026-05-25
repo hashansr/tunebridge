@@ -6667,6 +6667,7 @@ tr:hover .fav-toggle,
   display: flex;
   flex-direction: column;
   gap: 0;
+  position: relative;
 }
 .pl-view-card:hover { transform: translateY(-2px); }
 
@@ -6728,24 +6729,6 @@ tr:hover .fav-toggle,
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
-/* Delete button on playlist card — visible only on hover */
-.pl-card-delete-btn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s, background 0.15s, color 0.15s;
-}
-.pl-view-card:hover .pl-card-delete-btn { opacity: 1; }
-.pl-card-delete-btn:hover { background: rgba(224,92,92,0.15); color: #e05c5c; }
 
 /* .pl-header-delete-btn removed — delete moved to pl-toolbar ··· menu */
 
@@ -7042,7 +7025,7 @@ tbody tr:hover {
   border-radius: 10px;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
   padding: 5px;
-  z-index: 9002;
+  z-index: 30000;
 }
 .pl-export-item {
   width: 100%;
@@ -11387,9 +11370,10 @@ tr.player-active .track-title { color: var(--accent); }
 
 /* ── Right-click context menu ────────────────────────────────────────── */
 #ctx-menu,
-#playlist-ctx-menu {
+#playlist-ctx-menu,
+#playlist-export-submenu {
   position: fixed;
-  z-index: 9000;
+  z-index: 30000;
   min-width: 210px;
   background: rgba(38, 37, 36, 0.92);
   border-radius: 12px;
@@ -11425,6 +11409,9 @@ tr.player-active .track-title { color: var(--accent); }
 }
 .ctx-item:hover { background: rgba(255,255,255,.09); }
 .ctx-item svg   { color: var(--text-muted); flex-shrink: 0; }
+.ctx-item-danger { color: #e05c5c; }
+.ctx-item-danger svg { color: #e05c5c; }
+.ctx-item-danger:hover { background: rgba(224, 92, 92, 0.12); }
 .ctx-sep {
   height: 1px;
   background: rgba(255,255,255,.07);
@@ -11448,7 +11435,7 @@ tr.player-active .track-title { color: var(--accent); }
 /* Playlist submenu panel */
 #ctx-submenu {
   position: fixed;
-  z-index: 9001;
+  z-index: 30001;
   min-width: 220px;
   max-height: 340px;
   overflow-y: scroll;
@@ -18746,7 +18733,8 @@ thead th:hover .table-col-resizer::after {
 #view-library-coverage .discover-album-card .card-more-btn,
 #view-favourites .card-more-btn,
 #view-fav-artists .card-more-btn,
-#view-fav-albums .card-more-btn {
+#view-fav-albums .card-more-btn,
+#view-playlists .card-more-btn {
   right: 0;
   bottom: 0;
   background: transparent;
@@ -18759,7 +18747,8 @@ thead th:hover .table-col-resizer::after {
 #view-favourites .artist-card:hover .card-more-btn,
 #view-favourites .album-card:hover .card-more-btn,
 #view-fav-artists .artist-card:hover .card-more-btn,
-#view-fav-albums .album-card:hover .card-more-btn {
+#view-fav-albums .album-card:hover .card-more-btn,
+#view-playlists .pl-view-card:hover .card-more-btn {
   background: rgba(255, 255, 255, 0.09);
   opacity: 1;
 }
