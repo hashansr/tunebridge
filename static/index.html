@@ -2050,10 +2050,11 @@
   <div id="bulk-bar">
     <span class="bulk-count" id="bulk-count">0 selected</span>
     <div class="bulk-sep"></div>
+    <button class="btn-secondary" id="bulk-select-all-btn" onclick="App.selectAllCurrentScope()">Select All</button>
     <button class="btn-primary" id="bulk-add-btn">+ Add to Playlist</button>
+    <button class="btn-secondary" id="bulk-play-next-btn" onclick="App.playNextSelected()">Play Next</button>
     <button class="btn-secondary" id="bulk-edit-tags-btn" onclick="App.openBulkTagEditor()" style="display:none">Edit Tags</button>
-    <button class="btn-secondary" id="bulk-fav-btn" onclick="App.bulkFavouriteSelected()" style="display:none">★ Favourite</button>
-    <button class="btn-secondary" id="bulk-unfav-btn" onclick="App.bulkUnfavouriteSelected()" style="display:none">☆ Unfavourite</button>
+    <button class="bulk-fav-toggle" id="bulk-fav-btn" onclick="App.bulkToggleSelectedFavourite()" style="display:none" title="Add to favourites" aria-label="Add to favourites"></button>
     <button class="btn-danger-sm" id="bulk-remove-btn" onclick="App.removeSelectedFromPlaylist()" style="display:none">Remove</button>
     <button class="btn-ghost-sm" onclick="App.clearSelection()">✕ Clear</button>
   </div>

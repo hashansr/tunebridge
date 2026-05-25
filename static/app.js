@@ -683,6 +683,7 @@ function _nameSortKey(name) {
 
 const _STAR_OUTLINE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z"/></svg>`;
 const _STAR_FILLED = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z"/></svg>`;
+const _STAR_HALF = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><defs><clipPath id="tb-star-half-clip"><rect x="0" y="0" width="12" height="24"/></clipPath></defs><path clip-path="url(#tb-star-half-clip)" fill="currentColor" d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z"/><path d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z" stroke="currentColor" stroke-width="1.4"/></svg>`;
 const _FAV_PLAYLIST_COVER = 'images/favourite-playlist-cover.png';
 const _CUSTOM_PEQ_KEY = 'tb_custom_peq';
 const _CREATE_PEQ_ID = '__create__';
@@ -1089,6 +1090,14 @@ function _applyFavouriteDomState(type, id, isFav) {
   });
 }
 
+function _setHeroFavouriteButtonState(btn, type, id, isFav = _isFavourite(type, id)) {
+  if (!btn) return;
+  btn.classList.toggle('is-fav', !!isFav);
+  const label = isFav ? 'Remove from favourites' : 'Add to favourites';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+}
+
 function _setFavouritesState(payload = {}) {
   const songs = Array.isArray(payload.songs) ? payload.songs : [];
   const albums = Array.isArray(payload.albums) ? payload.albums : [];
@@ -1136,6 +1145,8 @@ async function toggleFavourite(type, encodedId) {
     _applyFavouriteDomState(type, id, had);
     refreshPlayerFavouriteButton();
     toast('Could not update favourites');
+  } finally {
+    if (state.selectedTrackIds?.size) updateSelectionUI();
   }
 }
 
@@ -2366,12 +2377,13 @@ async function loadTracks(artist = null, album = null, displayArtist = '') {
       const albumId = String(tracks[0].artwork_key || '');
       const isFav = albumId ? _isFavourite('albums', albumId) : false;
       albumFavBtn.style.display = albumId ? '' : 'none';
-      albumFavBtn.classList.toggle('is-fav', isFav);
+      _setHeroFavouriteButtonState(albumFavBtn, 'albums', albumId, isFav);
       albumFavBtn.onclick = async (e) => {
         e.stopPropagation();
         if (!albumId) return;
+        _setHeroFavouriteButtonState(albumFavBtn, 'albums', albumId, !_isFavourite('albums', albumId));
         await toggleFavourite('albums', encodeURIComponent(albumId));
-        albumFavBtn.classList.toggle('is-fav', _isFavourite('albums', albumId));
+        _setHeroFavouriteButtonState(albumFavBtn, 'albums', albumId);
       };
     }
     const albumMoreBtn = document.getElementById('album-hero-more');
@@ -3398,13 +3410,51 @@ function _getCurrentViewTrackList() {
   return [];
 }
 
+function _getCurrentSelectionScopeTracks() {
+  if (state.view === 'playlist') return state.playlist?.tracks || [];
+  if (state.view === 'songs') return _songsData || [];
+  if (state.view === 'tracks') return state.tracks || [];
+  return _getCurrentViewTrackList();
+}
+
+function _selectionMetadataKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function _allSelectedShareField(tracks, field) {
+  if (!Array.isArray(tracks) || tracks.length < 2) return false;
+  const values = tracks.map((track) => _selectionMetadataKey(track?.[field]));
+  return !!values[0] && values.every((value) => value === values[0]);
+}
+
+function _canEditSelectedTags(selectedTracks, count) {
+  if (count === 1) return true;
+  if (!selectedTracks.length || selectedTracks.length !== count) return false;
+  return _allSelectedShareField(selectedTracks, 'album') || _allSelectedShareField(selectedTracks, 'artist');
+}
+
+function _findSelectedTrack(id) {
+  const itemId = String(id || '');
+  if (!itemId) return null;
+  const pools = [
+    _getCurrentSelectionScopeTracks(),
+    _getCurrentViewTrackList(),
+    state.tracks,
+    state.playlist?.tracks,
+    _songsData,
+    Player.getTrack?.(itemId) ? [Player.getTrack(itemId)] : null,
+  ];
+  for (const pool of pools) {
+    const match = (pool || []).find(t => String(t?.id || '') === itemId);
+    if (match) return match;
+  }
+  return null;
+}
+
 function _getSelectedTracksInCurrentView() {
   if (!state.selectedTrackIds.size) return [];
-  const tracks = _getCurrentViewTrackList() || [];
-  if (!tracks.length) return [];
-  const byId = new Map(tracks.map((t) => [String(t.id), t]));
   return [...state.selectedTrackIds]
-    .map((id) => byId.get(String(id)))
+    .map((id) => _findSelectedTrack(id))
     .filter(Boolean);
 }
 
@@ -3435,15 +3485,26 @@ function updateSelectionUI() {
   const removeBtn = document.getElementById('bulk-remove-btn');
   const addBtn = document.getElementById('bulk-add-btn');
   const favBtn = document.getElementById('bulk-fav-btn');
-  const unfavBtn = document.getElementById('bulk-unfav-btn');
   const editTagsBtn = document.getElementById('bulk-edit-tags-btn');
+  const selectedTracks = _getSelectedTracksInCurrentView();
 
   countEl.textContent = `${count} song${count !== 1 ? 's' : ''} selected`;
   bar.classList.toggle('visible', count > 0);
-  if (removeBtn) removeBtn.style.display = state.view === 'playlist' && count > 0 ? 'inline-flex' : 'none';
+  if (removeBtn) removeBtn.style.display = 'none';
   if (favBtn) favBtn.style.display = count > 0 ? 'inline-flex' : 'none';
-  if (unfavBtn) unfavBtn.style.display = count > 0 ? 'inline-flex' : 'none';
-  if (editTagsBtn) editTagsBtn.style.display = count > 0 ? 'inline-flex' : 'none';
+  if (editTagsBtn) editTagsBtn.style.display = _canEditSelectedTags(selectedTracks, count) ? 'inline-flex' : 'none';
+
+  if (favBtn) {
+    const favCount = [...state.selectedTrackIds].filter(id => _isFavourite('songs', id)).length;
+    const allFav = count > 0 && favCount === count;
+    const mixedFav = favCount > 0 && favCount < count;
+    const label = allFav ? 'Remove from favourites' : 'Add to favourites';
+    favBtn.classList.toggle('is-fav', allFav);
+    favBtn.classList.toggle('is-mixed', mixedFav);
+    favBtn.title = label;
+    favBtn.setAttribute('aria-label', label);
+    favBtn.innerHTML = allFav ? _STAR_FILLED : (mixedFav ? _STAR_HALF : _STAR_OUTLINE);
+  }
 
   // Wire add button each time (event could differ)
   if (addBtn) {
@@ -3473,6 +3534,26 @@ function clearSelection() {
   state.selectedTrackIds.clear();
   state.lastSelectedIdx = null;
   updateSelectionUI();
+}
+
+function selectAllCurrentScope() {
+  const tracks = _getCurrentSelectionScopeTracks();
+  state.selectedTrackIds.clear();
+  (tracks || []).forEach((track) => {
+    if (track?.id) state.selectedTrackIds.add(track.id);
+  });
+  state.lastSelectedIdx = tracks.length ? tracks.length - 1 : null;
+  updateSelectionUI();
+}
+
+function playNextSelected() {
+  const tracks = _getSelectedTracksInCurrentView();
+  if (!tracks.length) {
+    toast('No selected tracks found');
+    return;
+  }
+  Player.registerTracks?.(tracks);
+  Player.playNext(tracks);
 }
 
 async function removeSelectedFromPlaylist() {
@@ -6013,6 +6094,7 @@ async function bulkFavouriteSelected() {
       await toggleFavourite('songs', encodeURIComponent(id));
     }
   }
+  updateSelectionUI();
   toast(`Favourited ${ids.length} song${ids.length === 1 ? '' : 's'}.`);
 }
 
@@ -6023,7 +6105,19 @@ async function bulkUnfavouriteSelected() {
       await toggleFavourite('songs', encodeURIComponent(id));
     }
   }
+  updateSelectionUI();
   toast(`Unfavourited ${ids.length} song${ids.length === 1 ? '' : 's'}.`);
+}
+
+async function bulkToggleSelectedFavourite() {
+  const ids = [...state.selectedTrackIds];
+  if (!ids.length) return;
+  const allFav = ids.every((id) => _isFavourite('songs', id));
+  if (allFav) {
+    await bulkUnfavouriteSelected();
+  } else {
+    await bulkFavouriteSelected();
+  }
 }
 
 /* ── Home ───────────────────────────────────────────────────────────── */
@@ -16502,6 +16596,7 @@ const App = {
   copyFavSongsToConnectedDap,
   bulkFavouriteSelected,
   bulkUnfavouriteSelected,
+  bulkToggleSelectedFavourite,
   openPlaylist,
   createPlaylist,
   createPlaylistAndAdd,
@@ -16649,6 +16744,8 @@ const App = {
   showArtistTracks,
   toggleTrackSelection,
   clearSelection,
+  selectAllCurrentScope,
+  playNextSelected,
   removeSelectedFromPlaylist,
   showSync,
   closeSyncModal,
