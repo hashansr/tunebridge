@@ -8820,6 +8820,14 @@ tbody tr:hover {
   mask-image: url('/icons/shuffle.svg');
   -webkit-mask-image: url('/icons/shuffle.svg');
 }
+.tb-icon-play {
+  mask-image: url('/icons/play.svg');
+  -webkit-mask-image: url('/icons/play.svg');
+}
+.tb-icon-play-next {
+  mask-image: url('/icons/play-next.svg');
+  -webkit-mask-image: url('/icons/play-next.svg');
+}
 .tb-icon-playlist {
   mask-image: url('/icons/queue.svg');
   -webkit-mask-image: url('/icons/queue.svg');
@@ -11408,9 +11416,18 @@ tr.player-active .track-title { color: var(--accent); }
   white-space: nowrap;
 }
 .ctx-item:hover { background: rgba(255,255,255,.09); }
-.ctx-item svg   { color: var(--text-muted); flex-shrink: 0; }
+.ctx-item svg,
+.ctx-item .tb-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.ctx-item .tb-icon {
+  width: 15px;
+  height: 15px;
+}
 .ctx-item-danger { color: #e05c5c; }
-.ctx-item-danger svg { color: #e05c5c; }
+.ctx-item-danger svg,
+.ctx-item-danger .tb-icon { color: #e05c5c; }
 .ctx-item-danger:hover { background: rgba(224, 92, 92, 0.12); }
 .ctx-sep {
   height: 1px;
