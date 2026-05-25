@@ -3428,7 +3428,7 @@ function _getCurrentViewTrackList() {
 
 function _getCurrentSelectionScopeTracks() {
   if (state.view === 'playlist') return state.playlist?.tracks || [];
-  if (state.view === 'songs') return _songsData || [];
+  if (state.view === 'songs') return _getSongsFilteredTracks();
   if (state.view === 'tracks') return state.tracks || [];
   return _getCurrentViewTrackList();
 }
