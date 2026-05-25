@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>TuneBridge — Confirmation Dialog System</title>
+  <link rel="stylesheet" href="colors_and_type.css">
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+      background: #f0eee9;
+    }
+    .tb-confirm-stage {
+      width: 100%; height: 100%;
+      background:
+        radial-gradient(1200px 700px at 20% -10%, rgba(39,63,116,0.34), transparent 60%),
+        radial-gradient(900px 640px at 96% 4%, rgba(83,225,111,0.12), transparent 62%),
+        #131313;
+      display: flex; align-items: center; justify-content: center;
+      padding: 32px 24px;
+      overflow: auto;
+    }
+    .tb-confirm-stage.top {
+      align-items: flex-start;
+    }
+    .tb-confirm-stage.spec {
+      background: #131313;
+      align-items: flex-start;
+    }
+    button, input, textarea, select { font-family: inherit; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="modal-system.jsx"></script>
+<script type="text/babel" src="confirmation-system.jsx"></script>
+<script type="text/babel" src="confirmation-examples.jsx"></script>
+
+<script type="text/babel">
+function Stage({ children, variant }) {
+  return <div className={"tb-confirm-stage " + (variant || '')}>{children}</div>;
+}
+
+function App() {
+  return (
+    <DesignCanvas>
+      <DCSection
+        id="foundations"
+        title="Confirmation dialog system"
+        subtitle="Decisions, not forms. Built on the TuneBridge modal language — uniform size, type, iconography, and footer order. Replaces the five inconsistent dialogs flagged in review.">
+        <DCArtboard id="anatomy" label="01 · Anatomy" width={760} height={420}>
+          <Stage variant="spec"><ConfirmAnatomy /></Stage>
+        </DCArtboard>
+        <DCArtboard id="kinds" label="02 · Kinds" width={920} height={300}>
+          <Stage variant="spec"><KindsGallery /></Stage>
+        </DCArtboard>
+        <DCArtboard id="footer" label="03 · Footer patterns" width={760} height={580}>
+          <Stage variant="spec"><FooterPatterns /></Stage>
+        </DCArtboard>
+        <DCArtboard id="ruler" label="04 · Type · spacing · radii" width={760} height={560}>
+          <Stage variant="spec"><SpacingRuler /></Stage>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="rebuilt"
+        title="Rebuilt — the five flagged dialogs"
+        subtitle="One width (420). One title scale. One icon tile. Cancel always left, committing action always right. Pink danger button reserved for irreversible removals.">
+        <DCArtboard id="already" label="Already in Playlist · warning" width={480} height={320}>
+          <Stage><ExAlreadyInPlaylist /></Stage>
+        </DCArtboard>
+        <DCArtboard id="del-dap" label="Delete DAP · danger" width={480} height={320}>
+          <Stage><ExDeleteDAP /></Stage>
+        </DCArtboard>
+        <DCArtboard id="del-playlist" label="Delete Playlist · danger" width={480} height={260}>
+          <Stage><ExDeletePlaylist /></Stage>
+        </DCArtboard>
+        <DCArtboard id="save-eq" label="Save Custom EQ · prompt" width={480} height={280}>
+          <Stage><ExSaveCustomEQ /></Stage>
+        </DCArtboard>
+        <DCArtboard id="support" label="Support TuneBridge · info · wide" width={540} height={360}>
+          <Stage><ExSupportTuneBridge /></Stage>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="extras"
+        title="Additional dialogs"
+        subtitle="Same primitives, broader coverage — to seed the rest of the app.">
+        <DCArtboard id="clear-queue" label="Clear Queue · warning" width={480} height={260}>
+          <Stage><ExClearQueue /></Stage>
+        </DCArtboard>
+        <DCArtboard id="sync-done" label="Sync Complete · acknowledge" width={480} height={320}>
+          <Stage><ExSyncComplete /></Stage>
+        </DCArtboard>
+        <DCArtboard id="overwrite" label="Overwrite Export · warning" width={480} height={320}>
+          <Stage><ExOverwriteExport /></Stage>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -1,0 +1,171 @@
+/*
+  TuneBridge Design System — Colors & Typography
+  "Luminous Depth / Obsidian Gallery"
+  v1.0 — April 2026
+  
+  Usage: Import this file before any component styles.
+  Fonts: System font stack (San Francisco on macOS — no download needed).
+*/
+
+/* ── Base Reset ──────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Color Tokens ────────────────────────────────────────────────────── */
+:root {
+
+  /* Surfaces — obsidian layering */
+  --bg:               #131313;   /* App background, sidebar */
+  --bg-sidebar:       #131313;   /* Sidebar background */
+  --bg-elevated:      #1c1b1b;   /* Cards, inputs, elevated panels */
+  --bg-hover:         #2a2a2a;   /* Hover state surface */
+  --bg-active:        #353534;   /* Active / pressed surface */
+
+  /* Accent — luminous blue-white (primary interaction) */
+  --accent:           #adc6ff;
+  --accent-dim:       rgba(173, 198, 255, 0.12);
+  --accent-hover:     rgba(173, 198, 255, 0.2);
+
+  /* Semantic accents */
+  --accent-secondary: #ffb3b5;          /* Danger / remove / error (pink) */
+  --accent-success:   #53e16f;          /* Success / synced / healthy (green) */
+  --accent-warning:   #f0b429;          /* Warning / out of sync (amber) */
+
+  /* Text — warm off-white (never pure #fff on dark backgrounds) */
+  --text:             #e5e2e1;   /* Body text */
+  --text-sub:         #c1c6d7;   /* Secondary, nav items */
+  --text-muted:       #6b6b7b;   /* Metadata, labels, placeholders */
+
+  /* Borders — ghost only; containment affordance */
+  --border:           rgba(65, 71, 85, 0.15);
+  --border-focus:     rgba(173, 198, 255, 0.4);
+
+  /* Surface gradients */
+  --surface-card-gradient:         linear-gradient(180deg, rgba(42,42,42,0.66), rgba(28,27,27,0.76));
+  --surface-card-gradient-hover:   linear-gradient(180deg, rgba(53,53,52,0.74), rgba(42,42,42,0.78));
+  --surface-panel-gradient:        linear-gradient(180deg, rgba(42,42,42,0.58), rgba(28,27,27,0.70));
+  --surface-section-gradient:      linear-gradient(180deg, rgba(42,42,42,0.62), rgba(28,27,27,0.74));
+  --surface-table-gradient:        linear-gradient(180deg, rgba(42,42,42,0.45), rgba(28,27,27,0.52));
+
+  /* Page background gradients */
+  --app-page-gradient:
+    radial-gradient(1200px 700px at 20% -10%, rgba(39,63,116,0.22), transparent 60%),
+    radial-gradient(900px 640px at 96% 4%, rgba(83,225,111,0.08), transparent 62%),
+    var(--bg);
+  --app-page-gradient-library:
+    radial-gradient(1280px 760px at 18% 10%, rgba(39,63,116,0.30), transparent 62%),
+    radial-gradient(980px 700px at 96% 8%, rgba(83,225,111,0.14), transparent 64%),
+    linear-gradient(180deg, rgba(19,24,36,0.34) 0%, rgba(19,19,19,0) 48%),
+    var(--bg);
+
+  /* ── Typography Tokens ─────────────────────────────────────────────── */
+
+  /* Scale */
+  --text-xs:   11px;   /* Overlines, status, scan labels */
+  --text-sm:   12px;   /* Metadata, secondary info */
+  --text-base: 13px;   /* Body, nav items, table rows */
+  --text-md:   14px;   /* Default body, inputs */
+  --text-lg:   15px;   /* Sidebar header */
+
+  /* Font stack — no download; San Francisco on macOS */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+
+  /* ── Layout / Spacing Tokens ──────────────────────────────────────── */
+  --sidebar-w:              260px;
+  --view-gutter:            32px;
+  --page-content-inset:     35px;
+  --section-to-content-gap: 18px;
+  --major-section-gap:      32px;
+  --card-grid-gap:          16px;
+
+  /* ── Radius Tokens ──────────────────────────────────────────────── */
+  --radius:     12px;    /* Cards, album thumbs, inputs */
+  --radius-lg:  24px;    /* Artist/album card outer */
+  --radius-pill: 9999px; /* Buttons, sort chips, filter inputs */
+
+  /* ── Elevation / Shadow ──────────────────────────────────────────── */
+  --shadow-card:    0 14px 40px rgba(0,0,0,0.22);
+  --shadow-modal:   0 24px 80px rgba(0,0,0,0.45);
+  --shadow-dropdown:0 8px 32px rgba(0,0,0,0.45);
+
+  /* ── Transition ──────────────────────────────────────────────────── */
+  --transition-fast: 0.12s ease;
+  --transition-base: 0.15s ease;
+  --transition-card: 0.20s ease;
+}
+
+/* ── Base Typography ─────────────────────────────────────────────────── */
+html, body {
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Semantic Type Styles ────────────────────────────────────────────── */
+
+/* Page headers */
+.h-page {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+/* Hero titles (artist, album, playlist names) */
+.h-hero {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+/* Playlist name (editable) */
+.h-playlist {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* Overline / section label */
+.overline {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Body / default */
+.body-base {
+  font-size: var(--text-base);
+  font-weight: 400;
+  color: var(--text);
+}
+
+/* Secondary body */
+.body-sub {
+  font-size: var(--text-base);
+  color: var(--text-sub);
+}
+
+/* Metadata */
+.body-meta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* Tabular numbers */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
