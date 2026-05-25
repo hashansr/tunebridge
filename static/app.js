@@ -3075,7 +3075,7 @@ async function downloadPlaylist(fmt, playlistId = null) {
         fmt === 'csv' ? 'TuneBridge Track List.csv' : 'TuneBridge Playlist.m3u'
       );
       const content = await fileRes.text();
-      const saved = await window.pywebview.api.save_text_file(filename, content);
+      const saved = await window.pywebview.api.save_text_file(filename, content, fmt === 'csv' ? 'csv' : 'm3u');
       if (saved?.cancelled) return;
       if (!saved?.ok) throw new Error(saved?.error || 'Save cancelled');
       toast(fmt === 'csv' ? 'Track list exported.' : 'Playlist exported.');

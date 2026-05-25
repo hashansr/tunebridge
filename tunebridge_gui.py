@@ -89,15 +89,31 @@ class _TuneBridgeApi:
         if isinstance(url, str) and any(url.startswith(p) for p in _ALLOWED_OPEN_URL_PREFIXES):
             subprocess.Popen(['open', url])
 
-    def save_text_file(self, filename, content):
+    def save_text_file(self, filename, content, file_kind=''):
         if self.window is None:
             return {'error': 'No window available'}
         try:
             safe_name = Path(str(filename or 'TuneBridge export.txt')).name
-            result = self.window.create_file_dialog(webview.SAVE_DIALOG, save_filename=safe_name)
+            kind = str(file_kind or '').strip().lower()
+            if kind == 'csv':
+                wanted_ext = '.csv'
+                file_types = ('CSV files (*.csv)',)
+            elif kind == 'm3u':
+                wanted_ext = '.m3u'
+                file_types = ('M3U playlists (*.m3u)',)
+            else:
+                wanted_ext = Path(safe_name).suffix
+                file_types = ()
+            result = self.window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename=safe_name,
+                file_types=file_types,
+            )
             if not result:
                 return {'cancelled': True}
             path = Path(result[0] if isinstance(result, (list, tuple)) else result)
+            if wanted_ext and path.suffix.lower() != wanted_ext.lower():
+                path = path.with_suffix(wanted_ext)
             path.write_text(str(content or ''), encoding='utf-8')
             return {'ok': True, 'path': str(path)}
         except Exception as exc:
