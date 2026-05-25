@@ -1290,6 +1290,7 @@ let _ctxTracks = [];
 let _ctxFavTarget = null;
 let _ctxFinderTarget = null;
 let _ctxDetailMode = null; // 'album' | 'artist' | null
+let _playlistCtxTarget = null;
 
 /* ── Create playlist modal state ────────────────────────────────────── */
 let _createPlPendingIds = [];
@@ -1464,7 +1465,7 @@ async function loadPlaylistsView() {
     }
     const count = pl.track_count != null ? pl.track_count : (pl.tracks ? pl.tracks.length : 0);
     return `
-      <div class="pl-view-card" onclick="App.openPlaylist('${pl.id}')">
+      <div class="pl-view-card" data-playlist-id="${esc(pl.id)}" data-playlist-name="${esc(pl.name)}" onclick="App.openPlaylist('${pl.id}')" oncontextmenu="App.showPlaylistCtxMenu(event,this.dataset.playlistId,this.dataset.playlistName)">
         <div class="pl-view-cover ${pl.has_artwork || (pl.artwork_keys && pl.artwork_keys.length === 1) ? 'playlist-cover-single' : ''}">
           ${coverHtml}
           <div class="card-thumb-overlay">
@@ -1478,6 +1479,9 @@ async function loadPlaylistsView() {
             <div class="pl-view-name" title="${esc(pl.name)}">${esc(pl.name)}</div>
             <div class="pl-view-meta">${count} track${count !== 1 ? 's' : ''}</div>
           </div>
+          <button class="pl-card-delete-btn" onclick="event.stopPropagation();App.showPlaylistCtxMenu(event,this.closest('.pl-view-card').dataset.playlistId,this.closest('.pl-view-card').dataset.playlistName)" title="More actions" aria-label="More actions">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+          </button>
           <button class="pl-card-delete-btn" onclick="event.stopPropagation();App.deletePlaylist('${pl.id}')" title="Delete playlist">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
           </button>
@@ -1490,7 +1494,7 @@ async function loadPlaylistsView() {
   if (favCount > 0) {
     const coverHtml = `<img src="${_FAV_PLAYLIST_COVER}" style="width:100%;height:100%;object-fit:cover" loading="lazy" />`;
     favCard = `
-      <div class="pl-view-card pl-view-card-fav" onclick="App.showView('fav-songs')">
+      <div class="pl-view-card pl-view-card-fav" data-playlist-id="__favourites__" data-playlist-name="Favourite Songs" onclick="App.showView('fav-songs')" oncontextmenu="App.showPlaylistCtxMenu(event,this.dataset.playlistId,this.dataset.playlistName)">
         <div class="pl-view-cover playlist-cover-single">
           ${coverHtml}
           <div class="card-thumb-overlay">
@@ -1504,6 +1508,9 @@ async function loadPlaylistsView() {
             <div class="pl-view-name" title="Favourite Songs">Favourite Songs <span class="fav-badge-inline">★</span></div>
             <div class="pl-view-meta">${favCount} track${favCount !== 1 ? 's' : ''}</div>
           </div>
+          <button class="pl-card-delete-btn" onclick="event.stopPropagation();App.showPlaylistCtxMenu(event,this.closest('.pl-view-card').dataset.playlistId,this.closest('.pl-view-card').dataset.playlistName)" title="More actions" aria-label="More actions">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+          </button>
         </div>
       </div>
     `;
@@ -1736,6 +1743,15 @@ function _formatCollectionDate(ts) {
   return n > 0 ? new Date(n * 1000).toLocaleDateString() : '';
 }
 
+function _playlistExportId(pid) {
+  const id = String(pid || '');
+  return id === '__favourites__' ? '__favourite_songs__' : id;
+}
+
+function _playlistOpenAction(pid) {
+  return _playlistExportId(pid) === '__favourite_songs__' ? "App.showView('fav-songs')" : `App.openPlaylist('${pid}')`;
+}
+
 function _renderPlaylistsList(wrap, paginationEl, rows, favCount) {
   if (!wrap) return;
   const pageInfo = _collectionPageRows('playlists', rows);
@@ -1762,10 +1778,10 @@ function _renderPlaylistsList(wrap, paginationEl, rows, favCount) {
             const keys = (pl.artwork_keys || []).slice(0, 1);
             coverHtml = keys.length ? `<img src="/api/artwork/${keys[0]}" alt="" loading="lazy" />` : coverPlaceholder('playlist', 34, '5px');
           }
-          const open = pl.id === '__favourites__' ? "App.showView('fav-songs')" : `App.openPlaylist('${pl.id}')`;
+          const open = _playlistOpenAction(pl.id);
           const type = pl.id === '__favourites__' ? 'Favourites' : (pl.is_smart ? 'Smart' : 'Manual');
           return `
-          <tr data-playlist-id="${esc(pl.id)}" tabindex="0" onclick="if(!event.target.closest('button')) ${open}" onkeydown="if(event.key==='Enter') ${open}" ondblclick="${open}">
+          <tr data-playlist-id="${esc(pl.id)}" data-playlist-name="${esc(pl.name)}" tabindex="0" onclick="if(!event.target.closest('button')) ${open}" onkeydown="if(event.key==='Enter') ${open}" ondblclick="${open}" oncontextmenu="App.showPlaylistCtxMenu(event,this.dataset.playlistId,this.dataset.playlistName)">
             <td class="collection-col-title"><div class="collection-title-cell">${_collectionThumb('playlist', coverHtml)}<span title="${esc(pl.name)}">${esc(pl.name)}</span></div></td>
             <td>${Number(count).toLocaleString()}</td>
             <td>${esc(type)}</td>
@@ -1773,6 +1789,7 @@ function _renderPlaylistsList(wrap, paginationEl, rows, favCount) {
             <td>${esc(_formatCollectionDate(pl.updated_at || pl.created_at))}</td>
             <td data-col="actions"><div class="col-act-inner">
               ${pl.id === '__favourites__' ? '' : `<button class="row-ctx-btn" onclick="event.stopPropagation();App.deletePlaylist('${pl.id}')" title="Delete playlist"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 1.5V2.5H3C2.44772 2.5 2 2.94772 2 3.5V4.5C2 5.05228 2.44772 5.5 3 5.5H21C21.5523 5.5 22 5.05228 22 4.5V3.5C22 2.94772 21.5523 2.5 21 2.5H16V1.5C16 0.947715 15.5523 0.5 15 0.5H9C8.44772 0.5 8 0.947715 8 1.5Z"/><path d="M3.9231 7.5H20.0767L19.1344 20.2216C19.0183 21.7882 17.7135 23 16.1426 23H7.85724C6.28636 23 4.98148 21.7882 4.86544 20.2216L3.9231 7.5Z"/></svg></button>`}
+              <button class="row-ctx-btn" onclick="event.stopPropagation();App.showPlaylistCtxMenu(event,this.closest('tr').dataset.playlistId,this.closest('tr').dataset.playlistName)" title="More actions"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
             </div></td>
           </tr>`;
         }).join('')}</tbody>
@@ -3028,19 +3045,22 @@ function closePlaylistDapMenu() {
   if (menu) menu.style.display = 'none';
 }
 
-function downloadPlaylist(fmt) {
-  const pid = state.playlist?.id;
+async function downloadPlaylist(fmt, playlistId = null) {
+  const pid = playlistId || state.playlist?.id;
   if (!pid) return;
-  const a = document.createElement('a');
-  const base = state.playlist?.is_favourites || pid === '__favourite_songs__'
-    ? '/api/favourites/songs/export'
-    : `/api/playlists/${encodeURIComponent(pid)}/export`;
-  a.href = `${base}/${encodeURIComponent(fmt)}`;
-  a.download = '';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  const exportId = _playlistExportId(pid);
+  const base = exportId === '__favourite_songs__'
+    ? '/favourites/songs/export'
+    : `/playlists/${encodeURIComponent(exportId)}/export`;
   _closePlExportMenu();
+  hidePlaylistCtxMenu();
+  try {
+    const res = await api(`${base}/${encodeURIComponent(fmt)}/save`, { method: 'POST' });
+    if (res?.cancelled) return;
+    toast(fmt === 'csv' ? 'Track list exported.' : 'Playlist exported.');
+  } catch (e) {
+    toast('Could not export playlist: ' + e.message);
+  }
 }
 
 function togglePlExportMenu(e) {
@@ -3049,7 +3069,24 @@ function togglePlExportMenu(e) {
   if (!menu) return;
   const isOpen = menu.style.display !== 'none';
   _closePlExportMenu();
-  if (!isOpen) menu.style.display = 'flex';
+  if (!isOpen) {
+    const anchor = e?.currentTarget || document.querySelector('.btn-export-local');
+    const rect = anchor?.getBoundingClientRect?.();
+    menu.style.display = 'flex';
+    if (rect) {
+      const pad = 8;
+      const w = menu.offsetWidth;
+      const h = menu.offsetHeight;
+      let left = rect.left;
+      let top = rect.bottom + 8;
+      if (left + w > window.innerWidth - pad) left = window.innerWidth - w - pad;
+      if (left < pad) left = pad;
+      if (top + h > window.innerHeight - pad) top = rect.top - h - 8;
+      if (top < pad) top = pad;
+      menu.style.left = `${left}px`;
+      menu.style.top = `${top}px`;
+    }
+  }
 }
 
 function _closePlExportMenu() {
@@ -3584,6 +3621,7 @@ function showAddDropdown(event, trackId) {
 
 /* ── Right-click context menu ───────────────────────────────────────── */
 function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null) {
+  hidePlaylistCtxMenu();
   _ctxTracks = tracks;
   _ctxFavTarget = favTarget;
   _ctxFinderTarget = finderTarget?.path
@@ -3654,6 +3692,50 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null
     menu.style.left = left + 'px';
     menu.style.top  = top  + 'px';
   });
+}
+
+function showPlaylistCtxMenu(e, playlistId, playlistName = '') {
+  e?.preventDefault?.();
+  e?.stopPropagation?.();
+  hideDropdown();
+  hideCtxMenu();
+  const exportId = _playlistExportId(playlistId);
+  if (!exportId) return;
+  _playlistCtxTarget = { id: exportId, name: playlistName || 'Playlist' };
+  const menu = document.getElementById('playlist-ctx-menu');
+  const labelEl = document.getElementById('playlist-ctx-label');
+  if (!menu) return;
+  if (labelEl) labelEl.textContent = _playlistCtxTarget.name;
+  menu.style.display = 'block';
+  menu.style.left = '-9999px';
+  menu.style.top = '-9999px';
+  requestAnimationFrame(() => {
+    const w = menu.offsetWidth;
+    const h = menu.offsetHeight;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const pad = 8;
+    let left = (e?.clientX ?? 0) + 4;
+    let top = (e?.clientY ?? 0) + 4;
+    if (left + w > vw - pad) left = (e?.clientX ?? left) - w - 4;
+    if (left < pad) left = pad;
+    if (top + h > vh - pad) top = (e?.clientY ?? top) - h - 4;
+    if (top < pad) top = pad;
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+  });
+}
+
+function hidePlaylistCtxMenu() {
+  const menu = document.getElementById('playlist-ctx-menu');
+  if (menu) menu.style.display = 'none';
+  _playlistCtxTarget = null;
+}
+
+function ctxPlaylistExport(fmt) {
+  const pid = _playlistCtxTarget?.id;
+  if (!pid) return;
+  downloadPlaylist(fmt, pid);
 }
 
 function hideCtxMenu() {
@@ -16250,6 +16332,9 @@ const App = {
   removeSongFromFavourites,
   showAddDropdown,
   showTrackCtxMenu,
+  showPlaylistCtxMenu,
+  hidePlaylistCtxMenu,
+  ctxPlaylistExport,
   playArtistCard,
   showArtistCtxMenu,
   showAlbumCtxMenu,
@@ -20696,7 +20781,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.key === 'Escape') {
       hideDropdown();
       hideCtxMenu();
+      hidePlaylistCtxMenu();
       closePlaylistDapMenu();
+      _closePlExportMenu();
       _closeFrOverlayMenu();
       _closeTopModalFromEscape();
       if (window.innerWidth <= 860) toggleSidebar(true);
@@ -20712,11 +20799,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Close context menu on outside click or scroll
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#ctx-menu') && !e.target.closest('#ctx-submenu')) hideCtxMenu();
+    if (!e.target.closest('#playlist-ctx-menu')) hidePlaylistCtxMenu();
   });
   document.addEventListener('scroll', (e) => {
     // Ignore scrolls inside the submenu — those are intentional
     if (e.target && (e.target.id === 'ctx-submenu' || e.target.closest?.('#ctx-submenu'))) return;
     hideCtxMenu();
+    hidePlaylistCtxMenu();
+    _closePlExportMenu();
   }, true);
 
   Player.init();

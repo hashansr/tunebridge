@@ -3667,35 +3667,26 @@ def get_favourite_song_tracks():
 def export_favourite_songs(fmt):
     favourites = load_favourites()
     tracks, _ = _resolve_favourite_tracks(favourites.get('songs') or [])
-
-    settings = load_settings()
-    if fmt == 'poweramp':
-        filename = 'Favourite Songs.m3u'
-        prefix = settings.get('poweramp_prefix', '')
-        content = generate_m3u(tracks, 'Favourite Songs', path_prefix=prefix)
-        mimetype = 'audio/x-mpegurl'
-    elif fmt == 'ap80':
-        filename = 'Favourite Songs.m3u'
-        prefix = '..'
-        content = generate_m3u(tracks, 'Favourite Songs', path_prefix=prefix)
-        mimetype = 'audio/x-mpegurl'
-    elif fmt == 'local':
-        filename = 'Favourite Songs.m3u'
-        music_base = str(get_music_base()).rstrip('/')
-        content = generate_m3u(tracks, 'Favourite Songs', absolute_base=music_base)
-        mimetype = 'audio/x-mpegurl'
-    elif fmt == 'csv':
-        filename = 'Favourite Songs - Track List.txt'
-        content = generate_playlist_track_list_tsv(tracks)
-        mimetype = 'text/tab-separated-values'
-    else:
+    payload = _playlist_export_payload(tracks, 'Favourite Songs', fmt)
+    if not payload:
         return jsonify({'error': 'Unknown format'}), 400
 
     return Response(
-        content,
-        mimetype=mimetype,
-        headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        payload['content'],
+        mimetype=payload['mimetype'],
+        headers={'Content-Disposition': f'attachment; filename="{payload["filename"]}"'}
     )
+
+
+@app.route('/api/favourites/songs/export/<fmt>/save', methods=['POST'])
+def save_favourite_songs_export(fmt):
+    favourites = load_favourites()
+    tracks, _ = _resolve_favourite_tracks(favourites.get('songs') or [])
+    payload = _playlist_export_payload(tracks, 'Favourite Songs', fmt)
+    if not payload:
+        return jsonify({'error': 'Unknown format'}), 400
+    body, status = _save_text_with_native_dialog(payload['filename'], payload['content'])
+    return jsonify(body), status
 
 
 @app.route('/api/artwork/<key>')
@@ -6535,6 +6526,54 @@ def generate_playlist_track_list_tsv(tracks):
     return out.getvalue()
 
 
+def _safe_export_filename(name, ext):
+    safe = re.sub(r'[\\/:*?"<>|]+', '-', str(name or 'Playlist')).strip()
+    safe = safe.strip('. ') or 'Playlist'
+    return f'{safe}.{ext}'
+
+
+def _playlist_export_payload(tracks, playlist_name, fmt):
+    if fmt == 'poweramp':
+        settings = load_settings()
+        filename = _safe_export_filename(playlist_name, 'm3u')
+        content = generate_m3u(tracks, playlist_name, path_prefix=settings.get('poweramp_prefix', ''))
+        mimetype = 'audio/x-mpegurl'
+    elif fmt == 'ap80':
+        filename = _safe_export_filename(playlist_name, 'm3u')
+        content = generate_m3u(tracks, playlist_name, path_prefix='..')
+        mimetype = 'audio/x-mpegurl'
+    elif fmt == 'local':
+        filename = _safe_export_filename(playlist_name, 'm3u')
+        music_base = str(get_music_base()).rstrip('/')
+        content = generate_m3u(tracks, playlist_name, absolute_base=music_base)
+        mimetype = 'audio/x-mpegurl'
+    elif fmt == 'csv':
+        filename = _safe_export_filename(f'{playlist_name} - Track List', 'txt')
+        content = generate_playlist_track_list_tsv(tracks)
+        mimetype = 'text/tab-separated-values'
+    else:
+        return None
+    return {'filename': filename, 'content': content, 'mimetype': mimetype}
+
+
+def _save_text_with_native_dialog(filename, content):
+    try:
+        import webview
+        wins = webview.windows
+        if not wins:
+            return {'error': 'No window available'}, 400
+        result = wins[0].create_file_dialog(webview.SAVE_DIALOG, save_filename=filename)
+        if not result:
+            return {'cancelled': True}, 200
+        path = Path(result[0] if isinstance(result, (list, tuple)) else result)
+        path.write_text(content, encoding='utf-8')
+        return {'ok': True, 'path': str(path)}, 200
+    except ImportError:
+        return {'error': 'Save dialog not available in dev mode'}, 400
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+
 def _m3u_write_encoding_for_dap(dap):
     """
     Return preferred .m3u write encoding for a target DAP profile.
@@ -6583,36 +6622,36 @@ def export_playlist(pid, fmt):
               for e in playlist.get('tracks', [])
               if (e if isinstance(e, str) else e.get('id')) in lib_map]
 
-    settings = load_settings()
-    if fmt == 'poweramp':
-        filename = f"{playlist['name']}.m3u"
-        prefix = settings.get('poweramp_prefix', '')
-        content = generate_m3u(tracks, playlist['name'], path_prefix=prefix)
-        mimetype = 'audio/x-mpegurl'
-    elif fmt == 'ap80':
-        # AP80 expects M3U files in playlist_data/ at the SD root.
-        # Paths must be relative from that folder to Music/, so prefix is '..'.
-        filename = f"{playlist['name']}.m3u"
-        prefix = '..'
-        content = generate_m3u(tracks, playlist['name'], path_prefix=prefix)
-        mimetype = 'audio/x-mpegurl'
-    elif fmt == 'local':
-        filename = f"{playlist['name']}.m3u"
-        music_base = str(get_music_base()).rstrip('/')
-        content = generate_m3u(tracks, playlist['name'], absolute_base=music_base)
-        mimetype = 'audio/x-mpegurl'
-    elif fmt == 'csv':
-        filename = f"{playlist['name']} - Track List.txt"
-        content = generate_playlist_track_list_tsv(tracks)
-        mimetype = 'text/tab-separated-values'
-    else:
+    payload = _playlist_export_payload(tracks, playlist['name'], fmt)
+    if not payload:
         return jsonify({'error': 'Unknown format'}), 400
 
     return Response(
-        content,
-        mimetype=mimetype,
-        headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        payload['content'],
+        mimetype=payload['mimetype'],
+        headers={'Content-Disposition': f'attachment; filename="{payload["filename"]}"'}
     )
+
+
+@app.route('/api/playlists/<pid>/export/<fmt>/save', methods=['POST'])
+def save_playlist_export(pid, fmt):
+    playlists = load_playlists()
+    playlist = playlists.get(pid)
+    if not playlist:
+        return jsonify({'error': 'Not found'}), 404
+
+    with library_lock:
+        lib_map = {t['id']: t for t in library}
+
+    tracks = [lib_map[e if isinstance(e, str) else e.get('id')]
+              for e in playlist.get('tracks', [])
+              if (e if isinstance(e, str) else e.get('id')) in lib_map]
+
+    payload = _playlist_export_payload(tracks, playlist['name'], fmt)
+    if not payload:
+        return jsonify({'error': 'Unknown format'}), 400
+    body, status = _save_text_with_native_dialog(payload['filename'], payload['content'])
+    return jsonify(body), status
 
 
 @app.route('/api/settings', methods=['GET'])

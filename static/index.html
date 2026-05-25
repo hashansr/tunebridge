@@ -670,10 +670,8 @@
               <button class="btn-hero-play" id="pl-play-all-btn" style="display:none"><svg class="icon-play-svg" style="--play-icon-size:13px" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.50632 3.14928C6.1753 2.29363 4.4248 3.24931 4.4248 4.83164V19.1683C4.4248 20.7506 6.1753 21.7063 7.50632 20.8507L18.6571 13.6823C19.8817 12.8951 19.8817 11.1049 18.6571 10.3176L7.50632 3.14928Z"/></svg> Play</button>
               <button class="btn-hero-shuffle" id="pl-shuffle-btn" style="display:none"><span class="tb-icon tb-icon-shuffle" style="width:13px;height:13px;vertical-align:-2px" aria-hidden="true"></span> Shuffle</button>
               <div class="pl-export-wrap" id="pl-export-wrap">
-                <button class="btn-export btn-export-local" onclick="App.togglePlExportMenu(event)" title="Export playlist">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-                  <span>Export</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                <button class="btn-export btn-export-local" onclick="App.togglePlExportMenu(event)" title="Export playlist" aria-label="Export playlist">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
                 </button>
                 <div class="pl-export-menu" id="pl-export-menu" style="display:none">
                   <button class="pl-export-item" onclick="App.downloadPlaylist('local')">
@@ -2907,6 +2905,20 @@
        onmouseenter="App._ctxSubmenuEnter()"
        onmouseleave="App._ctxSubmenuLeave()">
     <div class="ctx-submenu-inner" id="ctx-submenu-list"></div>
+  </div>
+
+  <!-- Playlist context menu -->
+  <div id="playlist-ctx-menu" style="display:none">
+    <div class="ctx-label" id="playlist-ctx-label"></div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" onclick="App.ctxPlaylistExport('local')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6"/></svg>
+      Export M3U
+    </div>
+    <div class="ctx-item" onclick="App.ctxPlaylistExport('csv')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+      Export Track List
+    </div>
   </div>
 
   <!-- Create playlist modal -->

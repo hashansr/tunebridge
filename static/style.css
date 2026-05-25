@@ -2586,10 +2586,17 @@ tbody tr:hover .remove-btn { opacity: 1; }
 }
 .btn-export:hover { background: var(--bg-hover); color: var(--text); }
 .btn-export-local {
+  justify-content: center;
+  width: 56px;
+  min-width: 56px;
+  padding: 9px 18px;
+  border-radius: 100px;
+  line-height: 1;
   color: var(--text);
 }
-.btn-export-local svg:last-child {
-  opacity: 0.72;
+.btn-export-local svg {
+  width: 16px;
+  height: 16px;
 }
 .btn-export-device {
   background: var(--accent-dim);
@@ -7025,8 +7032,8 @@ tbody tr:hover {
   position: relative;
 }
 .pl-export-menu {
-  position: absolute;
-  top: calc(100% + 6px);
+  position: fixed;
+  top: 0;
   left: 0;
   flex-direction: column;
   min-width: 180px;
@@ -7035,7 +7042,7 @@ tbody tr:hover {
   border-radius: 10px;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
   padding: 5px;
-  z-index: 200;
+  z-index: 9002;
 }
 .pl-export-item {
   width: 100%;
@@ -11379,7 +11386,8 @@ tr.player-active .track-title { color: var(--accent); }
 .btn-danger:active { transform: scale(0.98); }
 
 /* ── Right-click context menu ────────────────────────────────────────── */
-#ctx-menu {
+#ctx-menu,
+#playlist-ctx-menu {
   position: fixed;
   z-index: 9000;
   min-width: 210px;
@@ -14014,6 +14022,7 @@ tr.player-active .track-title { color: var(--accent); }
 #view-albums #artist-hero.artist-detail-hero .tb-icon,
 #view-playlist #playlist-hero.playlist-detail-hero .btn-hero-play svg,
 #view-playlist #playlist-hero.playlist-detail-hero .btn-hero-shuffle svg,
+#view-playlist #playlist-hero.playlist-detail-hero .btn-export svg,
 #view-playlist #playlist-hero.playlist-detail-hero .tb-icon {
   color: rgb(var(--album-hero-accent));
 }
