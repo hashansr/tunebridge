@@ -3072,7 +3072,7 @@ async function downloadPlaylist(fmt, playlistId = null) {
       }
       const filename = _filenameFromContentDisposition(
         fileRes.headers.get('Content-Disposition'),
-        fmt === 'csv' ? 'TuneBridge Track List.txt' : 'TuneBridge Playlist.m3u'
+        fmt === 'csv' ? 'TuneBridge Track List.csv' : 'TuneBridge Playlist.m3u'
       );
       const content = await fileRes.text();
       const saved = await window.pywebview.api.save_text_file(filename, content);

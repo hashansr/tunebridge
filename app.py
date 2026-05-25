@@ -6513,10 +6513,10 @@ def generate_m3u(tracks, playlist_name, path_prefix='', absolute_base=''):
     return '\n'.join(lines)
 
 
-def generate_playlist_track_list_tsv(tracks):
-    """Generate a tab-delimited track listing for spreadsheet apps."""
+def generate_playlist_track_list_csv(tracks):
+    """Generate a comma-delimited track listing for spreadsheet apps."""
     out = io.StringIO()
-    writer = csv.writer(out, delimiter='\t', lineterminator='\n')
+    writer = csv.writer(out, lineterminator='\n')
     writer.writerow(['#', 'Title', 'Artist', 'Album', 'Year', 'Duration', 'Genre'])
     for idx, t in enumerate(tracks, 1):
         writer.writerow([
@@ -6553,9 +6553,9 @@ def _playlist_export_payload(tracks, playlist_name, fmt):
         content = generate_m3u(tracks, playlist_name, absolute_base=music_base)
         mimetype = 'audio/x-mpegurl'
     elif fmt == 'csv':
-        filename = _safe_export_filename(f'{playlist_name} - Track List', 'txt')
-        content = generate_playlist_track_list_tsv(tracks)
-        mimetype = 'text/tab-separated-values'
+        filename = _safe_export_filename(f'{playlist_name} - Track List', 'csv')
+        content = generate_playlist_track_list_csv(tracks)
+        mimetype = 'text/csv'
     else:
         return None
     return {'filename': filename, 'content': content, 'mimetype': mimetype}
