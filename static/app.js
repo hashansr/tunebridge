@@ -1080,7 +1080,7 @@ function _favToggleBtn(type, id, extraClass = '') {
 
 function _applyFavouriteDomState(type, id, isFav) {
   const itemId = String(id || '');
-  document.querySelectorAll('.fav-toggle').forEach(btn => {
+  document.querySelectorAll('.fav-toggle, .hero-fav-star').forEach(btn => {
     if (btn.dataset.type !== type || btn.dataset.id !== itemId) return;
     btn.classList.toggle('is-fav', isFav);
     const label = isFav ? 'Remove from favourites' : 'Add to favourites';
@@ -1092,10 +1092,14 @@ function _applyFavouriteDomState(type, id, isFav) {
 
 function _setHeroFavouriteButtonState(btn, type, id, isFav = _isFavourite(type, id)) {
   if (!btn) return;
+  const itemId = String(id || '');
+  btn.dataset.type = type;
+  btn.dataset.id = itemId;
   btn.classList.toggle('is-fav', !!isFav);
   const label = isFav ? 'Remove from favourites' : 'Add to favourites';
   btn.title = label;
   btn.setAttribute('aria-label', label);
+  btn.innerHTML = isFav ? _STAR_FILLED : _STAR_OUTLINE;
 }
 
 function _setFavouritesState(payload = {}) {
@@ -2281,12 +2285,12 @@ async function loadAlbums(artistFilter = null) {
     if (artistFavBtn) {
       const artistId = _normArtistId(artistFilter);
       const isFav = _isFavourite('artists', artistId);
-      artistFavBtn.classList.toggle('is-fav', isFav);
+      _setHeroFavouriteButtonState(artistFavBtn, 'artists', artistId, isFav);
       artistFavBtn.onclick = async (e) => {
         e.stopPropagation();
+        _setHeroFavouriteButtonState(artistFavBtn, 'artists', artistId, !_isFavourite('artists', artistId));
         await toggleFavourite('artists', encodeURIComponent(artistId));
-        const nowFav = _isFavourite('artists', artistId);
-        artistFavBtn.classList.toggle('is-fav', nowFav);
+        _setHeroFavouriteButtonState(artistFavBtn, 'artists', artistId);
       };
     }
     const artistPlayBtn = document.getElementById('artist-hero-play');
@@ -3293,16 +3297,25 @@ function renderPlaylistTracks(tracks) {
   }
   const tbody = document.getElementById('pl-tbody');
   const table = document.getElementById('pl-table');
+  const tableWrap = document.getElementById('pl-table-wrap');
   const empty = document.getElementById('pl-empty');
+  const exportWrap = document.getElementById('pl-export-wrap');
+  const dapExportPills = document.getElementById('dap-export-pills');
 
   const displayed = _getDisplayedTracks();
   const isFiltered = state.plFilter.trim().length > 0;
   const isSorted = state.plSortMode !== 'original';
   const isDragEnabled = !isFiltered && !isSorted;
   const totalTracks = (state.playlist?.tracks || []).length;
+  const isPlaylistEmpty = totalTracks === 0;
   const emptyTitleEl = empty ? empty.querySelector('.empty-title') : null;
   const emptySubEl = empty ? empty.querySelector('.empty-subtitle') : null;
   const emptyCta = empty ? empty.querySelector('.empty-cta') : null;
+
+  if (tableWrap) tableWrap.style.display = isPlaylistEmpty ? 'none' : '';
+  if (exportWrap) exportWrap.style.display = isPlaylistEmpty ? 'none' : '';
+  if (dapExportPills) dapExportPills.style.display = isPlaylistEmpty ? 'none' : '';
+  if (isPlaylistEmpty) _closePlExportMenu();
 
   if (emptyTitleEl && emptySubEl) {
     if (state.playlist?.is_favourites) {
