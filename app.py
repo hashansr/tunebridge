@@ -3663,13 +3663,20 @@ def get_favourite_song_tracks():
     })
 
 
-@app.route('/api/favourites/songs/export/<fmt>', methods=['GET'])
-def export_favourite_songs(fmt):
+def _favourite_songs_export_payload(fmt):
     favourites = load_favourites()
     tracks, _ = _resolve_favourite_tracks(favourites.get('songs') or [])
-    payload = _playlist_export_payload(tracks, 'Favourite Songs', fmt)
+    return _playlist_export_payload(tracks, 'Favourite Songs', fmt)
+
+
+@app.route('/api/favourites/songs/export/<fmt>', methods=['GET', 'POST'])
+def export_favourite_songs(fmt):
+    payload = _favourite_songs_export_payload(fmt)
     if not payload:
         return jsonify({'error': 'Unknown format'}), 400
+    if request.method == 'POST':
+        body, status = _save_text_with_native_dialog(payload['filename'], payload['content'])
+        return jsonify(body), status
 
     return Response(
         payload['content'],
@@ -3680,9 +3687,7 @@ def export_favourite_songs(fmt):
 
 @app.route('/api/favourites/songs/export/<fmt>/save', methods=['POST'])
 def save_favourite_songs_export(fmt):
-    favourites = load_favourites()
-    tracks, _ = _resolve_favourite_tracks(favourites.get('songs') or [])
-    payload = _playlist_export_payload(tracks, 'Favourite Songs', fmt)
+    payload = _favourite_songs_export_payload(fmt)
     if not payload:
         return jsonify({'error': 'Unknown format'}), 400
     body, status = _save_text_with_native_dialog(payload['filename'], payload['content'])
@@ -6608,12 +6613,11 @@ def _ascii_fold_relpath(relpath: str) -> str:
     return _normalize_rel('/'.join(out_parts))
 
 
-@app.route('/api/playlists/<pid>/export/<fmt>')
-def export_playlist(pid, fmt):
+def _playlist_export_payload_for_id(pid, fmt):
     playlists = load_playlists()
     playlist = playlists.get(pid)
     if not playlist:
-        return jsonify({'error': 'Not found'}), 404
+        return None, ({'error': 'Not found'}, 404)
 
     with library_lock:
         lib_map = {t['id']: t for t in library}
@@ -6623,8 +6627,20 @@ def export_playlist(pid, fmt):
               if (e if isinstance(e, str) else e.get('id')) in lib_map]
 
     payload = _playlist_export_payload(tracks, playlist['name'], fmt)
+    return payload, None
+
+
+@app.route('/api/playlists/<pid>/export/<fmt>', methods=['GET', 'POST'])
+def export_playlist(pid, fmt):
+    payload, error = _playlist_export_payload_for_id(pid, fmt)
+    if error:
+        body, status = error
+        return jsonify(body), status
     if not payload:
         return jsonify({'error': 'Unknown format'}), 400
+    if request.method == 'POST':
+        body, status = _save_text_with_native_dialog(payload['filename'], payload['content'])
+        return jsonify(body), status
 
     return Response(
         payload['content'],
@@ -6635,19 +6651,10 @@ def export_playlist(pid, fmt):
 
 @app.route('/api/playlists/<pid>/export/<fmt>/save', methods=['POST'])
 def save_playlist_export(pid, fmt):
-    playlists = load_playlists()
-    playlist = playlists.get(pid)
-    if not playlist:
-        return jsonify({'error': 'Not found'}), 404
-
-    with library_lock:
-        lib_map = {t['id']: t for t in library}
-
-    tracks = [lib_map[e if isinstance(e, str) else e.get('id')]
-              for e in playlist.get('tracks', [])
-              if (e if isinstance(e, str) else e.get('id')) in lib_map]
-
-    payload = _playlist_export_payload(tracks, playlist['name'], fmt)
+    payload, error = _playlist_export_payload_for_id(pid, fmt)
+    if error:
+        body, status = error
+        return jsonify(body), status
     if not payload:
         return jsonify({'error': 'Unknown format'}), 400
     body, status = _save_text_with_native_dialog(payload['filename'], payload['content'])
