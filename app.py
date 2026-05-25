@@ -347,6 +347,7 @@ scan_state = {
     'new_tracks': 0,
     'added_tracks': 0,
     'removed_tracks': 0,
+    'scan_failures': 0,
     'message': '',
 }
 
@@ -967,10 +968,9 @@ def get_flac_tag(tags, *keys):
 def scan_file(filepath):
     filepath = Path(filepath)
     music_base = get_music_base()
-    rel_path = str(filepath.relative_to(music_base))
-    filename = filepath.name
-
     try:
+        rel_path = str(filepath.relative_to(music_base))
+        filename = filepath.name
         lyric_path = filepath.with_suffix('.lrc')
         if not lyric_path.exists():
             target_name = f'{filepath.stem}.lrc'.lower()
@@ -1257,8 +1257,7 @@ def scan_file(filepath):
 def do_scan():
     global library, scan_state
 
-    prev_count = len(library)
-    prev_ids = {t.get('id') for t in library if t.get('id')}
+    prev_paths = {t.get('path') for t in library if t.get('path')}
     scan_state.update({
         'status': 'scanning',
         'message': 'Finding music files...',
@@ -1267,6 +1266,7 @@ def do_scan():
         'new_tracks': 0,
         'added_tracks': 0,
         'removed_tracks': 0,
+        'scan_failures': 0,
     })
 
     music_base = get_music_base()
@@ -1292,7 +1292,11 @@ def do_scan():
     tracks = []
     for i, filepath in enumerate(files):
         scan_state['progress'] = i + 1
-        track = scan_file(filepath)
+        try:
+            track = scan_file(filepath)
+        except Exception as e:
+            print(f"Unexpected scan error for {filepath}: {e}")
+            track = None
         if track:
             tracks.append(track)
 
@@ -1319,21 +1323,34 @@ def do_scan():
     except Exception as e:
         print(f"Error saving library cache: {e}")
 
-    next_ids = {t.get('id') for t in tracks if t.get('id')}
-    added_count = len(next_ids - prev_ids)
-    removed_count = len(prev_ids - next_ids)
-    new_count = len(tracks) - prev_count
+    walked_rel_paths = {str(f.relative_to(music_base)) for f in files}
+    next_paths = {t['path'] for t in tracks if t.get('path')}
+    added_count   = len(walked_rel_paths - prev_paths)
+    removed_count = len(prev_paths - walked_rel_paths)
+    scan_failures = len(walked_rel_paths - next_paths)
+    new_count     = added_count - removed_count
+
+    if scan_failures > 0:
+        failed_paths = sorted(walked_rel_paths - next_paths)
+        print(f"Scan: {scan_failures} file(s) failed to parse (check mutagen/file integrity):")
+        for p in failed_paths[:20]:
+            print(f"  ! {p}")
+        if scan_failures > 20:
+            print(f"  ... and {scan_failures - 20} more")
+
+    failure_note = f' · {scan_failures} unreadable' if scan_failures else ''
     scan_state.update({
         'status': 'done',
-        'message': f'Library ready — {len(tracks)} tracks',
+        'message': f'Library ready — {len(tracks)} tracks{failure_note}',
         'progress': len(files),
         'total': len(files),
         'new_tracks': new_count,
         'added_tracks': added_count,
         'removed_tracks': removed_count,
+        'scan_failures': scan_failures,
         'total_tracks': len(tracks),
     })
-    print(f"Scan complete: {len(tracks)} tracks (+{added_count} / -{removed_count})")
+    print(f"Scan complete: {len(tracks)} tracks (+{added_count} / -{removed_count} / !{scan_failures})")
     _invalidate_home_cache()
     global _meta_maps_cache, _stream_track_cache
     _meta_maps_cache = None

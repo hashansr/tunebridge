@@ -535,7 +535,7 @@ const Player = (function () {
         _pushRecentContext(prevTrack, 'xfade');
         _postPlaybackEvents([{
           track_id:                prevTrack.id,
-          played_at:               Math.floor(_safeNowSec()),
+          played_at:               Math.floor(_trackSessionStartedAt || _safeNowSec()),
           play_seconds:            elapsed,
           track_duration_seconds:  duration,
           completed,
@@ -638,7 +638,7 @@ const Player = (function () {
         _pushRecentContext(prevTrack, 'xfade');
         _postPlaybackEvents([{
           track_id: prevTrack.id,
-          played_at: Math.floor(_safeNowSec()),
+          played_at: Math.floor(_trackSessionStartedAt || _safeNowSec()),
           play_seconds: elapsed,
           track_duration_seconds: duration,
           completed,
@@ -3234,7 +3234,7 @@ const Player = (function () {
             const payload = JSON.stringify({
               events: [{
                 track_id: t.id,
-                played_at: Math.floor(_safeNowSec()),
+                played_at: Math.floor(_trackSessionStartedAt || _safeNowSec()),
                 play_seconds: elapsed,
                 track_duration_seconds: duration || 0,
                 completed: duration > 0 && pos >= Math.max(duration - 1.0, duration * 0.98),
@@ -3428,7 +3428,7 @@ const Player = (function () {
     const ctx = ps.playbackContext || { sourceType: 'unknown', sourceId: '', sourceLabel: '' };
     const posted = _postPlaybackEvents([{
       track_id: t.id,
-      played_at: Math.floor(_safeNowSec()),
+      played_at: Math.floor(_trackSessionStartedAt || _safeNowSec()),
       play_seconds: elapsed,
       track_duration_seconds: duration || 0,
       completed,

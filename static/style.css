@@ -671,6 +671,7 @@ nav {
 .scan-total { color: var(--text-sub); font-weight: 600; font-size: 12px; }
 .scan-new { color: var(--accent-success); font-size: var(--text-xs); }
 .scan-removed { color: var(--accent-secondary); font-size: var(--text-xs); }
+.scan-warn { color: #f5c542; font-size: var(--text-xs); font-weight: 500; }
 .scan-unchanged { color: var(--text-muted); font-size: var(--text-xs); }
 .scan-error { color: var(--accent-secondary); font-size: var(--text-xs); }
 #rescan-btn {

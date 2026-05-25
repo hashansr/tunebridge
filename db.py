@@ -1980,7 +1980,7 @@ def db_insert_play_events(events):
         if existing:
             conn.execute(
                 """UPDATE play_events
-                   SET played_at = ?,
+                   SET played_at = MIN(played_at, ?),
                        play_seconds = MAX(play_seconds, ?),
                        track_duration_seconds = MAX(track_duration_seconds, ?),
                        completed = MAX(completed, ?),

@@ -1191,14 +1191,17 @@ async function refreshSidebarSyncIndicator(daps = null) {
 }
 
 function _sidebarScanDeltaHtml(status) {
-  const added = Number(status?.added_tracks || 0);
-  const removed = Number(status?.removed_tracks || 0);
+  const added    = Number(status?.added_tracks   || 0);
+  const removed  = Number(status?.removed_tracks || 0);
+  const failures = Number(status?.scan_failures  || 0);
+  const parts = [];
+  if (added   > 0) parts.push(`<span class="scan-new">+ ${added.toLocaleString()}</span>`);
+  if (removed > 0) parts.push(`<span class="scan-removed">- ${removed.toLocaleString()}</span>`);
   if (added > 0 || removed > 0) {
-    const parts = [];
-    if (added > 0) parts.push(`<span class="scan-new">+ ${added.toLocaleString()}</span>`);
-    if (removed > 0) parts.push(`<span class="scan-removed">- ${removed.toLocaleString()}</span>`);
+    if (failures > 0) parts.push(`<span class="scan-warn">${failures.toLocaleString()} unreadable</span>`);
     return parts.join(`<span class="scan-separator">&bull;</span>`);
   }
+  if (failures > 0) return `<span class="scan-warn">${failures.toLocaleString()} unreadable</span>`;
   const delta = Number(status?.new_tracks || 0);
   if (delta > 0) return `<span class="scan-new">+ ${delta.toLocaleString()}</span>`;
   if (delta < 0) return `<span class="scan-removed">- ${Math.abs(delta).toLocaleString()}</span>`;
