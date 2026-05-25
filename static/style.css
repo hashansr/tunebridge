@@ -10984,13 +10984,27 @@ tbody tr:hover {
   line-height: 1.2;
 }
 .queue-section-from {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  flex: 0 1 62%;
   font-size: 11px;
   color: #6b6b7b;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.queue-section-from-prefix {
+  flex: 0 0 auto;
+  color: #777789;
+}
+.queue-section-from-detail {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 60%;
 }
 
 .queue-history-row {

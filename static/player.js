@@ -1033,14 +1033,23 @@ const Player = (function () {
     return !!(track && track.__autoplay);
   }
 
-  function _markAutoplayTrack(track) {
-    return { ...track, __autoplay: true };
+  function _markAutoplayTrack(track, seedTrack = null) {
+    const seedTitle = String(seedTrack?.title || '').trim();
+    const seedArtist = String(seedTrack?.artist || '').trim();
+    return {
+      ...track,
+      __autoplay: true,
+      __autoplaySeedTitle: seedTitle,
+      __autoplaySeedArtist: seedArtist,
+    };
   }
 
   function _stripInternalTrackFields(track) {
     if (!track || typeof track !== 'object') return track;
     const clean = { ...track };
     delete clean.__autoplay;
+    delete clean.__autoplaySeedTitle;
+    delete clean.__autoplaySeedArtist;
     return clean;
   }
 
@@ -1173,7 +1182,7 @@ const Player = (function () {
       existing.add(id);
       excluded.add(id);
       _registry.set(id, track);
-      clean.push(_markAutoplayTrack(track));
+      clean.push(_markAutoplayTrack(track, currentTrack()));
     });
     if (!clean.length) return 0;
 
@@ -2344,6 +2353,66 @@ const Player = (function () {
     if (activeEl) activeEl.classList.toggle('queue-item-paused', !ps.isPlaying);
   }
 
+  function _stripContextPrefix(label, sourceType = '') {
+    const value = String(label || '').trim();
+    if (!value) return '';
+    const normalizedType = String(sourceType || '').trim().toLowerCase();
+    const prefixMatch = value.match(/^([^·:]+)\s*(?:·|:)\s*(.+)$/);
+    if (!prefixMatch) return value;
+    const prefix = prefixMatch[1].trim().toLowerCase();
+    if (!normalizedType || prefix === normalizedType || `${prefix}s` === normalizedType) {
+      return prefixMatch[2].trim();
+    }
+    return value;
+  }
+
+  function _autoplaySeedLabel(track, historyItems = []) {
+    const seed = String(track?.__autoplaySeedTitle || '').trim();
+    if (seed) return seed;
+    const previous = [...historyItems].reverse().find(({ t }) => t && !_isAutoplayTrack(t));
+    return String(previous?.t?.title || '').trim();
+  }
+
+  function _queueSourceLabel(currentTrackObj, upcomingItems, historyItems) {
+    if (_isAutoplayTrack(currentTrackObj)) {
+      const detail = _autoplaySeedLabel(currentTrackObj, historyItems) || currentTrackObj?.title || '';
+      return detail ? { prefix: 'Similar Songs:', detail } : null;
+    }
+
+    const ctx = ps.playbackContext || {};
+    const sourceType = String(ctx.sourceType || '').toLowerCase();
+    const sourceLabel = String(ctx.sourceLabel || ps.playbackContextLabel || '').trim();
+    const labels = {
+      album: 'From Album:',
+      artist: 'From Artist:',
+      playlist: 'From Playlist:',
+    };
+
+    if (labels[sourceType]) {
+      const detail = _stripContextPrefix(sourceLabel, sourceType);
+      if (detail) return { prefix: labels[sourceType], detail };
+    }
+
+    const inferred = sourceLabel.match(/^(Album|Artist|Playlist)\s*(?:·|:)\s*(.+)$/i);
+    if (inferred) {
+      const type = inferred[1].toLowerCase();
+      const detail = inferred[2].trim();
+      if (labels[type] && detail) return { prefix: labels[type], detail };
+    }
+
+    const fallbackAlbum = currentTrackObj?.album || upcomingItems[0]?.t?.album || '';
+    return fallbackAlbum ? { prefix: 'From Album:', detail: fallbackAlbum } : null;
+  }
+
+  function _queueSourceHtml(source) {
+    if (!source || !source.detail) return '';
+    const title = `${source.prefix} ${source.detail}`;
+    return `<span class="queue-section-from" title="${_esc(title)}">
+      <span class="queue-section-from-prefix">${_esc(source.prefix)}</span>
+      <span class="queue-section-from-detail">${_esc(source.detail)}</span>
+    </span>`;
+  }
+
   function _queueItemHtml(t, realIdx, mode = 'autoplay') {
     const isPlaying = mode === 'playing';
     const isQueue = mode === 'queue';
@@ -2434,11 +2503,11 @@ const Player = (function () {
     }
 
     // ── Continue Playing section ─────────────────────────────────────
-    const fromLabel = ps.playbackContextLabel || currentTrackObj?.album || upcomingItems[0]?.t?.album || '';
+    const sourceLabel = _queueSourceLabel(currentTrackObj, upcomingItems, historyItems);
     html += `<div class="queue-section queue-section-continue">
       <div class="queue-section-hdr queue-section-hdr-plain" oncontextmenu="event.preventDefault();event.stopPropagation();if(confirm('Clear upcoming queue?'))Player.clearQueue()" title="Right-click to clear queue">
         <span class="queue-section-title">Continue Playing</span>
-        ${fromLabel ? `<span class="queue-section-from">from ${_esc(fromLabel)}</span>` : ''}
+        ${_queueSourceHtml(sourceLabel)}
       </div>`;
 
     // Current track (highlighted, not draggable, no remove)
