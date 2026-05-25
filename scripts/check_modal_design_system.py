@@ -20,7 +20,7 @@ STYLE_CSS = ROOT / "static" / "style.css"
 
 STRICT_MODAL_IDS: list[str] = []  # sync-modal removed — sync is now an inline wizard view
 OVERLAY_EXCEPTIONS = {"onboarding-modal"}
-SHELL_EXCEPTIONS = {"onboarding-modal", "iem-compare-modal", "confirm-modal"}
+SHELL_EXCEPTIONS = {"onboarding-modal", "iem-compare-modal", "confirm-modal", "donate-modal"}
 ALLOWED_INLINE_STYLE_PATTERNS = [
     re.compile(r"^display\s*:\s*none\s*;?$", re.IGNORECASE),
 ]

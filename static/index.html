@@ -3777,21 +3777,26 @@ Questions: mail@hashanr.com</pre>
 
   <!-- Donate modal (count-triggered: launches 2, 5, 15, 25) -->
   <div id="donate-modal" class="modal-overlay tb-modal-overlay" style="display:none" onclick="if(event.target===this)App._dismissDonate()">
-    <div class="modal donate-modal-inner tb-modal-shell tb-modal--sm">
-      <button class="modal-x-btn donate-close-btn" type="button" onclick="App._dismissDonate()" title="Close" aria-label="Close support modal">
-        <span aria-hidden="true"></span>
-      </button>
-      <div class="donate-modal-icon">
-        <span class="home-donate-icon donate-modal-heart" aria-hidden="true"></span>
+    <div class="confirm-shell">
+      <div class="confirm-header">
+        <div class="confirm-kind-icon" style="color:#ffb3b5">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M7 2C3.31333 2 1 5.21475 1 8.5C1 11.8412 2.67415 14.6994 4.77151 16.9297C6.8721 19.1634 9.47698 20.8565 11.5528 21.8944C11.8343 22.0352 12.1657 22.0352 12.4472 21.8944C14.523 20.8565 17.1279 19.1634 19.2285 16.9297C21.3259 14.6994 23 11.8412 23 8.5C23 5.22013 20.7289 2 17 2C15.275 2 14.0531 2.47979 13.1186 3.20977C12.6785 3.55357 12.311 3.95011 11.9974 4.33639C11.6802 3.94929 11.3091 3.55266 10.8649 3.2079C9.92877 2.48125 8.70883 2 7 2Z"/></svg>
+        </div>
+        <h3 id="donate-modal-title" class="confirm-title"></h3>
+        <button class="confirm-close-btn" type="button" onclick="App._dismissDonate()" title="Close" aria-label="Close support modal">
+          <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+        </button>
       </div>
-      <h3 id="donate-modal-title" class="donate-modal-title"></h3>
-      <p id="donate-modal-msg" class="donate-modal-msg"></p>
-      <div class="donate-modal-actions">
-        <button class="btn-primary donate-kofi-btn" onclick="App._openKofi()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;flex-shrink:0"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+      <div class="confirm-body">
+        <p id="donate-modal-msg" class="confirm-body-text"></p>
+      </div>
+      <div class="confirm-footer">
+        <div class="confirm-footer-spacer"></div>
+        <button class="confirm-btn-secondary" onclick="App._dismissDonate()">Maybe later</button>
+        <button class="confirm-btn-primary donate-kofi-btn" onclick="App._openKofi()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;flex-shrink:0"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
           Support on Ko-fi
         </button>
-        <button class="confirm-cancel-link donate-later-link" onclick="App._dismissDonate()">Maybe later</button>
       </div>
     </div>
   </div>

@@ -21334,77 +21334,6 @@ body.is-col-resizing {
   line-height: 1.5;
 }
 
-/* ── Donate modal ────────────────────────────────────────────────────────── */
-.donate-modal-inner {
-  width: 340px;
-  max-width: 90vw;
-  text-align: center;
-  padding: 32px 28px 28px;
-  position: relative;
-}
-.donate-close-btn {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-}
-.donate-close-btn span {
-  width: 12px;
-  height: 12px;
-  display: block;
-  background: currentColor;
-  -webkit-mask: url("/icons/close.svg") center / contain no-repeat;
-  mask: url("/icons/close.svg") center / contain no-repeat;
-}
-.donate-modal-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
-  background: rgba(20, 19, 19, 0.9);
-  margin: 0 auto 20px;
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 8px 24px rgba(0,0,0,0.4);
-}
-.donate-modal-heart {
-  width: 28px;
-  height: 28px;
-  color: rgba(255, 179, 181, 0.9);
-}
-.donate-modal-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text);
-  margin: 0 0 16px;
-  letter-spacing: -0.01em;
-}
-.donate-modal-msg {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin: 0 0 24px;
-  line-height: 1.6;
-  text-align: left;
-}
-.donate-modal-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-.donate-kofi-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 11px;
-  font-size: 14px;
-  font-weight: 600;
-}
-.donate-later-link {
-  font-size: 13px;
-  padding: 4px;
-}
-
 /* ── Settings support card (donate + feedback) ───────────────────────────── */
 .settings-support-card {
   padding: 18px 20px;
@@ -21522,7 +21451,7 @@ body.is-col-resizing {
   backdrop-filter: none !important;
 }
 
-.tb-modal-overlay > .modal:not(.modal-wide):not(.modal-help):not(.donate-modal-inner) { --tb-modal-w: 560px; }
+.tb-modal-overlay > .modal:not(.modal-wide):not(.modal-help) { --tb-modal-w: 560px; }
 .tb-modal-overlay > .modal-wide { --tb-modal-w: 620px; }
 #import-modal .modal { --tb-modal-w: 760px; }
 #ml-gen-modal .modal,
@@ -21533,12 +21462,6 @@ body.is-col-resizing {
 #album-art-modal .modal,
 #artist-image-modal .modal,
 #iem-compare-modal .iem-compare-dialog { --tb-modal-w: 680px; }
-#donate-modal .donate-modal-inner { --tb-modal-w: 360px; }
-
-#donate-modal.tb-modal-overlay {
-  align-items: center !important;
-}
-
 #dup-modal.tb-modal-overlay {
   align-items: center !important;
 }
@@ -21599,18 +21522,6 @@ body.is-col-resizing {
   margin-top: 0 !important;
 }
 
-#donate-modal .donate-modal-title {
-  margin: 0 0 12px !important;
-}
-
-#donate-modal .donate-modal-msg {
-  margin: 0 !important;
-}
-
-#donate-modal .donate-modal-actions {
-  margin: 10px 0 0 !important;
-}
-
 .tb-modal-overlay .modal > *,
 .tb-modal-overlay .tb-modal-shell > *,
 .tb-modal-overlay .iem-compare-dialog > * {
@@ -21646,9 +21557,7 @@ body.is-col-resizing {
 .tb-modal-overlay .tb-modal-title,
 .tb-modal-overlay .sync-modal-title,
 .tb-modal-overlay .iem-compare-title,
-#license-modal .license-modal-title,
-#donate-modal .donate-modal-title,
-#confirm-modal .confirm-modal-title {
+#license-modal .license-modal-title {
   margin: 0 !important;
   color: var(--modal-text) !important;
   font-size: 17px !important;
@@ -21662,9 +21571,7 @@ body.is-col-resizing {
 .tb-modal-overlay .sync-modal-subtitle,
 .tb-modal-overlay .iem-modal-subtitle,
 .tb-modal-overlay .iem-compare-subtitle,
-#license-modal .license-modal-subtitle,
-#donate-modal .donate-modal-msg,
-#confirm-modal .confirm-modal-msg {
+#license-modal .license-modal-subtitle {
   color: var(--modal-text-muted) !important;
   font-size: 12.5px !important;
   font-weight: 400 !important;
@@ -21687,8 +21594,7 @@ body.is-col-resizing {
 
 .tb-modal-overlay .tb-modal-icon-tile,
 .tb-modal-overlay .sync-modal-icon,
-.tb-modal-overlay .confirm-modal-icon,
-.tb-modal-overlay .donate-modal-icon {
+.tb-modal-overlay .confirm-modal-icon {
   width: 22px !important;
   height: 22px !important;
   margin: 2px 0 0 !important;
@@ -21702,8 +21608,7 @@ body.is-col-resizing {
 
 .tb-modal-overlay .tb-modal-icon-tile svg,
 .tb-modal-overlay .sync-modal-icon svg,
-.tb-modal-overlay .confirm-modal-icon svg,
-.tb-modal-overlay .donate-modal-icon svg {
+.tb-modal-overlay .confirm-modal-icon svg {
   width: 16px !important;
   height: 16px !important;
 }
@@ -21813,7 +21718,6 @@ body.is-col-resizing {
 .tb-modal-overlay .tb-modal-footer,
 .tb-modal-overlay .sync-modal-footer,
 .tb-modal-overlay .confirm-modal-actions,
-.tb-modal-overlay .donate-modal-actions,
 #license-modal .license-modal-actions {
   display: flex !important;
   align-items: center !important;
@@ -21831,11 +21735,7 @@ body.is-col-resizing {
 .tb-modal-overlay .btn-danger-pill,
 .tb-modal-overlay .btn-ghost,
 .tb-modal-overlay .btn-text,
-#license-modal .license-agree-btn,
-#donate-modal .donate-kofi-btn,
-#donate-modal .donate-later-link,
-#confirm-modal .confirm-cancel-link,
-#confirm-modal .confirm-modal-actions button {
+#license-modal .license-agree-btn {
   min-height: 32px !important;
   border-radius: 7px !important;
   padding: 0 13px !important;
@@ -21846,24 +21746,20 @@ body.is-col-resizing {
   transform: none !important;
 }
 .tb-modal-overlay .btn-primary,
-#license-modal .license-agree-btn,
-#donate-modal .donate-kofi-btn {
+#license-modal .license-agree-btn {
   color: var(--modal-accent-ink) !important;
   background: var(--modal-accent) !important;
   border: 1px solid var(--modal-accent) !important;
 }
 .tb-modal-overlay .btn-secondary,
-.tb-modal-overlay .btn-ghost,
-#donate-modal .donate-later-link,
-#confirm-modal .confirm-cancel-link {
+.tb-modal-overlay .btn-ghost {
   color: var(--modal-text-sub) !important;
   background: rgba(255,255,255,0.06) !important;
   border: 1px solid var(--modal-border) !important;
   text-decoration: none !important;
 }
 .tb-modal-overlay .btn-danger-pill,
-.tb-modal-overlay .btn-danger,
-#confirm-modal .confirm-modal-actions .btn-danger-pill {
+.tb-modal-overlay .btn-danger {
   color: #3a1014 !important;
   background: var(--modal-danger) !important;
   border: 1px solid var(--modal-danger) !important;
