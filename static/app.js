@@ -6995,8 +6995,10 @@ async function _renderSearchResults() {
     });
   const playableSearchTracks = Array.from(playableTracks.values());
   Player.registerTracks?.(playableSearchTracks);
-  Player.setPlaybackContext?.(playableSearchTracks, {
-    sourceType: 'songs',
+  // Global search is a lookup surface, not a play-through context: playing a
+  // song result should queue only that song instead of every matched result.
+  Player.setPlaybackContext?.([], {
+    sourceType: 'search',
     sourceId: `search:${q}`,
     sourceLabel: `Search · ${q}`,
   });
