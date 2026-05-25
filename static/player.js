@@ -126,7 +126,7 @@ const Player = (function () {
   const _CUSTOM_EQ_ID = '__custom__';
   const _CREATE_PEQ_ID = '__create__';
   const _AUTOPLAY_VISIBLE_LIMIT = 10;
-  const _AUTOPLAY_LOW_WATERMARK = 5;
+  const _AUTOPLAY_TARGET_SIZE = _AUTOPLAY_VISIBLE_LIMIT;
   const _NO_GAIN_TYPES = new Set(['LPQ', 'HPQ', 'NO', 'AP']);
   const _LOSSLESS_FORMATS = new Set(['FLAC', 'ALAC', 'WAV', 'AIFF', 'AIF', 'APE', 'WV', 'DSF', 'DFF']);
   const _LOSSY_FORMATS = new Set(['MP3', 'AAC', 'M4A', 'MP4', 'OGG', 'OPUS', 'WMA']);
@@ -397,6 +397,7 @@ const Player = (function () {
         _markTrackSessionStart();
         if (ps.queueOpen) _renderQueue();
         _saveState();
+        _ensureAutoplayQueue('mpv-advance');
       }
     } else {
       // End of queue, no repeat
@@ -1198,7 +1199,7 @@ const Player = (function () {
 
     _syncAutoplayQueueState();
     const pending = _pendingAutoplayEntries().length;
-    if (!options.force && pending >= _AUTOPLAY_LOW_WATERMARK) return false;
+    if (!options.force && pending >= _AUTOPLAY_TARGET_SIZE) return false;
     if (pending >= _AUTOPLAY_VISIBLE_LIMIT) return false;
 
     _autoplayFetchInFlight = true;
