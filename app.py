@@ -3,6 +3,7 @@ import os
 import sys
 import json
 import io
+import csv
 import zipfile
 import subprocess
 import plistlib
@@ -3671,16 +3672,28 @@ def export_favourite_songs(fmt):
     if fmt == 'poweramp':
         filename = 'Favourite Songs.m3u'
         prefix = settings.get('poweramp_prefix', '')
+        content = generate_m3u(tracks, 'Favourite Songs', path_prefix=prefix)
+        mimetype = 'audio/x-mpegurl'
     elif fmt == 'ap80':
         filename = 'Favourite Songs.m3u'
         prefix = '..'
+        content = generate_m3u(tracks, 'Favourite Songs', path_prefix=prefix)
+        mimetype = 'audio/x-mpegurl'
+    elif fmt == 'local':
+        filename = 'Favourite Songs.m3u'
+        music_base = str(get_music_base()).rstrip('/')
+        content = generate_m3u(tracks, 'Favourite Songs', absolute_base=music_base)
+        mimetype = 'audio/x-mpegurl'
+    elif fmt == 'csv':
+        filename = 'Favourite Songs - Track List.txt'
+        content = generate_playlist_track_list_tsv(tracks)
+        mimetype = 'text/tab-separated-values'
     else:
         return jsonify({'error': 'Unknown format'}), 400
 
-    content = generate_m3u(tracks, 'Favourite Songs', path_prefix=prefix)
     return Response(
         content,
-        mimetype='audio/x-mpegurl',
+        mimetype=mimetype,
         headers={'Content-Disposition': f'attachment; filename="{filename}"'}
     )
 
@@ -6477,24 +6490,49 @@ def import_playlist():
     return jsonify(result)
 
 
-def generate_m3u(tracks, playlist_name, path_prefix=''):
+def generate_m3u(tracks, playlist_name, path_prefix='', absolute_base=''):
     """
     Generate M3U content.
     path_prefix: if set (e.g. '/mnt/sdcard'), paths are absolute: {prefix}/Music/{rel}
                  if empty, paths are relative: Music/{rel}
+    absolute_base: if set, paths are absolute local files: {absolute_base}/{rel}
     """
     lines = ['#EXTM3U', f'#PLAYLIST:{playlist_name}', '']
     prefix = path_prefix.rstrip('/') if path_prefix else ''
+    base = str(absolute_base).rstrip('/') if absolute_base else ''
     for t in tracks:
         duration = t.get('duration', -1)
         artist = t.get('artist', '')
         title = t.get('title', '')
         rel = (t.get('path') or '').replace('\\', '/')
-        track_path = f'{prefix}/Music/{rel}' if prefix else f'Music/{rel}'
+        if base:
+            track_path = f'{base}/{rel}'
+        elif prefix:
+            track_path = f'{prefix}/Music/{rel}'
+        else:
+            track_path = f'Music/{rel}'
         lines.append(f'#EXTINF:{duration},{artist} - {title}')
         lines.append(track_path)
         lines.append('')
     return '\n'.join(lines)
+
+
+def generate_playlist_track_list_tsv(tracks):
+    """Generate a tab-delimited track listing for spreadsheet apps."""
+    out = io.StringIO()
+    writer = csv.writer(out, delimiter='\t', lineterminator='\n')
+    writer.writerow(['#', 'Title', 'Artist', 'Album', 'Year', 'Duration', 'Genre'])
+    for idx, t in enumerate(tracks, 1):
+        writer.writerow([
+            idx,
+            t.get('title') or '',
+            t.get('artist') or '',
+            t.get('album') or '',
+            t.get('year') or '',
+            format_duration(t.get('duration') or 0),
+            t.get('genre') or '',
+        ])
+    return out.getvalue()
 
 
 def _m3u_write_encoding_for_dap(dap):
@@ -6549,19 +6587,30 @@ def export_playlist(pid, fmt):
     if fmt == 'poweramp':
         filename = f"{playlist['name']}.m3u"
         prefix = settings.get('poweramp_prefix', '')
+        content = generate_m3u(tracks, playlist['name'], path_prefix=prefix)
+        mimetype = 'audio/x-mpegurl'
     elif fmt == 'ap80':
         # AP80 expects M3U files in playlist_data/ at the SD root.
         # Paths must be relative from that folder to Music/, so prefix is '..'.
         filename = f"{playlist['name']}.m3u"
         prefix = '..'
+        content = generate_m3u(tracks, playlist['name'], path_prefix=prefix)
+        mimetype = 'audio/x-mpegurl'
+    elif fmt == 'local':
+        filename = f"{playlist['name']}.m3u"
+        music_base = str(get_music_base()).rstrip('/')
+        content = generate_m3u(tracks, playlist['name'], absolute_base=music_base)
+        mimetype = 'audio/x-mpegurl'
+    elif fmt == 'csv':
+        filename = f"{playlist['name']} - Track List.txt"
+        content = generate_playlist_track_list_tsv(tracks)
+        mimetype = 'text/tab-separated-values'
     else:
         return jsonify({'error': 'Unknown format'}), 400
 
-    content = generate_m3u(tracks, playlist['name'], path_prefix=prefix)
-
     return Response(
         content,
-        mimetype='audio/x-mpegurl',
+        mimetype=mimetype,
         headers={'Content-Disposition': f'attachment; filename="{filename}"'}
     )
 

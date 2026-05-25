@@ -3028,6 +3028,35 @@ function closePlaylistDapMenu() {
   if (menu) menu.style.display = 'none';
 }
 
+function downloadPlaylist(fmt) {
+  const pid = state.playlist?.id;
+  if (!pid) return;
+  const a = document.createElement('a');
+  const base = state.playlist?.is_favourites || pid === '__favourite_songs__'
+    ? '/api/favourites/songs/export'
+    : `/api/playlists/${encodeURIComponent(pid)}/export`;
+  a.href = `${base}/${encodeURIComponent(fmt)}`;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  _closePlExportMenu();
+}
+
+function togglePlExportMenu(e) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById('pl-export-menu');
+  if (!menu) return;
+  const isOpen = menu.style.display !== 'none';
+  _closePlExportMenu();
+  if (!isOpen) menu.style.display = 'flex';
+}
+
+function _closePlExportMenu() {
+  const menu = document.getElementById('pl-export-menu');
+  if (menu) menu.style.display = 'none';
+}
+
 async function pickConnectedDapExport(did) {
   closePlaylistDapMenu();
   await exportToDeviceDap(did);
@@ -16290,6 +16319,8 @@ const App = {
   renderDapExportPills,
   togglePlaylistDapMenu,
   closePlaylistDapMenu,
+  downloadPlaylist,
+  togglePlExportMenu,
   pickConnectedDapExport,
   toggleHeroMore,
   togglePlMoreMenu,
@@ -20638,6 +20669,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!e.target.closest('.pl-more-wrap')) {
       const plMenu = document.getElementById('pl-more-menu');
       if (plMenu) plMenu.style.display = 'none';
+    }
+    if (!e.target.closest('.pl-export-wrap')) {
+      _closePlExportMenu();
     }
 
     // Close any open mapping results dropdowns

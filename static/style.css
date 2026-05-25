@@ -2585,6 +2585,12 @@ tbody tr:hover .remove-btn { opacity: 1; }
   transition: background 0.15s, color 0.15s;
 }
 .btn-export:hover { background: var(--bg-hover); color: var(--text); }
+.btn-export-local {
+  color: var(--text);
+}
+.btn-export-local svg:last-child {
+  opacity: 0.72;
+}
 .btn-export-device {
   background: var(--accent-dim);
   color: var(--accent);
@@ -7015,6 +7021,44 @@ tbody tr:hover {
 .pl-more-item:hover { background: var(--bg-hover); }
 .pl-more-item-danger { color: #e05c5c; }
 .pl-more-item-danger:hover { background: rgba(224, 92, 92, 0.12); }
+.pl-export-wrap {
+  position: relative;
+}
+.pl-export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  flex-direction: column;
+  min-width: 180px;
+  background: rgba(24, 24, 26, 0.97);
+  border: 1px solid rgba(173, 198, 255, 0.16);
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+  padding: 5px;
+  z-index: 200;
+}
+.pl-export-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-base);
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.pl-export-item:hover {
+  background: var(--bg-hover);
+}
+.pl-export-item svg {
+  color: var(--text-muted);
+}
 
 /* Hero more-menu (artist/album ···) */
 .browse-hero {
