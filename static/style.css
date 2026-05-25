@@ -7046,8 +7046,14 @@ tbody tr:hover {
 .pl-export-item:hover {
   background: var(--bg-hover);
 }
-.pl-export-item svg {
+.pl-export-item svg,
+.pl-export-item .tb-icon {
   color: var(--text-muted);
+}
+.pl-export-item .tb-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 /* Hero more-menu (artist/album ···) */
@@ -8827,6 +8833,14 @@ tbody tr:hover {
 .tb-icon-play-next {
   mask-image: url('/icons/play-next.svg');
   -webkit-mask-image: url('/icons/play-next.svg');
+}
+.tb-icon-file-m3u {
+  mask-image: url('/icons/m3u-file-format-variant-svgrepo-com.svg');
+  -webkit-mask-image: url('/icons/m3u-file-format-variant-svgrepo-com.svg');
+}
+.tb-icon-file-xml {
+  mask-image: url('/icons/xml-file-icon.svg');
+  -webkit-mask-image: url('/icons/xml-file-icon.svg');
 }
 .tb-icon-playlist {
   mask-image: url('/icons/queue.svg');
