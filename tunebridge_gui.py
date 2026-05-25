@@ -316,7 +316,9 @@ def _show_about_alert():
     alert = NSAlert.alloc().init()
     alert.setMessageText_('TuneBridge')
     alert.setInformativeText_(
-        f'Version {version}\n\nA local music manager for FLAC libraries.'
+        f'Version {version}\n\n'
+        'Play your music library, build playlists, manage your DAPs and IEMs, '
+        'analyse your collection, and sync music to portable devices.'
     )
     alert.runModal()
 
@@ -361,13 +363,39 @@ def _setup_native_menus(window):
         def cycleRepeat_(self, sender): _js(window, 'Player.cycleRepeat()')
         def newPlaylist_(self, sender): _js(window, 'App.showCreatePlaylistModal()')
         def importPl_(self, sender):    _js(window, 'App.triggerImport()')
-        def prefs_(self, sender):       _js(window, 'App.loadSettings()')
+        def addDap_(self, sender):      _js(window, 'App.showAddDapModal()')
+        def addIem_(self, sender):      _js(window, 'App.showAddIemModal()')
+        def libraryScan_(self, sender): _js(window, 'App.rescan()')
+        def prefs_(self, sender):       _js(window, "App.showView('settings')")
         def helpModal_(self, sender):   _js(window, 'App.showHelp()')
         def github_(self, sender):      subprocess.Popen(['open', 'https://github.com/hashansr/tunebridge-releases/'])
         def kofi_(self, sender):        subprocess.Popen(['open', 'https://ko-fi.com/hashansr'])
         def aboutApp_(self, sender):    _show_about_alert()
 
     handler = _TBMenuHandler.alloc().init()
+
+    # ── Edit menu delegate — strips macOS auto-injected text-service items ────
+    class _EditMenuDelegate(NSObject):
+        _SYSTEM = frozenset([
+            'Writing Tools', 'AutoFill',
+            'Start Dictation…', 'Emoji & Symbols',
+            'Substitutions', 'Transformations', 'Speech',
+        ])
+
+        def menuWillOpen_(self, menu):
+            i = menu.numberOfItems() - 1
+            while i >= 0:
+                if str(menu.itemAtIndex_(i).title()) in self._SYSTEM:
+                    menu.removeItemAtIndex_(i)
+                i -= 1
+            # Remove trailing separator macOS leaves behind
+            while menu.numberOfItems() > 0:
+                if menu.itemAtIndex_(menu.numberOfItems() - 1).isSeparatorItem():
+                    menu.removeItemAtIndex_(menu.numberOfItems() - 1)
+                else:
+                    break
+
+    edit_delegate = _EditMenuDelegate.alloc().init()
 
     # ── Menu item factory ─────────────────────────────────────────────────────
     def mi(title, action=None, key='', mask=CMD, target=None):
@@ -405,6 +433,11 @@ def _setup_native_menus(window):
     file_m.addItem_(sep())
     file_m.addItem_(mi('Import Playlist…', 'importPl:', 'i', target=handler))
     file_m.addItem_(sep())
+    file_m.addItem_(mi('Add Digital Audio Player…', 'addDap:', target=handler))
+    file_m.addItem_(mi('Add IEM or Headphone…', 'addIem:', target=handler))
+    file_m.addItem_(sep())
+    file_m.addItem_(mi('Library Scan', 'libraryScan:', target=handler))
+    file_m.addItem_(sep())
     file_m.addItem_(mi('Close Window', 'performClose:', 'w'))
 
     # ── Edit menu (standard NSResponder selectors — WKWebView handles these) ──
@@ -417,6 +450,7 @@ def _setup_native_menus(window):
     edit_m.addItem_(mi('Paste', 'paste:', 'v'))
     edit_m.addItem_(sep())
     edit_m.addItem_(mi('Select All', 'selectAll:', 'a'))
+    edit_m.setDelegate_(edit_delegate)
 
     # ── Play menu ─────────────────────────────────────────────────────────────
     play_m = NSMenu.alloc().initWithTitle_('Play')
@@ -456,7 +490,7 @@ def _setup_native_menus(window):
         app.setDockMenu_(dock_m)
 
     callAfter(_apply)
-    _TB_MENU_HANDLER = handler
+    _TB_MENU_HANDLER = (handler, edit_delegate)  # both must stay alive for PyObjC GC
     print('TuneBridge: native menu bar installed')
 
 
