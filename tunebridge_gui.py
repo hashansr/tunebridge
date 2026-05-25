@@ -82,9 +82,26 @@ _ALLOWED_OPEN_URL_PREFIXES = (
 class _TuneBridgeApi:
     """Exposed to JavaScript as window.pywebview.api — provides native macOS actions."""
 
+    def __init__(self):
+        self.window = None
+
     def open_url(self, url):
         if isinstance(url, str) and any(url.startswith(p) for p in _ALLOWED_OPEN_URL_PREFIXES):
             subprocess.Popen(['open', url])
+
+    def save_text_file(self, filename, content):
+        if self.window is None:
+            return {'error': 'No window available'}
+        try:
+            safe_name = Path(str(filename or 'TuneBridge export.txt')).name
+            result = self.window.create_file_dialog(webview.SAVE_DIALOG, save_filename=safe_name)
+            if not result:
+                return {'cancelled': True}
+            path = Path(result[0] if isinstance(result, (list, tuple)) else result)
+            path.write_text(str(content or ''), encoding='utf-8')
+            return {'ok': True, 'path': str(path)}
+        except Exception as exc:
+            return {'error': str(exc)}
 
 
 def _set_port(port: int):
@@ -553,6 +570,7 @@ def main():
     # document shell on cold start.
     app_url = f"{URL}/?v={int(time.time())}"
 
+    native_api = _TuneBridgeApi()
     window = webview.create_window(
         title="TuneBridge",
         url=app_url,
@@ -560,8 +578,9 @@ def main():
         height=800,
         min_size=(900, 600),
         background_color="#131313",
-        js_api=_TuneBridgeApi(),
+        js_api=native_api,
     )
+    native_api.window = window
 
     # ── Player state persistence ─────────────────────────────────────────────
     # IMPORTANT: Do NOT call evaluate_js from window.events.closing.

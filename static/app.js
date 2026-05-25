@@ -3039,6 +3039,20 @@ function closePlaylistDapMenu() {
   if (menu) menu.style.display = 'none';
 }
 
+function _filenameFromContentDisposition(value, fallback) {
+  const header = String(value || '');
+  const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match) {
+    try { return decodeURIComponent(utf8Match[1].trim().replace(/^"|"$/g, '')); } catch (_) {}
+  }
+  const plainMatch = header.match(/filename="?([^";]+)"?/i);
+  return plainMatch ? plainMatch[1].trim() : fallback;
+}
+
+function _nativeSaveApi() {
+  return window.pywebview?.api?.save_text_file;
+}
+
 async function downloadPlaylist(fmt, playlistId = null) {
   const pid = playlistId || state.playlist?.id;
   if (!pid) return;
@@ -3046,16 +3060,35 @@ async function downloadPlaylist(fmt, playlistId = null) {
   const base = exportId === '__favourite_songs__'
     ? '/favourites/songs/export'
     : `/playlists/${encodeURIComponent(exportId)}/export`;
+  const exportUrl = `/api${base}/${encodeURIComponent(fmt)}`;
   _closePlExportMenu();
   hidePlaylistCtxMenu();
   try {
+    if (_nativeSaveApi()) {
+      const fileRes = await fetch(exportUrl);
+      if (!fileRes.ok) {
+        const err = await fileRes.json().catch(() => ({ error: fileRes.statusText }));
+        throw new Error(err.error || fileRes.statusText);
+      }
+      const filename = _filenameFromContentDisposition(
+        fileRes.headers.get('Content-Disposition'),
+        fmt === 'csv' ? 'TuneBridge Track List.txt' : 'TuneBridge Playlist.m3u'
+      );
+      const content = await fileRes.text();
+      const saved = await window.pywebview.api.save_text_file(filename, content);
+      if (saved?.cancelled) return;
+      if (!saved?.ok) throw new Error(saved?.error || 'Save cancelled');
+      toast(fmt === 'csv' ? 'Track list exported.' : 'Playlist exported.');
+      return;
+    }
+
     const res = await api(`${base}/${encodeURIComponent(fmt)}/save`, { method: 'POST' });
     if (res?.cancelled) return;
     toast(fmt === 'csv' ? 'Track list exported.' : 'Playlist exported.');
   } catch (e) {
     if (/No window available|Save dialog not available/i.test(e.message || '')) {
       const a = document.createElement('a');
-      a.href = `/api${base}/${encodeURIComponent(fmt)}`;
+      a.href = exportUrl;
       a.download = '';
       document.body.appendChild(a);
       a.click();
