@@ -2792,16 +2792,24 @@
   </section>
 
   <!-- Generic confirm modal -->
-  <div id="confirm-modal" class="modal-overlay tb-modal-overlay" style="display:none">
-    <div class="modal confirm-modal-inner tb-modal-shell tb-modal--sm">
-      <div id="confirm-modal-icon" class="confirm-modal-icon">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="var(--accent-secondary)"><path d="M8 1.5V2.5H3C2.44772 2.5 2 2.94772 2 3.5V4.5C2 5.05228 2.44772 5.5 3 5.5H21C21.5523 5.5 22 5.05228 22 4.5V3.5C22 2.94772 21.5523 2.5 21 2.5H16V1.5C16 0.947715 15.5523 0.5 15 0.5H9C8.44772 0.5 8 0.947715 8 1.5Z"/><path d="M3.9231 7.5H20.0767L19.1344 20.2216C19.0183 21.7882 17.7135 23 16.1426 23H7.85724C6.28636 23 4.98148 21.7882 4.86544 20.2216L3.9231 7.5Z"/></svg>
+  <div id="confirm-modal" class="modal-overlay tb-modal-overlay" style="display:none" onclick="if(event.target===this)App._confirmNo()">
+    <div class="confirm-shell">
+      <div class="confirm-header">
+        <div id="confirm-kind-icon" class="confirm-kind-icon"></div>
+        <h3 id="confirm-modal-title" class="confirm-title"></h3>
+        <button class="confirm-close-btn" onclick="App._confirmNo()">
+          <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+        </button>
       </div>
-      <h3 id="confirm-modal-title" class="confirm-modal-title"></h3>
-      <p id="confirm-modal-msg" class="confirm-modal-msg"></p>
-      <div class="confirm-modal-actions">
-        <button id="confirm-modal-ok" class="btn-danger-pill" onclick="App._confirmYes()">Delete</button>
-        <button id="confirm-modal-cancel" class="confirm-cancel-link" onclick="App._confirmNo()">Cancel</button>
+      <div class="confirm-body">
+        <p id="confirm-modal-msg" class="confirm-body-text"></p>
+        <div id="confirm-context-strip" class="confirm-context-strip" style="display:none"></div>
+      </div>
+      <div class="confirm-footer">
+        <button id="confirm-alt-btn" class="confirm-btn-ghost" onclick="App._confirmAlt()" style="display:none"></button>
+        <div class="confirm-footer-spacer"></div>
+        <button id="confirm-modal-cancel" class="confirm-btn-secondary" onclick="App._confirmNo()">Cancel</button>
+        <button id="confirm-modal-ok" class="confirm-btn-primary" onclick="App._confirmYes()">Delete</button>
       </div>
     </div>
   </div>

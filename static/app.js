@@ -1343,27 +1343,67 @@ const _ML_MOOD_PRESETS = {
 /* ── Generic confirm modal ──────────────────────────────────────────── */
 let _confirmResolve = null;
 
-function _showConfirm({ title = '', message = '', okText = 'Delete', cancelText = 'Cancel', danger = true, icon = null } = {}) {
+const _CONFIRM_KINDS = {
+  danger:  { tint: '#ffb3b5', svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 1.5V2.5H3C2.44772 2.5 2 2.94772 2 3.5V4.5C2 5.05228 2.44772 5.5 3 5.5H21C21.5523 5.5 22 5.05228 22 4.5V3.5C22 2.94772 21.5523 2.5 21 2.5H16V1.5C16 0.947715 15.5523 0.5 15 0.5H9C8.44772 0.5 8 0.947715 8 1.5Z"/><path d="M3.9231 7.5H20.0767L19.1344 20.2216C19.0183 21.7882 17.7135 23 16.1426 23H7.85724C6.28636 23 4.98148 21.7882 4.86544 20.2216L3.9231 7.5Z"/></svg>' },
+  warning: { tint: '#f0b429', svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M9.82664 2.22902C10.7938 0.590326 13.2063 0.590325 14.1735 2.22902L23.6599 18.3024C24.6578 19.9933 23.3638 22 21.4865 22H2.51362C0.63634 22 -0.657696 19.9933 0.340215 18.3024L9.82664 2.22902ZM10.0586 7.05547C10.0268 6.48227 10.483 6 11.0571 6H12.9429C13.517 6 13.9732 6.48227 13.9414 7.05547L13.5525 14.0555C13.523 14.5854 13.0847 15 12.554 15H11.446C10.9153 15 10.477 14.5854 10.4475 14.0555L10.0586 7.05547ZM14 18C14 19.1046 13.1046 20 12 20C10.8954 20 10 19.1046 10 18C10 16.8954 10.8954 16 12 16C13.1046 16 14 16.8954 14 18Z"/></svg>' },
+  prompt:  { tint: '#adc6ff', svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M1 12C1 5.92487 5.92487 1 12 1C18.0751 1 23 5.92487 23 12C23 18.0751 18.0751 23 12 23C5.92487 23 1 18.0751 1 12ZM10.0586 6.05547C10.0268 5.48227 10.483 5 11.0571 5H12.9429C13.517 5 13.9732 5.48227 13.9414 6.05547L13.5525 13.0555C13.523 13.5854 13.0847 14 12.554 14H11.446C10.9153 14 10.477 13.5854 10.4475 13.0555L10.0586 6.05547ZM14 17C14 18.1046 13.1046 19 12 19C10.8954 19 10 18.1046 10 17C10 15.8954 10.8954 15 12 15C13.1046 15 14 15.8954 14 17Z"/></svg>' },
+  info:    { tint: '#adc6ff', svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M1 12C1 5.92487 5.92487 1 12 1C18.0751 1 23 5.92487 23 12C23 18.0751 18.0751 23 12 23C5.92487 23 1 18.0751 1 12ZM10.25 11C10.25 10.4477 10.6977 10 11.25 10H12.75C13.3023 10 13.75 10.4477 13.75 11V18C13.75 18.5523 13.3023 19 12.75 19H11.25C10.6977 19 10.25 18.5523 10.25 18V11ZM14 7C14 5.89543 13.1046 5 12 5C10.8954 5 10 5.89543 10 7C10 8.10457 10.8954 9 12 9C13.1046 9 14 8.10457 14 7Z"/></svg>' },
+  success: { tint: '#53e16f', svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M1 12C1 5.92487 5.92487 1 12 1C18.0751 1 23 5.92487 23 12C23 18.0751 18.0751 23 12 23C5.92487 23 1 18.0751 1 12ZM18.4158 9.70405C18.8055 9.31268 18.8041 8.67952 18.4127 8.28984L17.7041 7.58426C17.3127 7.19458 16.6796 7.19594 16.2899 7.58731L10.5183 13.3838L7.19723 10.1089C6.80398 9.72117 6.17083 9.7256 5.78305 10.1189L5.08092 10.8309C4.69314 11.2241 4.69758 11.8573 5.09083 12.2451L9.82912 16.9174C10.221 17.3039 10.8515 17.301 11.2399 16.911L18.4158 9.70405Z"/></svg>' },
+};
+
+function _showConfirm({ kind = null, title = '', message = '', okText = 'Delete', cancelText = 'Cancel', altText = null, danger = true, context = null } = {}) {
+  const resolvedKind = kind || (danger ? 'danger' : 'info');
+  const k = _CONFIRM_KINDS[resolvedKind] || _CONFIRM_KINDS.info;
+
   return new Promise(resolve => {
     _confirmResolve = resolve;
+
     document.getElementById('confirm-modal-title').textContent = title;
-    document.getElementById('confirm-modal-msg').textContent   = message;
+    document.getElementById('confirm-modal-msg').textContent = message;
+
+    // Icon
+    const iconEl = document.getElementById('confirm-kind-icon');
+    iconEl.innerHTML = k.svg;
+    iconEl.style.color = k.tint;
+
+    // OK button
     const okBtn = document.getElementById('confirm-modal-ok');
+    okBtn.textContent = okText;
+    okBtn.className = resolvedKind === 'danger' ? 'confirm-btn-danger' : 'confirm-btn-primary';
+    if (resolvedKind !== 'danger') okBtn.setAttribute('autofocus', '');
+    else okBtn.removeAttribute('autofocus');
+
+    // Cancel button
     const cancelBtn = document.getElementById('confirm-modal-cancel');
-    okBtn.textContent  = okText;
-    okBtn.className    = danger ? 'btn-danger-pill' : 'btn-danger-pill btn-danger-pill--neutral';
-    if (cancelBtn) cancelBtn.textContent = cancelText;
-    const iconEl = document.getElementById('confirm-modal-icon');
-    if (icon) {
-      iconEl.innerHTML  = icon;
-      iconEl.className  = 'confirm-modal-icon';
-    } else if (!danger) {
-      iconEl.innerHTML  = `<svg width="26" height="26" viewBox="0 0 24 24" fill="var(--accent)"><path fill-rule="evenodd" clip-rule="evenodd" d="M1 12C1 5.92487 5.92487 1 12 1C18.0751 1 23 5.92487 23 12C23 18.0751 18.0751 23 12 23C5.92487 23 1 18.0751 1 12ZM10.25 11C10.25 10.4477 10.6977 10 11.25 10H12.75C13.3023 10 13.75 10.4477 13.75 11V18C13.75 18.5523 13.3023 19 12.75 19H11.25C10.6977 19 10.25 18.5523 10.25 18V11ZM14 7C14 5.89543 13.1046 5 12 5C10.8954 5 10 5.89543 10 7C10 8.10457 10.8954 9 12 9C13.1046 9 14 8.10457 14 7Z"/></svg>`;
-      iconEl.className  = 'confirm-modal-icon icon-neutral';
+    if (cancelText) {
+      cancelBtn.textContent = cancelText;
+      cancelBtn.style.display = '';
     } else {
-      iconEl.innerHTML  = `<svg width="26" height="26" viewBox="0 0 24 24" fill="var(--accent-secondary)"><path d="M8 1.5V2.5H3C2.44772 2.5 2 2.94772 2 3.5V4.5C2 5.05228 2.44772 5.5 3 5.5H21C21.5523 5.5 22 5.05228 22 4.5V3.5C22 2.94772 21.5523 2.5 21 2.5H16V1.5C16 0.947715 15.5523 0.5 15 0.5H9C8.44772 0.5 8 0.947715 8 1.5Z"/><path d="M3.9231 7.5H20.0767L19.1344 20.2216C19.0183 21.7882 17.7135 23 16.1426 23H7.85724C6.28636 23 4.98148 21.7882 4.86544 20.2216L3.9231 7.5Z"/></svg>`;
-      iconEl.className  = 'confirm-modal-icon';
+      cancelBtn.style.display = 'none';
     }
+
+    // Alt button (ghost, leftmost — three-option pattern)
+    const altBtn = document.getElementById('confirm-alt-btn');
+    if (altText) {
+      altBtn.textContent = altText;
+      altBtn.style.display = '';
+    } else {
+      altBtn.style.display = 'none';
+    }
+
+    // Context strip
+    const ctxEl = document.getElementById('confirm-context-strip');
+    if (context) {
+      ctxEl.style.display = 'flex';
+      ctxEl.innerHTML = `
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <div class="confirm-context-primary"${context.mono ? ' style="font-family:ui-monospace,monospace"' : ''}>${context.primary}</div>
+          ${context.secondary ? `<div class="confirm-context-secondary"${context.mono ? ' style="font-family:ui-monospace,monospace"' : ''}>${context.secondary}</div>` : ''}
+        </div>`;
+    } else {
+      ctxEl.style.display = 'none';
+    }
+
     document.getElementById('confirm-modal').style.display = 'flex';
   });
 }
@@ -1376,6 +1416,11 @@ function _confirmYes() {
 function _confirmNo() {
   document.getElementById('confirm-modal').style.display = 'none';
   if (_confirmResolve) { _confirmResolve(false); _confirmResolve = null; }
+}
+
+function _confirmAlt() {
+  document.getElementById('confirm-modal').style.display = 'none';
+  if (_confirmResolve) { _confirmResolve(null); _confirmResolve = null; }
 }
 
 /* ── Sidebar playlists ──────────────────────────────────────────────── */
@@ -4715,26 +4760,26 @@ function _isSyncBusy() {
 async function _guardModalNavigation() {
   if (_isOverlayOpen('confirm-modal')) return false;
   if (_isSyncBusy() && !await _showConfirm({
+    kind: 'warning',
     title: 'Sync In Progress',
     message: 'Leave this screen and stop monitoring sync?',
     okText: 'Leave',
     cancelText: 'Stay',
-    danger: false,
   })) {
     return false;
   }
-  if (_isDapModalDirty() && !await _showConfirm({ title: 'Discard Changes?', message: 'Discard unsaved Device changes?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
-  if (_isIemModalDirty() && !await _showConfirm({ title: 'Discard Changes?', message: 'Discard unsaved IEM changes?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
-  if (_isPeqUploadModalDirty() && !await _showConfirm({ title: 'Discard Upload?', message: 'Discard unsaved PEQ upload details?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
-  if (_isCreatePlaylistModalDirty() && !await _showConfirm({ title: 'Discard Playlist?', message: 'Discard the new playlist name?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
-  if (_isImportModalDirty() && !await _showConfirm({ title: 'Discard Import?', message: 'Discard the current playlist import mapping?', okText: 'Discard', cancelText: 'Keep Mapping', danger: true })) return false;
-  if (_isSmartRulesModalDirty() && !await _showConfirm({ title: 'Discard Smart Rules?', message: 'Discard Smart Rules changes?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
-  if (_isTagEditorModalDirty() && !await _showConfirm({ title: 'Discard Tag Edits?', message: 'Your track tag edits have not been saved.', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
-  if (_isAlbumTagModalDirty() && !await _showConfirm({ title: 'Discard Album Edits?', message: 'Your album tag edits have not been saved.', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
-  if (_isArtistRenameModalDirty() && !await _showConfirm({ title: 'Discard Rename?', message: 'The new artist name has not been saved.', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
-  if (_isMissingTagsBulkModalDirty() && !await _showConfirm({ title: 'Discard Bulk Tags?', message: 'Discard the bulk tag values you entered?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
-  if (_isAlbumArtModalDirty() && !await _showConfirm({ title: 'Discard Album Art?', message: 'Discard the selected album artwork?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
-  if (_isArtistImageModalDirty() && !await _showConfirm({ title: 'Discard Artist Image?', message: 'Discard the selected artist image?', okText: 'Discard', cancelText: 'Keep Editing', danger: true })) return false;
+  if (_isDapModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Changes?', message: "Your changes to this device haven't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
+  if (_isIemModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Changes?', message: "Your IEM changes haven't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
+  if (_isPeqUploadModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Upload?', message: "Your PEQ upload details haven't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
+  if (_isCreatePlaylistModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Playlist?', message: "The new playlist name hasn't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
+  if (_isImportModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Import?', message: "Your import mapping hasn't been saved.", okText: 'Discard', cancelText: 'Keep Mapping' })) return false;
+  if (_isSmartRulesModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Smart Rules?', message: "Your Smart Rules changes haven't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
+  if (_isTagEditorModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Tag Edits?', message: "Your track tag edits haven't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
+  if (_isAlbumTagModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Album Edits?', message: "Your album tag edits haven't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
+  if (_isArtistRenameModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Rename?', message: "The new artist name hasn't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
+  if (_isMissingTagsBulkModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Bulk Tags?', message: "Your bulk tag edits haven't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
+  if (_isAlbumArtModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Album Art?', message: "Your album art selection hasn't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
+  if (_isArtistImageModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Artist Image?', message: "Your artist image selection hasn't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
   return true;
 }
 
@@ -4834,11 +4879,11 @@ function _resetMlPreviewState() {
 async function _confirmMlDiscard() {
   if (!_hasUnsavedMlPreview()) return true;
   return _showConfirm({
+    kind: 'prompt',
     title: 'Discard Preview?',
-    message: 'You have an unsaved generated playlist preview. Discard it and continue?',
+    message: "Your generated playlist preview hasn't been saved.",
     okText: 'Discard',
     cancelText: 'Keep Editing',
-    danger: true,
   });
 }
 
@@ -7860,11 +7905,11 @@ function _renderImportSummary() {
 
 async function closeImportModal(force = false) {
   if (!force && _isImportModalDirty() && !await _showConfirm({
+    kind: 'prompt',
     title: 'Discard Import?',
-    message: 'Discard the current playlist import mapping?',
+    message: "Your import mapping hasn't been saved.",
     okText: 'Discard',
     cancelText: 'Keep Mapping',
-    danger: true,
   })) return false;
   document.getElementById('import-modal').style.display = 'none';
   _importData = null;
@@ -9358,8 +9403,8 @@ async function swStartSync() {
   const totals = _swComputeTotals();
   if (totals.deleteCount > 0) {
     const ok = await _showConfirm({
-      title: `Delete ${totals.deleteCount} file${totals.deleteCount===1?'':'s'} from device?`,
-      message: `${totals.deleteCount} file${totals.deleteCount===1?' will be':'s will be'} permanently deleted from your player. Empty folders will also be removed.`,
+      title: 'Delete Files from Device?',
+      message: `${totals.deleteCount} file${totals.deleteCount===1?'':'s'} will be permanently deleted. Empty folders will also be removed.`,
       okText: 'Delete', danger: true,
     });
     if (!ok) return;
@@ -11047,7 +11092,7 @@ async function saveDap() {
 async function deleteDap(id) {
   const ok = await _showConfirm({
     title:   'Delete DAP',
-    message: 'This DAP and all its export history will be removed.',
+    message: 'This DAP and all its export history will be permanently deleted.',
     okText:  'Delete',
   });
   if (!ok) return;
@@ -11948,20 +11993,24 @@ function isPeqWorkspaceOpen() {
 async function _guardPeqEditorNavigation() {
   if (!_peqWorkspaceOpen) return true;
   if (_peqWorkspaceDirty) {
-    const shouldSave = await _showConfirm({
-      title: 'Save Custom EQ?',
-      message: 'Save Custom PEQ changes before leaving? Choose Save to keep the live edits, or Discard to leave without them.',
+    const result = await _showConfirm({
+      kind: 'prompt',
+      title: 'Unsaved PEQ Changes',
+      message: 'You have unsaved Custom PEQ changes.',
       okText: 'Save',
-      cancelText: 'Discard',
-      danger: false,
+      cancelText: 'Cancel',
+      altText: 'Discard',
     });
-    if (shouldSave) {
+    if (result === false) return false; // Cancel — stay in editor
+    if (result === true) {
+      // Save — persist changes and proceed
       const st = _saveCustomPeqState();
       st.enabled = true;
       _saveCustomPeqState();
       Player?.applyCustomPeq?.(st);
       _snapshotPeqWorkspace();
     } else {
+      // Discard (null) — restore initial state and proceed
       try {
         _customPeqEditorState = _sanitizeCustomPeqState(JSON.parse(_peqWorkspaceInitialJson || '{}'));
       } catch (_) {
@@ -12238,12 +12287,11 @@ function closePeqEditor() {
     return;
   }
   _showConfirm({
-    title: 'Discard unsaved PEQ edits?',
-    message: 'You have unsaved changes in Custom PEQ. Choose "Discard & Close" to exit without saving, or "Keep Editing" to continue.',
+    kind: 'prompt',
+    title: 'Unsaved PEQ Changes',
+    message: 'You have unsaved Custom PEQ changes.',
     okText: 'Discard & Close',
     cancelText: 'Keep Editing',
-    danger: true,
-    icon: `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>`,
   }).then(discard => {
     if (!discard) return;
     try {
@@ -12270,10 +12318,10 @@ async function applyAndClosePeqEditor() {
 
 async function resetCustomPeq() {
   const ok = await _showConfirm({
+    kind: 'info',
     title: 'Reset Custom PEQ',
-    message: 'Reset all 10 bands and preamp to defaults?',
+    message: 'This will set all 10 bands and preamp back to flat.',
     okText: 'Reset',
-    danger: false,
   });
   if (!ok) return;
   _customPeqEditorState = _defaultCustomPeqState();
@@ -12762,8 +12810,8 @@ async function saveIem() {
 
 async function deleteIem(id) {
   const ok = await _showConfirm({
-    title:   'Delete IEM / Headphone',
-    message: 'All measurements and EQ profiles for this IEM will be removed.',
+    title:   'Delete IEM',
+    message: 'All measurements and EQ profiles will be permanently deleted.',
     okText:  'Delete',
   });
   if (!ok) return;
@@ -12818,7 +12866,7 @@ async function deletePeq(peqId) {
   if (!_currentIemId) return;
   const ok = await _showConfirm({
     title:   'Delete EQ Profile',
-    message: 'This EQ profile will be permanently removed.',
+    message: 'This EQ profile will be permanently deleted.',
     okText:  'Delete',
   });
   if (!ok) return;
@@ -13988,7 +14036,7 @@ async function saveDeviceSettings() {
 
 async function clearListeningHistory() {
   const ok = await _showConfirm({
-    title: 'Clear listening history?',
+    title: 'Clear Listening History',
     message: 'This removes Home recommendations and 12-month listening stats.',
     okText: 'Clear',
     danger: true,
@@ -14374,10 +14422,10 @@ async function confirmUpdate() {
   const disclaimer = disclaimers[channel];
   if (disclaimer) {
     const ok = await _showConfirm({
+      kind: 'warning',
       title: `Update to ${channel.toUpperCase()} build?`,
       message: disclaimer,
       okText: 'Update Anyway',
-      danger: false,
     });
     if (!ok) return;
   }
@@ -14740,11 +14788,11 @@ function srOpen() {
 
 async function srClose(force = false) {
   if (!force && _isSmartRulesModalDirty() && !await _showConfirm({
+    kind: 'prompt',
     title: 'Discard Smart Rules?',
-    message: 'Discard Smart Rules changes?',
+    message: "Your Smart Rules changes haven't been saved.",
     okText: 'Discard',
     cancelText: 'Keep Editing',
-    danger: true,
   })) return;
   _srDirty = false;
   _srInitialJson = '';
@@ -15423,7 +15471,7 @@ function toggleHistoryClearMenu(e) {
 async function clearHistoryPeriod(days) {
   document.getElementById('history-clear-menu').style.display = 'none';
   const label = days === 0 ? 'all listening history' : `the last ${days} days of history`;
-  const ok = await _showConfirm({ title: 'Clear History', message: `Delete ${label}?`, okText: 'Clear', danger: true });
+  const ok = await _showConfirm({ title: 'Clear History', message: `Clear ${label}?`, okText: 'Clear', danger: true });
   if (!ok) return;
   try {
     await api('/history/clear', { method: 'POST', body: { days } });
@@ -15892,8 +15940,8 @@ async function _dupDapDelete(key) {
   const relPaths = removeIds.map(id => decodeURIComponent(id));
   if (!relPaths.length) { showToast('Mark at least one track as Remove', 'error'); return; }
   if (!await _showConfirm({
-    title: 'Delete From DAP?',
-    message: `Delete ${relPaths.length} file${relPaths.length !== 1 ? 's' : ''} from the DAP? This cannot be undone.`,
+    title: 'Delete From DAP',
+    message: `${relPaths.length} file${relPaths.length !== 1 ? 's' : ''} will be permanently deleted from your player.`,
     okText: 'Delete',
     cancelText: 'Cancel',
     danger: true,
@@ -16661,6 +16709,7 @@ const App = {
   applyMlReferenceBrowser,
   _confirmYes,
   _confirmNo,
+  _confirmAlt,
   deletePlaylist,
   deleteCurrentPlaylist,
   openRenameModal,
@@ -18274,10 +18323,10 @@ let _analysisPoller = null;
 
 async function startLibraryAnalysis() {
   const ok = await _showConfirm({
+    kind: 'info',
     title: 'Analyse Library',
-    message: 'Audio analysis reads every file in your library. This runs in the background and may take a while depending on library size and machine speed.',
+    message: 'This analyses every track and runs in the background. It may take a few minutes for large libraries.',
     okText: 'Start Analysis',
-    danger: false,
   });
   if (!ok) return;
 
@@ -20368,7 +20417,7 @@ async function removeAlbumArt() {
   if (!_albumArtArtist || !_albumArtAlbum) return;
   const confirmed = await _showConfirm({
     title: 'Remove Album Art',
-    message: `Remove the artwork for "${_albumArtAlbum}"? The album will show a placeholder until art is re-extracted or uploaded.`,
+    message: `Remove the artwork for "${_albumArtAlbum}"? The album will show a placeholder until new artwork is added.`,
     okText: 'Remove', danger: true,
   });
   if (!confirmed) return;
@@ -20563,7 +20612,7 @@ async function removeArtistImage() {
   if (!_artistImageKey) { toast('No image to remove'); return; }
   const confirmed = await _showConfirm({
     title: 'Remove Artist Image',
-    message: `Remove the portrait for "${_artistImageName}"? The artist cards will revert to album art.`,
+    message: `Remove the portrait for "${_artistImageName}"? Artist cards will show album art instead.`,
     okText: 'Remove',
     danger: true,
   });
@@ -20910,11 +20959,11 @@ async function setRgModeFromSettings(mode) {
 
 async function _showRgFirstRunModal() {
   const ok = await _showConfirm({
-    title:      'Replay Gain enabled',
-    message:    'Tag your library now so playback volume can be normalised? This analyses each track and may take a few minutes.',
+    kind:       'info',
+    title:      'Tag Library for Replay Gain?',
+    message:    'Tagging normalises playback volume across all tracks. This analyses each file and may take a few minutes.',
     okText:     'Tag Library',
     cancelText: 'Later',
-    danger:     false,
   });
   if (ok) tagReplayGain();
 }
@@ -21135,7 +21184,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       closePlaylistDapMenu();
       _closePlExportMenu();
       _closeFrOverlayMenu();
-      _closeTopModalFromEscape();
+      if (document.getElementById('confirm-modal')?.style.display !== 'none') {
+        _confirmNo();
+      } else {
+        _closeTopModalFromEscape();
+      }
       if (window.innerWidth <= 860) toggleSidebar(true);
     }
     const tag = document.activeElement?.tagName?.toLowerCase();
