@@ -3053,6 +3053,17 @@ function _nativeSaveApi() {
   return window.pywebview?.api?.save_text_file;
 }
 
+function _exportFallbackFilename(fmt) {
+  if (fmt === 'csv') return 'TuneBridge Track List.csv';
+  if (fmt === 'm3u8') return 'TuneBridge Playlist.m3u8';
+  if (fmt === 'xml') return 'TuneBridge Playlist.xml';
+  return 'TuneBridge Playlist.m3u';
+}
+
+function _exportFileKind(fmt) {
+  return ['csv', 'm3u8', 'xml'].includes(fmt) ? fmt : 'm3u';
+}
+
 async function downloadPlaylist(fmt, playlistId = null) {
   const pid = playlistId || state.playlist?.id;
   if (!pid) return;
@@ -3072,10 +3083,10 @@ async function downloadPlaylist(fmt, playlistId = null) {
       }
       const filename = _filenameFromContentDisposition(
         fileRes.headers.get('Content-Disposition'),
-        fmt === 'csv' ? 'TuneBridge Track List.csv' : 'TuneBridge Playlist.m3u'
+        _exportFallbackFilename(fmt)
       );
       const content = await fileRes.text();
-      const saved = await window.pywebview.api.save_text_file(filename, content, fmt === 'csv' ? 'csv' : 'm3u');
+      const saved = await window.pywebview.api.save_text_file(filename, content, _exportFileKind(fmt));
       if (saved?.cancelled) return;
       if (!saved?.ok) throw new Error(saved?.error || 'Save cancelled');
       toast(fmt === 'csv' ? 'Track list exported.' : 'Playlist exported.');

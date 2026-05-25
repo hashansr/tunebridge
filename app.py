@@ -6531,6 +6531,56 @@ def generate_playlist_track_list_csv(tracks):
     return out.getvalue()
 
 
+def generate_playlist_xml(tracks, playlist_name):
+    """Generate an iTunes-compatible XML playlist plist."""
+    import datetime as _dt
+
+    music_base = str(get_music_base()).rstrip('/')
+    track_map = {}
+    playlist_items = []
+    now = int(time.time())
+    exported_at = _dt.datetime.now(_dt.timezone.utc)
+
+    for idx, t in enumerate(tracks, 1):
+        track_id = idx
+        rel = (t.get('path') or '').replace('\\', '/')
+        abs_path = f'{music_base}/{rel}' if music_base and rel else rel
+        track = {
+            'Track ID': track_id,
+            'Name': t.get('title') or '',
+            'Artist': t.get('artist') or '',
+            'Album': t.get('album') or '',
+            'Genre': t.get('genre') or '',
+            'Total Time': int(float(t.get('duration') or 0) * 1000),
+            'Location': 'file://' + urlquote(abs_path),
+        }
+        if t.get('year'):
+            try:
+                track['Year'] = int(t.get('year'))
+            except (TypeError, ValueError):
+                pass
+        track_map[str(track_id)] = track
+        playlist_items.append({'Track ID': track_id})
+
+    payload = {
+        'Major Version': 1,
+        'Minor Version': 1,
+        'Date': exported_at,
+        'Application Version': 'TuneBridge',
+        'Features': 5,
+        'Show Content Ratings': True,
+        'Tracks': track_map,
+        'Playlists': [{
+            'Name': playlist_name,
+            'Playlist ID': now,
+            'Playlist Persistent ID': f'{now:016X}',
+            'All Items': True,
+            'Playlist Items': playlist_items,
+        }],
+    }
+    return plistlib.dumps(payload, fmt=plistlib.FMT_XML).decode('utf-8')
+
+
 def _safe_export_filename(name, ext):
     safe = re.sub(r'[\\/:*?"<>|]+', '-', str(name or 'Playlist')).strip()
     safe = safe.strip('. ') or 'Playlist'
@@ -6552,10 +6602,19 @@ def _playlist_export_payload(tracks, playlist_name, fmt):
         music_base = str(get_music_base()).rstrip('/')
         content = generate_m3u(tracks, playlist_name, absolute_base=music_base)
         mimetype = 'audio/x-mpegurl'
+    elif fmt == 'm3u8':
+        filename = _safe_export_filename(playlist_name, 'm3u8')
+        music_base = str(get_music_base()).rstrip('/')
+        content = generate_m3u(tracks, playlist_name, absolute_base=music_base)
+        mimetype = 'application/vnd.apple.mpegurl'
     elif fmt == 'csv':
         filename = _safe_export_filename(f'{playlist_name} - Track List', 'csv')
         content = generate_playlist_track_list_csv(tracks)
         mimetype = 'text/csv'
+    elif fmt == 'xml':
+        filename = _safe_export_filename(playlist_name, 'xml')
+        content = generate_playlist_xml(tracks, playlist_name)
+        mimetype = 'application/xml'
     else:
         return None
     return {'filename': filename, 'content': content, 'mimetype': mimetype}

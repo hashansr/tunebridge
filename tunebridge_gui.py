@@ -98,9 +98,15 @@ class _TuneBridgeApi:
             if kind == 'csv':
                 wanted_ext = '.csv'
                 file_types = ('CSV files (*.csv)',)
+            elif kind == 'm3u8':
+                wanted_ext = '.m3u8'
+                file_types = ('M3U8 playlists (*.m3u8)',)
             elif kind == 'm3u':
                 wanted_ext = '.m3u'
                 file_types = ('M3U playlists (*.m3u)',)
+            elif kind == 'xml':
+                wanted_ext = '.xml'
+                file_types = ('XML files (*.xml)',)
             else:
                 wanted_ext = Path(safe_name).suffix
                 file_types = ()
