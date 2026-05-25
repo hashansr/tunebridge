@@ -3053,6 +3053,16 @@ async function downloadPlaylist(fmt, playlistId = null) {
     if (res?.cancelled) return;
     toast(fmt === 'csv' ? 'Track list exported.' : 'Playlist exported.');
   } catch (e) {
+    if (/No window available|Save dialog not available/i.test(e.message || '')) {
+      const a = document.createElement('a');
+      a.href = `/api${base}/${encodeURIComponent(fmt)}`;
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast(fmt === 'csv' ? 'Track list downloaded.' : 'Playlist downloaded.');
+      return;
+    }
     toast('Could not export playlist: ' + e.message);
   }
 }
