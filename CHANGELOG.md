@@ -3,8 +3,10 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Startup update checks now show a clickable download toast instead of opening Settings directly to the App tab.
+- Change: Settings App update action is now labelled "Update Now".
 - Fix: Settings App update notifications now use the standard TuneBridge toggle styling with tighter label spacing and default to enabled.
-- Change: Startup update notifications now carry through to Settings App by opening the App tab and showing the available version plus Update action.
+- Change: Startup update notifications now carry through to Settings App by showing the available version plus Update Now action.
 
 ## v0.415-rc.260526-2154 · 2026-05-26
 - Remove: Drag-to-reorder on pinned items removed — interaction was awkward on the horizontal card rail

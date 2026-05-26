@@ -7522,7 +7522,7 @@ async function showView(viewName) {
   else if (viewName === 'library-coverage') loadInsightsCoverage();
   else if (viewName === 'settings') {
     setHealthSectionExpanded(false);
-    showSettingsCategory(_lastUpdateCheckResult?.update_available ? 'app' : 'library');
+    showSettingsCategory('library');
     loadSettings();
   }
   else if (viewName === 'insights') loadInsightsView();
@@ -14586,6 +14586,16 @@ function _applyUpdateResult(res, opts = {}) {
   }
 }
 
+function _showUpdateAvailableToast(res) {
+  const latest = res?.latest ? ` v${res.latest}` : '';
+  _toastEnqueue({
+    msg: `New version${latest} available. Click here to download.`,
+    type: 'info',
+    duration: 9000,
+    action: confirmUpdate,
+  });
+}
+
 async function setUpdateChannel(channel) {
   try {
     await fetch('/api/version/channel', {
@@ -14649,6 +14659,7 @@ async function _silentUpdateCheck() {
     if (res.update_available) {
       _showUpdateBadge();
       _applyUpdateResult(res, { showCurrent: false, showErrors: false });
+      _showUpdateAvailableToast(res);
     }
   } catch (_) {}
 }
