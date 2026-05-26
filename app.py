@@ -1479,7 +1479,6 @@ def _resolve_pinned_items(rows):
         artist_map[akey]['track_count'] += 1
         if not artist_map[akey]['artwork_key'] and t.get('artwork_key'):
             artist_map[akey]['artwork_key'] = t['artwork_key']
-
         ak = t.get('artwork_key')
         if ak and ak not in album_map:
             album_map[ak] = {
@@ -1492,6 +1491,8 @@ def _resolve_pinned_items(rows):
         if ak:
             album_map[ak]['track_count'] += 1
 
+    # Load artist portrait keys (used by custom artist images)
+    artist_image_keys = _db.db_get_all_artist_image_keys()
     playlists = load_playlists()
 
     result = []
@@ -1504,10 +1505,12 @@ def _resolve_pinned_items(rows):
             info = artist_map.get(item_id.lower())
             if not info:
                 continue  # orphaned — artist no longer in library
+            img_key = get_artist_image_key(info['name'])
             enriched.update({
                 'title': info['name'],
                 'subtitle': f"{len(info['albums'])} album{'s' if len(info['albums']) != 1 else ''}",
                 'artwork_key': info['artwork_key'] or '',
+                'image_key': img_key if img_key in artist_image_keys else None,
                 'artist': info['name'],
                 'kind': 'artist',
             })

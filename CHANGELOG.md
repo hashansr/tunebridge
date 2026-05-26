@@ -9,6 +9,7 @@
 - Change: Prod DMG is now distributed as a GitHub Release asset, enabling download counting via the GitHub API
 - Add: Pin button in artist, album, and playlist hero sections — outline when not pinned, filled accent blue when pinned
 - Change: Pin icon updated to thumbtack design throughout (context menus and hero buttons)
+- Fix: Pinned artist cards on Home now show the artist portrait instead of a placeholder
 
 ## v0.408-rc.260526-1520 · 2026-05-26
 - Add: Pin artists, albums, and playlists to the Home screen for quick access via right-click context menu
