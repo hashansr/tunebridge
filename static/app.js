@@ -690,6 +690,9 @@ function _nameSortKey(name) {
 const _STAR_OUTLINE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z"/></svg>`;
 const _STAR_FILLED = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z"/></svg>`;
 const _STAR_HALF = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><defs><clipPath id="tb-star-half-clip"><rect x="0" y="0" width="12" height="24"/></clipPath></defs><path clip-path="url(#tb-star-half-clip)" fill="currentColor" d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z"/><path d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z" stroke="currentColor" stroke-width="1.4"/></svg>`;
+const _PIN_PATH = `M49.5,15.4L36,1.9c-1.4-1.4-3.6-1.4-5,0s-1.4,3.6,0,5l0.7,0.7L15.5,18.3L15,17.8c-1.4-1.4-3.6-1.4-5,0s-1.4,3.6,0,5l7.2,7.2L2.4,44.8c-1.4,1.4-1.4,3.7,0,5.1c1.4,1.4,3.7,1.4,5.1,0L22.3,35l6.3,6.3c1.4,1.4,3.6,1.4,5,0c1.4-1.4,1.4-3.6,0-5l-0.5-0.5l10.6-16.3l0.7,0.7c1.4,1.4,3.6,1.4,5,0h0C50.8,19,50.8,16.8,49.5,15.4z`;
+const _PIN_OUTLINE = `<svg width="14" height="14" viewBox="0 0 52 52" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round" aria-hidden="true"><path d="${_PIN_PATH}"/></svg>`;
+const _PIN_FILLED = `<svg width="14" height="14" viewBox="0 0 52 52" fill="currentColor" aria-hidden="true"><path d="${_PIN_PATH}"/></svg>`;
 const _FAV_PLAYLIST_COVER = 'images/favourite-playlist-cover.png';
 const _CUSTOM_PEQ_KEY = 'tb_custom_peq';
 const _CREATE_PEQ_ID = '__create__';
@@ -1106,6 +1109,17 @@ function _setHeroFavouriteButtonState(btn, type, id, isFav = _isFavourite(type, 
   btn.title = label;
   btn.setAttribute('aria-label', label);
   btn.innerHTML = isFav ? _STAR_FILLED : _STAR_OUTLINE;
+}
+
+function _setHeroPinButtonState(btn, category, itemId, isPinned = _isPinned(category, itemId)) {
+  if (!btn) return;
+  btn.dataset.category = category;
+  btn.dataset.itemId = String(itemId || '');
+  btn.classList.toggle('is-pinned', !!isPinned);
+  const label = isPinned ? 'Unpin from Home' : 'Pin to Home';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  btn.innerHTML = isPinned ? _PIN_FILLED : _PIN_OUTLINE;
 }
 
 function _setFavouritesState(payload = {}) {
@@ -2446,6 +2460,15 @@ async function loadAlbums(artistFilter = null) {
         _setHeroFavouriteButtonState(artistFavBtn, 'artists', artistId);
       };
     }
+    const artistPinBtn = document.getElementById('artist-hero-pin');
+    if (artistPinBtn) {
+      _setHeroPinButtonState(artistPinBtn, 'artist', artistFilter);
+      artistPinBtn.onclick = async (e) => {
+        e.stopPropagation();
+        await togglePinItem('artist', artistFilter);
+        _setHeroPinButtonState(artistPinBtn, 'artist', artistFilter);
+      };
+    }
     const artistPlayBtn = document.getElementById('artist-hero-play');
     if (artistPlayBtn) {
       artistPlayBtn.onclick = async () => {
@@ -2546,6 +2569,19 @@ async function loadTracks(artist = null, album = null, displayArtist = '') {
         _setHeroFavouriteButtonState(albumFavBtn, 'albums', albumId);
       };
     }
+    const albumPinBtn = document.getElementById('album-hero-pin');
+    if (albumPinBtn) {
+      const albumId = String(tracks[0].artwork_key || '');
+      albumPinBtn.style.display = albumId ? '' : 'none';
+      if (albumId) {
+        _setHeroPinButtonState(albumPinBtn, 'album', albumId);
+        albumPinBtn.onclick = async (e) => {
+          e.stopPropagation();
+          await togglePinItem('album', albumId);
+          _setHeroPinButtonState(albumPinBtn, 'album', albumId);
+        };
+      }
+    }
     const albumMoreBtn = document.getElementById('album-hero-more');
     if (albumMoreBtn) albumMoreBtn.onclick = (e) => App.showAlbumDetailCtxMenu(e, artist || heroArtist, album);
     albumHero.oncontextmenu = (e) => App.showAlbumDetailCtxMenu(e, artist || heroArtist, album);
@@ -2564,6 +2600,8 @@ async function loadTracks(artist = null, album = null, displayArtist = '') {
       `${tracks.length} songs${totalSecs ? ' · ' + fmtDuration(totalSecs) : ''}`;
     const albumFavBtn = document.getElementById('album-hero-fav');
     if (albumFavBtn) albumFavBtn.style.display = 'none';
+    const albumPinBtnAllSongs = document.getElementById('album-hero-pin');
+    if (albumPinBtnAllSongs) albumPinBtnAllSongs.style.display = 'none';
     const albumMoreBtn = document.getElementById('album-hero-more');
     if (albumMoreBtn) albumMoreBtn.onclick = (e) => App.showArtistDetailCtxMenu(e, artist);
     albumHero.oncontextmenu = (e) => App.showArtistDetailCtxMenu(e, artist);
@@ -3083,6 +3121,15 @@ async function openPlaylist(pid) {
       Player.playCollectionShuffled(pl.tracks, `Playlist · ${pl.name}`);
     };
     shuffleBtn.style.display = pl.tracks.length ? '' : 'none';
+  }
+  const plPinBtn = document.getElementById('pl-hero-pin');
+  if (plPinBtn) {
+    _setHeroPinButtonState(plPinBtn, 'playlist', pid);
+    plPinBtn.onclick = async (e) => {
+      e.stopPropagation();
+      await togglePinItem('playlist', pid);
+      _setHeroPinButtonState(plPinBtn, 'playlist', pid);
+    };
   }
 }
 

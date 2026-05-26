@@ -2062,6 +2062,37 @@ h4.settings-subsection-title {
   color: #e05c5c;
   opacity: 1;
 }
+.hero-pin-star {
+  width: 24px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-muted);
+  opacity: 0.85;
+  padding: 0;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+.hero-pin-star svg {
+  width: 18px;
+  height: 18px;
+}
+.hero-pin-star:hover {
+  background: transparent;
+  color: var(--text);
+  opacity: 1;
+}
+.hero-pin-star.is-pinned {
+  color: var(--accent);
+  opacity: 1;
+}
 .hero-sub { font-size: var(--text-md); color: var(--text-sub); margin-bottom: 4px; }
 .hero-sub a, .hero-sub span.link { color: var(--accent); cursor: pointer; font-weight: 500; }
 .hero-sub a:hover, .hero-sub span.link:hover { color: var(--text); text-decoration: underline; }
@@ -14074,6 +14105,7 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 #view-tracks #album-hero.album-detail-hero.is-album-context .hero-fav-star,
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-pin-star,
 #view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-more {
   background: transparent;
   border: none;
@@ -14084,6 +14116,7 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 #view-tracks #album-hero.album-detail-hero.is-album-context .hero-fav-star:hover,
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-pin-star:hover,
 #view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-more:hover {
   background: transparent;
   color: rgba(246, 249, 255, 0.98);
@@ -14098,6 +14131,18 @@ tr.player-active .track-title { color: var(--accent); }
 
 #view-tracks #album-hero.album-detail-hero.is-album-context .hero-fav-star.is-fav:hover {
   color: #ffd96a;
+  background: transparent;
+}
+
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-pin-star.is-pinned {
+  color: var(--accent);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-pin-star.is-pinned:hover {
+  color: var(--accent);
   background: transparent;
 }
 
@@ -14261,6 +14306,7 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 #view-albums #artist-hero.artist-detail-hero .hero-fav-star,
+#view-albums #artist-hero.artist-detail-hero .hero-pin-star,
 #view-albums #artist-hero.artist-detail-hero .btn-hero-more,
 #view-playlist #playlist-hero.playlist-detail-hero .btn-export-local {
   width: 24px;
@@ -14275,6 +14321,7 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 #view-albums #artist-hero.artist-detail-hero .hero-fav-star:hover,
+#view-albums #artist-hero.artist-detail-hero .hero-pin-star:hover,
 #view-albums #artist-hero.artist-detail-hero .btn-hero-more:hover,
 #view-playlist #playlist-hero.playlist-detail-hero .btn-export-local:hover {
   background: transparent;
@@ -14291,6 +14338,36 @@ tr.player-active .track-title { color: var(--accent); }
 #view-albums #artist-hero.artist-detail-hero .hero-fav-star.is-fav:hover {
   color: #ffd96a;
   background: transparent;
+}
+
+#view-albums #artist-hero.artist-detail-hero .hero-pin-star.is-pinned,
+#view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star.is-pinned {
+  color: var(--accent);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+#view-albums #artist-hero.artist-detail-hero .hero-pin-star.is-pinned:hover,
+#view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star.is-pinned:hover {
+  color: var(--accent);
+  background: transparent;
+}
+
+#view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star {
+  width: 24px;
+  min-width: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  color: rgba(246, 249, 255, 0.82);
+}
+
+#view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star:hover {
+  background: transparent;
+  color: rgba(246, 249, 255, 0.98);
 }
 
 #view-albums #artist-hero.artist-detail-hero .btn-hero-play svg,
