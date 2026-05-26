@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.414-rc.260526-2148 · 2026-05-26
 - Fix: Right-click context menu on pinned cards no longer disappears when moving the mouse to click an option
 
 ## v0.413-rc.260526-2145 · 2026-05-26
