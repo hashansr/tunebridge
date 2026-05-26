@@ -7,7 +7,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
-  <link rel="stylesheet" href="/style.css?v=77" />
+  <link rel="stylesheet" href="/style.css?v=79" />
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -1434,12 +1434,12 @@
             </div>
 
             <!-- Notify me about updates toggle -->
-            <div class="settings-app-row settings-playback-row settings-app-row-compact">
+            <div class="settings-app-row settings-app-row-clean settings-app-row-compact settings-update-notify-row">
               <div class="settings-app-main">
                 <div class="settings-app-row-label">Notify me about updates</div>
                 <div class="settings-app-row-hint">Check for updates silently at startup and show a badge when one is available.</div>
               </div>
-              <div class="settings-playback-actions">
+              <div class="settings-app-actions settings-update-notify-actions">
                 <label class="settings-toggle">
                   <input type="checkbox" id="auto-update-check-toggle" checked
                          onchange="App.toggleAutoUpdateCheck(this)">
@@ -3881,6 +3881,6 @@ Questions: mail@hashanr.com</pre>
   </div>
 
   <script src="/player.js?v=42"></script>
-  <script src="/app.js?v=70"></script>
+  <script src="/app.js?v=71"></script>
 </body>
 </html>
