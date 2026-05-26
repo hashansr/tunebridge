@@ -21497,6 +21497,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.addEventListener('scroll', (e) => {
     // Ignore scrolls inside the submenu — those are intentional
     if (e.target && (e.target.id === 'ctx-submenu' || e.target.closest?.('#ctx-submenu'))) return;
+    // Home rail scrolls don't move the fixed-position context menu, so don't close it.
+    // WebKit can fire spurious scroll events on overflow-x rails at edge positions.
+    if (e.target?.classList?.contains('home-rail')) return;
     hideCtxMenu();
     hidePlaylistCtxMenu();
     _closePlExportMenu();
