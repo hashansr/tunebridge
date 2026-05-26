@@ -1210,6 +1210,9 @@ function _renderHomePinnedSection() {
         <div class="home-card-play-btn" onclick="event.stopPropagation();App.homePlayItem(event,${onPlayArgs})" role="button" tabindex="0" title="Play">
           ${_HOME_PLAY_SVG}
         </div>
+        <div class="home-pin-drag-handle" title="Drag to reorder" oncontextmenu="event.stopPropagation()">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="3" cy="2.5" r="1.2"/><circle cx="9" cy="2.5" r="1.2"/><circle cx="3" cy="6" r="1.2"/><circle cx="9" cy="6" r="1.2"/><circle cx="3" cy="9.5" r="1.2"/><circle cx="9" cy="9.5" r="1.2"/></svg>
+        </div>
       </div>
       <div class="home-card-title" title="${esc(item.title || '')}">${esc(item.title || '')}</div>
       <div class="home-card-sub home-card-type-badge">${esc(typeLabel)}</div>
@@ -1219,9 +1222,11 @@ function _renderHomePinnedSection() {
   if (items.length > 1) {
     Sortable.create(document.getElementById('home-pinned'), {
       animation: 150,
+      handle: '.home-pin-drag-handle',
       ghostClass: 'home-pin-drag-ghost',
       chosenClass: 'home-pin-drag-chosen',
       direction: 'horizontal',
+      scroll: false,
       onEnd: _onPinnedReorder,
     });
   }
