@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Add: Pin artists, albums, and playlists to the Home screen for quick access via right-click context menu
 
 ## v0.407-rc.260526-1004 · 2026-05-26
 

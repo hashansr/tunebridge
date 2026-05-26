@@ -55,6 +55,12 @@ const state = {
   favPanel: 'artists',
   favSearch: '',
   favCounts: { artists: 0, albums: 0, songs: 0 },
+  pinned: {
+    artists: new Set(),
+    albums: new Set(),
+    playlists: new Set(),
+  },
+  pinnedItems: [],
   artistSearch: '',
   artistAlpha: '',
   albumSearch: '',
@@ -1123,6 +1129,107 @@ async function loadFavourites() {
   }
 }
 
+/* ── Pinned items ────────────────────────────────────────────────────── */
+
+function _isPinned(category, itemId) {
+  const key = category === 'artist' ? 'artists' : category === 'album' ? 'albums' : 'playlists';
+  return state.pinned[key]?.has(String(itemId || ''));
+}
+
+async function loadPinned() {
+  try {
+    const items = await api('/pinned');
+    state.pinnedItems = Array.isArray(items) ? items : [];
+    state.pinned.artists = new Set(state.pinnedItems.filter(i => i.category === 'artist').map(i => String(i.item_id)));
+    state.pinned.albums = new Set(state.pinnedItems.filter(i => i.category === 'album').map(i => String(i.item_id)));
+    state.pinned.playlists = new Set(state.pinnedItems.filter(i => i.category === 'playlist').map(i => String(i.item_id)));
+  } catch (_) {
+    state.pinnedItems = [];
+  }
+}
+
+async function togglePinItem(category, itemId) {
+  if (!category || !itemId) return;
+  const wasPinned = _isPinned(category, itemId);
+  const method = wasPinned ? 'DELETE' : 'POST';
+  try {
+    await api(`/pinned/${encodeURIComponent(category)}/${encodeURIComponent(itemId)}`, { method });
+    await loadPinned();
+    if (state.view === 'home') _renderHomePinnedSection();
+    toast(wasPinned ? 'Unpinned from Home' : 'Pinned to Home');
+  } catch (_) {
+    toast('Could not update pin. Try again.');
+  }
+}
+
+function _renderHomePinnedSection() {
+  const section = document.getElementById('home-pinned-section');
+  const rail = document.getElementById('home-pinned');
+  if (!rail) return;
+  const items = state.pinnedItems;
+  if (!items.length) {
+    _homeSectionVisible('home-pinned-section', false);
+    return;
+  }
+  _homeSectionVisible('home-pinned-section', true);
+  rail.classList.remove('is-empty');
+  rail.innerHTML = items.map(item => {
+    const typeLabel = item.category === 'artist' ? 'Artist' : item.category === 'album' ? 'Album' : 'Playlist';
+    const isArtist = item.category === 'artist';
+    const artClass = isArtist ? 'home-card-art home-artist-art-card' : 'home-card-art';
+    const artStyle = isArtist ? ` style="--artist-card-accent:${_artistCardAccent(item.artist || item.title || '')}"` : '';
+    const artHtml = _homeArtEl(item);
+    const onClickArgs = [
+      `'${esc(item.kind || item.category)}'`,
+      `''`,
+      `'${esc(encodeURIComponent(item.artist || ''))}'`,
+      `'${esc(encodeURIComponent(item.album || ''))}'`,
+      `'${esc(encodeURIComponent(item.playlist_id || ''))}'`,
+      `'${esc(encodeURIComponent(item.artist || ''))}'`,
+    ].join(',');
+    const onPlayArgs = onClickArgs;
+    return `<div class="home-card" onclick="App.homeOpenItem(${onClickArgs})" role="button" tabindex="0"
+      oncontextmenu="App._showPinnedCtxMenu(event,'${esc(item.category)}','${esc(item.item_id)}','${esc(item.artist||'')}','${esc(item.album||'')}','${esc(item.playlist_id||'')}')">
+      <div class="${artClass}"${artStyle}>
+        ${artHtml}
+        <div class="home-card-play-btn" onclick="event.stopPropagation();App.homePlayItem(event,${onPlayArgs})" role="button" tabindex="0" title="Play">
+          ${_HOME_PLAY_SVG}
+        </div>
+      </div>
+      <div class="home-card-title" title="${esc(item.title || '')}">${esc(item.title || '')}</div>
+      <div class="home-card-sub home-card-type-badge">${esc(typeLabel)}</div>
+    </div>`;
+  }).join('');
+  _homeBindRailUX('home-pinned');
+}
+
+async function _showPinnedCtxMenu(e, category, itemId, artist, album, playlistId) {
+  e?.preventDefault?.();
+  e?.stopPropagation?.();
+  if (category === 'artist' && artist) {
+    await showArtistCtxMenu(e, artist);
+  } else if (category === 'album' && artist && album) {
+    await showAlbumCtxMenu(e, artist, album);
+  } else if (category === 'playlist' && playlistId) {
+    const pl = state.playlists.find(p => p.id === playlistId);
+    showPlaylistCtxMenu(e, playlistId, pl?.name || '');
+  }
+}
+
+function ctxTogglePin() {
+  const target = _ctxPinTarget;
+  if (!target?.category || !target?.item_id) return;
+  togglePinItem(target.category, target.item_id);
+  hideCtxMenu();
+}
+
+function ctxTogglePinPlaylist() {
+  const target = _playlistCtxTarget;
+  if (!target?.id) return;
+  togglePinItem('playlist', target.id);
+  hidePlaylistCtxMenu();
+}
+
 function _replaceFavouriteCategory(type, rows) {
   const payload = { ...state.favouritesMeta };
   payload[type] = Array.isArray(rows) ? rows : [];
@@ -1306,6 +1413,7 @@ async function refreshCurrentLibraryView() {
 /* ── Context menu state ─────────────────────────────────────────────── */
 let _ctxTracks = [];
 let _ctxFavTarget = null;
+let _ctxPinTarget = null; // {category, item_id} | null
 let _ctxFinderTarget = null;
 let _ctxDetailMode = null; // 'album' | 'artist' | null
 let _playlistCtxTarget = null;
@@ -3833,10 +3941,11 @@ function showAddDropdown(event, trackId) {
 }
 
 /* ── Right-click context menu ───────────────────────────────────────── */
-function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null) {
+function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null, pinTarget = null) {
   hidePlaylistCtxMenu();
   _ctxTracks = tracks;
   _ctxFavTarget = favTarget;
+  _ctxPinTarget = pinTarget;
   _ctxFinderTarget = finderTarget?.path
     ? finderTarget
     : (tracks.length === 1 ? _trackFinderTarget(tracks[0]) : null);
@@ -3874,6 +3983,18 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null
       favLabel.textContent = _isFavourite(favTarget.type, favTarget.id)
         ? 'Remove from Favourites'
         : 'Add to Favourites';
+    }
+  }
+  const pinItem = document.getElementById('ctx-pin-item');
+  const pinLabel = document.getElementById('ctx-pin-label');
+  if (pinItem && pinLabel) {
+    if (!pinTarget?.category || !pinTarget?.item_id) {
+      pinItem.style.display = 'none';
+    } else {
+      pinItem.style.display = '';
+      pinLabel.textContent = _isPinned(pinTarget.category, pinTarget.item_id)
+        ? 'Unpin from Home'
+        : 'Pin to Home';
     }
   }
   if (finderItem) {
@@ -3926,6 +4047,14 @@ function showPlaylistCtxMenu(e, playlistId, playlistName = '') {
   if (renameItem) renameItem.style.display = canEdit ? '' : 'none';
   if (deleteItem) deleteItem.style.display = canEdit ? '' : 'none';
   if (manageSep) manageSep.style.display = canEdit ? '' : 'none';
+  const pinItem = document.getElementById('playlist-ctx-pin-item');
+  const pinLabel = document.getElementById('playlist-ctx-pin-label');
+  if (pinItem && pinLabel && canEdit) {
+    pinItem.style.display = '';
+    pinLabel.textContent = _isPinned('playlist', exportId) ? 'Unpin from Home' : 'Pin to Home';
+  } else if (pinItem) {
+    pinItem.style.display = 'none';
+  }
   menu.style.display = 'block';
   menu.style.left = '-9999px';
   menu.style.top = '-9999px';
@@ -4068,6 +4197,7 @@ function hideCtxMenu() {
   clearTimeout(_ctxSubmenuTimer);
   _ctxTracks = [];
   _ctxFavTarget = null;
+  _ctxPinTarget = null;
   _ctxFinderTarget = null;
   _ctxDetailMode = null;
   const editAlbumItem = document.getElementById('ctx-edit-album-tags-item');
@@ -4080,6 +4210,8 @@ function hideCtxMenu() {
   if (editTrackItem) editTrackItem.style.display = 'none';
   if (finderItem) finderItem.style.display = 'none';
   if (removeItem) removeItem.style.display = 'none';
+  const pinItem = document.getElementById('ctx-pin-item');
+  if (pinItem) pinItem.style.display = 'none';
 }
 
 function _normalizeFinderRelPath(path) {
@@ -4173,7 +4305,9 @@ async function showArtistCtxMenu(e, artistName) {
     const tracks = await api(`/library/tracks?artist=${encodeURIComponent(artistName)}`);
     _showCtxMenu(e.clientX, e.clientY, tracks,
       `${artistName} · ${tracks.length} song${tracks.length !== 1 ? 's' : ''}`,
-      { type: 'artists', id: _normArtistId(artistName) });
+      { type: 'artists', id: _normArtistId(artistName) },
+      null,
+      { category: 'artist', item_id: artistName });
   } catch (_) {}
 }
 
@@ -4187,7 +4321,8 @@ async function showAlbumCtxMenu(e, artist, album) {
     _showCtxMenu(e.clientX, e.clientY, tracks,
       `${album} · ${tracks.length} song${tracks.length !== 1 ? 's' : ''}`,
       artworkKey ? { type: 'albums', id: artworkKey } : null,
-      _albumFinderTarget(tracks));
+      _albumFinderTarget(tracks),
+      artworkKey ? { category: 'album', item_id: artworkKey } : null);
   } catch (_) {}
 }
 
@@ -6715,7 +6850,7 @@ async function loadHome() {
 
   let data;
   try {
-    data = await api('/home');
+    [data] = await Promise.all([api('/home'), loadPinned()]);
   } catch (err) {
     _homeLoading = false;
     document.getElementById('home-empty-title').textContent = 'Could not load Home';
@@ -6775,6 +6910,9 @@ function _homeApplyData(data, force) {
     return;
   }
   _homeSectionVisible('home-empty-state', false);
+
+  // Pinned — render on every load (state already up-to-date from loadPinned in loadHome)
+  _renderHomePinnedSection();
 
   const changed = (key) => !prev || JSON.stringify(prev[key]) !== JSON.stringify(data[key]);
 
@@ -16742,6 +16880,9 @@ const App = {
   ctxAddToQueue,
   ctxCreateSmartPlaylist,
   ctxToggleFavourite,
+  ctxTogglePin,
+  ctxTogglePinPlaylist,
+  _showPinnedCtxMenu,
   ctxShowInFinder,
   ctxFindLyrics,
   ctxEditTrackTags,
@@ -21241,7 +21382,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const cpInput = document.getElementById('create-playlist-input');
     if (cpInput) cpInput.addEventListener('keydown', e => { if (e.key === 'Enter') App.submitCreatePlaylist(); });
     const settings = await loadSettings();
-    await loadFavourites();
+    await Promise.all([loadFavourites(), loadPinned()]);
     await loadPlaylists();
     _enhanceTableSystem();
     refreshSidebarSyncIndicator();

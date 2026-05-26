@@ -104,6 +104,8 @@ _MIGRATIONS: list[tuple] = [
         'ALTER TABLE tracks ADD COLUMN lyrics_status TEXT',
         'ALTER TABLE tracks ADD COLUMN lyrics_fetched_at INTEGER',
     ]),
+    # v11: pinned_items is a new table handled by create_schema().
+    (11, 'Add pinned_items table', None),
 ]
 
 _SCHEMA_SQL = """
@@ -182,6 +184,14 @@ CREATE TABLE IF NOT EXISTS favourite_dap_exports (
     dap_id      TEXT NOT NULL,
     exported_at INTEGER NOT NULL,
     PRIMARY KEY (dap_id)
+);
+
+CREATE TABLE IF NOT EXISTS pinned_items (
+    category   TEXT NOT NULL,
+    item_id    TEXT NOT NULL,
+    pinned_at  INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (category, item_id)
 );
 
 -- DAPs
@@ -1056,6 +1066,55 @@ def db_is_favourite(category, item_id):
         (category, item_id)
     ).fetchone()
     return row is not None
+
+
+# ---------------------------------------------------------------------------
+# Pinned items
+# ---------------------------------------------------------------------------
+
+def db_load_pinned():
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT category, item_id, pinned_at, sort_order FROM pinned_items ORDER BY sort_order ASC, pinned_at DESC"
+    ).fetchall()
+    return [{'category': r['category'], 'item_id': r['item_id'], 'pinned_at': r['pinned_at'], 'sort_order': r['sort_order']} for r in rows]
+
+
+def db_add_pinned(category, item_id):
+    conn = get_conn()
+    max_row = conn.execute("SELECT MAX(sort_order) FROM pinned_items").fetchone()
+    next_order = (max_row[0] or 0) + 1
+    conn.execute(
+        "INSERT OR REPLACE INTO pinned_items (category, item_id, pinned_at, sort_order) VALUES (?, ?, ?, ?)",
+        (category, item_id, int(time.time()), next_order)
+    )
+    conn.commit()
+
+
+def db_remove_pinned(category, item_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM pinned_items WHERE category = ? AND item_id = ?", (category, item_id))
+    conn.commit()
+
+
+def db_is_pinned(category, item_id):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT 1 FROM pinned_items WHERE category = ? AND item_id = ?",
+        (category, item_id)
+    ).fetchone()
+    return row is not None
+
+
+def db_reorder_pinned(ordered_pairs):
+    """ordered_pairs: list of (category, item_id) in desired order."""
+    conn = get_conn()
+    for i, (category, item_id) in enumerate(ordered_pairs):
+        conn.execute(
+            "UPDATE pinned_items SET sort_order = ? WHERE category = ? AND item_id = ?",
+            (i, category, item_id)
+        )
+    conn.commit()
 
 
 # ---------------------------------------------------------------------------

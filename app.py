@@ -1457,6 +1457,103 @@ def _favourites_latest_song_ts(favourites):
     return max(int(r.get('added_at') or 0) for r in rows)
 
 
+def load_pinned():
+    return _db.db_load_pinned()
+
+
+def _resolve_pinned_items(rows):
+    """Resolve raw pinned DB rows to enriched dicts for the frontend."""
+    with library_lock:
+        tracks = library[:]
+
+    # Build fast lookups
+    # artist lookup: name.lower() → {name, artwork_key, album_count, track_count}
+    artist_map = {}
+    album_map = {}  # artwork_key → {name, artist, year, track_count, artwork_key}
+    for t in tracks:
+        art = t.get('album_artist') or t.get('artist') or 'Unknown Artist'
+        akey = art.lower()
+        if akey not in artist_map:
+            artist_map[akey] = {'name': art, 'albums': set(), 'track_count': 0, 'artwork_key': None}
+        artist_map[akey]['albums'].add(t.get('album'))
+        artist_map[akey]['track_count'] += 1
+        if not artist_map[akey]['artwork_key'] and t.get('artwork_key'):
+            artist_map[akey]['artwork_key'] = t['artwork_key']
+
+        ak = t.get('artwork_key')
+        if ak and ak not in album_map:
+            album_map[ak] = {
+                'name': t.get('album') or 'Unknown Album',
+                'artist': art,
+                'year': t.get('year'),
+                'track_count': 0,
+                'artwork_key': ak,
+            }
+        if ak:
+            album_map[ak]['track_count'] += 1
+
+    playlists = load_playlists()
+
+    result = []
+    for row in rows:
+        category = row['category']
+        item_id = row['item_id']
+        enriched = {'category': category, 'item_id': item_id, 'pinned_at': row['pinned_at']}
+
+        if category == 'artist':
+            info = artist_map.get(item_id.lower())
+            if not info:
+                continue  # orphaned — artist no longer in library
+            enriched.update({
+                'title': info['name'],
+                'subtitle': f"{len(info['albums'])} album{'s' if len(info['albums']) != 1 else ''}",
+                'artwork_key': info['artwork_key'] or '',
+                'artist': info['name'],
+                'kind': 'artist',
+            })
+
+        elif category == 'album':
+            info = album_map.get(item_id)
+            if not info:
+                continue  # orphaned — album no longer in library
+            enriched.update({
+                'title': info['name'],
+                'subtitle': info['artist'],
+                'artwork_key': info['artwork_key'],
+                'artist': info['artist'],
+                'album': info['name'],
+                'kind': 'album',
+            })
+
+        elif category == 'playlist':
+            pl = playlists.get(item_id)
+            if not pl:
+                continue  # orphaned — playlist deleted
+            lib_map = {t['id']: t for t in tracks}
+            seen = []
+            for entry in pl.get('tracks', []):
+                tid = entry if isinstance(entry, str) else entry.get('id')
+                track = lib_map.get(tid)
+                if track and track.get('artwork_key') and track['artwork_key'] not in seen:
+                    seen.append(track['artwork_key'])
+                    if len(seen) >= 1:
+                        break
+            enriched.update({
+                'title': pl['name'],
+                'subtitle': f"{len(pl.get('tracks', []))} song{'s' if len(pl.get('tracks', [])) != 1 else ''}",
+                'artwork_key': seen[0] if seen else '',
+                'playlist_id': item_id,
+                'has_artwork': has_playlist_artwork(item_id),
+                'kind': 'playlist',
+            })
+
+        else:
+            continue
+
+        result.append(enriched)
+    return result
+
+
 def _resolve_favourite_tracks(rows):
     with library_lock:
         lib_map = {t.get('id'): t for t in library if t.get('id')}
@@ -3720,6 +3817,43 @@ def get_artwork(key):
     if artwork_path.exists():
         return send_file(str(artwork_path), mimetype='image/jpeg')
     return '', 404
+
+
+# ── Pinned Items ──────────────────────────────────────────────────────────────
+
+@app.route('/api/pinned', methods=['GET'])
+def get_pinned():
+    rows = load_pinned()
+    return jsonify(_resolve_pinned_items(rows))
+
+
+@app.route('/api/pinned/<category>/<path:item_id>', methods=['POST'])
+def add_pinned(category, item_id):
+    if category not in ('artist', 'album', 'playlist'):
+        return jsonify({'error': 'Unknown category'}), 400
+    _db.db_add_pinned(category, item_id)
+    return jsonify({'ok': True}), 201
+
+
+@app.route('/api/pinned/<category>/<path:item_id>', methods=['DELETE'])
+def remove_pinned(category, item_id):
+    if category not in ('artist', 'album', 'playlist'):
+        return jsonify({'error': 'Unknown category'}), 400
+    _db.db_remove_pinned(category, item_id)
+    return jsonify({'ok': True}), 200
+
+
+@app.route('/api/pinned/reorder', methods=['PUT'])
+def reorder_pinned():
+    items = (request.json or {}).get('items', [])
+    pairs = []
+    for it in items:
+        cat = it.get('category', '')
+        iid = it.get('item_id', '')
+        if cat and iid:
+            pairs.append((cat, iid))
+    _db.db_reorder_pinned(pairs)
+    return jsonify({'ok': True})
 
 
 # ── Album Artwork Management ──────────────────────────────────────────────────

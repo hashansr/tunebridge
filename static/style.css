@@ -15488,6 +15488,14 @@ body.is-col-resizing {
   text-overflow: ellipsis;
 }
 
+.home-card-type-badge {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
 /* ── Because You Listened — pick cards (mirrors home-card + adds reason line) ── */
 .home-pick-card {
   --home-card-size: var(--tb-grid-card-size);
