@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Add: Drag-to-reorder pinned items on Home — grip handle appears on card hover; right-click context menu unaffected
 - Change: Startup update checks now show a clickable download toast instead of opening Settings directly to the App tab.
 - Change: Settings App update action is now labelled "Update Now".
 - Fix: Settings App update notifications now use the standard TuneBridge toggle styling with tighter label spacing and default to enabled.

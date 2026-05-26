@@ -1203,6 +1203,7 @@ function _renderHomePinnedSection() {
     ].join(',');
     const onPlayArgs = onClickArgs;
     return `<div class="home-card" onclick="App.homeOpenItem(${onClickArgs})" role="button" tabindex="0"
+      data-category="${esc(item.category)}" data-item-id="${esc(item.item_id)}"
       oncontextmenu="App._showPinnedCtxMenu(event,'${esc(item.category)}','${esc(item.item_id)}','${esc(item.artist||'')}','${esc(item.album||'')}','${esc(item.playlist_id||'')}')">
       <div class="${artClass}"${artStyle}>
         ${artHtml}
@@ -1212,9 +1213,36 @@ function _renderHomePinnedSection() {
       </div>
       <div class="home-card-title" title="${esc(item.title || '')}">${esc(item.title || '')}</div>
       <div class="home-card-sub home-card-type-badge">${esc(typeLabel)}</div>
+      ${items.length > 1 ? `<div class="home-pin-drag-handle" onclick="event.stopPropagation()" title="Drag to reorder"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="6" r="1.2" fill="currentColor"/><circle cx="15" cy="6" r="1.2" fill="currentColor"/><circle cx="9" cy="12" r="1.2" fill="currentColor"/><circle cx="15" cy="12" r="1.2" fill="currentColor"/><circle cx="9" cy="18" r="1.2" fill="currentColor"/><circle cx="15" cy="18" r="1.2" fill="currentColor"/></svg></div>` : ''}
     </div>`;
   }).join('');
   _homeBindRailUX('home-pinned');
+  if (items.length > 1) {
+    Sortable.create(document.getElementById('home-pinned'), {
+      animation: 150,
+      handle: '.home-pin-drag-handle',
+      ghostClass: 'home-pin-drag-ghost',
+      chosenClass: 'home-pin-drag-chosen',
+      direction: 'horizontal',
+      onEnd: _onPinnedReorder,
+    });
+  }
+}
+
+async function _onPinnedReorder() {
+  const cards = document.querySelectorAll('#home-pinned .home-card[data-category]');
+  const items = Array.from(cards).map(el => ({
+    category: el.dataset.category,
+    item_id: el.dataset.itemId,
+  }));
+  await fetch('/api/pinned/reorder', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  });
+  state.pinnedItems = items
+    .map(({ category, item_id }) => state.pinnedItems.find(p => p.category === category && p.item_id === item_id))
+    .filter(Boolean);
 }
 
 async function _showPinnedCtxMenu(e, category, itemId, artist, album, playlistId) {
