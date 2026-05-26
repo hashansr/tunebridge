@@ -322,6 +322,7 @@ _DEFAULT_FAVOURITES = {
     'songs': [],
     'albums': [],
     'artists': [],
+    'playlists': [],
     'dap_exports': {},
 }
 
@@ -1424,6 +1425,7 @@ def _normalize_favourites_payload(payload):
     base['songs'] = _normalize_favourite_rows(src.get('songs'))
     base['albums'] = _normalize_favourite_rows(src.get('albums'))
     base['artists'] = _normalize_favourite_rows(src.get('artists'))
+    base['playlists'] = _normalize_favourite_rows(src.get('playlists'))
 
     exports = {}
     raw_exports = src.get('dap_exports') if isinstance(src.get('dap_exports'), dict) else {}
@@ -3674,7 +3676,7 @@ def update_artist_tags(artist):
 # ── Favourites ───────────────────────────────────────────────────────────────
 
 def _fav_category_rows(favourites, category):
-    if category not in ('songs', 'albums', 'artists'):
+    if category not in ('songs', 'albums', 'artists', 'playlists'):
         return None
     return favourites.get(category, [])
 
@@ -3741,9 +3743,19 @@ def remove_favourite_artist(artist_id):
     return _remove_favourite('artists', artist_id)
 
 
+@app.route('/api/favourites/playlists/<path:playlist_id>', methods=['POST'])
+def add_favourite_playlist(playlist_id):
+    return _add_favourite('playlists', playlist_id)
+
+
+@app.route('/api/favourites/playlists/<path:playlist_id>', methods=['DELETE'])
+def remove_favourite_playlist(playlist_id):
+    return _remove_favourite('playlists', playlist_id)
+
+
 @app.route('/api/favourites/<category>/reorder', methods=['PUT'])
 def reorder_favourites(category):
-    if category not in ('songs', 'albums', 'artists'):
+    if category not in ('songs', 'albums', 'artists', 'playlists'):
         return jsonify({'error': 'Unknown category'}), 400
     payload = request.json or {}
     order = [str(x).strip() for x in (payload.get('order') or []) if str(x).strip()]

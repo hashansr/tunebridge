@@ -1011,9 +1011,9 @@ def db_get_playlist_meta(pid):
 def db_load_favourites():
     """Load favourites in the same structure as the JSON format."""
     conn = get_conn()
-    result = {'songs': [], 'albums': [], 'artists': [], 'dap_exports': {}}
+    result = {'songs': [], 'albums': [], 'artists': [], 'playlists': [], 'dap_exports': {}}
 
-    for cat in ('songs', 'albums', 'artists'):
+    for cat in ('songs', 'albums', 'artists', 'playlists'):
         rows = conn.execute(
             "SELECT item_id, added_at FROM favourites WHERE category = ? ORDER BY added_at DESC",
             (cat,)
@@ -1030,7 +1030,7 @@ def db_save_favourites(favourites):
     conn = get_conn()
     conn.execute("DELETE FROM favourites")
     conn.execute("DELETE FROM favourite_dap_exports")
-    for cat in ('songs', 'albums', 'artists'):
+    for cat in ('songs', 'albums', 'artists', 'playlists'):
         items = favourites.get(cat, [])
         conn.executemany(
             "INSERT OR IGNORE INTO favourites (category, item_id, added_at) VALUES (?, ?, ?)",

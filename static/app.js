@@ -41,11 +41,13 @@ const state = {
     songs: new Set(),
     albums: new Set(),
     artists: new Set(),
+    playlists: new Set(),
   },
   favouritesMeta: {
     songs: [],
     albums: [],
     artists: [],
+    playlists: [],
     dap_exports: {},
   },
   favSongsData: [],
@@ -1126,11 +1128,13 @@ function _setFavouritesState(payload = {}) {
   const songs = Array.isArray(payload.songs) ? payload.songs : [];
   const albums = Array.isArray(payload.albums) ? payload.albums : [];
   const artists = Array.isArray(payload.artists) ? payload.artists : [];
+  const playlists = Array.isArray(payload.playlists) ? payload.playlists : [];
   const dapExports = (payload.dap_exports && typeof payload.dap_exports === 'object') ? payload.dap_exports : {};
-  state.favouritesMeta = { songs, albums, artists, dap_exports: dapExports };
+  state.favouritesMeta = { songs, albums, artists, playlists, dap_exports: dapExports };
   state.favourites.songs = new Set(songs.map(r => String(r.id || '')).filter(Boolean));
   state.favourites.albums = new Set(albums.map(r => String(r.id || '')).filter(Boolean));
   state.favourites.artists = new Set(artists.map(r => String(r.id || '')).filter(Boolean));
+  state.favourites.playlists = new Set(playlists.map(r => String(r.id || '')).filter(Boolean));
 }
 
 async function loadFavourites() {
@@ -1282,7 +1286,7 @@ function _replaceFavouriteCategory(type, rows) {
 
 async function toggleFavourite(type, encodedId) {
   const id = decodeURIComponent(String(encodedId || ''));
-  if (!id || !['songs', 'albums', 'artists'].includes(type)) return;
+  if (!id || !['songs', 'albums', 'artists', 'playlists'].includes(type)) return;
   const had = _isFavourite(type, id);
   _applyFavouriteDomState(type, id, !had);
   if (had) state.favourites[type].delete(id);
@@ -3160,6 +3164,17 @@ async function openPlaylist(pid) {
       _setHeroPinButtonState(plPinBtn, 'playlist', pid);
     };
   }
+  const plFavBtn = document.getElementById('pl-hero-fav');
+  if (plFavBtn) {
+    plFavBtn.style.display = '';
+    _setHeroFavouriteButtonState(plFavBtn, 'playlists', pid);
+    plFavBtn.onclick = async (e) => {
+      e.stopPropagation();
+      _setHeroFavouriteButtonState(plFavBtn, 'playlists', pid, !_isFavourite('playlists', pid));
+      await toggleFavourite('playlists', encodeURIComponent(pid));
+      _setHeroFavouriteButtonState(plFavBtn, 'playlists', pid);
+    };
+  }
 }
 
 function _applyPlaylistDetailMode(isFavouriteVirtual) {
@@ -3170,9 +3185,11 @@ function _applyPlaylistDetailMode(isFavouriteVirtual) {
   const removeBtn = document.getElementById('pl-cover-remove');
   const fileInput = document.getElementById('artwork-file-input');
   const nameEl = document.getElementById('pl-name');
+  const favBtn = document.getElementById('pl-hero-fav');
   if (delBtn) delBtn.style.display = isFavouriteVirtual ? 'none' : '';
   if (renameBtn) renameBtn.style.display = isFavouriteVirtual ? 'none' : '';
   if (moreBtn) moreBtn.style.display = isFavouriteVirtual ? 'none' : '';
+  if (favBtn) favBtn.style.display = isFavouriteVirtual ? 'none' : '';
   if (removeBtn) removeBtn.style.display = isFavouriteVirtual ? 'none' : removeBtn.style.display;
   if (fileInput) fileInput.disabled = !!isFavouriteVirtual;
   if (coverWrap) {
