@@ -14132,6 +14132,9 @@ async function loadSettings() {
       verEl.textContent = `v${display}${ver.released ? '  ·  ' + ver.released : ''}`;
     }
     if (channelSel && ver.channel) channelSel.value = ver.channel;
+
+    const autoChk = document.getElementById('auto-update-check-toggle');
+    if (autoChk) autoChk.checked = localStorage.getItem('tb_auto_update_check') !== 'off';
   } catch (_) {}
 
   showSettingsCategory(_activeSettingsCategory || 'library');
@@ -14527,6 +14530,7 @@ async function checkForUpdate() {
   const btn   = document.getElementById('check-update-btn');
   const dlBtn = document.getElementById('update-download-btn');
 
+  _clearUpdateBadge();
   if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
   if (dlBtn) dlBtn.style.display = 'none';
   _setUpdateStatus('', 'Checking for updates…');
@@ -14548,6 +14552,39 @@ async function checkForUpdate() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Check for Update'; }
   }
+}
+
+function _showUpdateBadge() {
+  const btn = document.getElementById('settings-btn');
+  if (!btn) return;
+  let dot = document.getElementById('settings-update-dot');
+  if (!dot) {
+    dot = document.createElement('span');
+    dot.id = 'settings-update-dot';
+    dot.className = 'settings-update-dot';
+    btn.appendChild(dot);
+  }
+  dot.style.display = '';
+}
+
+function _clearUpdateBadge() {
+  const dot = document.getElementById('settings-update-dot');
+  if (dot) dot.style.display = 'none';
+}
+
+async function _silentUpdateCheck() {
+  if (localStorage.getItem('tb_auto_update_check') === 'off') return;
+  try {
+    const res = await fetch('/api/update/check').then(r => r.json());
+    if (res.update_available) {
+      _updateDownloadUrl = res.download_url || '';
+      _showUpdateBadge();
+    }
+  } catch (_) {}
+}
+
+function toggleAutoUpdateCheck(el) {
+  localStorage.setItem('tb_auto_update_check', el.checked ? 'on' : 'off');
 }
 
 async function confirmUpdate() {
@@ -17040,6 +17077,7 @@ const App = {
   setUpdateChannel,
   checkForUpdate,
   confirmUpdate,
+  toggleAutoUpdateCheck,
   setExclusiveMode,
   setAudioDevice,
   retryMpvDetection,
@@ -21354,6 +21392,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }, true);
 
   Player.init();
+  _silentUpdateCheck();
   _updateNavButtonStates();
   window.addEventListener('tb-track-change', () => {
     refreshPlayerFavouriteButton();

@@ -8274,8 +8274,14 @@ import sys as _sys
 _BUNDLE_DIR = Path(_sys._MEIPASS) if (getattr(_sys, 'frozen', False) and hasattr(_sys, '_MEIPASS')) \
               else Path(__file__).parent
 _VERSION_FILE = _BUNDLE_DIR / 'version.json'
-_RELEASES_BASE = 'https://raw.githubusercontent.com/hashansr/tunebridge-releases/main'
-_RELEASES_DL_BASE = 'https://github.com/hashansr/tunebridge-releases/raw/main'
+_RELEASES_BASE    = 'https://raw.githubusercontent.com/hashansr/tunebridge-releases/main'
+# Prod DMG is a GitHub Release asset (enables download counting).
+# RC/dev DMGs are still raw files — releases/latest skips pre-releases so we keep the raw URL.
+_RELEASES_DL_BASE = {
+    'prod': 'https://github.com/hashansr/tunebridge-releases/releases/latest/download',
+    'rc':   'https://github.com/hashansr/tunebridge-releases/raw/main',
+    'dev':  'https://github.com/hashansr/tunebridge-releases/raw/main',
+}
 
 _CHANNEL_VERSION_FILE = {
     'prod': 'version.json',
@@ -8355,8 +8361,9 @@ def check_for_update():
     channel = _effective_channel()
     ver_file = _CHANNEL_VERSION_FILE.get(channel, 'version.json')
     dmg_file = _CHANNEL_DMG_FILE.get(channel, 'TuneBridge-latest.dmg')
+    dl_base  = _RELEASES_DL_BASE.get(channel, _RELEASES_DL_BASE['dev'])
     version_url  = f'{_RELEASES_BASE}/{ver_file}'
-    download_url = f'{_RELEASES_DL_BASE}/{dmg_file}'
+    download_url = f'{dl_base}/{dmg_file}'
 
     try:
         with open(_VERSION_FILE) as f:

@@ -1430,6 +1430,19 @@
               <span id="update-status-label"></span>
             </div>
 
+            <!-- Notify me about updates toggle -->
+            <div class="settings-app-row settings-app-row-clean">
+              <div class="settings-app-main">
+                <div class="settings-app-row-label">Notify me about updates</div>
+                <div class="settings-app-row-hint">Check for updates silently at startup and show a badge when one is available.</div>
+              </div>
+              <label class="settings-toggle-wrap">
+                <input type="checkbox" id="auto-update-check-toggle" checked
+                       onchange="App.toggleAutoUpdateCheck(this)">
+                <span class="settings-toggle-track"><span class="settings-toggle-thumb"></span></span>
+              </label>
+            </div>
+
             <!-- Restart row -->
             <div class="settings-rg-divider"></div>
             <div class="settings-app-row settings-app-row-clean">

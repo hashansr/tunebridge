@@ -478,10 +478,22 @@ nav {
 
 #settings-btn {
   flex-shrink: 0;
+  position: relative;
 }
 #settings-btn .settings-btn-icon {
   display: block;
   transform: translateY(-0.25px);
+}
+.settings-update-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
+  animation: insights-pulse 1.4s ease-in-out infinite;
 }
 
 #playlists-list { padding: 4px 0; }

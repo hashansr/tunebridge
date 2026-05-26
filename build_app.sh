@@ -612,20 +612,41 @@ if [ "$BUILD_DMG" = "1" ]; then
       _warn "Could not sync releases repo — push may fail if remote has newer commits"
     fi
 
-    printf "  📋  Copying artifacts to releases repo... "
-    cp -f "$DISTRO_LATEST" "${RELEASES_REPO}/${DMG_DEST}"
+    printf "  📋  Copying version artifacts to releases repo... "
+    # Prod DMG is distributed as a GitHub Release asset (enables download counting).
+    # RC/dev DMGs are still committed as raw files (releases/latest skips pre-releases).
+    if [ "$BUILD_CHANNEL" != "prod" ]; then
+      cp -f "$DISTRO_LATEST" "${RELEASES_REPO}/${DMG_DEST}"
+    fi
     cp -f "${PROJECT_DIR}/version.json" "${RELEASES_REPO}/${VER_DEST}"
     cp -f "${CHANGELOG}" "${RELEASES_REPO}/CHANGELOG.md"
     echo -e "${GREEN}done ✅${NC}"
 
     printf "  📝  Committing releases repo... "
-    git -C "$RELEASES_REPO" add "${DMG_DEST}" "${VER_DEST}" CHANGELOG.md
+    if [ "$BUILD_CHANNEL" != "prod" ]; then
+      git -C "$RELEASES_REPO" add "${DMG_DEST}" "${VER_DEST}" CHANGELOG.md
+    else
+      git -C "$RELEASES_REPO" add "${VER_DEST}" CHANGELOG.md
+    fi
     git -C "$RELEASES_REPO" commit -m "$(echo "$BUILD_CHANNEL" | tr '[:lower:]' '[:upper:]') v${VERSION_FULL}"
     echo -e "${GREEN}done ✅${NC}"
 
     printf "  🌐  Pushing releases repo... "
     git -C "$RELEASES_REPO" push
     echo -e "${GREEN}done ✅${NC}"
+
+    # Create GitHub Release with DMG asset for download counting
+    if [ "$BUILD_CHANNEL" = "prod" ]; then
+      printf "  🎁  Creating GitHub Release v${APP_VERSION}... "
+      gh release create "v${APP_VERSION}" \
+        --repo hashansr/tunebridge-releases \
+        --title "TuneBridge v${APP_VERSION}" \
+        --latest \
+        --notes "" \
+        "${DISTRO_LATEST}#TuneBridge-latest.dmg" > /dev/null
+      echo -e "${GREEN}done ✅${NC}"
+    fi
+
     _ok "Published $(echo "$BUILD_CHANNEL" | tr '[:lower:]' '[:upper:]') v${VERSION_FULL} → hashansr/tunebridge-releases  (${DMG_DEST})"
   fi
 fi
@@ -644,7 +665,8 @@ case "$BUILD_CHANNEL" in
   prod)
     echo -e "  ${BOLD}Released:${NC}"
     echo "    🏷️   Tag v${APP_VERSION} pushed to hashansr/tunebridge"
-    echo "    🌐  DMG live at hashansr/tunebridge-releases"
+    echo "    🌐  GitHub Release at hashansr/tunebridge-releases (download counted)"
+    echo "    📊  Check downloads: gh api /repos/hashansr/tunebridge-releases/releases --jq '.[].assets[].download_count'"
     echo ""
     echo -e "  ${BOLD}Local install updated:${NC}"
     echo "    /Applications/${APP_NAME}.app ✅"
