@@ -7522,7 +7522,7 @@ async function showView(viewName) {
   else if (viewName === 'library-coverage') loadInsightsCoverage();
   else if (viewName === 'settings') {
     setHealthSectionExpanded(false);
-    showSettingsCategory('library');
+    showSettingsCategory(_lastUpdateCheckResult?.update_available ? 'app' : 'library');
     loadSettings();
   }
   else if (viewName === 'insights') loadInsightsView();
@@ -14181,7 +14181,13 @@ async function loadSettings() {
     if (channelSel && ver.channel) channelSel.value = ver.channel;
 
     const autoChk = document.getElementById('auto-update-check-toggle');
-    if (autoChk) autoChk.checked = localStorage.getItem('tb_auto_update_check') !== 'off';
+    if (autoChk) {
+      autoChk.checked = localStorage.getItem('tb_auto_update_check') !== 'off';
+      _setSettingsToggleState('auto-update-check-toggle', 'auto-update-check-state', autoChk.checked, true);
+    }
+    if (_lastUpdateCheckResult && _lastUpdateCheckResult.update_available) {
+      _applyUpdateResult(_lastUpdateCheckResult, { showCurrent: false, showErrors: false });
+    }
   } catch (_) {}
 
   showSettingsCategory(_activeSettingsCategory || 'library');
@@ -14544,6 +14550,7 @@ function _applyTestModeUI(isTestMode, channel) {
 }
 
 let _updateDownloadUrl = '';
+let _lastUpdateCheckResult = null;
 
 function _setUpdateStatus(state, text) {
   const line  = document.getElementById('update-status-line');
@@ -14554,6 +14561,29 @@ function _setUpdateStatus(state, text) {
   line.className = 'settings-update-status' + (state ? ' settings-update-status--' + state : '');
   if (icon)  icon.textContent  = state === 'ok' ? '✓' : state === 'avail' ? '↑' : state === 'error' ? '✕' : '…';
   if (label) label.textContent = text;
+}
+
+function _applyUpdateResult(res, opts = {}) {
+  const dlBtn = document.getElementById('update-download-btn');
+  if (!res) return;
+
+  if (dlBtn) dlBtn.style.display = 'none';
+  if (res.error) {
+    if (opts.showErrors) _setUpdateStatus('error', res.error);
+    return;
+  }
+
+  if (res.update_available) {
+    const rel = res.released ? ' · ' + res.released : '';
+    _setUpdateStatus('avail', `v${res.latest} available${rel}`);
+    _updateDownloadUrl = res.download_url || '';
+    if (dlBtn && _updateDownloadUrl) dlBtn.style.display = '';
+    return;
+  }
+
+  if (opts.showCurrent) {
+    _setUpdateStatus('ok', `v${res.current} — you're up to date`);
+  }
 }
 
 async function setUpdateChannel(channel) {
@@ -14584,16 +14614,8 @@ async function checkForUpdate() {
 
   try {
     const res = await fetch('/api/update/check').then(r => r.json());
-    if (res.error) {
-      _setUpdateStatus('error', res.error);
-    } else if (res.update_available) {
-      const rel = res.released ? ' · ' + res.released : '';
-      _setUpdateStatus('avail', `v${res.latest} available${rel}`);
-      _updateDownloadUrl = res.download_url || '';
-      if (dlBtn) dlBtn.style.display = '';
-    } else {
-      _setUpdateStatus('ok', `v${res.current} — you're up to date`);
-    }
+    _lastUpdateCheckResult = res;
+    _applyUpdateResult(res, { showCurrent: true, showErrors: true });
   } catch (e) {
     _setUpdateStatus('error', 'Could not reach update server');
   } finally {
@@ -14623,15 +14645,17 @@ async function _silentUpdateCheck() {
   if (localStorage.getItem('tb_auto_update_check') === 'off') return;
   try {
     const res = await fetch('/api/update/check').then(r => r.json());
+    _lastUpdateCheckResult = res;
     if (res.update_available) {
-      _updateDownloadUrl = res.download_url || '';
       _showUpdateBadge();
+      _applyUpdateResult(res, { showCurrent: false, showErrors: false });
     }
   } catch (_) {}
 }
 
 function toggleAutoUpdateCheck(el) {
   localStorage.setItem('tb_auto_update_check', el.checked ? 'on' : 'off');
+  _setSettingsToggleState('auto-update-check-toggle', 'auto-update-check-state', el.checked, true);
 }
 
 async function confirmUpdate() {
@@ -14651,7 +14675,7 @@ async function confirmUpdate() {
     });
     if (!ok) return;
   }
-  if (_updateDownloadUrl) window.open(_updateDownloadUrl, '_blank');
+  if (_updateDownloadUrl) _openExternalUrl(_updateDownloadUrl);
 }
 
 function setHealthSectionExpanded(expanded) {

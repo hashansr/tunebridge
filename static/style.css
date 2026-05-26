@@ -1153,6 +1153,12 @@ h4.settings-subsection-title {
   line-height: 1.62;
   max-width: 78ch;
 }
+.settings-app-row-compact .settings-app-row-label {
+  margin-bottom: 4px;
+}
+.settings-app-row-compact .settings-app-row-hint {
+  line-height: 1.45;
+}
 .settings-help-text {
   max-width: 74ch;
   margin-top: 12px;
