@@ -15450,6 +15450,9 @@ body.is-col-resizing {
 .home-card:hover {
   transform: scale(1.03);
 }
+.home-pin-drag-ghost { opacity: 0.35; }
+.home-pin-drag-chosen { cursor: grabbing !important; transform: scale(1.05); }
+#home-pinned .home-card { cursor: grab; }
 
 .home-card-art {
   position: relative;
