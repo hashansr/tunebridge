@@ -9098,7 +9098,7 @@ tbody tr:hover {
   gap: 10px;
   grid-column: 1 / -1;
   grid-row: 2;
-  padding: 0 0 11px;
+  padding: 5px 0 9px;
 }
 .player-time {
   font-size: 11px;
