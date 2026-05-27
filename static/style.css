@@ -9076,16 +9076,16 @@ tbody tr:hover {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: rgba(235,240,255,0.10);
+  background: transparent;
   color: rgba(235,240,255,0.95);
   border: none;
   padding: 0;
-  transition: transform 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition: transform 0.15s ease, color 0.15s ease;
 }
 .player-play-pause:hover {
   color: #fff;
-  background: rgba(235,240,255,0.18);
-  transform: scale(1.08);
+  background: transparent;
+  transform: scale(1.1);
 }
 .player-play-pause:active {
   transform: scale(0.9);
@@ -9161,7 +9161,7 @@ tbody tr:hover {
 .player-seek::-moz-range-progress {
   background: transparent;
 }
-/* Thumb — always visible while a track is loaded */
+/* Thumb — hidden; appears on hover for precise scrubbing */
 .player-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 12px;
@@ -9170,7 +9170,8 @@ tbody tr:hover {
   background: #adc6ff;
   cursor: pointer;
   box-shadow: 0 0 0 3px rgba(173,198,255,0.20);
-  transition: transform 0.12s, box-shadow 0.12s;
+  opacity: 0;
+  transition: opacity 0.12s, transform 0.12s, box-shadow 0.12s;
 }
 .player-seek::-moz-range-thumb {
   width: 12px;
@@ -9180,20 +9181,23 @@ tbody tr:hover {
   border: none;
   cursor: pointer;
   box-shadow: 0 0 0 3px rgba(173,198,255,0.20);
-  transition: transform 0.12s, box-shadow 0.12s;
+  opacity: 0;
+  transition: opacity 0.12s, transform 0.12s, box-shadow 0.12s;
 }
 .player-seek-wrap:hover .player-seek::-webkit-slider-thumb {
-  transform: scale(1.25);
+  opacity: 1;
+  transform: scale(1.1);
   box-shadow: 0 0 0 5px rgba(173,198,255,0.28);
 }
 .player-seek-wrap:hover .player-seek::-moz-range-thumb {
-  transform: scale(1.25);
+  opacity: 1;
+  transform: scale(1.1);
   box-shadow: 0 0 0 5px rgba(173,198,255,0.28);
 }
 /* Disable seek interaction when no track is loaded */
 .player-seek:disabled { cursor: default; pointer-events: none; }
-.player-seek:disabled::-webkit-slider-thumb { opacity: 0; }
-.player-seek:disabled::-moz-range-thumb { opacity: 0; }
+.player-seek:disabled::-webkit-slider-thumb { opacity: 0 !important; }
+.player-seek:disabled::-moz-range-thumb { opacity: 0 !important; }
 /* Brighten fill on hover */
 .player-seek-wrap:hover .player-progress-fill { background: linear-gradient(90deg, rgba(190,210,255,0.98), rgba(102,232,125,0.95)); }
 .player-seek-wrap:hover .player-progress-bg   { background: rgba(74,74,72,0.95); }
