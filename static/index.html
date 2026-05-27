@@ -2551,7 +2551,7 @@
       </div>
     </div>
 
-    <!-- Center: transport controls + progress bar -->
+    <!-- Center: transport controls -->
     <div class="player-center">
       <div class="player-controls">
         <button class="player-btn player-btn-sm" id="player-shuffle-btn" onclick="Player.toggleShuffle()" title="Shuffle">
@@ -2569,18 +2569,6 @@
         <button class="player-btn player-btn-sm" id="player-repeat-btn" onclick="Player.cycleRepeat()" title="Repeat">
           <span class="tb-icon tb-icon-repeat-list" aria-hidden="true"></span>
         </button>
-      </div>
-      <div class="player-progress-row">
-        <span class="player-time" id="player-current-time">0:00</span>
-        <div class="player-seek-wrap">
-          <div class="player-progress-bg"></div>
-          <div class="player-progress-fill" id="player-progress-fill"></div>
-          <input type="range" id="player-seek" class="player-seek" min="0" max="1000" value="0" step="1"
-                 disabled
-                 oninput="Player.seekInput(this.value)"
-                 onchange="Player.seek(this.value)" />
-        </div>
-        <span class="player-time" id="player-duration">0:00</span>
       </div>
     </div>
 
@@ -2653,11 +2641,50 @@
       <button class="player-btn player-btn-sm fav-toggle player-fav-btn" id="player-fav-btn" onclick="App.toggleCurrentTrackFavourite()" title="Add to favourites" aria-label="Add to favourites">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z"/></svg>
       </button>
+      <!-- Vertical divider before volume section -->
+      <div class="player-right-divider" aria-hidden="true"></div>
       <button class="player-btn player-btn-sm" id="player-mute-btn" onclick="Player.toggleMute()" title="Mute">
         <span class="tb-icon tb-icon-speaker-1" aria-hidden="true"></span>
       </button>
       <input type="range" id="player-volume" class="player-vol-slider" min="0" max="100" value="100"
              oninput="Player.setVolume(this.value)" />
+      <!-- Compact overflow (hidden at full width, shown ≤900 px) -->
+      <div class="player-overflow-wrap">
+        <button class="player-btn player-btn-sm player-overflow-btn" id="player-overflow-btn"
+                onclick="Player.toggleOverflowMenu()" title="More controls" aria-label="More controls">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/>
+          </svg>
+        </button>
+        <div class="player-overflow-menu" id="player-overflow-menu" style="display:none">
+          <button class="player-overflow-item player-btn" onclick="Player.togglePeqPopover()" title="Parametric EQ">
+            <span class="tb-icon tb-icon-eq" aria-hidden="true"></span>
+            <span class="player-overflow-label">Parametric EQ</span>
+          </button>
+          <button class="player-overflow-item player-btn" onclick="Player.toggleQueue()" title="Queue">
+            <span class="tb-icon tb-icon-playlist" aria-hidden="true"></span>
+            <span class="player-overflow-label">Queue</span>
+          </button>
+          <button class="player-overflow-item player-btn fav-toggle" onclick="App.toggleCurrentTrackFavourite()" title="Favourite">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z"/></svg>
+            <span class="player-overflow-label">Favourite</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Full-width scrubber row — spans all 3 grid columns -->
+    <div class="player-progress-row">
+      <span class="player-time" id="player-current-time">0:00</span>
+      <div class="player-seek-wrap">
+        <div class="player-progress-bg"></div>
+        <div class="player-progress-fill" id="player-progress-fill"></div>
+        <input type="range" id="player-seek" class="player-seek" min="0" max="1000" value="0" step="1"
+               disabled
+               oninput="Player.seekInput(this.value)"
+               onchange="Player.seek(this.value)" />
+      </div>
+      <span class="player-time" id="player-duration">0:00</span>
     </div>
   </div>
 

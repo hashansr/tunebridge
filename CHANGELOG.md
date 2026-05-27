@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Player bar facelift — Variant B "Integrated Premium": 96 px two-row layout with full-width scrubber on row 2, balanced 1fr auto 1fr three-column controls row, tonal play-button circle, visible scrubber thumb with accent halo, vertical divider before volume, compact ≤900 px collapse to ··· overflow menu
 
 ## v0.420-rc.270526-0839 · 2026-05-27
 

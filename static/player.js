@@ -3252,6 +3252,13 @@ const Player = (function () {
           && !e.target.closest('#player-queue-btn')) {
         toggleQueue();
       }
+      // Close compact overflow menu
+      const overflowMenu = document.getElementById('player-overflow-menu');
+      if (overflowMenu && overflowMenu.classList.contains('open')
+          && !e.target.closest('.player-overflow-wrap')) {
+        overflowMenu.classList.remove('open');
+        overflowMenu.style.display = 'none';
+      }
     });
 
     // 7. Seek slider: reset dragging flag on pointer release
@@ -3643,6 +3650,13 @@ const Player = (function () {
     get currentTrack() { return currentTrack(); },
     get isPlaying()    { return ps.isPlaying; },
     get queue()        { return ps.queue; },
+    // Compact overflow menu (shown ≤900 px)
+    toggleOverflowMenu() {
+      const menu = document.getElementById('player-overflow-menu');
+      if (!menu) return;
+      const isOpen = menu.classList.toggle('open');
+      menu.style.display = isOpen ? 'flex' : 'none';
+    },
   };
 })();
 

@@ -7469,7 +7469,7 @@ tbody tr:hover {
   position: fixed;
   top: 0;
   right: 0;
-  bottom: 86px;
+  bottom: 96px;
   left: var(--sidebar-w);
   overflow-y: auto;
   padding: clamp(12px, 2.6vh, 24px);
@@ -8740,14 +8740,14 @@ tbody tr:hover {
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* Push main content up so the player bar doesn't overlap it */
-#main   { padding-bottom: 86px; }
-#sidebar { padding-bottom: 86px; }
+#main   { padding-bottom: 96px; }
+#sidebar { padding-bottom: 96px; }
 
 /* ── Bar shell ────────────────────────────────────────────────────────── */
 #player-bar {
   position: fixed;
   bottom: 0; left: 0; right: 0;
-  height: 86px;
+  height: 96px;
   background:
     radial-gradient(540px 180px at 10% -90%, rgba(173, 198, 255, 0.15), transparent 62%),
     radial-gradient(620px 220px at 88% -120%, rgba(83, 225, 111, 0.08), transparent 68%),
@@ -8755,12 +8755,13 @@ tbody tr:hover {
   backdrop-filter: blur(12px);
   border-top: 1px solid rgba(173,198,255,0.17);
   border-radius: 24px 24px 0 0;
-  /* 3-column grid with fluid side rails keeps layout stable while resizing */
+  /* Two-row grid: balanced 1fr auto 1fr columns, full-width scrubber on row 2 */
   display: grid;
-  grid-template-columns: minmax(220px, 300px) minmax(340px, 1fr) minmax(220px, 300px);
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-rows: 1fr auto;
   align-items: center;
-  gap: 18px;
-  padding: 0 22px;
+  gap: 0 18px;
+  padding: 10px 22px 0;
   z-index: 400;
   user-select: none;
   box-shadow: 0 -16px 46px rgba(4, 8, 24, 0.52);
@@ -8783,6 +8784,9 @@ tbody tr:hover {
   align-items: center;
   gap: 14px;
   min-width: 0;
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
 }
 
 .player-art {
@@ -8904,11 +8908,12 @@ tbody tr:hover {
 /* ── Center section ───────────────────────────────────────────────────── */
 .player-center {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 7px;
+  justify-content: center;
   min-width: 0;
-  width: 100%;
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
 }
 
 .player-controls {
@@ -9071,29 +9076,32 @@ tbody tr:hover {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: transparent;
+  background: rgba(235,240,255,0.10);
   color: rgba(235,240,255,0.95);
   border: none;
   padding: 0;
-  transition: transform 0.15s ease, color 0.15s ease;
+  transition: transform 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 .player-play-pause:hover {
   color: #fff;
-  transform: scale(1.1);
+  background: rgba(235,240,255,0.18);
+  transform: scale(1.08);
 }
 .player-play-pause:active {
   transform: scale(0.9);
 }
 
-/* Progress bar */
+/* Progress bar — full-width row spanning all 3 columns */
 .player-progress-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  padding: 0 0 11px;
 }
 .player-time {
-  font-size: 10px;
+  font-size: 11px;
   color: rgba(193,198,215,0.88);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
@@ -9105,15 +9113,18 @@ tbody tr:hover {
 .player-seek-wrap {
   position: relative;
   flex: 1;
-  height: 6px;
+  height: 4px;
   display: flex;
   align-items: center;
+  transition: height 0.15s ease;
+  cursor: pointer;
 }
+.player-seek-wrap:hover { height: 6px; }
 .player-progress-bg,
 .player-progress-fill {
   position: absolute;
   left: 0; right: 0;
-  height: 6px;
+  height: 100%;
   border-radius: 9999px;
   pointer-events: none;
 }
@@ -9125,20 +9136,65 @@ tbody tr:hover {
   transition: width 0.1s linear;
 }
 
-/* Range input — invisible but interactive, sits on top */
+/* Range input — transparent track, styled thumb */
 .player-seek {
   position: absolute;
   inset: -6px 0;
   width: 100%;
   height: 18px;
-  opacity: 0;
+  opacity: 1;
   cursor: pointer;
   margin: 0;
   -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+.player-seek::-webkit-slider-runnable-track {
+  background: transparent;
+  height: 100%;
+  border: none;
+}
+.player-seek::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+.player-seek::-moz-range-progress {
+  background: transparent;
+}
+/* Thumb — always visible while a track is loaded */
+.player-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #adc6ff;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(173,198,255,0.20);
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.player-seek::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #adc6ff;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(173,198,255,0.20);
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.player-seek-wrap:hover .player-seek::-webkit-slider-thumb {
+  transform: scale(1.25);
+  box-shadow: 0 0 0 5px rgba(173,198,255,0.28);
+}
+.player-seek-wrap:hover .player-seek::-moz-range-thumb {
+  transform: scale(1.25);
+  box-shadow: 0 0 0 5px rgba(173,198,255,0.28);
 }
 /* Disable seek interaction when no track is loaded */
 .player-seek:disabled { cursor: default; pointer-events: none; }
-/* Show thumb on hover */
+.player-seek:disabled::-webkit-slider-thumb { opacity: 0; }
+.player-seek:disabled::-moz-range-thumb { opacity: 0; }
+/* Brighten fill on hover */
 .player-seek-wrap:hover .player-progress-fill { background: linear-gradient(90deg, rgba(190,210,255,0.98), rgba(102,232,125,0.95)); }
 .player-seek-wrap:hover .player-progress-bg   { background: rgba(74,74,72,0.95); }
 
@@ -9149,10 +9205,64 @@ tbody tr:hover {
   gap: 8px;
   justify-content: flex-end;
   min-width: 0;
+  grid-column: 3;
+  grid-row: 1;
+  align-self: center;
 }
 
 .player-peq-wrap {
   position: relative;
+}
+
+/* Vertical divider between action icons and volume section */
+.player-right-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(193,198,215,0.14);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+/* Compact overflow — hidden at full width, shown ≤900 px */
+.player-overflow-btn { display: none; }
+.player-overflow-wrap {
+  position: relative;
+}
+.player-overflow-menu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  background: var(--modal-bg, #1d1d1f);
+  border: 1px solid var(--modal-border, rgba(255,255,255,0.07));
+  border-radius: 10px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+  min-width: 160px;
+  z-index: 420;
+}
+.player-overflow-menu.open { display: flex; }
+.player-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  width: 100%;
+  text-align: left;
+  color: rgba(193,198,215,0.75);
+}
+.player-overflow-item:hover {
+  background: rgba(255,255,255,0.06);
+  color: rgba(225,230,245,0.95);
+  transform: none;
+}
+.player-overflow-label {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 /* PEQ popover */
@@ -9563,7 +9673,7 @@ tbody tr:hover {
    ═══════════════════════════════════════════════════════════════════════ */
 .queue-drawer {
   position: fixed;
-  bottom: 94px; right: 14px;
+  bottom: 104px; right: 14px;
   width: 408px;
   max-width: calc(100vw - 28px);
   max-height: min(720px, calc(100vh - 118px));
@@ -9658,13 +9768,30 @@ tbody tr:hover {
   color: #e8e6e5;
 }
 
+/* ── Player compact collapse ≤900 px ──────────────────────────────────── */
+@media (max-width: 900px) {
+  /* Show overflow button; hide individual action icons */
+  .player-overflow-btn { display: flex; }
+  #player-lyrics-btn,
+  #player-peq-btn,
+  #player-queue-btn,
+  #player-fav-btn,
+  .player-right-divider { display: none !important; }
+
+  /* Tighten right-section gap */
+  .player-right { gap: 6px; }
+
+  /* Narrower volume slider */
+  .player-vol-slider { width: 72px; }
+}
+
 /* Custom PEQ workspace */
 .peq-workspace {
   position: fixed;
   left: var(--sidebar-w);
   right: 0;
   top: 0;
-  bottom: 86px;
+  bottom: 96px;
   z-index: 360;
   background: var(--app-page-gradient);
   backdrop-filter: none;
@@ -10800,9 +10927,9 @@ tbody tr:hover {
 /* Responsive player shell */
 @media (max-width: 1360px) {
   #player-bar {
-    grid-template-columns: minmax(190px, 240px) minmax(300px, 1fr) minmax(190px, 240px);
-    gap: 12px;
-    padding: 0 16px;
+    /* Keep 1fr auto 1fr — just tighten padding and gap */
+    gap: 0 12px;
+    padding: 10px 16px 0;
   }
   .player-vol-slider {
     width: 84px;
@@ -10810,9 +10937,8 @@ tbody tr:hover {
 }
 @media (max-width: 1180px) {
   #player-bar {
-    grid-template-columns: minmax(170px, 220px) minmax(260px, 1fr) minmax(170px, 220px);
-    gap: 12px;
-    padding: 0 14px;
+    gap: 0 10px;
+    padding: 10px 14px 0;
   }
   .player-left {
     gap: 10px;
@@ -10824,49 +10950,30 @@ tbody tr:hover {
     font-size: 11px;
   }
   .player-controls {
-    gap: 6px;
+    gap: 4px;
   }
   .player-vol-slider {
     width: 76px;
   }
 }
 @media (max-width: 1040px) {
-  #main,
-  #sidebar {
-    padding-bottom: 192px;
-  }
+  /* Player bar stays 2-row at 96px — just tighter padding */
   #player-bar {
-    min-height: 130px;
-    height: auto;
-    grid-template-columns: 1fr;
-    gap: 8px;
-    padding: 10px 12px 12px;
-  }
-  .player-left,
-  .player-center,
-  .player-right {
-    width: 100%;
+    gap: 0 8px;
+    padding: 10px 12px 0;
   }
   .player-left {
     gap: 10px;
-  }
-  .player-center {
-    gap: 6px;
-  }
-  .player-right {
-    justify-content: space-between;
-    flex-wrap: wrap;
-    row-gap: 6px;
   }
   .player-vol-slider {
     width: min(180px, 44vw);
   }
   .queue-drawer {
-    bottom: 200px;
+    bottom: 112px;
   }
   .peq-workspace {
     left: 0;
-    bottom: 192px;
+    bottom: 96px;
   }
   .peq-workspace-shell {
     padding: 18px 16px 18px;
@@ -10913,10 +11020,10 @@ tbody tr:hover {
 @media (max-width: 620px) {
   #main,
   #sidebar {
-    padding-bottom: 192px;
+    padding-bottom: 96px;
   }
   #player-bar {
-    padding: 10px 10px 12px;
+    padding: 10px 10px 0;
   }
   .player-quality {
     display: none;
@@ -10937,10 +11044,10 @@ tbody tr:hover {
     right: 10px;
     border-radius: 12px;
     transform-origin: bottom center;
-    bottom: 200px;
+    bottom: 112px;
   }
   .peq-workspace {
-    bottom: 192px;
+    bottom: 96px;
   }
 }
 
