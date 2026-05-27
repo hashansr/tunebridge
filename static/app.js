@@ -10698,6 +10698,7 @@ async function dapExportAllPlaylists(dapId, btn) {
 
 async function ejectDap(dapId, name) {
   const btns = document.querySelectorAll(`#eject-btn-${dapId}`);
+  const ejectToast = _showLiveToast(`Ejecting ${name}`);
   btns.forEach(b => {
     b.disabled = true;
     if (b.classList.contains('gear-icon-btn')) {
@@ -10710,11 +10711,11 @@ async function ejectDap(dapId, name) {
     const r = await fetch(`/api/daps/${dapId}/eject`, { method: 'POST' });
     const d = await r.json();
     if (r.ok) {
-      toast(`${name} ejected. Safe to remove.`, 'success');
+      ejectToast.finish(`${name} ejected. Safe to remove.`, 'success');
       await loadDapsView();
       if (state.view === 'dap-detail') await showDapDetail(dapId);
     } else {
-      toast(d.error || 'Eject failed.', 'error');
+      ejectToast.finish(d.error || 'Eject failed.', 'error');
       btns.forEach(b => {
         b.disabled = false;
         b.style.opacity = '';
@@ -10722,7 +10723,7 @@ async function ejectDap(dapId, name) {
       });
     }
   } catch (e) {
-    toast('Eject failed.', 'error');
+    ejectToast.finish('Eject failed.', 'error');
     btns.forEach(b => {
       b.disabled = false;
       b.style.opacity = '';
