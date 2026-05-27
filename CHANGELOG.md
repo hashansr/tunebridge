@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.422-rc.270526-1226 · 2026-05-27
 - Fix: Compact player (<=900 px) -- Queue button now stays permanently visible outside the overflow menu; EQ and Favourite move into the overflow menu only
 - Fix: Compact player overflow menu and PEQ popover now appear above the player bar correctly (resolved stacking context issue caused by player bar's fixed positioning)
 - Fix: Overflow menu icon alignment and typography corrected -- icons and labels now properly aligned in a flex row with consistent sizing and font rendering
