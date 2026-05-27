@@ -3657,6 +3657,26 @@ const Player = (function () {
       const isOpen = menu.classList.toggle('open');
       menu.style.display = isOpen ? 'flex' : 'none';
     },
+    _closeOverflowMenu() {
+      const menu = document.getElementById('player-overflow-menu');
+      if (!menu) return;
+      menu.classList.remove('open');
+      menu.style.display = 'none';
+    },
+    // Overflow item handlers — stopPropagation prevents the document click
+    // handler from immediately closing whatever these buttons open.
+    overflowEqClick(e) {
+      e.stopPropagation();
+      this._closeOverflowMenu();
+      togglePeqPopover();
+    },
+    overflowFavClick(e) {
+      e.stopPropagation();
+      this._closeOverflowMenu();
+      if (typeof App !== 'undefined' && App.toggleCurrentTrackFavourite) {
+        App.toggleCurrentTrackFavourite();
+      }
+    },
   };
 })();
 
