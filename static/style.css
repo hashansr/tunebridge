@@ -9268,12 +9268,13 @@ tbody tr:hover {
   line-height: 1;
   white-space: nowrap;
 }
-/* Fav-toggle inside the overflow menu is always fully visible */
+/* Fav-toggle inside the overflow menu is always fully visible and left-aligned */
 .player-overflow-menu .fav-toggle {
   opacity: 1;
-  width: auto;
+  width: 100%;
   height: auto;
   display: flex;
+  justify-content: flex-start;
   border-radius: 7px;
 }
 
