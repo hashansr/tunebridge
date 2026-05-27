@@ -9223,34 +9223,50 @@ tbody tr:hover {
   background: var(--modal-bg, #1d1d1f);
   border: 1px solid var(--modal-border, rgba(255,255,255,0.07));
   border-radius: 10px;
-  padding: 5px;
+  padding: 4px;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  box-shadow: 0 8px 28px rgba(0,0,0,0.45);
-  min-width: 160px;
+  gap: 0;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.3);
+  min-width: 172px;
   z-index: 420;
 }
 .player-overflow-menu.open { display: flex; }
 .player-overflow-item {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 7px 10px;
+  gap: 10px;
+  padding: 8px 11px;
   border-radius: 7px;
   width: 100%;
-  text-align: left;
-  color: rgba(193,198,215,0.75);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: rgba(193,198,215,0.82);
+  /* reset any .player-btn defaults inherited via class */
+  font-family: var(--tb-font-sans, -apple-system, BlinkMacSystemFont, sans-serif);
+}
+.player-overflow-item .tb-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: inherit;
+}
+.player-overflow-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 .player-overflow-item:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.07);
   color: rgba(225,230,245,0.95);
-  transform: none;
 }
 .player-overflow-label {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 500;
-  letter-spacing: 0;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 /* PEQ popover */
@@ -9258,19 +9274,22 @@ tbody tr:hover {
   position: absolute;
   bottom: calc(100% + 12px);
   right: 0;
-  width: min(360px, calc(100vw - 20px));
-  background: var(--modal-bg, #1d1d1f);
+  width: min(320px, calc(100vw - 20px));
+  background: #1d1d1f;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  border: 1px solid var(--modal-border, rgba(255,255,255,0.07));
-  border-radius: 10px;
-  padding: 14px 16px 16px;
-  box-shadow: var(--modal-shadow, 0 24px 56px rgba(0,0,0,0.5), 0 4px 10px rgba(0,0,0,0.35));
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  padding: 0;
+  box-shadow: 0 24px 56px rgba(0,0,0,0.5), 0 4px 10px rgba(0,0,0,0.35);
   z-index: 410;
   opacity: 0;
   transform: translateY(8px) scale(0.985);
   pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+  color: #e8e6e5;
+  font-family: var(--tb-font-sans);
 }
 .peq-popover.open {
   opacity: 1;
@@ -9281,39 +9300,41 @@ tbody tr:hover {
 /* Header row */
 .peq-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 13px;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 10px 10px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 .peq-title {
-  font-size: 15.5px;
-  font-weight: 600;
-  letter-spacing: 0;
-  line-height: 1.25;
-  color: var(--modal-text, var(--text));
+  flex: 1;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: #e8e6e5;
 }
 .peq-close-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  min-height: 20px;
-  border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.05);
-  background: rgba(255,255,255,0.06);
-  color: var(--modal-text-muted, var(--text-muted));
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: #8a8a96;
   cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
   flex-shrink: 0;
   padding: 0;
 }
 .peq-close-btn:hover {
-  background: rgba(255,255,255,0.12);
-  border-color: rgba(255,255,255,0.08);
-  color: var(--modal-text, var(--text));
+  background: rgba(255,255,255,0.08);
+  color: #e8e6e5;
 }
 .peq-close-btn svg {
   width: 8px;
@@ -9321,13 +9342,14 @@ tbody tr:hover {
 }
 
 /* Sections */
-.peq-section { margin-bottom: 14px; }
+.peq-section { margin-bottom: 12px; }
 .peq-section:last-of-type { margin-bottom: 0; }
 .peq-popover-fields {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 14px;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  padding: 14px 16px 0;
+  margin-bottom: 12px;
 }
 
 .peq-open-workspace-btn {
@@ -9343,10 +9365,10 @@ tbody tr:hover {
 }
 .peq-popover-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 8px;
-  margin-top: 13px;
-  padding-top: 0;
+  margin-top: 12px;
+  padding: 0 16px 16px;
 }
 .peq-create-btn {
   text-transform: none;
@@ -9370,12 +9392,12 @@ tbody tr:hover {
 }
 
 .peq-section-label {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--modal-text-muted, var(--text-muted));
-  margin-bottom: 5px;
+  margin-bottom: 6px;
   white-space: nowrap;
 }
 
@@ -9406,10 +9428,10 @@ tbody tr:hover {
 
 /* Select */
 .peq-popover .peq-select {
-  min-height: 30px;
+  min-height: 34px;
   border-radius: 7px;
   border: 1px solid var(--modal-border, rgba(255,255,255,0.07));
-  padding: 5px 30px 5px 10px;
+  padding: 6px 30px 6px 10px;
   font-size: 12.5px;
   font-weight: 400;
   line-height: 1.35;
@@ -9431,7 +9453,7 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 7px;
+  margin-bottom: 8px;
 }
 .peq-xfade-cat {
   font-size: 10px;
@@ -9758,11 +9780,10 @@ tbody tr:hover {
 
 /* ── Player compact collapse ≤900 px ──────────────────────────────────── */
 @media (max-width: 900px) {
-  /* Show overflow button; hide individual action icons */
+  /* Show overflow button; hide EQ, fav, lyrics — queue stays visible */
   .player-overflow-btn { display: flex; }
   #player-lyrics-btn,
   #player-peq-btn,
-  #player-queue-btn,
   #player-fav-btn,
   .player-right-divider { display: none !important; }
 
@@ -9771,6 +9792,23 @@ tbody tr:hover {
 
   /* Narrower volume slider */
   .player-vol-slider { width: 72px; }
+
+  /* Re-anchor popups to viewport so they clear the player bar's stacking context */
+  .player-peq-wrap { position: static; }
+  .peq-popover {
+    position: fixed !important;
+    bottom: 104px;
+    right: 14px;
+    top: auto;
+    left: auto;
+  }
+  .player-overflow-menu {
+    position: fixed !important;
+    bottom: 104px;
+    right: 14px;
+    top: auto;
+    left: auto;
+  }
 }
 
 /* Custom PEQ workspace */

@@ -2598,14 +2598,14 @@
             <div class="peq-section">
               <div class="peq-section-label">IEM or Headphone</div>
               <select id="peq-iem-select" class="peq-select" onchange="Player.onPeqIemChange(this.value)">
-                <option value="">— None —</option>
+                <option value="">None</option>
               </select>
             </div>
             <!-- Profile selector -->
             <div class="peq-section" id="peq-profile-row">
               <div class="peq-section-label">Select PEQ</div>
               <select id="peq-profile-select" class="peq-select" onchange="Player.onPeqProfileChange(this.value)">
-                <option value="">— None —</option>
+                <option value="">None</option>
                 <option value="__create__">Create PEQ</option>
               </select>
             </div>
@@ -2635,11 +2635,12 @@
           </div>
         </div>
       </div>
-      <button class="player-btn player-btn-sm" id="player-queue-btn" onclick="Player.toggleQueue()" title="Queue">
-        <span class="tb-icon tb-icon-playlist" aria-hidden="true"></span>
-      </button>
       <button class="player-btn player-btn-sm fav-toggle player-fav-btn" id="player-fav-btn" onclick="App.toggleCurrentTrackFavourite()" title="Add to favourites" aria-label="Add to favourites">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z"/></svg>
+      </button>
+      <!-- Queue always visible; left of divider/volume -->
+      <button class="player-btn player-btn-sm" id="player-queue-btn" onclick="Player.toggleQueue()" title="Queue">
+        <span class="tb-icon tb-icon-playlist" aria-hidden="true"></span>
       </button>
       <!-- Vertical divider before volume section -->
       <div class="player-right-divider" aria-hidden="true"></div>
@@ -2648,7 +2649,7 @@
       </button>
       <input type="range" id="player-volume" class="player-vol-slider" min="0" max="100" value="100"
              oninput="Player.setVolume(this.value)" />
-      <!-- Compact overflow (hidden at full width, shown ≤900 px) -->
+      <!-- Compact overflow (hidden at full width, shown ≤900 px) — EQ + Fav only -->
       <div class="player-overflow-wrap">
         <button class="player-btn player-btn-sm player-overflow-btn" id="player-overflow-btn"
                 onclick="Player.toggleOverflowMenu()" title="More controls" aria-label="More controls">
@@ -2657,16 +2658,12 @@
           </svg>
         </button>
         <div class="player-overflow-menu" id="player-overflow-menu" style="display:none">
-          <button class="player-overflow-item player-btn" onclick="Player.togglePeqPopover()" title="Parametric EQ">
+          <button class="player-overflow-item" onclick="Player.togglePeqPopover()" title="Parametric EQ">
             <span class="tb-icon tb-icon-eq" aria-hidden="true"></span>
             <span class="player-overflow-label">Parametric EQ</span>
           </button>
-          <button class="player-overflow-item player-btn" onclick="Player.toggleQueue()" title="Queue">
-            <span class="tb-icon tb-icon-playlist" aria-hidden="true"></span>
-            <span class="player-overflow-label">Queue</span>
-          </button>
-          <button class="player-overflow-item player-btn fav-toggle" onclick="App.toggleCurrentTrackFavourite()" title="Favourite">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z"/></svg>
+          <button class="player-overflow-item fav-toggle" onclick="App.toggleCurrentTrackFavourite()" title="Favourite">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z"/></svg>
             <span class="player-overflow-label">Favourite</span>
           </button>
         </div>
