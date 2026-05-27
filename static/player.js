@@ -1244,6 +1244,12 @@ const Player = (function () {
 
   function setAutoplayEnabled(enabled) {
     ps.autoplayEnabled = !!enabled;
+    // Autoplay and Repeat are mutually exclusive — enabling autoplay turns repeat off
+    // so the queue advances into autoplay tracks rather than looping the same album.
+    if (ps.autoplayEnabled && ps.repeatMode !== 'off') {
+      ps.repeatMode = 'off';
+      _updateRepeatBtn();
+    }
     if (ps.autoplayEnabled) {
       if (!ps.autoplaySessionId) _startNewAutoplaySession();
       _ensureAutoplayQueue('enabled', { force: true });
@@ -1506,6 +1512,8 @@ const Player = (function () {
       _ensureAutoplayQueue('repeat-off', { force: true });
     }
     _updateRepeatBtn();
+    _updateAutoplayBtn();  // reflect conflict/active state when repeat changes
+    _renderQueue();        // update queue drawer autoplay section message
     _saveState();
     _preloadNext();  // repeat mode change may change which track is next
   }
@@ -2543,7 +2551,11 @@ const Player = (function () {
           html += `<div class="queue-overflow-note">+ ${hiddenAutoplayCount} more Autoplay track${hiddenAutoplayCount !== 1 ? 's' : ''}</div>`;
         }
       } else {
-        html += `<div class="queue-empty queue-empty-compact">${_autoplayFetchInFlight ? 'Finding similar songs...' : 'Autoplay will add similar songs at the end.'}</div>`;
+        const _apBlocked = ps.repeatMode !== 'off';
+        const _apMsg = _apBlocked
+          ? 'Autoplay is paused while Repeat is on.'
+          : (_autoplayFetchInFlight ? 'Finding similar songs...' : 'Autoplay will add similar songs at the end.');
+        html += `<div class="queue-empty queue-empty-compact">${_apMsg}</div>`;
       }
       html += `</div></div>`;
     } else {
@@ -2875,8 +2887,13 @@ const Player = (function () {
   function _updateAutoplayBtn() {
     const btn = document.getElementById('player-autoplay-btn');
     if (!btn) return;
-    btn.classList.toggle('active', !!ps.autoplayEnabled);
-    btn.title = ps.autoplayEnabled ? 'Autoplay on - click to turn off' : 'Autoplay off - click to turn on';
+    // Autoplay is "conflicted" when it's enabled but repeat is on — it won't actually fire.
+    const conflicted = ps.autoplayEnabled && ps.repeatMode !== 'off';
+    btn.classList.toggle('active',     ps.autoplayEnabled && !conflicted);
+    btn.classList.toggle('conflicted', conflicted);
+    btn.title = conflicted
+      ? 'Autoplay paused — Repeat is on'
+      : (ps.autoplayEnabled ? 'Autoplay on — click to turn off' : 'Autoplay off — click to turn on');
     btn.setAttribute('aria-pressed', ps.autoplayEnabled ? 'true' : 'false');
   }
 

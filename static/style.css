@@ -9046,6 +9046,11 @@ tbody tr:hover {
   width: 27px;
   height: 27px;
 }
+/* Autoplay is on but silently blocked by Repeat — show as dimmed */
+#player-autoplay-btn.conflicted {
+  opacity: 0.4;
+  color: var(--text-secondary);
+}
 .player-btn-sm { padding: 4px; }
 .player-btn-text {
   padding: 4px 9px;
