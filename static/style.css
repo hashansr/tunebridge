@@ -9161,43 +9161,27 @@ tbody tr:hover {
 .player-seek::-moz-range-progress {
   background: transparent;
 }
-/* Thumb — hidden; appears on hover for precise scrubbing */
+/* Thumb — fully invisible; scrubbing works via the transparent range input */
 .player-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #adc6ff;
+  background: transparent;
+  box-shadow: none;
   cursor: pointer;
-  box-shadow: 0 0 0 3px rgba(173,198,255,0.20);
-  opacity: 0;
-  transition: opacity 0.12s, transform 0.12s, box-shadow 0.12s;
 }
 .player-seek::-moz-range-thumb {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #adc6ff;
+  background: transparent;
   border: none;
+  box-shadow: none;
   cursor: pointer;
-  box-shadow: 0 0 0 3px rgba(173,198,255,0.20);
-  opacity: 0;
-  transition: opacity 0.12s, transform 0.12s, box-shadow 0.12s;
-}
-.player-seek-wrap:hover .player-seek::-webkit-slider-thumb {
-  opacity: 1;
-  transform: scale(1.1);
-  box-shadow: 0 0 0 5px rgba(173,198,255,0.28);
-}
-.player-seek-wrap:hover .player-seek::-moz-range-thumb {
-  opacity: 1;
-  transform: scale(1.1);
-  box-shadow: 0 0 0 5px rgba(173,198,255,0.28);
 }
 /* Disable seek interaction when no track is loaded */
 .player-seek:disabled { cursor: default; pointer-events: none; }
-.player-seek:disabled::-webkit-slider-thumb { opacity: 0 !important; }
-.player-seek:disabled::-moz-range-thumb { opacity: 0 !important; }
 /* Brighten fill on hover */
 .player-seek-wrap:hover .player-progress-fill { background: linear-gradient(90deg, rgba(190,210,255,0.98), rgba(102,232,125,0.95)); }
 .player-seek-wrap:hover .player-progress-bg   { background: rgba(74,74,72,0.95); }
