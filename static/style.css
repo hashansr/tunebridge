@@ -9283,7 +9283,7 @@ tbody tr:hover {
   position: absolute;
   bottom: calc(100% + 12px);
   right: 0;
-  width: min(320px, calc(100vw - 20px));
+  width: min(250px, calc(100vw - 20px));
   background: #1d1d1f;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -9558,7 +9558,7 @@ tbody tr:hover {
 
 @media (max-width: 920px) {
   .peq-popover {
-    width: min(320px, calc(100vw - 12px));
+    width: min(250px, calc(100vw - 12px));
     border-radius: 12px;
   }
   .peq-title {
