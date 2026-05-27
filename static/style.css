@@ -9268,6 +9268,14 @@ tbody tr:hover {
   line-height: 1;
   white-space: nowrap;
 }
+/* Fav-toggle inside the overflow menu is always fully visible */
+.player-overflow-menu .fav-toggle {
+  opacity: 1;
+  width: auto;
+  height: auto;
+  display: flex;
+  border-radius: 7px;
+}
 
 /* PEQ popover */
 .peq-popover {
