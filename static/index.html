@@ -1334,7 +1334,7 @@
             <div class="settings-rg-divider"></div>
             <div class="settings-rg-row">
               <div class="settings-rg-meta">
-                <span class="settings-rg-label">Lyrics</span>
+                <span class="settings-rg-label">Lyrics <span class="settings-section-status" data-settings-section-status="lyrics" style="display:none"></span></span>
                 <span id="lyrics-stats-text" class="settings-rg-sub">Loading…</span>
               </div>
               <div class="settings-rg-actions">
@@ -1343,14 +1343,11 @@
                 <button class="btn-secondary" id="lyrics-bulk-cancel-btn" onclick="App.cancelLyricsBulk()" style="display:none">Cancel</button>
               </div>
             </div>
-            <div id="lyrics-bulk-banner" class="rg-banner" role="status" aria-live="polite" style="display:none">
-              <div class="rg-banner-text">
-                <span id="lyrics-bulk-msg" style="color:var(--text-muted)"></span>
+            <div id="lyrics-bulk-banner" class="scan-progress-wrap" role="status" aria-live="polite" style="display:none">
+              <div class="scan-bar-outer">
+                <div id="lyrics-bulk-bar" class="scan-bar-inner" style="width:0%"></div>
               </div>
-              <div class="insights-analysis-bar-wrap" style="flex:1;min-width:80px">
-                <div id="lyrics-bulk-bar" class="insights-analysis-bar" style="width:0%"></div>
-              </div>
-              <span id="lyrics-bulk-percent" class="lyrics-bulk-percent">0%</span>
+              <div id="lyrics-bulk-msg" class="scan-status-msg"></div>
             </div>
             <div class="lyrics-advanced-wrap">
               <button class="lyrics-advanced-toggle" onclick="App.toggleLyricsAdvanced()">

@@ -16777,7 +16777,6 @@ function _updateLyricsBulkBanner(s) {
   const banner = document.getElementById('lyrics-bulk-banner');
   const bar = document.getElementById('lyrics-bulk-bar');
   const msg = document.getElementById('lyrics-bulk-msg');
-  const pctEl = document.getElementById('lyrics-bulk-percent');
   const newBtn = document.getElementById('lyrics-bulk-new-btn');
   const allBtn = document.getElementById('lyrics-bulk-all-btn');
   const cancelBtn = document.getElementById('lyrics-bulk-cancel-btn');
@@ -16803,6 +16802,7 @@ function _updateLyricsBulkBanner(s) {
     return parts.join(', ');
   };
   banner.style.display = (s.status === 'idle') ? 'none' : '';
+  if (s.status === 'idle') _setSettingsStatus('lyrics');
   [newBtn, allBtn].forEach((btn) => {
     if (!btn) return;
     const isActive = running && btn.id === (mode === 'all' ? 'lyrics-bulk-all-btn' : 'lyrics-bulk-new-btn');
@@ -16813,9 +16813,13 @@ function _updateLyricsBulkBanner(s) {
     if (label) label.textContent = isActive ? 'Finding...' : (btn.dataset.label || label.textContent);
   });
   if (cancelBtn) cancelBtn.style.display = running ? '' : 'none';
-  if (pctEl) pctEl.textContent = `${pct}%`;
   if (running) {
     const found = (s.synced || 0) + (s.plain || 0);
+    _setSettingsStatus('lyrics', {
+      show: true,
+      tone: 'busy',
+      title: `Lyrics lookup running: ${Number(s.progress || 0).toLocaleString()} / ${Number(s.total || 0).toLocaleString()}`,
+    });
     if (bar) bar.style.width = pct + '%';
     if (msg) {
       const total = s.total || 0;
@@ -16827,8 +16831,8 @@ function _updateLyricsBulkBanner(s) {
     }
   } else if (s.status === 'done') {
     const found = (s.synced || 0) + (s.plain || 0);
+    _setSettingsStatus('lyrics');
     if (bar) bar.style.width = '100%';
-    if (pctEl) pctEl.textContent = '100%';
     if (msg) {
       const prefix = s.errors
         ? `Done with ${s.errors.toLocaleString()} retryable ${s.errors === 1 ? 'error' : 'errors'}`
@@ -16840,6 +16844,7 @@ function _updateLyricsBulkBanner(s) {
     if (newBtn) newBtn.disabled = false;
     if (allBtn) allBtn.disabled = false;
   } else if (s.status === 'error') {
+    _setSettingsStatus('lyrics', { show: true, tone: 'error', title: 'Lyrics lookup encountered an error' });
     if (bar) bar.style.width = pct + '%';
     if (msg) msg.textContent =
       `${s.last_error || s.message || 'Lyrics search paused because of errors'} · ` +
@@ -16848,8 +16853,8 @@ function _updateLyricsBulkBanner(s) {
     if (newBtn) newBtn.disabled = false;
     if (allBtn) allBtn.disabled = false;
   } else if (s.status === 'cancelled') {
+    _setSettingsStatus('lyrics');
     if (bar) bar.style.width = '0%';
-    if (pctEl) pctEl.textContent = '0%';
     if (msg) msg.textContent = `Cancelled after ${(s.progress || 0).toLocaleString()} tracks`;
     if (newBtn) newBtn.disabled = false;
     if (allBtn) allBtn.disabled = false;
