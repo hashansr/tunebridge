@@ -9344,6 +9344,9 @@ tbody tr:hover {
 /* Sections */
 .peq-section { margin-bottom: 12px; }
 .peq-section:last-of-type { margin-bottom: 0; }
+#xfade-row {
+  padding: 0 16px;
+}
 .peq-popover-fields {
   display: grid;
   grid-template-columns: 1fr;
@@ -9546,16 +9549,15 @@ tbody tr:hover {
 
 @media (max-width: 920px) {
   .peq-popover {
-    width: min(360px, calc(100vw - 12px));
-    padding: 14px;
-    border-radius: 10px;
+    width: min(320px, calc(100vw - 12px));
+    border-radius: 12px;
   }
   .peq-title {
-    font-size: 15.5px;
+    font-size: 13px;
   }
   .peq-close-btn {
-    width: 20px;
-    height: 20px;
+    width: 26px;
+    height: 26px;
   }
   .peq-popover-fields,
   .peq-popover-actions {

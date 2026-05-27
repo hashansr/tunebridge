@@ -2126,7 +2126,7 @@ const Player = (function () {
     try {
       const iems = await fetch('/api/iems').then(r => r.json());
       const activeIemId = ps.activePeqIemId === _CUSTOM_EQ_ID ? '' : (ps.activePeqIemId || '');
-      sel.innerHTML = `<option value=""${!activeIemId ? ' selected' : ''}>— None —</option>` +
+      sel.innerHTML = `<option value=""${!activeIemId ? ' selected' : ''}>None</option>` +
         iems.map(iem =>
           `<option value="${iem.id}"${iem.id === activeIemId ? ' selected' : ''}>${_esc(iem.name)}</option>`
         ).join('');
@@ -2152,7 +2152,7 @@ const Player = (function () {
     const row = document.getElementById('peq-profile-row');
     const sel = document.getElementById('peq-profile-select');
     if (!row || !sel) return;
-    const base = `<option value="">— None —</option><option value="${_CREATE_PEQ_ID}">Create PEQ</option>`;
+    const base = `<option value="">None</option><option value="${_CREATE_PEQ_ID}">Create PEQ</option>`;
     row.style.display = '';
     if (!iemId) {
       try {
