@@ -16859,6 +16859,14 @@ body.is-col-resizing {
   gap: 8px;
   align-items: center;
 }
+.te-artwork-actions .btn-secondary {
+  min-height: 38px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
 .te-artwork-pick-btn {
   cursor: pointer;
 }
@@ -16868,7 +16876,7 @@ body.is-col-resizing {
   color: #ffb3b5;
 }
 .te-artwork-remove-btn:hover {
-  border: 1px solid rgba(255,179,181,0.22);
+  border-color: rgba(255,179,181,0.32);
   background: rgba(255,179,181,0.18);
   color: #ffb3b5;
 }
