@@ -3628,6 +3628,8 @@
 
       <div class="artist-image-modal-body">
 
+        <div id="aa-existing-preview" class="artist-image-existing" style="display:none"></div>
+
         <!-- Search section -->
         <div class="ai-section-label">Find online</div>
         <div class="artist-image-search-bar">
@@ -3645,6 +3647,7 @@
         <div id="aa-candidates" class="artist-image-candidates">
           <p class="artist-image-hint">Select a service and click Search to find covers.</p>
         </div>
+        <div id="aa-candidate-pager" class="artist-image-pager" style="display:none"></div>
 
         <!-- Upload section -->
         <div class="artist-image-divider"><span>or upload your own</span></div>
@@ -3656,6 +3659,7 @@
           </label>
           <span id="aa-file-name" class="ai-file-name-label"></span>
         </div>
+        <div id="aa-upload-preview" class="artist-image-upload-preview" style="display:none"></div>
 
         <!-- Error -->
         <div id="aa-error" class="tag-editor-error" style="display:none">
@@ -3696,10 +3700,12 @@
 
       <div class="artist-image-modal-body">
 
+        <div id="ai-existing-preview" class="artist-image-existing" style="display:none"></div>
+
         <!-- Search section -->
         <div class="ai-section-label">Find online</div>
         <div class="artist-image-search-bar">
-          <select id="ai-service-select" class="settings-select">
+          <select id="ai-service-select" class="settings-select" onchange="App.onArtistImageSearchServiceChange(this.value)">
             <option value="itunes">iTunes Search</option>
             <option value="lastfm">Last.fm</option>
             <option value="fanart">Fanart.tv</option>
@@ -3713,6 +3719,7 @@
         <div id="ai-candidates" class="artist-image-candidates">
           <p class="artist-image-hint">Select a service and click Search to find photos.</p>
         </div>
+        <div id="ai-candidate-pager" class="artist-image-pager" style="display:none"></div>
 
         <!-- Upload section -->
         <div class="artist-image-divider"><span>or upload your own</span></div>
@@ -3724,6 +3731,7 @@
           </label>
           <span id="ai-file-name" class="ai-file-name-label"></span>
         </div>
+        <div id="ai-upload-preview" class="artist-image-upload-preview" style="display:none"></div>
 
         <!-- Error -->
         <div id="ai-error" class="tag-editor-error" style="display:none">

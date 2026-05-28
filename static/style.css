@@ -16871,23 +16871,61 @@ tr:hover .track-edit-btn:hover {
 .artist-image-modal-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 9px;
 }
 
 /* Eyebrow labels above each section */
 .ai-section-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10.5px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
   color: var(--text-muted);
-  margin-bottom: -4px;
+  margin-bottom: -3px;
+}
+
+.artist-image-existing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 78px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.035);
+}
+.artist-image-existing img {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  object-fit: cover;
+  border-radius: 7px;
+}
+.artist-image-existing-copy {
+  min-width: 0;
+}
+.artist-image-existing-title {
+  margin-top: 3px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.artist-image-existing-sub {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 /* Search row: select + search button */
 .artist-image-search-bar {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
 }
 .artist-image-search-bar .settings-select { flex: 1; }
@@ -16896,32 +16934,40 @@ tr:hover .track-edit-btn:hover {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  padding: 8px 16px;
+  padding: 7px 14px;
 }
 
-/* Photo candidate grid — responsive fill */
+/* Photo candidate grid — fixed, paged strip */
 .artist-image-candidates {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
-  gap: 10px;
-  min-height: 54px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 76px;
 }
 
 .artist-image-hint {
-  font-size: var(--text-sm);
+  font-size: 12.5px;
   color: var(--text-muted);
-  margin: 6px 0;
+  margin: 5px 0;
   grid-column: 1 / -1;
 }
 
 .artist-img-candidate {
   width: 100%;
   aspect-ratio: 1 / 1;
-  object-fit: cover;
   border-radius: 8px;
   cursor: pointer;
   border: 2px solid transparent;
+  background: rgba(255,255,255,0.04);
+  padding: 0;
   transition: border-color 0.15s, transform 0.12s, box-shadow 0.15s;
+  display: block;
+  overflow: hidden;
+}
+.artist-img-candidate img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   display: block;
 }
 .artist-img-candidate:hover  { transform: scale(1.03); border-color: rgba(173, 198, 255, 0.45); }
@@ -16930,15 +16976,44 @@ tr:hover .track-edit-btn:hover {
   box-shadow: 0 0 0 3px rgba(173, 198, 255, 0.2);
   transform: scale(1.02);
 }
+.artist-image-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 26px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.artist-image-page-btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-sub);
+  background: rgba(255,255,255,0.055);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.artist-image-page-btn:hover {
+  color: var(--accent);
+  background: rgba(255,255,255,0.09);
+}
+.artist-image-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 /* Divider between search and upload — full-width flex rule */
 .artist-image-divider {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   color: var(--text-muted);
-  font-size: var(--text-sm);
-  margin: 2px 0;
+  font-size: 12.5px;
+  margin: 1px 0;
 }
 .artist-image-divider::before,
 .artist-image-divider::after {
@@ -16952,7 +17027,7 @@ tr:hover .track-edit-btn:hover {
 .artist-image-upload-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .artist-image-upload-label {
   flex-shrink: 0;
@@ -16962,12 +17037,45 @@ tr:hover .track-edit-btn:hover {
   gap: 7px;
 }
 .ai-file-name-label {
-  font-size: var(--text-sm);
+  font-size: 12.5px;
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 260px;
+}
+.artist-image-upload-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 70px;
+  padding: 8px;
+  border: 1px solid rgba(173, 198, 255, 0.45);
+  border-radius: 8px;
+  background: rgba(173, 198, 255, 0.08);
+  box-shadow: 0 0 0 2px rgba(173, 198, 255, 0.12);
+}
+.artist-image-upload-preview img {
+  width: 54px;
+  height: 54px;
+  flex: 0 0 54px;
+  object-fit: cover;
+  border-radius: 7px;
+}
+.artist-image-upload-meta {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.artist-image-upload-title {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Footer: remove on left, cancel+save on right */
@@ -16985,6 +17093,24 @@ tr:hover .track-edit-btn:hover {
   align-items: center;
   gap: 10px;
   margin-left: auto;
+}
+
+@media (max-width: 760px) {
+  .artist-image-candidates {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .artist-image-search-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .artist-image-existing {
+    min-height: 70px;
+  }
+  .artist-image-existing img {
+    width: 56px;
+    height: 56px;
+    flex-basis: 56px;
+  }
 }
 
 /* Camera icon button — shared base for artist cards and album cards */

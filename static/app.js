@@ -17352,6 +17352,8 @@ const App = {
   openArtistImageModal,
   closeArtistImageModal,
   searchArtistImages,
+  artistImageCandidatesPage,
+  onArtistImageSearchServiceChange,
   onArtistImageFileSelected,
   saveArtistImage,
   removeArtistImage,
@@ -17375,6 +17377,7 @@ const App = {
   _openAlbumArtForCard,
   closeAlbumArtModal,
   searchAlbumArt,
+  albumArtCandidatesPage,
   onAlbumArtServiceChange,
   onAlbumArtFileSelected,
   saveAlbumArt,
@@ -20544,6 +20547,169 @@ let _albumArtArtist = null;
 let _albumArtAlbum  = null;
 let _albumArtSelectedUrl  = null;
 let _albumArtSelectedFile = null;
+let _albumArtCandidates = [];
+let _albumArtPage = 0;
+let _albumArtSelectedIndex = null;
+let _albumArtUploadObjectUrl = null;
+
+const ARTWORK_MODAL_PAGE_SIZE = 6;
+
+function _formatImageFileSize(bytes) {
+  if (!Number.isFinite(bytes)) return '';
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function _resetArtworkUploadPreview(prefix) {
+  if (prefix === 'aa' && _albumArtUploadObjectUrl) {
+    URL.revokeObjectURL(_albumArtUploadObjectUrl);
+    _albumArtUploadObjectUrl = null;
+  }
+  if (prefix === 'ai' && _artistImageUploadObjectUrl) {
+    URL.revokeObjectURL(_artistImageUploadObjectUrl);
+    _artistImageUploadObjectUrl = null;
+  }
+  const preview = document.getElementById(`${prefix}-upload-preview`);
+  if (preview) {
+    preview.style.display = 'none';
+    preview.innerHTML = '';
+  }
+}
+
+function _readImageDimensions(url) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+async function _showArtworkUploadPreview(prefix, file, label) {
+  _resetArtworkUploadPreview(prefix);
+  const objectUrl = URL.createObjectURL(file);
+  if (prefix === 'aa') _albumArtUploadObjectUrl = objectUrl;
+  if (prefix === 'ai') _artistImageUploadObjectUrl = objectUrl;
+
+  const dims = await _readImageDimensions(objectUrl);
+  const preview = document.getElementById(`${prefix}-upload-preview`);
+  if (!preview) return;
+  const dimText = dims ? `${dims.width} x ${dims.height}px` : 'Dimensions unavailable';
+  preview.innerHTML = `
+    <img src="${objectUrl}" alt="${esc(label)} preview">
+    <div class="artist-image-upload-meta">
+      <div class="artist-image-upload-title">${esc(file.name)}</div>
+      <div>${esc(dimText)} · ${esc(_formatImageFileSize(file.size))}</div>
+      <div>Will save as 600 x 600 JPEG</div>
+    </div>
+  `;
+  preview.style.display = '';
+}
+
+function _renderExistingArtworkPreview(prefix, src, title, kindLabel) {
+  const el = document.getElementById(`${prefix}-existing-preview`);
+  if (!el) return;
+  if (!src) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = `
+    <div class="artist-image-existing-copy">
+      <div class="ai-section-label">Existing</div>
+      <div class="artist-image-existing-title">${esc(title)}</div>
+      <div class="artist-image-existing-sub">${esc(kindLabel)} currently saved in TuneBridge</div>
+    </div>
+    <img src="${src}" alt="${esc(title)}">
+  `;
+  el.style.display = '';
+}
+
+function _setArtworkCandidateHint(prefix, text) {
+  const container = document.getElementById(`${prefix}-candidates`);
+  const pager = document.getElementById(`${prefix}-candidate-pager`);
+  if (container) container.innerHTML = `<p class="artist-image-hint">${esc(text)}</p>`;
+  if (pager) {
+    pager.style.display = 'none';
+    pager.innerHTML = '';
+  }
+}
+
+function _renderArtworkCandidatePage(prefix, mode) {
+  const isAlbum = mode === 'album';
+  const candidates = isAlbum ? _albumArtCandidates : _artistImageCandidates;
+  const page = isAlbum ? _albumArtPage : _artistImagePage;
+  const selectedIndex = isAlbum ? _albumArtSelectedIndex : _artistImageSelectedIndex;
+  const container = document.getElementById(`${prefix}-candidates`);
+  const pager = document.getElementById(`${prefix}-candidate-pager`);
+  if (!container || !pager) return;
+
+  container.innerHTML = '';
+  const start = page * ARTWORK_MODAL_PAGE_SIZE;
+  const shown = candidates.slice(start, start + ARTWORK_MODAL_PAGE_SIZE);
+  shown.forEach((c, offset) => {
+    const idx = start + offset;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `artist-img-candidate${idx === selectedIndex ? ' selected' : ''}`;
+    btn.title = c.label || '';
+    btn.onclick = () => {
+      if (isAlbum) {
+        _albumArtSelectedIndex = idx;
+        _albumArtSelectedUrl = c.url;
+        _albumArtSelectedFile = null;
+        _resetArtworkUploadPreview('aa');
+        document.getElementById('aa-file-name').textContent = '';
+        document.getElementById('aa-file-input').value = '';
+        document.getElementById('aa-use-btn').disabled = false;
+        _renderArtworkCandidatePage('aa', 'album');
+      } else {
+        _artistImageSelectedIndex = idx;
+        _selectedImageUrl = c.url;
+        _selectedImageSource = c.source;
+        _selectedImageFile = null;
+        _resetArtworkUploadPreview('ai');
+        document.getElementById('ai-file-name').textContent = '';
+        document.getElementById('ai-file-input').value = '';
+        document.getElementById('ai-use-btn').disabled = false;
+        _renderArtworkCandidatePage('ai', 'artist');
+      }
+    };
+    const img = document.createElement('img');
+    img.src = c.thumbnail_url || c.url;
+    img.alt = c.label || '';
+    img.loading = 'lazy';
+    img.onerror = () => { btn.style.opacity = '0.35'; btn.disabled = true; };
+    btn.appendChild(img);
+    container.appendChild(btn);
+  });
+
+  const totalPages = Math.ceil(candidates.length / ARTWORK_MODAL_PAGE_SIZE);
+  if (totalPages <= 1) {
+    pager.style.display = 'none';
+    pager.innerHTML = '';
+    return;
+  }
+  const prevFn = isAlbum ? 'albumArtCandidatesPage' : 'artistImageCandidatesPage';
+  const nextDisabled = page >= totalPages - 1 ? 'disabled' : '';
+  const prevDisabled = page <= 0 ? 'disabled' : '';
+  pager.innerHTML = `
+    <button type="button" class="artist-image-page-btn" onclick="App.${prevFn}(-1)" ${prevDisabled} aria-label="Previous page">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <span>Page ${page + 1} of ${totalPages}</span>
+    <button type="button" class="artist-image-page-btn" onclick="App.${prevFn}(1)" ${nextDisabled} aria-label="Next page">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
+  `;
+  pager.style.display = '';
+}
+
+function albumArtCandidatesPage(delta) {
+  const totalPages = Math.ceil(_albumArtCandidates.length / ARTWORK_MODAL_PAGE_SIZE);
+  _albumArtPage = Math.max(0, Math.min(totalPages - 1, _albumArtPage + delta));
+  _renderArtworkCandidatePage('aa', 'album');
+}
 
 function openAlbumArtModal() {
   document.querySelectorAll('.hero-more-menu.open').forEach(m => m.classList.remove('open'));
@@ -20553,13 +20719,16 @@ function openAlbumArtModal() {
   _albumArtAlbum        = state.album;
   _albumArtSelectedUrl  = null;
   _albumArtSelectedFile = null;
+  _albumArtCandidates = [];
+  _albumArtPage = 0;
+  _albumArtSelectedIndex = null;
 
   document.getElementById('album-art-modal-subtitle').textContent =
     `${state.artist} — ${state.album}`;
 
   // Reset candidate grid, error, buttons, file input
-  document.getElementById('aa-candidates').innerHTML =
-    '<p class="artist-image-hint">Select a service and click Search to find covers.</p>';
+  _setArtworkCandidateHint('aa', 'Select a service and click Search to find covers.');
+  _resetArtworkUploadPreview('aa');
   _hideTagError('aa-error');
   const useBtn = document.getElementById('aa-use-btn');
   useBtn.disabled    = true;
@@ -20578,6 +20747,12 @@ function openAlbumArtModal() {
     a.name === state.album && a.artist === state.artist);
   document.getElementById('aa-remove-btn').style.display =
     albumObj?.artwork_key ? '' : 'none';
+  _renderExistingArtworkPreview(
+    'aa',
+    albumObj?.artwork_key ? `/api/artwork/${encodeURIComponent(albumObj.artwork_key)}?t=${Date.now()}` : '',
+    state.album,
+    'Album art'
+  );
 
   document.getElementById('album-art-modal').style.display = 'flex';
 }
@@ -20590,6 +20765,7 @@ function _openAlbumArtForCard(artist, album) {
 }
 
 function closeAlbumArtModal() {
+  _resetArtworkUploadPreview('aa');
   document.getElementById('album-art-modal').style.display = 'none';
 }
 
@@ -20610,6 +20786,17 @@ async function searchAlbumArt() {
   container.innerHTML = '<p class="artist-image-hint">Searching…</p>';
   _albumArtSelectedUrl  = null;
   _albumArtSelectedFile = null;
+  _albumArtCandidates = [];
+  _albumArtPage = 0;
+  _albumArtSelectedIndex = null;
+  _resetArtworkUploadPreview('aa');
+  const pager = document.getElementById('aa-candidate-pager');
+  if (pager) {
+    pager.style.display = 'none';
+    pager.innerHTML = '';
+  }
+  document.getElementById('aa-file-name').textContent = '';
+  document.getElementById('aa-file-input').value = '';
   document.getElementById('aa-use-btn').disabled = true;
 
   const service = document.getElementById('aa-service-select')?.value || 'itunes';
@@ -20626,32 +20813,16 @@ async function searchAlbumArt() {
     const candidates = data.candidates || [];
     const svcLabel = { itunes: 'iTunes', lastfm: 'Last.fm', fanart: 'Fanart.tv' }[service] || service;
     if (!candidates.length) {
-      container.innerHTML = `<p class="artist-image-hint">No results found on ${svcLabel}. Try a different service or upload your own image.</p>`;
+      _setArtworkCandidateHint('aa', `No results found on ${svcLabel}. Try a different service or upload your own image.`);
       _resetAlbumArtSearchBtn();
       return;
     }
 
-    container.innerHTML = '';
-    candidates.forEach(c => {
-      const img = document.createElement('img');
-      img.src       = c.thumbnail_url || c.url;
-      img.className = 'artist-img-candidate';
-      img.title     = c.label || '';
-      img.loading   = 'lazy';
-      img.onerror   = () => { img.style.opacity = '0.25'; img.style.pointerEvents = 'none'; };
-      img.onclick   = () => {
-        container.querySelectorAll('.artist-img-candidate').forEach(x => x.classList.remove('selected'));
-        img.classList.add('selected');
-        _albumArtSelectedUrl  = c.url;
-        _albumArtSelectedFile = null;
-        document.getElementById('aa-file-name').textContent = '';
-        document.getElementById('aa-use-btn').disabled = false;
-      };
-      container.appendChild(img);
-    });
+    _albumArtCandidates = candidates;
+    _renderArtworkCandidatePage('aa', 'album');
   } catch (e) {
     _showTagError('aa-error', e.message || 'Search failed.');
-    container.innerHTML = '';
+    _setArtworkCandidateHint('aa', 'Search failed.');
   }
 
   _resetAlbumArtSearchBtn();
@@ -20659,26 +20830,30 @@ async function searchAlbumArt() {
 
 function onAlbumArtServiceChange(value) {
   // Reset the candidate grid when the service changes so stale results are cleared
-  const container = document.getElementById('aa-candidates');
-  if (container) {
-    container.innerHTML = '<p class="artist-image-hint">Select a service and click Search to find covers.</p>';
-  }
+  _setArtworkCandidateHint('aa', 'Select a service and click Search to find covers.');
   _albumArtSelectedUrl  = null;
   _albumArtSelectedFile = null;
+  _albumArtCandidates = [];
+  _albumArtPage = 0;
+  _albumArtSelectedIndex = null;
   document.getElementById('aa-file-name').textContent = '';
+  document.getElementById('aa-file-input').value = '';
+  _resetArtworkUploadPreview('aa');
   const useBtn = document.getElementById('aa-use-btn');
   if (useBtn) useBtn.disabled = true;
   _hideTagError('aa-error');
 }
 
-function onAlbumArtFileSelected(input) {
+async function onAlbumArtFileSelected(input) {
   const file = input.files[0];
   if (!file) return;
   _albumArtSelectedFile = file;
   _albumArtSelectedUrl  = null;
+  _albumArtSelectedIndex = null;
   document.getElementById('aa-file-name').textContent = file.name;
   document.getElementById('aa-use-btn').disabled = false;
-  document.querySelectorAll('#aa-candidates .artist-img-candidate').forEach(x => x.classList.remove('selected'));
+  await _showArtworkUploadPreview('aa', file, 'Album art');
+  _renderArtworkCandidatePage('aa', 'album');
   _hideTagError('aa-error');
 }
 
@@ -20757,6 +20932,16 @@ let _artistImageName = null;
 let _selectedImageUrl = null;
 let _selectedImageSource = null;
 let _selectedImageFile = null;
+let _artistImageCandidates = [];
+let _artistImagePage = 0;
+let _artistImageSelectedIndex = null;
+let _artistImageUploadObjectUrl = null;
+
+function artistImageCandidatesPage(delta) {
+  const totalPages = Math.ceil(_artistImageCandidates.length / ARTWORK_MODAL_PAGE_SIZE);
+  _artistImagePage = Math.max(0, Math.min(totalPages - 1, _artistImagePage + delta));
+  _renderArtworkCandidatePage('ai', 'artist');
+}
 
 function openArtistImageModal() {
   document.querySelectorAll('.hero-more-menu.open').forEach(m => m.classList.remove('open'));
@@ -20767,15 +20952,18 @@ function openArtistImageModal() {
   _selectedImageUrl    = null;
   _selectedImageSource = null;
   _selectedImageFile   = null;
+  _artistImageCandidates = [];
+  _artistImagePage = 0;
+  _artistImageSelectedIndex = null;
 
   // Header subtitle shows the artist name
   document.getElementById('artist-image-modal-subtitle').textContent = state.artist;
 
   // Reset candidate grid
-  document.getElementById('ai-candidates').innerHTML =
-    '<p class="artist-image-hint">Select a service and click Search to find photos.</p>';
+  _setArtworkCandidateHint('ai', 'Select a service and click Search to find photos.');
 
   // Reset error, save button, file input
+  _resetArtworkUploadPreview('ai');
   _hideTagError('ai-error');
   const useBtn = document.getElementById('ai-use-btn');
   useBtn.disabled    = true;
@@ -20796,11 +20984,18 @@ function openArtistImageModal() {
   const artistObj = (state.artists || []).find(a => a.name === state.artist);
   const removeBtn = document.getElementById('ai-remove-btn');
   if (removeBtn) removeBtn.style.display = artistObj?.image_key ? '' : 'none';
+  _renderExistingArtworkPreview(
+    'ai',
+    artistObj?.image_key ? `/api/artists/${encodeURIComponent(artistObj.image_key)}/image?t=${Date.now()}` : '',
+    state.artist,
+    'Artist photo'
+  );
 
   document.getElementById('artist-image-modal').style.display = 'flex';
 }
 
 function closeArtistImageModal() {
+  _resetArtworkUploadPreview('ai');
   document.getElementById('artist-image-modal').style.display = 'none';
 }
 
@@ -20814,7 +21009,6 @@ async function searchArtistImages() {
   const btn = document.getElementById('ai-search-btn');
   const service = document.getElementById('ai-service-select').value;
   const container = document.getElementById('ai-candidates');
-  const errEl = document.getElementById('ai-error');
 
   btn.disabled = true;
   btn.innerHTML = 'Searching…';
@@ -20822,6 +21016,18 @@ async function searchArtistImages() {
   container.innerHTML = '<p class="artist-image-hint">Searching…</p>';
   _selectedImageUrl = null;
   _selectedImageSource = null;
+  _selectedImageFile = null;
+  _artistImageCandidates = [];
+  _artistImagePage = 0;
+  _artistImageSelectedIndex = null;
+  _resetArtworkUploadPreview('ai');
+  const pager = document.getElementById('ai-candidate-pager');
+  if (pager) {
+    pager.style.display = 'none';
+    pager.innerHTML = '';
+  }
+  document.getElementById('ai-file-name').textContent = '';
+  document.getElementById('ai-file-input').value = '';
   document.getElementById('ai-use-btn').disabled = true;
 
   const _resetSearchBtn = () => {
@@ -20839,49 +21045,49 @@ async function searchArtistImages() {
 
     const candidates = data.candidates || [];
     if (!candidates.length) {
-      container.innerHTML = '<p class="artist-image-hint">No results found. Try a different service or check your API key in Settings.</p>';
+      _setArtworkCandidateHint('ai', 'No results found. Try a different service or check your API key in Settings.');
       _resetSearchBtn();
       return;
     }
 
-    container.innerHTML = '';
-    candidates.forEach((c) => {
-      const img = document.createElement('img');
-      img.src = c.thumbnail_url || c.url;
-      img.className = 'artist-img-candidate';
-      img.title = c.label || '';
-      img.loading = 'lazy';
-      img.onerror = () => { img.style.opacity = '0.25'; img.style.pointerEvents = 'none'; };
-      img.onclick = () => {
-        container.querySelectorAll('.artist-img-candidate').forEach(x => x.classList.remove('selected'));
-        img.classList.add('selected');
-        _selectedImageUrl    = c.url;
-        _selectedImageSource = c.source;
-        _selectedImageFile   = null;
-        document.getElementById('ai-file-name').textContent = '';
-        document.getElementById('ai-use-btn').disabled = false;
-      };
-      container.appendChild(img);
-    });
+    _artistImageCandidates = candidates;
+    _renderArtworkCandidatePage('ai', 'artist');
   } catch (e) {
     _showTagError('ai-error', e.message || 'Search failed. Check your API key in Settings.');
-    container.innerHTML = '';
+    _setArtworkCandidateHint('ai', 'Search failed.');
   }
 
   _resetSearchBtn();
 }
 
 
-function onArtistImageFileSelected(input) {
+function onArtistImageSearchServiceChange(value) {
+  _setArtworkCandidateHint('ai', 'Select a service and click Search to find photos.');
+  _selectedImageUrl = null;
+  _selectedImageSource = null;
+  _selectedImageFile = null;
+  _artistImageCandidates = [];
+  _artistImagePage = 0;
+  _artistImageSelectedIndex = null;
+  document.getElementById('ai-file-name').textContent = '';
+  document.getElementById('ai-file-input').value = '';
+  _resetArtworkUploadPreview('ai');
+  const useBtn = document.getElementById('ai-use-btn');
+  if (useBtn) useBtn.disabled = true;
+  _hideTagError('ai-error');
+}
+
+async function onArtistImageFileSelected(input) {
   const file = input.files[0];
   if (!file) return;
   _selectedImageFile   = file;
   _selectedImageUrl    = null;
   _selectedImageSource = 'upload';
+  _artistImageSelectedIndex = null;
   document.getElementById('ai-file-name').textContent = file.name;
   document.getElementById('ai-use-btn').disabled = false;
-  // Deselect any grid candidate
-  document.querySelectorAll('.artist-img-candidate').forEach(x => x.classList.remove('selected'));
+  await _showArtworkUploadPreview('ai', file, 'Artist photo');
+  _renderArtworkCandidatePage('ai', 'artist');
   _hideTagError('ai-error');
 }
 
