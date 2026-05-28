@@ -16837,11 +16837,14 @@ body.is-col-resizing {
   cursor: pointer;
 }
 .te-artwork-remove-btn {
-  color: var(--accent-secondary);
+  border: 1px solid rgba(255,179,181,0.22);
+  background: rgba(255,179,181,0.1);
+  color: #ffb3b5;
 }
 .te-artwork-remove-btn:hover {
-  color: var(--accent-secondary);
-  background: rgba(255,179,181,0.12);
+  border: 1px solid rgba(255,179,181,0.22);
+  background: rgba(255,179,181,0.18);
+  color: #ffb3b5;
 }
 
 /* ── Tag editor: sort fields toggle ─────────────────────────────── */
