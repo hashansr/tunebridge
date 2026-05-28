@@ -4549,8 +4549,9 @@ async function ctxFindLyrics() {
 }
 
 function ctxEditTrackTags() {
+  const tracks = _ctxTracks.slice();
   hideCtxMenu();
-  if (_ctxTracks.length === 1) openTagEditor(_ctxTracks[0].id);
+  if (tracks.length === 1) openTagEditor(tracks[0].id);
 }
 
 function ctxEditAlbumTags() {

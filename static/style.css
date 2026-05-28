@@ -16758,6 +16758,13 @@ body.is-col-resizing {
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
 }
+.tag-editor-row-2col .settings-row > div {
+  flex: 1;
+  min-width: 0;
+}
+.tag-editor-row-2col .settings-row > div > input {
+  width: 100%;
+}
 
 /* Loading skeleton shimmer on disabled inputs */
 .tag-editor-form input:disabled {
@@ -16797,9 +16804,9 @@ body.is-col-resizing {
 }
 .te-artwork-area {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
 }
 .te-artwork-square {
   width: 96px;
@@ -16827,13 +16834,10 @@ body.is-col-resizing {
 .te-artwork-actions {
   display: flex;
   flex-direction: row;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
 }
 .te-artwork-pick-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   cursor: pointer;
 }
 .te-artwork-remove-btn {
