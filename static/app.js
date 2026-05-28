@@ -81,6 +81,7 @@ let _homeTrackRefreshTimer = null;
 
 let _currentGearTab = 'daps';
 let _currentDapId = null;        // track current DAP being viewed (for nav history)
+let _dapPlaylistSort = { col: 'name', order: 'asc' };
 let _navHistory = [];             // back stack: array of nav snapshots
 let _isNavigatingBack = false;    // suppresses history push during back/forward restoration
 
@@ -10521,7 +10522,7 @@ async function checkDapSyncStatus(did) {
   const btn = document.getElementById('dap-check-sync-btn');
   if (btn) {
     btn.disabled = true;
-    btn.textContent = 'Checking…';
+    btn.innerHTML = `<span class="gd-btn-icon">${_GEAR_ICON_REFRESH}</span>Checking...`;
   }
   try {
     await api(`/daps/${did}/sync-status/check`, { method: 'POST' });
@@ -10535,9 +10536,20 @@ async function checkDapSyncStatus(did) {
     toast('Sync status check failed: ' + e.message);
     if (btn) {
       btn.disabled = false;
-      btn.textContent = 'Check Sync Status';
+      btn.innerHTML = `<span class="gd-btn-icon">${_GEAR_ICON_REFRESH}</span>Check status`;
     }
   }
+}
+
+function sortDapPlaylistStatus(col) {
+  const key = _pickAllowed(col, ['name', 'tracks', 'status', 'last_synced', 'sync'], 'name');
+  if (_dapPlaylistSort.col === key) {
+    _dapPlaylistSort.order = _dapPlaylistSort.order === 'asc' ? 'desc' : 'asc';
+  } else {
+    _dapPlaylistSort.col = key;
+    _dapPlaylistSort.order = key === 'status' ? 'desc' : 'asc';
+  }
+  if (_currentDapId) showDapDetail(_currentDapId);
 }
 
 async function showDapDetail(id) {
@@ -10571,7 +10583,6 @@ async function showDapDetail(id) {
         : `Estimated • ${_formatSyncCheckedAt(summary.last_scan_at)}`;
   const musicStatus = _dapMusicStatus(summary, !!dap.mounted);
   const playlistStatus = _dapPlaylistStatus(dap, summary);
-  const sortedPl = [...playlists].sort((a, b) => a.name.localeCompare(b.name));
   const playlistOut = Number(summary.playlist_out_of_sync_count || (dap.stale_count || 0) + (dap.never_exported || 0));
   const songsToSync = Number(summary.music_out_of_sync_count || 0);
   const musicToAdd = Number(summary.music_to_add_count || 0);
@@ -10618,6 +10629,13 @@ async function showDapDetail(id) {
       <span class="gd-dot ${dap.mounted ? 'on' : 'off'}"></span>${mountedLabel}
     </span>
   `;
+  const navRight = document.getElementById('main-nav-right');
+  if (navRight) {
+    navRight.innerHTML = `
+      <button class="gd-icon-btn danger gd-nav-icon-btn" onclick="App.deleteDap('${dap.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
+      <button class="gd-icon-btn gd-nav-icon-btn" onclick="App.showEditDapModal('${dap.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
+    `;
+  }
   const _counterNum = (value, cls = '') => `<span class="gd-counter-num ${cls}">${esc(value)}</span>`;
   const _counterEmpty = () => '<span class="gd-counter-empty">No data</span>';
   const _bytesParts = (bytes, fallback = 'Unavailable') => {
@@ -10629,6 +10647,27 @@ async function showDapDetail(id) {
   const totalParts = _bytesParts(spaceTotalBytes);
   const freeParts = _bytesParts(spaceFreeBytes);
   const lastSyncLabel = lastSyncTs ? _fmtRelDate(lastSyncTs).replace(' ago', '') : 'Never';
+  const _plStatusRank = (pl) => {
+    const ts = Number(exports[pl.id] || 0);
+    if (!ts) return 2;
+    return ts < Number(pl.updated_at || 0) ? 1 : 0;
+  };
+  const sortedPl = [...playlists].sort((a, b) => {
+    const dir = _dapPlaylistSort.order === 'desc' ? -1 : 1;
+    const col = String(_dapPlaylistSort.col || 'name');
+    let cmp = 0;
+    if (col === 'tracks') {
+      cmp = Number(a.tracks?.length || 0) - Number(b.tracks?.length || 0);
+    } else if (col === 'status' || col === 'sync') {
+      cmp = _plStatusRank(a) - _plStatusRank(b);
+    } else if (col === 'last_synced') {
+      cmp = Number(exports[a.id] || 0) - Number(exports[b.id] || 0);
+    } else {
+      cmp = String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
+    }
+    if (cmp !== 0) return cmp * dir;
+    return String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
+  });
 
   const plRows = sortedPl.map(pl => {
     const ts = exports[pl.id];
@@ -10666,10 +10705,6 @@ async function showDapDetail(id) {
           <h1>${esc(dap.name)}</h1>
           <div class="gd-id-sub">${esc(_dapIdentityLine(dap))}</div>
         </div>
-        <div class="gd-icon-actions gd-identity-actions">
-          <button class="gd-icon-btn danger" onclick="App.deleteDap('${dap.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
-          <button class="gd-icon-btn" onclick="App.showEditDapModal('${dap.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
-        </div>
       </div>
 
       <div class="gd-actions-row">
@@ -10680,7 +10715,6 @@ async function showDapDetail(id) {
           ${dap.mounted ? 'Sync all playlists' : 'Not mounted'}
         </button>
         ${dap.mounted ? `<button id="eject-btn-${dap.id}" class="gd-btn" onclick="App.ejectDap('${dap.id}', '${esc(dap.name)}')">Eject</button>` : ''}
-        <button class="gd-btn" onclick="App.showEditDapModal('${dap.id}')">Edit</button>
         <div class="gd-actions-right">${statusPillHtml}</div>
       </div>
 
@@ -10695,7 +10729,7 @@ async function showDapDetail(id) {
           </div>
         </div>
         <div class="gd-counter-strip">
-          <div class="gd-counter">${_counterNum(playlistOut, playlistOut ? 'warn' : 'zero')}<span>Playlists out of sync</span></div>
+          <div class="gd-counter">${_counterNum(playlistOut, playlistOut ? 'warn' : 'zero')}<span>Unsynced playlists</span></div>
           <div class="gd-counter">${hasSongData ? _counterNum(songsToSync) : _counterEmpty()}<span>Songs to sync</span></div>
           <div class="gd-counter">${hasDriveData && totalParts.unit ? `<span class="gd-counter-num">${esc(totalParts.value)}<small>${esc(totalParts.unit)}</small></span>` : _counterEmpty()}<span>Drive capacity</span></div>
           <div class="gd-counter">${hasDriveData && freeParts.unit ? `<span class="gd-counter-num">${esc(freeParts.value)}<small>${esc(freeParts.unit)}</small></span>` : _counterEmpty()}<span>Free space</span></div>
@@ -10726,21 +10760,31 @@ async function showDapDetail(id) {
 
       <section class="gd-section">
         <div class="gd-section-head">
-          <span class="title">Playlist sync status</span>
+          <h2 class="title">Playlist sync status</h2>
           <span class="count">· ${sortedPl.length} playlist${sortedPl.length === 1 ? '' : 's'}</span>
-          <button class="gd-sort-pill" type="button">Sort: name</button>
         </div>
-        <div class="dap-table-shell">
-          <table class="dap-pl-table gd-playlist-table" data-table-context="dap_playlists">
+        <div class="dap-table-shell tb-table-shell">
+          <div class="tb-table-scroll-area">
+          <table id="dap-playlist-table" class="dap-pl-table gd-playlist-table tb-table tb-table-density-compact" data-table-context="dap_playlists">
         <thead><tr>
-          <th>Playlist name</th><th>Tracks</th><th>Sync status</th><th>Last synced</th><th>Sync</th>
+          <th data-sort="name" onclick="App.sortDapPlaylistStatus('name')"><span class="th-sort-label">Playlist name<span id="dap-sort-name" class="sort-arrow"></span></span></th>
+          <th data-sort="tracks" onclick="App.sortDapPlaylistStatus('tracks')"><span class="th-sort-label">Tracks<span id="dap-sort-tracks" class="sort-arrow"></span></span></th>
+          <th data-sort="status" onclick="App.sortDapPlaylistStatus('status')"><span class="th-sort-label">Sync status<span id="dap-sort-status" class="sort-arrow"></span></span></th>
+          <th data-sort="last_synced" onclick="App.sortDapPlaylistStatus('last_synced')"><span class="th-sort-label">Last synced<span id="dap-sort-last_synced" class="sort-arrow"></span></span></th>
+          <th data-sort="sync" onclick="App.sortDapPlaylistStatus('sync')"><span class="th-sort-label">Sync<span id="dap-sort-sync" class="sort-arrow"></span></span></th>
         </tr></thead>
         <tbody>${plRows || '<tr><td colspan="5" class="dap-pl-empty-row">No playlists yet</td></tr>'}</tbody>
       </table>
+          </div>
         </div>
       </section>
     </div>
   `;
+  _enhanceTableSystem(document.getElementById('dap-detail-content'));
+  document.querySelectorAll('#dap-playlist-table .sort-arrow').forEach(el => el.textContent = '');
+  const dapSortArrow = document.getElementById(`dap-sort-${_dapPlaylistSort.col}`);
+  if (dapSortArrow) dapSortArrow.textContent = _dapPlaylistSort.order === 'asc' ? '\u25B2' : '\u25BC';
+  _syncTableSortState('dap-playlist-table', _dapPlaylistSort);
 }
 
 async function dapExportPlaylist(dapId, plId, btn) {
@@ -17341,6 +17385,7 @@ const App = {
   // DAP
   checkAllDapSyncStatus,
   checkDapSyncStatus,
+  sortDapPlaylistStatus,
   ejectDap,
   showDapDetail,
   showAddDapModal,
