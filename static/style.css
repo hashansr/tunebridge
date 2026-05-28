@@ -16753,10 +16753,32 @@ body.is-col-resizing {
   gap: 4px;
 }
 
+#tag-editor-modal .tag-editor-form {
+  gap: 2px;
+}
+
+#tag-editor-modal .tag-editor-form .settings-row {
+  align-items: flex-start !important;
+  gap: 12px !important;
+}
+
+#tag-editor-modal .tag-editor-form .settings-row > label {
+  width: 108px !important;
+  flex: 0 0 108px !important;
+  padding-top: 7px !important;
+}
+
+#tag-editor-modal .tag-editor-form .settings-row > input,
+#tag-editor-modal .tag-editor-form .settings-row > select,
+#tag-editor-modal .tag-editor-form .settings-row > textarea {
+  flex: 1;
+  min-width: 0;
+}
+
 .tag-editor-row-2col {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0 16px;
+  gap: 0 24px;
 }
 .tag-editor-row-2col .settings-row > div {
   flex: 1;
