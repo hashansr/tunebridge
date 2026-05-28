@@ -10051,6 +10051,9 @@ const _GEAR_ICON_EDIT = `<svg width="14" height="14" viewBox="0 0 24 24" fill="c
 const _GEAR_ICON_TRASH = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 1.5V2.5H3C2.44772 2.5 2 2.94772 2 3.5V4.5C2 5.05228 2.44772 5.5 3 5.5H21C21.5523 5.5 22 5.05228 22 4.5V3.5C22 2.94772 21.5523 2.5 21 2.5H16V1.5C16 0.947715 15.5523 0.5 15 0.5H9C8.44772 0.5 8 0.947715 8 1.5Z"/><path d="M3.9231 7.5H20.0767L19.1344 20.2216C19.0183 21.7882 17.7135 23 16.1426 23H7.85724C6.28636 23 4.98148 21.7882 4.86544 20.2216L3.9231 7.5Z"/></svg>`;
 const _GEAR_ICON_EQ = `<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M3 12V8M3 6V2M7 12V9M7 7V2M11 12V6M11 4V2"/><circle cx="3" cy="7" r="1.2" fill="currentColor"/><circle cx="7" cy="8" r="1.2" fill="currentColor"/><circle cx="11" cy="5" r="1.2" fill="currentColor"/></svg>`;
 const _GEAR_ICON_COMPARE = `<svg width="13" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><rect x="0.5" y="1.5" width="5" height="9" rx="1"/><rect x="8.5" y="1.5" width="5" height="9" rx="1"/><path d="M5.5 6h3"/></svg>`;
+const _GEAR_ICON_WARN = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 4.3 2.7 17.2A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`;
+const _GEAR_ICON_WARN_LARGE = `<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 4.3 2.7 17.2A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`;
+const _GEAR_ICON_CHECK_LARGE = `<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
 
 function _prettyModelLabel(model) {
   const raw = String(model || 'generic').trim();
@@ -10568,25 +10571,68 @@ async function showDapDetail(id) {
   const musicStatus = _dapMusicStatus(summary, !!dap.mounted);
   const playlistStatus = _dapPlaylistStatus(dap, summary);
   const sortedPl = [...playlists].sort((a, b) => a.name.localeCompare(b.name));
+  const playlistOut = Number(summary.playlist_out_of_sync_count || (dap.stale_count || 0) + (dap.never_exported || 0));
+  const songsToSync = Number(summary.music_out_of_sync_count || 0);
+  const musicToAdd = Number(summary.music_to_add_count || 0);
+  const musicToRemove = Number(summary.music_to_remove_count || 0);
+  const spaceTotalBytes = summary.space_total_bytes ?? dap.capacity_bytes;
+  const spaceFreeBytes = summary.space_available_bytes ?? (
+    dap.capacity_bytes != null && dap.used_bytes != null
+      ? Math.max(0, Number(dap.capacity_bytes) - Number(dap.used_bytes))
+      : null
+  );
+  const lastSyncTs = summary.last_sync_at || dap.last_sync_at || 0;
+  const hasPlaylistWork = playlistOut > 0;
+  const hasMusicWork = songsToSync > 0;
+  const needsSync = hasPlaylistWork || hasMusicWork;
+  const syncTone = needsSync ? 'warn' : 'success';
+  const verdictHeadline = needsSync
+    ? (hasPlaylistWork ? 'Playlists need sync' : 'Music library needs sync')
+    : 'Playlists up to date';
+  const verdictSub = needsSync
+    ? [playlistStatus.detail, musicStatus.detail, syncStateText].filter(Boolean).join(' · ')
+    : `Ready for listening · ${syncStateText}`;
+  const activeMountPath = dap.active_mount_path || dap.mount_path || '';
+  const mountedLabel = dap.mounted ? 'Connected' : 'Not connected';
+  const statusPillHtml = `
+    <span class="gd-pill ${dap.mounted ? 'success' : ''}">
+      <span class="gd-dot ${dap.mounted ? 'on' : 'off'}"></span>${mountedLabel}
+    </span>
+    <span class="gd-pill ${needsSync ? 'warn' : 'success'}">
+      ${needsSync ? _GEAR_ICON_WARN : '<span class="gd-dot on"></span>'}${esc(playlistStatus.text)}
+    </span>
+  `;
+  const _counterNum = (value, cls = '') => `<span class="gd-counter-num ${cls}">${esc(value)}</span>`;
+  const _bytesParts = (bytes, fallback = 'Unavailable') => {
+    if (bytes === null || bytes === undefined || !Number.isFinite(Number(bytes))) return { value: fallback, unit: '' };
+    const formatted = _fmtBytes(bytes);
+    const parts = formatted.split(' ');
+    return { value: parts[0] || formatted, unit: parts.slice(1).join(' ') };
+  };
+  const totalParts = _bytesParts(spaceTotalBytes);
+  const freeParts = _bytesParts(spaceFreeBytes);
+  const lastSyncLabel = lastSyncTs ? _fmtRelDate(lastSyncTs).replace(' ago', '') : 'Never';
 
   const plRows = sortedPl.map(pl => {
     const ts = exports[pl.id];
-    let statusHtml;
+    let statusHtml, actionTone = '';
     if (!ts) {
-      statusHtml = `<span class="gear-sync-badge gear-sync-never">Never exported</span>`;
+      statusHtml = `<span class="gd-status-chip muted">Never exported</span>`;
     } else if (ts < (pl.updated_at || 0)) {
-      statusHtml = `<span class="gear-sync-badge gear-sync-stale">⚠ Outdated</span>`;
+      actionTone = 'warn';
+      statusHtml = `<span class="gd-status-chip warn">${_GEAR_ICON_WARN} Outdated</span>`;
     } else {
-      statusHtml = `<span class="gear-sync-badge gear-sync-ok">✓ Up to date</span>`;
+      statusHtml = `<span class="gd-status-chip"><span class="gd-dot on"></span>Up to date</span>`;
     }
     const canExport = dap.mounted;
     return `
-      <tr>
+      <tr class="gd-playlist-row">
         <td class="dap-pl-name" onclick="App.openPlaylist('${pl.id}')" title="Open playlist">${esc(pl.name)}</td>
-        <td>${pl.tracks?.length ?? 0} tracks</td>
+        <td class="gd-num-cell">${pl.tracks?.length ?? 0}</td>
         <td>${statusHtml}</td>
+        <td class="gd-muted-mono">${ts ? esc(_fmtRelDate(ts)) : 'Never'}</td>
         <td class="dap-pl-export-cell">
-          <button class="dap-pl-export-btn" ${canExport ? '' : 'disabled title="Device not mounted"'}
+          <button class="gd-row-action ${actionTone}" ${canExport ? '' : 'disabled title="Device not mounted"'}
             onclick="App.dapExportPlaylist('${dap.id}','${pl.id}',this)">
             ${dap.mounted ? 'Sync' : 'Not mounted'}
           </button>
@@ -10596,59 +10642,94 @@ async function showDapDetail(id) {
   }).join('');
 
   document.getElementById('dap-detail-content').innerHTML = `
-    <div class="dap-detail-header">
-      <div class="dap-detail-icon">${_DAP_SVG}</div>
-      <div>
-        <div class="dap-detail-title tb-object-title">${esc(dap.name)}</div>
-        <div class="dap-detail-sub">
-          <span class="gear-badge ${dap.mounted ? 'gear-badge-connected' : 'gear-badge-disconnected'}">
-            ${dap.mounted ? '● Connected' : '○ Not connected'}
-          </span>
-          ${_gearStatusPillHtml(_GEAR_ICON_MUSIC, musicStatus.className, musicStatus.text)}
-          ${_gearStatusPillHtml(_GEAR_ICON_PLAYLIST, playlistStatus.className, playlistStatus.text)}
-        </div>
-        ${(musicStatus.detail || playlistStatus.detail)
-          ? `<div class="gear-card-meta-text" style="margin-top:6px">${esc([musicStatus.detail, playlistStatus.detail].filter(Boolean).join(' · '))}</div>`
-          : ''}
-        <div class="gear-card-meta-text" style="margin-top:4px">${esc(syncStateText)}</div>
-        <div class="gear-edit-actions">
-          <button id="dap-check-sync-btn" class="btn-secondary" onclick="App.checkDapSyncStatus('${dap.id}')" ${syncState === 'checking' ? 'disabled' : ''}>
-            ${syncState === 'checking' ? 'Checking…' : 'Check Sync Status'}
-          </button>
-          <button class="btn-secondary" onclick="App.dapExportAllPlaylists('${dap.id}', this)" ${dap.mounted ? '' : 'disabled title="Device not mounted"'}>
-            ${dap.mounted ? 'Sync All Playlists' : 'Not mounted'}
-          </button>
-          ${dap.mounted ? `<button id="eject-btn-${dap.id}" class="btn-secondary" onclick="App.ejectDap('${dap.id}', '${esc(dap.name)}')">Eject</button>` : ''}
-          <button class="btn-secondary" onclick="App.showEditDapModal('${dap.id}')">Edit</button>
-          <button class="btn-danger-sm" onclick="App.deleteDap('${dap.id}')">Delete</button>
+    <div class="gear-detail-page dap-detail-v2">
+      <div class="gd-chrome">
+        <button class="gd-back-orb" onclick="App.navBack()" title="Back" aria-label="Back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="gd-icon-actions">
+          <button class="gd-icon-btn danger" onclick="App.deleteDap('${dap.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
+          <button class="gd-icon-btn" onclick="App.showEditDapModal('${dap.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
         </div>
       </div>
-    </div>
-    <div class="dap-config-block">
-      <div class="dap-config-field"><label>Mount path</label><span>${esc(dap.mount_path || '—')}</span></div>
-      <div class="dap-config-field"><label>Storage</label><span>${esc(dap.storage_type === 'internal' ? 'Internal' : 'SD card')}</span></div>
-      <div class="dap-config-field"><label>Music folder</label><span>${esc(dap.music_root || 'Music')}</span></div>
-      <div class="dap-config-field"><label>Export folder</label><span>${esc(dap.export_folder || 'Playlists')}</span></div>
-      <div class="dap-config-field"><label>PEQ folder</label><span>${esc(dap.peq_folder || '~/PEQ')}</span></div>
-      <div class="dap-config-field"><label>Sync template</label><span><code>${esc(dap.path_template || DAP_TEMPLATE_PRESETS.artist_album_track)}</code></span></div>
-      <div class="dap-config-field"><label>Path prefix</label><span>${esc(dap.path_prefix || '(none)')}</span></div>
-      <div class="dap-config-field"><label>Model</label><span>${esc(dap.model || 'generic')}</span></div>
-      <div class="dap-config-field"><label>Playlists out of sync</label><span>${Number(summary.playlist_out_of_sync_count || (dap.stale_count || 0) + (dap.never_exported || 0))}</span></div>
-      <div class="dap-config-field"><label>Music files out of sync</label><span>${Number(summary.music_out_of_sync_count || 0)} <span class="gear-card-meta-text">(${Number(summary.music_to_add_count || 0)} add • ${Number(summary.music_to_remove_count || 0)} remove)</span></span></div>
-      <div class="dap-config-field"><label>Device space</label><span>${summary.space_available_bytes === null || summary.space_available_bytes === undefined ? 'Unavailable' : _fmtBytes(summary.space_available_bytes)}</span></div>
-      <div class="dap-config-field"><label>Required for add</label><span>${_fmtBytes(Number(summary.space_required_bytes || 0))}${Number(summary.space_shortfall_bytes || 0) > 0 ? ` <span class="gear-sync-badge gear-sync-stale">Short ${_fmtBytes(Number(summary.space_shortfall_bytes || 0))}</span>` : ''}</span></div>
-    </div>
-    <div class="dap-section-title tb-section-title">Playlist Sync Status</div>
-    <div class="dap-table-shell tb-table-shell" data-table-context="dap_playlists">
-      <table class="dap-pl-table tb-table tb-table-density-compact" data-table-context="dap_playlists">
+
+      <div class="gd-identity">
+        <div class="gd-badge-tile">${_DAP_SVG}</div>
+        <div class="gd-id-text">
+          <h1>${esc(dap.name)}</h1>
+          <div class="gd-id-sub">${esc(_dapIdentityLine(dap))}</div>
+        </div>
+      </div>
+
+      <div class="gd-actions-row">
+        <button id="dap-check-sync-btn" class="gd-btn primary" onclick="App.checkDapSyncStatus('${dap.id}')" ${syncState === 'checking' ? 'disabled' : ''}>
+          ${syncState === 'checking' ? 'Checking...' : 'Check status'}
+        </button>
+        <button class="gd-btn" onclick="App.dapExportAllPlaylists('${dap.id}', this)" ${dap.mounted ? '' : 'disabled title="Device not mounted"'}>
+          ${dap.mounted ? 'Sync all playlists' : 'Not mounted'}
+        </button>
+        ${dap.mounted ? `<button id="eject-btn-${dap.id}" class="gd-btn" onclick="App.ejectDap('${dap.id}', '${esc(dap.name)}')">Eject</button>` : ''}
+        <button class="gd-btn" onclick="App.showEditDapModal('${dap.id}')">Edit</button>
+        <div class="gd-actions-right">${statusPillHtml}</div>
+      </div>
+
+      <section class="gd-sync-hero ${syncTone}">
+        <div class="gd-sync-top">
+          <div class="gd-verdict">
+            <div class="gd-hero-glyph">${needsSync ? _GEAR_ICON_WARN_LARGE : _GEAR_ICON_CHECK_LARGE}</div>
+            <div>
+              <h2>${esc(verdictHeadline)}</h2>
+              <p>${esc(verdictSub)}</p>
+            </div>
+          </div>
+        </div>
+        <div class="gd-counter-strip">
+          <div class="gd-counter">${_counterNum(playlistOut, playlistOut ? 'warn' : 'zero')}<span>Playlists out of sync</span></div>
+          <div class="gd-counter">${_counterNum(songsToSync)}<span>Songs to sync</span></div>
+          <div class="gd-counter"><span class="gd-counter-num">${esc(totalParts.value)}${totalParts.unit ? `<small>${esc(totalParts.unit)}</small>` : ''}</span><span>Drive capacity</span></div>
+          <div class="gd-counter"><span class="gd-counter-num">${esc(freeParts.value)}${freeParts.unit ? `<small>${esc(freeParts.unit)}</small>` : ''}</span><span>Free space</span></div>
+          <div class="gd-counter">${_counterNum(lastSyncLabel)}<span>Last synced</span></div>
+        </div>
+      </section>
+
+      <details class="gd-section gd-config">
+        <summary>
+          <span>Configuration</span>
+          <span class="gd-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="gd-config-grid">
+          <div><label>Mount path</label><span>${esc(activeMountPath || '—')}</span></div>
+          <div><label>Storage</label><span>${esc(dap.storage_type === 'internal' ? 'Internal' : 'SD card')}</span></div>
+          <div><label>Music folder</label><span>${esc(dap.music_root || 'Music')}</span></div>
+          <div><label>Export folder</label><span>${esc(dap.export_folder || 'Playlists')}</span></div>
+          <div><label>PEQ folder</label><span>${esc(dap.peq_folder || '~/PEQ')}</span></div>
+          <div><label>Sync template</label><span>${esc(dap.path_template || DAP_TEMPLATE_PRESETS.artist_album_track)}</span></div>
+          <div><label>Path prefix</label><span class="muted">${esc(dap.path_prefix || '— none')}</span></div>
+          <div><label>Model</label><span>${esc(dap.model || 'generic')}</span></div>
+          <div><label>Playlists out of sync</label><span class="${playlistOut ? 'warn' : ''}">${playlistOut}</span></div>
+          <div><label>Music files out of sync</label><span>${songsToSync} <small>${musicToAdd} add · ${musicToRemove} remove</small></span></div>
+          <div><label>Device space</label><span>${spaceFreeBytes == null ? 'Unavailable' : esc(_fmtBytes(spaceFreeBytes))}</span></div>
+          <div><label>Required for add</label><span>${esc(_fmtBytes(Number(summary.space_required_bytes || 0)))}${Number(summary.space_shortfall_bytes || 0) > 0 ? ` <small class="warn">Short ${esc(_fmtBytes(Number(summary.space_shortfall_bytes || 0)))}</small>` : ''}</span></div>
+        </div>
+      </details>
+
+      <section class="gd-section">
+        <div class="gd-section-head">
+          <span class="title">Playlist sync status</span>
+          <span class="count">· ${sortedPl.length} playlist${sortedPl.length === 1 ? '' : 's'}</span>
+          <button class="gd-sort-pill" type="button">Sort: name</button>
+        </div>
+        <div class="dap-table-shell">
+          <table class="dap-pl-table gd-playlist-table" data-table-context="dap_playlists">
         <thead><tr>
-          <th>Playlist</th><th>Tracks</th><th>Status</th><th></th>
+          <th>Playlist name</th><th>Tracks</th><th>Sync status</th><th>Last synced</th><th>Sync</th>
         </tr></thead>
-        <tbody>${plRows || '<tr><td colspan="4" class="dap-pl-empty-row tb-table-empty-row">No playlists yet</td></tr>'}</tbody>
+        <tbody>${plRows || '<tr><td colspan="5" class="dap-pl-empty-row">No playlists yet</td></tr>'}</tbody>
       </table>
+        </div>
+      </section>
     </div>
   `;
-  _enhanceTableSystem(document.getElementById('dap-detail-content'));
 }
 
 async function dapExportPlaylist(dapId, plId, btn) {
@@ -10656,13 +10737,13 @@ async function dapExportPlaylist(dapId, plId, btn) {
   btn.textContent = 'Syncing…';
   try {
     await api(`/daps/${dapId}/export/${plId}`, { method: 'POST' });
-    btn.textContent = '✓ Synced';
+    btn.textContent = 'Synced';
     btn.style.background = '#4caf8f';
     // Refresh stale badge
     const row = btn.closest('tr');
     if (row) {
       const statusCell = row.cells[2];
-      if (statusCell) statusCell.innerHTML = `<span class="gear-sync-badge gear-sync-ok">✓ Up to date</span>`;
+      if (statusCell) statusCell.innerHTML = `<span class="gd-status-chip"><span class="gd-dot on"></span>Up to date</span>`;
     }
   } catch (e) {
     toast('Export failed. Check the device is connected.');
@@ -11387,54 +11468,75 @@ async function showIemDetail(id) {
   ).join('');
 
   document.getElementById('iem-detail-content').innerHTML = `
-    <div class="iem-detail-header">
-      <div class="iem-detail-icon">
-        ${detailIcon}
-      </div>
-      <div>
-        <div class="iem-detail-title tb-object-title">${esc(iem.name)}</div>
-        <div class="iem-detail-sub">
-          <span class="gear-badge ${typeBadge}">${esc(iem.type || 'IEM')}</span>
-          ${sourceLink && sourceLink.url ? `<a href="${esc(sourceLink.url)}" target="_blank" style="font-size:var(--text-xs);color:var(--accent);text-decoration:none">squig.link ↗</a>` : ''}
-        </div>
-        <div class="gear-edit-actions">
-          <button class="btn-secondary" onclick="App.showEditIemModal('${iem.id}')">Edit</button>
-          <button class="btn-danger-sm" onclick="App.deleteIem('${iem.id}')">Delete</button>
+    <div class="gear-detail-page iem-detail-v2">
+      <div class="gd-chrome">
+        <button class="gd-back-orb" onclick="App.navBack()" title="Back" aria-label="Back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="gd-icon-actions">
+          <button class="gd-icon-btn danger" onclick="App.deleteIem('${iem.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
+          <button class="gd-icon-btn" onclick="App.showEditIemModal('${iem.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
         </div>
       </div>
-    </div>
 
-    <div class="freq-graph-wrap">
-      <div class="freq-graph-toolbar">
-        ${sourceOptions ? `<label>Source:</label>
+      <div class="gd-identity iem">
+        <div class="gd-badge-tile iem">${detailIcon}</div>
+        <div class="gd-id-text">
+          <div class="gd-id-meta">
+            <span class="gd-tag-chip ${typeBadge}">${esc(iem.type || 'IEM')}</span>
+            ${hasMeasurement ? '<span class="gd-pill success"><span class="gd-dot on"></span>Measurement loaded</span>' : '<span class="gd-pill"><span class="gd-dot off"></span>No measurement</span>'}
+          </div>
+          <h1>${esc(iem.name)}</h1>
+          <div class="gd-id-sub">
+            ${(iem.squig_sources || []).length ? `${(iem.squig_sources || []).length} measurement source${(iem.squig_sources || []).length === 1 ? '' : 's'}` : 'Add a squig.link source to import frequency response'}
+            ${sourceLink && sourceLink.url ? ` · <a href="${esc(sourceLink.url)}" target="_blank" class="gd-src-link">squig.link</a>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <div class="gd-controls-row">
+        ${sourceOptions ? `<label>Source</label>
         <select id="iem-source-select" onchange="App.applyIemSourceToGraph(this.value)">
           ${sourceOptions}
         </select>` : ''}
-        <label>PEQ:</label>
+        <label>PEQ</label>
         <select id="peq-select" onchange="App.applyPeqToGraph(this.value)">
           <option value="">None (raw measurement)</option>
           ${peqOptions}
         </select>
         <div id="freq-overlay-host" class="fr-overlay-host fr-overlay-host--toolbar" data-fr-overlay-host="1" data-fr-overlay-context="iem-detail"></div>
+        <button class="gd-btn" onclick="App.showEditIemModal('${iem.id}')">Edit</button>
       </div>
-      <div id="freq-canvas-wrap">
-        ${hasMeasurement
-          ? `<canvas id="freq-canvas"></canvas>`
-          : `<div class="freq-no-data">
-               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 4-4" stroke-width="2"/></svg>
-               <span>No measurement data — add a squig.link URL to import frequency response.</span>
-             </div>`
-        }
-      </div>
-      ${hasMeasurement ? `<div id="iem-curve-legend" class="curve-legend"></div>` : ''}
-    </div>
 
-    <div class="peq-section-hdr">
-      <div class="peq-section-title tb-section-title">PEQ Profiles</div>
-      <button class="btn-secondary" onclick="App.showPeqModal()">+ Upload PEQ</button>
-    </div>
-    <div class="peq-list" id="peq-list">
-      ${_renderPeqList(iem.peq_profiles || [])}
+      <section class="gd-graph-section">
+        <div class="gd-section-head">
+          <span class="title">Frequency response</span>
+          <span class="count">${hasMeasurement ? '· raw measurement' : '· no data'}</span>
+        </div>
+        <div class="freq-graph-wrap">
+          <div id="freq-canvas-wrap">
+            ${hasMeasurement
+              ? `<canvas id="freq-canvas"></canvas>`
+              : `<div class="freq-no-data">
+                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 4-4" stroke-width="2"/></svg>
+                   <span>No measurement data. Add a squig.link URL to import frequency response.</span>
+                 </div>`
+            }
+          </div>
+          ${hasMeasurement ? `<div id="iem-curve-legend" class="curve-legend"></div>` : ''}
+        </div>
+      </section>
+
+      <section class="gd-section">
+        <div class="gd-section-head">
+          <span class="title">PEQ profiles</span>
+          <span class="count">· ${(iem.peq_profiles || []).length} profile${(iem.peq_profiles || []).length === 1 ? '' : 's'}</span>
+          <button class="gd-btn compact" onclick="App.showPeqModal()">Upload PEQ</button>
+        </div>
+        <div class="peq-list" id="peq-list">
+          ${_renderPeqList(iem.peq_profiles || [])}
+        </div>
+      </section>
     </div>
   `;
   _refreshFrOverlayControls();

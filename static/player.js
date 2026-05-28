@@ -2084,6 +2084,18 @@ const Player = (function () {
     btn.textContent = (v && v !== _CREATE_PEQ_ID) ? 'Edit PEQ' : 'Create PEQ';
   }
 
+  function _positionPeqPopover() {
+    const pop = document.getElementById('peq-popover');
+    if (!pop) return;
+    const btn = document.getElementById('player-peq-btn');
+    const rect = btn ? btn.getBoundingClientRect() : null;
+    const fallbackRight = window.matchMedia('(max-width: 620px)').matches ? 10 : 14;
+    const right = rect && rect.width > 0
+      ? Math.max(14, Math.round(window.innerWidth - rect.right))
+      : fallbackRight;
+    pop.style.right = `${right}px`;
+  }
+
   function _setPeqPopoverOpen(open) {
     const pop = document.getElementById('peq-popover');
     if (!pop) return;
@@ -2093,6 +2105,7 @@ const Player = (function () {
     }
     if (open) {
       pop.style.display = 'block';
+      _positionPeqPopover();
       requestAnimationFrame(() => pop.classList.add('open'));
       return;
     }
@@ -3276,6 +3289,10 @@ const Player = (function () {
         overflowMenu.classList.remove('open');
         overflowMenu.style.display = 'none';
       }
+    });
+
+    window.addEventListener('resize', () => {
+      if (ps.peqOpen) _positionPeqPopover();
     });
 
     // 7. Seek slider: reset dragging flag on pointer release
