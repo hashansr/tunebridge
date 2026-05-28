@@ -22956,7 +22956,7 @@ body.is-col-resizing {
   position: relative;
   max-width: 1280px;
   margin: 0 auto;
-  padding: 12px 40px 96px;
+  padding: 0 40px 96px;
   color: var(--text);
 }
 .iem-detail-v2 {
@@ -22976,9 +22976,6 @@ body.is-col-resizing {
   justify-content: space-between;
 }
 .gd-chrome.dap {
-  position: absolute;
-  top: 18px;
-  right: 40px;
   justify-content: flex-end;
 }
 .gd-back-orb {
@@ -23004,6 +23001,11 @@ body.is-col-resizing {
 }
 .gd-icon-actions {
   gap: 4px;
+}
+.gd-identity-actions {
+  margin-left: auto;
+  align-self: flex-start;
+  padding-top: 2px;
 }
 .gd-icon-btn {
   width: 32px;
@@ -23031,7 +23033,7 @@ body.is-col-resizing {
   color: var(--accent-secondary);
 }
 .gd-identity {
-  margin-top: 34px;
+  margin-top: 78px;
   display: flex;
   gap: 20px;
   align-items: center;
@@ -23248,6 +23250,10 @@ body.is-col-resizing {
   border-color: rgba(83, 225, 111, 0.35);
   color: var(--accent-success);
 }
+.gd-sync-hero.error .gd-hero-glyph {
+  border-color: rgba(255, 179, 181, 0.35);
+  color: var(--accent-secondary);
+}
 .gd-verdict h2 {
   margin: 0 0 4px;
   color: var(--text);
@@ -23267,12 +23273,12 @@ body.is-col-resizing {
 }
 .gd-counter {
   min-width: 0;
-  padding: 14px 24px 15px;
+  padding: 16px 24px 14px;
   border-right: 1px solid var(--hairline);
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  min-height: 82px;
+  gap: 8px;
+  min-height: 92px;
 }
 .gd-counter:last-child {
   border-right: none;
@@ -23281,8 +23287,8 @@ body.is-col-resizing {
   overflow: hidden;
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 21px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
   line-height: 1.1;
@@ -23292,9 +23298,9 @@ body.is-col-resizing {
 .gd-counter-empty {
   color: var(--text-muted);
   font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.2;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.1;
 }
 .gd-counter-num.warn {
   color: var(--accent-warning);
@@ -23303,19 +23309,20 @@ body.is-col-resizing {
   color: var(--text-sub);
 }
 .gd-counter-num small {
-  margin-left: 4px;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 500;
+  margin-left: 5px;
+  color: var(--text-sub);
+  font-size: 14px;
+  font-weight: 650;
   letter-spacing: 0;
 }
 .gd-counter > span:last-child {
   margin-top: 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0;
-  text-transform: none;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 .gd-section {
   margin-top: 44px;

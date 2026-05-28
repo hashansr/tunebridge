@@ -10593,13 +10593,24 @@ async function showDapDetail(id) {
   const hasPlaylistWork = playlistOut > 0;
   const hasMusicWork = songsToSync > 0;
   const needsSync = hasPlaylistWork || hasMusicWork;
-  const syncTone = needsSync ? 'warn' : 'success';
-  const verdictHeadline = needsSync
-    ? (hasPlaylistWork ? 'Playlists need sync' : 'Music library needs sync')
-    : 'Playlists up to date';
-  const verdictSub = needsSync
-    ? [playlistStatus.detail, musicStatus.detail, syncStateText].filter(Boolean).join(' · ')
-    : `Ready for listening · ${syncStateText}`;
+  const syncErrorMessage = String(summary.sync_status_message || '');
+  const isUnmountedStatus = !dap.mounted || /not mounted|not connected/i.test(syncErrorMessage);
+  const hasSyncError = syncState === 'error' && !isUnmountedStatus;
+  const syncTone = hasSyncError ? 'error' : (needsSync || isUnmountedStatus ? 'warn' : 'success');
+  const verdictHeadline = hasSyncError
+    ? 'Sync status unavailable'
+    : isUnmountedStatus
+      ? 'Connect device to sync'
+      : needsSync
+      ? 'Device needs sync'
+      : 'Device fully synced';
+  const verdictSub = hasSyncError
+    ? (summary.sync_status_message || 'Run a status check to refresh this device.')
+    : isUnmountedStatus
+      ? [playlistStatus.detail || 'Playlist changes pending', 'Device not mounted'].filter(Boolean).join(' · ')
+      : needsSync
+      ? [playlistStatus.detail || 'Playlist changes pending', musicStatus.detail, syncStateText].filter(Boolean).join(' · ')
+      : `No action required · ${syncStateText}`;
   const activeMountPath = dap.active_mount_path || dap.mount_path || '';
   const mountedLabel = dap.mounted ? 'Connected' : 'Not connected';
   const statusPillHtml = `
@@ -10649,18 +10660,15 @@ async function showDapDetail(id) {
 
   document.getElementById('dap-detail-content').innerHTML = `
     <div class="gear-detail-page dap-detail-v2">
-      <div class="gd-chrome dap">
-        <div class="gd-icon-actions">
-          <button class="gd-icon-btn danger" onclick="App.deleteDap('${dap.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
-          <button class="gd-icon-btn" onclick="App.showEditDapModal('${dap.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
-        </div>
-      </div>
-
       <div class="gd-identity">
         <div class="gd-badge-tile">${_DAP_SVG}</div>
         <div class="gd-id-text">
           <h1>${esc(dap.name)}</h1>
           <div class="gd-id-sub">${esc(_dapIdentityLine(dap))}</div>
+        </div>
+        <div class="gd-icon-actions gd-identity-actions">
+          <button class="gd-icon-btn danger" onclick="App.deleteDap('${dap.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
+          <button class="gd-icon-btn" onclick="App.showEditDapModal('${dap.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
         </div>
       </div>
 
