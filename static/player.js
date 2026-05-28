@@ -2913,7 +2913,11 @@ const Player = (function () {
   function _updateVolumeUI() {
     const slider = document.getElementById('player-volume');
     const btn    = document.getElementById('player-mute-btn');
-    if (slider) slider.value = Math.round(ps.volume * 100);
+    if (slider) {
+      const volumePct = Math.round(ps.volume * 100);
+      slider.value = volumePct;
+      slider.style.setProperty('--player-volume-fill', `${ps.muted ? 0 : volumePct}%`);
+    }
     if (btn) {
       if (ps.muted || ps.volume === 0) {
         btn.innerHTML = `<span class="tb-icon tb-icon-speaker-x" aria-hidden="true"></span>`;
