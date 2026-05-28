@@ -3416,6 +3416,23 @@
         </button>
       </div>
       <div class="tag-editor-form">
+        <!-- Artwork row -->
+        <div class="settings-row te-artwork-row">
+          <label>Artwork</label>
+          <div class="te-artwork-area">
+            <img id="te-artwork-thumb" class="te-artwork-thumb" src="" alt="" style="display:none" />
+            <div id="te-artwork-placeholder" class="te-artwork-placeholder">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            </div>
+            <div class="te-artwork-actions">
+              <label class="btn-secondary te-artwork-pick-btn" title="Choose image file">
+                Change
+                <input id="te-artwork-file" type="file" accept="image/*" style="display:none" onchange="App._teArtworkPicked(this)" />
+              </label>
+              <button id="te-artwork-remove-btn" class="btn-secondary te-artwork-remove-btn" onclick="App._teArtworkRemove()" title="Remove artwork from tag editor" style="display:none">Remove</button>
+            </div>
+          </div>
+        </div>
         <div class="settings-row">
           <label>Title</label>
           <input id="te-title" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
@@ -3468,6 +3485,34 @@
         <div class="settings-row">
           <label>Comment</label>
           <input id="te-comment" type="text" maxlength="500" autocomplete="off" spellcheck="false" />
+        </div>
+        <!-- Sort fields (collapsible) -->
+        <button class="te-sort-toggle" id="te-sort-toggle" onclick="App._teSortToggle()" type="button">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" id="te-sort-chevron" style="transition:transform .2s"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+          Sort Fields
+        </button>
+        <div id="te-sort-fields" style="display:none">
+          <div class="tag-editor-sort-hint">Used by media players to sort "The Beatles" under B, etc. Leave blank to keep existing values.</div>
+          <div class="tag-editor-row-2col">
+            <div class="settings-row">
+              <label>Sort Artist</label>
+              <input id="te-artist-sort" type="text" maxlength="200" autocomplete="off" spellcheck="false" placeholder="e.g. Beatles, The" />
+            </div>
+            <div class="settings-row">
+              <label>Sort Album Artist</label>
+              <input id="te-album-artist-sort" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
+            </div>
+          </div>
+          <div class="tag-editor-row-2col">
+            <div class="settings-row">
+              <label>Sort Album</label>
+              <input id="te-album-sort" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="settings-row">
+              <label>Sort Title</label>
+              <input id="te-title-sort" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
+            </div>
+          </div>
         </div>
         <div id="te-error" class="tag-editor-error" style="display:none">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;margin-top:1px"><path fill-rule="evenodd" clip-rule="evenodd" d="M1 12C1 5.92487 5.92487 1 12 1C18.0751 1 23 5.92487 23 12C23 18.0751 18.0751 23 12 23C5.92487 23 1 18.0751 1 12ZM10.25 11C10.25 10.4477 10.6977 10 11.25 10H12.75C13.3023 10 13.75 10.4477 13.75 11V18C13.75 18.5523 13.3023 19 12.75 19H11.25C10.6977 19 10.25 18.5523 10.25 18V11ZM14 7C14 5.89543 13.1046 5 12 5C10.8954 5 10 5.89543 10 7C10 8.10457 10.8954 9 12 9C13.1046 9 14 8.10457 14 7Z"/></svg>

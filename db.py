@@ -106,6 +106,12 @@ _MIGRATIONS: list[tuple] = [
     ]),
     # v11: pinned_items is a new table handled by create_schema().
     (11, 'Add pinned_items table', None),
+    (12, 'Add sort tag columns to tracks', [
+        'ALTER TABLE tracks ADD COLUMN artist_sort TEXT',
+        'ALTER TABLE tracks ADD COLUMN album_sort TEXT',
+        'ALTER TABLE tracks ADD COLUMN album_artist_sort TEXT',
+        'ALTER TABLE tracks ADD COLUMN title_sort TEXT',
+    ]),
 ]
 
 _SCHEMA_SQL = """
@@ -143,7 +149,11 @@ CREATE TABLE IF NOT EXISTS tracks (
     has_lyrics      INTEGER DEFAULT 0,
     lyric_path      TEXT,
     lyrics_status   TEXT,
-    lyrics_fetched_at INTEGER
+    lyrics_fetched_at INTEGER,
+    artist_sort        TEXT,
+    album_sort         TEXT,
+    album_artist_sort  TEXT,
+    title_sort         TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_tracks_artist       ON tracks(artist COLLATE NOCASE);
@@ -581,8 +591,9 @@ def db_save_library(tracks):
            album, track_number, disc_number, year, genre, duration, artwork_key, bitrate,
            format, sample_rate, bits_per_sample, date_added,
            rg_track_gain, rg_album_gain, rg_track_peak, rg_album_peak,
-           has_lyrics, lyric_path, lyrics_status, lyrics_fetched_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           has_lyrics, lyric_path, lyrics_status, lyrics_fetched_at,
+           artist_sort, album_sort, album_artist_sort, title_sort)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 t['id'], t.get('path', ''), t.get('filename', ''),
@@ -600,6 +611,8 @@ def db_save_library(tracks):
                 t.get('lyric_path'),
                 t.get('lyrics_status'),
                 t.get('lyrics_fetched_at'),
+                t.get('artist_sort'), t.get('album_sort'),
+                t.get('album_artist_sort'), t.get('title_sort'),
             )
             for t in tracks
         ]
@@ -1940,8 +1953,13 @@ def db_record_tag_changes(track_id, changes: dict, old_values: dict):
 
 
 def db_update_track_tags(track_id, changes: dict):
-    """Update specific tag fields in the tracks table."""
-    allowed = {'title', 'artist', 'album_artist', 'album', 'track_number', 'disc_number', 'year', 'genre'}
+    """Update specific tag fields in the tracks table. None values set the column to NULL (clear)."""
+    allowed = {
+        'title', 'artist', 'album_artist', 'album', 'track_number', 'disc_number',
+        'year', 'genre', 'comment', 'composer', 'compilation',
+        'artist_sort', 'album_sort', 'album_artist_sort', 'title_sort',
+    }
+    # Accept both explicit values and None (clear = set to NULL)
     clean = {k: v for k, v in changes.items() if k in allowed}
     if not clean:
         return

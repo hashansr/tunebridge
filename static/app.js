@@ -3701,9 +3701,7 @@ function _allSelectedShareField(tracks, field) {
 }
 
 function _canEditSelectedTags(selectedTracks, count) {
-  if (count === 1) return true;
-  if (!selectedTracks.length || selectedTracks.length !== count) return false;
-  return _allSelectedShareField(selectedTracks, 'album') || _allSelectedShareField(selectedTracks, 'artist');
+  return count > 0;
 }
 
 function _findSelectedTrack(id) {
@@ -17342,6 +17340,9 @@ const App = {
   openTagEditor,
   closeTagEditor,
   saveTagEditor,
+  _teArtworkPicked,
+  _teArtworkRemove,
+  _teSortToggle,
   openAlbumTagEditor,
   closeAlbumTagEditor,
   saveAlbumTags,
@@ -20133,6 +20134,7 @@ let _tagEditorOriginal  = {};
 let _pendingTagEdits    = 0; // incremented on any tag save; resets when Insights view is loaded
 let _albumTagOriginal   = {};
 let _artistRenameOriginal = '';
+let _teArtworkFile = null;   // File object picked in tag editor; null if unchanged
 
 // ── Validation helpers ─────────────────────────────────────────────────
 function _validateYear(val) {
@@ -20145,16 +20147,20 @@ function _validateTrackNum(val) {
 // ── Dirty-state helpers ────────────────────────────────────────────────
 function _getTagEditorValues() {
   return {
-    title:        document.getElementById('te-title')?.value.trim()        ?? '',
-    artist:       document.getElementById('te-artist')?.value.trim()       ?? '',
-    album_artist: document.getElementById('te-album-artist')?.value.trim() ?? '',
-    album:        document.getElementById('te-album')?.value.trim()        ?? '',
-    track_number: document.getElementById('te-track-number')?.value.trim() ?? '',
-    year:         document.getElementById('te-year')?.value.trim()         ?? '',
-    genre:        document.getElementById('te-genre')?.value.trim()        ?? '',
-    disc_number:  document.getElementById('te-disc-number')?.value.trim()  ?? '',
-    composer:     document.getElementById('te-composer')?.value.trim()     ?? '',
-    comment:      document.getElementById('te-comment')?.value.trim()      ?? '',
+    title:             document.getElementById('te-title')?.value.trim()              ?? '',
+    artist:            document.getElementById('te-artist')?.value.trim()             ?? '',
+    album_artist:      document.getElementById('te-album-artist')?.value.trim()       ?? '',
+    album:             document.getElementById('te-album')?.value.trim()              ?? '',
+    track_number:      document.getElementById('te-track-number')?.value.trim()       ?? '',
+    year:              document.getElementById('te-year')?.value.trim()               ?? '',
+    genre:             document.getElementById('te-genre')?.value.trim()              ?? '',
+    disc_number:       document.getElementById('te-disc-number')?.value.trim()        ?? '',
+    composer:          document.getElementById('te-composer')?.value.trim()           ?? '',
+    comment:           document.getElementById('te-comment')?.value.trim()            ?? '',
+    artist_sort:       document.getElementById('te-artist-sort')?.value.trim()        ?? '',
+    album_sort:        document.getElementById('te-album-sort')?.value.trim()         ?? '',
+    album_artist_sort: document.getElementById('te-album-artist-sort')?.value.trim()  ?? '',
+    title_sort:        document.getElementById('te-title-sort')?.value.trim()         ?? '',
   };
 }
 function _tagEditorDirty() {
@@ -20197,14 +20203,29 @@ function _hideTagError(id) {
 async function openTagEditor(trackId) {
   _tagEditorTrackId  = trackId;
   _tagEditorOriginal = {};
+  _teArtworkFile     = null;
 
   const btn = document.getElementById('te-save-btn');
   _hideTagError('te-error');
   btn.disabled    = true;
   btn.textContent = 'Loading…';
 
+  // Reset artwork state
+  const thumb = document.getElementById('te-artwork-thumb');
+  const placeholder = document.getElementById('te-artwork-placeholder');
+  const removeBtn = document.getElementById('te-artwork-remove-btn');
+  if (thumb) { thumb.src = ''; thumb.style.display = 'none'; }
+  if (placeholder) placeholder.style.display = 'flex';
+  if (removeBtn) removeBtn.style.display = 'none';
+  const artFile = document.getElementById('te-artwork-file');
+  if (artFile) artFile.value = '';
+
   // Disable inputs and show modal with loading pulse
-  const inputIds = ['te-title','te-artist','te-album-artist','te-album','te-track-number','te-year','te-genre','te-disc-number','te-composer','te-comment'];
+  const inputIds = [
+    'te-title','te-artist','te-album-artist','te-album',
+    'te-track-number','te-year','te-genre','te-disc-number','te-composer','te-comment',
+    'te-artist-sort','te-album-sort','te-album-artist-sort','te-title-sort',
+  ];
   inputIds.forEach(id => { const el = document.getElementById(id); if (el) { el.value = ''; el.disabled = true; } });
   document.getElementById('tag-editor-modal').style.display = 'flex';
 
@@ -20237,6 +20258,17 @@ async function openTagEditor(trackId) {
     document.getElementById('te-disc-number').value  = t.disc_number  || '';
     document.getElementById('te-composer').value     = t.composer     || '';
     document.getElementById('te-comment').value      = t.comment      || '';
+    document.getElementById('te-artist-sort').value       = t.artist_sort       || '';
+    document.getElementById('te-album-sort').value        = t.album_sort        || '';
+    document.getElementById('te-album-artist-sort').value = t.album_artist_sort || '';
+    document.getElementById('te-title-sort').value        = t.title_sort        || '';
+
+    // Show existing artwork
+    if (t.artwork_key && thumb && placeholder) {
+      thumb.src = `/api/artwork/${t.artwork_key}`;
+      thumb.style.display = 'block';
+      placeholder.style.display = 'none';
+    }
 
     _tagEditorOriginal = _getTagEditorValues();
     inputIds.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
@@ -20249,7 +20281,7 @@ async function openTagEditor(trackId) {
   }
 
   // Keyboard handlers (Enter = save, Escape = close)
-  document.querySelectorAll('#tag-editor-modal input').forEach(inp => {
+  document.querySelectorAll('#tag-editor-modal input[type="text"]').forEach(inp => {
     inp.onkeydown = e => {
       if (e.key === 'Enter' && !e.shiftKey) saveTagEditor();
       if (e.key === 'Escape') closeTagEditor();
@@ -20258,7 +20290,7 @@ async function openTagEditor(trackId) {
 }
 
 async function closeTagEditor() {
-  if (_tagEditorDirty()) {
+  if (_tagEditorDirty() || _teArtworkFile) {
     const ok = await _showConfirm({
       title: 'Discard changes?',
       message: 'Your tag edits haven\'t been saved.',
@@ -20269,6 +20301,7 @@ async function closeTagEditor() {
   document.getElementById('tag-editor-modal').style.display = 'none';
   _tagEditorTrackId  = null;
   _tagEditorOriginal = {};
+  _teArtworkFile     = null;
 }
 
 async function saveTagEditor() {
@@ -20300,26 +20333,43 @@ async function saveTagEditor() {
     return;
   }
 
-  // Only send fields that actually changed (empty = skip, not clear)
+  // Build changes: send null for fields user cleared, new value for fields user changed.
+  // Empty string = clear (null); title cannot be cleared (validated above).
   const changes = {};
   Object.entries(cur).forEach(([k, v]) => {
-    if (v && v !== (_tagEditorOriginal[k] ?? '')) changes[k] = v;
+    const orig = _tagEditorOriginal[k] ?? '';
+    if (v === orig) return; // unchanged
+    changes[k] = (v === '' && k !== 'title') ? null : v;
   });
-  if (!Object.keys(changes).length) {
-    // Nothing changed — silently close
+
+  const hasTagChanges  = Object.keys(changes).length > 0;
+  const hasArtwork     = !!_teArtworkFile;
+
+  if (!hasTagChanges && !hasArtwork) {
     document.getElementById('tag-editor-modal').style.display = 'none';
-    _tagEditorTrackId = null; _tagEditorOriginal = {};
+    _tagEditorTrackId = null; _tagEditorOriginal = {}; _teArtworkFile = null;
     return;
   }
 
   btn.disabled = true; btn.textContent = 'Saving…';
 
   try {
-    await api(`/library/tracks/${_tagEditorTrackId}/tags`, { method: 'PUT', body: changes });
+    if (hasTagChanges) {
+      await api(`/library/tracks/${_tagEditorTrackId}/tags`, { method: 'PUT', body: changes });
+    }
+    if (hasArtwork) {
+      const fd = new FormData();
+      fd.append('file', _teArtworkFile);
+      const artRes = await fetch(`/api/library/tracks/${_tagEditorTrackId}/artwork`, { method: 'PUT', body: fd });
+      if (!artRes.ok) {
+        const err = await artRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Artwork upload failed');
+      }
+    }
     _pendingTagEdits++;
     toast('Tags saved');
     document.getElementById('tag-editor-modal').style.display = 'none';
-    _tagEditorTrackId = null; _tagEditorOriginal = {};
+    _tagEditorTrackId = null; _tagEditorOriginal = {}; _teArtworkFile = null;
     if (state.view === 'tracks') loadTracks(state.artist, state.album);
     else if (state.view === 'songs') loadSongs();
     else if (state.view === 'insights') {
@@ -20333,6 +20383,42 @@ async function saveTagEditor() {
     _showTagError('te-error', e.message || 'Save failed. The file may be read-only or in use.');
     btn.disabled = false; btn.textContent = 'Save Tags';
   }
+}
+
+// ── Tag Editor: artwork + sort toggle helpers ──────────────────────────
+
+function _teArtworkPicked(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  _teArtworkFile = file;
+  const url = URL.createObjectURL(file);
+  const thumb = document.getElementById('te-artwork-thumb');
+  const placeholder = document.getElementById('te-artwork-placeholder');
+  const removeBtn = document.getElementById('te-artwork-remove-btn');
+  if (thumb) { thumb.src = url; thumb.style.display = 'block'; }
+  if (placeholder) placeholder.style.display = 'none';
+  if (removeBtn) removeBtn.style.display = 'inline-flex';
+}
+
+function _teArtworkRemove() {
+  _teArtworkFile = null;
+  const thumb = document.getElementById('te-artwork-thumb');
+  const placeholder = document.getElementById('te-artwork-placeholder');
+  const removeBtn = document.getElementById('te-artwork-remove-btn');
+  const artFile = document.getElementById('te-artwork-file');
+  if (thumb) { thumb.src = ''; thumb.style.display = 'none'; }
+  if (placeholder) placeholder.style.display = 'flex';
+  if (removeBtn) removeBtn.style.display = 'none';
+  if (artFile) artFile.value = '';
+}
+
+function _teSortToggle() {
+  const panel = document.getElementById('te-sort-fields');
+  const chevron = document.getElementById('te-sort-chevron');
+  if (!panel) return;
+  const open = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : 'block';
+  if (chevron) chevron.style.transform = open ? '' : 'rotate(180deg)';
 }
 
 // ── Album Tag Editor ───────────────────────────────────────────────────

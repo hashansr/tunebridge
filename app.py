@@ -770,15 +770,20 @@ def _search_fanart(artist_name: str, api_key: str) -> list:
 
 # ── ID3 tag writing ──────────────────────────────────────────────────────────
 
-from mutagen.id3 import ID3, APIC, TIT2, TPE1, TPE2, TALB, TRCK, TDRC, TCON, TCOM, TPOS, COMM, TXXX, error as ID3Error
+from mutagen.id3 import (
+    ID3, APIC, TIT2, TPE1, TPE2, TALB, TRCK, TDRC, TCON, TCOM, TPOS, COMM, TXXX,
+    TSOP, TSOA, TSO2, TSOT, error as ID3Error,
+)
 
 
-def _write_tags_to_file(filepath: Path, changes: dict) -> None:
+def _write_tags_to_file(filepath: Path, changes: dict, to_clear: set = None) -> None:
     """
-    Write changed tag fields to a FLAC, MP3, or M4A file using mutagen.
-    Only writes fields present in `changes`. Raises on error.
+    Write changed tag fields to a FLAC, MP3, M4A or WAV file using mutagen.
+    Only writes fields present in `changes` with non-None values.
+    Fields in `to_clear` have their tag frames deleted from the file.
     """
     ext = filepath.suffix.lower()
+    to_clear = to_clear or set()
 
     if ext == '.flac':
         audio = FLAC(str(filepath))
@@ -787,37 +792,58 @@ def _write_tags_to_file(filepath: Path, changes: dict) -> None:
         mapping = {
             'title': 'TITLE', 'artist': 'ARTIST', 'album_artist': 'ALBUMARTIST',
             'album': 'ALBUM', 'track_number': 'TRACKNUMBER', 'year': 'DATE', 'genre': 'GENRE',
-            'comment': 'COMMENT', 'composer': 'COMPOSER', 'disc_number': 'DISCNUMBER', 'compilation': 'COMPILATION',
+            'comment': 'COMMENT', 'composer': 'COMPOSER', 'disc_number': 'DISCNUMBER',
+            'compilation': 'COMPILATION',
+            'artist_sort': 'ARTISTSORT', 'album_sort': 'ALBUMSORT',
+            'album_artist_sort': 'ALBUMARTISTSORT', 'title_sort': 'TITLESORT',
         }
         for field, tag in mapping.items():
-            if field in changes and changes[field] is not None:
+            if field in to_clear:
+                try:
+                    del audio.tags[tag]
+                except KeyError:
+                    pass
+            elif field in changes and changes[field] is not None:
                 audio.tags[tag] = [str(changes[field])]
         audio.save()
 
-    elif ext == '.mp3':
-        try:
-            audio = MP3(str(filepath), ID3=ID3)
+    elif ext in ('.mp3', '.wav', '.wave'):
+        if ext == '.mp3':
+            try:
+                audio = MP3(str(filepath), ID3=ID3)
+                if audio.tags is None:
+                    audio.add_tags()
+            except ID3Error:
+                audio = MP3(str(filepath))
+                audio.add_tags()
+        else:
+            audio = WAVE(str(filepath))
             if audio.tags is None:
                 audio.add_tags()
-        except ID3Error:
-            audio = MP3(str(filepath))
-            audio.add_tags()
 
         frame_map = {
-            'title': (TIT2, {}),
-            'artist': (TPE1, {}),
-            'album_artist': (TPE2, {}),
-            'album': (TALB, {}),
-            'track_number': (TRCK, {}),
-            'year': (TDRC, {}),
-            'genre': (TCON, {}),
-            'composer': (TCOM, {}),
-            'disc_number': (TPOS, {}),
+            'title':        (TIT2, 'TIT2'),
+            'artist':       (TPE1, 'TPE1'),
+            'album_artist': (TPE2, 'TPE2'),
+            'album':        (TALB, 'TALB'),
+            'track_number': (TRCK, 'TRCK'),
+            'year':         (TDRC, 'TDRC'),
+            'genre':        (TCON, 'TCON'),
+            'composer':     (TCOM, 'TCOM'),
+            'disc_number':  (TPOS, 'TPOS'),
+            'artist_sort':       (TSOP, 'TSOP'),
+            'album_sort':        (TSOA, 'TSOA'),
+            'album_artist_sort': (TSO2, 'TSO2'),
+            'title_sort':        (TSOT, 'TSOT'),
         }
-        for field, (FrameCls, kwargs) in frame_map.items():
-            if field in changes and changes[field] is not None:
-                audio.tags.setall(FrameCls.__name__, [FrameCls(encoding=3, text=str(changes[field]), **kwargs)])
-        if 'comment' in changes and changes['comment'] is not None:
+        for field, (FrameCls, frame_key) in frame_map.items():
+            if field in to_clear:
+                audio.tags.delall(frame_key)
+            elif field in changes and changes[field] is not None:
+                audio.tags.setall(frame_key, [FrameCls(encoding=3, text=str(changes[field]))])
+        if 'comment' in to_clear:
+            audio.tags.delall('COMM')
+        elif 'comment' in changes and changes['comment'] is not None:
             audio.tags.setall('COMM', [COMM(encoding=3, lang='eng', desc='', text=str(changes['comment']))])
         if 'compilation' in changes and changes['compilation'] is not None:
             val = str(changes['compilation']).strip().lower()
@@ -833,17 +859,25 @@ def _write_tags_to_file(filepath: Path, changes: dict) -> None:
             'title': '\xa9nam', 'artist': '\xa9ART', 'album_artist': 'aART',
             'album': '\xa9alb', 'year': '\xa9day', 'genre': '\xa9gen',
             'comment': '\xa9cmt', 'composer': '\xa9wrt',
+            'artist_sort': 'soar', 'album_sort': 'soal',
+            'album_artist_sort': 'soaa', 'title_sort': 'sonm',
         }
         for field, tag in mp4_map.items():
-            if field in changes and changes[field] is not None:
+            if field in to_clear:
+                audio.tags.pop(tag, None)
+            elif field in changes and changes[field] is not None:
                 audio.tags[tag] = [str(changes[field])]
-        if 'track_number' in changes and changes['track_number'] is not None:
+        if 'track_number' in to_clear:
+            audio.tags.pop('trkn', None)
+        elif 'track_number' in changes and changes['track_number'] is not None:
             try:
                 tn = int(str(changes['track_number']).split('/')[0])
                 audio.tags['trkn'] = [(tn, 0)]
             except (ValueError, TypeError):
                 pass
-        if 'disc_number' in changes and changes['disc_number'] is not None:
+        if 'disc_number' in to_clear:
+            audio.tags.pop('disk', None)
+        elif 'disc_number' in changes and changes['disc_number'] is not None:
             try:
                 raw = str(changes['disc_number'])
                 dn = int(raw.split('/')[0].strip())
@@ -859,32 +893,6 @@ def _write_tags_to_file(filepath: Path, changes: dict) -> None:
         if 'compilation' in changes and changes['compilation'] is not None:
             val = str(changes['compilation']).strip().lower()
             audio.tags['cpil'] = [1 if val in ('1', 'true', 'yes', 'on') else 0]
-        audio.save()
-
-    elif ext in ('.wav', '.wave'):
-        audio = WAVE(str(filepath))
-        if audio.tags is None:
-            audio.add_tags()
-        frame_map = {
-            'title': (TIT2, {}),
-            'artist': (TPE1, {}),
-            'album_artist': (TPE2, {}),
-            'album': (TALB, {}),
-            'track_number': (TRCK, {}),
-            'year': (TDRC, {}),
-            'genre': (TCON, {}),
-            'composer': (TCOM, {}),
-            'disc_number': (TPOS, {}),
-        }
-        for field, (FrameCls, kwargs) in frame_map.items():
-            if field in changes and changes[field] is not None:
-                audio.tags.setall(FrameCls.__name__, [FrameCls(encoding=3, text=str(changes[field]), **kwargs)])
-        if 'comment' in changes and changes['comment'] is not None:
-            audio.tags.setall('COMM', [COMM(encoding=3, lang='eng', desc='', text=str(changes['comment']))])
-        if 'compilation' in changes and changes['compilation'] is not None:
-            val = str(changes['compilation']).strip().lower()
-            normalized = '1' if val in ('1', 'true', 'yes', 'on') else '0'
-            audio.tags.setall('TXXX:TCMP', [TXXX(encoding=3, desc='TCMP', text=normalized)])
         audio.save()
 
     else:
@@ -930,8 +938,8 @@ def _update_library_track(track_id: str, changes: dict):
     with library_lock:
         for t in library:
             if t.get('id') == track_id:
-                t.update({k: v for k, v in changes.items() if v is not None})
-                # Recompute duration_fmt if needed (not affected by tag changes)
+                # Include None values so cleared fields are reflected in-memory
+                t.update(changes)
                 break
 
 
@@ -1002,6 +1010,10 @@ def scan_file(filepath):
         rg_album_gain = None
         rg_track_peak = None
         rg_album_peak = None
+        artist_sort = None
+        album_sort = None
+        album_artist_sort = None
+        title_sort = None
         if filename.lower().endswith('.flac'):
             audio = FLAC(str(filepath))
             tags = audio.tags
@@ -1015,6 +1027,10 @@ def scan_file(filepath):
             disc_num = get_flac_tag(tags, 'DISCNUMBER', 'DISC')
             year = get_flac_tag(tags, 'DATE', 'YEAR')
             genre = get_flac_tag(tags, 'GENRE')
+            artist_sort = get_flac_tag(tags, 'ARTISTSORT')
+            album_sort = get_flac_tag(tags, 'ALBUMSORT')
+            album_artist_sort = get_flac_tag(tags, 'ALBUMARTISTSORT')
+            title_sort = get_flac_tag(tags, 'TITLESORT')
 
             artwork_key = None
             eff_artist = album_artist or artist
@@ -1054,6 +1070,10 @@ def scan_file(filepath):
             disc_num = mp3_tag('TPOS')
             year = mp3_tag('TDRC') or mp3_tag('TYER')
             genre = mp3_tag('TCON')
+            artist_sort = mp3_tag('TSOP')
+            album_sort = mp3_tag('TSOA')
+            album_artist_sort = mp3_tag('TSO2')
+            title_sort = mp3_tag('TSOT')
 
             artwork_key = None
             eff_artist = album_artist or artist
@@ -1099,6 +1119,10 @@ def scan_file(filepath):
             album_artist = mp4_tag('aART')
             album = mp4_tag('\xa9alb')
             title = mp4_tag('\xa9nam')
+            artist_sort = mp4_tag('soar')
+            album_sort = mp4_tag('soal')
+            album_artist_sort = mp4_tag('soaa')
+            title_sort = mp4_tag('sonm')
             trkn = tags.get('trkn')
             if trkn and isinstance(trkn[0], tuple):
                 track_num = str(trkn[0][0])
@@ -1163,6 +1187,10 @@ def scan_file(filepath):
             disc_num = wav_tag('TPOS')
             year = wav_tag('TDRC') or wav_tag('TYER')
             genre = wav_tag('TCON')
+            artist_sort = wav_tag('TSOP')
+            album_sort = wav_tag('TSOA')
+            album_artist_sort = wav_tag('TSO2')
+            title_sort = wav_tag('TSOT')
 
             artwork_key = None
             eff_artist = album_artist or artist
@@ -1249,6 +1277,10 @@ def scan_file(filepath):
             'lyric_path': lyric_rel_path,
             'lyrics_status': lyrics_status_from_file,
             'lyrics_fetched_at': None,
+            'artist_sort': artist_sort,
+            'album_sort': album_sort,
+            'album_artist_sort': album_artist_sort,
+            'title_sort': title_sort,
         }
     except Exception as e:
         print(f"Error scanning {filepath}: {e}")
@@ -3477,11 +3509,16 @@ def home_overview():
 
 _EDITABLE_FIELDS = {
     'title', 'artist', 'album_artist', 'album', 'track_number', 'year', 'genre',
-    'comment', 'composer', 'disc_number', 'compilation'
+    'comment', 'composer', 'disc_number', 'compilation',
+    'artist_sort', 'album_sort', 'album_artist_sort', 'title_sort',
 }
+# Fields that can be set to null/empty to remove the tag frame from the file.
+# Title is excluded because it is required.
+_CLEARABLE_FIELDS = _EDITABLE_FIELDS - {'title', 'compilation'}
 _BATCH_ALBUM_FIELDS = {
     'title', 'artist', 'album_artist', 'album', 'track_number', 'year', 'genre',
-    'comment', 'composer', 'disc_number', 'compilation'
+    'comment', 'composer', 'disc_number', 'compilation',
+    'artist_sort', 'album_sort', 'album_artist_sort', 'title_sort',
 }
 
 
@@ -3509,7 +3546,9 @@ def _apply_tag_edit(track_id: str, changes: dict):
     except ValueError:
         return None, 'Path traversal detected'
 
-    # Strip out None / empty values; only keep recognised fields
+    # Fields to clear (explicitly sent as None = delete the tag frame from the file)
+    to_clear = {k for k, v in changes.items() if k in _CLEARABLE_FIELDS and v is None}
+    # Fields to write (recognised, non-None, non-empty)
     clean = {
         k: v.strip() if isinstance(v, str) else v
         for k, v in changes.items()
@@ -3517,29 +3556,32 @@ def _apply_tag_edit(track_id: str, changes: dict):
     }
     # UX safety: if user renames Artist and Album Artist previously matched Artist,
     # keep Album Artist aligned unless user explicitly supplied album_artist.
-    if 'artist' in clean and 'album_artist' not in clean:
+    if 'artist' in clean and 'album_artist' not in clean and 'album_artist' not in to_clear:
         old_artist = str(track.get('artist') or '').strip()
         old_album_artist = str(track.get('album_artist') or '').strip()
         if old_album_artist and old_album_artist.lower() == old_artist.lower():
             clean['album_artist'] = clean['artist']
-    if not clean:
+    if not clean and not to_clear:
         return track, None  # nothing to do
 
     # Write to file
     try:
-        _write_tags_to_file(abs_path, clean)
+        _write_tags_to_file(abs_path, clean, to_clear=to_clear)
     except Exception as e:
         return None, f'Could not write tags to file: {e}'
 
-    # Snapshot old values to tag_history after the file write succeeds.
-    old_values = {field: track.get(field) for field in clean}
-    _db.db_record_tag_changes(track_id, clean, old_values)
+    # Combined changeset for history and cache updates
+    all_changes = {**clean, **{k: None for k in to_clear}}
 
-    # Update SQLite cache
-    _db.db_update_track_tags(track_id, clean)
+    # Snapshot old values to tag_history after the file write succeeds.
+    old_values = {field: track.get(field) for field in all_changes}
+    _db.db_record_tag_changes(track_id, all_changes, old_values)
+
+    # Update SQLite cache (None values become NULL for cleared fields)
+    _db.db_update_track_tags(track_id, all_changes)
 
     # Update in-memory library
-    _update_library_track(track_id, clean)
+    _update_library_track(track_id, all_changes)
     # Home and metadata maps must refresh immediately after tag edits.
     global _meta_maps_cache
     _meta_maps_cache = None
@@ -4139,6 +4181,57 @@ def delete_album_artwork():
                 t['artwork_key'] = None
 
     return '', 204
+
+
+@app.route('/api/library/tracks/<track_id>/artwork', methods=['PUT'])
+def set_track_artwork(track_id):
+    """Upload artwork for a single track: embeds it in the source file and updates the album art cache."""
+    track = _db.db_get_track(track_id)
+    if not track:
+        return jsonify({'error': 'Track not found'}), 404
+
+    music_base = get_music_base()
+    abs_path = music_base / track['path']
+    if not abs_path.exists():
+        return jsonify({'error': 'File not found'}), 404
+    if not os.access(str(abs_path), os.W_OK):
+        return jsonify({'error': 'File is read-only'}), 400
+
+    try:
+        abs_path.resolve().relative_to(music_base.resolve())
+    except ValueError:
+        return jsonify({'error': 'Path traversal detected'}), 400
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'file field required'}), 400
+    raw = request.files['file'].read()
+
+    try:
+        processed = _process_artist_image(raw)
+    except Exception as e:
+        return jsonify({'error': f'Image processing failed: {e}'}), 400
+
+    try:
+        _write_artwork_to_file(abs_path, processed)
+    except Exception as e:
+        return jsonify({'error': f'Could not embed artwork: {e}'}), 400
+
+    # Update the shared album art cache so the change is visible immediately.
+    eff_artist = (track.get('album_artist') or track.get('artist') or '').strip()
+    album = (track.get('album') or '').strip()
+    artwork_key = None
+    if eff_artist and album:
+        artwork_key = get_artwork_key(eff_artist, album)
+        artwork_path = ARTWORK_DIR / f"{artwork_key}.jpg"
+        artwork_path.write_bytes(processed)
+        with library_lock:
+            for t in library:
+                ta = (t.get('album_artist') or t.get('artist') or '').strip()
+                tl = (t.get('album') or '').strip()
+                if get_artwork_key(ta, tl) == artwork_key:
+                    t['artwork_key'] = artwork_key
+
+    return jsonify({'ok': True, 'artwork_key': artwork_key})
 
 
 # ── Artist Images ─────────────────────────────────────────────────────────────
