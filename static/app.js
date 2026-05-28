@@ -10054,6 +10054,7 @@ const _GEAR_ICON_COMPARE = `<svg width="13" height="12" viewBox="0 0 14 12" fill
 const _GEAR_ICON_WARN = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 4.3 2.7 17.2A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`;
 const _GEAR_ICON_WARN_LARGE = `<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 4.3 2.7 17.2A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`;
 const _GEAR_ICON_CHECK_LARGE = `<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
+const _GEAR_ICON_REFRESH = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M3 12A9 9 0 0 1 18.5 5.8"/><path d="M18.5 2v3.8H22"/><path d="M5.5 22v-3.8H2"/></svg>`;
 
 function _prettyModelLabel(model) {
   const raw = String(model || 'generic').trim();
@@ -10575,12 +10576,19 @@ async function showDapDetail(id) {
   const songsToSync = Number(summary.music_out_of_sync_count || 0);
   const musicToAdd = Number(summary.music_to_add_count || 0);
   const musicToRemove = Number(summary.music_to_remove_count || 0);
-  const spaceTotalBytes = summary.space_total_bytes ?? dap.capacity_bytes;
-  const spaceFreeBytes = summary.space_available_bytes ?? (
+  const hasDriveData = !!dap.mounted;
+  const hasSongData = !!dap.mounted && (
+    syncState === 'verified' ||
+    songsToSync > 0 ||
+    musicToAdd > 0 ||
+    musicToRemove > 0
+  );
+  const spaceTotalBytes = hasDriveData ? (summary.space_total_bytes ?? dap.capacity_bytes) : null;
+  const spaceFreeBytes = hasDriveData ? (summary.space_available_bytes ?? (
     dap.capacity_bytes != null && dap.used_bytes != null
       ? Math.max(0, Number(dap.capacity_bytes) - Number(dap.used_bytes))
       : null
-  );
+  )) : null;
   const lastSyncTs = summary.last_sync_at || dap.last_sync_at || 0;
   const hasPlaylistWork = playlistOut > 0;
   const hasMusicWork = songsToSync > 0;
@@ -10598,11 +10606,9 @@ async function showDapDetail(id) {
     <span class="gd-pill ${dap.mounted ? 'success' : ''}">
       <span class="gd-dot ${dap.mounted ? 'on' : 'off'}"></span>${mountedLabel}
     </span>
-    <span class="gd-pill ${needsSync ? 'warn' : 'success'}">
-      ${needsSync ? _GEAR_ICON_WARN : '<span class="gd-dot on"></span>'}${esc(playlistStatus.text)}
-    </span>
   `;
   const _counterNum = (value, cls = '') => `<span class="gd-counter-num ${cls}">${esc(value)}</span>`;
+  const _counterEmpty = () => '<span class="gd-counter-empty">No data</span>';
   const _bytesParts = (bytes, fallback = 'Unavailable') => {
     if (bytes === null || bytes === undefined || !Number.isFinite(Number(bytes))) return { value: fallback, unit: '' };
     const formatted = _fmtBytes(bytes);
@@ -10643,10 +10649,7 @@ async function showDapDetail(id) {
 
   document.getElementById('dap-detail-content').innerHTML = `
     <div class="gear-detail-page dap-detail-v2">
-      <div class="gd-chrome">
-        <button class="gd-back-orb" onclick="App.navBack()" title="Back" aria-label="Back">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-        </button>
+      <div class="gd-chrome dap">
         <div class="gd-icon-actions">
           <button class="gd-icon-btn danger" onclick="App.deleteDap('${dap.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
           <button class="gd-icon-btn" onclick="App.showEditDapModal('${dap.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
@@ -10663,7 +10666,7 @@ async function showDapDetail(id) {
 
       <div class="gd-actions-row">
         <button id="dap-check-sync-btn" class="gd-btn primary" onclick="App.checkDapSyncStatus('${dap.id}')" ${syncState === 'checking' ? 'disabled' : ''}>
-          ${syncState === 'checking' ? 'Checking...' : 'Check status'}
+          <span class="gd-btn-icon">${_GEAR_ICON_REFRESH}</span>${syncState === 'checking' ? 'Checking...' : 'Check status'}
         </button>
         <button class="gd-btn" onclick="App.dapExportAllPlaylists('${dap.id}', this)" ${dap.mounted ? '' : 'disabled title="Device not mounted"'}>
           ${dap.mounted ? 'Sync all playlists' : 'Not mounted'}
@@ -10685,9 +10688,9 @@ async function showDapDetail(id) {
         </div>
         <div class="gd-counter-strip">
           <div class="gd-counter">${_counterNum(playlistOut, playlistOut ? 'warn' : 'zero')}<span>Playlists out of sync</span></div>
-          <div class="gd-counter">${_counterNum(songsToSync)}<span>Songs to sync</span></div>
-          <div class="gd-counter"><span class="gd-counter-num">${esc(totalParts.value)}${totalParts.unit ? `<small>${esc(totalParts.unit)}</small>` : ''}</span><span>Drive capacity</span></div>
-          <div class="gd-counter"><span class="gd-counter-num">${esc(freeParts.value)}${freeParts.unit ? `<small>${esc(freeParts.unit)}</small>` : ''}</span><span>Free space</span></div>
+          <div class="gd-counter">${hasSongData ? _counterNum(songsToSync) : _counterEmpty()}<span>Songs to sync</span></div>
+          <div class="gd-counter">${hasDriveData && totalParts.unit ? `<span class="gd-counter-num">${esc(totalParts.value)}<small>${esc(totalParts.unit)}</small></span>` : _counterEmpty()}<span>Drive capacity</span></div>
+          <div class="gd-counter">${hasDriveData && freeParts.unit ? `<span class="gd-counter-num">${esc(freeParts.value)}<small>${esc(freeParts.unit)}</small></span>` : _counterEmpty()}<span>Free space</span></div>
           <div class="gd-counter">${_counterNum(lastSyncLabel)}<span>Last synced</span></div>
         </div>
       </section>
