@@ -16836,6 +16836,13 @@ body.is-col-resizing {
   justify-content: center;
   cursor: pointer;
 }
+.te-artwork-remove-btn {
+  color: var(--accent-secondary);
+}
+.te-artwork-remove-btn:hover {
+  color: var(--accent-secondary);
+  background: rgba(255,179,181,0.12);
+}
 
 /* ── Tag editor: sort fields toggle ─────────────────────────────── */
 .te-sort-toggle {
