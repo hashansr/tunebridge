@@ -23032,10 +23032,27 @@ body.is-col-resizing {
 .gd-icon-btn.danger:hover {
   color: var(--accent-secondary);
 }
-.gd-nav-icon-btn {
-  background: rgba(28, 27, 27, 0.72);
-  border-color: rgba(173, 198, 255, 0.1);
-  backdrop-filter: blur(16px);
+.gd-nav-action-btn {
+  width: 24px;
+  min-width: 24px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  color: rgba(246, 249, 255, 0.82);
+  opacity: 0.85;
+}
+.gd-nav-action-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.gd-nav-action-btn:hover {
+  background: transparent;
+  border-color: transparent;
+  color: rgba(246, 249, 255, 0.98);
+  opacity: 1;
 }
 .gd-identity {
   margin-top: 42px;
@@ -23118,6 +23135,14 @@ body.is-col-resizing {
   margin-top: 18px;
   gap: 8px;
   flex-wrap: wrap;
+}
+.gd-last-sync-inline {
+  margin-left: 10px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 34px;
+  white-space: nowrap;
 }
 .gd-actions-right {
   margin-left: auto;

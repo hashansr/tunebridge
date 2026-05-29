@@ -10574,26 +10574,11 @@ async function showDapDetail(id) {
   const exports = dap.playlist_exports || {};
   const summary = dap.sync_summary || {};
   const syncState = String(summary.sync_status_state || 'estimated');
-  const syncStateText = syncState === 'checking'
-    ? 'Checking live sync status…'
-    : syncState === 'verified'
-      ? _formatSyncCheckedAt(summary.last_verified_at)
-      : syncState === 'error'
-        ? (summary.sync_status_message || 'Sync check unavailable')
-        : `Estimated • ${_formatSyncCheckedAt(summary.last_scan_at)}`;
-  const musicStatus = _dapMusicStatus(summary, !!dap.mounted);
-  const playlistStatus = _dapPlaylistStatus(dap, summary);
   const playlistOut = Number(summary.playlist_out_of_sync_count || (dap.stale_count || 0) + (dap.never_exported || 0));
   const songsToSync = Number(summary.music_out_of_sync_count || 0);
   const musicToAdd = Number(summary.music_to_add_count || 0);
   const musicToRemove = Number(summary.music_to_remove_count || 0);
   const hasDriveData = !!dap.mounted;
-  const hasSongData = !!dap.mounted && (
-    syncState === 'verified' ||
-    songsToSync > 0 ||
-    musicToAdd > 0 ||
-    musicToRemove > 0
-  );
   const spaceTotalBytes = hasDriveData ? (summary.space_total_bytes ?? dap.capacity_bytes) : null;
   const spaceFreeBytes = hasDriveData ? (summary.space_available_bytes ?? (
     dap.capacity_bytes != null && dap.used_bytes != null
@@ -10601,52 +10586,19 @@ async function showDapDetail(id) {
       : null
   )) : null;
   const lastSyncTs = summary.last_sync_at || dap.last_sync_at || 0;
-  const hasPlaylistWork = playlistOut > 0;
-  const hasMusicWork = songsToSync > 0;
-  const needsSync = hasPlaylistWork || hasMusicWork;
-  const syncErrorMessage = String(summary.sync_status_message || '');
-  const isUnmountedStatus = !dap.mounted || /not mounted|not connected/i.test(syncErrorMessage);
-  const hasSyncError = syncState === 'error' && !isUnmountedStatus;
-  const syncTone = hasSyncError ? 'error' : (needsSync || isUnmountedStatus ? 'warn' : 'success');
-  const verdictHeadline = hasSyncError
-    ? 'Sync status unavailable'
-    : isUnmountedStatus
-      ? 'Connect device to sync'
-      : needsSync
-      ? 'Device needs sync'
-      : 'Device fully synced';
-  const verdictSub = hasSyncError
-    ? (summary.sync_status_message || 'Run a status check to refresh this device.')
-    : isUnmountedStatus
-      ? [playlistStatus.detail || 'Playlist changes pending', 'Device not mounted'].filter(Boolean).join(' · ')
-      : needsSync
-      ? [playlistStatus.detail || 'Playlist changes pending', musicStatus.detail, syncStateText].filter(Boolean).join(' · ')
-      : `No action required · ${syncStateText}`;
   const activeMountPath = dap.active_mount_path || dap.mount_path || '';
-  const mountedLabel = dap.mounted ? 'Connected' : 'Not connected';
-  const statusPillHtml = `
-    <span class="gd-pill ${dap.mounted ? 'success' : ''}">
-      <span class="gd-dot ${dap.mounted ? 'on' : 'off'}"></span>${mountedLabel}
-    </span>
-  `;
   const navRight = document.getElementById('main-nav-right');
   if (navRight) {
     navRight.innerHTML = `
-      <button class="gd-icon-btn danger gd-nav-icon-btn" onclick="App.deleteDap('${dap.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
-      <button class="gd-icon-btn gd-nav-icon-btn" onclick="App.showEditDapModal('${dap.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
+      <button class="gd-icon-btn danger gd-nav-action-btn" onclick="App.deleteDap('${dap.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
+      <button class="gd-icon-btn gd-nav-action-btn" onclick="App.showEditDapModal('${dap.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
     `;
   }
-  const _counterNum = (value, cls = '') => `<span class="gd-counter-num ${cls}">${esc(value)}</span>`;
-  const _counterEmpty = () => '<span class="gd-counter-empty">No data</span>';
-  const _bytesParts = (bytes, fallback = 'Unavailable') => {
-    if (bytes === null || bytes === undefined || !Number.isFinite(Number(bytes))) return { value: fallback, unit: '' };
-    const formatted = _fmtBytes(bytes);
-    const parts = formatted.split(' ');
-    return { value: parts[0] || formatted, unit: parts.slice(1).join(' ') };
-  };
-  const totalParts = _bytesParts(spaceTotalBytes);
-  const freeParts = _bytesParts(spaceFreeBytes);
-  const lastSyncLabel = lastSyncTs ? _fmtRelDate(lastSyncTs).replace(' ago', '') : 'Never';
+  const lastSyncLabel = lastSyncTs ? _fmtRelDate(lastSyncTs) : 'never';
+  const identityMeta = [_prettyModelLabel(dap.model)];
+  if (dap.mounted && spaceFreeBytes != null && spaceTotalBytes != null) {
+    identityMeta.push(`${_fmtBytes(spaceFreeBytes)} free of ${_fmtBytes(spaceTotalBytes)}`);
+  }
   const _plStatusRank = (pl) => {
     const ts = Number(exports[pl.id] || 0);
     if (!ts) return 2;
@@ -10688,9 +10640,9 @@ async function showDapDetail(id) {
         <td>${statusHtml}</td>
         <td class="gd-muted-mono">${ts ? esc(_fmtRelDate(ts)) : 'Never'}</td>
         <td class="dap-pl-export-cell">
-          <button class="gd-row-action ${actionTone}" ${canExport ? '' : 'disabled title="Device not mounted"'}
+          <button class="gd-row-action ${actionTone}" ${canExport ? '' : 'disabled title="Device not connected"'}
             onclick="App.dapExportPlaylist('${dap.id}','${pl.id}',this)">
-            ${dap.mounted ? 'Sync' : 'Not mounted'}
+            ${dap.mounted ? 'Sync' : 'Not Connected'}
           </button>
         </td>
       </tr>
@@ -10703,7 +10655,7 @@ async function showDapDetail(id) {
         <div class="gd-badge-tile">${_DAP_SVG}</div>
         <div class="gd-id-text">
           <h1>${esc(dap.name)}</h1>
-          <div class="gd-id-sub">${esc(_dapIdentityLine(dap))}</div>
+          <div class="gd-id-sub">${identityMeta.map(esc).join(' · ')}</div>
         </div>
       </div>
 
@@ -10711,31 +10663,11 @@ async function showDapDetail(id) {
         <button id="dap-check-sync-btn" class="gd-btn primary" onclick="App.checkDapSyncStatus('${dap.id}')" ${syncState === 'checking' ? 'disabled' : ''}>
           <span class="gd-btn-icon">${_GEAR_ICON_REFRESH}</span>${syncState === 'checking' ? 'Checking...' : 'Check status'}
         </button>
-        <button class="gd-btn" onclick="App.dapExportAllPlaylists('${dap.id}', this)" ${dap.mounted ? '' : 'disabled title="Device not mounted"'}>
-          ${dap.mounted ? 'Sync all playlists' : 'Not mounted'}
+        <button id="eject-btn-${dap.id}" class="gd-btn" data-restore-label="Unmount" ${dap.mounted ? `onclick="App.ejectDap('${dap.id}', '${esc(dap.name)}')"` : 'disabled title="Device not connected"'}>
+          ${dap.mounted ? 'Unmount' : 'Not Connected'}
         </button>
-        ${dap.mounted ? `<button id="eject-btn-${dap.id}" class="gd-btn" onclick="App.ejectDap('${dap.id}', '${esc(dap.name)}')">Eject</button>` : ''}
-        <div class="gd-actions-right">${statusPillHtml}</div>
+        <span class="gd-last-sync-inline">Last synced ${esc(lastSyncLabel)}</span>
       </div>
-
-      <section class="gd-sync-hero ${syncTone}">
-        <div class="gd-sync-top">
-          <div class="gd-verdict">
-            <div class="gd-hero-glyph">${needsSync ? _GEAR_ICON_WARN_LARGE : _GEAR_ICON_CHECK_LARGE}</div>
-            <div>
-              <h2>${esc(verdictHeadline)}</h2>
-              <p>${esc(verdictSub)}</p>
-            </div>
-          </div>
-        </div>
-        <div class="gd-counter-strip">
-          <div class="gd-counter">${_counterNum(playlistOut, playlistOut ? 'warn' : 'zero')}<span>Unsynced playlists</span></div>
-          <div class="gd-counter">${hasSongData ? _counterNum(songsToSync) : _counterEmpty()}<span>Songs to sync</span></div>
-          <div class="gd-counter">${hasDriveData && totalParts.unit ? `<span class="gd-counter-num">${esc(totalParts.value)}<small>${esc(totalParts.unit)}</small></span>` : _counterEmpty()}<span>Drive capacity</span></div>
-          <div class="gd-counter">${hasDriveData && freeParts.unit ? `<span class="gd-counter-num">${esc(freeParts.value)}<small>${esc(freeParts.unit)}</small></span>` : _counterEmpty()}<span>Free space</span></div>
-          <div class="gd-counter">${_counterNum(lastSyncLabel)}<span>Last synced</span></div>
-        </div>
-      </section>
 
       <details class="gd-section gd-config">
         <summary>
@@ -10854,7 +10786,7 @@ async function ejectDap(dapId, name) {
       btns.forEach(b => {
         b.disabled = false;
         b.style.opacity = '';
-        if (!b.classList.contains('gear-icon-btn')) b.innerHTML = 'Eject';
+        if (!b.classList.contains('gear-icon-btn')) b.innerHTML = b.dataset.restoreLabel || 'Eject';
       });
     }
   } catch (e) {
@@ -10862,7 +10794,7 @@ async function ejectDap(dapId, name) {
     btns.forEach(b => {
       b.disabled = false;
       b.style.opacity = '';
-      if (!b.classList.contains('gear-icon-btn')) b.innerHTML = 'Eject';
+      if (!b.classList.contains('gear-icon-btn')) b.innerHTML = b.dataset.restoreLabel || 'Eject';
     });
   }
 }
