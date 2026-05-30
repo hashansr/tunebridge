@@ -7265,6 +7265,10 @@ def _start_macos_device_watcher():
                                 was_playing = _mpv_last_known_was_playing
                     # Reinit so the new instance opens on the updated system default
                     _mpv_safe_reinit()
+                    # Sync _last_play_dev_id to the new device so that the next
+                    # player_play() call doesn't see a stale mismatch and trigger
+                    # yet another reinit (which would kill our resumed playback).
+                    _last_play_dev_id = current_id
                     # Read the device name the new instance resolved to
                     resolved = 'auto'
                     try:
@@ -7494,11 +7498,17 @@ def _mpv_safe_reinit():
          thread that already held a local reference to the old instance will
          just get a safe idle response rather than crashing.
     """
-    global _mpv_instance
+    global _mpv_instance, _mpv_track_ended, _mpv_load_time
     old_instance = None
     with _mpv_lock:
         old_instance = _mpv_instance
         _mpv_instance = None          # null first — callers now wait on lock
+        # Clear the end-file flag set by the old instance's event callback.
+        # Without this, a stale _mpv_track_ended=True (e.g. from a CoreAudio
+        # device-change error being reported as EOF) survives reinit and causes
+        # the next mpv_state poll to trigger an unwanted queue advance.
+        _mpv_track_ended = False
+        _mpv_load_time   = time.time()   # activate 0.75 s grace period
         _create_mpv_instance()        # sets _mpv_instance = fresh player
     # Terminate old outside the lock so mpv's event thread can exit cleanly
     if old_instance is not None:
