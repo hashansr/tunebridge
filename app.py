@@ -7227,7 +7227,7 @@ def _start_macos_device_watcher():
     def _watch():
         last_dev_id = _ca_get_default_output_device_id()
         while True:
-            time.sleep(3)
+            time.sleep(1)
             try:
                 settings = load_settings()
                 if settings.get('audio_device', 'auto') not in ('auto', ''):
@@ -7252,9 +7252,17 @@ def _start_macos_device_watcher():
                             pos = p.time_pos
                             if pos is not None:
                                 resume_position = float(pos)
-                            was_playing = (not bool(p.pause)) and (not bool(p.idle_active)) and (pos is not None)
+                                was_playing = (not bool(p.pause)) and (not bool(p.idle_active))
+                            else:
+                                # mpv already went idle from the CoreAudio error —
+                                # fall back to the last position captured by the 250 ms frontend poll.
+                                if _mpv_last_known_track_id == resume_track_id:
+                                    resume_position = _mpv_last_known_position
+                                    was_playing = _mpv_last_known_was_playing
                         except Exception:
-                            pass
+                            if _mpv_last_known_track_id == resume_track_id:
+                                resume_position = _mpv_last_known_position
+                                was_playing = _mpv_last_known_was_playing
                     # Reinit so the new instance opens on the updated system default
                     _mpv_safe_reinit()
                     # Read the device name the new instance resolved to
@@ -7263,9 +7271,13 @@ def _start_macos_device_watcher():
                         resolved = _get_mpv().audio_device or 'auto'
                     except Exception:
                         pass
-                    _auto_device_switch['fired']       = True
-                    _auto_device_switch['device_name'] = resolved
-                    print(f'[AudioWatcher] macOS default output changed → {resolved}')
+                    _auto_device_switch['fired']           = True
+                    _auto_device_switch['device_name']     = resolved
+                    _auto_device_switch['was_playing']     = was_playing
+                    _auto_device_switch['resume_position'] = resume_position
+                    _auto_device_switch['resume_track_id'] = resume_track_id
+                    print(f'[AudioWatcher] macOS default output changed → {resolved} '
+                          f'(was_playing={was_playing}, resume_pos={resume_position:.1f}s)')
                     # Resume playback on the new device using the same approach as player_play()
                     if was_playing and resume_track_id:
                         try:
@@ -7274,7 +7286,7 @@ def _start_macos_device_watcher():
                                 p2 = _get_mpv()
                                 if resume_position > 0.5:
                                     p2.command('loadfile', path, 'replace',
-                                               f'start={int(resume_position)}')
+                                               f'start={resume_position:.3f}')
                                 else:
                                     p2.command('loadfile', path, 'replace')
                                 p2.pause = False
@@ -7298,6 +7310,13 @@ _mpv_load_time        = 0.0    # epoch timestamp of last player_play() call (gra
 _mpv_last_volume      = 1.0    # logical 0.0–1.0 volume persisted across reinit
 _mpv_last_af          = ''     # last applied lavfi chain (PEQ) persisted across reinit
 _last_play_dev_id     = None   # CoreAudio device ID at time of last player_play(); detects mid-session output changes
+
+# Last-known good playback state — updated by every /api/player/mpv_state poll.
+# Used by the audio-device watcher as a fallback when mpv has already gone idle
+# (time_pos returns None) before the watcher detects the device change.
+_mpv_last_known_position    = 0.0   # last position (s) seen while actively playing
+_mpv_last_known_track_id    = None  # track ID at time of _mpv_last_known_position
+_mpv_last_known_was_playing = False # False if the user explicitly paused
 
 # Crossfade state — dual-instance overlap crossfade
 _mpv_xfade_instance   = None   # secondary mpv instance during crossfade
@@ -8017,8 +8036,10 @@ def player_mpv_state():
                         'track_ended': False, 'track_id': _mpv_current_track_id,
                         'xfade_in_progress': _xfade_in_progress,
                         'xfade_track_id': None, 'xfade_track_ended': False,
-                        'auto_device_switched': switched,
-                        'auto_device_name':     dev_name})
+                        'auto_device_switched':        switched,
+                        'auto_device_name':            dev_name,
+                        'auto_device_was_playing':     _auto_device_switch.get('was_playing', False),
+                        'auto_device_resume_position': _auto_device_switch.get('resume_position', 0.0)})
 
     ended = _mpv_track_ended
     if ended:
@@ -8054,20 +8075,32 @@ def player_mpv_state():
     if switched:
         _auto_device_switch['fired'] = False   # consume — one-shot per poll cycle
 
+    # Update last-known good playback state so the device watcher can use it as
+    # a fallback when mpv has already gone idle before the change is detected.
+    global _mpv_last_known_position, _mpv_last_known_track_id, _mpv_last_known_was_playing
+    if position is not None and not idle and position > 0.5:
+        _mpv_last_known_position    = position
+        _mpv_last_known_track_id    = _mpv_current_track_id
+        _mpv_last_known_was_playing = True
+    elif paused:
+        _mpv_last_known_was_playing = False  # explicit user pause resets the flag
+
     return jsonify({
-        'available':            True,
-        'position':             position if position is not None else 0.0,
-        'duration':             duration if duration is not None else 0.0,
-        'playing':              (not paused) and (not idle) and (position is not None),
-        'paused':               paused,
-        'idle':                 idle,
-        'track_ended':          ended,
-        'track_id':             _mpv_current_track_id,
-        'xfade_in_progress':    _xfade_in_progress,
-        'xfade_track_id':       xt,
-        'xfade_track_ended':    xfade_track_ended,
-        'auto_device_switched': switched,
-        'auto_device_name':     device_name,
+        'available':                    True,
+        'position':                     position if position is not None else 0.0,
+        'duration':                     duration if duration is not None else 0.0,
+        'playing':                      (not paused) and (not idle) and (position is not None),
+        'paused':                       paused,
+        'idle':                         idle,
+        'track_ended':                  ended,
+        'track_id':                     _mpv_current_track_id,
+        'xfade_in_progress':            _xfade_in_progress,
+        'xfade_track_id':               xt,
+        'xfade_track_ended':            xfade_track_ended,
+        'auto_device_switched':         switched,
+        'auto_device_name':             device_name,
+        'auto_device_was_playing':      _auto_device_switch.get('was_playing', False),
+        'auto_device_resume_position':  _auto_device_switch.get('resume_position', 0.0),
     })
 
 

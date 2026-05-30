@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Switching the macOS audio output mid-song (plugging in headphones or changing via system settings) now seamlessly resumes playback on the new device from the same position — no pause, no restarting from the beginning
 
 ## v0.440-rc.310526-0850 · 2026-05-31
 - Fix: Play button no longer blinks back to Play when starting a track — the pause event fired by audio loading was incorrectly resetting playback state

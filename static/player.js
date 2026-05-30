@@ -53,6 +53,12 @@ const Player = (function () {
   let _mpvIdleAdvanceHandled = false;
   let _lastManualPlayAt = 0;
 
+  // Audio output device switch state — tracks seamless resume across CoreAudio changes
+  let _deviceSwitchPending        = false; // true while backend is reiniting after device change
+  let _deviceSwitchWasPlaying     = false; // were we playing when the switch was detected?
+  let _deviceSwitchResumePosition = 0;     // last known position for fallback resume
+  let _deviceSwitchResumeTimeout  = null;  // fallback resume timer handle
+
   function _isMpvActive() {
     if (!_mpvAvailable) return false;
     // Crossfade is now handled by the mpv dual-instance backend path.
@@ -337,7 +343,10 @@ const Player = (function () {
     // Sync play/pause indicator (only when not seek-dragging)
     if (!_seekDragging && !_seeking) {
       const wasPlaying = ps.isPlaying;
-      const optimisticPlay = !state.playing && currentTrack() && Date.now() - _lastManualPlayAt < 1000;
+      const optimisticPlay = !state.playing && currentTrack() && (
+        Date.now() - _lastManualPlayAt < 1000 ||
+        (_deviceSwitchPending && _deviceSwitchWasPlaying)  // suppress pause flash while backend reinits
+      );
       ps.isPlaying = !!state.playing || optimisticPlay;
       if (wasPlaying !== ps.isPlaying) {
         _updatePlayBtn();
@@ -385,6 +394,15 @@ const Player = (function () {
       _onMpvTrackEnded();
     }
 
+    // Clear device-switch pending once backend confirms playback resumed
+    if (state.playing && _deviceSwitchPending) {
+      _deviceSwitchPending = false;
+      if (_deviceSwitchResumeTimeout) {
+        clearTimeout(_deviceSwitchResumeTimeout);
+        _deviceSwitchResumeTimeout = null;
+      }
+    }
+
     // macOS system audio device changed — watcher reinited mpv automatically
     if (state.auto_device_switched && state.auto_device_name) {
       const raw   = state.auto_device_name;
@@ -392,6 +410,24 @@ const Player = (function () {
       _resolvedAutoDevice = label;
       _toast(`Audio output: ${label || 'system default'}`, 'info', 3500);
       if (_outputPopoverOpen) _populateOutputDevices();
+
+      // Set up seamless resume state
+      _deviceSwitchPending        = true;
+      _deviceSwitchWasPlaying     = state.auto_device_was_playing || ps.isPlaying;
+      _deviceSwitchResumePosition = state.auto_device_resume_position || _mpvPosition;
+
+      // Fallback: if backend doesn't resume within 2 s, trigger it from the frontend
+      if (_deviceSwitchWasPlaying) {
+        if (_deviceSwitchResumeTimeout) clearTimeout(_deviceSwitchResumeTimeout);
+        _deviceSwitchResumeTimeout = setTimeout(() => {
+          if (_deviceSwitchPending && !ps.isPlaying) {
+            const t = currentTrack();
+            if (t) _mpvCmd('play', { track_id: t.id, position: _deviceSwitchResumePosition });
+          }
+          _deviceSwitchPending       = false;
+          _deviceSwitchResumeTimeout = null;
+        }, 2000);
+      }
     }
   }
 
