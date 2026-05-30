@@ -81,6 +81,8 @@ let _homeTrackRefreshTimer = null;
 
 let _currentGearTab = 'daps';
 let _currentDapId = null;        // track current DAP being viewed (for nav history)
+let _currentDap = null;
+let _currentDapPlaylists = [];
 let _dapPlaylistSort = { col: 'name', order: 'asc' };
 let _navHistory = [];             // back stack: array of nav snapshots
 let _isNavigatingBack = false;    // suppresses history push during back/forward restoration
@@ -10056,6 +10058,7 @@ const _GEAR_ICON_WARN = `<svg width="12" height="12" viewBox="0 0 24 24" fill="n
 const _GEAR_ICON_WARN_LARGE = `<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 4.3 2.7 17.2A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`;
 const _GEAR_ICON_CHECK_LARGE = `<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
 const _GEAR_ICON_REFRESH = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M3 12A9 9 0 0 1 18.5 5.8"/><path d="M18.5 2v3.8H22"/><path d="M5.5 22v-3.8H2"/></svg>`;
+const _GEAR_ICON_UNLINK = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/><line x1="2" y1="2" x2="22" y2="22"/></svg>`;
 
 function _prettyModelLabel(model) {
   const raw = String(model || 'generic').trim();
@@ -10590,8 +10593,8 @@ async function showDapDetail(id) {
   const navRight = document.getElementById('main-nav-right');
   if (navRight) {
     navRight.innerHTML = `
-      <button class="gd-icon-btn danger gd-nav-action-btn" onclick="App.deleteDap('${dap.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
-      <button class="gd-icon-btn gd-nav-action-btn" onclick="App.showEditDapModal('${dap.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
+      <button class="gd-icon-btn danger" onclick="App.deleteDap('${dap.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
+      <button class="gd-icon-btn" onclick="App.showEditDapModal('${dap.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
     `;
   }
   const lastSyncLabel = lastSyncTs ? _fmtRelDate(lastSyncTs) : 'never';
@@ -10649,6 +10652,8 @@ async function showDapDetail(id) {
     `;
   }).join('');
 
+  _currentDap = dap;
+  _currentDapPlaylists = playlists;
   document.getElementById('dap-detail-content').innerHTML = `
     <div class="gear-detail-page dap-detail-v2">
       <div class="gd-identity">
@@ -10664,7 +10669,7 @@ async function showDapDetail(id) {
           <span class="gd-btn-icon">${_GEAR_ICON_REFRESH}</span>${syncState === 'checking' ? 'Checking...' : 'Check status'}
         </button>
         <button id="eject-btn-${dap.id}" class="gd-btn" data-restore-label="Unmount" ${dap.mounted ? `onclick="App.ejectDap('${dap.id}', '${esc(dap.name)}')"` : 'disabled title="Device not connected"'}>
-          ${dap.mounted ? 'Unmount' : 'Not Connected'}
+          <span class="gd-btn-icon">${dap.mounted ? _GEAR_ICON_EJECT : _GEAR_ICON_UNLINK}</span>${dap.mounted ? 'Unmount' : 'Not Connected'}
         </button>
         <span class="gd-last-sync-inline">Last synced ${esc(lastSyncLabel)}</span>
       </div>
@@ -10693,7 +10698,7 @@ async function showDapDetail(id) {
       <section class="gd-section">
         <div class="gd-section-head">
           <h2 class="title">Playlist sync status</h2>
-          <span class="count">· ${sortedPl.length} playlist${sortedPl.length === 1 ? '' : 's'}</span>
+          <span class="count">· ${playlists.length} playlist${playlists.length === 1 ? '' : 's'}</span>
         </div>
         <div class="dap-table-shell tb-table-shell">
           <div class="tb-table-scroll-area">
@@ -10705,7 +10710,7 @@ async function showDapDetail(id) {
           <th data-sort="last_synced" onclick="App.sortDapPlaylistStatus('last_synced')"><span class="th-sort-label">Last synced<span id="dap-sort-last_synced" class="sort-arrow"></span></span></th>
           <th data-sort="sync" onclick="App.sortDapPlaylistStatus('sync')"><span class="th-sort-label">Sync<span id="dap-sort-sync" class="sort-arrow"></span></span></th>
         </tr></thead>
-        <tbody>${plRows || '<tr><td colspan="5" class="dap-pl-empty-row">No playlists yet</td></tr>'}</tbody>
+        <tbody></tbody>
       </table>
           </div>
         </div>
@@ -10713,10 +10718,7 @@ async function showDapDetail(id) {
     </div>
   `;
   _enhanceTableSystem(document.getElementById('dap-detail-content'));
-  document.querySelectorAll('#dap-playlist-table .sort-arrow').forEach(el => el.textContent = '');
-  const dapSortArrow = document.getElementById(`dap-sort-${_dapPlaylistSort.col}`);
-  if (dapSortArrow) dapSortArrow.textContent = _dapPlaylistSort.order === 'asc' ? '\u25B2' : '\u25BC';
-  _syncTableSortState('dap-playlist-table', _dapPlaylistSort);
+  _renderDapPlaylistTable(dap, playlists);
 }
 
 async function dapExportPlaylist(dapId, plId, btn) {
