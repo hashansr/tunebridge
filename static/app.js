@@ -10544,64 +10544,8 @@ async function checkDapSyncStatus(did) {
   }
 }
 
-function sortDapPlaylistStatus(col) {
-  const key = _pickAllowed(col, ['name', 'tracks', 'status', 'last_synced', 'sync'], 'name');
-  if (_dapPlaylistSort.col === key) {
-    _dapPlaylistSort.order = _dapPlaylistSort.order === 'asc' ? 'desc' : 'asc';
-  } else {
-    _dapPlaylistSort.col = key;
-    _dapPlaylistSort.order = key === 'status' ? 'desc' : 'asc';
-  }
-  if (_currentDapId) showDapDetail(_currentDapId);
-}
-
-async function showDapDetail(id) {
-  _pushToNavHistory();
-  _currentDapId = id;
-  state.view = 'dap-detail';
-  clearSelection();
-  setActiveNav('gear');
-  showViewEl('dap-detail');
-
-  document.getElementById('dap-detail-content').innerHTML = `
-    <div class="spinner-wrap" style="padding:24px 0">
-      <div class="spinner"></div>
-    </div>
-  `;
-
-  const [dap, playlists] = await Promise.all([
-    api(`/daps/${id}`),
-    _getPlaylistsForGear(),
-  ]);
-
+function _renderDapPlaylistTable(dap, playlists) {
   const exports = dap.playlist_exports || {};
-  const summary = dap.sync_summary || {};
-  const syncState = String(summary.sync_status_state || 'estimated');
-  const playlistOut = Number(summary.playlist_out_of_sync_count || (dap.stale_count || 0) + (dap.never_exported || 0));
-  const songsToSync = Number(summary.music_out_of_sync_count || 0);
-  const musicToAdd = Number(summary.music_to_add_count || 0);
-  const musicToRemove = Number(summary.music_to_remove_count || 0);
-  const hasDriveData = !!dap.mounted;
-  const spaceTotalBytes = hasDriveData ? (summary.space_total_bytes ?? dap.capacity_bytes) : null;
-  const spaceFreeBytes = hasDriveData ? (summary.space_available_bytes ?? (
-    dap.capacity_bytes != null && dap.used_bytes != null
-      ? Math.max(0, Number(dap.capacity_bytes) - Number(dap.used_bytes))
-      : null
-  )) : null;
-  const lastSyncTs = summary.last_sync_at || dap.last_sync_at || 0;
-  const activeMountPath = dap.active_mount_path || dap.mount_path || '';
-  const navRight = document.getElementById('main-nav-right');
-  if (navRight) {
-    navRight.innerHTML = `
-      <button class="gd-icon-btn danger" onclick="App.deleteDap('${dap.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
-      <button class="gd-icon-btn" onclick="App.showEditDapModal('${dap.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
-    `;
-  }
-  const lastSyncLabel = lastSyncTs ? _fmtRelDate(lastSyncTs) : 'never';
-  const identityMeta = [_prettyModelLabel(dap.model)];
-  if (dap.mounted && spaceFreeBytes != null && spaceTotalBytes != null) {
-    identityMeta.push(`${_fmtBytes(spaceFreeBytes)} free of ${_fmtBytes(spaceTotalBytes)}`);
-  }
   const _plStatusRank = (pl) => {
     const ts = Number(exports[pl.id] || 0);
     if (!ts) return 2;
@@ -10652,6 +10596,72 @@ async function showDapDetail(id) {
     `;
   }).join('');
 
+  const tbody = document.querySelector('#dap-playlist-table tbody');
+  if (tbody) tbody.innerHTML = plRows || '<tr><td colspan="5" class="dap-pl-empty-row">No playlists yet</td></tr>';
+  document.querySelectorAll('#dap-playlist-table .sort-arrow').forEach(el => el.textContent = '');
+  const arrow = document.getElementById(`dap-sort-${_dapPlaylistSort.col}`);
+  if (arrow) arrow.textContent = _dapPlaylistSort.order === 'asc' ? '▲' : '▼';
+  _syncTableSortState('dap-playlist-table', _dapPlaylistSort);
+}
+
+function sortDapPlaylistStatus(col) {
+  const key = _pickAllowed(col, ['name', 'tracks', 'status', 'last_synced', 'sync'], 'name');
+  if (_dapPlaylistSort.col === key) {
+    _dapPlaylistSort.order = _dapPlaylistSort.order === 'asc' ? 'desc' : 'asc';
+  } else {
+    _dapPlaylistSort.col = key;
+    _dapPlaylistSort.order = key === 'status' ? 'desc' : 'asc';
+  }
+  if (_currentDap) _renderDapPlaylistTable(_currentDap, _currentDapPlaylists);
+}
+
+async function showDapDetail(id) {
+  _pushToNavHistory();
+  _currentDapId = id;
+  state.view = 'dap-detail';
+  clearSelection();
+  setActiveNav('gear');
+  showViewEl('dap-detail');
+
+  document.getElementById('dap-detail-content').innerHTML = `
+    <div class="spinner-wrap" style="padding:24px 0">
+      <div class="spinner"></div>
+    </div>
+  `;
+
+  const [dap, playlists] = await Promise.all([
+    api(`/daps/${id}`),
+    _getPlaylistsForGear(),
+  ]);
+
+  const exports = dap.playlist_exports || {};
+  const summary = dap.sync_summary || {};
+  const syncState = String(summary.sync_status_state || 'estimated');
+  const playlistOut = Number(summary.playlist_out_of_sync_count || (dap.stale_count || 0) + (dap.never_exported || 0));
+  const songsToSync = Number(summary.music_out_of_sync_count || 0);
+  const musicToAdd = Number(summary.music_to_add_count || 0);
+  const musicToRemove = Number(summary.music_to_remove_count || 0);
+  const hasDriveData = !!dap.mounted;
+  const spaceTotalBytes = hasDriveData ? (summary.space_total_bytes ?? dap.capacity_bytes) : null;
+  const spaceFreeBytes = hasDriveData ? (summary.space_available_bytes ?? (
+    dap.capacity_bytes != null && dap.used_bytes != null
+      ? Math.max(0, Number(dap.capacity_bytes) - Number(dap.used_bytes))
+      : null
+  )) : null;
+  const lastSyncTs = summary.last_sync_at || dap.last_sync_at || 0;
+  const activeMountPath = dap.active_mount_path || dap.mount_path || '';
+  const navRight = document.getElementById('main-nav-right');
+  if (navRight) {
+    navRight.innerHTML = `
+      <button class="gd-icon-btn danger" onclick="App.deleteDap('${dap.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
+      <button class="gd-icon-btn" onclick="App.showEditDapModal('${dap.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
+    `;
+  }
+  const lastSyncLabel = lastSyncTs ? _fmtRelDate(lastSyncTs) : 'never';
+  const identityMeta = [_prettyModelLabel(dap.model)];
+  if (dap.mounted && spaceFreeBytes != null && spaceTotalBytes != null) {
+    identityMeta.push(`${_fmtBytes(spaceFreeBytes)} free of ${_fmtBytes(spaceTotalBytes)}`);
+  }
   _currentDap = dap;
   _currentDapPlaylists = playlists;
   document.getElementById('dap-detail-content').innerHTML = `
