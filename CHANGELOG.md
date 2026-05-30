@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Playlist cover art is now copied both next to the .m3u file and to the Pictures/ folder on the device, so DAP apps that look for art alongside the playlist (Poweramp, Hiby, etc.) pick it up correctly. Applies on every export, device copy, and sync.
 
 ## v0.436-rc.290526-1235 · 2026-05-29
 

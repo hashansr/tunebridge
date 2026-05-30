@@ -4638,20 +4638,39 @@ def _playlist_cover_image_from_tracks(tracks):
     return canvas
 
 
-def _copy_playlist_cover_to_device(pid, playlist, tracks, device_root, safe_name):
+def _copy_playlist_cover_to_device(pid, playlist, tracks, device_root, safe_name, out_dir=None):
+    """Copy playlist cover art to the device.
+
+    Writes to two locations:
+      1. out_dir/<safe_name>.jpg  — next to the .m3u file (where most DAP apps look)
+      2. device_root/Pictures/<safe_name>.jpg  — legacy fallback location
+
+    If out_dir is None, only the Pictures/ copy is written.
+    Existing files are always overwritten so updates propagate on re-export.
+    """
     art_src = PLAYLIST_ARTWORK_DIR / f'{pid}.jpg'
     pics_dir = device_root / 'Pictures'
-    art_dst = pics_dir / f'{safe_name}.jpg'
+
+    def _write(image_bytes_or_pil, is_pil=False):
+        destinations = []
+        if out_dir is not None:
+            destinations.append(Path(out_dir) / f'{safe_name}.jpg')
+        destinations.append(pics_dir / f'{safe_name}.jpg')
+        for dst in destinations:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if is_pil:
+                image_bytes_or_pil.save(dst, 'JPEG', quality=90)
+            else:
+                shutil.copy2(image_bytes_or_pil, dst)
+
     if art_src.exists():
-        pics_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(art_src, art_dst)
+        _write(art_src)
         return True, 'custom'
 
     cover = _playlist_cover_image_from_tracks(tracks)
     if cover is None:
         return False, 'none'
-    pics_dir.mkdir(parents=True, exist_ok=True)
-    cover.save(art_dst, 'JPEG', quality=90)
+    _write(cover, is_pil=True)
     return True, 'generated'
 
 
@@ -8557,6 +8576,7 @@ def export_to_device():
         tracks,
         device_root,
         playlist['name'].replace('/', '-').replace(':', '-'),
+        out_dir=playlists_dir,
     )
 
     return jsonify({
@@ -10939,7 +10959,7 @@ def _export_playlist_to_dap(did, pid, daps=None, playlists=None, save_after=True
         with open(out_dir / f"{safe_name}.m3u", 'w', encoding=m3u_encoding) as f:
             f.write(content)
 
-        art_copied, art_source = _copy_playlist_cover_to_device(pid, playlist, export_tracks, device_root, safe_name)
+        art_copied, art_source = _copy_playlist_cover_to_device(pid, playlist, export_tracks, device_root, safe_name, out_dir=out_dir)
     except OSError as e:
         import errno as _errno
         if e.errno == _errno.EROFS:
