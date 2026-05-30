@@ -277,6 +277,20 @@ const Player = (function () {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body || {}),
+    }).then(r => {
+      if (!r.ok && route === 'play') {
+        r.json().then(err => {
+          const msg = (err && err.error) ? err.error : `Playback failed (HTTP ${r.status})`;
+          _toast(msg, 'error');
+          ps.isPlaying = false;
+          _updatePlayBtn();
+        }).catch(() => {
+          _toast(`Playback failed (HTTP ${r.status})`, 'error');
+          ps.isPlaying = false;
+          _updatePlayBtn();
+        });
+      }
+      return r;
     }).catch(e => console.warn(`Player: mpv ${route} failed`, e));
   }
 
@@ -1531,6 +1545,7 @@ const Player = (function () {
 
   /** Play a single track immediately, replacing the top of the queue */
   function playTrack(track) {
+    _startupRestoreGuardActive = false;
     if (!track) return;
     _registry.set(track.id, track);
     // If already in queue (and not shuffle), jump to it
@@ -1578,6 +1593,7 @@ const Player = (function () {
 
   /** Replace the entire queue with tracks[], start at startIdx */
   function playAll(tracks, startIdx = 0, contextLabel = '', options = {}) {
+    _startupRestoreGuardActive = false;
     if (!tracks || tracks.length === 0) return;
     _resetStandbyBuffer();
     tracks.forEach(t => _registry.set(t.id, t));
@@ -2028,10 +2044,7 @@ const Player = (function () {
   function _onPause() {
     if (this !== _audio) return;
     if (_suppressPauseFlush) {
-      ps.isPlaying = false;
-      _updatePlayBtn();
-      if (ps.queueOpen) _renderQueue();
-      return;
+      return;  // complete no-op: _audio.load() fires pause synchronously, do not touch state
     }
     const now = Date.now();
     if (now - _lastPauseEventAt > 12000) {

@@ -7297,6 +7297,7 @@ _mpv_current_track_id = None
 _mpv_load_time        = 0.0    # epoch timestamp of last player_play() call (grace period)
 _mpv_last_volume      = 1.0    # logical 0.0–1.0 volume persisted across reinit
 _mpv_last_af          = ''     # last applied lavfi chain (PEQ) persisted across reinit
+_last_play_dev_id     = None   # CoreAudio device ID at time of last player_play(); detects mid-session output changes
 
 # Crossfade state — dual-instance overlap crossfade
 _mpv_xfade_instance   = None   # secondary mpv instance during crossfade
@@ -7690,7 +7691,7 @@ def player_set_audio_device():
 @app.route('/api/player/play', methods=['POST'])
 def player_play():
     """Start playback of a track by ID. Optional: position (seconds) to start from."""
-    global _mpv_current_track_id, _mpv_track_ended, _mpv_load_time, _xfade_in_progress
+    global _mpv_current_track_id, _mpv_track_ended, _mpv_load_time, _xfade_in_progress, _last_play_dev_id
     _refresh_mpv_backend()
     if not MPV_AVAILABLE:
         return jsonify({'error': 'mpv not available — run: brew install mpv'}), 503
@@ -7728,10 +7729,38 @@ def player_play():
         if new_sr and old_sr and new_sr != old_sr:
             _mpv_safe_reinit()
 
+    # Auto-device check: if macOS system default output changed since the last play
+    # (e.g. user plugged in headphones between plays), reinit before loading the track
+    # so it opens on the correct device. Complements the 3-second CoreAudio watcher.
+    if settings.get('audio_device', 'auto') in ('auto', ''):
+        current_dev_id = _ca_get_default_output_device_id()
+        if (current_dev_id is not None
+                and _last_play_dev_id is not None
+                and current_dev_id != _last_play_dev_id):
+            _mpv_safe_reinit()
+        _last_play_dev_id = current_dev_id
+
     _mpv_current_track_id = track_id  # update AFTER sample-rate check
 
     # Fetch p AFTER potential reinit so we always talk to the live instance
     p = _get_mpv()
+
+    # Guard against stale device UID: if the configured device is no longer in
+    # mpv's available list (e.g. device was replugged and its UID changed), silently
+    # reset to auto and reinit so the play isn't silently dropped.
+    configured_dev = settings.get('audio_device', 'auto') or 'auto'
+    if configured_dev not in ('auto', ''):
+        try:
+            available = {str(d.get('name', '')) for d in (p.audio_device_list or [])}
+            available.add('auto')
+            if configured_dev not in available:
+                settings['audio_device'] = 'auto'
+                save_settings(settings)
+                _mpv_safe_reinit()
+                p = _get_mpv()
+        except Exception:
+            pass
+
     if position > 0:
         p.command('loadfile', path, 'replace', f'start={position}')
     else:
