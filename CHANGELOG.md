@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.440-rc.310526-0850 · 2026-05-31
 - Fix: Play button no longer blinks back to Play when starting a track — the pause event fired by audio loading was incorrectly resetting playback state
 - Fix: Double-clicking a track or clicking Play All now correctly clears the startup-restore guard, preventing silent playback failures when no track was playing at launch
 - Fix: mpv HTTP errors on play (e.g. 404 track not found, 503 mpv unavailable) now show a toast and reset the button instead of silently reverting
