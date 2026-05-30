@@ -7158,10 +7158,18 @@ def health():
 import ctypes as _ctypes
 import struct as _struct
 
-def _ca_get_default_output_device_id():
-    """Return the CoreAudio device ID of the current macOS default output, or None."""
+# Module-level CoreAudio setup — initialised once, reused on every poll call.
+_ca_lib  = None
+_ca_addr_type = None
+_ca_ready = False
+
+def _ca_init():
+    """Load CoreAudio and cache the struct/function types. No-op after first call."""
+    global _ca_lib, _ca_addr_type, _ca_ready
+    if _ca_ready:
+        return True
     try:
-        _ca = _ctypes.cdll.LoadLibrary(
+        _ca_lib = _ctypes.cdll.LoadLibrary(
             '/System/Library/Frameworks/CoreAudio.framework/CoreAudio')
 
         class _Addr(_ctypes.Structure):
@@ -7169,23 +7177,37 @@ def _ca_get_default_output_device_id():
                         ('scope', _ctypes.c_uint32),
                         ('elem', _ctypes.c_uint32)]
 
-        _ca.AudioObjectGetPropertyData.restype  = _ctypes.c_int32
-        _ca.AudioObjectGetPropertyData.argtypes = [
+        _ca_addr_type = _Addr
+        _ca_lib.AudioObjectGetPropertyData.restype  = _ctypes.c_int32
+        _ca_lib.AudioObjectGetPropertyData.argtypes = [
             _ctypes.c_uint32, _ctypes.POINTER(_Addr),
             _ctypes.c_uint32, _ctypes.c_void_p,
             _ctypes.POINTER(_ctypes.c_uint32), _ctypes.c_void_p]
+        _ca_ready = True
+        return True
+    except Exception:
+        return False
 
-        addr   = _Addr(_struct.unpack('>I', b'dOut')[0],
-                       _struct.unpack('>I', b'glob')[0], 0)
+
+def _ca_get_default_output_device_id():
+    """Return the CoreAudio device ID of the current macOS default output, or None."""
+    if not _ca_init():
+        return None
+    try:
+        addr   = _ca_addr_type(_struct.unpack('>I', b'dOut')[0],
+                               _struct.unpack('>I', b'glob')[0], 0)
         dev_id = _ctypes.c_uint32(0)
         size   = _ctypes.c_uint32(4)
-        err    = _ca.AudioObjectGetPropertyData(
+        err    = _ca_lib.AudioObjectGetPropertyData(
             1, _ctypes.byref(addr), 0, None,
             _ctypes.byref(size), _ctypes.byref(dev_id))
         return dev_id.value if err == 0 else None
     except Exception:
         return None
 
+
+# One-shot flag consumed by /api/player/mpv_state so the frontend can show a toast.
+_auto_device_switch = {'fired': False, 'device_name': ''}
 
 _macos_default_device_watcher_started = False
 
@@ -7209,20 +7231,22 @@ def _start_macos_device_watcher():
             try:
                 settings = load_settings()
                 if settings.get('audio_device', 'auto') not in ('auto', ''):
-                    # Explicit device chosen — do not auto-switch
+                    # Explicit device chosen — track last ID so we detect if user
+                    # later switches back to auto while also changing system device.
                     last_dev_id = _ca_get_default_output_device_id()
                     continue
                 current_id = _ca_get_default_output_device_id()
                 if current_id is None:
                     continue
                 if last_dev_id is not None and current_id != last_dev_id:
-                    # System default changed — reinit mpv so it opens on new device
                     last_dev_id = current_id
-                    if MPV_AVAILABLE and _mpv_instance is not None:
-                        # Capture playback state before reinit so we can resume
-                        resume_track_id = _mpv_current_track_id
-                        resume_position = 0.0
-                        was_playing = False
+                    if not MPV_AVAILABLE:
+                        continue
+                    # Capture playback state before reinit so we can resume
+                    resume_track_id = _mpv_current_track_id
+                    resume_position = 0.0
+                    was_playing = False
+                    if _mpv_instance is not None:
                         try:
                             p = _get_mpv()
                             pos = p.time_pos
@@ -7231,22 +7255,31 @@ def _start_macos_device_watcher():
                             was_playing = (not bool(p.pause)) and (not bool(p.idle_active)) and (pos is not None)
                         except Exception:
                             pass
-                        _mpv_safe_reinit()
-                        # Resume on the new device if something was playing
-                        if was_playing and resume_track_id:
-                            try:
-                                path = _resolve_track_path_mpv(resume_track_id)
-                                if path:
-                                    p2 = _get_mpv()
-                                    p2.loadfile(path, 'replace')
-                                    if resume_position > 0.5:
-                                        time.sleep(0.4)
-                                        try:
-                                            p2.time_pos = resume_position
-                                        except Exception:
-                                            pass
-                            except Exception:
-                                pass
+                    # Reinit so the new instance opens on the updated system default
+                    _mpv_safe_reinit()
+                    # Read the device name the new instance resolved to
+                    resolved = 'auto'
+                    try:
+                        resolved = _get_mpv().audio_device or 'auto'
+                    except Exception:
+                        pass
+                    _auto_device_switch['fired']       = True
+                    _auto_device_switch['device_name'] = resolved
+                    print(f'[AudioWatcher] macOS default output changed → {resolved}')
+                    # Resume playback on the new device using the same approach as player_play()
+                    if was_playing and resume_track_id:
+                        try:
+                            path = _resolve_track_path_mpv(resume_track_id)
+                            if path:
+                                p2 = _get_mpv()
+                                if resume_position > 0.5:
+                                    p2.command('loadfile', path, 'replace',
+                                               f'start={int(resume_position)}')
+                                else:
+                                    p2.command('loadfile', path, 'replace')
+                                p2.pause = False
+                        except Exception:
+                            pass
                 else:
                     last_dev_id = current_id
             except Exception:
@@ -7946,11 +7979,17 @@ def player_mpv_state():
                 pass  # instance briefly invalid during reinit — fall through to idle response
 
     if p is None or paused is None:
+        switched    = _auto_device_switch.get('fired', False)
+        dev_name    = _auto_device_switch.get('device_name', '')
+        if switched:
+            _auto_device_switch['fired'] = False
         return jsonify({'available': True, 'position': 0.0, 'duration': 0.0,
                         'playing': False, 'paused': True, 'idle': True,
                         'track_ended': False, 'track_id': _mpv_current_track_id,
                         'xfade_in_progress': _xfade_in_progress,
-                        'xfade_track_id': None, 'xfade_track_ended': False})
+                        'xfade_track_id': None, 'xfade_track_ended': False,
+                        'auto_device_switched': switched,
+                        'auto_device_name':     dev_name})
 
     ended = _mpv_track_ended
     if ended:
@@ -7981,18 +8020,25 @@ def player_mpv_state():
             xfade_track_ended = True
             _mpv_xfade_ended  = False  # consume
 
+    switched     = _auto_device_switch.get('fired', False)
+    device_name  = _auto_device_switch.get('device_name', '')
+    if switched:
+        _auto_device_switch['fired'] = False   # consume — one-shot per poll cycle
+
     return jsonify({
-        'available':         True,
-        'position':          position if position is not None else 0.0,
-        'duration':          duration if duration is not None else 0.0,
-        'playing':           (not paused) and (not idle) and (position is not None),
-        'paused':            paused,
-        'idle':              idle,
-        'track_ended':       ended,
-        'track_id':          _mpv_current_track_id,
-        'xfade_in_progress': _xfade_in_progress,
-        'xfade_track_id':    xt,
-        'xfade_track_ended': xfade_track_ended,
+        'available':            True,
+        'position':             position if position is not None else 0.0,
+        'duration':             duration if duration is not None else 0.0,
+        'playing':              (not paused) and (not idle) and (position is not None),
+        'paused':               paused,
+        'idle':                 idle,
+        'track_ended':          ended,
+        'track_id':             _mpv_current_track_id,
+        'xfade_in_progress':    _xfade_in_progress,
+        'xfade_track_id':       xt,
+        'xfade_track_ended':    xfade_track_ended,
+        'auto_device_switched': switched,
+        'auto_device_name':     device_name,
     })
 
 

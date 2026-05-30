@@ -370,6 +370,15 @@ const Player = (function () {
       _mpvIdleAdvanceHandled = true;
       _onMpvTrackEnded();
     }
+
+    // macOS system audio device changed — watcher reinited mpv automatically
+    if (state.auto_device_switched && state.auto_device_name) {
+      const raw   = state.auto_device_name;
+      const label = raw.startsWith('coreaudio/') ? raw.slice('coreaudio/'.length) : raw;
+      _resolvedAutoDevice = label;
+      _toast(`Audio output: ${label || 'system default'}`, 'info', 3500);
+      if (_outputPopoverOpen) _populateOutputDevices();
+    }
   }
 
   function _onMpvTrackEnded() {
@@ -2255,6 +2264,7 @@ const Player = (function () {
   let _outputDevices = [];
   let _currentOutputDevice = 'auto';
   let _outputPopoverOpen = false;
+  let _resolvedAutoDevice = '';  // last known physical device when on "auto"
 
   async function toggleOutputPopover() {
     const popover = document.getElementById('output-popover');
@@ -2297,11 +2307,15 @@ const Player = (function () {
     list.innerHTML = _outputDevices.map(d => {
       const isActive = d.name === _currentOutputDevice ||
                        (d.name === 'auto' && (!_currentOutputDevice || _currentOutputDevice === 'auto'));
+      let label = d.description || d.name;
+      if (d.name === 'auto' && _resolvedAutoDevice) {
+        label = `Auto (${_esc(_resolvedAutoDevice)})`;
+      }
       return `<button class="output-device-item${isActive ? ' active' : ''}"
                 data-device="${_esc(d.name)}"
                 onclick="Player.selectOutputDevice(this.dataset.device)">
         <span class="output-device-dot"></span>
-        <span>${_esc(d.description || d.name)}</span>
+        <span>${label}</span>
       </button>`;
     }).join('');
   }
