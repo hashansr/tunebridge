@@ -7147,6 +7147,116 @@ def health():
 # Provides bit-perfect CoreAudio output via libmpv.
 # Requires: brew install mpv  (installs libmpv.dylib)
 
+# ── macOS system audio device watcher ────────────────────────────────────────
+# When the player output is set to "auto", mpv binds to whichever CoreAudio
+# device is the system default at the moment playback opens. Switching the
+# system output via the macOS menu bar does NOT migrate the open stream.
+# This watcher polls the CoreAudio default output device every 3 seconds; if
+# it changes while the setting is still "auto", mpv is reinitialised so the
+# next track (and the current one, if playing) routes to the new device.
+
+import ctypes as _ctypes
+import struct as _struct
+
+def _ca_get_default_output_device_id():
+    """Return the CoreAudio device ID of the current macOS default output, or None."""
+    try:
+        _ca = _ctypes.cdll.LoadLibrary(
+            '/System/Library/Frameworks/CoreAudio.framework/CoreAudio')
+
+        class _Addr(_ctypes.Structure):
+            _fields_ = [('sel', _ctypes.c_uint32),
+                        ('scope', _ctypes.c_uint32),
+                        ('elem', _ctypes.c_uint32)]
+
+        _ca.AudioObjectGetPropertyData.restype  = _ctypes.c_int32
+        _ca.AudioObjectGetPropertyData.argtypes = [
+            _ctypes.c_uint32, _ctypes.POINTER(_Addr),
+            _ctypes.c_uint32, _ctypes.c_void_p,
+            _ctypes.POINTER(_ctypes.c_uint32), _ctypes.c_void_p]
+
+        addr   = _Addr(_struct.unpack('>I', b'dOut')[0],
+                       _struct.unpack('>I', b'glob')[0], 0)
+        dev_id = _ctypes.c_uint32(0)
+        size   = _ctypes.c_uint32(4)
+        err    = _ca.AudioObjectGetPropertyData(
+            1, _ctypes.byref(addr), 0, None,
+            _ctypes.byref(size), _ctypes.byref(dev_id))
+        return dev_id.value if err == 0 else None
+    except Exception:
+        return None
+
+
+_macos_default_device_watcher_started = False
+
+def _start_macos_device_watcher():
+    """Start a daemon thread that polls the macOS default audio output every 3 s.
+
+    When the setting is 'auto' and the system default device changes, mpv is
+    reinitialised so playback migrates to the new device automatically.
+    """
+    global _macos_default_device_watcher_started
+    if _macos_default_device_watcher_started:
+        return
+    if sys.platform != 'darwin':
+        return
+    _macos_default_device_watcher_started = True
+
+    def _watch():
+        last_dev_id = _ca_get_default_output_device_id()
+        while True:
+            time.sleep(3)
+            try:
+                settings = load_settings()
+                if settings.get('audio_device', 'auto') not in ('auto', ''):
+                    # Explicit device chosen — do not auto-switch
+                    last_dev_id = _ca_get_default_output_device_id()
+                    continue
+                current_id = _ca_get_default_output_device_id()
+                if current_id is None:
+                    continue
+                if last_dev_id is not None and current_id != last_dev_id:
+                    # System default changed — reinit mpv so it opens on new device
+                    last_dev_id = current_id
+                    if MPV_AVAILABLE and _mpv_instance is not None:
+                        # Capture playback state before reinit so we can resume
+                        resume_track_id = _mpv_current_track_id
+                        resume_position = 0.0
+                        was_playing = False
+                        try:
+                            p = _get_mpv()
+                            pos = p.time_pos
+                            if pos is not None:
+                                resume_position = float(pos)
+                            was_playing = (not bool(p.pause)) and (not bool(p.idle_active)) and (pos is not None)
+                        except Exception:
+                            pass
+                        _mpv_safe_reinit()
+                        # Resume on the new device if something was playing
+                        if was_playing and resume_track_id:
+                            try:
+                                path = _resolve_track_path_mpv(resume_track_id)
+                                if path:
+                                    p2 = _get_mpv()
+                                    p2.loadfile(path, 'replace')
+                                    if resume_position > 0.5:
+                                        time.sleep(0.4)
+                                        try:
+                                            p2.time_pos = resume_position
+                                        except Exception:
+                                            pass
+                            except Exception:
+                                pass
+                else:
+                    last_dev_id = current_id
+            except Exception:
+                pass
+
+    t = threading.Thread(target=_watch, daemon=True, name='macos-audio-watcher')
+    t.start()
+
+# ─────────────────────────────────────────────────────────────────────────────
+
 _mpv_instance         = None   # mpv.MPV singleton
 _mpv_lock             = threading.Lock()
 _mpv_track_ended      = False  # set by end-file(eof) event, consumed by /mpv_state
@@ -14565,6 +14675,7 @@ def _artwork_backfill_thread():
 
 
 threading.Thread(target=_artwork_backfill_thread, daemon=True).start()
+_start_macos_device_watcher()
 
 
 if __name__ == '__main__':
