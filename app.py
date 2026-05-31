@@ -7209,6 +7209,23 @@ def _ca_get_default_output_device_id():
 # One-shot flag consumed by /api/player/mpv_state so the frontend can show a toast.
 _auto_device_switch = {'fired': False, 'device_name': ''}
 
+# ── Device-switch diagnostic log ─────────────────────────────────────────────
+# Captures the last 30 events across all code paths so we can replay exactly
+# what happened during a device switch.  Access via GET /api/player/dsw_log.
+_dsw_log = []
+
+def _dsw(msg, **kw):
+    """Append a timestamped entry to the device-switch diagnostic log."""
+    import traceback as _tb
+    entry = {'t': round(time.time(), 3), 'msg': msg}
+    entry.update(kw)
+    _dsw_log.append(entry)
+    if len(_dsw_log) > 30:
+        _dsw_log.pop(0)
+    parts = [f'[DSW {entry["t"]}] {msg}']
+    parts += [f'  {k}={v!r}' for k, v in kw.items()]
+    print('\n'.join(parts), flush=True)
+
 _macos_default_device_watcher_started = False
 
 def _start_macos_device_watcher():
@@ -7225,14 +7242,13 @@ def _start_macos_device_watcher():
     _macos_default_device_watcher_started = True
 
     def _watch():
+        global _last_play_dev_id
         last_dev_id = _ca_get_default_output_device_id()
         while True:
             time.sleep(1)
             try:
                 settings = load_settings()
                 if settings.get('audio_device', 'auto') not in ('auto', ''):
-                    # Explicit device chosen — track last ID so we detect if user
-                    # later switches back to auto while also changing system device.
                     last_dev_id = _ca_get_default_output_device_id()
                     continue
                 current_id = _ca_get_default_output_device_id()
@@ -7242,64 +7258,117 @@ def _start_macos_device_watcher():
                     last_dev_id = current_id
                     if not MPV_AVAILABLE:
                         continue
-                    # Capture playback state before reinit so we can resume
+
+                    _dsw('device-change detected', old_id=last_dev_id, new_id=current_id,
+                         mpv_alive=(_mpv_instance is not None),
+                         track_id=_mpv_current_track_id)
+
+                    # ── Step 1: snapshot current playback state ───────────────
                     resume_track_id = _mpv_current_track_id
                     resume_position = 0.0
-                    was_playing = False
+                    was_playing     = False
+                    mpv_still_alive = False   # True if mpv is actively playing (no reinit needed)
+
                     if _mpv_instance is not None:
                         try:
                             p = _get_mpv()
-                            pos = p.time_pos
+                            pos        = p.time_pos
+                            is_paused  = bool(p.pause)
+                            is_idle    = bool(p.idle_active)
+                            _dsw('mpv state snapshot', pos=pos, paused=is_paused, idle=is_idle,
+                                 last_known_pos=_mpv_last_known_position,
+                                 last_known_track=_mpv_last_known_track_id)
                             if pos is not None:
                                 resume_position = float(pos)
-                                was_playing = (not bool(p.pause)) and (not bool(p.idle_active))
+                                was_playing     = (not is_paused) and (not is_idle)
+                                # mpv is actively playing — CoreAudio may have auto-rerouted
+                                # the audio without any error.  Skip reinit to avoid killing
+                                # working playback and restarting from the last known position.
+                                mpv_still_alive = was_playing
                             else:
-                                # mpv already went idle from the CoreAudio error —
-                                # fall back to the last position captured by the 250 ms frontend poll.
+                                # mpv already went idle from a CoreAudio error — use the
+                                # last position captured by the 250 ms frontend poll as fallback.
+                                _dsw('mpv idle/no-pos, falling back to last_known',
+                                     lk_track=_mpv_last_known_track_id,
+                                     resume_track=resume_track_id,
+                                     lk_pos=_mpv_last_known_position)
                                 if _mpv_last_known_track_id == resume_track_id:
                                     resume_position = _mpv_last_known_position
-                                    was_playing = _mpv_last_known_was_playing
-                        except Exception:
+                                    was_playing     = _mpv_last_known_was_playing
+                        except Exception as _e:
+                            _dsw('mpv state snapshot EXCEPTION', err=str(_e),
+                                 lk_track=_mpv_last_known_track_id, resume_track=resume_track_id)
                             if _mpv_last_known_track_id == resume_track_id:
                                 resume_position = _mpv_last_known_position
-                                was_playing = _mpv_last_known_was_playing
-                    # Reinit so the new instance opens on the updated system default
-                    _mpv_safe_reinit()
-                    # Sync _last_play_dev_id to the new device so that the next
-                    # player_play() call doesn't see a stale mismatch and trigger
-                    # yet another reinit (which would kill our resumed playback).
-                    _last_play_dev_id = current_id
-                    # Read the device name the new instance resolved to
-                    resolved = 'auto'
-                    try:
-                        resolved = _get_mpv().audio_device or 'auto'
-                    except Exception:
-                        pass
-                    _auto_device_switch['fired']           = True
-                    _auto_device_switch['device_name']     = resolved
-                    _auto_device_switch['was_playing']     = was_playing
-                    _auto_device_switch['resume_position'] = resume_position
-                    _auto_device_switch['resume_track_id'] = resume_track_id
-                    print(f'[AudioWatcher] macOS default output changed → {resolved} '
-                          f'(was_playing={was_playing}, resume_pos={resume_position:.1f}s)')
-                    # Resume playback on the new device using the same approach as player_play()
-                    if was_playing and resume_track_id:
+                                was_playing     = _mpv_last_known_was_playing
+
+                    _dsw('state after snapshot', mpv_still_alive=mpv_still_alive,
+                         was_playing=was_playing, resume_pos=resume_position,
+                         resume_track=resume_track_id)
+
+                    # ── Step 2: reinit only when mpv stopped on its own ───────
+                    if mpv_still_alive:
+                        # mpv is still playing — CoreAudio routed audio to the new
+                        # device automatically.  Just sync the tracking variable so
+                        # that the next player_play() doesn't misread a device change.
+                        _last_play_dev_id = current_id
+                        _dsw('skipping reinit — mpv still playing on new device')
+                        resolved = 'auto'
                         try:
-                            path = _resolve_track_path_mpv(resume_track_id)
-                            if path:
-                                p2 = _get_mpv()
-                                if resume_position > 0.5:
-                                    p2.command('loadfile', path, 'replace',
-                                               f'start={resume_position:.3f}')
-                                else:
-                                    p2.command('loadfile', path, 'replace')
-                                p2.pause = False
+                            resolved = _get_mpv().audio_device or 'auto'
                         except Exception:
                             pass
+                        _auto_device_switch['fired']           = True
+                        _auto_device_switch['device_name']     = resolved
+                        _auto_device_switch['was_playing']     = True
+                        _auto_device_switch['resume_position'] = resume_position
+                        _auto_device_switch['resume_track_id'] = resume_track_id
+                        _dsw('switch notification sent (no-reinit)', device=resolved,
+                             pos=resume_position)
+                    else:
+                        # mpv stopped or never started — reinit and resume
+                        _dsw('calling _mpv_safe_reinit',
+                             was_playing=was_playing, resume_pos=resume_position)
+                        _mpv_safe_reinit()
+                        _last_play_dev_id = current_id
+                        _dsw('reinit complete')
+
+                        resolved = 'auto'
+                        try:
+                            resolved = _get_mpv().audio_device or 'auto'
+                        except Exception:
+                            pass
+                        _auto_device_switch['fired']           = True
+                        _auto_device_switch['device_name']     = resolved
+                        _auto_device_switch['was_playing']     = was_playing
+                        _auto_device_switch['resume_position'] = resume_position
+                        _auto_device_switch['resume_track_id'] = resume_track_id
+                        _dsw('switch notification sent (post-reinit)', device=resolved,
+                             was_playing=was_playing, pos=resume_position)
+
+                        if was_playing and resume_track_id:
+                            try:
+                                path = _resolve_track_path_mpv(resume_track_id)
+                                _dsw('resuming playback', path=path, pos=resume_position)
+                                if path:
+                                    p2 = _get_mpv()
+                                    if resume_position > 0.5:
+                                        p2.command('loadfile', path, 'replace',
+                                                   f'start={resume_position:.3f}')
+                                    else:
+                                        p2.command('loadfile', path, 'replace')
+                                    p2.pause = False
+                                    _dsw('loadfile + unpause sent')
+                            except Exception as _e:
+                                _dsw('resume EXCEPTION', err=str(_e))
+
+                    print(f'[AudioWatcher] macOS default output changed → {resolved} '
+                          f'(was_playing={was_playing}, resume_pos={resume_position:.1f}s, '
+                          f'mpv_still_alive={mpv_still_alive})')
                 else:
                     last_dev_id = current_id
-            except Exception:
-                pass
+            except Exception as _ex:
+                _dsw('_watch outer EXCEPTION', err=str(_ex))
 
     t = threading.Thread(target=_watch, daemon=True, name='macos-audio-watcher')
     t.start()
@@ -7371,7 +7440,10 @@ def _create_mpv_instance():
     def _on_end_file(event):
         global _mpv_track_ended
         try:
-            reason = event.as_dict().get('reason')
+            d      = event.as_dict()
+            reason = d.get('reason')
+            _dsw('end-file event', reason=repr(reason), track_id=_mpv_current_track_id,
+                 pos_before=_mpv_last_known_position)
             # python-mpv returns bytes (b'eof', b'stop', …)
             if reason in (b'eof', 'eof'):
                 _mpv_track_ended = True
@@ -7498,6 +7570,9 @@ def _mpv_safe_reinit():
          thread that already held a local reference to the old instance will
          just get a safe idle response rather than crashing.
     """
+    import traceback as _tb
+    _dsw('_mpv_safe_reinit called',
+         caller=_tb.format_stack()[-2].strip().splitlines()[0].strip())
     global _mpv_instance, _mpv_track_ended, _mpv_load_time
     old_instance = None
     with _mpv_lock:
@@ -7516,6 +7591,7 @@ def _mpv_safe_reinit():
             old_instance.terminate()
         except Exception:
             pass
+    _dsw('_mpv_safe_reinit done')
 
 
 def _build_lavfi_peq(preamp_db, filters):
@@ -7766,7 +7842,12 @@ def player_play():
         if (current_dev_id is not None
                 and _last_play_dev_id is not None
                 and current_dev_id != _last_play_dev_id):
+            _dsw('player_play: device mismatch → reinit',
+                 last=_last_play_dev_id, current=current_dev_id, track_id=track_id)
             _mpv_safe_reinit()
+        else:
+            _dsw('player_play: device OK', current=current_dev_id, track_id=track_id,
+                 position=position)
         _last_play_dev_id = current_dev_id
 
     _mpv_current_track_id = track_id  # update AFTER sample-rate check
@@ -8057,9 +8138,13 @@ def player_mpv_state():
             ended            = False
             _mpv_track_ended = False  # discard — crossfade path handles queue advance
         elif (time.time() - _mpv_load_time) < 0.75:
+            _dsw('track_ended suppressed by grace period',
+                 age_ms=round((time.time()-_mpv_load_time)*1000))
             ended            = False
             _mpv_track_ended = False  # grace period: false positive from loadfile-replace
         else:
+            _dsw('track_ended will be sent to frontend',
+                 track_id=_mpv_current_track_id, pos=position)
             _mpv_track_ended = False  # consume the one-shot flag
 
     # Hold _mpv_xfade_lock for the ENTIRE duration of secondary property reads —
@@ -8235,6 +8320,12 @@ def player_events():
 def clear_player_events():
     _db.db_clear_play_events()
     return jsonify({'ok': True})
+
+
+@app.route('/api/player/dsw_log')
+def get_dsw_log():
+    """Return the device-switch diagnostic log (last 30 events) as JSON."""
+    return jsonify({'log': list(_dsw_log)})
 
 
 @app.route('/api/history/<int:event_id>', methods=['DELETE'])
