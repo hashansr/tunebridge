@@ -23055,7 +23055,7 @@ body.is-col-resizing {
   opacity: 1;
 }
 .gd-identity {
-  margin-top: 42px;
+  margin-top: 20px;
   display: flex;
   gap: 20px;
   align-items: center;
@@ -23607,12 +23607,9 @@ body.is-col-resizing {
 .iem-detail-v2 .freq-graph-wrap {
   margin: 0;
   padding: 14px 0 10px;
-  border: 1px solid var(--hairline);
-  border-top: none;
-  border-radius: 0 0 16px 16px;
-  background:
-    radial-gradient(900px 380px at 10% 0%, rgba(39, 63, 116, 0.1), transparent 60%),
-    linear-gradient(180deg, rgba(22, 24, 28, 0.65), rgba(16, 16, 16, 0.75));
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 .iem-detail-v2 #freq-canvas-wrap {
   height: 420px;
