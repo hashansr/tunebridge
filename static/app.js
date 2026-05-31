@@ -79,6 +79,7 @@ let _homeAutoRefreshTimer = null;
 let _searchDebounceTimer = null;
 let _homeTrackRefreshTimer = null;
 let _homePinnedFingerprint = null;
+const _homeRailFingerprints = new Map(); // railId → last rendered fingerprint
 
 let _currentGearTab = 'daps';
 let _currentDapId = null;        // track current DAP being viewed (for nav history)
@@ -6518,6 +6519,50 @@ function _homeOnPlay(item, e) {
 
 const _HOME_PLAY_SVG = playSvg(16);
 
+// Stable key for a home rail item — used for keyed DOM diffing.
+function _railItemKey(item) {
+  return item.playlist_id || item.id ||
+    (item.artist && item.album ? item.artist + '\0' + item.album : '') ||
+    item.artist || item.title || '';
+}
+
+// Surgical DOM update for a rail: reuses existing card nodes by key,
+// inserts new ones, removes stale ones. No full innerHTML wipe.
+function _diffRail(rail, newItems, cardHtmlFn) {
+  // Build map of existing keyed cards; remove any non-keyed children (e.g. empty-state divs)
+  const existing = new Map();
+  Array.from(rail.children).forEach(el => {
+    if (el.dataset.railKey) {
+      existing.set(el.dataset.railKey, el);
+    } else {
+      el.remove();
+    }
+  });
+
+  const newKeys = new Set(newItems.map(item => String(_railItemKey(item))));
+
+  // Append cards in new order — appendChild moves existing nodes, inserts new ones
+  newItems.forEach(item => {
+    const key = String(_railItemKey(item));
+    if (existing.has(key)) {
+      rail.appendChild(existing.get(key));
+    } else {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = cardHtmlFn(item);
+      const card = tmp.firstElementChild;
+      if (card) {
+        card.dataset.railKey = key;
+        rail.appendChild(card);
+      }
+    }
+  });
+
+  // Remove cards no longer in the new list
+  existing.forEach((el, key) => {
+    if (!newKeys.has(key)) el.remove();
+  });
+}
+
 function _homeRailCardHtml(item) {
   const title = item.title || 'Unknown';
   const subtitle = item.subtitle || '';
@@ -6567,22 +6612,20 @@ function _renderHomeRailSection(sectionId, railId, items, emptyMsg) {
   if (!rail) return false;
   _homeSectionVisible(sectionId, true);
   if (!Array.isArray(items) || !items.length) {
+    const fp = '__empty__';
+    if (_homeRailFingerprints.get(railId) === fp) return false;
+    _homeRailFingerprints.set(railId, fp);
     rail.classList.add('is-empty');
-    rail.style.opacity = '0';
-    requestAnimationFrame(() => {
-      rail.innerHTML = `<div class="home-rail-empty">${esc(emptyMsg)}</div>`;
-      _homeBindRailUX(railId);
-      requestAnimationFrame(() => { rail.style.opacity = ''; });
-    });
+    rail.innerHTML = `<div class="home-rail-empty">${esc(emptyMsg)}</div>`;
+    _homeBindRailUX(railId);
     return false;
   }
+  const fp = items.map(i => _railItemKey(i)).join('|');
+  if (_homeRailFingerprints.get(railId) === fp) return true;
+  _homeRailFingerprints.set(railId, fp);
   rail.classList.remove('is-empty');
-  rail.style.opacity = '0';
-  requestAnimationFrame(() => {
-    rail.innerHTML = items.map(_homeRailCardHtml).join('');
-    _homeBindRailUX(railId);
-    requestAnimationFrame(() => { rail.style.opacity = ''; });
-  });
+  _diffRail(rail, items, _homeRailCardHtml);
+  _homeBindRailUX(railId);
   return true;
 }
 
@@ -6669,23 +6712,21 @@ function _renderHomeTopPicks(items) {
   if (!rail) return false;
   if (!Array.isArray(items) || !items.length) {
     _homeSectionVisible('home-because-section', true);
+    const fp = '__empty__';
+    if (_homeRailFingerprints.get('home-because') === fp) return false;
+    _homeRailFingerprints.set('home-because', fp);
     rail.classList.add('is-empty');
-    rail.style.opacity = '0';
-    requestAnimationFrame(() => {
-      rail.innerHTML = '<div class="home-rail-empty">Play a few songs to unlock personalised picks.</div>';
-      _homeBindRailUX('home-because');
-      requestAnimationFrame(() => { rail.style.opacity = ''; });
-    });
+    rail.innerHTML = '<div class="home-rail-empty">Play a few songs to unlock personalised picks.</div>';
+    _homeBindRailUX('home-because');
     return false;
   }
   _homeSectionVisible('home-because-section', true);
+  const fp = items.map(i => _railItemKey(i)).join('|');
+  if (_homeRailFingerprints.get('home-because') === fp) return true;
+  _homeRailFingerprints.set('home-because', fp);
   rail.classList.remove('is-empty');
-  rail.style.opacity = '0';
-  requestAnimationFrame(() => {
-    rail.innerHTML = items.map(_homePickCardHtml).join('');
-    _homeBindRailUX('home-because');
-    requestAnimationFrame(() => { rail.style.opacity = ''; });
-  });
+  _diffRail(rail, items, _homePickCardHtml);
+  _homeBindRailUX('home-because');
   return true;
 }
 
