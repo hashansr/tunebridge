@@ -11528,26 +11528,24 @@ async function showIemDetail(id) {
     `<option value="${p.id}">${esc(p.name)}</option>`
   ).join('');
 
+  const navRight = document.getElementById('main-nav-right');
+  if (navRight) {
+    navRight.innerHTML = `
+      <button class="gd-icon-btn danger" onclick="App.deleteIem('${iem.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
+      <button class="gd-icon-btn" onclick="App.showEditIemModal('${iem.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
+    `;
+  }
+
   document.getElementById('iem-detail-content').innerHTML = `
     <div class="gear-detail-page iem-detail-v2">
-      <div class="gd-chrome">
-        <button class="gd-back-orb" onclick="App.navBack()" title="Back" aria-label="Back">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-        </button>
-        <div class="gd-icon-actions">
-          <button class="gd-icon-btn danger" onclick="App.deleteIem('${iem.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
-          <button class="gd-icon-btn" onclick="App.showEditIemModal('${iem.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
-        </div>
-      </div>
-
       <div class="gd-identity iem">
         <div class="gd-badge-tile iem">${detailIcon}</div>
         <div class="gd-id-text">
+          <h1>${esc(iem.name)}</h1>
           <div class="gd-id-meta">
             <span class="gd-tag-chip ${typeBadge}">${esc(iem.type || 'IEM')}</span>
             ${hasMeasurement ? '<span class="gd-pill success"><span class="gd-dot on"></span>Measurement loaded</span>' : '<span class="gd-pill"><span class="gd-dot off"></span>No measurement</span>'}
           </div>
-          <h1>${esc(iem.name)}</h1>
           <div class="gd-id-sub">
             ${(iem.squig_sources || []).length ? `${(iem.squig_sources || []).length} measurement source${(iem.squig_sources || []).length === 1 ? '' : 's'}` : 'Add a squig.link source to import frequency response'}
             ${sourceLink && sourceLink.url ? ` · <a href="${esc(sourceLink.url)}" target="_blank" class="gd-src-link">squig.link</a>` : ''}
@@ -11566,7 +11564,6 @@ async function showIemDetail(id) {
           ${peqOptions}
         </select>
         <div id="freq-overlay-host" class="fr-overlay-host fr-overlay-host--toolbar" data-fr-overlay-host="1" data-fr-overlay-context="iem-detail"></div>
-        <button class="gd-btn" onclick="App.showEditIemModal('${iem.id}')">Edit</button>
       </div>
 
       <section class="gd-graph-section">
