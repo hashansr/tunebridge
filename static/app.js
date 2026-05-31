@@ -78,6 +78,7 @@ let _homeLoading = false;
 let _homeAutoRefreshTimer = null;
 let _searchDebounceTimer = null;
 let _homeTrackRefreshTimer = null;
+let _homePinnedFingerprint = null;
 
 let _currentGearTab = 'daps';
 let _currentDapId = null;        // track current DAP being viewed (for nav history)
@@ -1190,8 +1191,12 @@ function _renderHomePinnedSection() {
   const items = state.pinnedItems;
   if (!items.length) {
     _homeSectionVisible('home-pinned-section', false);
+    _homePinnedFingerprint = null;
     return;
   }
+  const fp = JSON.stringify(items.map(i => i.category + ':' + i.item_id));
+  if (fp === _homePinnedFingerprint) return;
+  _homePinnedFingerprint = fp;
   _homeSectionVisible('home-pinned-section', true);
   rail.classList.remove('is-empty');
   rail.innerHTML = items.map(item => {
@@ -6563,13 +6568,21 @@ function _renderHomeRailSection(sectionId, railId, items, emptyMsg) {
   _homeSectionVisible(sectionId, true);
   if (!Array.isArray(items) || !items.length) {
     rail.classList.add('is-empty');
-    rail.innerHTML = `<div class="home-rail-empty">${esc(emptyMsg)}</div>`;
-    _homeBindRailUX(railId);
+    rail.style.opacity = '0';
+    requestAnimationFrame(() => {
+      rail.innerHTML = `<div class="home-rail-empty">${esc(emptyMsg)}</div>`;
+      _homeBindRailUX(railId);
+      requestAnimationFrame(() => { rail.style.opacity = ''; });
+    });
     return false;
   }
   rail.classList.remove('is-empty');
-  rail.innerHTML = items.map(_homeRailCardHtml).join('');
-  _homeBindRailUX(railId);
+  rail.style.opacity = '0';
+  requestAnimationFrame(() => {
+    rail.innerHTML = items.map(_homeRailCardHtml).join('');
+    _homeBindRailUX(railId);
+    requestAnimationFrame(() => { rail.style.opacity = ''; });
+  });
   return true;
 }
 
@@ -6657,14 +6670,22 @@ function _renderHomeTopPicks(items) {
   if (!Array.isArray(items) || !items.length) {
     _homeSectionVisible('home-because-section', true);
     rail.classList.add('is-empty');
-    rail.innerHTML = '<div class="home-rail-empty">Play a few songs to unlock personalised picks.</div>';
-    _homeBindRailUX('home-because');
+    rail.style.opacity = '0';
+    requestAnimationFrame(() => {
+      rail.innerHTML = '<div class="home-rail-empty">Play a few songs to unlock personalised picks.</div>';
+      _homeBindRailUX('home-because');
+      requestAnimationFrame(() => { rail.style.opacity = ''; });
+    });
     return false;
   }
   _homeSectionVisible('home-because-section', true);
   rail.classList.remove('is-empty');
-  rail.innerHTML = items.map(_homePickCardHtml).join('');
-  _homeBindRailUX('home-because');
+  rail.style.opacity = '0';
+  requestAnimationFrame(() => {
+    rail.innerHTML = items.map(_homePickCardHtml).join('');
+    _homeBindRailUX('home-because');
+    requestAnimationFrame(() => { rail.style.opacity = ''; });
+  });
   return true;
 }
 

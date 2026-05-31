@@ -15484,6 +15484,7 @@ body.is-col-resizing {
   -webkit-overflow-scrolling: touch;
   -webkit-mask-image: none;
   mask-image: none;
+  transition: opacity 0.18s ease;
 }
 #home-because-section .home-rail {
   padding-bottom: 48px;
