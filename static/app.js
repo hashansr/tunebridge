@@ -10348,6 +10348,8 @@ function toggleIemCompareMode() {
       : `${_GEAR_ICON_COMPARE} Compare`;
     btn.classList.toggle('active', _iemCompareMode);
   }
+  const grid = document.getElementById('iems-grid');
+  if (grid) grid.classList.remove('iems-grid--compare-full');
   _updateIemCompareBar();
   // Re-render cards to show/hide checkboxes
   api('/iems').then(iems => _renderIemCards(iems)).catch(() => {});
@@ -10355,6 +10357,7 @@ function toggleIemCompareMode() {
 
 function toggleIemCompareSelect(iemId, event) {
   if (event) event.stopPropagation();
+  if (!_iemCompareSelected.has(iemId) && _iemCompareSelected.size >= 2) return;
   if (_iemCompareSelected.has(iemId)) {
     _iemCompareSelected.delete(iemId);
   } else {
@@ -10362,10 +10365,13 @@ function toggleIemCompareSelect(iemId, event) {
   }
   const card = document.getElementById(`gear-iem-card-${iemId}`);
   if (card) {
-    card.classList.toggle('gear-card--selected', _iemCompareSelected.has(iemId));
+    card.classList.toggle('gear-row--selected', _iemCompareSelected.has(iemId));
     const chk = card.querySelector('.gear-compare-check');
     if (chk) chk.classList.toggle('checked', _iemCompareSelected.has(iemId));
   }
+  // Dim non-selected cards when both slots are filled
+  const grid = document.getElementById('iems-grid');
+  if (grid) grid.classList.toggle('iems-grid--compare-full', _iemCompareSelected.size >= 2);
   _updateIemCompareBar();
 }
 
@@ -10377,8 +10383,11 @@ function _updateIemCompareBar() {
   const n = _iemCompareSelected.size;
   if (_iemCompareMode) {
     bar.style.display = 'flex';
-    if (label) label.textContent = n < 2 ? 'Select 2 or more IEMs to compare' : `${n} IEMs selected`;
-    if (btn) { btn.textContent = `Compare ${n > 0 ? n : ''}`; btn.disabled = n < 2; }
+    const labelText = n === 0 ? 'Select an IEM to compare'
+                    : n === 1 ? 'Select 1 more IEM'
+                    : '2 IEMs selected — ready';
+    if (label) label.textContent = labelText;
+    if (btn) { btn.textContent = 'Compare'; btn.disabled = n < 2; }
   } else {
     bar.style.display = 'none';
   }
@@ -10406,10 +10415,10 @@ function closeIemCompare(event) {
 function _buildIemCompareChart(data) {
   const canvas = document.getElementById('iem-compare-canvas');
   const legendEl = document.getElementById('iem-compare-legend');
-  const hdr = document.querySelector('#iem-compare-modal .iem-compare-hdr');
+  const controlsEl = document.getElementById('iem-compare-controls');
   if (!canvas) return;
   if (_iemCompareChart) { _iemCompareChart.destroy(); _iemCompareChart = null; }
-  if (hdr) {
+  if (controlsEl) {
     let host = document.getElementById('iem-compare-overlay-host');
     if (!host) {
       host = document.createElement('div');
@@ -10417,9 +10426,7 @@ function _buildIemCompareChart(data) {
       host.className = 'fr-overlay-host fr-overlay-host--compare';
       host.setAttribute('data-fr-overlay-host', '1');
       host.setAttribute('data-fr-overlay-context', 'iem-compare');
-      const closeBtn = hdr.querySelector('.modal-x-btn');
-      if (closeBtn) hdr.insertBefore(host, closeBtn);
-      else hdr.appendChild(host);
+      controlsEl.appendChild(host);
     }
   }
   _refreshFrOverlayControls();
@@ -10447,14 +10454,14 @@ function _buildIemCompareChart(data) {
       scales: {
         x: {
           type: 'logarithmic', min: 20, max: 20000,
-          title: { display: true, text: 'Frequency (Hz)', color: '#6b6b7b', font: { size: 10, family: 'Inter, sans-serif' } },
+          title: { display: true, text: 'Frequency (Hz)', color: '#6b6b7b', font: { size: 11, family: 'Inter, sans-serif' } },
           ticks: {
-            color: '#6b6b7b', font: { size: 9, family: 'Inter, sans-serif' }, autoSkip: false, maxRotation: 0,
+            color: '#8888a0', font: { size: 10, family: 'Inter, sans-serif' }, autoSkip: false, maxRotation: 0,
             callback: v => [20,50,100,200,500,1000,2000,5000,10000,20000].includes(v)
               ? (v >= 1000 ? v/1000+'k' : v) : '',
           },
           grid: { color: ctx => [100,1000,10000].includes(ctx.tick?.value)
-            ? 'rgba(173,198,255,.12)' : 'rgba(173,198,255,.04)' },
+            ? 'rgba(173,198,255,.18)' : 'rgba(173,198,255,.05)' },
           afterBuildTicks: axis => {
             axis.ticks = [20,30,40,50,60,80,100,150,200,300,400,500,600,800,1000,1500,2000,
               3000,4000,5000,6000,8000,10000,15000,20000].map(v => ({ value: v }));
@@ -10462,9 +10469,9 @@ function _buildIemCompareChart(data) {
         },
         y: {
           min: 50, max: 110,
-          title: { display: true, text: 'dB', color: '#6b6b7b', font: { size: 10, family: 'Inter, sans-serif' } },
-          ticks: { color: '#6b6b7b', font: { size: 9, family: 'Inter, sans-serif' }, stepSize: 10 },
-          grid: { color: 'rgba(173,198,255,.06)' },
+          title: { display: true, text: 'dB', color: '#6b6b7b', font: { size: 11, family: 'Inter, sans-serif' } },
+          ticks: { color: '#8888a0', font: { size: 10, family: 'Inter, sans-serif' }, stepSize: 10 },
+          grid: { color: 'rgba(173,198,255,.07)' },
         },
       },
       plugins: {

@@ -5891,14 +5891,19 @@ tr:hover .fav-toggle,
   color: var(--text-muted);
   font-size: 12px;
 }
+.iem-compare-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 8px;
+  flex-shrink: 0;
+}
 .iem-compare-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 0 20px 12px;
+  padding: 0 0 12px;
   flex-shrink: 0;
-  max-height: 96px;
-  overflow-y: auto;
 }
 .compare-legend-item {
   display: flex;
@@ -5929,10 +5934,10 @@ tr:hover .fav-toggle,
   border-color: rgba(255,255,255,.10);
 }
 .iem-compare-chart-wrap {
-  flex: 0 0 auto;
-  min-height: 320px;
-  height: clamp(340px, 48vh, 520px);
-  padding: 0 20px 20px;
+  flex: 1 1 0;
+  min-height: 360px;
+  height: clamp(380px, 52vh, 580px);
+  padding: 0 0 4px;
 }
 .iem-compare-chart-wrap #iem-compare-canvas {
   display: block;
@@ -5941,8 +5946,8 @@ tr:hover .fav-toggle,
 }
 @media (max-width: 900px) {
   .iem-compare-chart-wrap {
-    min-height: 280px;
-    height: clamp(300px, 44vh, 420px);
+    min-height: 300px;
+    height: clamp(320px, 46vh, 460px);
   }
 }
 
@@ -6165,8 +6170,9 @@ tr:hover .fav-toggle,
   font-size: 12px;
   padding: 5px 10px;
 }
-.iem-compare-hdr .fr-overlay-host--compare {
-  margin-left: auto;
+.gear-list.iems-grid--compare-full .gear-row:not(.gear-row--selected) {
+  opacity: 0.38;
+  pointer-events: none;
 }
 .freq-graph-toolbar label {
   font-size: var(--text-xs);
@@ -22019,7 +22025,7 @@ body.is-col-resizing {
 #album-tag-modal .modal,
 #album-art-modal .modal,
 #artist-image-modal .modal,
-#iem-compare-modal .iem-compare-dialog { --tb-modal-w: 680px; }
+#iem-compare-modal .iem-compare-dialog { --tb-modal-w: 920px; }
 #dup-modal.tb-modal-overlay {
   align-items: center !important;
 }
