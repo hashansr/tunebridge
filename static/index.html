@@ -2645,7 +2645,8 @@
         <span class="tb-icon tb-icon-speaker-1" aria-hidden="true"></span>
       </button>
       <input type="range" id="player-volume" class="player-vol-slider" min="0" max="100" value="100"
-             oninput="Player.setVolume(this.value)" />
+             oninput="Player.setVolume(this.value)"
+             onchange="Player.setVolume(this.value)" />
       <!-- Compact overflow (hidden at full width, shown ≤900 px) — EQ + Fav only -->
       <div class="player-overflow-wrap">
         <button class="player-btn player-btn-sm player-overflow-btn" id="player-overflow-btn"
