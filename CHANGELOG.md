@@ -3,6 +3,10 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: IEM compare limited to exactly 2 IEMs; non-selectable cards dim once both slots are filled
+- Fix: FR comparison graph no longer appears squashed — dialog widened from 680px to 920px giving a proper 2:1 aspect ratio
+- Fix: FR region-band overlay controls moved out of the modal title row into their own dedicated row
+- Fix: selection highlight on IEM rows in compare mode now applies correctly
 
 ## v0.452-rc.310526-1608 · 2026-05-31
 
