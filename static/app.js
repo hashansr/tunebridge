@@ -14186,6 +14186,22 @@ async function browseFolder(inputId) {
 
 async function exportBackup() {
   try {
+    // Try native save dialog (pywebview/macOS app)
+    const saveRes = await fetch('/api/backup/save-to-disk', { method: 'POST' });
+    const saveData = await saveRes.json();
+    if (saveData.cancelled) return;
+    if (saveData.ok) {
+      const fname = saveData.path.split('/').pop();
+      toast(`Backup saved as ${fname}`, 'success');
+      return;
+    }
+    // 'not_available' = no pywebview; 'no_window' = dev mode without app window — both fall through to blob download
+    const _nativeUnavailable = new Set(['not_available', 'no_window']);
+    if (saveData.error && !_nativeUnavailable.has(saveData.error)) {
+      toast(saveData.error || 'Export failed.');
+      return;
+    }
+    // Fallback: blob download for dev/browser mode
     const res = await fetch('/api/backup/export');
     if (!res.ok) {
       let msg = 'Export failed.';

@@ -12533,19 +12533,16 @@ def stream_track(track_id):
     return rv
 
 
-@app.route('/api/backup/export', methods=['GET'])
-def export_backup():
+def _build_backup_zip() -> io.BytesIO:
+    """Build a backup ZIP (SQLite snapshot + playlist artwork) and return a seeked BytesIO."""
     buf = io.BytesIO()
-    timestamp = time.strftime('%Y%m%d_%H%M%S')
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        # Export a consistent SQLite snapshot.
         with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
             tmp_db_path = Path(tmp.name)
         try:
-            src = _db.get_conn()
             dst = sqlite3.connect(str(tmp_db_path))
             try:
-                src.backup(dst)
+                _db.get_conn().backup(dst)
             finally:
                 dst.close()
             zf.write(tmp_db_path, 'tunebridge.db')
@@ -12560,9 +12557,46 @@ def export_backup():
                 if item.is_file():
                     zf.write(item, f'playlist_artwork/{item.name}')
     buf.seek(0)
+    return buf
+
+
+@app.route('/api/backup/export', methods=['GET'])
+def export_backup():
+    buf = _build_backup_zip()
+    timestamp = time.strftime('%Y%m%d_%H%M%S')
     return send_file(buf, mimetype='application/zip',
                      as_attachment=True,
                      download_name=f'tunebridge_backup_{timestamp}.zip')
+
+
+@app.route('/api/backup/save-to-disk', methods=['POST'])
+def backup_save_to_disk():
+    """Open native macOS save dialog and write backup ZIP to chosen path."""
+    try:
+        import webview
+        wins = webview.windows
+        if not wins:
+            return jsonify({'error': 'no_window'}), 400
+        timestamp = time.strftime('%Y%m%d_%H%M%S')
+        default_name = f'tunebridge_backup_{timestamp}.zip'
+        result = wins[0].create_file_dialog(
+            webview.SAVE_DIALOG,
+            directory=str(Path.home() / 'Desktop'),
+            save_filename=default_name,
+            file_types=('ZIP Archive (*.zip)',)
+        )
+        if not result:
+            return jsonify({'cancelled': True})
+        save_path = result[0] if isinstance(result, (list, tuple)) else result
+        if not str(save_path).lower().endswith('.zip'):
+            save_path = str(save_path) + '.zip'
+        buf = _build_backup_zip()
+        Path(save_path).write_bytes(buf.getvalue())
+        return jsonify({'ok': True, 'path': str(save_path)})
+    except ImportError:
+        return jsonify({'error': 'not_available'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/backup/import', methods=['POST'])
