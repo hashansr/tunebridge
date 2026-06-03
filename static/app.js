@@ -14184,28 +14184,57 @@ async function browseFolder(inputId) {
   // res.path === null means user cancelled — do nothing
 }
 
-function exportBackup() {
-  window.location.href = '/api/backup/export';
+async function exportBackup() {
+  try {
+    const res = await fetch('/api/backup/export');
+    if (!res.ok) {
+      let msg = 'Export failed.';
+      try { const d = await res.json(); msg = d.error || msg; } catch {}
+      toast(msg);
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const cd = res.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    a.download = m ? m[1].replace(/['"]/g, '') : `tunebridge_backup_${Date.now()}.zip`;
+    a.href = url;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    toast('Backup exported.', 'success');
+  } catch {
+    toast('Export failed — check the server is running.');
+  }
 }
 
 async function importBackup(input) {
   const file = input.files[0];
-  if (!file) return;
+  if (!file) { input.value = ''; return; }
+  const confirmed = await _showConfirm({
+    title: 'Restore from backup?',
+    message: 'This will overwrite all playlists, DAPs, IEMs, and settings with the backup. This cannot be undone.',
+    okText: 'Restore',
+    danger: true,
+  });
+  if (!confirmed) { input.value = ''; return; }
   const fd = new FormData();
   fd.append('file', file);
   try {
     const res = await fetch('/api/backup/import', { method: 'POST', body: fd });
     const data = await res.json();
     if (data.ok) {
-      toast('Backup restored. Reloading.', 'success');
+      toast('Backup restored. Reloading...', 'success');
       setTimeout(() => location.reload(), 1500);
     } else {
-      toast('Restore failed. The file may be corrupt.');
+      toast(data.error || 'Restore failed — the file may be corrupt.');
     }
   } catch(e) {
-    toast('Restore failed. The file may be corrupt.');
+    toast('Restore failed — the file may be corrupt.');
   }
-  input.value = '';  // reset so same file can be re-selected
+  input.value = '';
 }
 
 /* ── Settings ──────────────────────────────────────────────────────── */

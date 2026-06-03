@@ -12583,14 +12583,11 @@ def import_backup():
                 tmp_db_path.write_bytes(zf.read('tunebridge.db'))
                 _validate_backup_db(tmp_db_path)
 
-                live_db = DATA_DIR / 'tunebridge.db'
-                _db.close_conn()
+                src = sqlite3.connect(str(tmp_db_path))
                 try:
-                    (DATA_DIR / 'tunebridge.db-wal').unlink(missing_ok=True)
-                    (DATA_DIR / 'tunebridge.db-shm').unlink(missing_ok=True)
-                except Exception:
-                    pass
-                os.replace(str(tmp_db_path), str(live_db))
+                    src.backup(_db.get_conn())
+                finally:
+                    src.close()
             finally:
                 try:
                     tmp_db_path.unlink(missing_ok=True)
