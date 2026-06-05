@@ -17197,15 +17197,161 @@ let _orgModal = {
   templates: [], // saved templates from server
 };
 
-// ── Token preview ─────────────────────────────────────────────────────────────
+// ── Rich token editor ─────────────────────────────────────────────────────────
+
+function _orgMakeTokenSpan(tokenDef) {
+  const span = document.createElement('span');
+  span.className = 'token-tag';
+  span.contentEditable = 'false';
+  span.dataset.token = tokenDef.token;
+  span.textContent = tokenDef.label;
+  return span;
+}
+
+function _orgEditorGetValue(editorEl) {
+  let result = '';
+  for (const node of editorEl.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      result += node.textContent;
+    } else if (node.classList?.contains('token-tag')) {
+      result += node.dataset.token;
+    }
+  }
+  return result.replace(/\{ext\}/g, '');
+}
+
+function _orgEditorSetValue(editorEl, template) {
+  editorEl.innerHTML = '';
+  if (!template) return;
+  template = String(template).replace(/\{ext\}/g, '');
+  const re = /(\{[^}]+\})|([^{]+)/g;
+  let m;
+  while ((m = re.exec(template)) !== null) {
+    if (m[1]) {
+      const def = ORGANIZER_TOKENS.find(t => t.token === m[1]);
+      editorEl.appendChild(def ? _orgMakeTokenSpan(def) : document.createTextNode(m[1]));
+    } else if (m[2]) {
+      editorEl.appendChild(document.createTextNode(m[2]));
+    }
+  }
+}
+
+function _orgEditorInsertNode(editorEl, node) {
+  editorEl.focus();
+  const sel = window.getSelection();
+  let range;
+  if (sel.rangeCount && editorEl.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+    range = sel.getRangeAt(0);
+  } else if (editorEl._savedRange) {
+    range = editorEl._savedRange.cloneRange();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    range = document.createRange();
+    range.selectNodeContents(editorEl);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  range.deleteContents();
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function _orgInitEditor(editorEl, onChange) {
+  if (!editorEl || editorEl._orgInited) return;
+  editorEl._orgInited = true;
+
+  // Save cursor position when focus leaves (buttons steal focus briefly)
+  editorEl.addEventListener('blur', () => {
+    const sel = window.getSelection();
+    if (sel.rangeCount && editorEl.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+      editorEl._savedRange = sel.getRangeAt(0).cloneRange();
+    }
+  });
+
+  editorEl.addEventListener('input', () => onChange(_orgEditorGetValue(editorEl)));
+
+  editorEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed) return;
+
+    const { startContainer, startOffset } = range;
+    let nodeToDelete = null;
+
+    if (e.key === 'Backspace') {
+      if (startContainer === editorEl && startOffset > 0) {
+        const prev = editorEl.childNodes[startOffset - 1];
+        if (prev?.classList?.contains('token-tag')) nodeToDelete = prev;
+      } else if (startContainer.nodeType === Node.TEXT_NODE && startOffset === 0) {
+        const prev = startContainer.previousSibling;
+        if (prev?.classList?.contains('token-tag')) nodeToDelete = prev;
+      }
+    } else {
+      if (startContainer === editorEl && startOffset < editorEl.childNodes.length) {
+        const next = editorEl.childNodes[startOffset];
+        if (next?.classList?.contains('token-tag')) nodeToDelete = next;
+      } else if (startContainer.nodeType === Node.TEXT_NODE && startOffset === startContainer.textContent.length) {
+        const next = startContainer.nextSibling;
+        if (next?.classList?.contains('token-tag')) nodeToDelete = next;
+      }
+    }
+
+    if (nodeToDelete) {
+      e.preventDefault();
+      const newRange = document.createRange();
+      const idx = Array.from(editorEl.childNodes).indexOf(nodeToDelete);
+      const after = nodeToDelete.nextSibling;
+      const before = nodeToDelete.previousSibling;
+      nodeToDelete.remove();
+      if (e.key === 'Backspace' && before) {
+        before.nodeType === Node.TEXT_NODE
+          ? newRange.setStart(before, before.textContent.length)
+          : newRange.setStartAfter(before);
+      } else if (e.key === 'Delete' && after) {
+        newRange.setStart(after, 0);
+      } else {
+        newRange.setStart(editorEl, Math.min(idx, editorEl.childNodes.length));
+      }
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+      onChange(_orgEditorGetValue(editorEl));
+    }
+  });
+
+  // Paste: plain text only, parse template tokens
+  editorEl.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const text = (e.clipboardData.getData('text/plain') || '').replace(/\{ext\}/g, '');
+    if (!text) return;
+    const frag = document.createDocumentFragment();
+    const tmp = document.createElement('div');
+    _orgEditorSetValue(tmp, text);
+    while (tmp.firstChild) frag.appendChild(tmp.firstChild);
+    const sel = window.getSelection();
+    if (sel.rangeCount) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      const last = frag.lastChild;
+      range.insertNode(frag);
+      if (last) { range.setStartAfter(last); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); }
+    }
+    onChange(_orgEditorGetValue(editorEl));
+  });
+}
 
 function _orgRenderTemplatePreview(template, previewElId) {
   const el = document.getElementById(previewElId);
   if (!el) return;
-  if (!template) { el.textContent = ''; return; }
   const s = ORGANIZER_SAMPLE;
-  // Strip any stray {ext} tokens — extension is always appended automatically
-  let rendered = template.replace(/\{ext\}/g, '');
+  let rendered = (template || '').replace(/\{ext\}/g, '');
   rendered = rendered.replace(/\{album_artist\}/g, s.album_artist);
   rendered = rendered.replace(/\{artist\}/g, s.artist);
   rendered = rendered.replace(/\{album\}/g, s.album);
@@ -17214,13 +17360,10 @@ function _orgRenderTemplatePreview(template, previewElId) {
   rendered = rendered.replace(/\{disc(?::(\d+))?\}/g, (_, p) => s.disc ? (p ? s.disc.padStart(parseInt(p), '0') : s.disc) : '');
   rendered = rendered.replace(/\{year\}/g, s.year);
   rendered = rendered.replace(/\{genre\}/g, s.genre);
-  // Collapse double slashes from empty optional tokens, trim
   rendered = rendered.replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
-  // Always append the sample extension
-  el.textContent = rendered + '.' + s.ext;
+  el.textContent = rendered ? rendered + '.' + s.ext : '';
 }
 
-/** Return a Set of base field names already used in a template string. */
 function _orgUsedFields(template) {
   const re = /\{(\w+)(?::\d+)?\}/g;
   const used = new Set();
@@ -17231,12 +17374,11 @@ function _orgUsedFields(template) {
   return used;
 }
 
-/** Disable chips whose field is already present in the template input. */
-function _orgRefreshChipStates(containerId, inputId) {
+function _orgRefreshChipStates(containerId, editorId) {
   const container = document.getElementById(containerId);
-  const inp = document.getElementById(inputId);
-  if (!container || !inp) return;
-  const used = _orgUsedFields(inp.value);
+  const editorEl = document.getElementById(editorId);
+  if (!container || !editorEl) return;
+  const used = _orgUsedFields(_orgEditorGetValue(editorEl));
   container.querySelectorAll('.token-chip').forEach(btn => {
     const field = btn.dataset.field;
     const inUse = field && used.has(field);
@@ -17246,34 +17388,59 @@ function _orgRefreshChipStates(containerId, inputId) {
   });
 }
 
-function _orgBuildTokenChips(containerId, inputId, previewId) {
+function _orgBuildTokenChips(containerId, editorId, previewId) {
   const container = document.getElementById(containerId);
   if (!container) return;
   container.innerHTML = '';
+
+  // Token chips
   for (const t of ORGANIZER_TOKENS) {
     const btn = document.createElement('button');
     btn.className = 'token-chip';
     btn.textContent = t.label;
     btn.dataset.field = t.field;
+    // mousedown prevents editor losing focus
+    btn.addEventListener('mousedown', e => e.preventDefault());
     btn.onclick = () => {
-      const inp = document.getElementById(inputId);
-      if (!inp) return;
-      // Block duplicate tokens
-      const used = _orgUsedFields(inp.value);
-      if (t.field && used.has(t.field)) {
+      const editorEl = document.getElementById(editorId);
+      if (!editorEl) return;
+      if (t.field && _orgUsedFields(_orgEditorGetValue(editorEl)).has(t.field)) {
         toast(`${t.label} is already in the template`);
         return;
       }
-      const s = inp.selectionStart, e = inp.selectionEnd;
-      inp.value = inp.value.substring(0, s) + t.token + inp.value.substring(e);
-      inp.selectionStart = inp.selectionEnd = s + t.token.length;
-      inp.focus();
-      inp.dispatchEvent(new Event('input'));
+      _orgEditorInsertNode(editorEl, _orgMakeTokenSpan(t));
+      const val = _orgEditorGetValue(editorEl);
+      _orgRenderTemplatePreview(val, previewId);
+      _orgRefreshChipStates(containerId, editorId);
+      editorEl.dispatchEvent(new Event('input'));
     };
     container.appendChild(btn);
   }
-  // Set initial chip states based on current input value
-  _orgRefreshChipStates(containerId, inputId);
+
+  // Divider
+  const divider = document.createElement('span');
+  divider.className = 'token-chips-divider';
+  container.appendChild(divider);
+
+  // Separator buttons: / and -
+  for (const [char, display] of [['/', '/'], ['-', '—']]) {
+    const btn = document.createElement('button');
+    btn.className = 'token-sep-btn';
+    btn.textContent = display;
+    btn.title = `Insert "${char}"`;
+    btn.addEventListener('mousedown', e => e.preventDefault());
+    btn.onclick = () => {
+      const editorEl = document.getElementById(editorId);
+      if (!editorEl) return;
+      _orgEditorInsertNode(editorEl, document.createTextNode(char));
+      const val = _orgEditorGetValue(editorEl);
+      _orgRenderTemplatePreview(val, previewId);
+      editorEl.dispatchEvent(new Event('input'));
+    };
+    container.appendChild(btn);
+  }
+
+  _orgRefreshChipStates(containerId, editorId);
 }
 
 // ── Setup Wizard ──────────────────────────────────────────────────────────────
@@ -17285,11 +17452,18 @@ function openLibrarySetup() {
   _setupGoToStep(1);
   document.getElementById('setup-lib-path').value = '';
   document.getElementById('setup-skip-template').checked = false;
-  document.getElementById('setup-template-input').style.display = 'none';
-  document.getElementById('setup-token-chips').style.display = 'none';
   document.getElementById('setup-template-preset').value = ORGANIZER_DEFAULT_TEMPLATE;
+
+  const editorEl = document.getElementById('setup-template-editor');
+  _orgBuildTokenChips('setup-token-chips', 'setup-template-editor', 'setup-template-preview');
+  _orgInitEditor(editorEl, (val) => {
+    _orgRenderTemplatePreview(val, 'setup-template-preview');
+    _orgRefreshChipStates('setup-token-chips', 'setup-template-editor');
+  });
+  _orgEditorSetValue(editorEl, ORGANIZER_DEFAULT_TEMPLATE);
   _orgRenderTemplatePreview(ORGANIZER_DEFAULT_TEMPLATE, 'setup-template-preview');
-  _orgBuildTokenChips('setup-token-chips', 'setup-template-input', 'setup-template-preview');
+  _orgRefreshChipStates('setup-token-chips', 'setup-template-editor');
+
   document.getElementById('library-setup-modal').style.display = 'flex';
 }
 
@@ -17331,12 +17505,9 @@ async function libSetupNext() {
   if (_setupStep === 2) {
     const skip = document.getElementById('setup-skip-template').checked;
     if (!skip) {
-      const preset = document.getElementById('setup-template-preset').value;
-      const custom = document.getElementById('setup-template-input').value.trim();
-      const tpl = preset === 'custom' ? custom : preset;
-      if (tpl) {
-        await api('/settings', { method: 'PUT', body: { default_organizer_template: tpl } }).catch(() => {});
-      }
+      const editorEl = document.getElementById('setup-template-editor');
+      const tpl = _orgEditorGetValue(editorEl).trim() || ORGANIZER_DEFAULT_TEMPLATE;
+      await api('/settings', { method: 'PUT', body: { default_organizer_template: tpl } }).catch(() => {});
     }
     await api('/settings', { method: 'PUT', body: { onboarding_completed: true } }).catch(() => {});
     _setupGoToStep(3);
@@ -17380,21 +17551,15 @@ function _libSetupPollScan() {
 
 function setupPresetChanged() {
   const sel = document.getElementById('setup-template-preset');
-  const inp = document.getElementById('setup-template-input');
-  const chips = document.getElementById('setup-token-chips');
-  const isCustom = sel.value === 'custom';
-  inp.style.display = isCustom ? '' : 'none';
-  chips.style.display = isCustom ? '' : 'none';
-  const tpl = isCustom ? inp.value : sel.value;
-  if (isCustom) inp.value = tpl;
-  _orgRenderTemplatePreview(tpl, 'setup-template-preview');
-  if (isCustom) _orgRefreshChipStates('setup-token-chips', 'setup-template-input');
+  if (!sel.value) return;
+  const editorEl = document.getElementById('setup-template-editor');
+  _orgEditorSetValue(editorEl, sel.value);
+  _orgRenderTemplatePreview(sel.value, 'setup-template-preview');
+  _orgRefreshChipStates('setup-token-chips', 'setup-template-editor');
 }
 
-function setupTemplateInputChanged() {
-  _orgRenderTemplatePreview(document.getElementById('setup-template-input').value, 'setup-template-preview');
-  _orgRefreshChipStates('setup-token-chips', 'setup-template-input');
-}
+// Kept for backward compat; editor onChange handles updates
+function setupTemplateInputChanged() {}
 
 function setupSkipTemplateChanged() {
   const skip = document.getElementById('setup-skip-template').checked;
@@ -17421,10 +17586,16 @@ async function openOrganizerModal(mode) {
 
   _orgGoToStep(1);
   _orgPopulateTemplateSelect();
-  _orgBuildTokenChips('org-token-chips', 'org-template-input', 'org-template-preview');
-  document.getElementById('org-template-input').value = _orgModal.template;
+  _orgBuildTokenChips('org-token-chips', 'org-template-editor', 'org-template-preview');
+  const _orgEditorEl = document.getElementById('org-template-editor');
+  _orgInitEditor(_orgEditorEl, (val) => {
+    _orgModal.template = val;
+    _orgRenderTemplatePreview(val, 'org-template-preview');
+    _orgRefreshChipStates('org-token-chips', 'org-template-editor');
+  });
+  _orgEditorSetValue(_orgEditorEl, _orgModal.template);
   _orgRenderTemplatePreview(_orgModal.template, 'org-template-preview');
-  _orgRefreshChipStates('org-token-chips', 'org-template-input');
+  _orgRefreshChipStates('org-token-chips', 'org-template-editor');
 
   const importZone = document.getElementById('org-import-src-zone');
   if (importZone) importZone.style.display = mode === 'import' ? '' : 'none';
@@ -17463,16 +17634,15 @@ function _orgGoToStep(n) {
 function orgTemplateSelectChanged() {
   const sel = document.getElementById('org-template-select');
   if (!sel.value) return;
-  document.getElementById('org-template-input').value = sel.value;
+  const editorEl = document.getElementById('org-template-editor');
+  _orgEditorSetValue(editorEl, sel.value);
   _orgModal.template = sel.value;
   _orgRenderTemplatePreview(sel.value, 'org-template-preview');
+  _orgRefreshChipStates('org-token-chips', 'org-template-editor');
 }
 
-function orgTemplateInputChanged() {
-  _orgModal.template = document.getElementById('org-template-input').value.trim();
-  _orgRenderTemplatePreview(_orgModal.template, 'org-template-preview');
-  _orgRefreshChipStates('org-token-chips', 'org-template-input');
-}
+// orgTemplateInputChanged kept for backward compat (HTML oninput removed; editor fires onChange)
+function orgTemplateInputChanged() {}
 
 function _orgPopulateTemplateSelect() {
   const sel = document.getElementById('org-template-select');
@@ -17499,7 +17669,7 @@ function orgBack() {
 }
 
 async function _orgRunPreview() {
-  const tpl = (document.getElementById('org-template-input').value || '').trim() || ORGANIZER_DEFAULT_TEMPLATE;
+  const tpl = (_orgModal.template || _orgEditorGetValue(document.getElementById('org-template-editor')) || '').trim() || ORGANIZER_DEFAULT_TEMPLATE;
   _orgModal.template = tpl;
   const policy = document.getElementById('org-conflict-policy').value;
   _orgModal.conflictPolicy = policy;
@@ -17782,8 +17952,12 @@ function orgDismissUndo() {
 async function openOrganizerTemplateManager() {
   _orgModal.templates = await api('/organizer/templates').catch(() => []);
   _orgTmplRenderList();
-  _orgBuildTokenChips('org-tmpl-token-chips', 'org-tmpl-pattern-input', 'org-tmpl-preview');
-  // Input is empty at open time; refresh happens when orgTmplNew() populates it
+  _orgBuildTokenChips('org-tmpl-token-chips', 'org-tmpl-pattern-editor', 'org-tmpl-preview');
+  const editorEl = document.getElementById('org-tmpl-pattern-editor');
+  _orgInitEditor(editorEl, (val) => {
+    _orgRenderTemplatePreview(val, 'org-tmpl-preview');
+    _orgRefreshChipStates('org-tmpl-token-chips', 'org-tmpl-pattern-editor');
+  });
   document.getElementById('org-tmpl-new-form').style.display = 'none';
   document.getElementById('organizer-tmpl-modal').style.display = 'flex';
 }
@@ -17818,9 +17992,10 @@ function _orgTmplRenderList() {
 function orgTmplNew() {
   document.getElementById('org-tmpl-new-form').style.display = '';
   document.getElementById('org-tmpl-name-input').value = '';
-  document.getElementById('org-tmpl-pattern-input').value = ORGANIZER_DEFAULT_TEMPLATE;
+  const editorEl = document.getElementById('org-tmpl-pattern-editor');
+  _orgEditorSetValue(editorEl, ORGANIZER_DEFAULT_TEMPLATE);
   _orgRenderTemplatePreview(ORGANIZER_DEFAULT_TEMPLATE, 'org-tmpl-preview');
-  _orgRefreshChipStates('org-tmpl-token-chips', 'org-tmpl-pattern-input');
+  _orgRefreshChipStates('org-tmpl-token-chips', 'org-tmpl-pattern-editor');
   document.getElementById('org-tmpl-name-input').focus();
 }
 
@@ -17828,14 +18003,12 @@ function orgTmplCancelNew() {
   document.getElementById('org-tmpl-new-form').style.display = 'none';
 }
 
-function orgTmplPreviewChanged() {
-  _orgRenderTemplatePreview(document.getElementById('org-tmpl-pattern-input').value, 'org-tmpl-preview');
-  _orgRefreshChipStates('org-tmpl-token-chips', 'org-tmpl-pattern-input');
-}
+// Kept for compat; editor onChange handles updates
+function orgTmplPreviewChanged() {}
 
 async function orgTmplSaveNew() {
   const name = document.getElementById('org-tmpl-name-input').value.trim();
-  const template = document.getElementById('org-tmpl-pattern-input').value.trim();
+  const template = _orgEditorGetValue(document.getElementById('org-tmpl-pattern-editor')).trim();
   if (!name) { toast('Enter a template name'); return; }
   if (!template) { toast('Enter a template pattern'); return; }
   try {

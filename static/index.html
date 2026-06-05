@@ -4017,10 +4017,9 @@ Questions: mail@hashanr.com</pre>
               <option value="{album_artist}/{album}/{track:02} - {title}">Artist / Album / Track (default)</option>
               <option value="{album_artist}/{album}/{disc:02}-{track:02} - {title}">Artist / Album / Disc-Track</option>
               <option value="{album_artist} - {album}/{track:02} - {title}">Artist - Album / Track</option>
-              <option value="custom">Custom&hellip;</option>
             </select>
-            <input id="setup-template-input" type="text" style="display:none" placeholder="{album_artist}/{album}/{track:02} - {title}.{ext}" oninput="App.setupTemplateInputChanged()" />
-            <div class="token-chip-row" id="setup-token-chips" style="display:none"></div>
+            <div id="setup-template-editor" class="org-token-editor" contenteditable="true" spellcheck="false" data-placeholder="{album_artist}/{album}/{track:02} - {title}"></div>
+            <div class="token-chip-row" id="setup-token-chips"></div>
             <div class="org-template-preview" id="setup-template-preview"></div>
           </div>
         </div>
@@ -4077,7 +4076,7 @@ Questions: mail@hashanr.com</pre>
             <select id="org-template-select" onchange="App.orgTemplateSelectChanged()">
               <option value="">-- choose saved template --</option>
             </select>
-            <input id="org-template-input" type="text" placeholder="{album_artist}/{album}/{track:02} - {title}.{ext}" oninput="App.orgTemplateInputChanged()" />
+            <div id="org-template-editor" class="org-token-editor" contenteditable="true" spellcheck="false" data-placeholder="{album_artist}/{album}/{track:02} - {title}"></div>
             <div class="token-chip-row" id="org-token-chips"></div>
             <span id="org-template-validation" class="org-validation-msg" style="display:none"></span>
             <div class="org-template-preview" id="org-template-preview"></div>
@@ -4173,7 +4172,7 @@ Questions: mail@hashanr.com</pre>
           <div class="settings-row">
             <label>Pattern</label>
             <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-              <input id="org-tmpl-pattern-input" type="text" placeholder="{album_artist}/{album}/{track:02} - {title}.{ext}" oninput="App.orgTmplPreviewChanged()" />
+              <div id="org-tmpl-pattern-editor" class="org-token-editor" contenteditable="true" spellcheck="false" data-placeholder="{album_artist}/{album}/{track:02} - {title}"></div>
               <div class="token-chip-row" id="org-tmpl-token-chips"></div>
               <div class="org-template-preview" id="org-tmpl-preview"></div>
             </div>
