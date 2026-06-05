@@ -4014,9 +4014,9 @@ Questions: mail@hashanr.com</pre>
           <label>Template</label>
           <div style="flex:1;display:flex;flex-direction:column;gap:6px">
             <select id="setup-template-preset" onchange="App.setupPresetChanged()">
-              <option value="{album_artist}/{album}/{track:02} - {title}.{ext}">Artist / Album / Track (default)</option>
-              <option value="{album_artist}/{album}/{disc:02}-{track:02} - {title}.{ext}">Artist / Album / Disc-Track</option>
-              <option value="{album_artist} - {album}/{track:02} - {title}.{ext}">Artist - Album / Track</option>
+              <option value="{album_artist}/{album}/{track:02} - {title}">Artist / Album / Track (default)</option>
+              <option value="{album_artist}/{album}/{disc:02}-{track:02} - {title}">Artist / Album / Disc-Track</option>
+              <option value="{album_artist} - {album}/{track:02} - {title}">Artist - Album / Track</option>
               <option value="custom">Custom&hellip;</option>
             </select>
             <input id="setup-template-input" type="text" style="display:none" placeholder="{album_artist}/{album}/{track:02} - {title}.{ext}" oninput="App.setupTemplateInputChanged()" />

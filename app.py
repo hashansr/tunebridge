@@ -397,7 +397,7 @@ sync_check_lock = threading.Lock()
 sync_check_inflight = set()
 
 # ── Library Organizer ─────────────────────────────────────────────────────────
-ORGANIZER_DEFAULT_TEMPLATE = '{album_artist}/{album}/{track:02} - {title}.{ext}'
+ORGANIZER_DEFAULT_TEMPLATE = '{album_artist}/{album}/{track:02} - {title}'
 _ORGANIZER_TOKEN_RE = re.compile(r'\{(\w+)(?::(\d+))?\}')
 
 _organizer_state = {
@@ -9356,9 +9356,17 @@ def _render_organizer_relpath(track, template):
     """
     Apply the organizer template to a track, returning (rel_path, warnings).
     Syntax: {field} or {field:N} where N = zero-pad width.
+
+    The file extension is ALWAYS taken from the source file and appended
+    automatically — {ext} in the template (if present) is silently stripped.
+    This ensures extensions are never changed, only folder/filename structure.
     """
     tokens = _organizer_token_map(track)
     warnings = []
+
+    # Strip any {ext} tokens — extension is always from the source file
+    template = re.sub(r'\{ext\}', '', template)
+
     rendered = template
 
     # Track which required tokens are missing
@@ -9389,11 +9397,12 @@ def _render_organizer_relpath(track, template):
         fallback = _safe_segment(Path(track.get('path') or '').name) or 'Unknown.flac'
         return fallback, warnings
 
-    # Ensure the last component carries the correct audio extension
+    # Always append the original file extension — never change it
     ext = tokens['ext']
     filename = parts[-1]
-    if not filename.lower().endswith(f'.{ext}'):
-        filename = f'{_safe_segment(Path(filename).stem or filename)}.{ext}'
+    # Strip any extension the template may have produced, then add the real one
+    filename_stem = _safe_segment(Path(filename).stem or filename) or 'track'
+    filename = f'{filename_stem}.{ext}' if ext else filename_stem
     parts[-1] = filename
 
     return '/'.join(parts), warnings

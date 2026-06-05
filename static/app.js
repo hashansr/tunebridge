@@ -17164,18 +17164,19 @@ function toggleSidebar(forceClose = false) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const ORGANIZER_TOKENS = [
-  { token: '{album_artist}', label: 'Album Artist' },
-  { token: '{artist}',       label: 'Artist' },
-  { token: '{album}',        label: 'Album' },
-  { token: '{title}',        label: 'Title' },
-  { token: '{track:02}',     label: 'Track #' },
-  { token: '{disc:02}',      label: 'Disc #' },
-  { token: '{year}',         label: 'Year' },
-  { token: '{genre}',        label: 'Genre' },
-  { token: '{ext}',          label: 'Extension' },
+  { token: '{album_artist}', label: 'Album Artist', field: 'album_artist' },
+  { token: '{artist}',       label: 'Artist',       field: 'artist' },
+  { token: '{album}',        label: 'Album',        field: 'album' },
+  { token: '{title}',        label: 'Title',        field: 'title' },
+  { token: '{track:02}',     label: 'Track #',      field: 'track' },
+  { token: '{disc:02}',      label: 'Disc #',       field: 'disc' },
+  { token: '{year}',         label: 'Year',         field: 'year' },
+  { token: '{genre}',        label: 'Genre',        field: 'genre' },
+  // {ext} is intentionally excluded — extension is always taken from source file
 ];
 
-const ORGANIZER_DEFAULT_TEMPLATE = '{album_artist}/{album}/{track:02} - {title}.{ext}';
+// Extension is always appended automatically; no .{ext} in the template
+const ORGANIZER_DEFAULT_TEMPLATE = '{album_artist}/{album}/{track:02} - {title}';
 
 const ORGANIZER_SAMPLE = {
   album_artist: 'Linkin Park', artist: 'Linkin Park',
@@ -17203,7 +17204,8 @@ function _orgRenderTemplatePreview(template, previewElId) {
   if (!el) return;
   if (!template) { el.textContent = ''; return; }
   const s = ORGANIZER_SAMPLE;
-  let rendered = template;
+  // Strip any stray {ext} tokens — extension is always appended automatically
+  let rendered = template.replace(/\{ext\}/g, '');
   rendered = rendered.replace(/\{album_artist\}/g, s.album_artist);
   rendered = rendered.replace(/\{artist\}/g, s.artist);
   rendered = rendered.replace(/\{album\}/g, s.album);
@@ -17212,9 +17214,36 @@ function _orgRenderTemplatePreview(template, previewElId) {
   rendered = rendered.replace(/\{disc(?::(\d+))?\}/g, (_, p) => s.disc ? (p ? s.disc.padStart(parseInt(p), '0') : s.disc) : '');
   rendered = rendered.replace(/\{year\}/g, s.year);
   rendered = rendered.replace(/\{genre\}/g, s.genre);
-  rendered = rendered.replace(/\{ext\}/g, s.ext);
-  rendered = rendered.replace(/\/\//g, '/').replace(/^\/|\/$/g, '');
-  el.textContent = rendered;
+  // Collapse double slashes from empty optional tokens, trim
+  rendered = rendered.replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
+  // Always append the sample extension
+  el.textContent = rendered + '.' + s.ext;
+}
+
+/** Return a Set of base field names already used in a template string. */
+function _orgUsedFields(template) {
+  const re = /\{(\w+)(?::\d+)?\}/g;
+  const used = new Set();
+  let m;
+  while ((m = re.exec(template)) !== null) {
+    if (m[1] !== 'ext') used.add(m[1]);
+  }
+  return used;
+}
+
+/** Disable chips whose field is already present in the template input. */
+function _orgRefreshChipStates(containerId, inputId) {
+  const container = document.getElementById(containerId);
+  const inp = document.getElementById(inputId);
+  if (!container || !inp) return;
+  const used = _orgUsedFields(inp.value);
+  container.querySelectorAll('.token-chip').forEach(btn => {
+    const field = btn.dataset.field;
+    const inUse = field && used.has(field);
+    btn.disabled = inUse;
+    btn.classList.toggle('token-chip--used', inUse);
+    btn.title = inUse ? `${btn.textContent} is already in the template` : '';
+  });
 }
 
 function _orgBuildTokenChips(containerId, inputId, previewId) {
@@ -17225,9 +17254,16 @@ function _orgBuildTokenChips(containerId, inputId, previewId) {
     const btn = document.createElement('button');
     btn.className = 'token-chip';
     btn.textContent = t.label;
+    btn.dataset.field = t.field;
     btn.onclick = () => {
       const inp = document.getElementById(inputId);
       if (!inp) return;
+      // Block duplicate tokens
+      const used = _orgUsedFields(inp.value);
+      if (t.field && used.has(t.field)) {
+        toast(`${t.label} is already in the template`);
+        return;
+      }
       const s = inp.selectionStart, e = inp.selectionEnd;
       inp.value = inp.value.substring(0, s) + t.token + inp.value.substring(e);
       inp.selectionStart = inp.selectionEnd = s + t.token.length;
@@ -17236,6 +17272,8 @@ function _orgBuildTokenChips(containerId, inputId, previewId) {
     };
     container.appendChild(btn);
   }
+  // Set initial chip states based on current input value
+  _orgRefreshChipStates(containerId, inputId);
 }
 
 // ── Setup Wizard ──────────────────────────────────────────────────────────────
@@ -17348,11 +17386,14 @@ function setupPresetChanged() {
   inp.style.display = isCustom ? '' : 'none';
   chips.style.display = isCustom ? '' : 'none';
   const tpl = isCustom ? inp.value : sel.value;
+  if (isCustom) inp.value = tpl;
   _orgRenderTemplatePreview(tpl, 'setup-template-preview');
+  if (isCustom) _orgRefreshChipStates('setup-token-chips', 'setup-template-input');
 }
 
 function setupTemplateInputChanged() {
   _orgRenderTemplatePreview(document.getElementById('setup-template-input').value, 'setup-template-preview');
+  _orgRefreshChipStates('setup-token-chips', 'setup-template-input');
 }
 
 function setupSkipTemplateChanged() {
@@ -17383,6 +17424,7 @@ async function openOrganizerModal(mode) {
   _orgBuildTokenChips('org-token-chips', 'org-template-input', 'org-template-preview');
   document.getElementById('org-template-input').value = _orgModal.template;
   _orgRenderTemplatePreview(_orgModal.template, 'org-template-preview');
+  _orgRefreshChipStates('org-token-chips', 'org-template-input');
 
   const importZone = document.getElementById('org-import-src-zone');
   if (importZone) importZone.style.display = mode === 'import' ? '' : 'none';
@@ -17429,6 +17471,7 @@ function orgTemplateSelectChanged() {
 function orgTemplateInputChanged() {
   _orgModal.template = document.getElementById('org-template-input').value.trim();
   _orgRenderTemplatePreview(_orgModal.template, 'org-template-preview');
+  _orgRefreshChipStates('org-token-chips', 'org-template-input');
 }
 
 function _orgPopulateTemplateSelect() {
@@ -17740,6 +17783,7 @@ async function openOrganizerTemplateManager() {
   _orgModal.templates = await api('/organizer/templates').catch(() => []);
   _orgTmplRenderList();
   _orgBuildTokenChips('org-tmpl-token-chips', 'org-tmpl-pattern-input', 'org-tmpl-preview');
+  // Input is empty at open time; refresh happens when orgTmplNew() populates it
   document.getElementById('org-tmpl-new-form').style.display = 'none';
   document.getElementById('organizer-tmpl-modal').style.display = 'flex';
 }
@@ -17776,6 +17820,7 @@ function orgTmplNew() {
   document.getElementById('org-tmpl-name-input').value = '';
   document.getElementById('org-tmpl-pattern-input').value = ORGANIZER_DEFAULT_TEMPLATE;
   _orgRenderTemplatePreview(ORGANIZER_DEFAULT_TEMPLATE, 'org-tmpl-preview');
+  _orgRefreshChipStates('org-tmpl-token-chips', 'org-tmpl-pattern-input');
   document.getElementById('org-tmpl-name-input').focus();
 }
 
@@ -17785,6 +17830,7 @@ function orgTmplCancelNew() {
 
 function orgTmplPreviewChanged() {
   _orgRenderTemplatePreview(document.getElementById('org-tmpl-pattern-input').value, 'org-tmpl-preview');
+  _orgRefreshChipStates('org-tmpl-token-chips', 'org-tmpl-pattern-input');
 }
 
 async function orgTmplSaveNew() {
