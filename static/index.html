@@ -2085,17 +2085,9 @@
       <div id="view-organizer" style="display:none">
         <div class="orgw-page">
 
-          <!-- chrome: back orb + step counter -->
-          <div class="orgw-chrome">
-            <button class="orgw-back-orb" onclick="App.orgPageBack()" aria-label="Back to Settings">
-              <svg class="orgw-ico-sm" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L4 7l5 5"/></svg>
-            </button>
-            <span class="orgw-step-count" id="orgw-step-count">Step 1 of 5</span>
-          </div>
-
           <!-- page header -->
           <div class="orgw-head">
-            <h1 class="orgw-h-title">File Organisation</h1>
+            <h2 class="tb-page-title">File Organisation</h2>
           </div>
 
           <!-- stepper -->
@@ -2113,11 +2105,6 @@
 
           <!-- ════ STEP 1 · TASK ════ -->
           <section class="orgw-step" data-step="1">
-            <div class="orgw-step-h">
-              <div class="orgw-eyebrow">Step 1</div>
-              <div class="orgw-st-title">What do you want to do?</div>
-              <div class="orgw-st-sub">Pick a task to begin. You can change this before applying.</div>
-            </div>
             <div class="orgw-scope-grid">
               <button class="orgw-scope-tile active" data-scope="import">
                 <span class="orgw-tile-glyph">
@@ -2142,11 +2129,6 @@
 
           <!-- ════ STEP 2 · SOURCE / SCOPE ════ -->
           <section class="orgw-step" data-step="2">
-            <div class="orgw-step-h">
-              <div class="orgw-eyebrow">Step 2</div>
-              <div class="orgw-st-title" id="orgw-s2-title">Select source files</div>
-              <div class="orgw-st-sub" id="orgw-s2-sub">Choose the files or folder to bring into your library.</div>
-            </div>
             <!-- Import panel -->
             <div id="orgw-import-panel">
               <div class="orgw-src-zone">
@@ -2192,11 +2174,6 @@
 
           <!-- ════ STEP 3 · STRUCTURE ════ -->
           <section class="orgw-step" data-step="3">
-            <div class="orgw-step-h">
-              <div class="orgw-eyebrow">Step 3</div>
-              <div class="orgw-st-title">Folder structure</div>
-              <div class="orgw-st-sub">Pick an existing structure, edit it, or create a new one. This decides how every file is named and filed.</div>
-            </div>
             <div class="orgw-struct-modes">
               <span class="orgw-mode-lab">Saved structures</span>
             </div>
@@ -2237,11 +2214,6 @@
 
           <!-- ════ STEP 4 · PREVIEW ════ -->
           <section class="orgw-step" data-step="4">
-            <div class="orgw-step-h">
-              <div class="orgw-eyebrow">Step 4</div>
-              <div class="orgw-st-title">Preview changes</div>
-              <div class="orgw-st-sub" id="orgw-preview-hint"></div>
-            </div>
             <!-- Conflict bar -->
             <div class="orgw-conflict-bar">
               <div class="orgw-cb-text">
@@ -2267,11 +2239,6 @@
 
           <!-- ════ STEP 5 · APPLY ════ -->
           <section class="orgw-step" data-step="5">
-            <div class="orgw-step-h">
-              <div class="orgw-eyebrow">Step 5</div>
-              <div class="orgw-st-title" id="orgw-s5-title">Applying changes</div>
-              <div class="orgw-st-sub" id="orgw-s5-sub">Hang tight &mdash; nothing is irreversible. You can undo the whole run when it finishes.</div>
-            </div>
             <div class="orgw-run-wrap" id="orgw-run-wrap"></div>
           </section>
 
@@ -2286,7 +2253,7 @@
             </button>
             <span class="orgw-foot-spacer"></span>
             <span class="orgw-foot-note" id="orgw-foot-note"></span>
-            <button class="orgw-btn orgw-btn-primary orgw-btn-lg" id="orgw-next-btn" onclick="App.orgWizNext()">
+            <button class="orgw-btn orgw-btn-primary" id="orgw-next-btn" onclick="App.orgWizNext()">
               <span id="orgw-next-label">Continue</span>
               <svg class="orgw-ico-sm" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h8M7.5 3.5L11 7l-3.5 3.5"/></svg>
             </button>

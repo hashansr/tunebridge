@@ -17713,9 +17713,6 @@ function _orgWizGoStep(n) {
 
   const slab2 = document.getElementById('orgw-slab2');
   if (slab2) slab2.textContent = _orgWiz.scope === 'import' ? 'Source' : 'Scope';
-  const stepCount = document.getElementById('orgw-step-count');
-  if (stepCount) stepCount.textContent = `Step ${n} of 5`;
-
   if (n === 2) _orgWizSyncStep2();
   if (n === 3) { _orgWizRenderRail(); _orgWizRenderLivePreview(); _orgWizRenderPalette(); }
   if (n === 4 && _orgWiz.previewData) _orgWizRenderPreviewBody();
@@ -17741,11 +17738,6 @@ function _orgWizSyncStep2() {
   const isImport = _orgWiz.scope === 'import';
   document.getElementById('orgw-import-panel').style.display = isImport ? '' : 'none';
   document.getElementById('orgw-library-panel').style.display = isImport ? 'none' : '';
-  const t1 = document.getElementById('orgw-s2-title'), t2 = document.getElementById('orgw-s2-sub');
-  if (t1) t1.textContent = isImport ? 'Select source files' : 'Select scope to organise';
-  if (t2) t2.textContent = isImport
-    ? 'Choose the files or folder to bring into your library.'
-    : 'Pick the tracks you want re-filed. Files already matching the structure stay put.';
   if (isImport) _orgWizRenderStaged();
 }
 
@@ -18238,12 +18230,6 @@ function _orgWizRenderPreviewBody() {
   if (!data || !body) return;
   const s = data.summary || {};
   const moves = s.moves || 0, conflicts = s.conflicts || 0, warnings = s.missing_metadata || 0, unchanged = s.same_path || 0, total = s.total || 0;
-  const t = _orgWizActiveTemplate();
-  const n = _orgWiz.scope === 'import' ? (data.entries || []).length : total;
-  const hintEl = document.getElementById('orgw-preview-hint');
-  if (hintEl) hintEl.textContent = _orgWiz.scope === 'import'
-    ? `Importing ${n} files with "${t ? t.name : 'selected structure'}". Nothing moves until you apply.`
-    : `Re-filing ${n} tracks with "${t ? t.name : 'selected structure'}". Nothing moves until you apply.`;
 
   let html = '';
   if (warnings > 0) {
@@ -18325,9 +18311,7 @@ async function _orgWizStartRun() {
   if (!_orgWiz.previewData) return;
   const entries = _orgWiz.previewData.entries || [];
   const plan = entries.filter(e => !e.same_path || _orgWiz.scope === 'import');
-  const s5title = document.getElementById('orgw-s5-title');
   const runWrap = document.getElementById('orgw-run-wrap');
-  if (s5title) s5title.textContent = _orgWiz.scope === 'import' ? 'Importing files' : 'Applying changes';
   if (!plan.length) { _orgWizRenderDone({ moved: 0, skipped: 0, errors: [] }); return; }
   const t = _orgWizActiveTemplate();
   const tplStr = t ? _orgWizTokensToStr(t.tokens) : ORGANIZER_DEFAULT_TEMPLATE;
@@ -18365,11 +18349,7 @@ function _orgWizRenderDone(s) {
   const moved = s.moved || 0, skipped = s.skipped || 0, errCount = (s.errors || []).length;
   const t = _orgWizActiveTemplate(), tName = t ? t.name : 'selected structure';
   const verb = _orgWiz.scope === 'import' ? 'imported & filed' : 'filed';
-  const s5title = document.getElementById('orgw-s5-title');
-  const s5sub = document.getElementById('orgw-s5-sub');
   const runWrap = document.getElementById('orgw-run-wrap');
-  if (s5title) s5title.textContent = 'All done';
-  if (s5sub) s5sub.textContent = 'Your changes have been applied. You can undo the entire run if something looks off.';
   const CHECKSVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>`;
   if (runWrap) runWrap.innerHTML = `<div class="orgw-applied"><span class="orgw-ap-glyph">${CHECKSVG}</span><div><div class="orgw-ap-t1">${moved} file${moved !== 1 ? 's' : ''} ${verb}</div><div class="orgw-ap-t2">Organised with "${_esc(tName)}"${errCount ? ` · ${errCount} error${errCount !== 1 ? 's' : ''}` : ''}.</div></div></div><div class="orgw-done-stats"><span class="orgw-stat orgw-stat-move"><span class="orgw-stat-n">${moved}</span><span class="orgw-stat-l">${moved === 1 ? 'file moved' : 'files moved'}</span></span>${skipped ? `<span class="orgw-stat-div"></span><span class="orgw-stat"><span class="orgw-stat-n" style="color:var(--text-muted)">${skipped}</span><span class="orgw-stat-l">skipped</span></span>` : ''}${errCount ? `<span class="orgw-stat-div"></span><span class="orgw-stat orgw-stat-conflict"><span class="orgw-stat-n">${errCount}</span><span class="orgw-stat-l">error${errCount !== 1 ? 's' : ''}</span></span>` : ''}</div><div class="orgw-done-actions"><button class="orgw-btn orgw-btn-primary orgw-btn-lg" id="orgw-done-library">View in library</button><button class="orgw-btn orgw-btn-lg" id="orgw-done-undo">Undo this run</button><button class="orgw-btn orgw-btn-ghost orgw-btn-lg" id="orgw-done-again">Organise more</button></div>`;
   const libBtn = document.getElementById('orgw-done-library');
