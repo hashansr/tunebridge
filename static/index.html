@@ -2081,152 +2081,217 @@
 
       </div><!-- /#view-sync -->
 
-      <!-- ── File Organisation Page ───────────────────────────────────────── -->
-      <div id="view-organizer" class="view" style="display:none">
-        <div class="view-header org-page-header">
-          <button class="org-page-back-btn" onclick="App.orgPageBack()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-            Settings
-          </button>
-          <h2 class="tb-page-title">File Organisation</h2>
-        </div>
+      <!-- ── File Organisation Wizard ──────────────────────────────────────── -->
+      <div id="view-organizer" style="display:none">
+        <div class="orgw-page">
 
-        <div class="org-page-tabs">
-          <button class="org-page-tab org-page-tab--active" data-tab="templates" onclick="App.showOrganizerTab('templates')">Templates</button>
-          <button class="org-page-tab" data-tab="reorganize" onclick="App.showOrganizerTab('reorganize')">Organise Library</button>
-          <button class="org-page-tab" data-tab="import" onclick="App.showOrganizerTab('import')">Import Songs</button>
-        </div>
-
-        <div class="org-page-content">
-
-          <!-- ── Templates tab ── -->
-          <div id="org-tab-templates" class="org-tab-panel">
-            <div id="org-tmpl-list" class="org-tmpl-list"></div>
-            <div class="org-tmpl-new-form" id="org-tmpl-new-form" style="display:none">
-              <div class="settings-row">
-                <label>Name</label>
-                <input id="org-tmpl-name-input" type="text" placeholder="My template" />
-              </div>
-              <div class="settings-row">
-                <label>Pattern</label>
-                <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-                  <div id="org-tmpl-pattern-editor" class="org-token-editor" contenteditable="true" spellcheck="false" data-placeholder="{album_artist}/{album}/{track:02} - {title}"></div>
-                  <div class="token-chip-row" id="org-tmpl-token-chips"></div>
-                  <div class="org-template-preview" id="org-tmpl-preview"></div>
-                </div>
-              </div>
-              <div class="org-page-form-actions">
-                <button class="btn-secondary" onclick="App.orgTmplCancelNew()">Cancel</button>
-                <button class="btn-primary" onclick="App.orgTmplSaveNew()">Save Template</button>
-              </div>
-            </div>
-            <div class="org-page-actions">
-              <button class="btn-primary" onclick="App.orgTmplNew()">+ New Template</button>
-            </div>
+          <!-- chrome: back orb + step counter -->
+          <div class="orgw-chrome">
+            <button class="orgw-back-orb" onclick="App.orgPageBack()" aria-label="Back to Settings">
+              <svg class="orgw-ico-sm" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L4 7l5 5"/></svg>
+            </button>
+            <span class="orgw-step-count" id="orgw-step-count">Step 1 of 5</span>
           </div>
 
-          <!-- ── Wizard tab (shared by Organise Library + Import Songs) ── -->
-          <div id="org-tab-wizard" class="org-tab-panel" style="display:none">
+          <!-- page header -->
+          <div class="orgw-head">
+            <h1 class="orgw-h-title">File Organisation</h1>
+          </div>
 
-            <!-- Undo bar -->
-            <div id="org-undo-bar" class="org-undo-bar" style="display:none">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;opacity:.7"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
-              <span id="org-undo-summary"></span>
-              <button class="btn-secondary btn-sm" onclick="App.orgRollback()">Rollback</button>
-              <button class="org-undo-dismiss" onclick="App.orgDismissUndo()" title="Dismiss">&#x2715;</button>
+          <!-- stepper -->
+          <div class="orgw-stepper" id="orgw-stepper">
+            <div class="orgw-snode" data-go="1"><span class="orgw-sdot">1</span><span class="orgw-slab">Task</span></div>
+            <div class="orgw-sconn"></div>
+            <div class="orgw-snode" data-go="2"><span class="orgw-sdot">2</span><span class="orgw-slab" id="orgw-slab2">Source</span></div>
+            <div class="orgw-sconn"></div>
+            <div class="orgw-snode" data-go="3"><span class="orgw-sdot">3</span><span class="orgw-slab">Structure</span></div>
+            <div class="orgw-sconn"></div>
+            <div class="orgw-snode" data-go="4"><span class="orgw-sdot">4</span><span class="orgw-slab">Preview</span></div>
+            <div class="orgw-sconn"></div>
+            <div class="orgw-snode" data-go="5"><span class="orgw-sdot">5</span><span class="orgw-slab">Apply</span></div>
+          </div>
+
+          <!-- ════ STEP 1 · TASK ════ -->
+          <section class="orgw-step" data-step="1">
+            <div class="orgw-step-h">
+              <div class="orgw-eyebrow">Step 1</div>
+              <div class="orgw-st-title">What do you want to do?</div>
+              <div class="orgw-st-sub">Pick a task to begin. You can change this before applying.</div>
             </div>
+            <div class="orgw-scope-grid">
+              <button class="orgw-scope-tile active" data-scope="import">
+                <span class="orgw-tile-glyph">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M1 12C1 18.0751 5.92487 23 12 23C18.0751 23 23 18.0751 23 12C23 5.92487 18.0751 1 12 1C5.92487 1 1 5.92487 1 12ZM7.83335 12C7.4963 12 7.19244 12.2088 7.06346 12.5291C6.93447 12.8494 7.00577 13.2181 7.2441 13.4632L11.4107 17.7489C11.7362 18.0837 12.2638 18.0837 12.5893 17.7489L16.7559 13.4632C16.9942 13.2181 17.0655 12.8494 16.9365 12.5291C16.8076 12.2088 16.5037 12 16.1666 12H14V7C14 6.44771 13.5523 6 13 6H11C10.4477 6 10 6.44771 10 7V12H7.83335Z"/></svg>
+                </span>
+                <span class="orgw-tile-body">
+                  <span class="orgw-tile-name">Import files to library</span>
+                </span>
+                <span class="orgw-tile-radio"></span>
+              </button>
+              <button class="orgw-scope-tile" data-scope="library">
+                <span class="orgw-tile-glyph">
+                  <svg width="22" height="22" viewBox="0 0 256 256" fill="currentColor"><path d="M224,64H154.667l-27.7334-20.7998A16.10323,16.10323,0,0,0,117.333,40H72A16.01833,16.01833,0,0,0,56,56V72H40A16.01833,16.01833,0,0,0,24,88V200a16.01833,16.01833,0,0,0,16,16H192.88867A15.12831,15.12831,0,0,0,208,200.88867V184h16.88867A15.12831,15.12831,0,0,0,240,168.88867V80A16.01833,16.01833,0,0,0,224,64Zm0,104H208V112a16.01833,16.01833,0,0,0-16-16H122.667L94.93359,75.2002A16.10323,16.10323,0,0,0,85.333,72H72V56h45.333l27.7334,20.7998A16.10323,16.10323,0,0,0,154.667,80H224Z"/></svg>
+                </span>
+                <span class="orgw-tile-body">
+                  <span class="orgw-tile-name">Organise library</span>
+                </span>
+                <span class="orgw-tile-radio"></span>
+              </button>
+            </div>
+          </section>
 
-            <!-- Step 1: Config -->
-            <div id="org-step-1" class="org-step">
-              <div class="settings-row">
-                <label>Template</label>
-                <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-                  <select id="org-template-select" onchange="App.orgTemplateSelectChanged()">
-                    <option value="">-- choose saved template --</option>
-                  </select>
-                  <div id="org-template-editor" class="org-token-editor" contenteditable="true" spellcheck="false" data-placeholder="{album_artist}/{album}/{track:02} - {title}"></div>
-                  <div class="token-chip-row" id="org-token-chips"></div>
-                  <span id="org-template-validation" class="org-validation-msg" style="display:none"></span>
-                  <div class="org-template-preview" id="org-template-preview"></div>
-                </div>
+          <!-- ════ STEP 2 · SOURCE / SCOPE ════ -->
+          <section class="orgw-step" data-step="2">
+            <div class="orgw-step-h">
+              <div class="orgw-eyebrow">Step 2</div>
+              <div class="orgw-st-title" id="orgw-s2-title">Select source files</div>
+              <div class="orgw-st-sub" id="orgw-s2-sub">Choose the files or folder to bring into your library.</div>
+            </div>
+            <!-- Import panel -->
+            <div id="orgw-import-panel">
+              <div class="orgw-src-zone">
+                <span class="orgw-sz-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></span>
+                <span class="orgw-sz-text">
+                  <span class="orgw-sz-t1">Add files to import</span>
+                  <span class="orgw-sz-t2">FLAC, ALAC, WAV or AIFF &middot; drop here or choose below</span>
+                </span>
+                <span class="orgw-sz-actions">
+                  <button class="orgw-btn orgw-btn-xs" onclick="App.orgAddFiles()">Add files&hellip;</button>
+                  <button class="orgw-btn orgw-btn-xs" onclick="App.orgAddFolder()">Add folder&hellip;</button>
+                </span>
               </div>
+              <div class="orgw-staged-list" id="orgw-staged-list"></div>
+            </div>
+            <!-- Library organise panel -->
+            <div id="orgw-library-panel" style="display:none">
+              <div class="orgw-scope-pick">
+                <button class="orgw-scope-opt active" data-libscope="all">
+                  <span class="orgw-scope-radio"></span>
+                  <span class="orgw-scope-icon"><svg width="20" height="20" viewBox="0 0 256 256" fill="currentColor"><path d="M224,64H154.667l-27.7334-20.7998A16.10323,16.10323,0,0,0,117.333,40H72A16.01833,16.01833,0,0,0,56,56V72H40A16.01833,16.01833,0,0,0,24,88V200a16.01833,16.01833,0,0,0,16,16H192.88867A15.12831,15.12831,0,0,0,208,200.88867V184h16.88867A15.12831,15.12831,0,0,0,240,168.88867V80A16.01833,16.01833,0,0,0,224,64Zm0,104H208V112a16.01833,16.01833,0,0,0-16-16H122.667L94.93359,75.2002A16.10323,16.10323,0,0,0,85.333,72H72V56h45.333l27.7334,20.7998A16.10323,16.10323,0,0,0,154.667,80H224Z"/></svg></span>
+                  <span class="orgw-scope-text">
+                    <span class="orgw-scope-name">Whole library</span>
+                    <span class="orgw-scope-desc">Every track. Files that already match the structure stay put.</span>
+                  </span>
+                  <span class="orgw-scope-stat" id="orgw-lib-total-stat"></span>
+                </button>
+                <button class="orgw-scope-opt" data-libscope="unsorted">
+                  <span class="orgw-scope-radio"></span>
+                  <span class="orgw-scope-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></span>
+                  <span class="orgw-scope-text">
+                    <span class="orgw-scope-name">A specific folder</span>
+                    <span class="orgw-scope-desc">Limit the re-file to one folder and its contents.</span>
+                  </span>
+                  <span class="orgw-scope-stat" id="orgw-folder-stat"></span>
+                </button>
+              </div>
+              <div style="margin-top:14px">
+                <button class="orgw-btn orgw-btn-xs" onclick="App.orgWizChooseFolder()">Choose a different folder&hellip;</button>
+              </div>
+            </div>
+          </section>
 
-              <!-- Import source zone (import mode only) -->
-              <div id="org-import-src-zone" style="display:none">
-                <div class="settings-row" style="align-items:flex-start">
-                  <label style="padding-top:6px">Source</label>
-                  <div style="flex:1;display:flex;flex-direction:column;gap:8px">
-                    <div style="display:flex;gap:8px">
-                      <button class="btn-secondary" onclick="App.orgAddFiles()">Add Files&hellip;</button>
-                      <button class="btn-secondary" onclick="App.orgAddFolder()">Add Folder&hellip;</button>
-                    </div>
-                    <div id="org-source-list" class="org-source-list"></div>
+          <!-- ════ STEP 3 · STRUCTURE ════ -->
+          <section class="orgw-step" data-step="3">
+            <div class="orgw-step-h">
+              <div class="orgw-eyebrow">Step 3</div>
+              <div class="orgw-st-title">Folder structure</div>
+              <div class="orgw-st-sub">Pick an existing structure, edit it, or create a new one. This decides how every file is named and filed.</div>
+            </div>
+            <div class="orgw-struct-modes">
+              <span class="orgw-mode-lab">Saved structures</span>
+            </div>
+            <div class="orgw-tmpl-rail" id="orgw-tmpl-rail"></div>
+            <!-- Result preview -->
+            <div class="orgw-result">
+              <div class="orgw-result-head">
+                <span class="orgw-overline">Result preview</span>
+                <span class="orgw-result-src">from &#8220;03 - Numb.flac&#8221;</span>
+                <span class="orgw-result-right"><button class="orgw-btn orgw-btn-xs" id="orgw-edit-structure-btn" onclick="App.orgWizToggleEditor()">Edit structure</button></span>
+              </div>
+              <div class="orgw-po-path" id="orgw-po-path"></div>
+              <div class="orgw-po-tree" id="orgw-po-tree"></div>
+            </div>
+            <!-- Pattern editor (revealed on demand) -->
+            <div class="orgw-structure-editor" id="orgw-structure-editor" style="display:none">
+              <div class="orgw-builder">
+                <label class="orgw-field-label" for="orgw-tname">Name</label>
+                <div><input id="orgw-tname" class="orgw-name-input" type="text" placeholder="Structure name" /></div>
+                <span class="orgw-field-label">Pattern</span>
+                <div class="orgw-pattern-stage">
+                  <div class="orgw-assembled" id="orgw-assembled">
+                    <div id="orgw-pattern-edit" class="orgw-pattern-edit" contenteditable="true" spellcheck="false" data-placeholder="Type text or add a field below&hellip;"></div>
+                    <span class="orgw-ext">.flac</span>
+                  </div>
+                  <p class="orgw-pattern-hint">Click anywhere to type literal text &mdash; folders, prefixes, or separators. Use the buttons below to insert a field at the cursor.</p>
+                  <div class="orgw-palette">
+                    <div class="orgw-palette-row" id="orgw-palette-fields"></div>
+                    <div class="orgw-palette-row" id="orgw-palette-seps"></div>
+                  </div>
+                  <div class="orgw-editor-actions">
+                    <button class="orgw-btn orgw-btn-xs orgw-btn-primary" onclick="App.orgWizSaveStructure()">Save</button>
                   </div>
                 </div>
               </div>
-
-              <div class="settings-row">
-                <label>On conflict</label>
-                <select id="org-conflict-policy">
-                  <option value="keep_both" selected>Keep both (add suffix)</option>
-                  <option value="skip">Skip (keep existing file)</option>
-                  <option value="overwrite">Overwrite</option>
-                </select>
-              </div>
             </div>
+          </section>
 
-            <!-- Step 2: Preview -->
-            <div id="org-step-2" class="org-step" style="display:none">
-              <div id="org-dot-warning-banner" class="org-dot-warning-banner" style="display:none">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
-                <span id="org-dot-warning-msg"></span>
-                <button class="org-dot-warning-fix" onclick="App.orgBack()">Fix template</button>
-              </div>
-              <div class="org-preview-summary" id="org-preview-summary"></div>
-              <div class="org-filter-chips" id="org-preview-chips">
-                <button class="sw-chip sw-chip--active" data-filter="all" onclick="App.orgSetPreviewFilter('all')">All <span class="sw-chip-badge" id="org-chip-all">0</span></button>
-                <button class="sw-chip" data-filter="moves" onclick="App.orgSetPreviewFilter('moves')">Moves <span class="sw-chip-badge" id="org-chip-moves">0</span></button>
-                <button class="sw-chip" data-filter="conflicts" onclick="App.orgSetPreviewFilter('conflicts')">Conflicts <span class="sw-chip-badge" id="org-chip-conflicts">0</span></button>
-                <button class="sw-chip" data-filter="warnings" onclick="App.orgSetPreviewFilter('warnings')">Warnings <span class="sw-chip-badge" id="org-chip-warnings">0</span></button>
-              </div>
-              <div id="org-preview-list" class="org-preview-list"></div>
+          <!-- ════ STEP 4 · PREVIEW ════ -->
+          <section class="orgw-step" data-step="4">
+            <div class="orgw-step-h">
+              <div class="orgw-eyebrow">Step 4</div>
+              <div class="orgw-st-title">Preview changes</div>
+              <div class="orgw-st-sub" id="orgw-preview-hint"></div>
             </div>
-
-            <!-- Step 3: Progress -->
-            <div id="org-step-3" class="org-step" style="display:none">
-              <div class="sw-progress-card sw-card">
-                <div class="sw-progress-hdr">
-                  <span class="sw-overline" id="org-progress-label">Moving files&hellip;</span>
-                  <span class="sw-stat-chip">
-                    <span class="sw-stat-val" id="org-progress-n">0</span>&thinsp;/&thinsp;<span class="sw-stat-val" id="org-progress-total">0</span>
-                  </span>
+            <!-- Conflict bar -->
+            <div class="orgw-conflict-bar">
+              <div class="orgw-cb-text">
+                <span class="orgw-cb-t1">When a file already exists at the destination</span>
+                <span class="orgw-cb-t2">Applies to every conflict in this run.</span>
+              </div>
+              <div class="orgw-cb-right">
+                <div class="orgw-select-wrap">
+                  <button class="orgw-select-pill" id="orgw-conflict-pill">
+                    <span id="orgw-conflict-label">Keep both (add suffix)</span>
+                    <span class="orgw-chev"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4l3.5 3.5L9.5 4"/></svg></span>
+                  </button>
+                  <div class="orgw-select-menu" id="orgw-conflict-menu">
+                    <button data-policy="keep_both">Keep both (add suffix)</button>
+                    <button data-policy="skip">Skip existing</button>
+                    <button data-policy="overwrite">Overwrite existing</button>
+                  </div>
                 </div>
-                <div class="sw-big-pct" id="org-progress-pct">0%</div>
-                <div class="sw-bar-wrap">
-                  <div class="sw-bar" id="org-progress-bar" style="width:0%"></div>
-                </div>
-                <div class="org-current-file" id="org-current-file"></div>
-                <div id="org-error-list" class="org-error-list"></div>
               </div>
             </div>
+            <div id="orgw-preview-body"></div>
+          </section>
 
-            <!-- Step 4: Done -->
-            <div id="org-step-4" class="org-step" style="display:none">
-              <div class="org-done-summary" id="org-done-summary"></div>
-              <button class="btn-secondary" style="margin-top:16px" onclick="App.orgPageBack()">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-                Back to Settings
-              </button>
+          <!-- ════ STEP 5 · APPLY ════ -->
+          <section class="orgw-step" data-step="5">
+            <div class="orgw-step-h">
+              <div class="orgw-eyebrow">Step 5</div>
+              <div class="orgw-st-title" id="orgw-s5-title">Applying changes</div>
+              <div class="orgw-st-sub" id="orgw-s5-sub">Hang tight &mdash; nothing is irreversible. You can undo the whole run when it finishes.</div>
             </div>
+            <div class="orgw-run-wrap" id="orgw-run-wrap"></div>
+          </section>
 
-            <!-- Wizard action bar -->
-            <div class="org-page-wizard-actions" id="org-wizard-actions">
-              <button class="btn-secondary" id="org-btn-back" style="display:none" onclick="App.orgBack()">Back</button>
-              <button class="btn-primary" id="org-btn-next" onclick="App.orgNext()">Preview</button>
-            </div>
+        </div><!-- /orgw-page -->
 
-          </div><!-- /org-tab-wizard -->
-        </div><!-- /org-page-content -->
+        <!-- sticky footer -->
+        <div class="orgw-foot" id="orgw-foot">
+          <div class="orgw-foot-inner">
+            <button class="orgw-btn" id="orgw-back-btn" onclick="App.orgWizBack()">
+              <svg class="orgw-ico-sm" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L4 7l5 5"/></svg>
+              Back
+            </button>
+            <span class="orgw-foot-spacer"></span>
+            <span class="orgw-foot-note" id="orgw-foot-note"></span>
+            <button class="orgw-btn orgw-btn-primary orgw-btn-lg" id="orgw-next-btn" onclick="App.orgWizNext()">
+              <span id="orgw-next-label">Continue</span>
+              <svg class="orgw-ico-sm" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h8M7.5 3.5L11 7l-3.5 3.5"/></svg>
+            </button>
+          </div>
+        </div>
       </div><!-- /view-organizer -->
 
     </main>

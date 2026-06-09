@@ -12796,19 +12796,53 @@ def _validate_backup_db(path: Path):
         conn.close()
 
 
+def _osascript_folder_picker():
+    """Open a native macOS Finder folder picker via osascript. Returns path string or None."""
+    import subprocess
+    script = 'POSIX path of (choose folder with prompt "Select a folder")'
+    r = subprocess.run(['osascript', '-e', script], capture_output=True, text=True, timeout=120)
+    if r.returncode != 0:
+        return None  # user cancelled or error
+    return r.stdout.strip().rstrip('/')
+
+
+def _osascript_file_picker():
+    """Open a native macOS Finder file picker (multi-select) via osascript. Returns list of paths."""
+    import subprocess
+    script = '''
+set theFiles to choose file with prompt "Select audio files" with multiple selections allowed
+set output to ""
+repeat with f in theFiles
+    set output to output & POSIX path of f & linefeed
+end repeat
+return output
+'''
+    r = subprocess.run(['osascript', '-e', script], capture_output=True, text=True, timeout=120)
+    if r.returncode != 0:
+        return []  # user cancelled or error
+    return [p for p in r.stdout.strip().splitlines() if p.strip()]
+
+
 @app.route('/api/browse/folder', methods=['POST'])
 def browse_folder():
+    # 1. Try pywebview (native TuneBridge.app)
     try:
         import webview
         wins = webview.windows
-        if not wins:
-            return jsonify({'error': 'No window available'}), 400
-        result = wins[0].create_file_dialog(webview.FOLDER_DIALOG)
-        if result:
-            return jsonify({'path': result[0]})
-        return jsonify({'path': None})
-    except ImportError:
-        return jsonify({'error': 'Browse not available in dev mode — type path manually'}), 400
+        if wins:
+            result = wins[0].create_file_dialog(webview.FOLDER_DIALOG)
+            if result:
+                return jsonify({'path': result[0]})
+            return jsonify({'path': None})
+    except (ImportError, Exception):
+        pass
+
+    # 2. Fall back to osascript (dev mode or browser — macOS only)
+    try:
+        path = _osascript_folder_picker()
+        return jsonify({'path': path})
+    except FileNotFoundError:
+        return jsonify({'error': 'Native folder picker not available on this OS'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -12816,21 +12850,28 @@ def browse_folder():
 @app.route('/api/browse/files', methods=['POST'])
 def browse_files():
     """Open a native multi-file picker. Returns {paths: [...]}."""
+    # 1. Try pywebview (native TuneBridge.app)
     try:
         import webview
         wins = webview.windows
-        if not wins:
-            return jsonify({'error': 'No window available'}), 400
-        result = wins[0].create_file_dialog(
-            webview.OPEN_DIALOG,
-            allow_multiple=True,
-            file_types=('Audio Files (*.flac;*.mp3;*.m4a;*.aac;*.wav;*.ogg;*.opus)',),
-        )
-        if result:
-            return jsonify({'paths': list(result)})
-        return jsonify({'paths': []})
-    except ImportError:
-        return jsonify({'error': 'Browse not available in dev mode'}), 400
+        if wins:
+            result = wins[0].create_file_dialog(
+                webview.OPEN_DIALOG,
+                allow_multiple=True,
+                file_types=('Audio Files (*.flac;*.mp3;*.m4a;*.aac;*.wav;*.ogg;*.opus)',),
+            )
+            if result:
+                return jsonify({'paths': list(result)})
+            return jsonify({'paths': []})
+    except (ImportError, Exception):
+        pass
+
+    # 2. Fall back to osascript (dev mode or browser — macOS only)
+    try:
+        paths = _osascript_file_picker()
+        return jsonify({'paths': paths})
+    except FileNotFoundError:
+        return jsonify({'error': 'Native file picker not available on this OS'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
