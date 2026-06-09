@@ -2182,8 +2182,12 @@
             <div class="orgw-result">
               <div class="orgw-result-head">
                 <span class="orgw-overline">Result preview</span>
-                <span class="orgw-result-src">from &#8220;03 - Numb.flac&#8221;</span>
+                <span class="orgw-result-src" id="orgw-result-src"></span>
                 <span class="orgw-result-right"><button class="orgw-btn orgw-btn-xs" id="orgw-edit-structure-btn" onclick="App.orgWizToggleEditor()">Edit structure</button></span>
+              </div>
+              <div class="orgw-target-root">
+                <span class="orgw-target-root-label">Destination</span>
+                <span class="orgw-target-root-path" id="orgw-target-root-path"></span>
               </div>
               <div class="orgw-po-path" id="orgw-po-path"></div>
               <div class="orgw-po-tree" id="orgw-po-tree"></div>
@@ -2205,7 +2209,7 @@
                     <div class="orgw-palette-row" id="orgw-palette-seps"></div>
                   </div>
                   <div class="orgw-editor-actions">
-                    <button class="orgw-btn orgw-btn-xs orgw-btn-primary" onclick="App.orgWizSaveStructure()">Save</button>
+                    <button class="orgw-btn orgw-btn-primary orgw-save-btn" onclick="App.orgWizSaveStructure()">Save</button>
                   </div>
                 </div>
               </div>

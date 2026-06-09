@@ -17589,7 +17589,7 @@ let _orgWiz = {
   step: 1, maxStep: 1, scope: 'import', libScope: 'all', libFolder: null,
   sources: [], templates: [], activeId: null, conflict: 'keep_both',
   filter: 'all', editorOpen: false, running: false, done: false,
-  previewData: null, pollTimer: null, _savedRange: null,
+  previewData: null, sample: null, pollTimer: null, _savedRange: null,
 };
 
 function _orgWizResolve(track, key) {
@@ -17639,7 +17639,7 @@ async function loadOrganizerView() {
   setActiveNav('settings');
 
   _orgWiz.step = 1; _orgWiz.maxStep = 1; _orgWiz.scope = 'import'; _orgWiz.libScope = 'all';
-  _orgWiz.sources = []; _orgWiz.previewData = null; _orgWiz.filter = 'all';
+  _orgWiz.sources = []; _orgWiz.previewData = null; _orgWiz.sample = null; _orgWiz.filter = 'all';
   _orgWiz.editorOpen = false; _orgWiz.running = false; _orgWiz.done = false;
   if (_orgWiz.pollTimer) { clearInterval(_orgWiz.pollTimer); _orgWiz.pollTimer = null; }
 
@@ -17796,7 +17796,15 @@ function orgWizBack() {
 
 async function orgWizNext() {
   const n = _orgWiz.step;
-  if (n === 3) {
+  if (n === 2) {
+    if (_orgWiz.scope === 'import' && !_orgWiz.sources.length) {
+      toast('Add at least one source file or folder');
+      return;
+    }
+    await _orgWizLoadSample();
+    if (_orgWiz.maxStep < 3) _orgWiz.maxStep = 3;
+    _orgWizGoStep(3);
+  } else if (n === 3) {
     await _orgWizLoadPreview();
   } else if (n === 4) {
     _orgWiz.done = false;
@@ -17808,10 +17816,23 @@ async function orgWizNext() {
   }
 }
 
+async function _orgWizLoadSample() {
+  const body = _orgWiz.scope === 'import'
+    ? { mode: 'import', sources: _orgWiz.sources.map(s => ({ type: s.type, path: s.path })) }
+    : { mode: 'library', folder: _orgWiz.libScope === 'unsorted' ? _orgWiz.libFolder : null };
+  try {
+    _orgWiz.sample = await api('/organizer/sample', { method: 'POST', body });
+  } catch (e) {
+    _orgWiz.sample = null;
+    toast('Could not load a preview file: ' + (e.message || 'unknown error'));
+  }
+}
+
 // ── Scope selection ───────────────────────────────────────────────────────────
 
 function _orgWizSelectScope(scope) {
   _orgWiz.scope = scope;
+  _orgWiz.sample = null;
   document.querySelectorAll('.orgw-scope-tile').forEach(t => t.classList.toggle('active', t.dataset.scope === scope));
   const slab2 = document.getElementById('orgw-slab2');
   if (slab2) slab2.textContent = scope === 'import' ? 'Source' : 'Scope';
@@ -17820,6 +17841,7 @@ function _orgWizSelectScope(scope) {
 
 function _orgWizSelectLibScope(ls) {
   _orgWiz.libScope = ls;
+  _orgWiz.sample = null;
   document.querySelectorAll('.orgw-scope-opt').forEach(o => o.classList.toggle('active', o.dataset.libscope === ls));
   _orgWizSyncFooter();
 }
@@ -17882,6 +17904,7 @@ function _orgWizFallbackSubmit(type) {
   }
 
   document.getElementById('orgw-path-fallback')?.remove();
+  _orgWiz.sample = null;
   _orgWizRenderStaged(); _orgWizSyncFooter();
 }
 
@@ -17892,6 +17915,7 @@ async function orgAddFiles() {
       if (!_orgWiz.sources.find(s => s.path === p))
         _orgWiz.sources.push({ type: 'file', path: p, label: p.split('/').pop() });
     }
+    _orgWiz.sample = null;
     _orgWizRenderStaged(); _orgWizSyncFooter();
   } catch (e) { toast(e.message || 'Could not open file picker', 'error'); }
 }
@@ -17902,22 +17926,25 @@ async function orgAddFolder() {
     if (!res || !res.path) return;
     if (!_orgWiz.sources.find(s => s.path === res.path))
       _orgWiz.sources.push({ type: 'folder', path: res.path, label: res.path.split('/').pop() + '/' });
+    _orgWiz.sample = null;
     _orgWizRenderStaged(); _orgWizSyncFooter();
   } catch (e) { toast(e.message || 'Could not open folder picker', 'error'); }
 }
 
 function orgRemoveSource(idx) {
   _orgWiz.sources.splice(idx, 1);
+  _orgWiz.sample = null;
   _orgWizRenderStaged(); _orgWizSyncFooter();
 }
 
-function orgClearSources() { _orgWiz.sources = []; _orgWizRenderStaged(); _orgWizSyncFooter(); }
+function orgClearSources() { _orgWiz.sources = []; _orgWiz.sample = null; _orgWizRenderStaged(); _orgWizSyncFooter(); }
 
 async function orgWizChooseFolder() {
   try {
     const res = await api('/browse/folder', { method: 'POST' });
     if (!res || !res.path) return;
     _orgWiz.libScope = 'unsorted'; _orgWiz.libFolder = res.path;
+    _orgWiz.sample = null;
     document.querySelectorAll('.orgw-scope-opt').forEach(o => o.classList.toggle('active', o.dataset.libscope === 'unsorted'));
     const stat = document.getElementById('orgw-folder-stat');
     if (stat) stat.textContent = res.path.split('/').pop() + '/';
@@ -17957,6 +17984,7 @@ function _orgWizLibFolderSubmit() {
   const p = input.value.trim().replace(/\/$/, '');
   if (!p) return;
   _orgWiz.libScope = 'unsorted'; _orgWiz.libFolder = p;
+  _orgWiz.sample = null;
   document.querySelectorAll('.orgw-scope-opt').forEach(o => o.classList.toggle('active', o.dataset.libscope === 'unsorted'));
   const stat = document.getElementById('orgw-folder-stat');
   if (stat) stat.textContent = p.split('/').pop() + '/';
@@ -17968,7 +17996,7 @@ function _orgWizRenderStaged() {
   const el = document.getElementById('orgw-staged-list');
   if (!el) return;
   if (!_orgWiz.sources.length) { el.innerHTML = ''; return; }
-  const FSVG = `<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 1.5h5l3 3V12a.5.5 0 01-.5.5h-7A.5.5 0 013 12z"/><path d="M8 1.5v3h3"/></svg>`;
+  const FSVG = `<span class="orgw-file-icon" aria-hidden="true"></span>`;
   const DSVG = `<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1.5 4.5V11a1 1 0 001 1h9a1 1 0 001-1V5a1 1 0 00-1-1H7L5.5 2.5h-3a1 1 0 00-1 1z"/></svg>`;
   el.innerHTML = `<div class="orgw-sl-head"><span class="orgw-sl-dot"></span><span>${_orgWiz.sources.length} file${_orgWiz.sources.length !== 1 ? 's' : ''} ready</span></div>` +
     _orgWiz.sources.map((s, i) =>
@@ -18085,7 +18113,9 @@ function _orgWizRenderAssembled() {
   pe.addEventListener('focus', _orgWizSaveRange);
   box.innerHTML = '';
   box.appendChild(pe);
-  const ext = document.createElement('span'); ext.className = 'orgw-ext'; ext.textContent = '.flac';
+  const ext = document.createElement('span');
+  ext.className = 'orgw-ext';
+  ext.textContent = '.' + ((_orgWiz.sample && _orgWiz.sample.extension) || 'flac');
   box.appendChild(ext);
   _orgWizSerialize();
 }
@@ -18173,21 +18203,29 @@ async function orgWizSaveStructure() {
 // ── Live path preview (Step 3) ────────────────────────────────────────────────
 
 function _orgWizColourPath(segs) {
+  const ext = (_orgWiz.sample && _orgWiz.sample.extension) || 'flac';
   return segs.map((s, i) => i < segs.length - 1
     ? `<span class="orgw-seg-folder">${_esc(s || '∅')}</span><span class="orgw-seg-slash">/</span>`
-    : `<span class="orgw-seg-file">${_esc(s || '∅')}</span><span class="orgw-seg-ext">.flac</span>`
+    : `<span class="orgw-seg-file">${_esc(s || '∅')}</span><span class="orgw-seg-ext">.${_esc(ext)}</span>`
   ).join('');
 }
 
 function _orgWizRenderLivePreview() {
   const tokens = _orgWizActiveTokens();
-  const segs = _orgWizSegments(tokens, _ORG_SAMPLE);
+  const sample = _orgWiz.sample;
+  const track = sample ? sample.track : _ORG_SAMPLE;
+  const ext = sample ? sample.extension : 'flac';
+  const segs = _orgWizSegments(tokens, track);
+  const srcEl = document.getElementById('orgw-result-src');
+  if (srcEl) srcEl.textContent = `from "${sample ? sample.source_name : _ORG_SAMPLE.from}"`;
+  const rootEl = document.getElementById('orgw-target-root-path');
+  if (rootEl) rootEl.textContent = sample ? sample.target_root : 'Your music library';
   const pathEl = document.getElementById('orgw-po-path');
   if (pathEl) pathEl.innerHTML = _orgWizColourPath(segs);
   const treeEl = document.getElementById('orgw-po-tree');
   if (!treeEl) return;
   treeEl.innerHTML = '';
-  const FSICO = `<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 1.5h5l3 3V12a.5.5 0 01-.5.5h-7A.5.5 0 013 12z"/><path d="M8 1.5v3h3"/></svg>`;
+  const FSICO = `<span class="orgw-file-icon" aria-hidden="true"></span>`;
   const FDICO = `<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1.5 4.5V11a1 1 0 001 1h9a1 1 0 001-1V5a1 1 0 00-1-1H7L5.5 2.5h-3a1 1 0 00-1 1z"/></svg>`;
   const folders = segs.slice(0, -1), file = segs[segs.length - 1];
   folders.forEach((f, i) => {
@@ -18197,7 +18235,7 @@ function _orgWizRenderLivePreview() {
     treeEl.appendChild(row);
   });
   const leaf = document.createElement('div'); leaf.className = 'orgw-t-row orgw-t-leaf';
-  leaf.innerHTML = `<span class="orgw-t-ind">${'  '.repeat(Math.max(0, folders.length - 1))}└─</span><span class="orgw-t-ico">${FSICO}</span><span class="orgw-t-name">${_esc((file || '∅') + '.flac')}</span>`;
+  leaf.innerHTML = `<span class="orgw-t-ind">${'  '.repeat(Math.max(0, folders.length - 1))}└─</span><span class="orgw-t-ico">${FSICO}</span><span class="orgw-t-name">${_esc((file || '∅') + '.' + ext)}</span>`;
   treeEl.appendChild(leaf);
 }
 

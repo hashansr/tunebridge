@@ -24269,27 +24269,32 @@ body.is-col-resizing {
 
 /* ── Buttons ────────────────────────────────────────────────── */
 .orgw-btn {
-  display: inline-flex; align-items: center; gap: 7px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   min-height: 34px; padding: 0 15px; border-radius: 9999px;
-  border: 1px solid rgba(65,71,85,.32); background: transparent;
-  color: var(--text); font-size: 12px; font-weight: 560;
-  font-family: var(--font-sans); cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  border: none; background: rgba(255,255,255,.07);
+  color: var(--text-sub); font-size: 13px; font-weight: 600;
+  font-family: var(--font-sans); cursor: pointer;
+  transition: background .15s, color .15s, filter .15s, transform .15s;
+  white-space: nowrap; line-height: 1;
 }
-.orgw-btn:hover { background: var(--bg-elevated); border-color: rgba(173,198,255,.2); }
+.orgw-btn:hover { background: rgba(255,255,255,.12); color: var(--text); }
+.orgw-btn:active { background: rgba(255,255,255,.05); transform: scale(.98); }
 .orgw-btn-primary {
   min-width: 96px;
-  background: linear-gradient(135deg, rgba(173,198,255,.95), rgba(130,168,255,.9));
-  color: #00285c; border-color: transparent; font-weight: 700;
+  background: linear-gradient(135deg, #adc6ff 0%, #385283 100%);
+  color: #fff; font-weight: 600;
 }
-.orgw-btn-primary:hover { filter: brightness(1.05); }
+.orgw-btn-primary:hover { background: linear-gradient(135deg, #adc6ff 0%, #385283 100%); color: #fff; filter: brightness(1.12); transform: translateY(-1px); }
+.orgw-btn-primary:active { filter: brightness(.95); transform: scale(.98); }
 .orgw-btn[disabled], .orgw-btn:disabled { color: var(--text-muted); background: transparent; border-color: rgba(255,255,255,.06); cursor: not-allowed; opacity: 0.85; }
 .orgw-btn[disabled]:hover, .orgw-btn:disabled:hover { background: transparent; border-color: rgba(255,255,255,.06); }
 .orgw-btn-ghost { background: transparent; border-color: transparent; color: var(--text-sub); }
 .orgw-btn-ghost:hover { background: var(--accent-dim); color: var(--text); }
 .orgw-btn-lg { height: 42px; padding: 0 24px; font-size: 13.5px; }
-.orgw-btn-xs { height: 28px; padding: 0 12px; font-size: 11.5px; }
+.orgw-btn-xs { min-height: 28px; height: 28px; padding: 0 12px; font-size: 11.5px; }
 .orgw-btn-warn { color: var(--accent-warning); border-color: rgba(240,180,41,.45); }
 .orgw-btn-warn:hover { background: rgba(240,180,41,.08); border-color: rgba(240,180,41,.6); }
+.orgw-save-btn { min-width: 76px; }
 
 /* ── STEP 1 · scope tiles ───────────────────────────────────── */
 .orgw-scope-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -24334,6 +24339,12 @@ body.is-col-resizing {
 .orgw-sl-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-success); flex-shrink: 0; }
 .orgw-staged-row { display: flex; align-items: center; gap: 11px; padding: 9px 4px; border-bottom: 1px solid rgba(255,255,255,.06); font-size: 12.5px; }
 .orgw-staged-fico { color: var(--text-muted); opacity: 0.7; display: inline-flex; flex-shrink: 0; }
+.orgw-file-icon {
+  width: 13px; height: 13px; display: inline-block; flex-shrink: 0;
+  background: currentColor;
+  -webkit-mask: url('/icons/doc-svgrepo-com.svg') center / contain no-repeat;
+  mask: url('/icons/doc-svgrepo-com.svg') center / contain no-repeat;
+}
 .orgw-staged-nm { font-family: ui-monospace, SFMono-Regular, monospace; color: var(--text-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .orgw-staged-rm { margin-left: auto; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 12px; flex-shrink: 0; padding: 0 2px; }
 .orgw-staged-rm:hover { color: var(--text); }
@@ -24385,6 +24396,19 @@ body.is-col-resizing {
 .orgw-overline { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); }
 .orgw-result-src { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11.5px; color: var(--text-muted); }
 .orgw-result-right { margin-left: auto; }
+.orgw-target-root {
+  display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px;
+  min-width: 0; color: var(--text-muted);
+}
+.orgw-target-root-label {
+  flex-shrink: 0; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase;
+}
+.orgw-target-root-path {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11.5px;
+  color: var(--text-sub);
+}
 
 .orgw-po-path { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 19px; line-height: 1.5; word-break: break-word; letter-spacing: -0.01em; }
 .orgw-seg-folder { color: var(--accent); }

@@ -15223,6 +15223,73 @@ def _collect_external_preview(sources, template):
     }
 
 
+def _organizer_random_external_file(sources):
+    """Choose one audio file from the selected import sources without listing everything."""
+    audio_exts = {'.flac', '.mp3', '.m4a', '.aac', '.wav', '.aiff', '.aif', '.ogg', '.opus'}
+    chosen = None
+    seen = 0
+    for src in sources:
+        src_path = Path(src.get('path', '')).expanduser()
+        if src.get('type', 'folder') == 'file':
+            candidates = [src_path]
+        elif src_path.is_dir():
+            candidates = (
+                Path(root) / fname
+                for root, dirs, files in os.walk(src_path)
+                for fname in files
+                if not any(part.startswith('.') for part in Path(root).relative_to(src_path).parts)
+            )
+        else:
+            candidates = []
+        for candidate in candidates:
+            if candidate.suffix.lower() not in audio_exts or not candidate.is_file():
+                continue
+            seen += 1
+            if random.randrange(seen) == 0:
+                chosen = candidate
+    return chosen
+
+
+@app.route('/api/organizer/sample', methods=['POST'])
+def organizer_sample():
+    """Return one real in-scope track for the Step 3 structure preview."""
+    data = request.get_json(silent=True) or {}
+    mode = data.get('mode', 'import')
+    music_base = get_music_base()
+
+    if mode == 'import':
+        abs_path = _organizer_random_external_file(data.get('sources', []))
+        if not abs_path:
+            return jsonify({'error': 'No supported audio files found'}), 404
+        track = _extract_file_metadata(abs_path)
+        source_path = str(abs_path)
+    else:
+        with library_lock:
+            tracks = list(library)
+        folder = str(data.get('folder') or '').strip()
+        if folder:
+            try:
+                folder_rel = str(Path(folder).resolve().relative_to(music_base.resolve()))
+            except Exception:
+                folder_rel = folder.strip('/\\')
+            if folder_rel not in ('', '.'):
+                prefix = folder_rel.rstrip('/\\') + '/'
+                tracks = [t for t in tracks if str(t.get('path') or '').startswith(prefix)]
+        if not tracks:
+            return jsonify({'error': 'No tracks found in the selected scope'}), 404
+        track = random.choice(tracks)
+        source_path = str(music_base / str(track.get('path') or ''))
+
+    token_map = _organizer_token_map(track)
+    return jsonify({
+        'source_path': source_path,
+        'source_name': Path(source_path).name,
+        'target_root': str(music_base),
+        'extension': token_map.pop('ext', 'flac'),
+        'track': token_map,
+    })
+
+
 @app.route('/api/organizer/preview', methods=['POST'])
 def organizer_preview():
     data = request.get_json(silent=True) or {}
