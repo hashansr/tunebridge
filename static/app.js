@@ -7639,6 +7639,7 @@ async function showView(viewName) {
   else if (viewName === 'history') loadHistoryView();
   else if (viewName === 'duplicates') loadDuplicatesView();
   else if (viewName === 'sync') loadSyncView();
+  else if (viewName === 'organizer') loadOrganizerView();
   else if (viewName === 'search') _renderSearchResults();
 
   if (viewName === 'home') {
@@ -7654,7 +7655,7 @@ async function showView(viewName) {
 
 function showViewEl(name) {
   closeLyricsView();
-  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync', 'search'];
+  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync', 'search', 'organizer'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (!el) return;
@@ -7842,6 +7843,8 @@ async function _restoreNavSnapshot(snap) {
       state.view = 'settings'; state.playlist = null; clearSelection();
       setActiveNav('settings'); renderSidebarPlaylists(); showViewEl('settings');
       setHealthSectionExpanded(false); await loadSettings();
+      _orgLoadUndoBar();
+      _orgLoadActiveTemplateDisplay();
       break;
     case 'insights':
       state.view = 'insights'; state.playlist = null; clearSelection();
@@ -17157,6 +17160,1261 @@ function toggleSidebar(forceClose = false) {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Library Organizer
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const ORGANIZER_TOKENS = [
+  { token: '{album_artist}', label: 'Album Artist', field: 'album_artist' },
+  { token: '{artist}',       label: 'Artist',       field: 'artist' },
+  { token: '{album}',        label: 'Album',        field: 'album' },
+  { token: '{title}',        label: 'Title',        field: 'title' },
+  { token: '{track:02}',     label: 'Track #',      field: 'track' },
+  { token: '{disc:02}',      label: 'Disc #',       field: 'disc' },
+  { token: '{year}',         label: 'Year',         field: 'year' },
+  { token: '{genre}',        label: 'Genre',        field: 'genre' },
+  // {ext} is intentionally excluded — extension is always taken from source file
+];
+
+// Extension is always appended automatically; no .{ext} in the template
+const ORGANIZER_DEFAULT_TEMPLATE = '{album_artist}/{album}/{track:02} - {title}';
+
+const ORGANIZER_SAMPLE = {
+  album_artist: 'Linkin Park', artist: 'Linkin Park',
+  album: 'Meteora', title: 'Numb',
+  track: '03', disc: '', year: '2003', genre: 'Alternative Rock', ext: 'flac',
+};
+
+let _orgModal = {
+  step: 1,
+  mode: 'reorganize',
+  activeTab: 'templates',
+  template: ORGANIZER_DEFAULT_TEMPLATE,
+  conflictPolicy: 'keep_both',
+  previewData: null,
+  previewFilter: 'all',
+  pollTimer: null,
+  runId: null,
+  sources: [],   // import mode: [{type, path, label}]
+  templates: [], // saved templates from server
+};
+
+// ── Rich token editor ─────────────────────────────────────────────────────────
+
+function _orgMakeTokenSpan(tokenDef) {
+  const span = document.createElement('span');
+  span.className = 'token-tag';
+  span.contentEditable = 'false';
+  span.dataset.token = tokenDef.token;
+  span.textContent = tokenDef.label;
+  return span;
+}
+
+function _orgEditorGetValue(editorEl) {
+  let result = '';
+  for (const node of editorEl.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      result += node.textContent;
+    } else if (node.classList?.contains('token-tag')) {
+      result += node.dataset.token;
+    }
+  }
+  return result.replace(/\{ext\}/g, '');
+}
+
+function _orgEditorSetValue(editorEl, template) {
+  editorEl.innerHTML = '';
+  if (!template) return;
+  template = String(template).replace(/\{ext\}/g, '');
+  const re = /(\{[^}]+\})|([^{]+)/g;
+  let m;
+  while ((m = re.exec(template)) !== null) {
+    if (m[1]) {
+      const def = ORGANIZER_TOKENS.find(t => t.token === m[1]);
+      editorEl.appendChild(def ? _orgMakeTokenSpan(def) : document.createTextNode(m[1]));
+    } else if (m[2]) {
+      editorEl.appendChild(document.createTextNode(m[2]));
+    }
+  }
+}
+
+function _orgEditorInsertNode(editorEl, node) {
+  editorEl.focus();
+  const sel = window.getSelection();
+  let range;
+  if (sel.rangeCount && editorEl.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+    range = sel.getRangeAt(0);
+  } else if (editorEl._savedRange) {
+    range = editorEl._savedRange.cloneRange();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    range = document.createRange();
+    range.selectNodeContents(editorEl);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  range.deleteContents();
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function _orgInitEditor(editorEl, onChange) {
+  if (!editorEl || editorEl._orgInited) return;
+  editorEl._orgInited = true;
+
+  // Save cursor position when focus leaves (buttons steal focus briefly)
+  editorEl.addEventListener('blur', () => {
+    const sel = window.getSelection();
+    if (sel.rangeCount && editorEl.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+      editorEl._savedRange = sel.getRangeAt(0).cloneRange();
+    }
+  });
+
+  editorEl.addEventListener('input', () => onChange(_orgEditorGetValue(editorEl)));
+
+  editorEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed) return;
+
+    const { startContainer, startOffset } = range;
+    let nodeToDelete = null;
+
+    if (e.key === 'Backspace') {
+      if (startContainer === editorEl && startOffset > 0) {
+        const prev = editorEl.childNodes[startOffset - 1];
+        if (prev?.classList?.contains('token-tag')) nodeToDelete = prev;
+      } else if (startContainer.nodeType === Node.TEXT_NODE && startOffset === 0) {
+        const prev = startContainer.previousSibling;
+        if (prev?.classList?.contains('token-tag')) nodeToDelete = prev;
+      }
+    } else {
+      if (startContainer === editorEl && startOffset < editorEl.childNodes.length) {
+        const next = editorEl.childNodes[startOffset];
+        if (next?.classList?.contains('token-tag')) nodeToDelete = next;
+      } else if (startContainer.nodeType === Node.TEXT_NODE && startOffset === startContainer.textContent.length) {
+        const next = startContainer.nextSibling;
+        if (next?.classList?.contains('token-tag')) nodeToDelete = next;
+      }
+    }
+
+    if (nodeToDelete) {
+      e.preventDefault();
+      const newRange = document.createRange();
+      const idx = Array.from(editorEl.childNodes).indexOf(nodeToDelete);
+      const after = nodeToDelete.nextSibling;
+      const before = nodeToDelete.previousSibling;
+      nodeToDelete.remove();
+      if (e.key === 'Backspace' && before) {
+        before.nodeType === Node.TEXT_NODE
+          ? newRange.setStart(before, before.textContent.length)
+          : newRange.setStartAfter(before);
+      } else if (e.key === 'Delete' && after) {
+        newRange.setStart(after, 0);
+      } else {
+        newRange.setStart(editorEl, Math.min(idx, editorEl.childNodes.length));
+      }
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+      onChange(_orgEditorGetValue(editorEl));
+    }
+  });
+
+  // Paste: plain text only, parse template tokens
+  editorEl.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const text = (e.clipboardData.getData('text/plain') || '').replace(/\{ext\}/g, '');
+    if (!text) return;
+    const frag = document.createDocumentFragment();
+    const tmp = document.createElement('div');
+    _orgEditorSetValue(tmp, text);
+    while (tmp.firstChild) frag.appendChild(tmp.firstChild);
+    const sel = window.getSelection();
+    if (sel.rangeCount) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      const last = frag.lastChild;
+      range.insertNode(frag);
+      if (last) { range.setStartAfter(last); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); }
+    }
+    onChange(_orgEditorGetValue(editorEl));
+  });
+}
+
+function _orgRenderTemplatePreview(template, previewElId) {
+  const el = document.getElementById(previewElId);
+  if (!el) return;
+  const s = ORGANIZER_SAMPLE;
+  let rendered = (template || '').replace(/\{ext\}/g, '');
+  rendered = rendered.replace(/\{album_artist\}/g, s.album_artist);
+  rendered = rendered.replace(/\{artist\}/g, s.artist);
+  rendered = rendered.replace(/\{album\}/g, s.album);
+  rendered = rendered.replace(/\{title\}/g, s.title);
+  rendered = rendered.replace(/\{track(?::(\d+))?\}/g, (_, p) => p ? s.track.padStart(parseInt(p), '0') : s.track);
+  rendered = rendered.replace(/\{disc(?::(\d+))?\}/g, (_, p) => s.disc ? (p ? s.disc.padStart(parseInt(p), '0') : s.disc) : '');
+  rendered = rendered.replace(/\{year\}/g, s.year);
+  rendered = rendered.replace(/\{genre\}/g, s.genre);
+  rendered = rendered.replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
+  el.textContent = rendered ? rendered + '.' + s.ext : '';
+}
+
+function _orgUsedFields(template) {
+  const re = /\{(\w+)(?::\d+)?\}/g;
+  const used = new Set();
+  let m;
+  while ((m = re.exec(template)) !== null) {
+    if (m[1] !== 'ext') used.add(m[1]);
+  }
+  return used;
+}
+
+function _orgRefreshChipStates(containerId, editorId) {
+  const container = document.getElementById(containerId);
+  const editorEl = document.getElementById(editorId);
+  if (!container || !editorEl) return;
+  const used = _orgUsedFields(_orgEditorGetValue(editorEl));
+  container.querySelectorAll('.token-chip').forEach(btn => {
+    const field = btn.dataset.field;
+    const inUse = field && used.has(field);
+    btn.disabled = inUse;
+    btn.classList.toggle('token-chip--used', inUse);
+    btn.title = inUse ? `${btn.textContent} is already in the template` : '';
+  });
+}
+
+function _orgBuildTokenChips(containerId, editorId, previewId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+
+  // Token chips
+  for (const t of ORGANIZER_TOKENS) {
+    const btn = document.createElement('button');
+    btn.className = 'token-chip';
+    btn.textContent = t.label;
+    btn.dataset.field = t.field;
+    // mousedown prevents editor losing focus
+    btn.addEventListener('mousedown', e => e.preventDefault());
+    btn.onclick = () => {
+      const editorEl = document.getElementById(editorId);
+      if (!editorEl) return;
+      if (t.field && _orgUsedFields(_orgEditorGetValue(editorEl)).has(t.field)) {
+        toast(`${t.label} is already in the template`);
+        return;
+      }
+      _orgEditorInsertNode(editorEl, _orgMakeTokenSpan(t));
+      const val = _orgEditorGetValue(editorEl);
+      _orgRenderTemplatePreview(val, previewId);
+      _orgRefreshChipStates(containerId, editorId);
+      editorEl.dispatchEvent(new Event('input'));
+    };
+    container.appendChild(btn);
+  }
+
+  // Divider
+  const divider = document.createElement('span');
+  divider.className = 'token-chips-divider';
+  container.appendChild(divider);
+
+  // Separator buttons: / and -
+  for (const [char, display] of [['/', '/'], ['-', '—']]) {
+    const btn = document.createElement('button');
+    btn.className = 'token-sep-btn';
+    btn.textContent = display;
+    btn.title = `Insert "${char}"`;
+    btn.addEventListener('mousedown', e => e.preventDefault());
+    btn.onclick = () => {
+      const editorEl = document.getElementById(editorId);
+      if (!editorEl) return;
+      _orgEditorInsertNode(editorEl, document.createTextNode(char));
+      const val = _orgEditorGetValue(editorEl);
+      _orgRenderTemplatePreview(val, previewId);
+      editorEl.dispatchEvent(new Event('input'));
+    };
+    container.appendChild(btn);
+  }
+
+  _orgRefreshChipStates(containerId, editorId);
+}
+
+// ── Setup Wizard ──────────────────────────────────────────────────────────────
+
+let _setupStep = 1;
+
+function openLibrarySetup() {
+  _setupStep = 1;
+  _setupGoToStep(1);
+  document.getElementById('setup-lib-path').value = '';
+  document.getElementById('setup-skip-template').checked = false;
+  document.getElementById('setup-template-preset').value = ORGANIZER_DEFAULT_TEMPLATE;
+
+  const editorEl = document.getElementById('setup-template-editor');
+  _orgBuildTokenChips('setup-token-chips', 'setup-template-editor', 'setup-template-preview');
+  _orgInitEditor(editorEl, (val) => {
+    _orgRenderTemplatePreview(val, 'setup-template-preview');
+    _orgRefreshChipStates('setup-token-chips', 'setup-template-editor');
+  });
+  _orgEditorSetValue(editorEl, ORGANIZER_DEFAULT_TEMPLATE);
+  _orgRenderTemplatePreview(ORGANIZER_DEFAULT_TEMPLATE, 'setup-template-preview');
+  _orgRefreshChipStates('setup-token-chips', 'setup-template-editor');
+
+  document.getElementById('library-setup-modal').style.display = 'flex';
+}
+
+function closeLibrarySetup(force) {
+  document.getElementById('library-setup-modal').style.display = 'none';
+}
+
+function _setupGoToStep(n) {
+  _setupStep = n;
+  for (let i = 1; i <= 3; i++) {
+    const el = document.getElementById(`setup-step-${i}`);
+    if (el) el.style.display = i === n ? '' : 'none';
+  }
+  document.getElementById('setup-step-num').textContent = n;
+  const btnBack = document.getElementById('setup-btn-back');
+  const btnNext = document.getElementById('setup-btn-next');
+  const btnSkip = document.getElementById('setup-btn-skip');
+  btnBack.style.display = n > 1 && n < 3 ? '' : 'none';
+  if (n === 3) {
+    btnNext.style.display = 'none';
+    btnSkip.style.display = 'none';
+  } else {
+    btnNext.style.display = '';
+    btnSkip.style.display = '';
+    btnNext.textContent = n === 2 ? 'Start Scan' : 'Next';
+  }
+  const titles = ['Choose Your Music Folder', 'File Organisation', 'Scanning Library'];
+  document.getElementById('setup-modal-title').textContent = titles[n - 1] || 'Set Up Your Library';
+}
+
+async function libSetupNext() {
+  if (_setupStep === 1) {
+    const path = document.getElementById('setup-lib-path').value.trim();
+    if (!path) { toast('Please choose your music folder first'); return; }
+    await api('/settings', { method: 'PUT', body: { library_path: path } }).catch(() => {});
+    _setupGoToStep(2);
+    return;
+  }
+  if (_setupStep === 2) {
+    const skip = document.getElementById('setup-skip-template').checked;
+    if (!skip) {
+      const editorEl = document.getElementById('setup-template-editor');
+      const tpl = _orgEditorGetValue(editorEl).trim() || ORGANIZER_DEFAULT_TEMPLATE;
+      await api('/settings', { method: 'PUT', body: { default_organizer_template: tpl } }).catch(() => {});
+    }
+    await api('/settings', { method: 'PUT', body: { onboarding_completed: true } }).catch(() => {});
+    _setupGoToStep(3);
+    _libSetupStartScan();
+  }
+}
+
+function libSetupBack() {
+  if (_setupStep > 1) _setupGoToStep(_setupStep - 1);
+}
+
+async function _libSetupStartScan() {
+  document.getElementById('setup-scan-label').textContent = 'Scanning library…';
+  document.getElementById('setup-scan-count').textContent = '0';
+  await api('/library/scan', { method: 'POST' }).catch(() => {});
+  _libSetupPollScan();
+}
+
+function _libSetupPollScan() {
+  const timer = setInterval(async () => {
+    const s = await api('/library/scan/status').catch(() => null);
+    if (!s) return;
+    document.getElementById('setup-scan-count').textContent = s.added_tracks || s.progress || 0;
+    if (s.status === 'done' || s.status === 'error') {
+      clearInterval(timer);
+      document.getElementById('setup-scan-label').textContent = s.status === 'done'
+        ? `Done! Found ${s.added_tracks || 0} tracks.`
+        : 'Scan finished with errors.';
+      const bar = document.getElementById('setup-scan-bar');
+      if (bar) { bar.classList.remove('sw-bar--indeterminate'); bar.style.width = '100%'; }
+      const btnNext = document.getElementById('setup-btn-next');
+      btnNext.style.display = '';
+      btnNext.textContent = 'Done';
+      btnNext.onclick = () => { closeLibrarySetup(); location.reload(); };
+      document.getElementById('setup-btn-skip').style.display = 'none';
+      // Refresh library in UI
+      if (s.status === 'done') load_library_state();
+    }
+  }, 800);
+}
+
+function setupPresetChanged() {
+  const sel = document.getElementById('setup-template-preset');
+  if (!sel.value) return;
+  const editorEl = document.getElementById('setup-template-editor');
+  _orgEditorSetValue(editorEl, sel.value);
+  _orgRenderTemplatePreview(sel.value, 'setup-template-preview');
+  _orgRefreshChipStates('setup-token-chips', 'setup-template-editor');
+}
+
+// Kept for backward compat; editor onChange handles updates
+function setupTemplateInputChanged() {}
+
+function setupSkipTemplateChanged() {
+  const skip = document.getElementById('setup-skip-template').checked;
+  document.getElementById('setup-template-preset').disabled = skip;
+  document.getElementById('setup-template-input').disabled = skip;
+}
+
+// ── File Organisation Wizard (5-step) ────────────────────────────────────────
+
+function _esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function _basename(p) { return p ? p.split('/').pop() : ''; }
+
+const _ORG_FIELDS = {
+  album_artist: 'Album Artist', artist: 'Artist', album: 'Album',
+  title: 'Title', track: 'Track #', disc: 'Disc #', year: 'Year', genre: 'Genre'
+};
+const _ORG_SEPS = ['/', '—', '·', '_'];
+const _ORG_SEP_OUT = { '/': '/', '—': ' — ', '·': ' · ', '_': '_' };
+const _ORG_SAMPLE = {
+  album_artist: 'Linkin Park', artist: 'Linkin Park', album: 'Meteora',
+  title: 'Numb', track: 3, disc: 1, year: 2003, genre: 'Rock', from: '03 - Numb.flac'
+};
+
+let _orgWiz = {
+  step: 1, maxStep: 1, scope: 'import', libScope: 'all', libFolder: null,
+  sources: [], templates: [], activeId: null, conflict: 'keep_both',
+  filter: 'all', editorOpen: false, running: false, done: false,
+  previewData: null, pollTimer: null, _savedRange: null,
+};
+
+function _orgWizResolve(track, key) {
+  // Strip format suffixes like "track:02" → "track", "disc:1" → "disc"
+  const bare = key.replace(/:.*$/, '');
+  if (bare === 'track') {
+    const pad = key.match(/:0*(\d+)/);
+    const width = pad ? parseInt(pad[1], 10) : 2;
+    return track.track == null ? '' : String(track.track).padStart(width, '0');
+  }
+  if (bare === 'disc') return track.disc == null ? '' : String(track.disc);
+  return track[bare] == null ? '' : String(track[bare]);
+}
+function _orgWizBuildString(tokens, track) {
+  return tokens.map(t => {
+    if (t.type === 'field') return _orgWizResolve(track, t.val);
+    if (t.type === 'sep') return _ORG_SEP_OUT[t.val] || t.val;
+    return t.val;
+  }).join('');
+}
+function _orgWizSegments(tokens, track) {
+  return _orgWizBuildString(tokens, track).replace(/\/{2,}/g, '/').replace(/^\/+/, '').split('/').map(s => s.trim());
+}
+function _orgWizActiveTemplate() {
+  return _orgWiz.templates.find(t => t.id === _orgWiz.activeId) || _orgWiz.templates[0] || null;
+}
+function _orgWizActiveTokens() {
+  const t = _orgWizActiveTemplate(); return t ? (t.tokens || []) : [];
+}
+function _orgWizParseTemplate(str) {
+  if (!str) return [];
+  const tokens = []; const re = /\{([^}]+)\}/g; let last = 0, m;
+  while ((m = re.exec(str)) !== null) {
+    if (m.index > last) tokens.push({ type: 'text', val: str.slice(last, m.index) });
+    tokens.push({ type: 'field', val: m[1] });
+    last = re.lastIndex;
+  }
+  if (last < str.length) tokens.push({ type: 'text', val: str.slice(last) });
+  return tokens;
+}
+function _orgWizTokensToStr(tokens) {
+  return tokens.map(t => t.type === 'field' ? `{${t.val}}` : t.val).join('');
+}
+
+async function loadOrganizerView() {
+  showViewEl('organizer');
+  setActiveNav('settings');
+
+  _orgWiz.step = 1; _orgWiz.maxStep = 1; _orgWiz.scope = 'import'; _orgWiz.libScope = 'all';
+  _orgWiz.sources = []; _orgWiz.previewData = null; _orgWiz.filter = 'all';
+  _orgWiz.editorOpen = false; _orgWiz.running = false; _orgWiz.done = false;
+  if (_orgWiz.pollTimer) { clearInterval(_orgWiz.pollTimer); _orgWiz.pollTimer = null; }
+
+  const saved = await api('/organizer/templates').catch(() => []);
+  _orgWiz.templates = saved.map(t => ({
+    id: t.id, name: t.name, isDefault: t.is_default,
+    tokens: _orgWizParseTemplate(t.template),
+  }));
+  if (!_orgWiz.templates.length) {
+    _orgWiz.templates = [{ id: 'default', name: 'Artist › Album › Track', isDefault: true, tokens: _orgWizParseTemplate(ORGANIZER_DEFAULT_TEMPLATE) }];
+  }
+  _orgWiz.activeId = _orgWiz.templates[0].id;
+
+  // Wire scope tiles (Step 1)
+  document.querySelectorAll('.orgw-scope-tile').forEach(tile => {
+    tile.addEventListener('click', () => _orgWizSelectScope(tile.dataset.scope));
+  });
+  // Wire library scope opts (Step 2)
+  document.querySelectorAll('.orgw-scope-opt').forEach(opt => {
+    opt.addEventListener('click', () => _orgWizSelectLibScope(opt.dataset.libscope));
+  });
+  // Wire conflict menu
+  const conflictPill = document.getElementById('orgw-conflict-pill');
+  const conflictMenu = document.getElementById('orgw-conflict-menu');
+  if (conflictPill) conflictPill.addEventListener('click', e => { e.stopPropagation(); conflictMenu.classList.toggle('open'); });
+  document.querySelectorAll('#orgw-conflict-menu button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _orgWiz.conflict = btn.dataset.policy;
+      const lbl = document.getElementById('orgw-conflict-label');
+      if (lbl) lbl.textContent = btn.textContent;
+      conflictMenu.classList.remove('open');
+      if (_orgWiz.previewData) _orgWizRenderPreviewBody();
+      _orgWizSyncFooter();
+    });
+  });
+  document.addEventListener('click', () => { if (conflictMenu) conflictMenu.classList.remove('open'); });
+  // Wire stepper clicks
+  document.querySelectorAll('#orgw-stepper .orgw-snode').forEach(node => {
+    node.addEventListener('click', () => {
+      const n = +node.dataset.go;
+      if (n <= _orgWiz.maxStep && !_orgWiz.running && n !== _orgWiz.step) _orgWizGoStep(n);
+    });
+  });
+  // Library total count
+  api('/library/status').then(s => {
+    const el = document.getElementById('orgw-lib-total-stat');
+    if (el && s && s.total_tracks) el.textContent = s.total_tracks + ' tracks';
+  }).catch(() => {});
+
+  _orgWizGoStep(1);
+  _orgWizRenderRail();
+  _orgWizRenderLivePreview();
+}
+
+function showOrganizerTab(tab) { /* no-op in wizard mode */ }
+
+function orgPageBack() {
+  if (_orgWiz.pollTimer) { clearInterval(_orgWiz.pollTimer); _orgWiz.pollTimer = null; }
+  showView('settings');
+}
+
+// ── Stepper / footer sync ─────────────────────────────────────────────────────
+
+function _orgWizGoStep(n) {
+  if (_orgWiz.running) return;
+  if (n > _orgWiz.maxStep) n = _orgWiz.maxStep;
+  _orgWiz.step = n;
+
+  document.querySelectorAll('.orgw-step').forEach(p => p.classList.toggle('active', +p.dataset.step === n));
+  _orgWizSyncStepper();
+
+  const slab2 = document.getElementById('orgw-slab2');
+  if (slab2) slab2.textContent = _orgWiz.scope === 'import' ? 'Source' : 'Scope';
+  const stepCount = document.getElementById('orgw-step-count');
+  if (stepCount) stepCount.textContent = `Step ${n} of 5`;
+
+  if (n === 2) _orgWizSyncStep2();
+  if (n === 3) { _orgWizRenderRail(); _orgWizRenderLivePreview(); _orgWizRenderPalette(); }
+  if (n === 4 && _orgWiz.previewData) _orgWizRenderPreviewBody();
+  if (n === 5 && !_orgWiz.done) _orgWizStartRun();
+
+  _orgWizSyncFooter();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function _orgWizSyncStepper() {
+  document.querySelectorAll('#orgw-stepper .orgw-snode').forEach(node => {
+    const i = +node.dataset.go;
+    node.classList.toggle('active', i === _orgWiz.step);
+    node.classList.toggle('done', i < _orgWiz.step || (i <= _orgWiz.maxStep && i !== _orgWiz.step));
+    node.classList.toggle('clickable', i <= _orgWiz.maxStep && !_orgWiz.running && i !== _orgWiz.step);
+  });
+  document.querySelectorAll('#orgw-stepper .orgw-sconn').forEach((c, idx) => {
+    c.classList.toggle('filled', (idx + 1) < _orgWiz.step);
+  });
+}
+
+function _orgWizSyncStep2() {
+  const isImport = _orgWiz.scope === 'import';
+  document.getElementById('orgw-import-panel').style.display = isImport ? '' : 'none';
+  document.getElementById('orgw-library-panel').style.display = isImport ? 'none' : '';
+  const t1 = document.getElementById('orgw-s2-title'), t2 = document.getElementById('orgw-s2-sub');
+  if (t1) t1.textContent = isImport ? 'Select source files' : 'Select scope to organise';
+  if (t2) t2.textContent = isImport
+    ? 'Choose the files or folder to bring into your library.'
+    : 'Pick the tracks you want re-filed. Files already matching the structure stay put.';
+  if (isImport) _orgWizRenderStaged();
+}
+
+function _orgWizSyncFooter() {
+  const foot = document.getElementById('orgw-foot');
+  const backBtn = document.getElementById('orgw-back-btn');
+  const nextBtn = document.getElementById('orgw-next-btn');
+  const nextLabel = document.getElementById('orgw-next-label');
+  const note = document.getElementById('orgw-foot-note');
+
+  if (foot) foot.style.display = _orgWiz.step === 5 ? 'none' : '';
+  if (_orgWiz.step === 5) return;
+  if (backBtn) backBtn.style.visibility = _orgWiz.step === 1 ? 'hidden' : 'visible';
+  if (nextBtn) nextBtn.disabled = false;
+  if (note) note.textContent = '';
+
+  const n = _orgWiz.step;
+  if (n === 1) {
+    if (nextLabel) nextLabel.textContent = 'Continue';
+  } else if (n === 2) {
+    if (nextLabel) nextLabel.textContent = 'Continue';
+    if (note) {
+      note.textContent = _orgWiz.scope === 'import'
+        ? `${_orgWiz.sources.length} file${_orgWiz.sources.length !== 1 ? 's' : ''} ready to import`
+        : (_orgWiz.libScope === 'all' ? 'Whole library' : 'Selected folder') + ' in scope';
+    }
+  } else if (n === 3) {
+    if (nextLabel) nextLabel.textContent = 'Review changes';
+    const t = _orgWizActiveTemplate();
+    if (note && t) note.textContent = `Structure: "${t.name}"`;
+  } else if (n === 4) {
+    const data = _orgWiz.previewData;
+    if (!data) { if (nextLabel) nextLabel.textContent = 'Apply changes'; return; }
+    const s = data.summary || {};
+    const moves = s.moves || 0, conflicts = s.conflicts || 0, warnings = s.missing_metadata || 0;
+    const total = moves + conflicts;
+    if (nextLabel) nextLabel.textContent = _orgWiz.scope === 'import' ? `Import ${total} files` : `Apply ${total} changes`;
+    if (warnings > 0) {
+      if (nextBtn) nextBtn.disabled = true;
+      if (note) note.textContent = `Fix ${warnings} warning${warnings !== 1 ? 's' : ''} before applying`;
+    } else if (total === 0) {
+      if (nextBtn) nextBtn.disabled = true;
+      if (note) note.textContent = 'Everything already matches — nothing to apply';
+    } else {
+      const map = { keep_both: 'Keep both (add suffix)', skip: 'Skip existing', overwrite: 'Overwrite existing' };
+      if (note) note.textContent = `Conflicts resolved by "${map[_orgWiz.conflict] || 'Keep both'}"`;
+    }
+  }
+}
+
+// ── Wizard navigation ─────────────────────────────────────────────────────────
+
+function orgWizBack() {
+  if (_orgWiz.step > 1 && !_orgWiz.running) _orgWizGoStep(_orgWiz.step - 1);
+}
+
+async function orgWizNext() {
+  const n = _orgWiz.step;
+  if (n === 3) {
+    await _orgWizLoadPreview();
+  } else if (n === 4) {
+    _orgWiz.done = false;
+    if (_orgWiz.maxStep < 5) _orgWiz.maxStep = 5;
+    _orgWizGoStep(5);
+  } else {
+    if (_orgWiz.maxStep < n + 1) _orgWiz.maxStep = n + 1;
+    _orgWizGoStep(n + 1);
+  }
+}
+
+// ── Scope selection ───────────────────────────────────────────────────────────
+
+function _orgWizSelectScope(scope) {
+  _orgWiz.scope = scope;
+  document.querySelectorAll('.orgw-scope-tile').forEach(t => t.classList.toggle('active', t.dataset.scope === scope));
+  const slab2 = document.getElementById('orgw-slab2');
+  if (slab2) slab2.textContent = scope === 'import' ? 'Source' : 'Scope';
+  _orgWizSyncFooter();
+}
+
+function _orgWizSelectLibScope(ls) {
+  _orgWiz.libScope = ls;
+  document.querySelectorAll('.orgw-scope-opt').forEach(o => o.classList.toggle('active', o.dataset.libscope === ls));
+  _orgWizSyncFooter();
+}
+
+// ── Import sources ────────────────────────────────────────────────────────────
+
+/** Show an inline text-input row when the native picker isn't available (dev mode). */
+function _orgWizShowPathFallback(type, onSubmit) {
+  const containerId = 'orgw-path-fallback';
+  // Dismiss any existing fallback first
+  document.getElementById(containerId)?.remove();
+
+  const isFolder = type === 'folder';
+  const placeholder = isFolder
+    ? '/Volumes/Storage/Music/Unsorted'
+    : '/path/to/track.flac, /path/to/other.flac';
+  const hint = isFolder
+    ? 'Paste or type a folder path and press Enter'
+    : 'Paste one or more file paths separated by commas, then press Enter';
+
+  const row = document.createElement('div');
+  row.id = containerId;
+  row.className = 'orgw-path-fallback';
+  row.innerHTML = `
+    <div class="orgw-pf-label">${hint}</div>
+    <div class="orgw-pf-row">
+      <input class="orgw-pf-input" id="orgw-pf-input" type="text" placeholder="${placeholder}" autocomplete="off" spellcheck="false">
+      <button class="orgw-btn orgw-btn-xs orgw-pf-add" onclick="App._orgWizFallbackSubmit('${type}')">Add</button>
+      <button class="orgw-btn orgw-btn-xs orgw-pf-cancel" onclick="document.getElementById('orgw-path-fallback')?.remove()">Cancel</button>
+    </div>`;
+
+  const zone = document.querySelector('#orgw-import-panel .orgw-src-zone');
+  if (zone) zone.after(row);
+  else document.getElementById('orgw-staged-list')?.before(row);
+
+  requestAnimationFrame(() => row.querySelector('input')?.focus());
+
+  row.querySelector('input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); App._orgWizFallbackSubmit(type); }
+    if (e.key === 'Escape') { e.preventDefault(); row.remove(); }
+  });
+}
+
+function _orgWizFallbackSubmit(type) {
+  const input = document.getElementById('orgw-pf-input');
+  if (!input) return;
+  const raw = input.value.trim();
+  if (!raw) return;
+
+  if (type === 'folder') {
+    const p = raw.replace(/\/$/, '');
+    if (!_orgWiz.sources.find(s => s.path === p))
+      _orgWiz.sources.push({ type: 'folder', path: p, label: p.split('/').pop() + '/' });
+  } else {
+    // comma-separated file paths
+    raw.split(',').map(s => s.trim()).filter(Boolean).forEach(p => {
+      if (!_orgWiz.sources.find(s => s.path === p))
+        _orgWiz.sources.push({ type: 'file', path: p, label: p.split('/').pop() });
+    });
+  }
+
+  document.getElementById('orgw-path-fallback')?.remove();
+  _orgWizRenderStaged(); _orgWizSyncFooter();
+}
+
+async function orgAddFiles() {
+  try {
+    const res = await api('/browse/files', { method: 'POST' });
+    for (const p of (res.paths || [])) {
+      if (!_orgWiz.sources.find(s => s.path === p))
+        _orgWiz.sources.push({ type: 'file', path: p, label: p.split('/').pop() });
+    }
+    _orgWizRenderStaged(); _orgWizSyncFooter();
+  } catch (e) { toast(e.message || 'Could not open file picker', 'error'); }
+}
+
+async function orgAddFolder() {
+  try {
+    const res = await api('/browse/folder', { method: 'POST' });
+    if (!res || !res.path) return;
+    if (!_orgWiz.sources.find(s => s.path === res.path))
+      _orgWiz.sources.push({ type: 'folder', path: res.path, label: res.path.split('/').pop() + '/' });
+    _orgWizRenderStaged(); _orgWizSyncFooter();
+  } catch (e) { toast(e.message || 'Could not open folder picker', 'error'); }
+}
+
+function orgRemoveSource(idx) {
+  _orgWiz.sources.splice(idx, 1);
+  _orgWizRenderStaged(); _orgWizSyncFooter();
+}
+
+function orgClearSources() { _orgWiz.sources = []; _orgWizRenderStaged(); _orgWizSyncFooter(); }
+
+async function orgWizChooseFolder() {
+  try {
+    const res = await api('/browse/folder', { method: 'POST' });
+    if (!res || !res.path) return;
+    _orgWiz.libScope = 'unsorted'; _orgWiz.libFolder = res.path;
+    document.querySelectorAll('.orgw-scope-opt').forEach(o => o.classList.toggle('active', o.dataset.libscope === 'unsorted'));
+    const stat = document.getElementById('orgw-folder-stat');
+    if (stat) stat.textContent = res.path.split('/').pop() + '/';
+    _orgWizSyncFooter();
+  } catch (e) { toast(e.message || 'Could not open folder picker', 'error'); }
+}
+
+function _orgWizShowLibFolderFallback() {
+  const containerId = 'orgw-lib-folder-fallback';
+  document.getElementById(containerId)?.remove();
+
+  const row = document.createElement('div');
+  row.id = containerId;
+  row.className = 'orgw-path-fallback';
+  row.innerHTML = `
+    <div class="orgw-pf-label">Paste or type the folder path and press Enter</div>
+    <div class="orgw-pf-row">
+      <input class="orgw-pf-input" id="orgw-lf-input" type="text" placeholder="/Volumes/Storage/Music/Unsorted" autocomplete="off" spellcheck="false">
+      <button class="orgw-btn orgw-btn-xs orgw-pf-add" onclick="App._orgWizLibFolderSubmit()">Set</button>
+      <button class="orgw-btn orgw-btn-xs orgw-pf-cancel" onclick="document.getElementById('orgw-lib-folder-fallback')?.remove()">Cancel</button>
+    </div>`;
+
+  const btn = document.querySelector('#orgw-library-panel button[onclick*="orgWizChooseFolder"]');
+  if (btn) btn.closest('.orgw-scope-opt, .orgw-lib-folder-row, div')?.after(row);
+  else document.getElementById('orgw-folder-stat')?.closest('div')?.after(row);
+
+  requestAnimationFrame(() => row.querySelector('input')?.focus());
+  row.querySelector('input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); App._orgWizLibFolderSubmit(); }
+    if (e.key === 'Escape') { e.preventDefault(); row.remove(); }
+  });
+}
+
+function _orgWizLibFolderSubmit() {
+  const input = document.getElementById('orgw-lf-input');
+  if (!input) return;
+  const p = input.value.trim().replace(/\/$/, '');
+  if (!p) return;
+  _orgWiz.libScope = 'unsorted'; _orgWiz.libFolder = p;
+  document.querySelectorAll('.orgw-scope-opt').forEach(o => o.classList.toggle('active', o.dataset.libscope === 'unsorted'));
+  const stat = document.getElementById('orgw-folder-stat');
+  if (stat) stat.textContent = p.split('/').pop() + '/';
+  document.getElementById('orgw-lib-folder-fallback')?.remove();
+  _orgWizSyncFooter();
+}
+
+function _orgWizRenderStaged() {
+  const el = document.getElementById('orgw-staged-list');
+  if (!el) return;
+  if (!_orgWiz.sources.length) { el.innerHTML = ''; return; }
+  const FSVG = `<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 1.5h5l3 3V12a.5.5 0 01-.5.5h-7A.5.5 0 013 12z"/><path d="M8 1.5v3h3"/></svg>`;
+  const DSVG = `<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1.5 4.5V11a1 1 0 001 1h9a1 1 0 001-1V5a1 1 0 00-1-1H7L5.5 2.5h-3a1 1 0 00-1 1z"/></svg>`;
+  el.innerHTML = `<div class="orgw-sl-head"><span class="orgw-sl-dot"></span><span>${_orgWiz.sources.length} file${_orgWiz.sources.length !== 1 ? 's' : ''} ready</span></div>` +
+    _orgWiz.sources.map((s, i) =>
+      `<div class="orgw-staged-row"><span class="orgw-staged-fico">${s.type === 'folder' ? DSVG : FSVG}</span><span class="orgw-staged-nm" title="${_esc(s.path)}">${_esc(s.label)}</span><button class="orgw-staged-rm" onclick="App.orgRemoveSource(${i})">&#x2715;</button></div>`
+    ).join('');
+}
+
+// ── STEP 3: template rail + pattern editor ────────────────────────────────────
+
+function _orgWizParseTemplate(str) {
+  if (!str) return [];
+  const tokens = []; const re = /\{([^}]+)\}/g; let last = 0, m;
+  while ((m = re.exec(str)) !== null) {
+    if (m.index > last) tokens.push({ type: 'text', val: str.slice(last, m.index) });
+    tokens.push({ type: 'field', val: m[1] }); last = re.lastIndex;
+  }
+  if (last < str.length) tokens.push({ type: 'text', val: str.slice(last) });
+  return tokens;
+}
+
+function _orgWizTokensToStr(tokens) {
+  return tokens.map(t => t.type === 'field' ? `{${t.val}}` : t.val).join('');
+}
+
+function _orgWizRenderRail() {
+  const rail = document.getElementById('orgw-tmpl-rail');
+  if (!rail) return;
+  rail.innerHTML = '';
+  _orgWiz.templates.forEach(t => {
+    const chip = document.createElement('button');
+    chip.className = 'orgw-tmpl-chip' + (t.id === _orgWiz.activeId ? ' active' : '');
+    chip.innerHTML = `<span>${_esc(t.name)}</span><span class="orgw-chip-x"><svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></span>`;
+    chip.querySelector('.orgw-chip-x').addEventListener('mousedown', e => {
+      e.preventDefault(); e.stopPropagation();
+      if (_orgWiz.templates.length <= 1) return;
+      _orgWiz.templates = _orgWiz.templates.filter(x => x.id !== t.id);
+      if (_orgWiz.activeId === t.id) { _orgWiz.activeId = _orgWiz.templates[0].id; _orgWiz.editorOpen = false; }
+      _orgWizRenderStructure();
+    });
+    chip.addEventListener('click', () => { _orgWiz.activeId = t.id; _orgWiz.editorOpen = false; _orgWizRenderStructure(); });
+    rail.appendChild(chip);
+  });
+  const add = document.createElement('button');
+  add.className = 'orgw-tmpl-chip orgw-tmpl-chip-add';
+  add.innerHTML = '<span class="orgw-plus">+</span> New structure';
+  add.addEventListener('click', () => {
+    const id = 'local_' + Date.now();
+    _orgWiz.templates.push({ id, name: 'New structure', isDefault: false, tokens: _orgWizParseTemplate(ORGANIZER_DEFAULT_TEMPLATE) });
+    _orgWiz.activeId = id; _orgWiz.editorOpen = true;
+    _orgWizRenderStructure();
+    const tnameEl = document.getElementById('orgw-tname');
+    if (tnameEl) { tnameEl.focus(); tnameEl.select(); }
+  });
+  rail.appendChild(add);
+}
+
+function _orgWizRenderStructure() {
+  _orgWizRenderRail();
+  const t = _orgWizActiveTemplate(); if (!t) return;
+  const tnameEl = document.getElementById('orgw-tname');
+  if (tnameEl) tnameEl.value = t.name;
+  _orgWizRenderAssembled();
+  _orgWizRenderPalette();
+  _orgWizRenderLivePreview();
+  _orgWizApplyEditorVisibility();
+  _orgWizSyncFooter();
+}
+
+function _orgWizApplyEditorVisibility() {
+  const ed = document.getElementById('orgw-structure-editor');
+  const btn = document.getElementById('orgw-edit-structure-btn');
+  if (ed) ed.style.display = _orgWiz.editorOpen ? '' : 'none';
+  if (btn) btn.textContent = _orgWiz.editorOpen ? 'Hide editor' : 'Edit structure';
+}
+
+function orgWizToggleEditor() {
+  _orgWiz.editorOpen = !_orgWiz.editorOpen;
+  _orgWizApplyEditorVisibility();
+  if (_orgWiz.editorOpen) _orgWizRenderAssembled();
+}
+
+function _orgWizPatternEl() { return document.getElementById('orgw-pattern-edit'); }
+
+function _orgWizMakeChip(key) {
+  const chip = document.createElement('span');
+  chip.className = 'orgw-ftag token-tag';
+  chip.setAttribute('contenteditable', 'false');
+  chip.dataset.field = key; chip.dataset.token = key;
+  chip.innerHTML = `<span class="orgw-ft-name">${_ORG_FIELDS[key] || key}</span><span class="orgw-ft-x"><svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></span>`;
+  chip.querySelector('.orgw-ft-x').addEventListener('mousedown', e => {
+    e.preventDefault(); e.stopPropagation();
+    chip.remove(); _orgWizSerialize(); _orgWizRenderLivePreview(); _orgWizSyncFooter();
+    _orgWizPatternEl() && _orgWizPatternEl().focus();
+  });
+  return chip;
+}
+
+function _orgWizRenderAssembled() {
+  const box = document.getElementById('orgw-assembled');
+  if (!box) return;
+  const pe = document.createElement('div');
+  pe.id = 'orgw-pattern-edit'; pe.className = 'orgw-pattern-edit';
+  pe.setAttribute('contenteditable', 'true'); pe.setAttribute('spellcheck', 'false');
+  pe.dataset.placeholder = 'Type text or add a field below…';
+  _orgWizActiveTokens().forEach(t => {
+    if (t.type === 'field') pe.appendChild(_orgWizMakeChip(t.val));
+    else if (t.type === 'sep') pe.appendChild(document.createTextNode(_ORG_SEP_OUT[t.val] || t.val));
+    else pe.appendChild(document.createTextNode(t.val));
+  });
+  pe.addEventListener('input', () => { _orgWizSerialize(); _orgWizRenderLivePreview(); _orgWizSyncFooter(); });
+  pe.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+  pe.addEventListener('keyup', _orgWizSaveRange);
+  pe.addEventListener('mouseup', _orgWizSaveRange);
+  pe.addEventListener('focus', _orgWizSaveRange);
+  box.innerHTML = '';
+  box.appendChild(pe);
+  const ext = document.createElement('span'); ext.className = 'orgw-ext'; ext.textContent = '.flac';
+  box.appendChild(ext);
+  _orgWizSerialize();
+}
+
+function _orgWizSaveRange() {
+  const sel = window.getSelection(); const pe = _orgWizPatternEl();
+  if (sel && sel.rangeCount && pe && pe.contains(sel.anchorNode))
+    _orgWiz._savedRange = sel.getRangeAt(0).cloneRange();
+}
+
+function _orgWizSerialize() {
+  const pe = _orgWizPatternEl(); if (!pe) return;
+  const toks = [];
+  function pushText(txt) {
+    if (!txt) return;
+    const last = toks[toks.length - 1];
+    if (last && last.type === 'text') last.val += txt; else toks.push({ type: 'text', val: txt });
+  }
+  pe.childNodes.forEach(node => {
+    if (node.nodeType === 3) pushText(node.textContent);
+    else if (node.nodeType === 1) {
+      if (node.dataset && node.dataset.field) toks.push({ type: 'field', val: node.dataset.field });
+      else if (node.tagName !== 'BR') pushText(node.textContent);
+    }
+  });
+  const t = _orgWizActiveTemplate(); if (t) t.tokens = toks;
+}
+
+function _orgWizInsertNode(node) {
+  const pe = _orgWizPatternEl(); if (!pe) return;
+  pe.focus();
+  const sel = window.getSelection(); let range;
+  if (_orgWiz._savedRange && pe.contains(_orgWiz._savedRange.startContainer)) range = _orgWiz._savedRange;
+  else if (sel.rangeCount && pe.contains(sel.anchorNode)) range = sel.getRangeAt(0);
+  if (range) {
+    range.deleteContents(); range.insertNode(node);
+    range.setStartAfter(node); range.collapse(true);
+    sel.removeAllRanges(); sel.addRange(range);
+    _orgWiz._savedRange = range.cloneRange();
+  } else {
+    pe.appendChild(node);
+    const r = document.createRange(); r.setStartAfter(node); r.collapse(true);
+    sel.removeAllRanges(); sel.addRange(r); _orgWiz._savedRange = r.cloneRange();
+  }
+  _orgWizSerialize(); _orgWizRenderLivePreview(); _orgWizSyncFooter();
+}
+
+function _orgWizRenderPalette() {
+  const fieldRow = document.getElementById('orgw-palette-fields');
+  const sepRow = document.getElementById('orgw-palette-seps');
+  if (!fieldRow || !sepRow) return;
+  fieldRow.innerHTML = '<span class="orgw-palette-lab orgw-mode-lab">Insert tag</span>';
+  Object.entries(_ORG_FIELDS).forEach(([key, label]) => {
+    const b = document.createElement('button');
+    b.className = 'orgw-pill-add'; b.innerHTML = `<span class="orgw-plus">+</span> ${label}`;
+    b.addEventListener('mousedown', e => e.preventDefault());
+    b.addEventListener('click', () => _orgWizInsertNode(_orgWizMakeChip(key)));
+    fieldRow.appendChild(b);
+  });
+  sepRow.innerHTML = '<span class="orgw-palette-lab orgw-mode-lab">Insert separator</span>';
+  _ORG_SEPS.forEach(s => {
+    const b = document.createElement('button');
+    b.className = 'orgw-pill-add orgw-pill-sep'; b.textContent = s;
+    b.addEventListener('mousedown', e => e.preventDefault());
+    b.addEventListener('click', () => _orgWizInsertNode(document.createTextNode(_ORG_SEP_OUT[s] || s)));
+    sepRow.appendChild(b);
+  });
+}
+
+async function orgWizSaveStructure() {
+  const t = _orgWizActiveTemplate(); if (!t) return;
+  const nameEl = document.getElementById('orgw-tname');
+  if (nameEl) t.name = nameEl.value.trim() || t.name;
+  if (t.id && !t.id.startsWith('local_')) {
+    await api(`/organizer/templates/${t.id}`, { method: 'PUT', body: { name: t.name, template: _orgWizTokensToStr(t.tokens) } }).catch(() => {});
+  } else {
+    try {
+      const created = await api('/organizer/templates', { method: 'POST', body: { name: t.name, template: _orgWizTokensToStr(t.tokens) } });
+      t.id = created.id || t.id;
+    } catch (e) { toast('Could not save template'); }
+  }
+  _orgWiz.editorOpen = false; _orgWizRenderStructure(); toast('Structure saved');
+}
+
+// ── Live path preview (Step 3) ────────────────────────────────────────────────
+
+function _orgWizColourPath(segs) {
+  return segs.map((s, i) => i < segs.length - 1
+    ? `<span class="orgw-seg-folder">${_esc(s || '∅')}</span><span class="orgw-seg-slash">/</span>`
+    : `<span class="orgw-seg-file">${_esc(s || '∅')}</span><span class="orgw-seg-ext">.flac</span>`
+  ).join('');
+}
+
+function _orgWizRenderLivePreview() {
+  const tokens = _orgWizActiveTokens();
+  const segs = _orgWizSegments(tokens, _ORG_SAMPLE);
+  const pathEl = document.getElementById('orgw-po-path');
+  if (pathEl) pathEl.innerHTML = _orgWizColourPath(segs);
+  const treeEl = document.getElementById('orgw-po-tree');
+  if (!treeEl) return;
+  treeEl.innerHTML = '';
+  const FSICO = `<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 1.5h5l3 3V12a.5.5 0 01-.5.5h-7A.5.5 0 013 12z"/><path d="M8 1.5v3h3"/></svg>`;
+  const FDICO = `<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1.5 4.5V11a1 1 0 001 1h9a1 1 0 001-1V5a1 1 0 00-1-1H7L5.5 2.5h-3a1 1 0 00-1 1z"/></svg>`;
+  const folders = segs.slice(0, -1), file = segs[segs.length - 1];
+  folders.forEach((f, i) => {
+    const row = document.createElement('div'); row.className = 'orgw-t-row';
+    const ind = i === 0 ? '' : `<span class="orgw-t-ind">${'  '.repeat(i - 1)}└─</span>`;
+    row.innerHTML = `${ind}<span class="orgw-t-ico">${FDICO}</span><span class="orgw-t-name">${_esc(f || '∅')}</span>`;
+    treeEl.appendChild(row);
+  });
+  const leaf = document.createElement('div'); leaf.className = 'orgw-t-row orgw-t-leaf';
+  leaf.innerHTML = `<span class="orgw-t-ind">${'  '.repeat(Math.max(0, folders.length - 1))}└─</span><span class="orgw-t-ico">${FSICO}</span><span class="orgw-t-name">${_esc((file || '∅') + '.flac')}</span>`;
+  treeEl.appendChild(leaf);
+}
+
+// ── STEP 4: preview/diff ──────────────────────────────────────────────────────
+
+async function _orgWizLoadPreview() {
+  const nextBtn = document.getElementById('orgw-next-btn');
+  if (nextBtn) { nextBtn.disabled = true; nextBtn.querySelector('#orgw-next-label') && (document.getElementById('orgw-next-label').textContent = 'Loading…'); }
+  const t = _orgWizActiveTemplate();
+  const tplStr = t ? _orgWizTokensToStr(t.tokens) : ORGANIZER_DEFAULT_TEMPLATE;
+  try {
+    let data;
+    if (_orgWiz.scope === 'import') {
+      if (!_orgWiz.sources.length) { toast('Add at least one source file or folder'); if (nextBtn) nextBtn.disabled = false; return; }
+      data = await api('/organizer/import/scan', { method: 'POST', body: { template: tplStr, sources: _orgWiz.sources.map(s => ({ type: s.type, path: s.path })) } });
+    } else {
+      data = await api('/organizer/preview', { method: 'POST', body: { template: tplStr, mode: _orgWiz.libScope === 'unsorted' ? 'unsorted' : 'reorganize', folder: _orgWiz.libFolder } });
+    }
+    _orgWiz.previewData = data;
+    if (_orgWiz.maxStep < 4) _orgWiz.maxStep = 4;
+    _orgWizGoStep(4);
+  } catch (e) {
+    toast('Preview failed: ' + (e.message || 'unknown error'));
+    if (nextBtn) { nextBtn.disabled = false; const lbl = document.getElementById('orgw-next-label'); if (lbl) lbl.textContent = 'Review changes'; }
+  }
+}
+
+function _orgWizRenderPreviewBody() {
+  const data = _orgWiz.previewData; const body = document.getElementById('orgw-preview-body');
+  if (!data || !body) return;
+  const s = data.summary || {};
+  const moves = s.moves || 0, conflicts = s.conflicts || 0, warnings = s.missing_metadata || 0, unchanged = s.same_path || 0, total = s.total || 0;
+  const t = _orgWizActiveTemplate();
+  const n = _orgWiz.scope === 'import' ? (data.entries || []).length : total;
+  const hintEl = document.getElementById('orgw-preview-hint');
+  if (hintEl) hintEl.textContent = _orgWiz.scope === 'import'
+    ? `Importing ${n} files with "${t ? t.name : 'selected structure'}". Nothing moves until you apply.`
+    : `Re-filing ${n} tracks with "${t ? t.name : 'selected structure'}". Nothing moves until you apply.`;
+
+  let html = '';
+  if (warnings > 0) {
+    html += `<div class="orgw-warn-banner"><span class="orgw-wb-glyph"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2L1.5 14h13L8 2z"/><path d="M8 6.5v3"/><circle cx="8" cy="11.5" r="0.6" fill="currentColor"/></svg></span><span class="orgw-wb-text"><span class="orgw-wb-t1">${warnings} track${warnings !== 1 ? 's have' : ' has'} a missing field</span><span class="orgw-wb-t2">They'd be filed into a folder with no name. <a class="orgw-wb-edit-link" href="#">Edit the structure</a> to fix this.</span></span><span class="orgw-wb-act"><button class="orgw-btn orgw-btn-xs orgw-btn-warn" id="orgw-qfix-btn">Edit structure</button></span></div>`;
+  }
+
+  html += `<div class="orgw-summary">
+    <span class="orgw-stat orgw-stat-move"><span class="orgw-stat-n">${moves}</span><span class="orgw-stat-l">${moves === 1 ? 'move' : 'moves'}</span></span>
+    <span class="orgw-stat-div"></span>
+    <span class="orgw-stat orgw-stat-conflict"><span class="orgw-stat-n">${conflicts}</span><span class="orgw-stat-l">${conflicts === 1 ? 'conflict' : 'conflicts'}</span></span>
+    <span class="orgw-stat-div"></span>
+    <span class="orgw-stat orgw-stat-warn"><span class="orgw-stat-n">${warnings}</span><span class="orgw-stat-l">${warnings === 1 ? 'warning' : 'warnings'}</span></span>
+    <span class="orgw-stat-div"></span>
+    <span class="orgw-stat"><span class="orgw-stat-n" style="color:var(--text-muted)">${unchanged}</span><span class="orgw-stat-l">unchanged</span></span>
+  </div>`;
+
+  const f = _orgWiz.filter;
+  html += `<div class="orgw-filters">
+    ${_orgWizFchip('all', 'All', total, f)}${_orgWizFchip('move', 'Moves', moves, f)}${_orgWizFchip('conflict', 'Conflicts', conflicts, f)}${_orgWizFchip('warn', 'Warnings', warnings, f)}${_orgWizFchip('ok', 'Unchanged', unchanged, f)}
+  </div>`;
+
+  const ARROW = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h9M8.5 4.5L12 8l-3.5 3.5"/></svg>`;
+  const ICOMOVE = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h9M8.5 4.5L12 8l-3.5 3.5"/></svg>`;
+  const ICOCHECK = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>`;
+  const ICOCONF = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3.5"/><circle cx="8" cy="11" r="0.6" fill="currentColor"/></svg>`;
+  const ICOWARN = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2L1.5 14h13L8 2z"/><path d="M8 6.5v3"/><circle cx="8" cy="11.5" r="0.6" fill="currentColor"/></svg>`;
+
+  const entries = data.entries || []; const CHUNK = 100;
+  html += `<div class="orgw-diff" id="orgw-diff-list">`;
+  let shown = 0;
+  for (const e of entries) {
+    const isWarn = e.warnings && e.warnings.length;
+    const kind = isWarn ? 'warn' : e.conflict ? 'conflict' : e.same_path ? 'ok' : 'move';
+    if (f !== 'all' && f !== kind) continue;
+    if (shown++ >= CHUNK) break;
+    const src = e.old_path || e.source_path || '', dst = e.new_path || '';
+    const srcName = src.split('/').pop();
+    let stHtml, badge = '';
+    if (kind === 'conflict') { stHtml = `<span class="orgw-st orgw-st-cf">${ICOCONF}</span>`; badge = `<span class="orgw-badge orgw-badge-cf">Exists</span>`; }
+    else if (kind === 'warn') { stHtml = `<span class="orgw-st orgw-st-wn">${ICOWARN}</span>`; badge = `<span class="orgw-badge orgw-badge-wn">No folder</span>`; }
+    else if (kind === 'ok') { stHtml = `<span class="orgw-st orgw-st-ok orgw-st-dim">${ICOCHECK}</span>`; }
+    else { stHtml = `<span class="orgw-st orgw-st-ok">${ICOMOVE}</span>`; }
+    const dstHtml = kind === 'ok' ? `<span class="orgw-to-same">Already matches structure</span>` : _orgWizColourDst(dst) + badge;
+    html += `<div class="orgw-diff-row">${stHtml}<span class="orgw-diff-from" title="${_esc(src)}">${_esc(srcName)}</span><span class="orgw-diff-arrow">${ARROW}</span><span class="orgw-diff-to">${dstHtml}</span></div>`;
+  }
+  html += `</div>`;
+  if (entries.length > CHUNK) html += `<div style="text-align:center;padding:12px 0;font-size:12px;color:var(--text-muted)">Showing first ${CHUNK} of ${entries.length} entries</div>`;
+  html += `<div class="orgw-diff-foot"><span class="orgw-df-left">${total} tracks &middot; ${moves} moving &middot; ${conflicts} conflicts &middot; ${unchanged} unchanged</span></div>`;
+
+  body.innerHTML = html;
+  body.querySelectorAll('.orgw-fchip').forEach(c => {
+    c.addEventListener('click', () => { _orgWiz.filter = c.dataset.filter; _orgWizRenderPreviewBody(); _orgWizSyncFooter(); });
+  });
+  const qfix = body.querySelector('#orgw-qfix-btn');
+  if (qfix) qfix.addEventListener('click', () => { _orgWiz.editorOpen = true; _orgWizGoStep(3); setTimeout(() => { const box = document.getElementById('orgw-assembled'); if (box) { box.classList.remove('orgw-pulse'); void box.offsetWidth; box.classList.add('orgw-pulse'); } }, 350); });
+  const editLink = body.querySelector('.orgw-wb-edit-link');
+  if (editLink) editLink.addEventListener('click', e => { e.preventDefault(); _orgWiz.editorOpen = true; _orgWizGoStep(3); });
+  _orgWizSyncFooter();
+}
+
+function _orgWizFchip(f, label, n, active) {
+  return `<button class="orgw-fchip${active === f ? ' active' : ''}" data-filter="${f}">${label} <span class="orgw-fchip-c">${n}</span></button>`;
+}
+
+function _orgWizColourDst(dst) {
+  if (!dst) return '';
+  const segs = dst.replace(/\.flac$/i, '').split('/');
+  return segs.map((s, i) => i < segs.length - 1
+    ? `<span class="orgw-to-d">${_esc(s)}</span><span class="orgw-to-s">/</span>`
+    : `<span class="orgw-to-f">${_esc(s)}</span><span class="orgw-to-s">.flac</span>`
+  ).join('');
+}
+
+function orgSetPreviewFilter(f) { _orgWiz.filter = f; if (_orgWiz.previewData) _orgWizRenderPreviewBody(); _orgWizSyncFooter(); }
+
+// ── STEP 5: apply ─────────────────────────────────────────────────────────────
+
+async function _orgWizStartRun() {
+  if (!_orgWiz.previewData) return;
+  const entries = _orgWiz.previewData.entries || [];
+  const plan = entries.filter(e => !e.same_path || _orgWiz.scope === 'import');
+  const s5title = document.getElementById('orgw-s5-title');
+  const runWrap = document.getElementById('orgw-run-wrap');
+  if (s5title) s5title.textContent = _orgWiz.scope === 'import' ? 'Importing files' : 'Applying changes';
+  if (!plan.length) { _orgWizRenderDone({ moved: 0, skipped: 0, errors: [] }); return; }
+  const t = _orgWizActiveTemplate();
+  const tplStr = t ? _orgWizTokensToStr(t.tokens) : ORGANIZER_DEFAULT_TEMPLATE;
+  if (runWrap) runWrap.innerHTML = `<div class="orgw-run-card"><div class="orgw-run-top"><svg class="orgw-run-spin" viewBox="0 0 44 44"><circle class="orgw-spin-trk" cx="22" cy="22" r="19"/><circle class="orgw-spin-arc" cx="22" cy="22" r="19"/></svg><div style="flex:1"><div class="orgw-rt-t1">${_orgWiz.scope === 'import' ? 'Importing & filing' : 'Re-filing tracks'}</div><div class="orgw-rt-t2" id="orgw-rt-sub">Starting…</div></div><div class="orgw-run-pct" id="orgw-run-pct">0%</div></div><div class="orgw-run-bar"><div class="orgw-run-fill" id="orgw-run-fill" style="width:0%"></div></div><div class="orgw-run-now" id="orgw-run-now"></div></div>`;
+  _orgWiz.running = true; _orgWizSyncStepper();
+  try {
+    const res = await api('/organizer/apply', { method: 'POST', body: { template: tplStr, conflict_policy: _orgWiz.conflict, mode: _orgWiz.scope === 'import' ? 'import' : (_orgWiz.libScope === 'unsorted' ? 'unsorted' : 'reorganize'), plan } });
+    _orgWiz.runId = res.run_id;
+    _orgWiz.pollTimer = setInterval(_orgWizPoll, 800);
+  } catch (e) {
+    _orgWiz.running = false; _orgWizSyncStepper(); _orgWizGoStep(4);
+    toast('Apply failed: ' + (e.message || 'unknown error'));
+  }
+}
+
+async function _orgWizPoll() {
+  const s = await api('/organizer/status').catch(() => null); if (!s) return;
+  const n = s.progress || 0, total = s.total || 1, pct = Math.round((n / total) * 100);
+  const fillEl = document.getElementById('orgw-run-fill');
+  const pctEl = document.getElementById('orgw-run-pct');
+  const subEl = document.getElementById('orgw-rt-sub');
+  const nowEl = document.getElementById('orgw-run-now');
+  if (fillEl) fillEl.style.width = pct + '%';
+  if (pctEl) pctEl.textContent = pct + '%';
+  if (subEl) subEl.textContent = `${n} of ${total} files`;
+  if (nowEl && s.current) nowEl.textContent = s.current;
+  if (s.status === 'done' || s.status === 'done_with_errors' || s.status === 'error') {
+    clearInterval(_orgWiz.pollTimer); _orgWiz.pollTimer = null;
+    _orgWiz.running = false; _orgWiz.done = true;
+    _orgWizSyncStepper(); _orgWizRenderDone(s);
+  }
+}
+
+function _orgWizRenderDone(s) {
+  const moved = s.moved || 0, skipped = s.skipped || 0, errCount = (s.errors || []).length;
+  const t = _orgWizActiveTemplate(), tName = t ? t.name : 'selected structure';
+  const verb = _orgWiz.scope === 'import' ? 'imported & filed' : 'filed';
+  const s5title = document.getElementById('orgw-s5-title');
+  const s5sub = document.getElementById('orgw-s5-sub');
+  const runWrap = document.getElementById('orgw-run-wrap');
+  if (s5title) s5title.textContent = 'All done';
+  if (s5sub) s5sub.textContent = 'Your changes have been applied. You can undo the entire run if something looks off.';
+  const CHECKSVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>`;
+  if (runWrap) runWrap.innerHTML = `<div class="orgw-applied"><span class="orgw-ap-glyph">${CHECKSVG}</span><div><div class="orgw-ap-t1">${moved} file${moved !== 1 ? 's' : ''} ${verb}</div><div class="orgw-ap-t2">Organised with "${_esc(tName)}"${errCount ? ` · ${errCount} error${errCount !== 1 ? 's' : ''}` : ''}.</div></div></div><div class="orgw-done-stats"><span class="orgw-stat orgw-stat-move"><span class="orgw-stat-n">${moved}</span><span class="orgw-stat-l">${moved === 1 ? 'file moved' : 'files moved'}</span></span>${skipped ? `<span class="orgw-stat-div"></span><span class="orgw-stat"><span class="orgw-stat-n" style="color:var(--text-muted)">${skipped}</span><span class="orgw-stat-l">skipped</span></span>` : ''}${errCount ? `<span class="orgw-stat-div"></span><span class="orgw-stat orgw-stat-conflict"><span class="orgw-stat-n">${errCount}</span><span class="orgw-stat-l">error${errCount !== 1 ? 's' : ''}</span></span>` : ''}</div><div class="orgw-done-actions"><button class="orgw-btn orgw-btn-primary orgw-btn-lg" id="orgw-done-library">View in library</button><button class="orgw-btn orgw-btn-lg" id="orgw-done-undo">Undo this run</button><button class="orgw-btn orgw-btn-ghost orgw-btn-lg" id="orgw-done-again">Organise more</button></div>`;
+  const libBtn = document.getElementById('orgw-done-library');
+  if (libBtn) libBtn.addEventListener('click', () => showView('artists'));
+  const undoBtn = document.getElementById('orgw-done-undo');
+  if (undoBtn) undoBtn.addEventListener('click', async () => {
+    if (!await _showConfirm({ title: 'Undo this run?', message: 'This will move all files back to their original locations.', okText: 'Undo', danger: false })) return;
+    try { const res = await api('/organizer/undo/rollback', { method: 'POST' }); toast(`Undo complete: ${res.restored} restored, ${res.errors} errors`); _orgWiz.done = false; _orgWizGoStep(4); } catch (e) { toast('Undo failed: ' + (e.message || 'error')); }
+  });
+  const againBtn = document.getElementById('orgw-done-again');
+  if (againBtn) againBtn.addEventListener('click', () => { _orgWiz.done = false; _orgWiz.filter = 'all'; _orgWizGoStep(1); });
+}
+
+// ── Compat stubs ──────────────────────────────────────────────────────────────
+
+function openOrganizerModal() { showView('organizer'); }
+function closeOrganizerModal() { orgPageBack(); }
+async function openOrganizerTemplateManager() { await showView('organizer'); }
+function closeOrganizerTemplateManager() { orgPageBack(); }
+function orgTemplateSelectChanged() {}
+function orgTemplateInputChanged() {}
+function orgTmplNew() {}
+function orgTmplCancelNew() {}
+function orgTmplPreviewChanged() {}
+function orgTmplSaveNew() {}
+async function orgTmplDelete(id) {
+  if (!await _showConfirm({ title: 'Delete structure?', message: 'This cannot be undone.', okText: 'Delete', danger: true })) return;
+  await api(`/organizer/templates/${id}`, { method: 'DELETE' }).catch(() => {});
+  _orgWiz.templates = _orgWiz.templates.filter(t => t.id !== id);
+  if (_orgWiz.activeId === id && _orgWiz.templates.length) _orgWiz.activeId = _orgWiz.templates[0].id;
+  _orgWizRenderRail();
+}
+async function orgTmplSetDefault(id) {
+  await api(`/organizer/templates/${id}`, { method: 'PUT', body: { set_default: true } }).catch(() => {});
+  const t = _orgWiz.templates.find(x => x.id === id);
+  if (t) await api('/settings', { method: 'PUT', body: { default_organizer_template: _orgWizTokensToStr(t.tokens) } }).catch(() => {});
+  toast('Default template updated');
+}
+async function orgRollback() {
+  if (!await _showConfirm({ title: 'Rollback Last Run?', message: 'This will move all files back to their original paths.', okText: 'Rollback', danger: false })) return;
+  try { const res = await api('/organizer/undo/rollback', { method: 'POST' }); toast(`Rollback complete: ${res.restored} restored, ${res.errors} errors`); } catch (e) { toast('Rollback failed: ' + (e.message || 'error')); }
+}
+function orgDismissUndo() {}
+async function _orgLoadActiveTemplateDisplay() {}
+
 const App = {
   toggleSidebar,
   showView,
@@ -17430,6 +18688,40 @@ const App = {
   browseFolder,
   exportBackup,
   importBackup,
+  // Library Setup Wizard
+  openLibrarySetup,
+  closeLibrarySetup,
+  libSetupNext,
+  libSetupBack,
+  setupPresetChanged,
+  setupTemplateInputChanged,
+  setupSkipTemplateChanged,
+  // Library Organizer Wizard
+  loadOrganizerView,
+  showOrganizerTab,
+  orgPageBack,
+  orgWizBack,
+  orgWizNext,
+  orgWizToggleEditor,
+  orgWizSaveStructure,
+  orgWizChooseFolder,
+  orgSetPreviewFilter,
+  orgAddFiles,
+  orgAddFolder,
+  orgRemoveSource,
+  orgClearSources,
+  _orgWizFallbackSubmit,
+  _orgWizLibFolderSubmit,
+  orgRollback,
+  orgDismissUndo,
+  orgTmplNew,
+  orgTmplCancelNew,
+  orgTmplPreviewChanged,
+  orgTmplSaveNew,
+  orgTmplDelete,
+  orgTmplSetDefault,
+  orgTemplateSelectChanged,
+  orgTemplateInputChanged,
   setListeningTracking,
   clearListeningHistory,
   // Baselines
@@ -22078,6 +23370,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Show first-run onboarding only when settings file does not exist yet.
     if (!settings._settings_exists && !settings.onboarding_completed) {
       _showOnboarding(settings);
+    }
+
+    // Show library setup wizard if library path is not set and onboarding is done
+    // (or if the user has no library configured at all).
+    if (settings.onboarding_completed && !settings.library_path) {
+      openLibrarySetup();
     }
 
     // Show donate popup at milestone launch counts.

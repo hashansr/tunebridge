@@ -261,6 +261,8 @@ DEFAULT_SETTINGS = {
     'replay_gain_enabled':  False,  # master switch; off by default on first load
     'replay_gain_mode':     'track', # 'track' | 'album'
     'replay_gain_prompted': False,  # True once user has seen the first-run tagging modal
+    # Library Organizer
+    'default_organizer_template': '',   # empty = use ORGANIZER_DEFAULT_TEMPLATE constant
 }
 
 _DEFAULT_GEAR_PROFILES = {
@@ -393,6 +395,24 @@ sync_state = {
 }
 sync_check_lock = threading.Lock()
 sync_check_inflight = set()
+
+# ── Library Organizer ─────────────────────────────────────────────────────────
+ORGANIZER_DEFAULT_TEMPLATE = '{album_artist}/{album}/{track:02} - {title}'
+_ORGANIZER_TOKEN_RE = re.compile(r'\{(\w+)(?::(\d+))?\}')
+
+_organizer_state = {
+    'status': 'idle',   # idle | running | done | error
+    'mode': '',         # reorganize | import
+    'progress': 0,
+    'total': 0,
+    'current': '',
+    'errors': [],
+    'message': '',
+    'run_id': '',
+    'moved': 0,
+    'skipped': 0,
+}
+_organizer_lock = threading.Lock()
 # Manifest entries for files queued for copy — written per-file after a successful copy,
 # not at scan time, to avoid marking files as synced if the copy fails.
 _pending_manifest_by_device_rel: dict = {}  # {device_rel: (manifest_key, entry)}
@@ -9272,6 +9292,127 @@ def _render_device_relpath(track, template):
     return rel, warnings
 
 
+def _extract_file_metadata(abs_path):
+    """Extract ID3/vorbis tags from any audio file for organizer preview.
+    Returns a minimal track dict (no 'id', no 'path' relative to library)."""
+    abs_path = Path(abs_path)
+    result = {
+        'title': abs_path.stem,
+        'artist': '', 'album_artist': '', 'album': '',
+        'track_number': '', 'disc_number': '',
+        'year': '', 'genre': '',
+        'path': abs_path.name,  # used only for ext extraction
+    }
+    try:
+        import mutagen
+        mf = mutagen.File(str(abs_path), easy=True)
+        if mf is None:
+            return result
+        def _tag(key):
+            v = mf.get(key)
+            return str(v[0]).strip() if v else ''
+        result['title'] = _tag('title') or abs_path.stem
+        result['artist'] = _tag('artist')
+        result['album_artist'] = _tag('albumartist') or _tag('artist')
+        result['album'] = _tag('album')
+        result['track_number'] = _tag('tracknumber')
+        result['disc_number'] = _tag('discnumber')
+        result['year'] = _tag('date')[:4] if _tag('date') else _tag('year')
+        result['genre'] = _tag('genre')
+    except Exception:
+        pass
+    return result
+
+
+def _organizer_token_map(track):
+    """Build {field} token map for the library organizer template engine."""
+    raw_track = str(track.get('track_number') or '').strip()
+    raw_disc = str(track.get('disc_number') or '').strip()
+    try:
+        track_num = str(int(raw_track.split('/')[0])) if raw_track else ''
+    except Exception:
+        track_num = ''
+    try:
+        disc_num = str(int(raw_disc.split('/')[0])) if raw_disc else ''
+    except Exception:
+        disc_num = ''
+    ext = Path(track.get('path') or track.get('filename') or '').suffix.lstrip('.').lower()
+    artist = str(track.get('artist') or '').strip()
+    album_artist = str(track.get('album_artist') or '').strip() or artist
+    return {
+        'artist': artist or 'Unknown Artist',
+        'album_artist': album_artist or 'Unknown Artist',
+        'album': str(track.get('album') or '').strip() or 'Unknown Album',
+        'title': str(track.get('title') or Path(track.get('path') or '').stem or '').strip() or 'Unknown Title',
+        'track': track_num,
+        'disc': disc_num,
+        'year': str(track.get('year') or '').strip(),
+        'genre': str(track.get('genre') or '').strip(),
+        'ext': ext or 'flac',
+    }
+
+
+def _render_organizer_relpath(track, template):
+    """
+    Apply the organizer template to a track, returning (rel_path, warnings).
+    Syntax: {field} or {field:N} where N = zero-pad width.
+
+    The file extension is ALWAYS taken from the source file and appended
+    automatically — {ext} in the template (if present) is silently stripped.
+    This ensures extensions are never changed, only folder/filename structure.
+    """
+    tokens = _organizer_token_map(track)
+    warnings = []
+
+    # Strip any {ext} tokens — extension is always from the source file
+    template = re.sub(r'\{ext\}', '', template)
+
+    rendered = template
+
+    # Track which required tokens are missing
+    OPTIONAL = {'disc', 'year', 'genre', 'track'}
+
+    def replace_token(m):
+        field = m.group(1)
+        pad = m.group(2)
+        val = tokens.get(field)
+        if val is None:
+            warnings.append(f"Unknown token {{{field}}}")
+            return ''
+        if not val and field not in OPTIONAL:
+            warnings.append(f"Missing {field}")
+            val = f'Unknown {field.replace("_", " ").title()}'
+        if val and pad:
+            try:
+                val = val.zfill(int(pad))
+            except Exception:
+                pass
+        return _safe_segment(val) if val else ''
+
+    rendered = _ORGANIZER_TOKEN_RE.sub(replace_token, rendered)
+
+    # Collapse empty path components left by missing optional tokens
+    parts = [p for p in rendered.replace('\\', '/').split('/') if p.strip(' .-')]
+    if not parts:
+        fallback = _safe_segment(Path(track.get('path') or '').name) or 'Unknown.flac'
+        return fallback, warnings
+
+    # Always append the original file extension — never change it
+    ext = tokens['ext']
+    filename = parts[-1]
+    # Strip any extension the template may have produced, then add the real one
+    filename_stem = _safe_segment(Path(filename).stem or filename) or 'track'
+    filename = f'{filename_stem}.{ext}' if ext else filename_stem
+    parts[-1] = filename
+
+    # Safety: warn if any path segment starts with '.' (hidden files on macOS/Linux)
+    for seg in parts:
+        if seg.startswith('.'):
+            warnings.append(f"Path segment '{seg}' starts with '.' — creates a hidden file/folder on macOS and Linux")
+
+    return '/'.join(parts), warnings
+
+
 def get_dap_music_path(dap_id):
     """Return configured music root folder on the DAP identified by dap_id."""
     dap = next((d for d in load_daps() if d['id'] == dap_id), None)
@@ -12655,19 +12796,82 @@ def _validate_backup_db(path: Path):
         conn.close()
 
 
+def _osascript_folder_picker():
+    """Open a native macOS Finder folder picker via osascript. Returns path string or None."""
+    import subprocess
+    script = 'POSIX path of (choose folder with prompt "Select a folder")'
+    r = subprocess.run(['osascript', '-e', script], capture_output=True, text=True, timeout=120)
+    if r.returncode != 0:
+        return None  # user cancelled or error
+    return r.stdout.strip().rstrip('/')
+
+
+def _osascript_file_picker():
+    """Open a native macOS Finder file picker (multi-select) via osascript. Returns list of paths."""
+    import subprocess
+    script = '''
+set theFiles to choose file with prompt "Select audio files" with multiple selections allowed
+set output to ""
+repeat with f in theFiles
+    set output to output & POSIX path of f & linefeed
+end repeat
+return output
+'''
+    r = subprocess.run(['osascript', '-e', script], capture_output=True, text=True, timeout=120)
+    if r.returncode != 0:
+        return []  # user cancelled or error
+    return [p for p in r.stdout.strip().splitlines() if p.strip()]
+
+
 @app.route('/api/browse/folder', methods=['POST'])
 def browse_folder():
+    # 1. Try pywebview (native TuneBridge.app)
     try:
         import webview
         wins = webview.windows
-        if not wins:
-            return jsonify({'error': 'No window available'}), 400
-        result = wins[0].create_file_dialog(webview.FOLDER_DIALOG)
-        if result:
-            return jsonify({'path': result[0]})
-        return jsonify({'path': None})
-    except ImportError:
-        return jsonify({'error': 'Browse not available in dev mode — type path manually'}), 400
+        if wins:
+            result = wins[0].create_file_dialog(webview.FOLDER_DIALOG)
+            if result:
+                return jsonify({'path': result[0]})
+            return jsonify({'path': None})
+    except (ImportError, Exception):
+        pass
+
+    # 2. Fall back to osascript (dev mode or browser — macOS only)
+    try:
+        path = _osascript_folder_picker()
+        return jsonify({'path': path})
+    except FileNotFoundError:
+        return jsonify({'error': 'Native folder picker not available on this OS'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/browse/files', methods=['POST'])
+def browse_files():
+    """Open a native multi-file picker. Returns {paths: [...]}."""
+    # 1. Try pywebview (native TuneBridge.app)
+    try:
+        import webview
+        wins = webview.windows
+        if wins:
+            result = wins[0].create_file_dialog(
+                webview.OPEN_DIALOG,
+                allow_multiple=True,
+                file_types=('Audio Files (*.flac;*.mp3;*.m4a;*.aac;*.wav;*.ogg;*.opus)',),
+            )
+            if result:
+                return jsonify({'paths': list(result)})
+            return jsonify({'paths': []})
+    except (ImportError, Exception):
+        pass
+
+    # 2. Fall back to osascript (dev mode or browser — macOS only)
+    try:
+        paths = _osascript_file_picker()
+        return jsonify({'paths': paths})
+    except FileNotFoundError:
+        return jsonify({'error': 'Native file picker not available on this OS'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -14873,6 +15077,499 @@ if not _migrate.ensure_db(DATA_DIR):
     raise RuntimeError('SQLite migration failed; startup aborted (JSON fallback removed).')
 
 load_library()
+
+
+# ── Library Organizer Routes ──────────────────────────────────────────────────
+
+@app.route('/api/organizer/templates', methods=['GET'])
+def organizer_get_templates():
+    return jsonify(_db.db_get_organizer_templates())
+
+
+@app.route('/api/organizer/templates', methods=['POST'])
+def organizer_create_template():
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    template = (data.get('template') or '').strip()
+    if not name or not template:
+        return jsonify({'error': 'name and template required'}), 400
+    tid = hashlib.md5(f'{name}{time.time()}'.encode()).hexdigest()[:12]
+    now = int(time.time())
+    row = {'id': tid, 'name': name, 'template': template, 'is_default': 0,
+           'created_at': now, 'updated_at': now}
+    _db.db_upsert_organizer_template(row)
+    return jsonify(row), 201
+
+
+@app.route('/api/organizer/templates/<tid>', methods=['PUT'])
+def organizer_update_template(tid):
+    data = request.get_json(silent=True) or {}
+    tmpl = next((t for t in _db.db_get_organizer_templates() if t['id'] == tid), None)
+    if not tmpl:
+        return jsonify({'error': 'not found'}), 404
+    if 'name' in data:
+        tmpl['name'] = data['name']
+    if 'template' in data:
+        tmpl['template'] = data['template']
+    if data.get('set_default'):
+        _db.db_set_organizer_template_default(tid)
+        return jsonify({'ok': True})
+    tmpl['updated_at'] = int(time.time())
+    _db.db_upsert_organizer_template(tmpl)
+    return jsonify(tmpl)
+
+
+@app.route('/api/organizer/templates/<tid>', methods=['DELETE'])
+def organizer_delete_template(tid):
+    _db.db_delete_organizer_template(tid)
+    return jsonify({'ok': True})
+
+
+def _collect_library_preview(template):
+    """Build the full preview plan for the existing library."""
+    music_base = get_music_base()
+    entries = []
+    with library_lock:
+        tracks = list(library)
+    for track in tracks:
+        new_rel, warns = _render_organizer_relpath(track, template)
+        old_rel = track.get('path', '')
+        same = (old_rel == new_rel)
+        abs_new = music_base / new_rel
+        conflict = (not same) and abs_new.exists()
+        entries.append({
+            'track_id': track.get('id', ''),
+            'old_path': old_rel,
+            'new_path': new_rel,
+            'same_path': same,
+            'conflict': conflict,
+            'warnings': warns,
+        })
+    total = len(entries)
+    moves = sum(1 for e in entries if not e['same_path'])
+    conflicts = sum(1 for e in entries if e['conflict'])
+    missing_meta = sum(1 for e in entries if e['warnings'])
+    return entries, {
+        'total': total, 'moves': moves,
+        'same_path': total - moves,
+        'conflicts': conflicts,
+        'missing_metadata': missing_meta,
+    }
+
+
+def _collect_external_preview(sources, template):
+    """Scan external sources and build import preview."""
+    music_base = get_music_base()
+    audio_exts = {'.flac', '.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus'}
+    entries = []
+    seen_paths = set()
+
+    def _process_file(abs_path):
+        abs_path = Path(abs_path)
+        if not abs_path.exists() or abs_path in seen_paths:
+            return
+        if abs_path.suffix.lower() not in audio_exts:
+            return
+        seen_paths.add(abs_path)
+        try:
+            track = _extract_file_metadata(abs_path)
+        except Exception:
+            track = {
+                'path': abs_path.name,
+                'title': abs_path.stem,
+                'artist': '',
+                'album_artist': '',
+                'album': '',
+                'track_number': '',
+                'disc_number': '',
+                'year': '',
+                'genre': '',
+            }
+        new_rel, warns = _render_organizer_relpath(track, template)
+        abs_new = music_base / new_rel
+        existing_in_library = any(
+            t.get('path') == new_rel for t in library
+        )
+        entries.append({
+            'source_path': str(abs_path),
+            'new_path': new_rel,
+            'conflict': abs_new.exists() or existing_in_library,
+            'warnings': warns,
+            'track': track,
+        })
+
+    for src in sources:
+        src_type = src.get('type', 'folder')
+        src_path = src.get('path', '')
+        if not src_path:
+            continue
+        if src_type == 'file':
+            _process_file(src_path)
+        else:
+            # folder (recursive)
+            for root, dirs, files in os.walk(src_path):
+                dirs[:] = [d for d in sorted(dirs) if not d.startswith('.')]
+                for fname in sorted(files):
+                    _process_file(Path(root) / fname)
+
+    total = len(entries)
+    conflicts = sum(1 for e in entries if e['conflict'])
+    missing_meta = sum(1 for e in entries if e['warnings'])
+    return entries, {
+        'total': total, 'moves': total,
+        'same_path': 0,
+        'conflicts': conflicts,
+        'missing_metadata': missing_meta,
+    }
+
+
+@app.route('/api/organizer/preview', methods=['POST'])
+def organizer_preview():
+    data = request.get_json(silent=True) or {}
+    template = (data.get('template') or '').strip() or ORGANIZER_DEFAULT_TEMPLATE
+    mode = data.get('mode', 'reorganize')
+
+    if mode == 'import':
+        sources = data.get('sources', [])
+        entries, summary = _collect_external_preview(sources, template)
+        # Strip internal track object from response to keep payload lean
+        for e in entries:
+            e.pop('track', None)
+    else:
+        entries, summary = _collect_library_preview(template)
+
+    return jsonify({'entries': entries, 'summary': summary})
+
+
+def _do_organizer_apply(plan, conflict_policy, run_id, mode='reorganize'):
+    global _organizer_state
+    music_base = get_music_base()
+    move_log = []
+    errors = []
+    moved = skipped = 0
+
+    with _organizer_lock:
+        _organizer_state.update({
+            'status': 'running', 'run_id': run_id, 'mode': mode,
+            'progress': 0, 'total': len(plan), 'moved': 0, 'skipped': 0,
+            'errors': [], 'current': '',
+        })
+
+    conn = _db.get_conn()
+
+    for i, entry in enumerate(plan):
+        if entry.get('same_path') and mode == 'reorganize':
+            with _organizer_lock:
+                _organizer_state['progress'] = i + 1
+            continue
+
+        old_rel = entry.get('old_path') or entry.get('source_path', '')
+        new_rel = entry.get('new_path', '')
+        track_id = entry.get('track_id', '')
+
+        if mode == 'reorganize':
+            abs_src = music_base / old_rel
+        else:
+            abs_src = Path(entry.get('source_path', old_rel))
+
+        abs_dst = music_base / new_rel
+
+        with _organizer_lock:
+            _organizer_state['current'] = new_rel
+            _organizer_state['progress'] = i + 1
+
+        try:
+            abs_dst.parent.mkdir(parents=True, exist_ok=True)
+
+            if abs_dst.exists() and mode == 'reorganize' and old_rel != new_rel:
+                if conflict_policy == 'skip':
+                    skipped += 1
+                    continue
+                elif conflict_policy == 'keep_both':
+                    stem = abs_dst.stem
+                    suffix = abs_dst.suffix
+                    counter = 2
+                    while abs_dst.exists():
+                        abs_dst = abs_dst.parent / f'{stem}_{counter}{suffix}'
+                        counter += 1
+                    new_rel = str(abs_dst.relative_to(music_base))
+                # 'overwrite' — proceed as-is
+
+            elif abs_dst.exists() and mode == 'import':
+                if conflict_policy == 'skip':
+                    skipped += 1
+                    continue
+                elif conflict_policy == 'keep_both':
+                    stem = abs_dst.stem
+                    suffix = abs_dst.suffix
+                    counter = 2
+                    while abs_dst.exists():
+                        abs_dst = abs_dst.parent / f'{stem}_{counter}{suffix}'
+                        counter += 1
+                    new_rel = str(abs_dst.relative_to(music_base))
+
+            # Move or copy
+            sidecars_moved_from = []
+            sidecars_moved_to = []
+
+            if mode == 'reorganize':
+                sidecars = _find_sidecar_files(abs_src)
+                shutil.move(str(abs_src), str(abs_dst))
+                for s in sidecars:
+                    new_s = abs_dst.parent / s.name
+                    try:
+                        shutil.move(str(s), str(new_s))
+                        sidecars_moved_from.append(str(s.relative_to(music_base)))
+                        sidecars_moved_to.append(str(new_s.relative_to(music_base)))
+                    except Exception:
+                        pass
+            else:
+                shutil.copy2(str(abs_src), str(abs_dst))
+
+            # Compute new track ID
+            new_id = hashlib.md5(new_rel.encode()).hexdigest()[:12] if not track_id else \
+                hashlib.md5(new_rel.encode()).hexdigest()[:12]
+
+            if mode == 'reorganize' and track_id:
+                try:
+                    # Fetch full track row to re-insert with new path/id
+                    row = conn.execute(
+                        "SELECT * FROM tracks WHERE id = ?", (track_id,)
+                    ).fetchone()
+                    if row:
+                        track_dict = dict(row)
+                        old_id = track_dict['id']
+                        track_dict['id'] = new_id
+                        track_dict['path'] = new_rel
+                        track_dict['filename'] = Path(new_rel).name
+                        # Handle lyric sidecar path update
+                        if track_dict.get('lyric_path') and sidecars_moved_to:
+                            for sc_new in sidecars_moved_to:
+                                if sc_new.endswith('.lrc'):
+                                    track_dict['lyric_path'] = sc_new
+                                    break
+
+                        cols = [k for k in track_dict.keys() if k != 'id']
+                        placeholders = ', '.join(['?'] * (len(cols) + 1))
+                        col_names = 'id, ' + ', '.join(cols)
+                        vals = [new_id] + [track_dict[c] for c in cols]
+
+                        conn.execute("BEGIN IMMEDIATE")
+                        conn.execute(f"INSERT OR REPLACE INTO tracks ({col_names}) VALUES ({placeholders})", vals)
+                        conn.execute(
+                            "UPDATE playlist_tracks SET track_id = ? WHERE track_id = ?",
+                            (new_id, old_id)
+                        )
+                        conn.execute("DELETE FROM tracks WHERE id = ?", (old_id,))
+                        conn.execute(
+                            "UPDATE play_events SET track_id = ? WHERE track_id = ?",
+                            (new_id, old_id)
+                        )
+                        conn.execute(
+                            "UPDATE track_features SET track_id = ? WHERE track_id = ?",
+                            (new_id, old_id)
+                        )
+                        conn.execute(
+                            "UPDATE favourites SET item_id = ? WHERE item_id = ? AND category = 'track'",
+                            (new_id, old_id)
+                        )
+                        conn.commit()
+
+                        # Swap in-memory library entry
+                        with library_lock:
+                            for idx, t in enumerate(library):
+                                if t.get('id') == old_id:
+                                    library[idx] = {**t, 'id': new_id, 'path': new_rel,
+                                                    'filename': Path(new_rel).name}
+                                    break
+
+                        move_log.append({
+                            'old_rel': old_rel, 'new_rel': new_rel,
+                            'old_track_id': old_id, 'new_track_id': new_id,
+                            'sidecar_old': sidecars_moved_from,
+                            'sidecar_new': sidecars_moved_to,
+                            'status': 'moved',
+                            'moved_at': int(time.time()),
+                        })
+                except Exception as e:
+                    errors.append({'path': old_rel, 'error': str(e)})
+                    continue
+            else:
+                # Import mode: scan and add to library (abs_dst is inside music_base)
+                try:
+                    new_track = scan_file(abs_dst)
+                    if new_track:
+                        with library_lock:
+                            library.append(new_track)
+                        _db.db_save_library(library)
+                except Exception as e:
+                    errors.append({'path': str(abs_src), 'error': f'Added but scan failed: {e}'})
+
+            moved += 1
+
+        except Exception as e:
+            errors.append({'path': old_rel, 'error': str(e)})
+
+        with _organizer_lock:
+            _organizer_state['moved'] = moved
+            _organizer_state['skipped'] = skipped
+            _organizer_state['errors'] = errors
+
+    # Save move log for undo (reorganize mode only)
+    if mode == 'reorganize' and move_log:
+        _db.db_save_organizer_run_log(run_id, move_log)
+        _db.db_clear_organizer_log()
+
+    # Clean up empty dirs after reorganize
+    if mode == 'reorganize':
+        old_rels = [e.get('old_path', '') for e in plan if not e.get('same_path')]
+        try:
+            empty_dirs = _find_empty_dirs_after_deletion(old_rels, music_base)
+            for d in empty_dirs:
+                try:
+                    (music_base / d).rmdir()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    with _organizer_lock:
+        _organizer_state.update({
+            'status': 'done' if not errors else 'done_with_errors',
+            'moved': moved, 'skipped': skipped, 'errors': errors,
+            'message': f'{moved} moved, {skipped} skipped, {len(errors)} errors',
+        })
+
+
+@app.route('/api/organizer/apply', methods=['POST'])
+def organizer_apply():
+    with _organizer_lock:
+        if _organizer_state['status'] == 'running':
+            return jsonify({'error': 'An organizer run is already in progress'}), 409
+
+    data = request.get_json(silent=True) or {}
+    template = (data.get('template') or '').strip() or ORGANIZER_DEFAULT_TEMPLATE
+    conflict_policy = data.get('conflict_policy', 'keep_both')
+    mode = data.get('mode', 'reorganize')
+    plan = data.get('plan', [])
+
+    if not plan:
+        return jsonify({'error': 'No plan provided'}), 400
+
+    run_id = hashlib.md5(f'{time.time()}'.encode()).hexdigest()[:12]
+    t = threading.Thread(
+        target=_do_organizer_apply,
+        args=(plan, conflict_policy, run_id, mode),
+        daemon=True
+    )
+    t.start()
+    return jsonify({'ok': True, 'run_id': run_id})
+
+
+@app.route('/api/organizer/status', methods=['GET'])
+def organizer_status():
+    with _organizer_lock:
+        return jsonify(dict(_organizer_state))
+
+
+@app.route('/api/organizer/import/scan', methods=['POST'])
+def organizer_import_scan():
+    data = request.get_json(silent=True) or {}
+    template = (data.get('template') or '').strip() or ORGANIZER_DEFAULT_TEMPLATE
+    sources = data.get('sources', [])
+    if not sources:
+        return jsonify({'error': 'No sources provided'}), 400
+    entries, summary = _collect_external_preview(sources, template)
+    for e in entries:
+        e.pop('track', None)
+    return jsonify({'entries': entries, 'summary': summary})
+
+
+@app.route('/api/organizer/undo/last', methods=['GET'])
+def organizer_undo_last():
+    run_id, entries = _db.db_get_last_organizer_run()
+    if not run_id:
+        return jsonify({'run_id': None, 'count': 0})
+    return jsonify({'run_id': run_id, 'count': len(entries)})
+
+
+@app.route('/api/organizer/undo/rollback', methods=['POST'])
+def organizer_undo_rollback():
+    with _organizer_lock:
+        if _organizer_state['status'] == 'running':
+            return jsonify({'error': 'Cannot rollback while organizer is running'}), 409
+
+    run_id, entries = _db.db_get_last_organizer_run()
+    if not run_id or not entries:
+        return jsonify({'error': 'No undo log found'}), 404
+
+    music_base = get_music_base()
+    conn = _db.get_conn()
+    restored = errors = 0
+
+    for entry in entries:
+        old_rel = entry['old_rel']
+        new_rel = entry['new_rel']
+        old_id = entry['old_track_id']
+        new_id = entry['new_track_id']
+        abs_old = music_base / old_rel
+        abs_new = music_base / new_rel
+
+        try:
+            abs_old.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(abs_new), str(abs_old))
+
+            # Restore sidecars
+            sidecar_new = entry.get('sidecar_new', [])
+            sidecar_old = entry.get('sidecar_old', [])
+            for sc_n, sc_o in zip(sidecar_new, sidecar_old):
+                try:
+                    abs_sc_n = music_base / sc_n
+                    abs_sc_o = music_base / sc_o
+                    abs_sc_o.parent.mkdir(parents=True, exist_ok=True)
+                    if abs_sc_n.exists():
+                        shutil.move(str(abs_sc_n), str(abs_sc_o))
+                except Exception:
+                    pass
+
+            # Reverse DB swap
+            row = conn.execute(
+                "SELECT * FROM tracks WHERE id = ?", (new_id,)
+            ).fetchone()
+            if row:
+                track_dict = dict(row)
+                track_dict['id'] = old_id
+                track_dict['path'] = old_rel
+                track_dict['filename'] = Path(old_rel).name
+                cols = [k for k in track_dict.keys() if k != 'id']
+                col_names = 'id, ' + ', '.join(cols)
+                placeholders = ', '.join(['?'] * (len(cols) + 1))
+                vals = [old_id] + [track_dict[c] for c in cols]
+
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute(f"INSERT OR REPLACE INTO tracks ({col_names}) VALUES ({placeholders})", vals)
+                conn.execute("UPDATE playlist_tracks SET track_id = ? WHERE track_id = ?", (old_id, new_id))
+                conn.execute("DELETE FROM tracks WHERE id = ?", (new_id,))
+                conn.execute("UPDATE play_events SET track_id = ? WHERE track_id = ?", (old_id, new_id))
+                conn.execute("UPDATE track_features SET track_id = ? WHERE track_id = ?", (old_id, new_id))
+                conn.execute("UPDATE favourites SET item_id = ? WHERE item_id = ? AND category = 'track'", (old_id, new_id))
+                conn.commit()
+
+                with library_lock:
+                    for idx, t in enumerate(library):
+                        if t.get('id') == new_id:
+                            library[idx] = {**t, 'id': old_id, 'path': old_rel, 'filename': Path(old_rel).name}
+                            break
+
+            restored += 1
+        except Exception as e:
+            errors += 1
+            print(f'[organizer] rollback error {new_rel}: {e}')
+
+    # Mark log as rolled back
+    _db.db_update_organizer_log_status(run_id, 'rolled_back')
+
+    return jsonify({'restored': restored, 'errors': errors})
 
 
 def _artwork_backfill_thread():

@@ -112,6 +112,8 @@ _MIGRATIONS: list[tuple] = [
         'ALTER TABLE tracks ADD COLUMN album_artist_sort TEXT',
         'ALTER TABLE tracks ADD COLUMN title_sort TEXT',
     ]),
+    # v13: organizer_templates and organizer_move_log are new tables handled by create_schema().
+    (13, 'Add organizer_templates and organizer_move_log tables', None),
 ]
 
 _SCHEMA_SQL = """
@@ -460,6 +462,32 @@ CREATE TABLE IF NOT EXISTS deleted_tracks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_deleted_tracks_deleted_at ON deleted_tracks(deleted_at DESC);
+
+-- Library Organizer: named path templates
+CREATE TABLE IF NOT EXISTS organizer_templates (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    template    TEXT NOT NULL,
+    is_default  INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+);
+
+-- Library Organizer: move log for the most recent apply run (enables one-level undo)
+CREATE TABLE IF NOT EXISTS organizer_move_log (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id          TEXT NOT NULL,
+    old_rel         TEXT NOT NULL,
+    new_rel         TEXT NOT NULL,
+    old_track_id    TEXT NOT NULL,
+    new_track_id    TEXT NOT NULL,
+    sidecar_old     TEXT DEFAULT '',
+    sidecar_new     TEXT DEFAULT '',
+    status          TEXT DEFAULT 'moved',
+    moved_at        INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_organizer_move_log_run ON organizer_move_log(run_id);
 """
 
 # FTS5 must be created separately (can't use IF NOT EXISTS with virtual tables the same way)
@@ -2243,3 +2271,108 @@ def db_is_smart_playlist(playlist_id: str) -> bool:
         "SELECT 1 FROM smart_playlist_rules WHERE playlist_id = ?", (playlist_id,)
     ).fetchone()
     return row is not None
+
+
+# ---------------------------------------------------------------------------
+# Library Organizer: Templates
+# ---------------------------------------------------------------------------
+
+def db_get_organizer_templates() -> list:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM organizer_templates ORDER BY is_default DESC, name COLLATE NOCASE"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def db_upsert_organizer_template(row: dict):
+    conn = get_conn()
+    conn.execute(
+        """INSERT OR REPLACE INTO organizer_templates
+           (id, name, template, is_default, created_at, updated_at)
+           VALUES (:id, :name, :template, :is_default, :created_at, :updated_at)""",
+        row
+    )
+    conn.commit()
+
+
+def db_delete_organizer_template(tid: str):
+    conn = get_conn()
+    conn.execute("DELETE FROM organizer_templates WHERE id = ?", (tid,))
+    conn.commit()
+
+
+def db_set_organizer_template_default(tid: str):
+    conn = get_conn()
+    conn.execute("UPDATE organizer_templates SET is_default = 0")
+    conn.execute("UPDATE organizer_templates SET is_default = 1 WHERE id = ?", (tid,))
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Library Organizer: Move log (undo support)
+# ---------------------------------------------------------------------------
+
+def db_save_organizer_run_log(run_id: str, entries: list):
+    conn = get_conn()
+    conn.execute("DELETE FROM organizer_move_log WHERE run_id = ?", (run_id,))
+    conn.executemany(
+        """INSERT INTO organizer_move_log
+           (run_id, old_rel, new_rel, old_track_id, new_track_id,
+            sidecar_old, sidecar_new, status, moved_at)
+           VALUES (?,?,?,?,?,?,?,?,?)""",
+        [
+            (run_id, e['old_rel'], e['new_rel'], e['old_track_id'], e['new_track_id'],
+             json.dumps(e.get('sidecar_old', [])), json.dumps(e.get('sidecar_new', [])),
+             e.get('status', 'moved'), e.get('moved_at', int(time.time())))
+            for e in entries
+        ]
+    )
+    conn.commit()
+
+
+def db_get_last_organizer_run() -> tuple:
+    """Return (run_id, entries_list) for the most recent run, or (None, [])."""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT run_id FROM organizer_move_log ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    if not row:
+        return None, []
+    run_id = row[0]
+    rows = conn.execute(
+        "SELECT * FROM organizer_move_log WHERE run_id = ? AND status = 'moved'",
+        (run_id,)
+    ).fetchall()
+    entries = []
+    for r in rows:
+        e = dict(r)
+        try:
+            e['sidecar_old'] = json.loads(e['sidecar_old'] or '[]')
+        except Exception:
+            e['sidecar_old'] = []
+        try:
+            e['sidecar_new'] = json.loads(e['sidecar_new'] or '[]')
+        except Exception:
+            e['sidecar_new'] = []
+        entries.append(e)
+    return run_id, entries
+
+
+def db_update_organizer_log_status(run_id: str, status: str):
+    conn = get_conn()
+    conn.execute(
+        "UPDATE organizer_move_log SET status = ? WHERE run_id = ?", (status, run_id)
+    )
+    conn.commit()
+
+
+def db_clear_organizer_log():
+    conn = get_conn()
+    prev_run = conn.execute(
+        "SELECT DISTINCT run_id FROM organizer_move_log ORDER BY id DESC LIMIT 2"
+    ).fetchall()
+    if len(prev_run) > 1:
+        old_id = prev_run[-1][0]
+        conn.execute("DELETE FROM organizer_move_log WHERE run_id = ?", (old_id,))
+        conn.commit()
