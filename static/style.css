@@ -23682,6 +23682,115 @@ body.is-col-resizing {
   font-size: 11px;
 }
 
+/* ── Organizer page chrome ───────────────────────────────────────────────── */
+.org-page-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+
+.org-page-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 0;
+  opacity: 0.75;
+  transition: opacity 0.15s;
+}
+.org-page-back-btn:hover { opacity: 1; }
+
+.org-page-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  margin-bottom: 24px;
+}
+
+.org-page-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 9px 18px;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.org-page-tab:hover { color: var(--text-1); }
+.org-page-tab--active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.org-page-content { max-width: 740px; }
+
+.org-tab-panel { /* block by default */ }
+
+.org-page-wizard-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.org-page-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.org-page-form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* Dot-segment warning banner */
+.org-dot-warning-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  background: rgba(255,179,0,.07);
+  border: 1px solid rgba(255,179,0,.25);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.org-dot-warning-banner svg { flex-shrink: 0; color: #ffb300; }
+.org-dot-warning-banner > span { flex: 1; }
+
+.org-dot-warning-fix {
+  background: none;
+  border: 1px solid rgba(255,179,0,.4);
+  color: #ffb300;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.org-dot-warning-fix:hover { background: rgba(255,179,0,.1); }
+
+/* Hidden-path badge */
+.org-preview-badge--dot { background: rgba(255,179,0,.15); color: #ffb300; }
+
+/* Live validation warning for dot segments in step 1 */
+.org-validation-msg--dot { color: #ffb300 !important; }
+
 .org-undo-bar {
   display: flex;
   align-items: center;

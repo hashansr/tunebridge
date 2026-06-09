@@ -7639,6 +7639,7 @@ async function showView(viewName) {
   else if (viewName === 'history') loadHistoryView();
   else if (viewName === 'duplicates') loadDuplicatesView();
   else if (viewName === 'sync') loadSyncView();
+  else if (viewName === 'organizer') loadOrganizerView();
   else if (viewName === 'search') _renderSearchResults();
 
   if (viewName === 'home') {
@@ -7654,7 +7655,7 @@ async function showView(viewName) {
 
 function showViewEl(name) {
   closeLyricsView();
-  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync', 'search'];
+  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync', 'search', 'organizer'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (!el) return;
@@ -17187,6 +17188,7 @@ const ORGANIZER_SAMPLE = {
 let _orgModal = {
   step: 1,
   mode: 'reorganize',
+  activeTab: 'templates',
   template: ORGANIZER_DEFAULT_TEMPLATE,
   conflictPolicy: 'keep_both',
   previewData: null,
@@ -17567,19 +17569,52 @@ function setupSkipTemplateChanged() {
   document.getElementById('setup-template-input').disabled = skip;
 }
 
-// ── Organizer Modal ───────────────────────────────────────────────────────────
+// ── Organizer Page ────────────────────────────────────────────────────────────
 
-async function openOrganizerModal(mode) {
-  _orgModal.mode = mode || 'reorganize';
+async function loadOrganizerView() {
+  showViewEl('organizer');
+  setActiveNav('settings');
+  await showOrganizerTab(_orgModal.activeTab || 'templates');
+}
+
+async function showOrganizerTab(tab) {
+  _orgModal.activeTab = tab;
+  document.querySelectorAll('.org-page-tab').forEach(btn => {
+    btn.classList.toggle('org-page-tab--active', btn.dataset.tab === tab);
+  });
+  const tmplPanel = document.getElementById('org-tab-templates');
+  const wizardPanel = document.getElementById('org-tab-wizard');
+  if (tab === 'templates') {
+    if (tmplPanel) tmplPanel.style.display = '';
+    if (wizardPanel) wizardPanel.style.display = 'none';
+    _orgModal.templates = await api('/organizer/templates').catch(() => []);
+    _orgTmplRenderList();
+    const editorEl = document.getElementById('org-tmpl-pattern-editor');
+    _orgBuildTokenChips('org-tmpl-token-chips', 'org-tmpl-pattern-editor', 'org-tmpl-preview');
+    _orgInitEditor(editorEl, (val) => {
+      _orgRenderTemplatePreview(val, 'org-tmpl-preview');
+      _orgRefreshChipStates('org-tmpl-token-chips', 'org-tmpl-pattern-editor');
+    });
+    document.getElementById('org-tmpl-new-form').style.display = 'none';
+  } else {
+    if (tmplPanel) tmplPanel.style.display = 'none';
+    if (wizardPanel) wizardPanel.style.display = '';
+    await _orgInitWizardTab(tab);
+    _orgLoadUndoBar();
+  }
+}
+
+async function _orgInitWizardTab(mode) {
+  // Don't reset if already in progress for this mode beyond step 1
+  if (_orgModal.mode === mode && _orgModal.step > 1) return;
+
+  _orgModal.mode = mode;
   _orgModal.step = 1;
   _orgModal.previewData = null;
   _orgModal.sources = [];
-  _orgModal.pollTimer = null;
+  if (_orgModal.pollTimer) { clearInterval(_orgModal.pollTimer); _orgModal.pollTimer = null; }
 
-  // Load saved templates
   _orgModal.templates = await api('/organizer/templates').catch(() => []);
-
-  // Load default template from settings
   const settings = await api('/settings').catch(() => ({}));
   _orgModal.template = settings.default_organizer_template || ORGANIZER_DEFAULT_TEMPLATE;
   _orgModal.conflictPolicy = 'keep_both';
@@ -17587,28 +17622,45 @@ async function openOrganizerModal(mode) {
   _orgGoToStep(1);
   _orgPopulateTemplateSelect();
   _orgBuildTokenChips('org-token-chips', 'org-template-editor', 'org-template-preview');
-  const _orgEditorEl = document.getElementById('org-template-editor');
-  _orgInitEditor(_orgEditorEl, (val) => {
+  const editorEl = document.getElementById('org-template-editor');
+  _orgInitEditor(editorEl, (val) => {
     _orgModal.template = val;
     _orgRenderTemplatePreview(val, 'org-template-preview');
     _orgRefreshChipStates('org-token-chips', 'org-template-editor');
+    _orgCheckLivePreviewWarnings();
   });
-  _orgEditorSetValue(_orgEditorEl, _orgModal.template);
+  _orgEditorSetValue(editorEl, _orgModal.template);
   _orgRenderTemplatePreview(_orgModal.template, 'org-template-preview');
   _orgRefreshChipStates('org-token-chips', 'org-template-editor');
+  _orgCheckLivePreviewWarnings();
 
   const importZone = document.getElementById('org-import-src-zone');
   if (importZone) importZone.style.display = mode === 'import' ? '' : 'none';
-
-  document.getElementById('org-modal-title').textContent =
-    mode === 'import' ? 'Import Songs' : 'Organise Library';
-  document.getElementById('organizer-modal').style.display = 'flex';
 }
 
-function closeOrganizerModal() {
+function _orgCheckLivePreviewWarnings() {
+  const previewEl = document.getElementById('org-template-preview');
+  const valEl = document.getElementById('org-template-validation');
+  if (!previewEl || !valEl) return;
+  const preview = previewEl.textContent || '';
+  const hasDot = preview.split('/').some(seg => seg.startsWith('.'));
+  if (hasDot) {
+    valEl.textContent = 'One or more path segments start with "." — this creates hidden files on macOS/Linux';
+    valEl.className = 'org-validation-msg org-validation-msg--dot';
+    valEl.style.display = '';
+  } else {
+    valEl.style.display = 'none';
+  }
+}
+
+function orgPageBack() {
   if (_orgModal.pollTimer) { clearInterval(_orgModal.pollTimer); _orgModal.pollTimer = null; }
-  document.getElementById('organizer-modal').style.display = 'none';
+  showView('settings');
 }
+
+// Kept for backward compat with any lingering references
+function openOrganizerModal(mode) { showView('organizer').then(() => showOrganizerTab(mode || 'reorganize')); }
+function closeOrganizerModal() { orgPageBack(); }
 
 function _orgGoToStep(n) {
   _orgModal.step = n;
@@ -17616,19 +17668,18 @@ function _orgGoToStep(n) {
     const el = document.getElementById(`org-step-${i}`);
     if (el) el.style.display = i === n ? '' : 'none';
   }
-  document.getElementById('org-step-num').textContent = Math.min(n, 3);
 
-  const btnCancel = document.getElementById('org-btn-cancel');
-  const btnBack   = document.getElementById('org-btn-back');
-  const btnNext   = document.getElementById('org-btn-next');
+  const actionsBar = document.getElementById('org-wizard-actions');
+  const btnBack = document.getElementById('org-btn-back');
+  const btnNext = document.getElementById('org-btn-next');
 
-  btnCancel.style.display = n === 4 ? 'none' : '';
-  btnBack.style.display   = n === 2 ? '' : 'none';
-  btnNext.style.display   = n === 3 ? 'none' : '';
-
-  if (n === 1) { btnNext.textContent = 'Preview'; btnNext.disabled = false; }
-  if (n === 2) { btnNext.textContent = 'Apply'; }
-  if (n === 4) { btnCancel.textContent = 'Close'; btnCancel.style.display = ''; }
+  if (actionsBar) actionsBar.style.display = n === 3 || n === 4 ? 'none' : '';
+  if (btnBack) btnBack.style.display = n === 2 ? '' : 'none';
+  if (btnNext) {
+    btnNext.style.display = '';
+    if (n === 1) { btnNext.textContent = 'Preview'; btnNext.disabled = false; }
+    if (n === 2) { btnNext.textContent = 'Apply'; }
+  }
 }
 
 function orgTemplateSelectChanged() {
@@ -17694,7 +17745,6 @@ async function _orgRunPreview() {
     _orgGoToStep(2);
   } catch (e) {
     toast('Preview failed: ' + (e.message || 'unknown error'));
-  } finally {
     btnNext.disabled = false;
     btnNext.textContent = 'Preview';
   }
@@ -17713,6 +17763,24 @@ function _orgRenderPreview(data) {
   document.getElementById('org-chip-moves').textContent = summary.moves || 0;
   document.getElementById('org-chip-conflicts').textContent = summary.conflicts || 0;
   document.getElementById('org-chip-warnings').textContent = summary.missing_metadata || 0;
+
+  // Dot-segment safety check
+  const DOT_RE = /(^|\/)(\.[^/])/;
+  const dotEntries = (data.entries || []).filter(e =>
+    e.warnings && e.warnings.some(w => w.includes("starts with '.'"))
+  );
+  const banner = document.getElementById('org-dot-warning-banner');
+  const btnNext = document.getElementById('org-btn-next');
+  if (dotEntries.length) {
+    const msg = document.getElementById('org-dot-warning-msg');
+    if (msg) msg.textContent = `${dotEntries.length} path${dotEntries.length !== 1 ? 's' : ''} will create hidden files or folders (names starting with '.'). Fix your template before applying.`;
+    if (banner) banner.style.display = 'flex';
+    if (btnNext) { btnNext.disabled = true; btnNext.title = 'Fix dot-segment warnings before applying'; }
+  } else {
+    if (banner) banner.style.display = 'none';
+    if (btnNext) { btnNext.disabled = false; btnNext.title = ''; }
+  }
+
   _orgModal.previewFilter = 'all';
   orgSetPreviewFilter('all');
 }
@@ -17751,7 +17819,9 @@ function _orgPaintPreviewList() {
     else if (e.same_path) cls += ' org-preview-row--same';
     const badges = [];
     if (e.conflict) badges.push('<span class="org-preview-badge org-preview-badge--conflict">conflict</span>');
-    if (e.warnings && e.warnings.length) badges.push('<span class="org-preview-badge org-preview-badge--warn">warning</span>');
+    const hasDotWarn = e.warnings && e.warnings.some(w => w.includes("starts with '.'"));
+    if (hasDotWarn) badges.push('<span class="org-preview-badge org-preview-badge--dot">&#x26A0; hidden</span>');
+    else if (e.warnings && e.warnings.length) badges.push('<span class="org-preview-badge org-preview-badge--warn">warning</span>');
     const src = e.old_path || e.source_path || '';
     const dst = e.new_path || '';
     return `<div class="${cls}">
@@ -17777,7 +17847,6 @@ async function _orgStartApply() {
   if (!plan.length) { toast('Nothing to apply'); return; }
 
   _orgGoToStep(3);
-  document.getElementById('org-modal-subtitle').textContent = '';
   document.getElementById('org-progress-total').textContent = plan.length;
 
   try {
@@ -17849,8 +17918,6 @@ function _orgRenderDone(s) {
     </div>
     ${errs ? `<div class="org-done-errors">${(s.errors || []).map(e => `<div class="org-error-row"><span>${_esc(e.path||'')}</span><span class="org-error-msg">${_esc(e.error||'')}</span></div>`).join('')}</div>` : ''}
   `;
-  document.getElementById('org-btn-cancel').textContent = 'Close';
-  document.getElementById('org-btn-cancel').style.display = '';
 }
 
 // ── Import sources ────────────────────────────────────────────────────────────
@@ -17949,24 +18016,9 @@ function orgDismissUndo() {
 
 // ── Template Manager ──────────────────────────────────────────────────────────
 
-async function openOrganizerTemplateManager() {
-  _orgModal.templates = await api('/organizer/templates').catch(() => []);
-  _orgTmplRenderList();
-  _orgBuildTokenChips('org-tmpl-token-chips', 'org-tmpl-pattern-editor', 'org-tmpl-preview');
-  const editorEl = document.getElementById('org-tmpl-pattern-editor');
-  _orgInitEditor(editorEl, (val) => {
-    _orgRenderTemplatePreview(val, 'org-tmpl-preview');
-    _orgRefreshChipStates('org-tmpl-token-chips', 'org-tmpl-pattern-editor');
-  });
-  document.getElementById('org-tmpl-new-form').style.display = 'none';
-  document.getElementById('organizer-tmpl-modal').style.display = 'flex';
-}
-
-function closeOrganizerTemplateManager() {
-  document.getElementById('organizer-tmpl-modal').style.display = 'none';
-  // Reload active template display in settings
-  _orgLoadActiveTemplateDisplay();
-}
+// Kept for backward compat
+async function openOrganizerTemplateManager() { await showView('organizer'); await showOrganizerTab('templates'); }
+function closeOrganizerTemplateManager() { orgPageBack(); }
 
 function _orgTmplRenderList() {
   const el = document.getElementById('org-tmpl-list');
@@ -18330,8 +18382,9 @@ const App = {
   setupTemplateInputChanged,
   setupSkipTemplateChanged,
   // Library Organizer
-  openOrganizerModal,
-  closeOrganizerModal,
+  loadOrganizerView,
+  showOrganizerTab,
+  orgPageBack,
   orgNext,
   orgBack,
   orgTemplateSelectChanged,
@@ -18343,8 +18396,6 @@ const App = {
   orgClearSources,
   orgRollback,
   orgDismissUndo,
-  openOrganizerTemplateManager,
-  closeOrganizerTemplateManager,
   orgTmplNew,
   orgTmplCancelNew,
   orgTmplPreviewChanged,

@@ -9405,6 +9405,11 @@ def _render_organizer_relpath(track, template):
     filename = f'{filename_stem}.{ext}' if ext else filename_stem
     parts[-1] = filename
 
+    # Safety: warn if any path segment starts with '.' (hidden files on macOS/Linux)
+    for seg in parts:
+        if seg.startswith('.'):
+            warnings.append(f"Path segment '{seg}' starts with '.' — creates a hidden file/folder on macOS and Linux")
+
     return '/'.join(parts), warnings
 
 
