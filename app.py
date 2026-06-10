@@ -399,6 +399,10 @@ sync_check_inflight = set()
 # ── Library Organizer ─────────────────────────────────────────────────────────
 ORGANIZER_DEFAULT_TEMPLATE = '{album_artist}/{album}/{track:02} - {title}'
 _ORGANIZER_TOKEN_RE = re.compile(r'\{(\w+)(?::(\d+))?\}')
+ORGANIZER_AUDIO_EXTENSIONS = {
+    '.flac', '.mp3', '.m4a', '.aac', '.mp4', '.wav', '.ogg', '.opus',
+    '.wv', '.aiff', '.aif', '.ape', '.wma', '.alac',
+}
 
 _organizer_state = {
     'status': 'idle',   # idle | running | done | error
@@ -9399,10 +9403,13 @@ def _render_organizer_relpath(track, template):
 
     # Always append the original file extension — never change it
     ext = tokens['ext']
-    filename = parts[-1]
-    # Strip any extension the template may have produced, then add the real one
-    filename_stem = _safe_segment(Path(filename).stem or filename) or 'track'
-    filename = f'{filename_stem}.{ext}' if ext else filename_stem
+    filename = _safe_segment(parts[-1]) or 'track'
+    # Strip only a real audio extension. Path.stem would also truncate ordinary
+    # dotted names such as "01. Come As You Are" to just "01".
+    current_suffix = Path(filename).suffix.lower()
+    if current_suffix in ORGANIZER_AUDIO_EXTENSIONS:
+        filename = filename[:-len(current_suffix)] or 'track'
+    filename = f'{filename}.{ext}' if ext else filename
     parts[-1] = filename
 
     # Safety: warn if any path segment starts with '.' (hidden files on macOS/Linux)
@@ -15125,6 +15132,19 @@ def organizer_delete_template(tid):
     return jsonify({'ok': True})
 
 
+def _mark_duplicate_organizer_destinations(entries):
+    """Mark every entry when multiple sources resolve to one destination."""
+    by_destination = {}
+    for entry in entries:
+        new_path = entry.get('new_path')
+        if new_path:
+            by_destination.setdefault(new_path, []).append(entry)
+    for matches in by_destination.values():
+        if len(matches) > 1:
+            for entry in matches:
+                entry['conflict'] = True
+
+
 def _collect_library_preview(template):
     """Build the full preview plan for the existing library."""
     music_base = get_music_base()
@@ -15145,6 +15165,7 @@ def _collect_library_preview(template):
             'conflict': conflict,
             'warnings': warns,
         })
+    _mark_duplicate_organizer_destinations(entries)
     total = len(entries)
     moves = sum(1 for e in entries if not e['same_path'])
     conflicts = sum(1 for e in entries if e['conflict'])
@@ -15160,7 +15181,6 @@ def _collect_library_preview(template):
 def _collect_external_preview(sources, template):
     """Scan external sources and build import preview."""
     music_base = get_music_base()
-    audio_exts = {'.flac', '.mp3', '.m4a', '.aac', '.wav', '.ogg', '.opus'}
     entries = []
     seen_paths = set()
 
@@ -15168,7 +15188,7 @@ def _collect_external_preview(sources, template):
         abs_path = Path(abs_path)
         if not abs_path.exists() or abs_path in seen_paths:
             return
-        if abs_path.suffix.lower() not in audio_exts:
+        if abs_path.suffix.lower() not in ORGANIZER_AUDIO_EXTENSIONS:
             return
         seen_paths.add(abs_path)
         try:
@@ -15199,19 +15219,19 @@ def _collect_external_preview(sources, template):
         })
 
     for src in sources:
-        src_type = src.get('type', 'folder')
-        src_path = src.get('path', '')
-        if not src_path:
+        raw_path = str(src.get('path', '')).strip()
+        if not raw_path:
             continue
-        if src_type == 'file':
+        src_path = Path(raw_path).expanduser()
+        if src_path.is_file():
             _process_file(src_path)
-        else:
-            # folder (recursive)
+        elif src_path.is_dir():
             for root, dirs, files in os.walk(src_path):
                 dirs[:] = [d for d in sorted(dirs) if not d.startswith('.')]
                 for fname in sorted(files):
                     _process_file(Path(root) / fname)
 
+    _mark_duplicate_organizer_destinations(entries)
     total = len(entries)
     conflicts = sum(1 for e in entries if e['conflict'])
     missing_meta = sum(1 for e in entries if e['warnings'])
@@ -15225,11 +15245,13 @@ def _collect_external_preview(sources, template):
 
 def _organizer_random_external_file(sources):
     """Choose one audio file from the selected import sources without listing everything."""
-    audio_exts = {'.flac', '.mp3', '.m4a', '.aac', '.wav', '.aiff', '.aif', '.ogg', '.opus'}
     chosen = None
     seen = 0
     for src in sources:
-        src_path = Path(str(src.get('path', '')).strip()).expanduser()
+        raw_path = str(src.get('path', '')).strip()
+        if not raw_path:
+            continue
+        src_path = Path(raw_path).expanduser()
         # Infer from the filesystem first. Native picker payloads have varied
         # between app shells, so a folder must remain usable even if mislabeled.
         if src_path.is_file():
@@ -15244,7 +15266,7 @@ def _organizer_random_external_file(sources):
         else:
             candidates = []
         for candidate in candidates:
-            if candidate.suffix.lower() not in audio_exts or not candidate.is_file():
+            if candidate.suffix.lower() not in ORGANIZER_AUDIO_EXTENSIONS or not candidate.is_file():
                 continue
             seen += 1
             if random.randrange(seen) == 0:

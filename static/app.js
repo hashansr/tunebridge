@@ -18001,7 +18001,7 @@ function _orgWizRenderStaged() {
   if (!_orgWiz.sources.length) { el.innerHTML = ''; return; }
   const FSVG = `<span class="orgw-file-icon" aria-hidden="true"></span>`;
   const DSVG = `<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1.5 4.5V11a1 1 0 001 1h9a1 1 0 001-1V5a1 1 0 00-1-1H7L5.5 2.5h-3a1 1 0 00-1 1z"/></svg>`;
-  el.innerHTML = `<div class="orgw-sl-head"><span class="orgw-sl-dot"></span><span>${_orgWiz.sources.length} file${_orgWiz.sources.length !== 1 ? 's' : ''} ready</span></div>` +
+  el.innerHTML = `<div class="orgw-sl-head"><span class="orgw-sl-dot"></span><span>${_orgWiz.sources.length} file${_orgWiz.sources.length !== 1 ? 's' : ''} ready</span><button class="orgw-btn orgw-btn-xs orgw-btn-ghost orgw-clear-sources" onclick="App.orgClearSources()">Clear all</button></div>` +
     _orgWiz.sources.map((s, i) =>
       `<div class="orgw-staged-row"><span class="orgw-staged-fico">${s.type === 'folder' ? DSVG : FSVG}</span><span class="orgw-staged-nm" title="${_esc(s.path)}">${_esc(s.label)}</span><button class="orgw-staged-rm" onclick="App.orgRemoveSource(${i})">&#x2715;</button></div>`
     ).join('');
@@ -18303,7 +18303,7 @@ function _orgWizRenderPreviewBody() {
   let shown = 0;
   for (const e of entries) {
     const isWarn = e.warnings && e.warnings.length;
-    const kind = isWarn ? 'warn' : e.conflict ? 'conflict' : e.same_path ? 'ok' : 'move';
+    const kind = e.conflict ? 'conflict' : isWarn ? 'warn' : e.same_path ? 'ok' : 'move';
     if (f !== 'all' && f !== kind) continue;
     if (shown++ >= CHUNK) break;
     const src = e.old_path || e.source_path || '', dst = e.new_path || '';
@@ -18337,10 +18337,15 @@ function _orgWizFchip(f, label, n, active) {
 
 function _orgWizColourDst(dst) {
   if (!dst) return '';
-  const segs = dst.replace(/\.flac$/i, '').split('/');
+  const segs = dst.split('/');
   return segs.map((s, i) => i < segs.length - 1
     ? `<span class="orgw-to-d">${_esc(s)}</span><span class="orgw-to-s">/</span>`
-    : `<span class="orgw-to-f">${_esc(s)}</span><span class="orgw-to-s">.flac</span>`
+    : (() => {
+        const extMatch = s.match(/(\.[^./]+)$/);
+        const ext = extMatch ? extMatch[1] : '';
+        const stem = ext ? s.slice(0, -ext.length) : s;
+        return `<span class="orgw-to-f">${_esc(stem)}</span><span class="orgw-to-s">${_esc(ext)}</span>`;
+      })()
   ).join('');
 }
 
