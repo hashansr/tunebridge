@@ -17801,7 +17801,8 @@ async function orgWizNext() {
       toast('Add at least one source file or folder');
       return;
     }
-    await _orgWizLoadSample();
+    const sampleLoaded = await _orgWizLoadSample();
+    if (!sampleLoaded) return;
     if (_orgWiz.maxStep < 3) _orgWiz.maxStep = 3;
     _orgWizGoStep(3);
   } else if (n === 3) {
@@ -17822,9 +17823,11 @@ async function _orgWizLoadSample() {
     : { mode: 'library', folder: _orgWiz.libScope === 'unsorted' ? _orgWiz.libFolder : null };
   try {
     _orgWiz.sample = await api('/organizer/sample', { method: 'POST', body });
+    return true;
   } catch (e) {
     _orgWiz.sample = null;
     toast('Could not load a preview file: ' + (e.message || 'unknown error'));
+    return false;
   }
 }
 

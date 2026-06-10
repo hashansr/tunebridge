@@ -15229,16 +15229,18 @@ def _organizer_random_external_file(sources):
     chosen = None
     seen = 0
     for src in sources:
-        src_path = Path(src.get('path', '')).expanduser()
-        if src.get('type', 'folder') == 'file':
+        src_path = Path(str(src.get('path', '')).strip()).expanduser()
+        # Infer from the filesystem first. Native picker payloads have varied
+        # between app shells, so a folder must remain usable even if mislabeled.
+        if src_path.is_file():
             candidates = [src_path]
         elif src_path.is_dir():
-            candidates = (
-                Path(root) / fname
-                for root, dirs, files in os.walk(src_path)
-                for fname in files
-                if not any(part.startswith('.') for part in Path(root).relative_to(src_path).parts)
-            )
+            def _walk_audio_files():
+                for root, dirs, files in os.walk(src_path):
+                    dirs[:] = [d for d in dirs if not d.startswith('.')]
+                    for fname in files:
+                        yield Path(root) / fname
+            candidates = _walk_audio_files()
         else:
             candidates = []
         for candidate in candidates:
