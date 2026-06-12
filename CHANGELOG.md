@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.466-rc.120626-1012 · 2026-06-12
 - Fix: Import Step 4 now correctly detects tracks that already exist in the library using metadata comparison (artist + album + title), catching cases where track number padding or title sanitisation differences caused path-based checks to silently miss duplicates
 - Fix: Import conflict badge now shows a specific reason — "File exists", "In library", or "Duplicate" — instead of a generic "Exists" label
 
