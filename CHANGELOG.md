@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.467-rc.120626-1036 · 2026-06-12
 - Add: Import Step 5 now lists every file that failed to copy, showing the filename and reason so users know exactly what went wrong
 
 ## v0.466-rc.120626-1012 · 2026-06-12
