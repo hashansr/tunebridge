@@ -18309,7 +18309,7 @@ function _orgWizRenderPreviewBody() {
     const src = e.old_path || e.source_path || '', dst = e.new_path || '';
     const srcName = src.split('/').pop();
     let stHtml, badge = '';
-    if (kind === 'conflict') { stHtml = `<span class="orgw-st orgw-st-cf">${ICOCONF}</span>`; badge = `<span class="orgw-badge orgw-badge-cf">Exists</span>`; }
+    if (kind === 'conflict') { stHtml = `<span class="orgw-st orgw-st-cf">${ICOCONF}</span>`; const _rl = { path_exists: 'File exists', in_library: 'In library', duplicate_track: 'Duplicate' }[e.conflict_reason] || 'Exists'; badge = `<span class="orgw-badge orgw-badge-cf">${_rl}</span>`; }
     else if (kind === 'warn') { stHtml = `<span class="orgw-st orgw-st-wn">${ICOWARN}</span>`; badge = `<span class="orgw-badge orgw-badge-wn">No folder</span>`; }
     else if (kind === 'ok') { stHtml = `<span class="orgw-st orgw-st-ok orgw-st-dim">${ICOCHECK}</span>`; }
     else { stHtml = `<span class="orgw-st orgw-st-ok">${ICOMOVE}</span>`; }

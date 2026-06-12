@@ -15184,6 +15184,23 @@ def _collect_external_preview(sources, template):
     entries = []
     seen_paths = set()
 
+    # Build lookup indices from a single locked snapshot of the library.
+    with library_lock:
+        lib_snapshot = list(library)
+
+    lib_paths = {t.get('path', '') for t in lib_snapshot}
+
+    def _norm(s):
+        return ' '.join((s or '').split()).lower()
+
+    lib_meta = set()
+    for t in lib_snapshot:
+        aa = _norm(t.get('album_artist') or t.get('artist') or '')
+        al = _norm(t.get('album') or '')
+        ti = _norm(t.get('title') or '')
+        if aa and al and ti:
+            lib_meta.add((aa, al, ti))
+
     def _process_file(abs_path):
         abs_path = Path(abs_path)
         if not abs_path.exists() or abs_path in seen_paths:
@@ -15207,13 +15224,34 @@ def _collect_external_preview(sources, template):
             }
         new_rel, warns = _render_organizer_relpath(track, template)
         abs_new = music_base / new_rel
-        existing_in_library = any(
-            t.get('path') == new_rel for t in library
-        )
+
+        # Check 1: file already exists at the destination path on disk
+        path_exists = abs_new.exists()
+        # Check 2: destination path already recorded in library (exact match)
+        in_library_exact = new_rel in lib_paths
+        # Check 3: same artist+album+title already in library (catches padding/
+        # sanitisation mismatches and whitespace differences that fool the
+        # path-equality check above)
+        aa = _norm(track.get('album_artist') or track.get('artist') or '')
+        al = _norm(track.get('album') or '')
+        ti = _norm(track.get('title') or '')
+        meta_dup = bool(aa and al and ti and (aa, al, ti) in lib_meta)
+
+        conflict = path_exists or in_library_exact or meta_dup
+        if path_exists:
+            conflict_reason = 'path_exists'
+        elif in_library_exact:
+            conflict_reason = 'in_library'
+        elif meta_dup:
+            conflict_reason = 'duplicate_track'
+        else:
+            conflict_reason = None
+
         entries.append({
             'source_path': str(abs_path),
             'new_path': new_rel,
-            'conflict': abs_new.exists() or existing_in_library,
+            'conflict': conflict,
+            'conflict_reason': conflict_reason,
             'warnings': warns,
             'track': track,
         })
