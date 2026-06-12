@@ -24592,6 +24592,15 @@ body.is-col-resizing {
 .orgw-ap-t2 { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; }
 .orgw-done-stats { margin-top: 22px; display: flex; align-items: center; gap: 26px; flex-wrap: wrap; padding-top: 22px; border-top: 1px solid rgba(255,255,255,.06); }
 .orgw-done-actions { margin-top: 24px; display: flex; gap: 10px; flex-wrap: wrap; }
+.orgw-applied--error { background: rgba(255,179,181,.05); }
+.orgw-applied--error .orgw-ap-glyph { color: var(--accent-secondary); border-color: rgba(255,179,181,.35); }
+.orgw-error-list { margin-top: 20px; border-radius: 12px; border: 1px solid rgba(255,179,181,.18); overflow: hidden; }
+.orgw-error-hdr { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: rgba(255,179,181,.08); font-size: 12.5px; font-weight: 600; color: var(--accent-secondary); }
+.orgw-error-rows { max-height: 220px; overflow-y: auto; }
+.orgw-error-row { display: flex; align-items: baseline; gap: 10px; padding: 8px 14px; border-top: 1px solid rgba(255,255,255,.04); font-size: 12px; }
+.orgw-error-row:first-child { border-top: none; }
+.orgw-err-file { flex-shrink: 0; max-width: 55%; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.orgw-err-msg { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Sticky footer ──────────────────────────────────────────── */
 .orgw-foot {
