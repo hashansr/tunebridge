@@ -8952,7 +8952,7 @@ SYNC_SKIP_DIR_NAMES = {
 }
 
 def _normalize_rel(path):
-    return str(path or '').replace('\\', '/').strip('/')
+    return str(path or '').strip().strip('/')
 
 
 def _sync_rel_key(path):
@@ -9196,6 +9196,13 @@ def _sync_pick_candidate_key(candidates, local_rel, rendered_rel):
     if not scored or scored[0][0] <= 0:
         return None
     if len(scored) > 1 and scored[0][0] == scored[1][0]:
+        top_score = scored[0][0]
+        tied = [cand for score, cand in scored if score == top_score]
+        rendered_keys = set(_sync_match_keys(rendered_rel))
+        local_keys = set(_sync_match_keys(local_rel))
+        reference_keys = rendered_keys or local_keys
+        if reference_keys and all(reference_keys.intersection(_sync_match_keys(cand)) for cand in tied):
+            return tied[0]
         return None
     return scored[0][1]
 
