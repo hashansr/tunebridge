@@ -17666,6 +17666,15 @@ function _orgWizParseTemplate(str) {
 function _orgWizTokensToStr(tokens) {
   return tokens.map(t => t.type === 'field' ? `{${t.val}}` : t.val).join('');
 }
+function _orgWizTaskTitle() {
+  return _orgWiz.scope === 'import' ? 'Import Files' : 'Organise Library';
+}
+function _orgWizSyncTaskTitle() {
+  const pageTitle = document.getElementById('orgw-page-title');
+  if (pageTitle) pageTitle.textContent = _orgWiz.step === 2 ? _orgWizTaskTitle() : 'File Organisation';
+  const slab2 = document.getElementById('orgw-slab2');
+  if (slab2) slab2.textContent = _orgWizTaskTitle();
+}
 
 async function loadOrganizerView(options = {}) {
   showViewEl('organizer');
@@ -17746,8 +17755,7 @@ function _orgWizGoStep(n) {
   document.querySelectorAll('.orgw-step').forEach(p => p.classList.toggle('active', +p.dataset.step === n));
   _orgWizSyncStepper();
 
-  const slab2 = document.getElementById('orgw-slab2');
-  if (slab2) slab2.textContent = _orgWiz.scope === 'import' ? 'Source' : 'Scope';
+  _orgWizSyncTaskTitle();
   if (n === 2) _orgWizSyncStep2();
   if (n === 3) { _orgWizRenderRail(); _orgWizRenderLivePreview(); _orgWizRenderPalette(); }
   if (n === 4 && _orgWiz.previewData) _orgWizRenderPreviewBody();
@@ -17872,8 +17880,7 @@ function _orgWizSelectScope(scope) {
   _orgWiz.scope = scope;
   _orgWiz.sample = null;
   document.querySelectorAll('.orgw-scope-tile').forEach(t => t.classList.toggle('active', t.dataset.scope === scope));
-  const slab2 = document.getElementById('orgw-slab2');
-  if (slab2) slab2.textContent = scope === 'import' ? 'Source' : 'Scope';
+  _orgWizSyncTaskTitle();
   _orgWizSyncFooter();
 }
 
