@@ -10218,7 +10218,9 @@ function _swRenderDone() {
 
 function swFinish() {
   _swClearTimers();
-  loadSyncView();
+  _swUnregisterUnloadGuard();
+  _syncBgStop();
+  showView('home');
 }
 
 /* ── Shared progress helpers ─────────────────────────────── */
