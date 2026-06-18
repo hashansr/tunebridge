@@ -391,6 +391,7 @@ sync_state = {
     'cancel_requested': False,
     'current_file_done': 0,
     'current_file_total': 0,
+    'completed_items': [],
     'path_template': '',
 }
 sync_check_lock = threading.Lock()
@@ -10122,6 +10123,7 @@ def sync_scan():
         'cancel_requested': False,
         'current_file_done': 0,
         'current_file_total': 0,
+        'completed_items': [],
         'path_template': '',
     }
 
@@ -10420,6 +10422,7 @@ def sync_execute():
         'current': '',
         'current_file_done': 0,
         'current_file_total': 0,
+        'completed_items': [],
         'message': f'Syncing 0 / {total} items…',
     })
 
@@ -10430,16 +10433,36 @@ def sync_execute():
         local_copy_map = sync_state.get('local_copy_map') or {}
         pending_manifest = _pending_manifest_by_device_rel
 
+        def push_completed(title, subtitle='', size_bytes=None, kind='track'):
+            subtitle_text = str(subtitle or '').strip()
+            if subtitle_text == '.':
+                subtitle_text = ''
+            item = {
+                'kind': kind,
+                'title': str(title or '').strip() or 'Completed item',
+                'subtitle': subtitle_text,
+            }
+            if size_bytes is not None:
+                try:
+                    item['size_bytes'] = int(size_bytes)
+                except Exception:
+                    pass
+            completed = list(sync_state.get('completed_items') or [])
+            completed.insert(0, item)
+            sync_state['completed_items'] = completed[:24]
+
         for row in clean_ignore_upserts:
             progress += 1
             sync_state['progress'] = progress
             sync_state['current'] = f'Ignore saved: {row.get("rel_path")}'
+            push_completed(row.get('rel_path'), 'Ignore rule saved', None, 'rule')
             sync_state['message'] = f'Syncing {progress} / {total} items…'
 
         for row in clean_ignore_removals:
             progress += 1
             sync_state['progress'] = progress
             sync_state['current'] = f'Ignore removed: {row.get("rel_path")}'
+            push_completed(row.get('rel_path'), 'Ignore rule removed', None, 'rule')
             sync_state['message'] = f'Syncing {progress} / {total} items…'
 
         for device_rel in add_to_device_paths:
@@ -10466,6 +10489,7 @@ def sync_execute():
                 if device_rel in pending_manifest:
                     mkey, mentry = pending_manifest[device_rel]
                     _update_dap_sync_manifest(dap_id, {mkey: mentry})
+                push_completed(Path(device_rel).name, str(Path(device_rel).parent), src.stat().st_size, 'track')
             except Exception as e:
                 errors.append(f'{device_rel}: {e}')
                 # Clean up any partial file left by a failed copy
@@ -10506,6 +10530,7 @@ def sync_execute():
                         pass
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
+                push_completed(Path(rel).name, 'Copied to library', src.stat().st_size, 'track')
             except Exception as e:
                 errors.append(f'{rel}: {e}')
             progress += 1
@@ -10520,6 +10545,7 @@ def sync_execute():
             sync_state['current'] = f'✖ Device delete: {rel}'
             try:
                 _safe_delete_device_rel_file(device_path, rel)
+                push_completed(Path(rel).name, 'Deleted from device', None, 'delete')
             except Exception as e:
                 errors.append(f'{rel}: {e}')
             progress += 1
@@ -10533,6 +10559,8 @@ def sync_execute():
             sync_state['current'] = f'↻ Playlist: {pl_name}'
             try:
                 _export_playlist_to_dap(dap_id, pid, daps=daps_cache, playlists=playlists_cache, save_after=False)
+                pl_tracks = (playlists_cache.get(pid) or {}).get('tracks') or []
+                push_completed(f'{pl_name}.m3u8', f'Playlist · {len(pl_tracks)} tracks', None, 'playlist')
             except Exception as e:
                 errors.append(f'Playlist "{pl_name}": {e}')
             progress += 1

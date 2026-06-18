@@ -8379,7 +8379,7 @@ const _SW_SCAN_PHASES = [
 
 const _SW_SYNC_PHASES = [
   'Preparing transfer queue',
-  'Copying tracks to device',
+  'Copying tracks',
   'Writing playlist files',
   'Updating device manifest',
   'Verifying transfers',
@@ -8404,6 +8404,7 @@ async function loadSyncView() {
     filter: 'all', pages: {}, expanded: {},
     scanPollTimer: null, syncPollTimer: null,
     scanStartTs: 0, syncStartTs: 0, logLines: [], syncResult: null,
+    syncCompletedItems: [], syncLastProgress: 0, syncRateSamples: [],
     executedPayload: null,
     mismatchWarning: 0, mismatchWarningDismissed: false,
   };
@@ -8497,6 +8498,14 @@ function _swGoTo(step) {
   const el = n => document.getElementById(n);
   el('sw-counter').textContent = `${step} / 5`;
   el('sw-title').textContent = meta.title;
+  const subEl = el('sw-step-sub');
+  if (subEl) {
+    const sub = step === 4 && _sw.device?.name
+      ? `Transferring to ${_sw.device.name}…`
+      : (meta.sub || '');
+    subEl.textContent = sub;
+    subEl.style.display = sub ? '' : 'none';
+  }
   // Footer per step
   _swUpdateFooter(step);
   // Show/hide back button based on step
@@ -8528,10 +8537,10 @@ function _swUpdateFooter(step) {
   if (step === 5) statusEl.classList.add('sw-footer-status--success');
 
   // Cancel button
-  const cancelLabels = { 1: 'Cancel', 2: '', 3: 'Cancel', 4: 'Stop sync', 5: '' };
+  const cancelLabels = { 1: 'Cancel', 2: '', 3: 'Cancel', 4: '', 5: '' };
   cancelBtn.textContent = cancelLabels[step] || '';
   cancelBtn.disabled = false;
-  cancelBtn.style.display = (step === 1 || step === 3 || step === 4) ? '' : 'none';
+  cancelBtn.style.display = (step === 1 || step === 3) ? '' : 'none';
   // Step 4 cancel calls swCancelSync, others call swCancel (via HTML onclick)
   if (step === 4) {
     cancelBtn.onclick = () => App.swCancelSync();
@@ -8754,7 +8763,11 @@ function _swResumeScan() {
   const meta = _SW_STEPS[1];
   document.getElementById('sw-counter').textContent = '2 / 5';
   document.getElementById('sw-title').textContent = meta.title;
-  document.getElementById('sw-sub').textContent = `Scanning ${_sw.device?.name || 'device'}…`;
+  const scanSub = document.getElementById('sw-step-sub');
+  if (scanSub) {
+    scanSub.textContent = `Scanning ${_sw.device?.name || 'device'}…`;
+    scanSub.style.display = '';
+  }
   _swUpdateFooter(2);
   _updateNavButtonStates();
   _sw.scanStartTs = Date.now() / 1000;
@@ -8772,11 +8785,23 @@ function _swResumeSync() {
   const meta = _SW_STEPS[3];
   document.getElementById('sw-counter').textContent = '4 / 5';
   document.getElementById('sw-title').textContent = meta.title;
-  document.getElementById('sw-sub').textContent = `Transferring to ${_sw.device?.name || 'device'}…`;
+  const syncSub = document.getElementById('sw-step-sub');
+  if (syncSub) {
+    syncSub.textContent = `Transferring to ${_sw.device?.name || 'device'}…`;
+    syncSub.style.display = '';
+  }
   _swUpdateFooter(4);
   _updateNavButtonStates();
   _sw.syncStartTs = Date.now() / 1000;
   _sw.logLines = [];
+  _sw.syncCompletedItems = [];
+  _sw.syncLastProgress = 0;
+  _sw.syncRateSamples = [];
+  _swRenderPhases('sw-sync-phases', _SW_SYNC_PHASES, -1);
+  _swUpdateSyncHeroStats(0, 0, 0, 0);
+  _swUpdateSyncPhaseMeta(0);
+  const log = document.getElementById('sw-sync-log');
+  if (log) log.innerHTML = _swRenderCompletedPlaceholder();
   _swResetCurrentFileUI();
   _swRegisterUnloadGuard();
   _sw.syncPollTimer = setInterval(_swPollSync, 600);
@@ -9777,8 +9802,10 @@ function _swResetCurrentFileUI() {
   if (wrap) wrap.style.display = 'none';
   const cur = document.getElementById('sw-sync-current');
   if (cur) cur.textContent = '';
-  const fb = document.getElementById('sw-sync-file-bar');
-  if (fb) fb.style.width = '0%';
+  const meta = document.getElementById('sw-sync-current-meta');
+  if (meta) meta.textContent = '';
+  const pct = document.getElementById('sw-sync-file-pct');
+  if (pct) pct.textContent = '0%';
   const cautionName = document.getElementById('sw-caution-device-name');
   if (cautionName) cautionName.textContent = _sw.device?.name || 'your device';
 }
@@ -9786,15 +9813,20 @@ function _swResetCurrentFileUI() {
 function _swInitSyncStep() {
   _swClearTimers();
   _sw.logLines = [];
+  _sw.syncCompletedItems = [];
+  _sw.syncLastProgress = 0;
+  _sw.syncRateSamples = [];
   _sw.syncStartTs = Date.now() / 1000;
 
   _swRenderPhases('sw-sync-phases', _SW_SYNC_PHASES, -1);
   const log = document.getElementById('sw-sync-log');
-  if (log) log.innerHTML = '';
+  if (log) log.innerHTML = _swRenderCompletedPlaceholder();
   const bar = document.getElementById('sw-sync-bar');
   if (bar) bar.style.width = '0%';
   const pct = document.getElementById('sw-sync-pct');
   if (pct) pct.textContent = '0%';
+  _swUpdateSyncHeroStats(0, 0, 0, 0);
+  _swUpdateSyncPhaseMeta(0);
   _swResetCurrentFileUI();
   _swRegisterUnloadGuard();
   _syncBgStart();
@@ -9845,36 +9877,32 @@ async function _swPollSync() {
   const elapsed  = (Date.now() / 1000) - _sw.syncStartTs;
 
   _swSetProgress('sync', pct);
-  document.getElementById('sw-sync-elapsed').textContent = _fmtSecs(elapsed);
-  document.getElementById('sw-sync-tracks').textContent = total > 0
-    ? `${progress.toLocaleString()} / ${total.toLocaleString()}`
-    : progress.toLocaleString();
+  _swUpdateSyncRateSamples(status);
+  _swUpdateSyncHeroStats(progress, total, elapsed, _swAverageSyncRate());
 
   const phase = status.message ?? '';
-  const phaseEl = document.getElementById('sw-sync-phase-label');
-  if (phaseEl) phaseEl.textContent = phase || 'Syncing…';
-  if (phase && (!_sw.logLines.length || _sw.logLines[_sw.logLines.length - 1] !== phase)) {
-    _swAppendLog('sw-sync-log', phase);
-  }
+  _swRenderCompletedFeed(status);
 
   // Per-file current path + thin secondary progress bar
   const curWrap = document.getElementById('sw-sync-current-wrap');
   const curEl   = document.getElementById('sw-sync-current');
   if (status.current && curEl) {
-    curEl.textContent = status.current;
+    const current = _swParseCurrentSyncItem(status.current);
+    curEl.textContent = current.title;
+    const currentMeta = document.getElementById('sw-sync-current-meta');
+    if (currentMeta) currentMeta.textContent = current.subtitle;
     if (curWrap) curWrap.style.display = '';
     const fileTotal = Number(status.current_file_total ?? 0);
     const fileDone  = Number(status.current_file_done  ?? 0);
-    const fileBar   = document.getElementById('sw-sync-file-bar');
-    if (fileBar) {
-      fileBar.style.width = fileTotal > 0 ? `${Math.round((fileDone / fileTotal) * 100)}%` : '0%';
-    }
+    const filePct   = document.getElementById('sw-sync-file-pct');
+    if (filePct) filePct.textContent = fileTotal > 0 ? `${Math.round((fileDone / fileTotal) * 100)}%` : '0%';
   } else if (curWrap) {
     curWrap.style.display = 'none';
   }
 
   const phaseIndex = _swSyncPhaseIndex(status, pct);
   _swRenderPhases('sw-sync-phases', _SW_SYNC_PHASES, phaseIndex);
+  _swUpdateSyncPhaseMeta(phaseIndex);
 
   if (status.status === 'cancelled') {
     clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null;
@@ -9898,6 +9926,8 @@ async function _swPollSync() {
     _syncBgStop('done');
     _swSetProgress('sync', 100);
     _swRenderPhases('sw-sync-phases', _SW_SYNC_PHASES, _SW_SYNC_PHASES.length);
+    _swUpdateSyncPhaseMeta(_SW_SYNC_PHASES.length - 1);
+    _swRenderCompletedFeed(status);
     _sw.syncResult = status;
     setTimeout(() => _swGoTo(5), 600);
   }
@@ -9911,6 +9941,113 @@ function _swSyncProgressPercent(status) {
     return 0;
   }
   return Math.min(99, (progress / total) * 100);
+}
+
+function _swFormatEta(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '--';
+  if (seconds < 60) return `~${Math.max(1, Math.round(seconds))}s`;
+  if (seconds < 3600) return `~${Math.max(1, Math.round(seconds / 60))} min`;
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.round((seconds % 3600) / 60);
+  return mins ? `~${hours}h ${mins}m` : `~${hours}h`;
+}
+
+function _swUpdateSyncHeroStats(progress, total, elapsed, bytesPerSec) {
+  const itemsEl = document.getElementById('sw-sync-items');
+  if (itemsEl) {
+    itemsEl.innerHTML = `${Math.max(0, progress).toLocaleString()} <small>/ ${Math.max(0, total).toLocaleString()}</small>`;
+  }
+
+  const itemRate = elapsed > 0 ? progress / elapsed : 0;
+  const remainingItems = Math.max(0, total - progress);
+  const eta = itemRate > 0 && remainingItems > 0 ? remainingItems / itemRate : 0;
+  const etaEl = document.getElementById('sw-sync-time-left');
+  if (etaEl) etaEl.textContent = total > 0 && progress < total ? _swFormatEta(eta) : '--';
+
+  const rateEl = document.getElementById('sw-sync-rate');
+  if (rateEl) {
+    if (bytesPerSec > 0) {
+      const pretty = _fmtBytes(bytesPerSec).split(' ');
+      rateEl.innerHTML = `${esc(pretty[0])} <small>${esc(pretty.slice(1).join(' ') || 'B')}/s</small>`;
+    } else {
+      rateEl.textContent = '--';
+    }
+  }
+}
+
+function _swUpdateSyncRateSamples(status) {
+  const now = Date.now() / 1000;
+  const done = Number(status?.current_file_done ?? 0);
+  const current = String(status?.current ?? '');
+  const last = _sw.syncRateSamples[_sw.syncRateSamples.length - 1];
+  if (current && done > 0) {
+    _sw.syncRateSamples.push({ t: now, done, current });
+  } else if (!current) {
+    _sw.syncRateSamples = [];
+    return;
+  }
+  _sw.syncRateSamples = _sw.syncRateSamples
+    .filter(s => s.current === current && now - s.t <= 8)
+    .slice(-12);
+  if (last && last.current !== current) _sw.syncRateSamples = [{ t: now, done, current }];
+}
+
+function _swAverageSyncRate() {
+  const samples = _sw.syncRateSamples || [];
+  if (samples.length < 2) return 0;
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  const dt = last.t - first.t;
+  const db = last.done - first.done;
+  return dt > 0 && db > 0 ? db / dt : 0;
+}
+
+function _swUpdateSyncPhaseMeta(activeIndex) {
+  const meta = document.getElementById('sw-sync-phase-meta');
+  if (!meta) return;
+  const step = Math.max(1, Math.min(_SW_SYNC_PHASES.length, activeIndex + 1));
+  meta.textContent = `Step ${step} of ${_SW_SYNC_PHASES.length}`;
+}
+
+function _swParseCurrentSyncItem(raw) {
+  const text = String(raw || '').trim();
+  const clean = text.replace(/^(→ Device:|← Local:|✖ Device delete:|↻ Playlist:)\s*/i, '').trim();
+  const parts = clean.split(/[\\/]/).filter(Boolean);
+  const title = parts.pop() || clean || 'Preparing next item';
+  let subtitle = parts.join(' · ');
+  if (/^← Local:/i.test(text)) subtitle = subtitle ? `${subtitle} · copied to library` : 'Copied to library';
+  if (/^✖/i.test(text)) subtitle = subtitle ? `${subtitle} · deleting from device` : 'Deleting from device';
+  if (/^↻ Playlist:/i.test(text)) subtitle = 'Playlist file';
+  return { title, subtitle };
+}
+
+function _swRenderCompletedPlaceholder() {
+  return `<div class="sw-completed-empty">Completed files will appear here as they finish.</div>`;
+}
+
+function _swRenderCompletedFeed(status) {
+  const feed = document.getElementById('sw-sync-log');
+  if (!feed) return;
+  const incoming = Array.isArray(status?.completed_items) ? status.completed_items : [];
+  _sw.syncCompletedItems = incoming.slice(0, 24);
+  const shown = _sw.syncCompletedItems.slice(0, 8);
+  if (!shown.length) {
+    feed.innerHTML = _swRenderCompletedPlaceholder();
+  } else {
+    feed.innerHTML = shown.map(item => {
+      const title = item?.title || 'Completed item';
+      const subtitle = item?.subtitle || (item?.kind === 'playlist' ? 'Playlist file' : 'Transferred');
+      const size = Number.isFinite(Number(item?.size_bytes)) ? _fmtBytes(Number(item.size_bytes)) : '--';
+      return `<div class="sw-completed-row">
+        <span class="sw-completed-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+        <span class="sw-completed-name"><span class="sw-completed-title">${esc(title)}</span><span class="sw-completed-sub">${esc(subtitle)}</span></span>
+        <span class="sw-completed-size">${esc(size)}</span>
+      </div>`;
+    }).join('');
+  }
+  const count = Number(status?.progress ?? _sw.syncCompletedItems.length);
+  const countEl = document.getElementById('sw-sync-log-count');
+  if (countEl) countEl.textContent = `${Math.max(0, count).toLocaleString()} transferred`;
 }
 
 function _swSyncPhaseIndex(status, pct) {

@@ -1905,8 +1905,11 @@
 
           <!-- Step header (shown on all steps) -->
           <div class="sw-step-header">
-            <span class="sw-step-counter" id="sw-counter">1 / 5</span>
-            <h1 class="sw-step-title" id="sw-title">Select a device</h1>
+            <div>
+              <span class="sw-step-counter" id="sw-counter">1 / 5</span>
+              <h1 class="sw-step-title" id="sw-title">Select a device</h1>
+            </div>
+            <p class="sw-step-sub" id="sw-step-sub"></p>
           </div>
 
           <!-- ── Step 1: Select device ── -->
@@ -1992,36 +1995,53 @@
             <div class="sw-progress-card sw-card" id="sw-sync-card">
               <div class="sw-sync-caution-bar" id="sw-sync-caution-bar">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                <span>Don't eject <strong id="sw-caution-device-name">your device</strong> or close the app until sync is complete.</span>
+                <span>Keep <strong id="sw-caution-device-name">your device</strong> connected and don't close TuneBridge until the sync finishes.</span>
               </div>
-              <div class="sw-progress-hdr">
-                <div class="sw-progress-hdr-left">
-                  <span class="sw-overline">syncing</span>
-                  <span class="sw-progress-phase-label" id="sw-sync-phase-label">Preparing…</span>
+              <div class="sw-sync-hero">
+                <div class="sw-sync-hero-row">
+                  <div class="sw-big-pct" id="sw-sync-pct">0%</div>
+                  <div class="sw-sync-stats" aria-label="Sync progress statistics">
+                    <div class="sw-sync-stat">
+                      <span class="sw-sync-stat-key">Items</span>
+                      <span class="sw-sync-stat-val" id="sw-sync-items">0 <small>/ 0</small></span>
+                    </div>
+                    <div class="sw-sync-stat">
+                      <span class="sw-sync-stat-key">Time left</span>
+                      <span class="sw-sync-stat-val" id="sw-sync-time-left">--</span>
+                    </div>
+                    <div class="sw-sync-stat">
+                      <span class="sw-sync-stat-key">Rate</span>
+                      <span class="sw-sync-stat-val" id="sw-sync-rate">--</span>
+                    </div>
+                  </div>
                 </div>
-                <div class="sw-progress-stats">
-                  <span class="sw-stat-chip"><span class="sw-stat-val" id="sw-sync-tracks">0</span> <span class="sw-stat-lbl">items</span></span>
-                  <span class="sw-stat-chip"><span class="sw-stat-val" id="sw-sync-elapsed">0s</span> <span class="sw-stat-lbl">elapsed</span></span>
+                <div class="sw-bar-wrap">
+                  <div class="sw-bar sw-bar--sync" id="sw-sync-bar" style="width:0%"></div>
                 </div>
-              </div>
-              <div class="sw-big-pct" id="sw-sync-pct">0%</div>
-              <div class="sw-bar-wrap">
-                <div class="sw-bar sw-bar--sync" id="sw-sync-bar" style="width:0%"></div>
               </div>
               <div class="sw-sync-current-wrap" id="sw-sync-current-wrap" style="display:none">
-                <span class="sw-sync-current-label" id="sw-sync-current"></span>
-                <div class="sw-bar-wrap sw-bar-wrap--thin">
-                  <div class="sw-bar sw-bar--file" id="sw-sync-file-bar" style="width:0%"></div>
+                <span class="sw-current-spinner" aria-hidden="true"></span>
+                <div class="sw-current-file">
+                  <span class="sw-current-kicker">Now copying</span>
+                  <span class="sw-sync-current-label" id="sw-sync-current"></span>
+                  <span class="sw-sync-current-meta" id="sw-sync-current-meta"></span>
                 </div>
+                <span class="sw-sync-file-pct" id="sw-sync-file-pct">0%</span>
               </div>
               <div class="sw-progress-body">
-                <div class="sw-phases-col" id="sw-sync-phases"><!-- populated by JS --></div>
+                <div class="sw-phases-wrap">
+                  <div class="sw-section-hdr">
+                    <span class="sw-overline">Progress</span>
+                    <span class="sw-section-meta" id="sw-sync-phase-meta">Step 1 of 6</span>
+                  </div>
+                  <div class="sw-phases-col" id="sw-sync-phases"><!-- populated by JS --></div>
+                </div>
                 <div class="sw-log-col">
                   <div class="sw-log-hdr">
-                    <span class="sw-overline">Live log</span>
-                    <span class="sw-log-count" id="sw-sync-log-count">0 entries</span>
+                    <span class="sw-overline">Recently completed</span>
+                    <span class="sw-log-count" id="sw-sync-log-count">0 transferred</span>
                   </div>
-                  <div class="sw-log" id="sw-sync-log"></div>
+                  <div class="sw-completed-feed feed-fade" id="sw-sync-log"></div>
                 </div>
               </div>
             </div>
