@@ -7601,6 +7601,8 @@ async function showView(viewName) {
   if (!await _guardMlGeneratorNavigation()) return;
   if (!await _guardPeqEditorNavigation()) return;
   if (!await _guardModalNavigation()) return;
+  const organizerOptions = viewName === 'organizer-import' ? { initialStep: 2 } : null;
+  if (organizerOptions) viewName = 'organizer';
   _closeModalOverlaysForNavigation();
   _pushToNavHistory();
   if (viewName === 'fav-artists') {
@@ -7639,7 +7641,7 @@ async function showView(viewName) {
   else if (viewName === 'history') loadHistoryView();
   else if (viewName === 'duplicates') loadDuplicatesView();
   else if (viewName === 'sync') loadSyncView();
-  else if (viewName === 'organizer') loadOrganizerView();
+  else if (viewName === 'organizer') loadOrganizerView(organizerOptions || {});
   else if (viewName === 'search') _renderSearchResults();
 
   if (viewName === 'home') {
@@ -7651,6 +7653,10 @@ async function showView(viewName) {
     clearInterval(_homeAutoRefreshTimer);
     _homeAutoRefreshTimer = null;
   }
+}
+
+async function openImportWizard() {
+  return showView('organizer-import');
 }
 
 function showViewEl(name) {
@@ -17661,11 +17667,12 @@ function _orgWizTokensToStr(tokens) {
   return tokens.map(t => t.type === 'field' ? `{${t.val}}` : t.val).join('');
 }
 
-async function loadOrganizerView() {
+async function loadOrganizerView(options = {}) {
   showViewEl('organizer');
   setActiveNav('settings');
 
-  _orgWiz.step = 1; _orgWiz.maxStep = 1; _orgWiz.scope = 'import'; _orgWiz.libScope = 'all';
+  const initialStep = options.initialStep === 2 ? 2 : 1;
+  _orgWiz.step = 1; _orgWiz.maxStep = initialStep; _orgWiz.scope = 'import'; _orgWiz.libScope = 'all';
   _orgWiz.sources = []; _orgWiz.previewData = null; _orgWiz.sample = null; _orgWiz.filter = 'all';
   _orgWiz.editorOpen = false; _orgWiz.running = false; _orgWiz.done = false;
   if (_orgWiz.pollTimer) { clearInterval(_orgWiz.pollTimer); _orgWiz.pollTimer = null; }
@@ -17716,7 +17723,8 @@ async function loadOrganizerView() {
     if (el && s && s.total_tracks) el.textContent = s.total_tracks + ' tracks';
   }).catch(() => {});
 
-  _orgWizGoStep(1);
+  _orgWizSelectScope('import');
+  _orgWizGoStep(initialStep);
   _orgWizRenderRail();
   _orgWizRenderLivePreview();
 }
@@ -18651,6 +18659,7 @@ const App = {
   showSettings,
   closeSettings,
   saveSettings,
+  openImportWizard,
   showHelp,
   closeHelp,
   triggerImport,

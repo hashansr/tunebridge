@@ -8982,6 +8982,10 @@ tbody tr:hover {
   mask-image: url('/icons/refresh2.svg');
   -webkit-mask-image: url('/icons/refresh2.svg');
 }
+.tb-icon-import {
+  mask-image: url('/icons/import.svg');
+  -webkit-mask-image: url('/icons/import.svg');
+}
 .tb-icon-refresh-sidebar {
   width: 13px;
   height: 13px;
