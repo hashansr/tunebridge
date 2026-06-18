@@ -10534,6 +10534,11 @@ def sync_execute():
         if playlist_ids:
             save_daps(daps_cache)
 
+        sync_state['current'] = ''
+        sync_state['current_file_done'] = 0
+        sync_state['current_file_total'] = 0
+        sync_state['message'] = 'Verifying transfers…'
+
         copied = total - len(errors)
         post_copy_diff = None
         diff_error = None

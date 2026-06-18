@@ -9834,11 +9834,15 @@ async function _swPollSync() {
   try { status = await api('/sync/status'); } catch (_) { return; }
 
   const progress = Number(status.progress ?? 0);
+  const total = Number(status.total ?? 0);
+  const pct = _swSyncProgressPercent(status);
   const elapsed  = (Date.now() / 1000) - _sw.syncStartTs;
 
-  _swSetProgress('sync', progress);
+  _swSetProgress('sync', pct);
   document.getElementById('sw-sync-elapsed').textContent = _fmtSecs(elapsed);
-  document.getElementById('sw-sync-tracks').textContent = String(status.current ?? status.progress ?? 0);
+  document.getElementById('sw-sync-tracks').textContent = total > 0
+    ? `${progress.toLocaleString()} / ${total.toLocaleString()}`
+    : progress.toLocaleString();
 
   const phase = status.message ?? '';
   const phaseEl = document.getElementById('sw-sync-phase-label');
@@ -9859,9 +9863,11 @@ async function _swPollSync() {
     if (fileBar) {
       fileBar.style.width = fileTotal > 0 ? `${Math.round((fileDone / fileTotal) * 100)}%` : '0%';
     }
+  } else if (curWrap) {
+    curWrap.style.display = 'none';
   }
 
-  const phaseIndex = Math.floor((progress / 100) * (_SW_SYNC_PHASES.length - 1));
+  const phaseIndex = _swSyncPhaseIndex(status, pct);
   _swRenderPhases('sw-sync-phases', _SW_SYNC_PHASES, phaseIndex);
 
   if (status.status === 'cancelled') {
@@ -9880,7 +9886,7 @@ async function _swPollSync() {
     return;
   }
 
-  if (status.status === 'done' || progress >= 100) {
+  if (status.status === 'done') {
     clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null;
     _swUnregisterUnloadGuard();
     _syncBgStop('done');
@@ -9889,6 +9895,27 @@ async function _swPollSync() {
     _sw.syncResult = status;
     setTimeout(() => _swGoTo(5), 600);
   }
+}
+
+function _swSyncProgressPercent(status) {
+  if (status?.status === 'done') return 100;
+  const progress = Number(status?.progress ?? 0);
+  const total = Number(status?.total ?? 0);
+  if (!Number.isFinite(progress) || progress <= 0 || !Number.isFinite(total) || total <= 0) {
+    return 0;
+  }
+  return Math.min(99, (progress / total) * 100);
+}
+
+function _swSyncPhaseIndex(status, pct) {
+  if (status?.status === 'done') return _SW_SYNC_PHASES.length;
+  const current = String(status?.current ?? '');
+  const message = String(status?.message ?? '');
+  if (/verifying/i.test(message)) return 4;
+  if (/playlist/i.test(current)) return 2;
+  if (/device manifest/i.test(message)) return 3;
+  if (/^(→|←|✖)/.test(current)) return 1;
+  return Math.floor((pct / 100) * (_SW_SYNC_PHASES.length - 1));
 }
 
 function _swHandleSyncCancelled() {
