@@ -8389,7 +8389,17 @@ const _SW_SYNC_PHASES = [
 // Keep a reference to the legacy poll timer var name
 let _syncPollTimer = null;
 
-function showSync() {
+async function showSync() {
+  // Ensure any completed/old sync state is cleared before opening the view.
+  // If the server refuses (409) it means a sync is actively running — show
+  // a small toast to explain we're resuming the active sync instead of
+  // starting a fresh one.
+  try {
+    const res = await fetch('/api/sync/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    if (res.status === 409) {
+      toast('Resuming active sync…', 'info');
+    }
+  } catch (e) { /* ignore network errors */ }
   App.showView('sync');
 }
 
