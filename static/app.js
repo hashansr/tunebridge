@@ -14974,12 +14974,10 @@ async function loadSettings() {
   const imgSvc = document.getElementById('artist-image-service-select');
   if (imgSvc) {
     imgSvc.value = settings.artist_image_service || 'itunes';
-    onArtistImageServiceChange(imgSvc.value);
+    onArtistImageServiceChange(imgSvc.value, { dirty: false });
   }
-  const lastfmIn = document.getElementById('lastfm-api-key-input');
-  if (lastfmIn) lastfmIn.value = settings.lastfm_api_key || '';
-  const fanartIn = document.getElementById('fanart-api-key-input');
-  if (fanartIn) fanartIn.value = settings.fanart_api_key || '';
+  _syncArtistImageKeyField(settings.artist_image_service || 'itunes');
+  _setArtistImageSettingsDirty(false);
   window._artistImageServicePref = settings.artist_image_service || 'itunes';
 
   const listeningToggle = document.getElementById('listening-tracking-toggle');
@@ -17440,6 +17438,7 @@ async function loadLyricsSettings() {
     ]);
     const sel = document.getElementById('lyrics-service-select');
     if (sel) sel.value = settings.service || 'lrclib';
+    _syncLyricsKeyRow();
     _updateLyricsStatsRow(stats);
     _updateLyricsBulkBanner(status);
     if (status.status === 'running') _startLyricsBulkPolling();
@@ -17454,13 +17453,24 @@ function _updateLyricsStatsRow(stats) {
   const by = stats.by_status || {};
   const never = by.null || 0;
   const retryable = by.error || 0;
-  const parts = [`${hasFiles.toLocaleString()} of ${total.toLocaleString()} songs have lyrics`];
-  if (never) parts.push(`${never.toLocaleString()} new songs without lyrics`);
-  if (retryable) parts.push(`${retryable.toLocaleString()} retryable errors`);
-  el.textContent = parts.join(' · ');
+  let text = `${hasFiles.toLocaleString()} of ${total.toLocaleString()} songs have lyrics.`;
+  if (never) text += ` ${never.toLocaleString()} new songs need lyrics.`;
+  if (retryable) text += ` ${retryable.toLocaleString()} retryable errors.`;
+  if (!never && !retryable) text += ' Fetch the rest, or re-fetch everything to refresh.';
+  el.textContent = text;
+}
+
+function _syncLyricsKeyRow() {
+  const select = document.getElementById('lyrics-service-select');
+  const selected = select?.selectedOptions?.[0];
+  const keyRow = document.getElementById('lyrics-key-row');
+  if (!keyRow) return;
+  const needsKey = selected?.dataset?.key === '1';
+  keyRow.classList.toggle('hidden', !needsKey);
 }
 
 async function onLyricsServiceChange(service) {
+  _syncLyricsKeyRow();
   await fetch('/api/lyrics/settings', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -19486,6 +19496,7 @@ const App = {
   saveArtistImage,
   removeArtistImage,
   onArtistImageServiceChange,
+  markArtistImageSettingsDirty,
   saveArtistImageSettings,
   startArtistImageBatch,
   cancelArtistImageBatch,
@@ -23378,11 +23389,49 @@ function _refreshArtistHeroImage() {
 
 // ── Artist Image Settings ────────────────────────────────────────────────────
 
-function onArtistImageServiceChange(value) {
-  const lastfmRow = document.getElementById('lastfm-key-row');
-  const fanartRow = document.getElementById('fanart-key-row');
-  if (lastfmRow) lastfmRow.style.display = value === 'lastfm' ? '' : 'none';
-  if (fanartRow) fanartRow.style.display = value === 'fanart' ? '' : 'none';
+const _ARTIST_IMAGE_KEY_META = {
+  fanart: {
+    label: 'Fanart.tv',
+    setting: 'fanart_api_key',
+    href: 'https://fanart.tv/get-an-api-key/',
+  },
+  lastfm: {
+    label: 'Last.fm',
+    setting: 'lastfm_api_key',
+    href: 'https://www.last.fm/api/accounts',
+  },
+};
+
+function _setArtistImageSettingsDirty(dirty) {
+  const body = document.getElementById('artwork-advanced-body');
+  const saveBtn = document.getElementById('artist-image-save-btn');
+  if (body) body.classList.toggle('dirty', !!dirty);
+  if (saveBtn) saveBtn.disabled = !dirty;
+}
+
+function markArtistImageSettingsDirty() {
+  _setArtistImageSettingsDirty(true);
+}
+
+function _syncArtistImageKeyField(value) {
+  const row = document.getElementById('artist-api-key-row');
+  const input = document.getElementById('artist-api-key-input');
+  const label = document.getElementById('artist-api-key-name');
+  const link = document.getElementById('artist-api-key-link');
+  const select = document.getElementById('artist-image-service-select');
+  const option = select?.selectedOptions?.[0];
+  const needsKey = option?.dataset?.key === '1';
+  const meta = _ARTIST_IMAGE_KEY_META[value];
+
+  if (row) row.classList.toggle('hidden', !needsKey || !meta);
+  if (label && meta) label.textContent = meta.label;
+  if (link && meta) link.href = meta.href;
+  if (input) input.value = meta ? (_settings[meta.setting] || '') : '';
+}
+
+function onArtistImageServiceChange(value, options = {}) {
+  _syncArtistImageKeyField(value);
+  if (options.dirty !== false) _setArtistImageSettingsDirty(true);
 }
 
 /* ── Artist Image Batch Fetch ────────────────────────────────────────── */
@@ -23724,8 +23773,9 @@ async function _checkRgMissingAndNotify() {
 
 async function saveArtistImageSettings() {
   const service = document.getElementById('artist-image-service-select')?.value || 'itunes';
-  const lastfmKey = (document.getElementById('lastfm-api-key-input')?.value || '').trim();
-  const fanartKey = (document.getElementById('fanart-api-key-input')?.value || '').trim();
+  const keyValue = (document.getElementById('artist-api-key-input')?.value || '').trim();
+  const lastfmKey = service === 'lastfm' ? keyValue : (_settings.lastfm_api_key || '');
+  const fanartKey = service === 'fanart' ? keyValue : (_settings.fanart_api_key || '');
   try {
     await api('/settings', {
       method: 'PUT',
@@ -23735,7 +23785,13 @@ async function saveArtistImageSettings() {
         fanart_api_key: fanartKey,
       },
     });
+    Object.assign(_settings, {
+      artist_image_service: service,
+      lastfm_api_key: lastfmKey,
+      fanart_api_key: fanartKey,
+    });
     window._artistImageServicePref = service;
+    _setArtistImageSettingsDirty(false);
     toast('Artist image settings saved');
   } catch (e) {
     toast('Error saving settings: ' + e.message);

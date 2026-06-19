@@ -1079,21 +1079,35 @@
                     <span id="lyrics-advanced-chevron" class="accordion-state-icon" aria-hidden="true" style="width:11px;height:11px"></span>
                   </button>
                   <div id="lyrics-advanced-body" style="display:none">
-                    <div class="settings-row">
-                      <label>Lyric service</label>
-                      <select id="lyrics-service-select" class="settings-select" onchange="App.onLyricsServiceChange(this.value)">
-                        <option value="lrclib">LrcLib (free, no key required)</option>
-                      </select>
-                    </div>
-                    <div class="settings-row settings-advanced-note-row">
-                      <p class="settings-hint settings-hint-inline-start">Local <code>.lrc</code> files beside tracks are also detected during library scans.</p>
-                    </div>
-                    <div class="lyric-health-tool-row">
-                      <div class="settings-rg-meta">
-                        <span class="settings-rg-label" style="font-size:var(--text-sm)">Lyric health</span>
-                        <span class="settings-rg-sub">Find .lrc files with no matching music file in your library.</span>
+                    <div class="settings-adv-config-row">
+                      <div>
+                        <div class="settings-adv-label">Lyric service</div>
+                        <div class="settings-adv-help">Local <code>.lrc</code> files beside your tracks are detected during library scans.</div>
                       </div>
-                      <button class="btn-secondary" id="lyric-health-btn" onclick="App.lyricHealthScan()">Scan for orphans</button>
+                      <div class="settings-adv-control">
+                        <select id="lyrics-service-select" class="settings-select" data-service="lyrics" onchange="App.onLyricsServiceChange(this.value)">
+                          <option value="lrclib" data-key="0">LrcLib (free, no key)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div id="lyrics-key-row" class="settings-adv-config-row hidden" data-keyrow="lyrics">
+                      <div>
+                        <div class="settings-adv-label"><span id="lyrics-key-name">Lyrics</span> API key</div>
+                        <div class="settings-adv-help">Optional. Improves match quality. Stored locally and never shared.</div>
+                      </div>
+                      <div class="settings-adv-control">
+                        <input id="lyrics-api-key-input" class="settings-adv-field" type="text" placeholder="Paste API key" />
+                        <button class="btn-secondary settings-ghost-action" type="button">Get key</button>
+                      </div>
+                    </div>
+                    <div class="settings-adv-config-row lyric-health-tool-row">
+                      <div>
+                        <div class="settings-adv-label">Lyric health</div>
+                        <div class="settings-adv-help">Find <code>.lrc</code> files with no matching track in your library.</div>
+                      </div>
+                      <div class="settings-adv-control">
+                        <button class="btn-secondary" id="lyric-health-btn" onclick="App.lyricHealthScan()">Scan for orphans</button>
+                      </div>
                     </div>
                     <div id="lyric-health-result" style="display:none"></div>
                   </div>
@@ -1122,38 +1136,32 @@
                     <span id="artwork-advanced-chevron" class="accordion-state-icon" aria-hidden="true" style="width:11px;height:11px"></span>
                   </button>
                   <div id="artwork-advanced-body" style="display:none">
-                    <div class="settings-row settings-advanced-note-row settings-hint-block-gap">
-                      <p class="settings-hint settings-hint-inline-start">
-                        Choose the artwork service and optionally add an API key for better results.
-                      </p>
-                    </div>
-                    <div class="settings-row">
-                      <label>Image service</label>
-                      <select id="artist-image-service-select" class="settings-select" onchange="App.onArtistImageServiceChange(this.value)">
-                        <option value="itunes">iTunes Search (no key required)</option>
-                        <option value="lastfm">Last.fm</option>
-                        <option value="fanart">Fanart.tv</option>
-                      </select>
-                    </div>
-                    <div id="lastfm-key-row" class="settings-row" style="display:none">
-                      <label>Last.fm API key</label>
-                      <div class="input-browse-group">
-                        <input id="lastfm-api-key-input" type="text" placeholder="Paste your API key" />
-                        <a class="btn-secondary settings-key-link" href="https://www.last.fm/api/accounts" target="_blank">Get key</a>
+                    <div class="settings-adv-config-row">
+                      <div>
+                        <div class="settings-adv-label">Image service</div>
+                        <div class="settings-adv-help">Choose the artwork provider. Some return better results with an API key.</div>
+                      </div>
+                      <div class="settings-adv-control">
+                        <select id="artist-image-service-select" class="settings-select" data-service="artist" onchange="App.onArtistImageServiceChange(this.value)">
+                          <option value="fanart" data-key="1">Fanart.tv</option>
+                          <option value="lastfm" data-key="1">Last.fm</option>
+                          <option value="itunes" data-key="0">iTunes Search (free, no key)</option>
+                        </select>
                       </div>
                     </div>
-                    <div id="fanart-key-row" class="settings-row" style="display:none">
-                      <label>Fanart.tv API key</label>
-                      <div class="input-browse-group">
-                        <input id="fanart-api-key-input" type="text" placeholder="Paste your API key" />
-                        <a class="btn-secondary settings-key-link" href="https://fanart.tv/get-an-api-key/" target="_blank">Get key</a>
+                    <div id="artist-api-key-row" class="settings-adv-config-row" data-keyrow="artist">
+                      <div>
+                        <div class="settings-adv-label"><span id="artist-api-key-name">Fanart.tv</span> API key</div>
+                        <div class="settings-adv-help">Optional. Improves results. Stored locally and never shared.</div>
+                      </div>
+                      <div class="settings-adv-control">
+                        <input id="artist-api-key-input" class="settings-adv-field" type="text" placeholder="Paste API key" oninput="App.markArtistImageSettingsDirty()" />
+                        <a id="artist-api-key-link" class="btn-secondary settings-ghost-action settings-key-link" href="https://fanart.tv/get-an-api-key/" target="_blank">Get key</a>
                       </div>
                     </div>
-                    <div class="settings-row settings-advanced-note-row">
-                      <p class="settings-hint settings-hint-inline-start">API keys are stored locally on your device and never shared.</p>
-                    </div>
-                    <div class="settings-inline-actions settings-advanced-actions">
-                      <button class="btn-primary" onclick="App.saveArtistImageSettings()">Save</button>
+                    <div class="settings-adv-footer">
+                      <span id="artist-image-save-hint" class="settings-save-hint">Unsaved changes</span>
+                      <button id="artist-image-save-btn" class="btn-primary" onclick="App.saveArtistImageSettings()" disabled>Save</button>
                     </div>
                   </div>
                 </div>
