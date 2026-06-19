@@ -14670,6 +14670,108 @@ async function exportBackup() {
   }
 }
 
+const _CSV_COLUMNS = [
+  ['title',           'Title',          true],
+  ['artist',          'Artist',         true],
+  ['album',           'Album',          true],
+  ['year',            'Year',           true],
+  ['track_number',    'Track Number',   true],
+  ['disc_number',     'Disc Number',    true],
+  ['genre',           'Genre',          true],
+  ['duration_fmt',    'Duration',       true],
+  ['format',          'Format',         true],
+  ['bits_per_sample', 'Bit Depth',      true],
+  ['sample_rate',     'Sample Rate',    true],
+  ['bitrate',         'Bitrate',        true],
+  ['date_added',      'Date Added',     true],
+  ['album_artist',    'Album Artist',   false],
+  ['path',            'File Path',      false],
+  ['rg_track_gain',   'RG Track Gain',  false],
+  ['rg_album_gain',   'RG Album Gain',  false],
+];
+
+function showExportCsvModal() {
+  const container = document.getElementById('export-csv-columns');
+  container.innerHTML = '';
+  for (const [key, label, checked] of _CSV_COLUMNS) {
+    const wrap = document.createElement('label');
+    wrap.style.cssText = 'display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;user-select:none';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = key;
+    cb.checked = checked;
+    cb.style.cssText = 'accent-color:var(--accent);width:13px;height:13px;flex-shrink:0;cursor:pointer';
+    wrap.appendChild(cb);
+    wrap.appendChild(document.createTextNode(label));
+    container.appendChild(wrap);
+  }
+  document.getElementById('export-csv-modal').style.display = '';
+}
+
+function _closeExportCsvModal() {
+  document.getElementById('export-csv-modal').style.display = 'none';
+}
+
+async function exportCsv() {
+  const columns = Array.from(
+    document.querySelectorAll('#export-csv-columns input[type=checkbox]:checked')
+  ).map(cb => cb.value);
+
+  if (!columns.length) {
+    toast('Select at least one column.', 'warning');
+    return;
+  }
+
+  _closeExportCsvModal();
+
+  try {
+    const saveRes = await fetch('/api/library/export-csv/save-to-disk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ columns }),
+    });
+    const saveData = await saveRes.json();
+    if (saveData.cancelled) return;
+    if (saveData.ok) {
+      const fname = saveData.path.split('/').pop();
+      toast(`Library exported as ${fname}`, 'success');
+      return;
+    }
+    const _nativeUnavailable = new Set(['not_available', 'no_window']);
+    if (saveData.error && !_nativeUnavailable.has(saveData.error)) {
+      toast(saveData.error || 'Export failed.');
+      return;
+    }
+    // Fallback: blob download for dev/browser mode
+    const res = await fetch('/api/library/export-csv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ columns }),
+    });
+    if (!res.ok) {
+      let msg = 'Export failed.';
+      try { const d = await res.json(); msg = d.error || msg; } catch {}
+      toast(msg);
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const cd = res.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const ts = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    a.download = m ? m[1].replace(/['"]/g, '') : `tunebridge_library_${ts}.csv`;
+    a.href = url;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    toast('Library exported.', 'success');
+  } catch {
+    toast('Export failed — check the server is running.');
+  }
+}
+
 async function importBackup(input) {
   const file = input.files[0];
   if (!file) { input.value = ''; return; }
@@ -19176,6 +19278,9 @@ const App = {
   browseFolder,
   exportBackup,
   importBackup,
+  showExportCsvModal,
+  exportCsv,
+  _closeExportCsvModal,
   // Library Setup Wizard
   openLibrarySetup,
   closeLibrarySetup,

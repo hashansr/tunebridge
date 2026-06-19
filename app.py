@@ -12990,6 +12990,110 @@ def backup_save_to_disk():
         return jsonify({'error': str(e)}), 500
 
 
+_LIBRARY_CSV_COLUMNS = {
+    'title':           'Title',
+    'artist':          'Artist',
+    'album':           'Album',
+    'album_artist':    'Album Artist',
+    'year':            'Year',
+    'track_number':    'Track Number',
+    'disc_number':     'Disc Number',
+    'genre':           'Genre',
+    'duration_fmt':    'Duration',
+    'format':          'Format',
+    'bits_per_sample': 'Bit Depth',
+    'sample_rate':     'Sample Rate',
+    'bitrate':         'Bitrate',
+    'date_added':      'Date Added',
+    'path':            'File Path',
+    'rg_track_gain':   'RG Track Gain',
+    'rg_album_gain':   'RG Album Gain',
+}
+
+
+def _generate_library_csv(columns):
+    with library_lock:
+        tracks = library[:]
+
+    def _sort_key(t):
+        artist = (t.get('artist') or '').lower()
+        album = (t.get('album') or '').lower()
+        try:
+            track_num = int(t.get('track_number') or 9999)
+        except (ValueError, TypeError):
+            track_num = 9999
+        return (artist, album, track_num)
+
+    tracks.sort(key=_sort_key)
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator='\n')
+    writer.writerow([_LIBRARY_CSV_COLUMNS[c] for c in columns])
+    for t in tracks:
+        row = []
+        for c in columns:
+            val = t.get(c)
+            if c == 'date_added' and val:
+                try:
+                    val = time.strftime('%Y-%m-%d', time.localtime(int(val)))
+                except Exception:
+                    pass
+            elif c == 'duration_fmt' and not val:
+                val = format_duration(t.get('duration') or 0)
+            row.append('' if val is None else str(val))
+        writer.writerow(row)
+    return out.getvalue()
+
+
+@app.route('/api/library/export-csv', methods=['POST'])
+def library_export_csv():
+    data = request.get_json(force=True, silent=True) or {}
+    columns = data.get('columns') or list(_LIBRARY_CSV_COLUMNS.keys())
+    columns = [c for c in columns if c in _LIBRARY_CSV_COLUMNS]
+    if not columns:
+        return jsonify({'error': 'No valid columns selected'}), 400
+    content = _generate_library_csv(columns)
+    timestamp = time.strftime('%Y%m%d')
+    buf = io.BytesIO(content.encode('utf-8-sig'))
+    buf.seek(0)
+    return send_file(buf, mimetype='text/csv', as_attachment=True,
+                     download_name=f'tunebridge_library_{timestamp}.csv')
+
+
+@app.route('/api/library/export-csv/save-to-disk', methods=['POST'])
+def library_export_csv_save_to_disk():
+    """Open native macOS save dialog and write library CSV to chosen path."""
+    try:
+        import webview
+        wins = webview.windows
+        if not wins:
+            return jsonify({'error': 'no_window'}), 400
+        data = request.get_json(force=True, silent=True) or {}
+        columns = data.get('columns') or list(_LIBRARY_CSV_COLUMNS.keys())
+        columns = [c for c in columns if c in _LIBRARY_CSV_COLUMNS]
+        if not columns:
+            return jsonify({'error': 'No valid columns selected'}), 400
+        timestamp = time.strftime('%Y%m%d')
+        default_name = f'tunebridge_library_{timestamp}.csv'
+        result = wins[0].create_file_dialog(
+            webview.SAVE_DIALOG,
+            directory=str(Path.home() / 'Desktop'),
+            save_filename=default_name,
+            file_types=('CSV File (*.csv)',)
+        )
+        if not result:
+            return jsonify({'cancelled': True})
+        save_path = result[0] if isinstance(result, (list, tuple)) else result
+        if not str(save_path).lower().endswith('.csv'):
+            save_path = str(save_path) + '.csv'
+        content = _generate_library_csv(columns)
+        Path(save_path).write_bytes(content.encode('utf-8-sig'))
+        return jsonify({'ok': True, 'path': str(save_path)})
+    except ImportError:
+        return jsonify({'error': 'not_available'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/backup/import', methods=['POST'])
 def import_backup():
     f = request.files.get('file')
