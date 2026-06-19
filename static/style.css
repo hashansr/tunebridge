@@ -23822,7 +23822,7 @@ body.is-col-resizing {
 #view-settings #lyrics-advanced-body .settings-row + .settings-row,
 #view-settings #artwork-advanced-body .settings-row + .settings-row,
 #view-settings .lyric-health-tool-row {
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border-top: 0;
 }
 #view-settings #lyrics-advanced-body .settings-row > label,
 #view-settings #artwork-advanced-body .settings-row > label {
@@ -23865,7 +23865,7 @@ body.is-col-resizing {
 #view-settings .settings-advanced-actions {
   justify-content: flex-end;
   padding-top: 12px;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border-top: 0;
 }
 #view-settings .settings-hint {
   padding-left: 0;
