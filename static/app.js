@@ -8396,32 +8396,44 @@ function _renderResolveModal(data) {
 }
 
 function _renderResolveMissingRow(entry) {
-  const { track_id, snapshot, candidates } = entry;
+  const { track_id, snapshot, artwork_key, candidates } = entry;
   const hasSnap  = !!(snapshot?.title || snapshot?.artist);
   const title    = snapshot?.title  || 'Unknown Track';
   const artist   = snapshot?.artist || '';
   const album    = snapshot?.album  || '';
   const tesc     = esc(track_id);
   const prefill  = hasSnap ? esc((snapshot.title || '') + (snapshot.artist ? ' ' + snapshot.artist : '')) : '';
+  const hasCands = !!(candidates && candidates.length);
 
-  const candHtml = (candidates || []).map(c =>
-    `<div class="resolve-candidate" onclick="App._resolveSelectCandidate('${tesc}','${esc(c.id)}','${esc(c.title)}','${esc(c.artist)}')">
-      <span class="resolve-cand-score">${c.score}</span>
+  const artHtml = artwork_key
+    ? `<img class="resolve-thumb" src="/api/artwork/${esc(artwork_key)}" alt="" onerror="this.style.display='none'">`
+    : `<div class="resolve-thumb resolve-thumb--placeholder"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".4"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>`;
+
+  const candHtml = (candidates || []).map(c => {
+    const autoBadge = c.auto
+      ? `<span class="resolve-cand-auto">moved</span>`
+      : `<span class="resolve-cand-score">${c.score}</span>`;
+    return `<div class="resolve-candidate${c.auto ? ' resolve-candidate--auto' : ''}" onclick="App._resolveSelectCandidate('${tesc}','${esc(c.id)}','${esc(c.title)}','${esc(c.artist)}')">
+      ${autoBadge}
       <span class="resolve-cand-title">${esc(c.title)}</span>
       <span class="resolve-cand-meta">${esc(c.artist)}${c.album ? ' · ' + esc(c.album) : ''}</span>
-    </div>`
-  ).join('');
+    </div>`;
+  }).join('');
 
-  return `<div class="map-row resolve-row" id="resolve-row-${tesc}">
-    <div class="map-row-source">
-      <div class="map-row-title resolve-missing-title">
-        ${esc(title)}
-        ${!hasSnap ? '<span class="resolve-no-snap" title="No metadata snapshot — track was added before Resolve Playlist was available">?</span>' : ''}
+  return `<div class="map-row resolve-row${hasCands ? ' resolve-row--has-cands' : ''}" id="resolve-row-${tesc}">
+    <div class="map-row-source resolve-source">
+      ${artHtml}
+      <div class="resolve-track-info">
+        <div class="map-row-title resolve-missing-title">
+          ${esc(title)}
+          ${!hasSnap ? '<span class="resolve-no-snap" title="No metadata available for this track">?</span>' : ''}
+        </div>
+        ${artist || album ? `<div class="map-row-breadcrumb">
+          ${artist ? `<span>${esc(artist)}</span>` : ''}
+          ${artist && album ? `<span class="map-crumb-sep">›</span>` : ''}
+          ${album ? `<span>${esc(album)}</span>` : ''}
+        </div>` : ''}
       </div>
-      ${artist ? `<div class="map-row-breadcrumb">
-        <span>${esc(artist)}</span>
-        ${album ? `<span class="map-crumb-sep">›</span><span>${esc(album)}</span>` : ''}
-      </div>` : ''}
     </div>
     <div class="map-row-target">
       <div id="resolve-resolved-${tesc}" class="map-mapped" style="display:none">

@@ -4995,12 +4995,55 @@ def resolve_playlist_check(pid):
         lib_list = list(library)
     track_ids = _db.db_get_playlist_tracks(pid)
     all_meta  = _db.db_get_all_track_meta(pid)
+
+    # Build deleted-track lookup: {md5(rel_path) → {title, artist, album}}
+    conn = _db.get_conn()
+    deleted_map = {}
+    for r in conn.execute("SELECT path, title, artist, album FROM deleted_tracks").fetchall():
+        if r['path']:
+            deleted_map[hashlib.md5(r['path'].encode()).hexdigest()] = {
+                'title': r['title'], 'artist': r['artist'], 'album': r['album']
+            }
+
+    # Build organizer redirect lookup: {old_track_id → new_track_id}
+    organizer_map = {
+        r['old_track_id']: r['new_track_id']
+        for r in conn.execute(
+            "SELECT old_track_id, new_track_id FROM organizer_move_log WHERE status='moved'"
+        ).fetchall()
+    }
+
     missing = []
     for tid in track_ids:
         if tid not in lib_map:
-            snapshot   = all_meta.get(tid)
-            candidates = _find_candidates(snapshot, lib_list) if snapshot else []
-            missing.append({'track_id': tid, 'snapshot': snapshot, 'candidates': candidates})
+            # snapshot priority: playlist_track_meta → deleted_tracks
+            snapshot = all_meta.get(tid) or deleted_map.get(tid)
+
+            # artwork key from snapshot artist+album (only if the jpg exists)
+            artwork_key = None
+            if snapshot and snapshot.get('artist') and snapshot.get('album'):
+                ak = get_artwork_key(snapshot['artist'], snapshot['album'])
+                if (ARTWORK_DIR / f'{ak}.jpg').exists():
+                    artwork_key = ak
+
+            # Check if organizer moved this track to a new ID that is in the library
+            candidates = []
+            org_new_id = organizer_map.get(tid)
+            if org_new_id and org_new_id in lib_map:
+                t = lib_map[org_new_id]
+                candidates.append({
+                    'id': t['id'], 'title': t.get('title', ''),
+                    'artist': t.get('artist', ''), 'album': t.get('album', ''),
+                    'score': 6, 'auto': True,
+                })
+            if snapshot:
+                others = [c for c in _find_candidates(snapshot, lib_list)
+                          if c['id'] != org_new_id]
+                candidates.extend(others[:5 - len(candidates)])
+            missing.append({
+                'track_id': tid, 'snapshot': snapshot,
+                'artwork_key': artwork_key, 'candidates': candidates,
+            })
     return jsonify({'ok': True, 'all_present': not missing,
                     'missing': missing, 'total_tracks': len(track_ids)})
 

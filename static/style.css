@@ -3469,6 +3469,53 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; backgrou
 .map-clear-btn:hover { color: var(--text); }
 
 /* ── Resolve Playlist modal ──────────────────────────────────────────── */
+
+/* Row layout overrides */
+.resolve-row { align-items: center; }           /* center source+target when no candidates */
+.resolve-row.resolve-row--has-cands { align-items: flex-start; padding-top: 10px; padding-bottom: 10px; }
+.map-row-source.resolve-source {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+}
+.resolve-track-info { min-width: 0; flex: 1; }
+
+/* Album art thumbnail */
+.resolve-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 5px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(173,198,255,.06);
+}
+.resolve-thumb--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(173,198,255,.10);
+}
+
+/* Auto-detected "moved" candidate */
+.resolve-candidate--auto {
+  background: rgba(83,225,111,.06);
+  border-color: rgba(83,225,111,.20);
+}
+.resolve-candidate--auto:hover { background: rgba(83,225,111,.14); }
+.resolve-cand-auto {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #4ade80;
+  background: rgba(83,225,111,.18);
+  border-radius: 3px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+}
+
 .resolve-loading-state {
   display: flex;
   align-items: center;
