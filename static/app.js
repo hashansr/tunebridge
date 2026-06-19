@@ -8337,11 +8337,14 @@ async function openResolveModal(pid) {
   const actionsEl  = document.getElementById('resolve-actions');
   const subtitleEl = document.getElementById('resolve-subtitle');
 
+  const closeActionsEl = document.getElementById('resolve-close-actions');
+
   modal.style.display      = 'flex';
   loadingEl.style.display  = 'flex';
   allOkEl.style.display    = 'none';
   missingEl.style.display  = 'none';
   actionsEl.style.display  = 'none';
+  if (closeActionsEl) closeActionsEl.style.display = 'none';
   if (subtitleEl) subtitleEl.textContent = 'Checking for missing tracks…';
 
   try {
@@ -8357,6 +8360,12 @@ async function openResolveModal(pid) {
 function closeResolveModal() {
   const modal = document.getElementById('resolve-modal');
   if (modal) modal.style.display = 'none';
+  const btn = document.getElementById('resolve-apply-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Apply Changes'; }
+  const actEl = document.getElementById('resolve-actions');
+  if (actEl) actEl.style.display = 'none';
+  const closeActEl = document.getElementById('resolve-close-actions');
+  if (closeActEl) closeActEl.style.display = 'none';
   _resolvePlaylistId = null;
   _resolveData       = null;
   _resolveActions    = {};
@@ -8380,8 +8389,10 @@ function _renderResolveModal(data) {
   if (data.all_present) {
     const n = data.total_tracks;
     if (subtitleEl) subtitleEl.textContent = `${n} track${n !== 1 ? 's' : ''} · all present`;
-    allOkEl.style.display  = 'flex';
-    actionsEl.style.display = 'none';
+    allOkEl.style.display    = 'flex';
+    actionsEl.style.display  = 'none';
+    const closeActEl = document.getElementById('resolve-close-actions');
+    if (closeActEl) closeActEl.style.display = 'flex';
     return;
   }
 
@@ -8392,6 +8403,8 @@ function _renderResolveModal(data) {
   listEl.innerHTML = data.missing.map(_renderResolveMissingRow).join('');
   missingEl.style.display = 'block';
   actionsEl.style.display = 'flex';
+  const closeActEl2 = document.getElementById('resolve-close-actions');
+  if (closeActEl2) closeActEl2.style.display = 'none';
   _updateResolveApplyBtn();
 }
 
