@@ -3188,6 +3188,7 @@ async function openPlaylist(pid) {
 
 function _applyPlaylistDetailMode(isFavouriteVirtual) {
   const delBtn = document.getElementById('pl-toolbar-delete-btn');
+  const resolveBtn = document.getElementById('pl-toolbar-resolve-btn');
   const renameBtn = document.getElementById('pl-rename-btn');
   const moreBtn = document.getElementById('pl-more-btn');
   const coverWrap = document.querySelector('.playlist-cover-wrap');
@@ -3196,6 +3197,7 @@ function _applyPlaylistDetailMode(isFavouriteVirtual) {
   const nameEl = document.getElementById('pl-name');
   const favBtn = document.getElementById('pl-hero-fav');
   if (delBtn) delBtn.style.display = isFavouriteVirtual ? 'none' : '';
+  if (resolveBtn) resolveBtn.style.display = isFavouriteVirtual ? 'none' : '';
   if (renameBtn) renameBtn.style.display = isFavouriteVirtual ? 'none' : '';
   if (moreBtn) moreBtn.style.display = isFavouriteVirtual ? 'none' : '';
   if (favBtn) favBtn.style.display = isFavouriteVirtual ? 'none' : '';
@@ -3496,6 +3498,13 @@ function togglePlMoreMenu() {
   if (!menu) return;
   const isOpen = menu.style.display !== 'none';
   menu.style.display = isOpen ? 'none' : 'block';
+}
+
+async function resolveCurrentPlaylist() {
+  const menu = document.getElementById('pl-more-menu');
+  if (menu) menu.style.display = 'none';
+  if (!state.playlist?.id || state.playlist.is_favourites) return;
+  await openResolveModal(state.playlist.id);
 }
 
 function focusPlaylistName() {
@@ -4175,6 +4184,11 @@ function showPlaylistCtxMenu(e, playlistId, playlistName = '') {
     menu.style.left = left + 'px';
     menu.style.top = top + 'px';
   });
+}
+
+function showCurrentPlaylistCtxMenu(e) {
+  if (!state.playlist?.id) return;
+  showPlaylistCtxMenu(e, state.playlist.id, state.playlist.name || 'Playlist');
 }
 
 function hidePlaylistCtxMenu() {
@@ -19093,6 +19107,7 @@ const App = {
   showAddDropdown,
   showTrackCtxMenu,
   showPlaylistCtxMenu,
+  showCurrentPlaylistCtxMenu,
   hidePlaylistCtxMenu,
   ctxPlaylistPlay,
   ctxPlaylistShuffle,
@@ -19106,6 +19121,7 @@ const App = {
   ctxPlaylistRename,
   ctxPlaylistDelete,
   ctxPlaylistResolve,
+  resolveCurrentPlaylist,
   openResolveModal,
   closeResolveModal,
   applyResolve,
