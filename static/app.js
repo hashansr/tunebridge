@@ -6759,26 +6759,24 @@ function _renderHomeDataHealth(data) {
   if (!trackingEnabled) {
     el.style.display = '';
     el.className = 'home-data-health warn';
-    el.textContent = 'Listening tracking is turned off. Enable it in Settings to personalise Home.';
+    el.textContent = 'Listening tracking is off. Turn it on in Settings to update stats.';
     return;
   }
   if (!total) {
-    el.style.display = '';
-    el.className = 'home-data-health info';
-    el.textContent = 'Play a few songs to personalise Home.';
+    el.style.display = 'none';
     return;
   }
   if (!historyFresh) {
     const ago = latest ? _homeRelativeTime(latest) : 'a while ago';
     el.style.display = '';
     el.className = 'home-data-health warn';
-    el.textContent = `Listening history looks out of date (last event ${ago}). Keep listening to refresh recommendations.`;
+    el.textContent = `Stats may be out of date. Last listen was ${ago}.`;
     return;
   }
   if (valid <= 0) {
     el.style.display = '';
     el.className = 'home-data-health info';
-    el.textContent = 'Recent listens are mostly short skips. Full listens improve recommendations and stats.';
+    el.textContent = 'Only short skips found. Play songs longer to build stats.';
     return;
   }
   el.style.display = 'none';
@@ -6804,7 +6802,7 @@ function _renderHomeListeningStats(data) {
   // Empty state — no data at all
   const hasData = playsNum > 0 || minutesNum > 0;
   if (!hasData) {
-    el.innerHTML = `<div class="ls-empty ls-glass">Start listening - your stats will appear here.</div>`;
+    el.innerHTML = `<div class="ls-empty ls-glass">Start listening and your stats will appear here.</div>`;
     _homeSectionVisible('home-stats-section', true);
     return;
   }
