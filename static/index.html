@@ -985,7 +985,7 @@
 
       <!-- Settings view -->
       <div id="view-settings" class="view" style="display:none">
-        <div class="view-header">
+        <div class="view-header settings-page-header">
           <h2 class="tb-page-title">Settings</h2>
         </div>
         <div class="settings-shell">
@@ -999,7 +999,7 @@
               <span class="settings-category-indicator" data-settings-indicator="playback" style="display:none"></span>
             </button>
             <button class="settings-category-btn" type="button" data-settings-category="audio-tools" onclick="App.showSettingsCategory('audio-tools')">
-              <span class="settings-category-title">Audio Tools</span>
+              <span class="settings-category-title">Audio tools</span>
               <span class="settings-category-indicator" data-settings-indicator="audio-tools" style="display:none"></span>
             </button>
             <button class="settings-category-btn" type="button" data-settings-category="app" onclick="App.showSettingsCategory('app')">
@@ -1012,50 +1012,169 @@
 
           <!-- Library section -->
           <div class="settings-section settings-panel active" id="settings-library-section" data-settings-panel="library">
-            <div class="settings-rg-label settings-library-section-label">Media Location</div>
-            <div class="settings-row settings-library-path-row">
-              <label>Music library path</label>
-              <div class="input-browse-group">
+            <div class="settings-group-header">
+              <span>Library source</span>
+              <i aria-hidden="true"></i>
+            </div>
+            <div class="settings-row settings-row-stack settings-library-path-row">
+              <div class="settings-row-copy">
+                <div class="settings-row-title">Music library folder</div>
+                <p class="settings-row-desc">Your music files live here. Structure: <code>Artist / Album / Track.flac</code></p>
+              </div>
+              <div class="input-browse-group settings-row-control">
                 <input id="lib-path-input" type="text" />
                 <button class="btn-browse" onclick="App.browseFolder('lib-path-input')">Browse…</button>
-                <button class="btn-secondary" onclick="App.saveLibraryPath()">Save</button>
-                <button class="btn-secondary btn-with-icon" onclick="App.rescan()"><span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>Rescan Library</button>
+                <button class="btn-secondary" onclick="App.saveLibraryPath()">Save path</button>
               </div>
             </div>
-            <p class="settings-hint">The folder containing your music files. Structure: <code>Artist/Album/Track.flac</code></p>
-
-            <!-- Duplicate tracks tool -->
-            <div class="settings-rg-divider"></div>
-            <div class="settings-rg-row">
-              <div class="settings-rg-meta">
-                <span class="settings-rg-label">Duplicate Tracks</span>
-                <span class="settings-rg-sub">Find tracks with identical title, artist and album tags</span>
+            <div class="settings-app-row settings-app-row-clean">
+              <div class="settings-app-main">
+                <div class="settings-app-row-label">Rescan library</div>
+                <div class="settings-app-row-hint">Re-read the folder for added, changed, or removed tracks.</div>
               </div>
               <div class="settings-rg-actions">
-                <button class="btn-secondary" onclick="App.showView('duplicates')">Find Duplicates</button>
+                <button class="btn-secondary btn-with-icon" onclick="App.rescan()"><span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>Rescan now</button>
               </div>
             </div>
 
-            <div class="settings-rg-divider"></div>
-            <!-- File Organisation -->
+            <!-- Duplicate tracks tool -->
+            <div class="settings-group-header">
+              <span>Maintenance</span>
+              <i aria-hidden="true"></i>
+            </div>
+            <div class="settings-rg-row">
+              <div class="settings-rg-meta">
+                <span class="settings-rg-label">Duplicate tracks</span>
+                <span class="settings-rg-sub">Find tracks with identical title, artist, and album tags.</span>
+              </div>
+              <div class="settings-rg-actions">
+                <button class="btn-secondary" onclick="App.showView('duplicates')">Find duplicates</button>
+              </div>
+            </div>
+
+            <!-- File organisation -->
             <div class="settings-rg-row" id="settings-organizer-row">
               <div class="settings-rg-meta">
-                <span class="settings-rg-label">File Organisation</span>
+                <span class="settings-rg-label">File organisation</span>
                 <span class="settings-rg-sub">Rename and move files to match a folder template, or import songs from an external folder.</span>
                 <div class="org-active-template" id="org-active-template-display" style="display:none">
                   Active template: <code id="org-active-template-code"></code>
                 </div>
               </div>
               <div class="settings-rg-actions">
-                <button class="btn-secondary" onclick="App.showView('organizer')">Open File Organisation</button>
+                <button class="btn-secondary" onclick="App.showView('organizer')">Open organiser</button>
               </div>
             </div>
 
-            <div class="settings-rg-divider"></div>
+            <div class="settings-group-header">
+              <span>Metadata</span>
+              <i aria-hidden="true"></i>
+            </div>
             <div class="settings-rg-row">
               <div class="settings-rg-meta">
-                <span class="settings-rg-label">Export Library Catalogue</span>
-                <span class="settings-rg-sub">Save your full track list as a CSV spreadsheet</span>
+                <span class="settings-rg-label">Lyrics <span class="settings-section-status" data-settings-section-status="lyrics" style="display:none"></span></span>
+                <span id="lyrics-stats-text" class="settings-rg-sub">Loading...</span>
+                <div class="lyrics-advanced-wrap">
+                  <button class="lyrics-advanced-toggle" onclick="App.toggleLyricsAdvanced()">
+                    Advanced
+                    <span id="lyrics-advanced-chevron" class="accordion-state-icon" aria-hidden="true" style="width:11px;height:11px"></span>
+                  </button>
+                  <div id="lyrics-advanced-body" style="display:none">
+                    <div class="settings-row" style="margin-top:10px">
+                      <label>Lyric service</label>
+                      <select id="lyrics-service-select" class="settings-select" onchange="App.onLyricsServiceChange(this.value)">
+                        <option value="lrclib">LrcLib (free, no key required)</option>
+                      </select>
+                    </div>
+                    <p class="settings-hint settings-hint-inline-start">Local <code>.lrc</code> files beside tracks are also detected during library scans.</p>
+                    <div class="lyric-health-tool-row">
+                      <div class="settings-rg-meta">
+                        <span class="settings-rg-label" style="font-size:var(--text-sm)">Lyric health</span>
+                        <span class="settings-rg-sub">Find .lrc files with no matching music file in your library.</span>
+                      </div>
+                      <button class="btn-secondary" id="lyric-health-btn" onclick="App.lyricHealthScan()">Scan for orphans</button>
+                    </div>
+                    <div id="lyric-health-result" style="display:none"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="settings-rg-actions">
+                <button class="btn-secondary lyrics-bulk-btn settings-ghost-action" id="lyrics-bulk-all-btn" data-label="Re-fetch all" onclick="App.startLyricsBulk('all')"><span class="lyrics-bulk-spinner" aria-hidden="true"></span><span class="lyrics-bulk-btn-label">Re-fetch all</span></button>
+                <button class="btn-secondary lyrics-bulk-btn" id="lyrics-bulk-new-btn" data-label="Fetch missing" onclick="App.startLyricsBulk('new')"><span class="lyrics-bulk-spinner" aria-hidden="true"></span><span class="lyrics-bulk-btn-label">Fetch missing</span></button>
+                <button class="btn-secondary" id="lyrics-bulk-cancel-btn" onclick="App.cancelLyricsBulk()" style="display:none">Cancel</button>
+              </div>
+            </div>
+            <div id="lyrics-bulk-banner" class="scan-progress-wrap" role="status" aria-live="polite" style="display:none">
+              <div class="scan-bar-outer">
+                <div id="lyrics-bulk-bar" class="scan-bar-inner" style="width:0%"></div>
+              </div>
+              <div id="lyrics-bulk-msg" class="scan-status-msg"></div>
+            </div>
+
+            <div class="settings-rg-row">
+              <div class="settings-rg-meta">
+                <span class="settings-rg-label">Artist images <span class="settings-section-status" data-settings-section-status="artwork" style="display:none"></span></span>
+                <span class="settings-rg-sub">Find photos for artists in your library that do not already have one.</span>
+                <div class="lyrics-advanced-wrap">
+                  <button class="lyrics-advanced-toggle" onclick="App.toggleArtworkAdvanced()">
+                    Advanced
+                    <span id="artwork-advanced-chevron" class="accordion-state-icon" aria-hidden="true" style="width:11px;height:11px"></span>
+                  </button>
+                  <div id="artwork-advanced-body" style="display:none">
+                    <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
+                      Choose the artwork service and optionally add an API key for better results.
+                    </p>
+                    <div class="settings-row">
+                      <label>Image service</label>
+                      <select id="artist-image-service-select" class="settings-select" onchange="App.onArtistImageServiceChange(this.value)">
+                        <option value="itunes">iTunes Search (no key required)</option>
+                        <option value="lastfm">Last.fm</option>
+                        <option value="fanart">Fanart.tv</option>
+                      </select>
+                    </div>
+                    <div id="lastfm-key-row" class="settings-row" style="display:none">
+                      <label>Last.fm API key</label>
+                      <div class="input-browse-group">
+                        <input id="lastfm-api-key-input" type="text" placeholder="Paste your API key" />
+                        <a class="btn-browse" href="https://www.last.fm/api/accounts" target="_blank">Get key</a>
+                      </div>
+                    </div>
+                    <div id="fanart-key-row" class="settings-row" style="display:none">
+                      <label>Fanart.tv API key</label>
+                      <div class="input-browse-group">
+                        <input id="fanart-api-key-input" type="text" placeholder="Paste your API key" />
+                        <a class="btn-browse" href="https://fanart.tv/get-an-api-key/" target="_blank">Get key</a>
+                      </div>
+                    </div>
+                    <p class="settings-hint settings-hint-inline-start">API keys are stored locally on your device and never shared.</p>
+                    <div class="settings-inline-actions">
+                      <button class="btn-primary" onclick="App.saveArtistImageSettings()">Save</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="settings-rg-actions">
+                <button class="btn-secondary settings-fetch-btn" id="batch-img-start-btn" onclick="App.startArtistImageBatch()">
+                  Fetch missing
+                </button>
+                <button class="btn-secondary" id="batch-img-cancel-btn" onclick="App.cancelArtistImageBatch()" style="display:none">Cancel</button>
+              </div>
+            </div>
+            <div id="batch-img-banner" class="scan-progress-wrap" style="display:none">
+              <div class="scan-bar-outer">
+                <div id="batch-img-bar" class="scan-bar-inner" style="width:0%"></div>
+              </div>
+              <div id="batch-img-msg" class="scan-status-msg"></div>
+            </div>
+
+            <div class="settings-group-header">
+              <span>Export</span>
+              <i aria-hidden="true"></i>
+            </div>
+            <div class="settings-rg-row">
+              <div class="settings-rg-meta">
+                <span class="settings-rg-label">Library catalogue</span>
+                <span class="settings-rg-sub">Save your full track list as a CSV spreadsheet.</span>
               </div>
               <div class="settings-rg-actions">
                 <button class="btn-secondary" onclick="App.showExportCsvModal()">Export CSV…</button>
@@ -1066,96 +1185,42 @@
 
           <!-- Data & Backup section -->
           <div class="settings-section settings-panel" id="settings-data-backup-section" data-settings-panel="app">
-            <div class="settings-rg-divider"></div>
+            <div class="settings-group-header">
+              <span>Data and backup</span>
+              <i aria-hidden="true"></i>
+            </div>
             <div class="settings-app-row settings-app-row-clean">
               <div class="settings-app-main">
-                <div class="settings-app-row-label">Data backup</div>
+                <div class="settings-app-row-label">Backup and restore</div>
                 <div class="settings-app-row-hint">
-                  Export or restore playlists, DAPs, IEMs, and settings. Data is stored at <code id="settings-data-dir">~/Library/Application Support/TuneBridge</code>.
+                  Export or restore playlists, DAPs, IEMs, and settings. Data lives at <code id="settings-data-dir">~/Library/Application Support/TuneBridge</code>.
                 </div>
               </div>
               <div class="settings-app-actions">
               <button class="btn-secondary" onclick="App.exportBackup()">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px;margin-right:5px"><path fill-rule="evenodd" clip-rule="evenodd" d="M3.5 15.5C4.05228 15.5 4.5 15.9477 4.5 16.5V19.5H19.5V16.5C19.5 15.9477 19.9477 15.5 20.5 15.5H21.5C22.0523 15.5 22.5 15.9477 22.5 16.5V20C22.5 21.3807 21.3807 22.5 20 22.5H4C2.61929 22.5 1.5 21.3807 1.5 20V16.5C1.5 15.9477 1.94772 15.5 2.5 15.5H3.5Z"/><path d="M7.07615 11.6173C7.23093 11.2436 7.59557 11 8.00003 11H10.5V3C10.5 2.44772 10.9477 2 11.5 2H12.5C13.0523 2 13.5 2.44771 13.5 3V11H16C16.4045 11 16.7691 11.2436 16.9239 11.6173C17.0787 11.991 16.9931 12.4211 16.7071 12.7071L12.7071 16.7071C12.3166 17.0976 11.6834 17.0976 11.2929 16.7071L7.29292 12.7071C7.00692 12.4211 6.92137 11.991 7.07615 11.6173Z"/></svg>
-                Export Backup
+                Export backup
               </button>
               <label class="btn-secondary" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8.00003 8C7.59557 8 7.23093 7.75636 7.07615 7.38268C6.92137 7.00901 7.00692 6.57889 7.29292 6.29289L11.2929 2.29289C11.6834 1.90237 12.3166 1.90237 12.7071 2.29289L16.7071 6.29289C16.9931 6.57889 17.0787 7.00901 16.9239 7.38268C16.7691 7.75636 16.4045 8 16 8H13.5V16C13.5 16.5523 13.0523 17 12.5 17H11.5C10.9477 17 10.5 16.5523 10.5 16V8H8.00003Z"/><path d="M4.5 16.5C4.5 15.9477 4.05228 15.5 3.5 15.5H2.5C1.94772 15.5 1.5 15.9477 1.5 16.5V20C1.5 21.3807 2.61929 22.5 4 22.5H20C21.3807 22.5 22.5 21.3807 22.5 20V16.5C22.5 15.9477 22.0523 15.5 21.5 15.5H20.5C19.9477 15.5 19.5 15.9477 19.5 16.5V19.5H4.5V16.5Z"/></svg>
-                Import Backup
+                Import backup
                 <input type="file" accept=".zip" style="display:none" onchange="App.importBackup(this)">
               </label>
               </div>
             </div>
           </div>
 
-          <!-- Artwork section -->
-          <div class="settings-section settings-panel" id="settings-image-search-section" data-settings-panel="library">
-            <div class="settings-rg-divider"></div>
-            <div class="settings-rg-row">
-              <div class="settings-rg-meta">
-                <span class="settings-rg-label">Artist Cover Images <span class="settings-section-status" data-settings-section-status="artwork" style="display:none"></span></span>
-                <span class="settings-rg-sub">Find photos for artists in your library that don't already have one</span>
-              </div>
-              <div class="settings-rg-actions">
-                <button class="btn-secondary settings-fetch-btn" id="batch-img-start-btn" onclick="App.startArtistImageBatch()">
-                  Fetch Missing Images
-                </button>
-                <button class="btn-secondary" id="batch-img-cancel-btn" onclick="App.cancelArtistImageBatch()" style="display:none">Cancel</button>
-              </div>
-            </div>
-
-            <!-- Progress banner -->
-            <div id="batch-img-banner" class="scan-progress-wrap" style="display:none">
-              <div class="scan-bar-outer">
-                <div id="batch-img-bar" class="scan-bar-inner" style="width:0%"></div>
-              </div>
-              <div id="batch-img-msg" class="scan-status-msg"></div>
-            </div>
-
-            <div class="lyrics-advanced-wrap">
-              <button class="lyrics-advanced-toggle" onclick="App.toggleArtworkAdvanced()">
-                Advanced
-                <span id="artwork-advanced-chevron" class="accordion-state-icon" aria-hidden="true" style="width:11px;height:11px"></span>
-              </button>
-              <div id="artwork-advanced-body" style="display:none">
-                <p class="settings-hint settings-hint-inline-start settings-hint-block-gap">
-                  Choose the artwork service and optionally add an API key for better results.
-                </p>
-                <div class="settings-row">
-                  <label>Image service</label>
-                  <select id="artist-image-service-select" class="settings-select" onchange="App.onArtistImageServiceChange(this.value)">
-                    <option value="itunes">iTunes Search (no key required)</option>
-                    <option value="lastfm">Last.fm</option>
-                    <option value="fanart">Fanart.tv</option>
-                  </select>
-                </div>
-                <div id="lastfm-key-row" class="settings-row" style="display:none">
-                  <label>Last.fm API key</label>
-                  <div class="input-browse-group">
-                    <input id="lastfm-api-key-input" type="text" placeholder="Paste your API key" />
-                    <a class="btn-browse" href="https://www.last.fm/api/accounts" target="_blank">Get Key</a>
-                  </div>
-                </div>
-                <div id="fanart-key-row" class="settings-row" style="display:none">
-                  <label>Fanart.tv API key</label>
-                  <div class="input-browse-group">
-                    <input id="fanart-api-key-input" type="text" placeholder="Paste your API key" />
-                    <a class="btn-browse" href="https://fanart.tv/get-an-api-key/" target="_blank">Get Key</a>
-                  </div>
-                </div>
-                <p class="settings-hint settings-hint-inline-start">API keys are stored locally on your device and never shared.</p>
-                <div class="settings-inline-actions">
-                  <button class="btn-primary" onclick="App.saveArtistImageSettings()">Save</button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <div class="settings-section settings-panel" id="settings-image-search-section" data-settings-panel="library" aria-hidden="true"></div>
 
           <!-- Frequency Response Baselines section -->
           <div class="settings-section settings-panel" id="settings-baselines-section" data-settings-panel="audio-tools">
+            <div class="settings-group-header">
+              <span>Frequency response baselines</span>
+              <i aria-hidden="true"></i>
+            </div>
             <div class="settings-app-row settings-audio-tool-row">
               <div class="settings-app-main">
-                <div class="settings-app-row-label">Frequency response baselines</div>
+                <div class="settings-app-row-label">Add baseline</div>
                 <div class="settings-app-row-hint">
                   Add tuning targets from <a href="https://squig.link" target="_blank" style="color:var(--accent)">squig.link</a>. Baselines appear as reference lines on IEM and headphone frequency response graphs.
                 </div>
@@ -1179,14 +1244,17 @@
 
           <!-- System Status section -->
           <div class="settings-section settings-panel" id="settings-system-status-section" data-settings-panel="app">
-            <div class="settings-rg-divider"></div>
+            <div class="settings-group-header">
+              <span>Troubleshooting</span>
+              <i aria-hidden="true"></i>
+            </div>
             <div class="settings-app-row settings-app-row-clean">
               <div class="settings-app-main">
                 <div class="settings-app-row-label">System status</div>
                 <div class="settings-app-row-hint">Check the local library, playback runtime, database, DAPs, and external integrations.</div>
               </div>
               <div class="settings-app-actions">
-                <button class="btn-secondary" id="health-check-btn" onclick="App.runHealthCheck()">Run Health Check</button>
+                <button class="btn-secondary" id="health-check-btn" onclick="App.runHealthCheck()">Run health check</button>
                 <span class="health-last-run" id="health-last-run" style="display:none"></span>
               </div>
             </div>
@@ -1231,20 +1299,27 @@
           </div>
 
           <div class="settings-section settings-panel" id="settings-peq-section" data-settings-panel="audio-tools">
-            <div class="settings-rg-divider"></div>
+            <div class="settings-group-header">
+              <span>Equaliser</span>
+              <i aria-hidden="true"></i>
+            </div>
             <div class="settings-app-row settings-audio-tool-row">
               <div class="settings-app-main">
                 <div class="settings-app-row-label">Parametric EQ</div>
-                <div class="settings-app-row-hint">Open the Custom PEQ workspace to tune headphones and IEMs while player controls remain available.</div>
+                <div class="settings-app-row-hint">Tune headphones and IEMs while player controls remain available.</div>
               </div>
               <div class="settings-audio-tool-actions settings-audio-tool-actions--single">
-                <button class="btn-secondary" onclick="App.openPeqEditor()">Open Custom PEQ Workspace</button>
+                <button class="btn-secondary" onclick="App.openPeqEditor()">Open PEQ workspace</button>
               </div>
             </div>
           </div>
 
           <!-- Playback section -->
           <div class="settings-section settings-panel" id="settings-playback-section" data-settings-panel="playback">
+            <div class="settings-group-header">
+              <span>Audio output</span>
+              <i aria-hidden="true"></i>
+            </div>
             <!-- Bit-perfect / exclusive mode -->
             <div class="settings-app-row settings-playback-row" id="exclusive-mode-row">
               <div class="settings-app-main">
@@ -1253,11 +1328,7 @@
                   <span id="exclusive-backend-badge" class="settings-badge" style="display:none"></span>
                 </div>
                 <div class="settings-app-row-hint">
-                  Sends playback directly to CoreAudio in exclusive mode. This avoids the macOS mixer for lossless files, but system audio may be muted while the device is in use.
-                </div>
-
-                <div class="settings-help-text">
-                  The player shows the BP badge when bit-perfect output is on, the current track is lossless, EQ is off, and volume is at 100%.
+                  Sends playback directly to CoreAudio in exclusive mode. This avoids the macOS mixer for lossless files, but system audio may be muted while the device is in use. The player shows the BP badge when bit-perfect output is on, the current track is lossless, EQ is off, and volume is at 100%.
                 </div>
 
                 <div class="settings-inline-actions" id="mpv-install-actions" style="display:none">
@@ -1284,34 +1355,16 @@
               <div class="settings-playback-actions">
                 <select id="audio-device-select" class="settings-select"
                         onchange="App.setAudioDevice(this.value)" disabled>
-                  <option value="auto">Auto Select Device</option>
+                  <option value="auto">Auto-select device</option>
                 </select>
               </div>
             </div>
 
-            <div class="settings-subsection-divider"></div>
-            <div class="settings-app-row settings-playback-row" id="listening-history-row">
-              <div class="settings-app-main">
-                <div class="settings-app-row-label">Listening history</div>
-                <div class="settings-app-row-hint">Stored on this device for Home recommendations and yearly listening stats.</div>
-              </div>
-              <div class="settings-playback-actions">
-                <label class="settings-toggle">
-                  <input type="checkbox" id="listening-tracking-toggle" onchange="App.setListeningTracking(this.checked)">
-                  <span class="settings-toggle-track"></span>
-                  <span class="settings-toggle-state" id="listening-tracking-state">On</span>
-                </label>
-                <button class="btn-secondary" id="listening-history-clear-btn" onclick="App.clearListeningHistory()">Clear History</button>
-              </div>
-            </div>
-
-            <div class="settings-subsection-divider"></div>
-
             <!-- Replay Gain enable toggle -->
             <div class="settings-app-row settings-playback-row" id="replay-gain-row">
               <div class="settings-app-main">
-                <div class="settings-app-row-label">Replay Gain</div>
-                <div class="settings-app-row-hint">Normalises playback volume across tracks using embedded gain tags. Off by default.</div>
+                <div class="settings-app-row-label">Replay gain</div>
+                <div class="settings-app-row-hint">Normalise playback volume across tracks using embedded gain tags.</div>
               </div>
               <div class="settings-playback-actions">
                 <label class="settings-toggle">
@@ -1336,17 +1389,16 @@
               </div>
             </div>
 
-            <!-- Tagging sub-section — hidden when RG is disabled -->
+            <!-- Tagging sub-section hidden when RG is disabled -->
             <div id="rg-section" style="display:none">
-              <div class="settings-rg-divider"></div>
               <div class="settings-rg-row">
                 <div class="settings-rg-meta">
-                  <span class="settings-rg-label">ReplayGain Tags</span>
-                  <span id="rg-info-text" class="settings-rg-sub">Loading…</span>
+                  <span class="settings-rg-label">ReplayGain tags</span>
+                  <span id="rg-info-text" class="settings-rg-sub">Loading...</span>
                 </div>
                 <div class="settings-rg-actions">
                   <button id="rg-tag-btn" class="btn-secondary settings-action-with-status" onclick="App.tagReplayGain()">
-                    <span>Tag Missing Tracks</span>
+                    <span>Tag missing tracks</span>
                     <span class="settings-action-status" data-settings-action-status="library-rg" style="display:none"></span>
                   </button>
                   <button id="rg-cancel-btn" class="btn-secondary" onclick="App.cancelRgTagging()" style="display:none">Cancel</button>
@@ -1363,53 +1415,27 @@
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- Lyrics section -->
-          <div class="settings-section settings-panel" id="settings-lyrics-section" data-settings-panel="library">
-            <div class="settings-rg-divider"></div>
-            <div class="settings-rg-row">
-              <div class="settings-rg-meta">
-                <span class="settings-rg-label">Lyrics <span class="settings-section-status" data-settings-section-status="lyrics" style="display:none"></span></span>
-                <span id="lyrics-stats-text" class="settings-rg-sub">Loading…</span>
-              </div>
-              <div class="settings-rg-actions">
-                <button class="btn-secondary lyrics-bulk-btn" id="lyrics-bulk-new-btn" data-label="Find New Songs" onclick="App.startLyricsBulk('new')"><span class="lyrics-bulk-spinner" aria-hidden="true"></span><span class="lyrics-bulk-btn-label">Find New Songs</span></button>
-                <button class="btn-secondary lyrics-bulk-btn" id="lyrics-bulk-all-btn" data-label="Find All Songs" onclick="App.startLyricsBulk('all')"><span class="lyrics-bulk-spinner" aria-hidden="true"></span><span class="lyrics-bulk-btn-label">Find All Songs</span></button>
-                <button class="btn-secondary" id="lyrics-bulk-cancel-btn" onclick="App.cancelLyricsBulk()" style="display:none">Cancel</button>
-              </div>
+            <div class="settings-group-header">
+              <span>Privacy</span>
+              <i aria-hidden="true"></i>
             </div>
-            <div id="lyrics-bulk-banner" class="scan-progress-wrap" role="status" aria-live="polite" style="display:none">
-              <div class="scan-bar-outer">
-                <div id="lyrics-bulk-bar" class="scan-bar-inner" style="width:0%"></div>
+            <div class="settings-app-row settings-playback-row" id="listening-history-row">
+              <div class="settings-app-main">
+                <div class="settings-app-row-label">Listening history</div>
+                <div class="settings-app-row-hint">Stored on this device only. Powers Home recommendations and your yearly listening stats.</div>
               </div>
-              <div id="lyrics-bulk-msg" class="scan-status-msg"></div>
-            </div>
-            <div class="lyrics-advanced-wrap">
-              <button class="lyrics-advanced-toggle" onclick="App.toggleLyricsAdvanced()">
-                Advanced
-                <span id="lyrics-advanced-chevron" class="accordion-state-icon" aria-hidden="true" style="width:11px;height:11px"></span>
-              </button>
-              <div id="lyrics-advanced-body" style="display:none">
-                <div class="settings-row" style="margin-top:10px">
-                  <label>Lyric service</label>
-                  <select id="lyrics-service-select" class="settings-select" onchange="App.onLyricsServiceChange(this.value)">
-                    <option value="lrclib">LrcLib (free, no key required)</option>
-                  </select>
-                </div>
-                <p class="settings-hint settings-hint-inline-start">Local <code>.lrc</code> files beside tracks are also detected during library scans.</p>
-                <!-- Lyric Health -->
-                <div class="lyric-health-tool-row">
-                  <div class="settings-rg-meta">
-                    <span class="settings-rg-label" style="font-size:var(--text-sm)">Lyric Health</span>
-                    <span class="settings-rg-sub">Find .lrc files with no matching music file in your library</span>
-                  </div>
-                  <button class="btn-secondary" id="lyric-health-btn" onclick="App.lyricHealthScan()">Scan for Orphans</button>
-                </div>
-                <div id="lyric-health-result" style="display:none"></div>
+              <div class="settings-playback-actions">
+                <button class="btn-secondary settings-danger-action" id="listening-history-clear-btn" onclick="App.clearListeningHistory()">Clear history</button>
+                <label class="settings-toggle">
+                  <input type="checkbox" id="listening-tracking-toggle" onchange="App.setListeningTracking(this.checked)">
+                  <span class="settings-toggle-track"></span>
+                  <span class="settings-toggle-state" id="listening-tracking-state">On</span>
+                </label>
               </div>
             </div>
           </div>
+          <div class="settings-section settings-panel" id="settings-lyrics-section" data-settings-panel="library" aria-hidden="true"></div>
 
           <!-- App section -->
           <div class="settings-section settings-panel" id="settings-app-restart-section" data-settings-panel="app">
@@ -1422,7 +1448,7 @@
                 </div>
                 <div class="settings-support-card-text">
                   <div class="settings-support-card-label">Support TuneBridge</div>
-                  <div class="settings-support-card-hint">TuneBridge is free and built by one person. If it's been useful, consider a Ko-fi donation — it helps keep the app alive and fund new features.</div>
+                  <div class="settings-support-card-hint">TuneBridge is free and built by one person. If it has been useful, consider a Ko-fi donation to help keep the app alive and fund new features.</div>
                 </div>
               </div>
               <div class="settings-support-card-actions">
@@ -1437,14 +1463,17 @@
               </div>
             </div>
 
-            <div class="settings-rg-divider"></div>
+            <div class="settings-group-header">
+              <span>Updates</span>
+              <i aria-hidden="true"></i>
+            </div>
 
-            <!-- Version + channel — compact single row -->
+            <!-- Version and channel compact single row -->
             <div class="settings-app-row settings-version-row settings-app-row-clean">
               <div class="settings-app-main">
                 <div class="settings-app-row-label">Version</div>
                 <div class="settings-app-row-hint">
-                  <span id="app-version-display" class="settings-version-val">—</span>
+                  <span id="app-version-display" class="settings-version-val">Checking...</span>
                 </div>
               </div>
               <div class="settings-app-actions">
@@ -1455,10 +1484,10 @@
                     <option value="prod">Prod</option>
                   </select>
                 <button class="btn-secondary" id="check-update-btn"
-                        onclick="App.checkForUpdate()">Check for Update</button>
+                        onclick="App.checkForUpdate()">Check for update</button>
                 <button class="btn-primary" id="update-download-btn"
                         onclick="App.confirmUpdate()" style="display:none">
-                  Update Now
+                  Update now
                 </button>
               </div>
             </div>
@@ -1484,10 +1513,9 @@
             </div>
 
             <!-- Restart row -->
-            <div class="settings-rg-divider"></div>
             <div class="settings-app-row settings-app-row-clean">
               <div class="settings-app-main">
-                <div class="settings-app-row-label">Restart &amp; Reload</div>
+                <div class="settings-app-row-label">Restart and reload</div>
                 <div class="settings-app-row-hint">Restart the local TuneBridge server and reload the page.</div>
               </div>
               <button class="btn-secondary settings-app-control" id="restart-btn" onclick="App.restartApp()">
@@ -1498,20 +1526,20 @@
 
             <!-- Developer section — hidden on prod builds, shown by JS when channel != prod -->
             <div id="settings-developer-section" style="display:none">
-              <div class="settings-rg-divider"></div>
-              <div class="settings-section-heading">
+              <div class="settings-group-header settings-group-header-icon">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
-                Developer
+                <span>Developer</span>
+                <i aria-hidden="true"></i>
               </div>
               <!-- Normal mode: enter test mode -->
               <div id="testmode-enter-row" class="settings-app-row settings-app-row-clean">
                 <div class="settings-app-main">
-                  <div class="settings-app-row-label">Test Mode</div>
+                  <div class="settings-app-row-label">Test mode</div>
                   <div class="settings-app-row-hint">Start a sandboxed first-run session with a blank database. Your real data is never touched. The test DB is deleted on exit.</div>
                 </div>
                 <button class="btn-secondary settings-app-control settings-testmode-btn" onclick="App.enterTestMode()">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;flex-shrink:0"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
-                  Enter Test Mode
+                  Enter test mode
                 </button>
               </div>
               <!-- Test mode active: show status + exit -->
@@ -1519,12 +1547,12 @@
                 <div class="settings-app-main">
                   <div class="settings-app-row-label">
                     <span class="testmode-active-badge">ACTIVE</span>
-                    Test Mode is running
+                    Test mode is running
                   </div>
                   <div class="settings-app-row-hint">You are in a sandboxed session. All changes are temporary and will be discarded when you exit.</div>
                 </div>
                 <button class="btn-secondary settings-app-control" onclick="App.exitTestMode()">
-                  Exit Test Mode
+                  Exit test mode
                 </button>
               </div>
             </div>

@@ -14923,11 +14923,11 @@ async function loadSettings() {
         deviceSelect.innerHTML = '';
         const audioDevices = (devices || []).some(d => d && d.name === 'auto')
           ? devices
-          : [{ name: 'auto', description: 'Auto Select Device' }, ...(devices || [])];
+          : [{ name: 'auto', description: 'Auto-select device' }, ...(devices || [])];
         audioDevices.forEach(d => {
           const opt = document.createElement('option');
           opt.value       = d.name;
-          opt.textContent = d.name === 'auto' ? 'Auto Select Device' : (d.description || d.name);
+          opt.textContent = d.name === 'auto' ? 'Auto-select device' : (d.description || d.name);
           if (d.name === (exclusiveActive ? (cap.audio_device || 'auto') : 'auto')) opt.selected = true;
           deviceSelect.appendChild(opt);
         });
@@ -14937,7 +14937,7 @@ async function loadSettings() {
         }
       } catch (_) {}
     } else {
-      deviceSelect.innerHTML = '<option value="auto">Auto Select Device</option>';
+      deviceSelect.innerHTML = '<option value="auto">Auto-select device</option>';
       deviceSelect.value = 'auto';
     }
   }
@@ -15336,7 +15336,7 @@ async function _confirmEnterTestMode() {
     }
   } catch (e) {
     toast('Could not prepare test mode');
-    if (btn) { btn.disabled = false; btn.textContent = 'Enter Test Mode'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Enter test mode'; }
   }
 }
 
@@ -15414,7 +15414,7 @@ function _applyUpdateResult(res, opts = {}) {
   }
 
   if (opts.showCurrent) {
-    _setUpdateStatus('ok', `v${res.current} — you're up to date`);
+    _setUpdateStatus('ok', `v${res.current} is up to date`);
   }
 }
 
@@ -15461,7 +15461,7 @@ async function checkForUpdate() {
   } catch (e) {
     _setUpdateStatus('error', 'Could not reach update server');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Check for Update'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Check for update'; }
   }
 }
 
@@ -15541,7 +15541,7 @@ async function runHealthCheck() {
     data = await api('/health/status');
   } catch(e) {
     toast('Health check failed: ' + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = 'Run Health Check'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Run health check'; }
     return;
   }
 
@@ -15690,7 +15690,7 @@ async function runHealthCheck() {
   const lastRun = document.getElementById('health-last-run');
   if (lastRun) lastRun.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
 
-  if (btn) { btn.disabled = false; btn.textContent = 'Run Health Check'; }
+  if (btn) { btn.disabled = false; btn.textContent = 'Run health check'; }
 }
 
 /* ── Baselines (FR tuning targets) ─────────────────────────────────── */
@@ -17659,7 +17659,7 @@ async function lyricHealthScan() {
     await api('/lyrics/health/scan', { method: 'POST' });
   } catch (e) {
     toast('Lyric Health scan failed: ' + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = 'Scan for Orphans'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Scan for orphans'; }
     return;
   }
   _lyricHealthPollTimer = setInterval(_lyricHealthPoll, 800);
@@ -17672,7 +17672,7 @@ async function _lyricHealthPoll() {
     clearInterval(_lyricHealthPollTimer);
     _lyricHealthPollTimer = null;
     const btn = document.getElementById('lyric-health-btn');
-    if (btn) { btn.disabled = false; btn.textContent = 'Scan for Orphans'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Scan for orphans'; }
     _renderLyricHealthResult(data);
   }
 }
