@@ -114,6 +114,8 @@ _MIGRATIONS: list[tuple] = [
     ]),
     # v13: organizer_templates and organizer_move_log are new tables handled by create_schema().
     (13, 'Add organizer_templates and organizer_move_log tables', None),
+    # v14: playlist_track_meta is a new table handled by create_schema().
+    (14, 'Add playlist_track_meta for resolve-playlist snapshots', None),
 ]
 
 _SCHEMA_SQL = """
@@ -488,6 +490,19 @@ CREATE TABLE IF NOT EXISTS organizer_move_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_organizer_move_log_run ON organizer_move_log(run_id);
+
+-- Playlist track metadata snapshots (for Resolve Playlist feature)
+CREATE TABLE IF NOT EXISTS playlist_track_meta (
+    playlist_id  TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+    track_id     TEXT NOT NULL,
+    title        TEXT,
+    artist       TEXT,
+    album        TEXT,
+    snapshot_at  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (playlist_id, track_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ptm_playlist ON playlist_track_meta(playlist_id);
 """
 
 # FTS5 must be created separately (can't use IF NOT EXISTS with virtual tables the same way)
@@ -976,6 +991,50 @@ def db_get_playlist_tracks(pid):
         (pid,)
     ).fetchall()
     return [r['track_id'] for r in rows]
+
+
+def db_upsert_track_meta_batch(playlist_id, entries):
+    """Batch upsert metadata snapshots. entries: [(track_id, title, artist, album)]"""
+    conn = get_conn()
+    now = int(time.time())
+    conn.executemany(
+        "INSERT OR REPLACE INTO playlist_track_meta "
+        "(playlist_id, track_id, title, artist, album, snapshot_at) VALUES (?,?,?,?,?,?)",
+        [(playlist_id, tid, title, artist, album, now) for tid, title, artist, album in entries]
+    )
+    conn.commit()
+
+
+def db_upsert_track_meta(playlist_id, track_id, title, artist, album):
+    """Upsert a single metadata snapshot for a track in a playlist."""
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR REPLACE INTO playlist_track_meta "
+        "(playlist_id, track_id, title, artist, album, snapshot_at) VALUES (?,?,?,?,?,?)",
+        (playlist_id, track_id, title, artist, album, int(time.time()))
+    )
+    conn.commit()
+
+
+def db_get_all_track_meta(playlist_id):
+    """Return {track_id: {title, artist, album}} for the entire playlist."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT track_id, title, artist, album FROM playlist_track_meta WHERE playlist_id=?",
+        (playlist_id,)
+    ).fetchall()
+    return {r['track_id']: {'title': r['title'], 'artist': r['artist'], 'album': r['album']}
+            for r in rows}
+
+
+def db_delete_track_meta(playlist_id, track_id):
+    """Remove the metadata snapshot for a track when it is removed from a playlist."""
+    conn = get_conn()
+    conn.execute(
+        "DELETE FROM playlist_track_meta WHERE playlist_id=? AND track_id=?",
+        (playlist_id, track_id)
+    )
+    conn.commit()
 
 
 def db_set_playlist_tracks(pid, track_ids, updated_at=None):

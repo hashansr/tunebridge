@@ -4820,7 +4820,17 @@ def update_playlist(pid):
     if 'name' in data:
         playlist['name'] = data['name']
     if 'tracks' in data:
-        playlist['tracks'] = [t if isinstance(t, str) else t.get('id') for t in data['tracks']]
+        new_track_ids = [t if isinstance(t, str) else t.get('id') for t in data['tracks']]
+        playlist['tracks'] = new_track_ids
+        # Upsert metadata snapshots for any newly referenced tracks
+        with library_lock:
+            lib_map = {t['id']: t for t in library}
+        meta_batch = [
+            (tid, lib_map[tid].get('title'), lib_map[tid].get('artist'), lib_map[tid].get('album'))
+            for tid in new_track_ids if tid in lib_map
+        ]
+        if meta_batch:
+            _db.db_upsert_track_meta_batch(pid, meta_batch)
 
     playlist['updated_at'] = int(time.time())
     save_playlists(playlists)
@@ -4881,6 +4891,17 @@ def add_track(pid):
 
     playlists[pid]['updated_at'] = int(time.time())
     save_playlists(playlists)
+
+    # Snapshot metadata for Resolve Playlist
+    with library_lock:
+        lib_map = {t['id']: t for t in library}
+    meta_batch = [
+        (tid, lib_map[tid].get('title'), lib_map[tid].get('artist'), lib_map[tid].get('album'))
+        for tid in to_add if tid in lib_map
+    ]
+    if meta_batch:
+        _db.db_upsert_track_meta_batch(pid, meta_batch)
+
     return jsonify({'added': len(to_add), 'duplicates': [], 'total': len(playlists[pid]['tracks'])})
 
 
@@ -4896,6 +4917,129 @@ def remove_track(pid, track_id):
     playlists[pid]['updated_at'] = int(time.time())
     save_playlists(playlists)
     return jsonify({'total': len(tracks)})
+
+
+# ── Resolve Playlist ──────────────────────────────────────────────────────────
+
+_EDITION_RE = re.compile(
+    r'\s*[\(\[\-]\s*(?:(?:\d{4}\s+)?'
+    r'(?:remaster(?:ed)?|expanded|deluxe|bonus\s+(?:track|disc)|'
+    r'live|acoustic|unplugged|anniversary(?:\s+edition)?|special\s+edition|'
+    r'limited\s+edition|collector[\'s]*\s+edition|box\s+set|super\s+deluxe|'
+    r'single\s+version|album\s+version|radio\s+edit|mono|stereo|'
+    r'original\s+(?:mix|version|recording)|(?:\d+(?:st|nd|rd|th)\s+anniversary)))'
+    r'[^\)\]]*[\)\]]?',
+    re.IGNORECASE
+)
+
+
+def _strip_edition_tags(s):
+    return _EDITION_RE.sub('', s or '').strip(' -–—') if s else ''
+
+
+def _norm_resolve(s):
+    import unicodedata as _ud
+    s = _ud.normalize('NFKD', s).encode('ascii', 'ignore').decode('ascii').lower()
+    s = re.sub(r'[^a-z0-9 ]+', ' ', s)
+    return re.sub(r'\s+', ' ', s).strip()
+
+
+def _resolve_score(snapshot, candidate):
+    """Score a library candidate vs a stored metadata snapshot. Max ~6."""
+    from difflib import SequenceMatcher
+    sn_t  = _norm_resolve(_strip_edition_tags(snapshot.get('title')  or ''))
+    sn_ar = _norm_resolve(snapshot.get('artist') or '')
+    sn_al = _norm_resolve(_strip_edition_tags(snapshot.get('album')  or ''))
+    cd_t  = _norm_resolve(_strip_edition_tags(candidate.get('title') or ''))
+    cd_ar = _norm_resolve(candidate.get('artist') or '')
+    cd_al = _norm_resolve(_strip_edition_tags(candidate.get('album') or ''))
+    score = 0
+    if sn_t and cd_t:
+        if sn_t == cd_t:
+            score += 3
+        elif len(sn_t) >= 4 and (sn_t in cd_t or cd_t in sn_t):
+            score += 2
+        elif SequenceMatcher(None, sn_t, cd_t).ratio() >= 0.75:
+            score += 1
+    if sn_ar and cd_ar:
+        if sn_ar == cd_ar:
+            score += 2
+        elif SequenceMatcher(None, sn_ar, cd_ar).ratio() >= 0.70:
+            score += 1
+    if sn_al and cd_al and (sn_al == cd_al or sn_al in cd_al or cd_al in sn_al):
+        score += 1
+    return score
+
+
+def _find_candidates(snapshot, lib_tracks, max_results=5):
+    scored = []
+    for t in lib_tracks:
+        s = _resolve_score(snapshot, t)
+        if s >= 2:
+            scored.append((s, t))
+    scored.sort(key=lambda x: -x[0])
+    return [
+        {'id': t['id'], 'title': t.get('title', ''), 'artist': t.get('artist', ''),
+         'album': t.get('album', ''), 'score': s}
+        for s, t in scored[:max_results]
+    ]
+
+
+@app.route('/api/playlists/<pid>/resolve', methods=['GET'])
+def resolve_playlist_check(pid):
+    playlists = load_playlists()
+    if pid not in playlists:
+        return jsonify({'error': 'Not found'}), 404
+    with library_lock:
+        lib_map  = {t['id']: t for t in library}
+        lib_list = list(library)
+    track_ids = _db.db_get_playlist_tracks(pid)
+    all_meta  = _db.db_get_all_track_meta(pid)
+    missing = []
+    for tid in track_ids:
+        if tid not in lib_map:
+            snapshot   = all_meta.get(tid)
+            candidates = _find_candidates(snapshot, lib_list) if snapshot else []
+            missing.append({'track_id': tid, 'snapshot': snapshot, 'candidates': candidates})
+    return jsonify({'ok': True, 'all_present': not missing,
+                    'missing': missing, 'total_tracks': len(track_ids)})
+
+
+@app.route('/api/playlists/<pid>/resolve', methods=['POST'])
+def resolve_playlist_apply(pid):
+    playlists = load_playlists()
+    if pid not in playlists:
+        return jsonify({'error': 'Not found'}), 404
+    data         = request.json or {}
+    replacements = {r['old_track_id']: r['new_track_id'] for r in data.get('replacements', [])}
+    removals     = set(data.get('removals', []))
+    overlap      = removals & set(replacements)
+    if overlap:
+        return jsonify({'error': 'track_id appears in both replacements and removals'}), 400
+    with library_lock:
+        lib_map = {t['id']: t for t in library}
+    track_ids = _db.db_get_playlist_tracks(pid)
+    new_tracks, applied = [], 0
+    for tid in track_ids:
+        if tid in removals:
+            _db.db_delete_track_meta(pid, tid)
+            applied += 1
+        elif tid in replacements:
+            new_id = replacements[tid]
+            new_tracks.append(new_id)
+            _db.db_delete_track_meta(pid, tid)
+            t = lib_map.get(new_id)
+            if t:
+                _db.db_upsert_track_meta(pid, new_id, t.get('title'), t.get('artist'), t.get('album'))
+            applied += 1
+        else:
+            new_tracks.append(tid)
+    now = int(time.time())
+    _db.db_set_playlist_tracks(pid, new_tracks, now)
+    playlists[pid]['tracks']     = new_tracks
+    playlists[pid]['updated_at'] = now
+    save_playlists(playlists)
+    return jsonify({'ok': True, 'applied': applied, 'new_total': len(new_tracks)})
 
 
 # ── Lyrics / LrcLib ────────────────────────────────────────────────────────────

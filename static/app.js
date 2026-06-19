@@ -4155,6 +4155,8 @@ function showPlaylistCtxMenu(e, playlistId, playlistName = '') {
   } else if (pinItem) {
     pinItem.style.display = 'none';
   }
+  const resolveItem = document.getElementById('playlist-ctx-resolve-item');
+  if (resolveItem) resolveItem.style.display = canEdit ? '' : 'none';
   menu.style.display = 'block';
   menu.style.left = '-9999px';
   menu.style.top = '-9999px';
@@ -8303,6 +8305,235 @@ function clearMapping(idx) {
 
 function _updateMappingCount() {
   _renderImportSummary();
+}
+
+/* ── Resolve Playlist ─────────────────────────────────────────────────── */
+
+let _resolvePlaylistId  = null;
+let _resolveData        = null;
+let _resolveActions     = {};
+let _resolveSearchTimers = {};
+
+async function ctxPlaylistResolve() {
+  const target = _playlistCtxTarget;
+  hidePlaylistCtxMenu();
+  if (!target?.id) return;
+  await openResolveModal(target.id);
+}
+
+async function openResolveModal(pid) {
+  _resolvePlaylistId = pid;
+  _resolveData       = null;
+  _resolveActions    = {};
+  Object.keys(_resolveSearchTimers).forEach(k => {
+    clearTimeout(_resolveSearchTimers[k]);
+    delete _resolveSearchTimers[k];
+  });
+
+  const modal      = document.getElementById('resolve-modal');
+  const loadingEl  = document.getElementById('resolve-loading');
+  const allOkEl    = document.getElementById('resolve-all-ok');
+  const missingEl  = document.getElementById('resolve-missing-wrap');
+  const actionsEl  = document.getElementById('resolve-actions');
+  const subtitleEl = document.getElementById('resolve-subtitle');
+
+  modal.style.display      = 'flex';
+  loadingEl.style.display  = 'flex';
+  allOkEl.style.display    = 'none';
+  missingEl.style.display  = 'none';
+  actionsEl.style.display  = 'none';
+  if (subtitleEl) subtitleEl.textContent = 'Checking for missing tracks…';
+
+  try {
+    const res = await api(`/playlists/${encodeURIComponent(pid)}/resolve`);
+    _resolveData = res;
+    _renderResolveModal(res);
+  } catch (e) {
+    toast('Error checking playlist: ' + (e.message || e), 'error');
+    closeResolveModal();
+  }
+}
+
+function closeResolveModal() {
+  const modal = document.getElementById('resolve-modal');
+  if (modal) modal.style.display = 'none';
+  _resolvePlaylistId = null;
+  _resolveData       = null;
+  _resolveActions    = {};
+  Object.keys(_resolveSearchTimers).forEach(k => {
+    clearTimeout(_resolveSearchTimers[k]);
+    delete _resolveSearchTimers[k];
+  });
+}
+
+function _renderResolveModal(data) {
+  const loadingEl  = document.getElementById('resolve-loading');
+  const allOkEl    = document.getElementById('resolve-all-ok');
+  const missingEl  = document.getElementById('resolve-missing-wrap');
+  const actionsEl  = document.getElementById('resolve-actions');
+  const subtitleEl = document.getElementById('resolve-subtitle');
+  const labelEl    = document.getElementById('resolve-section-label');
+  const listEl     = document.getElementById('resolve-missing-list');
+
+  loadingEl.style.display = 'none';
+
+  if (data.all_present) {
+    const n = data.total_tracks;
+    if (subtitleEl) subtitleEl.textContent = `${n} track${n !== 1 ? 's' : ''} · all present`;
+    allOkEl.style.display  = 'flex';
+    actionsEl.style.display = 'none';
+    return;
+  }
+
+  const n = data.missing.length;
+  if (subtitleEl) subtitleEl.textContent = `${n} missing track${n !== 1 ? 's' : ''} of ${data.total_tracks}`;
+  if (labelEl)    labelEl.textContent = `${n} missing track${n !== 1 ? 's' : ''} — choose a replacement or remove`;
+
+  listEl.innerHTML = data.missing.map(_renderResolveMissingRow).join('');
+  missingEl.style.display = 'block';
+  actionsEl.style.display = 'flex';
+  _updateResolveApplyBtn();
+}
+
+function _renderResolveMissingRow(entry) {
+  const { track_id, snapshot, candidates } = entry;
+  const hasSnap  = !!(snapshot?.title || snapshot?.artist);
+  const title    = snapshot?.title  || 'Unknown Track';
+  const artist   = snapshot?.artist || '';
+  const album    = snapshot?.album  || '';
+  const tesc     = esc(track_id);
+  const prefill  = hasSnap ? esc((snapshot.title || '') + (snapshot.artist ? ' ' + snapshot.artist : '')) : '';
+
+  const candHtml = (candidates || []).map(c =>
+    `<div class="resolve-candidate" onclick="App._resolveSelectCandidate('${tesc}','${esc(c.id)}','${esc(c.title)}','${esc(c.artist)}')">
+      <span class="resolve-cand-score">${c.score}</span>
+      <span class="resolve-cand-title">${esc(c.title)}</span>
+      <span class="resolve-cand-meta">${esc(c.artist)}${c.album ? ' · ' + esc(c.album) : ''}</span>
+    </div>`
+  ).join('');
+
+  return `<div class="map-row resolve-row" id="resolve-row-${tesc}">
+    <div class="map-row-source">
+      <div class="map-row-title resolve-missing-title">
+        ${esc(title)}
+        ${!hasSnap ? '<span class="resolve-no-snap" title="No metadata snapshot — track was added before Resolve Playlist was available">?</span>' : ''}
+      </div>
+      ${artist ? `<div class="map-row-breadcrumb">
+        <span>${esc(artist)}</span>
+        ${album ? `<span class="map-crumb-sep">›</span><span>${esc(album)}</span>` : ''}
+      </div>` : ''}
+    </div>
+    <div class="map-row-target">
+      <div id="resolve-resolved-${tesc}" class="map-mapped" style="display:none">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <span id="resolve-resolved-label-${tesc}" class="map-mapped-label"></span>
+        <button class="map-clear-btn" onclick="App._resolveClearAction('${tesc}')" title="Clear">✕</button>
+      </div>
+      <div id="resolve-remove-badge-${tesc}" class="resolve-remove-badge" style="display:none">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        Remove from playlist
+        <button class="map-clear-btn" onclick="App._resolveClearAction('${tesc}')" title="Clear">✕</button>
+      </div>
+      <div id="resolve-search-wrap-${tesc}">
+        ${candHtml ? `<div class="resolve-candidates">${candHtml}</div>` : ''}
+        <div class="resolve-search-row">
+          <input type="text" id="resolve-input-${tesc}" class="map-input"
+                 placeholder="Search to replace…" value="${prefill}"
+                 oninput="App._resolveSearch('${tesc}', this.value)"
+                 onfocus="App._resolveSearch('${tesc}', this.value)" />
+          <div id="resolve-results-${tesc}" class="map-results" style="display:none"></div>
+          <button class="resolve-remove-btn" onclick="App._resolveMarkRemove('${tesc}')">Remove</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function _resolveSearch(trackId, query) {
+  clearTimeout(_resolveSearchTimers[trackId]);
+  const resultsEl = document.getElementById(`resolve-results-${trackId}`);
+  if (!resultsEl) return;
+  if (!query.trim()) { resultsEl.style.display = 'none'; return; }
+  _resolveSearchTimers[trackId] = setTimeout(async () => {
+    const tracks = await api(`/library/tracks?q=${encodeURIComponent(query)}`).catch(() => []);
+    const top = (Array.isArray(tracks) ? tracks : []).slice(0, 6);
+    if (!top.length) {
+      resultsEl.innerHTML = `<div class="map-result-none">No results found</div>`;
+    } else {
+      resultsEl.innerHTML = top.map(t =>
+        `<div class="map-result-item"
+              onclick="App._resolveSelectCandidate('${trackId}','${esc(t.id)}','${esc(t.title)}','${esc(t.artist)}')">
+          <span class="map-result-title">${esc(t.title)}</span>
+          <span class="map-result-meta">${esc(t.artist)}${t.album ? ' · ' + esc(t.album) : ''}</span>
+        </div>`
+      ).join('');
+    }
+    resultsEl.style.display = 'block';
+  }, 250);
+}
+
+function _resolveSelectCandidate(trackId, newId, title, artist) {
+  _resolveActions[trackId] = { action: 'replace', newId, title, artist };
+  document.getElementById(`resolve-search-wrap-${trackId}`)?.style?.setProperty('display', 'none');
+  document.getElementById(`resolve-remove-badge-${trackId}`)?.style?.setProperty('display', 'none');
+  document.getElementById(`resolve-results-${trackId}`)?.style?.setProperty('display', 'none');
+  const labelEl = document.getElementById(`resolve-resolved-label-${trackId}`);
+  if (labelEl) labelEl.textContent = `${title}${artist ? ' — ' + artist : ''}`;
+  const resolvedEl = document.getElementById(`resolve-resolved-${trackId}`);
+  if (resolvedEl) resolvedEl.style.display = 'flex';
+  _updateResolveApplyBtn();
+}
+
+function _resolveMarkRemove(trackId) {
+  _resolveActions[trackId] = { action: 'remove' };
+  document.getElementById(`resolve-search-wrap-${trackId}`)?.style?.setProperty('display', 'none');
+  document.getElementById(`resolve-resolved-${trackId}`)?.style?.setProperty('display', 'none');
+  const badge = document.getElementById(`resolve-remove-badge-${trackId}`);
+  if (badge) badge.style.display = 'flex';
+  _updateResolveApplyBtn();
+}
+
+function _resolveClearAction(trackId) {
+  delete _resolveActions[trackId];
+  document.getElementById(`resolve-resolved-${trackId}`)?.style?.setProperty('display', 'none');
+  document.getElementById(`resolve-remove-badge-${trackId}`)?.style?.setProperty('display', 'none');
+  const searchWrap = document.getElementById(`resolve-search-wrap-${trackId}`);
+  if (searchWrap) searchWrap.style.display = 'block';
+  _updateResolveApplyBtn();
+}
+
+function _updateResolveApplyBtn() {
+  const btn   = document.getElementById('resolve-apply-btn');
+  const count = Object.keys(_resolveActions).length;
+  if (!btn) return;
+  btn.disabled    = count === 0;
+  btn.textContent = count > 0 ? `Apply Changes (${count})` : 'Apply Changes';
+}
+
+async function applyResolve() {
+  if (!_resolvePlaylistId || !Object.keys(_resolveActions).length) return;
+  const replacements = [];
+  const removals     = [];
+  for (const [trackId, action] of Object.entries(_resolveActions)) {
+    if (action.action === 'replace') replacements.push({ old_track_id: trackId, new_track_id: action.newId });
+    else if (action.action === 'remove') removals.push(trackId);
+  }
+  const btn = document.getElementById('resolve-apply-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Applying…'; }
+  try {
+    const res = await api(`/playlists/${encodeURIComponent(_resolvePlaylistId)}/resolve`, {
+      method: 'POST', body: { replacements, removals }
+    });
+    const pid = _resolvePlaylistId;
+    closeResolveModal();
+    if (state.playlist?.id === pid) await openPlaylist(pid);
+    await loadPlaylists();
+    const applied = res.applied || 0;
+    toast(`Resolve complete — ${applied} change${applied !== 1 ? 's' : ''} applied`);
+  } catch (e) {
+    toast('Apply failed: ' + (e.message || e), 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'Apply Changes'; }
+  }
 }
 
 /* ── Sync Wizard ─────────────────────────────────────────────────────── */
@@ -18733,6 +18964,14 @@ const App = {
   _playlistExportSubmenuLeave,
   ctxPlaylistRename,
   ctxPlaylistDelete,
+  ctxPlaylistResolve,
+  openResolveModal,
+  closeResolveModal,
+  applyResolve,
+  _resolveSearch,
+  _resolveSelectCandidate,
+  _resolveMarkRemove,
+  _resolveClearAction,
   playArtistCard,
   showArtistCtxMenu,
   showAlbumCtxMenu,
