@@ -1315,7 +1315,7 @@ def scan_file(filepath):
 def do_scan():
     global library, scan_state
 
-    prev_paths = {t.get('path') for t in library if t.get('path')}
+    prev_lib_by_path = {t['path']: t for t in library if t.get('path')}
     scan_state.update({
         'status': 'scanning',
         'message': 'Finding music files...',
@@ -1382,9 +1382,25 @@ def do_scan():
         print(f"Error saving library cache: {e}")
 
     walked_rel_paths = {str(f.relative_to(music_base)) for f in files}
+
+    # Record tracks that vanished (path no longer on disk) into deleted_tracks so
+    # Resolve Playlist can recover their title/artist/album metadata later.
+    try:
+        prev_paths = set(prev_lib_by_path)
+        new_paths  = {t['path'] for t in tracks if t.get('path')}
+        removed_paths = prev_paths - new_paths
+        if removed_paths:
+            conn = _db.get_conn()
+            for p in removed_paths:
+                t = prev_lib_by_path[p]
+                _record_deleted_track(conn, t)
+            conn.commit()
+    except Exception as e:
+        print(f"[scan] Warning: could not record deleted tracks: {e}")
     next_paths = {t['path'] for t in tracks if t.get('path')}
-    added_count   = len(walked_rel_paths - prev_paths)
-    removed_count = len(prev_paths - walked_rel_paths)
+    _prev_paths_set = set(prev_lib_by_path)
+    added_count   = len(walked_rel_paths - _prev_paths_set)
+    removed_count = len(_prev_paths_set - walked_rel_paths)
     scan_failures = len(walked_rel_paths - next_paths)
     new_count     = added_count - removed_count
 
@@ -15306,11 +15322,53 @@ else:
         (DATA_DIR / 'tunebridge_testmode.db-shm').unlink(missing_ok=True)
         _shutil_tm.rmtree(_TESTMODE_ARTWORK_DIR, ignore_errors=True)
 
+def _backfill_deleted_from_library_json():
+    """
+    One-time startup backfill: populate deleted_tracks from library.json for any
+    playlist track IDs that are no longer in the library but have no deleted_tracks
+    entry yet. This recovers metadata for tracks that went missing before the
+    rescan-recording fix was added.
+    """
+    lib_json = DATA_DIR / 'library.json'
+    if not lib_json.exists():
+        return
+    try:
+        raw = json.loads(lib_json.read_text())
+        if not isinstance(raw, list):
+            return
+        json_map = {t['id']: t for t in raw if isinstance(t, dict) and 'id' in t}
+        conn = _db.get_conn()
+        lib_ids = {r[0] for r in conn.execute('SELECT id FROM tracks').fetchall()}
+        playlist_ids = {r[0] for r in conn.execute('SELECT DISTINCT track_id FROM playlist_tracks').fetchall()}
+        orphans = playlist_ids - lib_ids
+        if not orphans:
+            return
+        existing_deleted = {
+            hashlib.md5(r[0].encode()).hexdigest()
+            for r in conn.execute('SELECT path FROM deleted_tracks WHERE path IS NOT NULL').fetchall()
+        }
+        backfilled = 0
+        for tid in orphans:
+            if tid in existing_deleted:
+                continue
+            t = json_map.get(tid)
+            if not t:
+                continue
+            _record_deleted_track(conn, t)
+            backfilled += 1
+        if backfilled:
+            conn.commit()
+            print(f"[startup] Backfilled {backfilled} deleted-track entries from library.json")
+    except Exception as e:
+        print(f"[startup] Warning: library.json backfill failed: {e}")
+
+
 # ── SQLite initialization ─────────────────────────────────────────────────────
 if not _migrate.ensure_db(DATA_DIR):
     raise RuntimeError('SQLite migration failed; startup aborted (JSON fallback removed).')
 
 load_library()
+_backfill_deleted_from_library_json()
 
 
 # ── Library Organizer Routes ──────────────────────────────────────────────────
