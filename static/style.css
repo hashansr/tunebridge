@@ -23777,7 +23777,8 @@ body.is-col-resizing {
 }
 #view-settings #lyrics-advanced-body,
 #view-settings #artwork-advanced-body {
-  max-width: 560px;
+  width: min(100%, 1040px);
+  max-width: none;
   margin-top: 12px;
   padding: 14px 16px;
   border: 1px solid rgba(255,255,255,0.06);
@@ -23787,12 +23788,51 @@ body.is-col-resizing {
 #view-settings #lyrics-advanced-body .settings-row,
 #view-settings #artwork-advanced-body .settings-row,
 #view-settings .lyric-health-tool-row {
-  gap: 16px;
-  padding: 8px 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 42%);
+  align-items: center;
+  gap: 32px;
+  padding: 14px 0;
 }
 #view-settings #lyrics-advanced-body .settings-row + .settings-row,
 #view-settings #artwork-advanced-body .settings-row + .settings-row,
 #view-settings .lyric-health-tool-row {
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+#view-settings #lyrics-advanced-body .settings-row > label,
+#view-settings #artwork-advanced-body .settings-row > label {
+  width: auto;
+  color: var(--text-sub);
+  font-size: 15px;
+  font-weight: 600;
+}
+#view-settings #lyrics-advanced-body .settings-select,
+#view-settings #artwork-advanced-body .settings-select,
+#view-settings #artwork-advanced-body .input-browse-group,
+#view-settings #lyrics-advanced-body .lyric-health-tool-row .btn-secondary {
+  justify-self: end;
+}
+#view-settings #lyrics-advanced-body .settings-select,
+#view-settings #artwork-advanced-body .settings-select {
+  width: min(420px, 100%);
+}
+#view-settings #artwork-advanced-body .input-browse-group {
+  width: min(520px, 100%);
+}
+#view-settings .settings-advanced-note-row {
+  grid-template-columns: 1fr !important;
+  gap: 0 !important;
+}
+#view-settings .settings-advanced-note-row .settings-hint {
+  margin: 0;
+  max-width: none;
+}
+#view-settings .lyric-health-tool-row .settings-rg-meta {
+  max-width: none;
+}
+#view-settings .settings-advanced-actions {
+  justify-content: flex-end;
+  padding-top: 12px;
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 #view-settings .settings-hint {
@@ -23814,18 +23854,20 @@ body.is-col-resizing {
 #view-settings .settings-support-card-icon {
   width: 42px;
   height: 42px;
-  border: 1px solid rgba(173,198,255,0.2);
+  border: 1px solid rgba(248,113,113,0.28);
   border-radius: 11px;
-  background: var(--accent-dim);
+  background: rgba(248,113,113,0.10);
+  color: var(--tb-danger);
 }
 #view-settings .settings-support-card-label {
   font-size: 15px;
   font-weight: 700;
 }
 #view-settings .settings-support-card-hint {
-  max-width: 600px;
+  max-width: none;
   font-size: 13px;
   line-height: 1.55;
+  white-space: nowrap;
 }
 #view-settings .settings-support-card-actions {
   margin-top: 14px;
@@ -23883,6 +23925,19 @@ body.is-col-resizing {
   #view-settings .settings-audio-tool-actions {
     grid-template-columns: 1fr;
     min-width: 0;
+  }
+  #view-settings #lyrics-advanced-body .settings-row,
+  #view-settings #artwork-advanced-body .settings-row,
+  #view-settings .lyric-health-tool-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  #view-settings #lyrics-advanced-body .settings-select,
+  #view-settings #artwork-advanced-body .settings-select,
+  #view-settings #artwork-advanced-body .input-browse-group,
+  #view-settings #lyrics-advanced-body .lyric-health-tool-row .btn-secondary {
+    justify-self: stretch;
+    width: 100%;
   }
   #view-settings .settings-category-bar {
     gap: 22px;
