@@ -14723,8 +14723,11 @@ async function exportCsv() {
   }
 
   _closeExportCsvModal();
+  const ts = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const defaultName = `tunebridge_library_${ts}.csv`;
 
   try {
+    // 1. Pywebview native save dialog (TuneBridge.app only)
     const saveRes = await fetch('/api/library/export-csv/save-to-disk', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -14733,8 +14736,7 @@ async function exportCsv() {
     const saveData = await saveRes.json();
     if (saveData.cancelled) return;
     if (saveData.ok) {
-      const fname = saveData.path.split('/').pop();
-      toast(`Library exported as ${fname}`, 'success');
+      toast(`Library exported as ${saveData.path.split('/').pop()}`, 'success');
       return;
     }
     const _nativeUnavailable = new Set(['not_available', 'no_window']);
@@ -14742,7 +14744,8 @@ async function exportCsv() {
       toast(saveData.error || 'Export failed.');
       return;
     }
-    // Fallback: blob download for dev/browser mode
+
+    // 2. Fetch CSV blob (shared by remaining paths)
     const res = await fetch('/api/library/export-csv', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -14755,12 +14758,29 @@ async function exportCsv() {
       return;
     }
     const blob = await res.blob();
+
+    // 3. Web File System Access API — native macOS Save dialog in Chrome/Edge
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: defaultName,
+          types: [{ description: 'CSV File', accept: { 'text/csv': ['.csv'] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        toast('Library exported.', 'success');
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return; // user cancelled dialog
+        // Other error: fall through to silent blob download
+      }
+    }
+
+    // 4. Silent blob download (last resort)
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const cd = res.headers.get('Content-Disposition') || '';
-    const m = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-    const ts = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    a.download = m ? m[1].replace(/['"]/g, '') : `tunebridge_library_${ts}.csv`;
+    a.download = defaultName;
     a.href = url;
     document.body.appendChild(a);
     a.click();
