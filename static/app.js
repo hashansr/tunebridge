@@ -14727,25 +14727,7 @@ async function exportCsv() {
   const defaultName = `tunebridge_library_${ts}.csv`;
 
   try {
-    // 1. Pywebview native save dialog (TuneBridge.app only)
-    const saveRes = await fetch('/api/library/export-csv/save-to-disk', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ columns }),
-    });
-    const saveData = await saveRes.json();
-    if (saveData.cancelled) return;
-    if (saveData.ok) {
-      toast(`Library exported as ${saveData.path.split('/').pop()}`, 'success');
-      return;
-    }
-    const _nativeUnavailable = new Set(['not_available', 'no_window']);
-    if (saveData.error && !_nativeUnavailable.has(saveData.error)) {
-      toast(saveData.error || 'Export failed.');
-      return;
-    }
-
-    // 2. Fetch CSV blob (shared by remaining paths)
+    // Fetch CSV content once (text, includes UTF-8 BOM for Excel)
     const res = await fetch('/api/library/export-csv', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -14757,10 +14739,22 @@ async function exportCsv() {
       toast(msg);
       return;
     }
-    const blob = await res.blob();
+    const csvText = await res.text();
 
-    // 3. Web File System Access API — native macOS Save dialog in Chrome/Edge
+    // 1. Pywebview JS API — native Save dialog in TuneBridge.app
+    if (window.pywebview?.api?.save_text_file) {
+      const result = await window.pywebview.api.save_text_file(defaultName, csvText, 'csv');
+      if (!result || result.cancelled) return;
+      if (result.ok) {
+        toast(`Library exported as ${result.path.split('/').pop()}`, 'success');
+        return;
+      }
+      // result.error: fall through to browser paths
+    }
+
+    // 2. Web File System Access API — native Save dialog in Chrome/Edge
     if (window.showSaveFilePicker) {
+      const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
       try {
         const handle = await window.showSaveFilePicker({
           suggestedName: defaultName,
@@ -14772,12 +14766,12 @@ async function exportCsv() {
         toast('Library exported.', 'success');
         return;
       } catch (e) {
-        if (e.name === 'AbortError') return; // user cancelled dialog
-        // Other error: fall through to silent blob download
+        if (e.name === 'AbortError') return; // user cancelled
       }
     }
 
-    // 4. Silent blob download (last resort)
+    // 3. Silent blob download (last resort)
+    const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.download = defaultName;
