@@ -10226,10 +10226,13 @@ function _swRenderDone() {
   }
 }
 
-function swFinish() {
+async function swFinish() {
   _swClearTimers();
   _swUnregisterUnloadGuard();
   _syncBgStop();
+  try {
+    await api('/sync/reset', { method: 'POST' });
+  } catch (_) {}
   showView('home');
 }
 
