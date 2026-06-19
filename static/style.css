@@ -23541,6 +23541,29 @@ body.is-col-resizing {
   border: 0;
   background: transparent;
 }
+#view-settings .settings-metadata-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 40px;
+  row-gap: 12px;
+}
+#view-settings .settings-metadata-row > .settings-rg-meta {
+  display: contents;
+}
+#view-settings .settings-metadata-row > .settings-rg-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: start;
+}
+#view-settings .settings-metadata-row .settings-rg-label,
+#view-settings .settings-metadata-row .settings-rg-sub {
+  grid-column: 1;
+  max-width: none;
+}
+#view-settings .settings-metadata-row .lyrics-advanced-wrap {
+  grid-column: 1 / -1;
+  width: 100%;
+}
 #view-settings .settings-row-stack {
   flex-direction: column;
   align-items: stretch;
@@ -23660,6 +23683,7 @@ body.is-col-resizing {
 }
 #view-settings .btn-secondary,
 #view-settings .btn-browse,
+#view-settings .settings-key-link,
 #view-settings .baseline-remove-btn,
 #view-settings .settings-feedback-link {
   min-height: 34px;
@@ -23675,6 +23699,7 @@ body.is-col-resizing {
 }
 #view-settings .btn-secondary:hover,
 #view-settings .btn-browse:hover,
+#view-settings .settings-key-link:hover,
 #view-settings .baseline-remove-btn:hover {
   background: var(--bg-elevated);
   border-color: rgba(173,198,255,0.2);
@@ -23777,7 +23802,7 @@ body.is-col-resizing {
 }
 #view-settings #lyrics-advanced-body,
 #view-settings #artwork-advanced-body {
-  width: min(100%, 1040px);
+  width: 100%;
   max-width: none;
   margin-top: 12px;
   padding: 14px 16px;
@@ -23818,6 +23843,13 @@ body.is-col-resizing {
 }
 #view-settings #artwork-advanced-body .input-browse-group {
   width: min(520px, 100%);
+}
+#view-settings #artwork-advanced-body .settings-key-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 #view-settings .settings-advanced-note-row {
   grid-template-columns: 1fr !important;
@@ -23915,6 +23947,17 @@ body.is-col-resizing {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
+  }
+  #view-settings .settings-metadata-row {
+    display: flex;
+  }
+  #view-settings .settings-metadata-row > .settings-rg-meta {
+    display: flex;
+    flex-direction: column;
+    max-width: none;
+  }
+  #view-settings .settings-metadata-row .lyrics-advanced-wrap {
+    width: 100%;
   }
   #view-settings .settings-rg-actions,
   #view-settings .settings-app-actions,
