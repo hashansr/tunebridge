@@ -2120,21 +2120,21 @@ h4.settings-subsection-title {
 .hero-meta { font-size: var(--text-base); color: var(--text-muted); margin-bottom: 18px; }
 .hero-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   align-items: center;
 }
 .hero-action-divider {
   width: 1px;
-  height: 24px;
-  margin: 0 4px;
+  height: 22px;
+  margin: 0 2px;
   background: rgba(255, 255, 255, 0.08);
   flex: 0 0 auto;
 }
 .hero-icon-cluster {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
 }
 
 /* ── Track table ─────────────────────────────────────────────────────── */
@@ -7228,7 +7228,7 @@ tbody tr:hover {
 #view-playlist .pl-hero-actions {
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 #view-playlist .playlist-actions {
   display: flex;
@@ -11826,12 +11826,12 @@ tr.player-active .track-title { color: var(--accent); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  height: 40px;
-  padding: 0 20px;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
   border-radius: 9999px;
   color: var(--text-sub);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -11857,8 +11857,8 @@ tr.player-active .track-title { color: var(--accent); }
 .btn-hero-play .tb-icon,
 .btn-hero-shuffle .tb-icon {
   flex-shrink: 0;
-  width: 16px !important;
-  height: 16px !important;
+  width: 15px !important;
+  height: 15px !important;
 }
 .btn-hero-play svg,
 .btn-hero-play .tb-icon { color: currentColor; }
@@ -14712,10 +14712,10 @@ tr.player-active .track-title { color: var(--accent); }
 #view-playlist #playlist-hero.playlist-detail-hero .hero-fav-star,
 #view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star,
 #view-playlist #playlist-hero.playlist-detail-hero .btn-export-local {
-  width: 34px;
-  min-width: 34px;
-  height: 38px;
-  min-height: 38px;
+  width: 30px;
+  min-width: 30px;
+  height: 34px;
+  min-height: 34px;
   padding: 0;
   background: transparent;
   border: none;
@@ -14737,8 +14737,21 @@ tr.player-active .track-title { color: var(--accent); }
 #view-playlist #playlist-hero.playlist-detail-hero .hero-fav-star:hover,
 #view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star:hover,
 #view-playlist #playlist-hero.playlist-detail-hero .btn-export-local:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
   color: var(--text);
+}
+
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-fav-star svg,
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-pin-star svg,
+#view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-more svg,
+#view-albums #artist-hero.artist-detail-hero .hero-fav-star svg,
+#view-albums #artist-hero.artist-detail-hero .hero-pin-star svg,
+#view-albums #artist-hero.artist-detail-hero .btn-hero-more svg,
+#view-playlist #playlist-hero.playlist-detail-hero .hero-fav-star svg,
+#view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star svg,
+#view-playlist #playlist-hero.playlist-detail-hero .btn-export-local svg {
+  width: 16px;
+  height: 16px;
 }
 
 #view-tracks #album-hero.album-detail-hero.is-album-context .hero-fav-star.is-fav,
@@ -14775,7 +14788,7 @@ tr.player-active .track-title { color: var(--accent); }
 #view-playlist #playlist-hero.playlist-detail-hero .hero-fav-star.is-fav:hover,
 #view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star.is-pinned:hover {
   color: var(--accent);
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
 }
 
 #view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-play svg,
@@ -14797,14 +14810,14 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 #view-playlist #playlist-hero.playlist-detail-hero .btn-export-device {
-  height: 40px;
-  padding: 0 20px;
+  height: 36px;
+  padding: 0 16px;
   border-radius: 9999px;
   background: transparent;
   border: 1px solid rgba(65, 71, 85, 0.32);
   color: var(--text-sub);
-  font-size: 13.5px;
-  gap: 9px;
+  font-size: 13px;
+  gap: 8px;
   transition: all 0.15s ease;
 }
 
