@@ -3269,14 +3269,17 @@ async function openFavouriteSongsPlaylist() {
 async function renderDapExportPills(pid) {
   const container = document.getElementById('dap-export-pills');
   if (!container) return;
+  const divider = document.getElementById('pl-dap-divider');
   const isFavVirtual = state.playlist?.is_favourites || pid === '__favourite_songs__';
 
   const daps = await api('/daps').catch(() => []);
   const connected = daps.filter(d => d.mounted);
   if (!connected.length) {
     container.innerHTML = '';
+    if (divider) divider.style.display = 'none';
     return;
   }
+  if (divider) divider.style.display = '';
 
   const svgDevice = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>`;
   const latestFavAt = Math.max(0, ...((state.favouritesMeta.songs || []).map(r => Number(r.added_at || 0))));

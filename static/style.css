@@ -2120,9 +2120,21 @@ h4.settings-subsection-title {
 .hero-meta { font-size: var(--text-base); color: var(--text-muted); margin-bottom: 18px; }
 .hero-actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   align-items: center;
+}
+.hero-action-divider {
+  width: 1px;
+  height: 24px;
+  margin: 0 4px;
+  background: rgba(255, 255, 255, 0.08);
+  flex: 0 0 auto;
+}
+.hero-icon-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
 
 /* ── Track table ─────────────────────────────────────────────────────── */
@@ -7216,7 +7228,7 @@ tbody tr:hover {
 #view-playlist .pl-hero-actions {
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 #view-playlist .playlist-actions {
   display: flex;
@@ -11809,28 +11821,49 @@ tr.player-active .track-title { color: var(--accent); }
 .btn-play-all:hover { opacity: 0.88; transform: scale(1.02); }
 .btn-play-all svg { flex-shrink: 0; }
 
-/* Hero action buttons (Apple Music style dark pills) */
 .btn-hero-play,
 .btn-hero-shuffle {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 9px 22px;
-  border-radius: 100px;
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text);
-  font-size: var(--text-base);
+  justify-content: center;
+  gap: 9px;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 9999px;
+  color: var(--text-sub);
+  font-size: 13.5px;
   font-weight: 600;
-  border: none;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s ease;
   line-height: 1;
   white-space: nowrap;
 }
-.btn-hero-play:hover,
-.btn-hero-shuffle:hover { background: rgba(255, 255, 255, 0.17); }
+.btn-hero-play {
+  background: linear-gradient(135deg, rgba(173, 198, 255, 0.95), rgba(130, 168, 255, 0.88));
+  border: none;
+  color: #00285c;
+}
+.btn-hero-play:hover { filter: brightness(1.05); }
+.btn-hero-shuffle {
+  background: var(--bg-elevated);
+  border: 1px solid rgba(65, 71, 85, 0.32);
+}
+.btn-hero-shuffle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
 .btn-hero-play svg,
-.btn-hero-shuffle svg { flex-shrink: 0; color: var(--accent); }
+.btn-hero-shuffle svg,
+.btn-hero-play .tb-icon,
+.btn-hero-shuffle .tb-icon {
+  flex-shrink: 0;
+  width: 16px !important;
+  height: 16px !important;
+}
+.btn-hero-play svg,
+.btn-hero-play .tb-icon { color: currentColor; }
+.btn-hero-shuffle svg,
+.btn-hero-shuffle .tb-icon { color: var(--accent); }
 
 /* ── Confirm dialog system ──────────────────────────────────────────── */
 #confirm-modal {
@@ -14503,67 +14536,10 @@ tr.player-active .track-title { color: var(--accent); }
   margin-bottom: 20px;
 }
 
-#view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-play,
-#view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-shuffle {
-  background: rgba(255, 255, 255, 0.14);
-  color: rgba(246, 249, 255, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(18px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 10px 24px rgba(0, 0, 0, 0.14);
-  font-size: 12px;
-}
-
-#view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-play:hover,
-#view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-shuffle:hover {
-  background: rgba(255, 255, 255, 0.22);
-}
-
 #view-tracks #album-hero.album-detail-hero.is-album-context .hero-fav-star,
 #view-tracks #album-hero.album-detail-hero.is-album-context .hero-pin-star,
 #view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-more {
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  backdrop-filter: none;
-  color: rgba(246, 249, 255, 0.82);
-  font-size: 12px;
-}
-
-#view-tracks #album-hero.album-detail-hero.is-album-context .hero-fav-star:hover,
-#view-tracks #album-hero.album-detail-hero.is-album-context .hero-pin-star:hover,
-#view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-more:hover {
-  background: transparent;
-  color: rgba(246, 249, 255, 0.98);
-}
-
-#view-tracks #album-hero.album-detail-hero.is-album-context .hero-fav-star.is-fav {
-  color: #f5c542;
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-}
-
-#view-tracks #album-hero.album-detail-hero.is-album-context .hero-fav-star.is-fav:hover {
-  color: #ffd96a;
-  background: transparent;
-}
-
-#view-tracks #album-hero.album-detail-hero.is-album-context .hero-pin-star.is-pinned {
-  color: var(--accent);
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-}
-
-#view-tracks #album-hero.album-detail-hero.is-album-context .hero-pin-star.is-pinned:hover {
-  color: var(--accent);
-  background: transparent;
-}
-
-#view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-play svg,
-#view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-shuffle svg,
-#view-tracks #album-hero.album-detail-hero.is-album-context .tb-icon {
-  color: rgb(var(--album-hero-accent));
+  color: var(--text-muted);
 }
 
 #view-albums #artist-hero.artist-detail-hero,
@@ -14703,57 +14679,78 @@ tr.player-active .track-title { color: var(--accent); }
 #view-playlist #playlist-hero.playlist-detail-hero .btn-hero-play,
 #view-playlist #playlist-hero.playlist-detail-hero .btn-hero-shuffle,
 #view-playlist #playlist-hero.playlist-detail-hero .btn-export {
-  background: rgba(255, 255, 255, 0.14);
-  color: rgba(246, 249, 255, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(18px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 10px 24px rgba(0, 0, 0, 0.14);
-  font-size: 12px;
+  backdrop-filter: none;
+  box-shadow: none;
 }
 
-#view-albums #artist-hero.artist-detail-hero .btn-hero-play:hover,
+#view-albums #artist-hero.artist-detail-hero .btn-hero-play,
+#view-playlist #playlist-hero.playlist-detail-hero .btn-hero-play {
+  background: linear-gradient(135deg, rgba(173, 198, 255, 0.95), rgba(130, 168, 255, 0.88));
+  border: none;
+  color: #00285c;
+}
+
+#view-albums #artist-hero.artist-detail-hero .btn-hero-shuffle,
+#view-playlist #playlist-hero.playlist-detail-hero .btn-hero-shuffle {
+  background: var(--bg-elevated);
+  border: 1px solid rgba(65, 71, 85, 0.32);
+  color: var(--text-sub);
+}
+
 #view-albums #artist-hero.artist-detail-hero .btn-hero-shuffle:hover,
-#view-playlist #playlist-hero.playlist-detail-hero .btn-hero-play:hover,
-#view-playlist #playlist-hero.playlist-detail-hero .btn-hero-shuffle:hover,
-#view-playlist #playlist-hero.playlist-detail-hero .btn-export:hover {
-  background: rgba(255, 255, 255, 0.22);
+#view-playlist #playlist-hero.playlist-detail-hero .btn-hero-shuffle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-fav-star,
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-pin-star,
+#view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-more,
 #view-albums #artist-hero.artist-detail-hero .hero-fav-star,
 #view-albums #artist-hero.artist-detail-hero .hero-pin-star,
 #view-albums #artist-hero.artist-detail-hero .btn-hero-more,
+#view-playlist #playlist-hero.playlist-detail-hero .hero-fav-star,
+#view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star,
 #view-playlist #playlist-hero.playlist-detail-hero .btn-export-local {
-  width: 24px;
-  min-width: 24px;
+  width: 34px;
+  min-width: 34px;
+  height: 38px;
+  min-height: 38px;
   padding: 0;
   background: transparent;
   border: none;
+  border-radius: 8px;
   box-shadow: none;
   backdrop-filter: none;
-  color: rgba(246, 249, 255, 0.82);
-  font-size: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  opacity: 1;
+  transition: all 0.15s ease;
 }
 
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-fav-star:hover,
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-pin-star:hover,
+#view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-more:hover,
 #view-albums #artist-hero.artist-detail-hero .hero-fav-star:hover,
 #view-albums #artist-hero.artist-detail-hero .hero-pin-star:hover,
 #view-albums #artist-hero.artist-detail-hero .btn-hero-more:hover,
+#view-playlist #playlist-hero.playlist-detail-hero .hero-fav-star:hover,
+#view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star:hover,
 #view-playlist #playlist-hero.playlist-detail-hero .btn-export-local:hover {
-  background: transparent;
-  color: rgba(246, 249, 255, 0.98);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
 }
 
-#view-albums #artist-hero.artist-detail-hero .hero-fav-star.is-fav {
-  color: #f5c542;
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-fav-star.is-fav,
+#view-albums #artist-hero.artist-detail-hero .hero-fav-star.is-fav,
+#view-playlist #playlist-hero.playlist-detail-hero .hero-fav-star.is-fav {
+  color: var(--accent);
   background: transparent;
   border-color: transparent;
   box-shadow: none;
 }
 
-#view-albums #artist-hero.artist-detail-hero .hero-fav-star.is-fav:hover {
-  color: #ffd96a;
-  background: transparent;
-}
-
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-pin-star.is-pinned,
 #view-albums #artist-hero.artist-detail-hero .hero-pin-star.is-pinned,
 #view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star.is-pinned {
   color: var(--accent);
@@ -14762,36 +14759,67 @@ tr.player-active .track-title { color: var(--accent); }
   box-shadow: none;
 }
 
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-fav-star.is-fav svg,
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-pin-star.is-pinned svg,
+#view-albums #artist-hero.artist-detail-hero .hero-fav-star.is-fav svg,
+#view-albums #artist-hero.artist-detail-hero .hero-pin-star.is-pinned svg,
+#view-playlist #playlist-hero.playlist-detail-hero .hero-fav-star.is-fav svg,
+#view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star.is-pinned svg {
+  fill: var(--accent);
+}
+
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-fav-star.is-fav:hover,
+#view-tracks #album-hero.album-detail-hero.is-album-context .hero-pin-star.is-pinned:hover,
+#view-albums #artist-hero.artist-detail-hero .hero-fav-star.is-fav:hover,
 #view-albums #artist-hero.artist-detail-hero .hero-pin-star.is-pinned:hover,
+#view-playlist #playlist-hero.playlist-detail-hero .hero-fav-star.is-fav:hover,
 #view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star.is-pinned:hover {
   color: var(--accent);
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
 }
 
-#view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star {
-  width: 24px;
-  min-width: 24px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  backdrop-filter: none;
-  color: rgba(246, 249, 255, 0.82);
-}
-
-#view-playlist #playlist-hero.playlist-detail-hero .hero-pin-star:hover {
-  background: transparent;
-  color: rgba(246, 249, 255, 0.98);
-}
-
+#view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-play svg,
+#view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-play .tb-icon,
 #view-albums #artist-hero.artist-detail-hero .btn-hero-play svg,
-#view-albums #artist-hero.artist-detail-hero .btn-hero-shuffle svg,
-#view-albums #artist-hero.artist-detail-hero .tb-icon,
+#view-albums #artist-hero.artist-detail-hero .btn-hero-play .tb-icon,
 #view-playlist #playlist-hero.playlist-detail-hero .btn-hero-play svg,
+#view-playlist #playlist-hero.playlist-detail-hero .btn-hero-play .tb-icon {
+  color: currentColor;
+}
+
+#view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-shuffle svg,
+#view-tracks #album-hero.album-detail-hero.is-album-context .btn-hero-shuffle .tb-icon,
+#view-albums #artist-hero.artist-detail-hero .btn-hero-shuffle svg,
+#view-albums #artist-hero.artist-detail-hero .btn-hero-shuffle .tb-icon,
 #view-playlist #playlist-hero.playlist-detail-hero .btn-hero-shuffle svg,
-#view-playlist #playlist-hero.playlist-detail-hero .btn-export svg,
-#view-playlist #playlist-hero.playlist-detail-hero .tb-icon {
-  color: rgb(var(--album-hero-accent));
+#view-playlist #playlist-hero.playlist-detail-hero .btn-hero-shuffle .tb-icon {
+  color: var(--accent);
+}
+
+#view-playlist #playlist-hero.playlist-detail-hero .btn-export-device {
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 9999px;
+  background: transparent;
+  border: 1px solid rgba(65, 71, 85, 0.32);
+  color: var(--text-sub);
+  font-size: 13.5px;
+  gap: 9px;
+  transition: all 0.15s ease;
+}
+
+#view-playlist #playlist-hero.playlist-detail-hero .btn-export-device:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+#view-playlist #playlist-hero.playlist-detail-hero .btn-export-device svg,
+#view-playlist #playlist-hero.playlist-detail-hero .btn-export-local svg {
+  color: var(--accent);
+}
+
+#view-playlist #playlist-hero.playlist-detail-hero .btn-export-device .dap-export-label {
+  min-width: 0;
 }
 
 #view-tracks #album-hero.album-detail-hero.is-album-context + #tracks-table-wrap {
