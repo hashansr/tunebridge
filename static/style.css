@@ -11829,10 +11829,11 @@ tr.player-active .track-title { color: var(--accent); }
   gap: 8px;
   height: 36px;
   padding: 0 16px;
+  min-width: 104px;
   border-radius: 9999px;
   color: var(--text-sub);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 400;
   cursor: pointer;
   transition: all 0.15s ease;
   line-height: 1;
@@ -14817,6 +14818,7 @@ tr.player-active .track-title { color: var(--accent); }
   border: 1px solid rgba(65, 71, 85, 0.32);
   color: var(--text-sub);
   font-size: 13px;
+  font-weight: 400;
   gap: 8px;
   transition: all 0.15s ease;
 }
