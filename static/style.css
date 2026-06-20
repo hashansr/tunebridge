@@ -7342,12 +7342,13 @@ tbody tr:hover {
   left: 0;
   flex-direction: column;
   min-width: 180px;
-  background: rgba(24, 24, 26, 0.97);
+  background: #18181a;
   border: 1px solid rgba(173, 198, 255, 0.16);
   border-radius: 10px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.62);
   padding: 5px;
   z-index: 30000;
+  isolation: isolate;
 }
 .pl-export-item {
   width: 100%;
@@ -14571,7 +14572,7 @@ tr.player-active .track-title { color: var(--accent); }
 #view-playlist .view-header + #playlist-hero.playlist-detail-hero {
   margin-top: calc(-1 * (8px + var(--main-nav-overlay-clearance)));
   padding-top: calc(8px + var(--main-nav-overlay-clearance) + 16px);
-  z-index: 0;
+  z-index: 20;
 }
 
 #view-albums #artist-hero.artist-detail-hero {
