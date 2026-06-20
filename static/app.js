@@ -698,8 +698,8 @@ const _STAR_OUTLINE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="non
 const _STAR_FILLED = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z"/></svg>`;
 const _STAR_HALF = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><defs><clipPath id="tb-star-half-clip"><rect x="0" y="0" width="12" height="24"/></clipPath></defs><path clip-path="url(#tb-star-half-clip)" fill="currentColor" d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z"/><path d="M12.9121 1.59053C12.7508 1.2312 12.3936 1 11.9997 1C11.6059 1 11.2487 1.2312 11.0874 1.59053L8.27041 7.86702L1.43062 8.60661C1.03903 8.64895 0.708778 8.91721 0.587066 9.2918C0.465355 9.66639 0.574861 10.0775 0.866772 10.342L5.96556 14.9606L4.55534 21.6942C4.4746 22.0797 4.62768 22.4767 4.94632 22.7082C5.26497 22.9397 5.68983 22.9626 6.03151 22.7667L11.9997 19.3447L17.968 22.7667C18.3097 22.9626 18.7345 22.9397 19.0532 22.7082C19.3718 22.4767 19.5249 22.0797 19.4441 21.6942L18.0339 14.9606L23.1327 10.342C23.4246 10.0775 23.5341 9.66639 23.4124 9.2918C23.2907 8.91721 22.9605 8.64895 22.5689 8.60661L15.7291 7.86702L12.9121 1.59053Z" stroke="currentColor" stroke-width="1.4"/></svg>`;
 const _PIN_PATH = `M665.5 256l-76.8 76.8v122.9a153.6 153.6 0 0 1 76.8 133h-128v153.6l-25.6 25.6-25.6-25.6V588.7h-128a153.47 153.47 0 0 1 76.8-133V332.8L358.3 256`;
-const _PIN_OUTLINE = `<svg width="14" height="14" viewBox="330 230 364 560" fill="currentColor" aria-hidden="true"><path d="${_PIN_PATH}"/></svg>`;
-const _PIN_FILLED = _PIN_OUTLINE;
+const _PIN_OUTLINE = `<svg width="14" height="14" viewBox="330 230 364 560" fill="none" stroke="currentColor" stroke-width="48" stroke-linejoin="round" aria-hidden="true"><path d="${_PIN_PATH}"/></svg>`;
+const _PIN_FILLED = `<svg width="14" height="14" viewBox="330 230 364 560" fill="currentColor" aria-hidden="true"><path d="${_PIN_PATH}"/></svg>`;
 const _FAV_PLAYLIST_COVER = 'images/favourite-playlist-cover.png';
 const _CUSTOM_PEQ_KEY = 'tb_custom_peq';
 const _CREATE_PEQ_ID = '__create__';
@@ -3281,7 +3281,7 @@ async function renderDapExportPills(pid) {
   }
   if (divider) divider.style.display = '';
 
-  const svgDevice = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18" stroke-width="3"/></svg>`;
+  const svgDevice = `<span class="gear-mask-icon gear-mask-icon-dap dap-export-icon" aria-hidden="true"></span>`;
   const latestFavAt = Math.max(0, ...((state.favouritesMeta.songs || []).map(r => Number(r.added_at || 0))));
   const favExports = state.favouritesMeta.dap_exports || {};
   container.innerHTML = connected.map(dap => {

@@ -14829,8 +14829,15 @@ tr.player-active .track-title { color: var(--accent); }
 }
 
 #view-playlist #playlist-hero.playlist-detail-hero .btn-export-device svg,
+#view-playlist #playlist-hero.playlist-detail-hero .btn-export-device .gear-mask-icon-dap,
 #view-playlist #playlist-hero.playlist-detail-hero .btn-export-local svg {
   color: var(--accent);
+}
+
+#view-playlist #playlist-hero.playlist-detail-hero .btn-export-device .gear-mask-icon-dap {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
 }
 
 #view-playlist #playlist-hero.playlist-detail-hero .btn-export-device .dap-export-label {
