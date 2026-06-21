@@ -17236,6 +17236,25 @@ let _lyricsSyncThrottle = 0;
 let _lyricsUserScrolled = false;
 let _lyricsScrollResumeTimer = null;
 let _lyricsBulkPoller = null;
+let _lyricsBulkHideTimer = null;
+let _lyricsBulkBannerDismissed = true;
+const SETTINGS_PROGRESS_DONE_HIDE_MS = 4000;
+
+function _clearLyricsBulkHideTimer() {
+  if (_lyricsBulkHideTimer) {
+    clearTimeout(_lyricsBulkHideTimer);
+    _lyricsBulkHideTimer = null;
+  }
+}
+
+function _scheduleLyricsBulkBannerHide(banner) {
+  _clearLyricsBulkHideTimer();
+  _lyricsBulkHideTimer = setTimeout(() => {
+    if (banner) banner.style.display = 'none';
+    _lyricsBulkBannerDismissed = true;
+    _lyricsBulkHideTimer = null;
+  }, SETTINGS_PROGRESS_DONE_HIDE_MS);
+}
 
 function openLyricsView() {
   if (_lyricsViewOpen) {
@@ -17598,7 +17617,16 @@ function _updateLyricsBulkBanner(s) {
     if (unreported) parts.push(`${unreported} pending`);
     return parts.join(', ');
   };
-  banner.style.display = (s.status === 'idle') ? 'none' : '';
+  if (running) {
+    _clearLyricsBulkHideTimer();
+    _lyricsBulkBannerDismissed = false;
+  } else if (s.status === 'idle' || s.status === 'cancelled') {
+    _clearLyricsBulkHideTimer();
+    _lyricsBulkBannerDismissed = true;
+  }
+
+  const shouldShowBanner = s.status !== 'idle' && !(s.status === 'done' && _lyricsBulkBannerDismissed);
+  banner.style.display = shouldShowBanner ? '' : 'none';
   if (s.status === 'idle') _setSettingsStatus('lyrics');
   [newBtn, allBtn].forEach((btn) => {
     if (!btn) return;
@@ -17640,7 +17668,10 @@ function _updateLyricsBulkBanner(s) {
     }
     if (newBtn) newBtn.disabled = false;
     if (allBtn) allBtn.disabled = false;
+    if (!_lyricsBulkBannerDismissed) _scheduleLyricsBulkBannerHide(banner);
   } else if (s.status === 'error') {
+    _clearLyricsBulkHideTimer();
+    _lyricsBulkBannerDismissed = false;
     _setSettingsStatus('lyrics', { show: true, tone: 'error', title: 'Lyrics lookup encountered an error' });
     if (bar) bar.style.width = pct + '%';
     if (msg) msg.textContent =
@@ -17655,6 +17686,7 @@ function _updateLyricsBulkBanner(s) {
     if (msg) msg.textContent = `Cancelled after ${(s.progress || 0).toLocaleString()} tracks`;
     if (newBtn) newBtn.disabled = false;
     if (allBtn) allBtn.disabled = false;
+    banner.style.display = 'none';
   }
 }
 
@@ -23440,6 +23472,24 @@ function onArtistImageServiceChange(value, options = {}) {
 /* ── Artist Image Batch Fetch ────────────────────────────────────────── */
 
 let _artistBatchPoller = null;
+let _artistBatchHideTimer = null;
+let _artistBatchBannerDismissed = true;
+
+function _clearArtistBatchHideTimer() {
+  if (_artistBatchHideTimer) {
+    clearTimeout(_artistBatchHideTimer);
+    _artistBatchHideTimer = null;
+  }
+}
+
+function _scheduleArtistBatchBannerHide(banner) {
+  _clearArtistBatchHideTimer();
+  _artistBatchHideTimer = setTimeout(() => {
+    if (banner) banner.style.display = 'none';
+    _artistBatchBannerDismissed = true;
+    _artistBatchHideTimer = null;
+  }, SETTINGS_PROGRESS_DONE_HIDE_MS);
+}
 
 async function startArtistImageBatch() {
   const service = document.getElementById('artist-image-service-select')?.value || 'itunes';
@@ -23495,7 +23545,16 @@ function _updateArtistBatchBanner(s) {
   if (!banner) return;
 
   const running = s.status === 'running';
-  banner.style.display   = (s.status === 'idle') ? 'none' : '';
+  if (running) {
+    _clearArtistBatchHideTimer();
+    _artistBatchBannerDismissed = false;
+  } else if (s.status === 'idle' || s.status === 'cancelled') {
+    _clearArtistBatchHideTimer();
+    _artistBatchBannerDismissed = true;
+  }
+
+  const shouldShowBanner = s.status !== 'idle' && !(s.status === 'done' && _artistBatchBannerDismissed);
+  banner.style.display = shouldShowBanner ? '' : 'none';
   if (startBtn)  startBtn.disabled    = running;
   if (cancelBtn) cancelBtn.style.display = running ? '' : 'none';
   if (s.status === 'idle') _setSettingsStatus('artwork');
@@ -23517,12 +23576,16 @@ function _updateArtistBatchBanner(s) {
       msg.textContent = `Done — ${s.fetched} new photos${errNote}, ${s.skipped} already had photos`;
     }
     if (startBtn) startBtn.disabled = false;
+    if (!_artistBatchBannerDismissed) _scheduleArtistBatchBannerHide(banner);
   } else if (s.status === 'cancelled') {
     _setSettingsStatus('artwork');
     if (bar) bar.style.width = '0%';
     if (msg) msg.textContent = `Cancelled after ${s.done.toLocaleString()} artists — ${s.fetched} photos saved`;
     if (startBtn) startBtn.disabled = false;
+    banner.style.display = 'none';
   } else if (s.status === 'error') {
+    _clearArtistBatchHideTimer();
+    _artistBatchBannerDismissed = false;
     _setSettingsStatus('artwork', { show: true, tone: 'error', title: 'Artist photo fetch encountered an error' });
     if (msg) msg.textContent = 'Batch job encountered an error.';
     if (startBtn) startBtn.disabled = false;

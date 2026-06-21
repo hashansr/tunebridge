@@ -23487,10 +23487,10 @@ body.is-col-resizing {
   margin-bottom: 0;
 }
 #view-settings .tb-page-title {
-  font-size: 40px;
-  font-weight: 800;
+  font-size: var(--tb-page-title-size);
+  font-weight: var(--tb-page-title-weight);
   letter-spacing: -0.025em;
-  line-height: 1;
+  line-height: var(--tb-page-title-line-height);
 }
 #view-settings .settings-shell {
   gap: 0;
@@ -23514,7 +23514,7 @@ body.is-col-resizing {
   color: var(--text);
 }
 #view-settings .settings-category-title {
-  font-size: 15px;
+  font-size: var(--text-md);
   font-weight: 600;
 }
 #view-settings .settings-category-btn.active::after {
@@ -23635,7 +23635,7 @@ body.is-col-resizing {
   flex-wrap: wrap;
   margin: 0;
   color: var(--text);
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 600;
   line-height: 1.35;
 }
@@ -23645,7 +23645,7 @@ body.is-col-resizing {
 #view-settings .settings-help-text {
   margin-top: 6px;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.55;
   max-width: 560px;
 }
@@ -23707,7 +23707,7 @@ body.is-col-resizing {
   border-radius: 10px;
   background: var(--bg-elevated);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-base);
   box-shadow: none;
 }
 #view-settings .input-browse-group input:focus,
@@ -23729,7 +23729,7 @@ body.is-col-resizing {
   border-radius: 10px;
   background-color: var(--bg-elevated);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-family: var(--tb-font-sans);
 }
 #view-settings .btn-secondary,
@@ -23743,7 +23743,7 @@ body.is-col-resizing {
   border-radius: 9999px;
   background: rgba(255,255,255,0.02);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   font-weight: 500;
   text-decoration: none;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
@@ -23845,7 +23845,7 @@ body.is-col-resizing {
 #view-settings .lyrics-advanced-toggle {
   gap: 4px;
   color: var(--text-sub);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   font-weight: 500;
 }
 #view-settings .lyrics-advanced-toggle:hover {
@@ -23880,14 +23880,14 @@ body.is-col-resizing {
 }
 #view-settings .settings-adv-label {
   color: var(--text);
-  font-size: 13.5px;
+  font-size: var(--text-base);
   font-weight: 600;
 }
 #view-settings .settings-adv-help {
   margin-top: 5px;
   max-width: 520px;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 #view-settings .settings-adv-help code {
@@ -23953,7 +23953,7 @@ body.is-col-resizing {
 #view-settings .settings-save-hint {
   margin-right: auto;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   opacity: 0;
   transition: opacity 0.16s ease;
 }
@@ -23976,7 +23976,7 @@ body.is-col-resizing {
 #view-settings .settings-hint {
   padding-left: 0;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 #view-settings .settings-support-card {
   display: block;
@@ -23998,14 +23998,13 @@ body.is-col-resizing {
   color: var(--tb-danger);
 }
 #view-settings .settings-support-card-label {
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 700;
 }
 #view-settings .settings-support-card-hint {
   max-width: none;
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.55;
-  white-space: nowrap;
 }
 #view-settings .settings-support-card-actions {
   margin-top: 14px;
@@ -24022,12 +24021,12 @@ body.is-col-resizing {
   height: 11px;
 }
 #view-settings .baseline-item-name {
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 600;
 }
 #view-settings .baseline-item-url {
   font-family: var(--tb-font-mono);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 #view-settings .baseline-color-btn {
