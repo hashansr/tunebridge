@@ -253,6 +253,7 @@ DEFAULT_SETTINGS = {
     'table_column_config': {},      # UI table visible-column preferences, persisted outside WebView storage
     'table_column_widths': {},      # UI table resized-column widths, persisted outside WebView storage
     'table_column_order': {},       # UI table column ordering preferences, persisted outside WebView storage
+    'export_csv_columns': None,     # UI library CSV export column preferences
     # Distribution / legal
     'launch_count':         0,      # incremented on each app start; drives donate popup milestones
     'license_accepted':     False,  # True once user accepts the license on first launch

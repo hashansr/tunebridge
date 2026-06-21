@@ -22840,6 +22840,176 @@ body.is-col-resizing {
 }
 .tb-modal-overlay button:disabled { opacity: 0.45 !important; cursor: not-allowed !important; }
 
+#export-csv-modal .export-csv-sheet {
+  --tb-modal-w: 560px;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+#export-csv-modal .export-csv-header {
+  padding: 18px 20px 14px !important;
+  margin: 0 !important;
+}
+
+#export-csv-modal .export-csv-icon {
+  color: var(--modal-accent) !important;
+}
+
+#export-csv-modal .export-csv-subtitle {
+  margin-top: 3px !important;
+}
+
+#export-csv-modal .export-csv-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 20px 20px !important;
+  overflow: visible;
+}
+
+#export-csv-modal .export-csv-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--modal-hairline);
+}
+
+#export-csv-modal .export-csv-summary {
+  color: var(--modal-text-muted);
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+
+#export-csv-modal .export-csv-summary strong {
+  color: var(--modal-text-sub);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+#export-csv-modal .export-csv-master-btn {
+  min-height: 0 !important;
+  padding: 2px 0 !important;
+  color: var(--modal-accent);
+  background: none;
+  border: 0;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  font-family: var(--modal-font);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+#export-csv-modal .export-csv-master-btn:hover {
+  color: #c4d5ff;
+}
+
+#export-csv-modal .export-csv-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 14px;
+  row-gap: 0;
+}
+
+#export-csv-modal .export-csv-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 6px;
+  color: var(--modal-text-muted);
+  font-size: 13px;
+  line-height: 1.25;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s, color 0.1s;
+}
+
+#export-csv-modal .export-csv-row:hover,
+#export-csv-modal .export-csv-row:focus-visible {
+  background: rgba(255,255,255,0.035);
+  outline: none;
+}
+
+#export-csv-modal .export-csv-row.is-checked {
+  color: var(--modal-text);
+}
+
+#export-csv-modal .export-csv-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: transparent;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 4px;
+  box-shadow: inset 0 1px 1px rgba(0,0,0,0.25);
+}
+
+#export-csv-modal .export-csv-checkbox svg {
+  width: 12px;
+  height: 12px;
+}
+
+#export-csv-modal .export-csv-row.is-checked .export-csv-checkbox {
+  color: var(--modal-accent-ink);
+  background: linear-gradient(180deg, rgba(173,198,255,0.95), rgba(140,170,235,0.9));
+  border-color: rgba(173,198,255,0.6);
+  box-shadow: none;
+}
+
+#export-csv-modal .export-csv-footer {
+  justify-content: space-between !important;
+  margin: 0 !important;
+  padding: 12px 18px 14px !important;
+  border-top: 1px solid var(--modal-hairline) !important;
+}
+
+#export-csv-modal .export-csv-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+#export-csv-modal .btn-secondary {
+  min-height: 32px !important;
+  padding: 7px 12px !important;
+  color: var(--modal-text-sub) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  font-weight: 500 !important;
+}
+
+#export-csv-modal .btn-secondary:hover {
+  background: rgba(255,255,255,0.06) !important;
+}
+
+#export-csv-modal .btn-primary {
+  min-height: 32px !important;
+  padding: 7px 16px !important;
+}
+
+#export-csv-modal .btn-primary:hover:not(:disabled) {
+  background: #c4d5ff !important;
+}
+
+#export-csv-modal .btn-primary:disabled {
+  color: rgba(10,31,71,0.45) !important;
+  background: rgba(173,198,255,0.18) !important;
+  border-color: transparent !important;
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+}
+
 #dap-modal .dap-modal-scroll,
 #iem-modal .iem-modal-scroll {
   max-height: none !important;

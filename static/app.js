@@ -5054,6 +5054,7 @@ function _closeModalOverlaysForNavigation() {
   if (_isOverlayOpen('import-modal')) closeImportModal(true);
   if (_isOverlayOpen('sr-modal')) srClose(true);
   if (_isOverlayOpen('dup-modal')) document.getElementById('dup-modal').style.display = 'none';
+  if (_isOverlayOpen('export-csv-modal')) _closeExportCsvModal();
   if (_isOverlayOpen('problem-tracks-modal')) closeProblemTracksModal();
   if (_isOverlayOpen('genre-distribution-modal')) closeGenreDistributionModal();
   if (_isOverlayOpen('iem-blindspot-modal')) closeAllBlindspots();
@@ -14689,37 +14690,97 @@ const _CSV_COLUMNS = [
   ['title',           'Title',          true],
   ['artist',          'Artist',         true],
   ['album',           'Album',          true],
+  ['album_artist',    'Album Artist',   false],
   ['year',            'Year',           true],
+  ['genre',           'Genre',          true],
   ['track_number',    'Track Number',   true],
   ['disc_number',     'Disc Number',    true],
-  ['genre',           'Genre',          true],
   ['duration_fmt',    'Duration',       true],
-  ['format',          'Format',         true],
-  ['bits_per_sample', 'Bit Depth',      true],
-  ['sample_rate',     'Sample Rate',    true],
-  ['bitrate',         'Bitrate',        true],
   ['date_added',      'Date Added',     true],
-  ['album_artist',    'Album Artist',   false],
-  ['path',            'File Path',      false],
+  ['format',          'Format',         true],
+  ['sample_rate',     'Sample Rate',    true],
+  ['bits_per_sample', 'Bit Depth',      true],
+  ['bitrate',         'Bitrate',        true],
   ['rg_track_gain',   'RG Track Gain',  false],
   ['rg_album_gain',   'RG Album Gain',  false],
+  ['path',            'File Path',      false],
 ];
+const _CSV_COLUMN_KEYS = _CSV_COLUMNS.map(([key]) => key);
+const _CSV_DEFAULT_COLUMNS = _CSV_COLUMNS.filter(([, , checked]) => checked).map(([key]) => key);
+let _exportCsvSelected = new Set(_CSV_DEFAULT_COLUMNS);
+let _exportCsvSaveTimer = null;
+
+function _normalizeExportCsvColumns(value) {
+  if (!Array.isArray(value)) return _CSV_DEFAULT_COLUMNS.slice();
+  const seen = new Set(value.filter(key => _CSV_COLUMN_KEYS.includes(key)));
+  return _CSV_COLUMN_KEYS.filter(key => seen.has(key));
+}
+
+function _getExportCsvColumnsFromSettings() {
+  if (Array.isArray(_settings?.export_csv_columns)) {
+    return _normalizeExportCsvColumns(_settings.export_csv_columns);
+  }
+  return _CSV_DEFAULT_COLUMNS.slice();
+}
+
+function _queueSaveExportCsvColumns() {
+  const columns = _CSV_COLUMN_KEYS.filter(key => _exportCsvSelected.has(key));
+  if (_settings) _settings.export_csv_columns = columns;
+  clearTimeout(_exportCsvSaveTimer);
+  _exportCsvSaveTimer = setTimeout(() => {
+    api('/settings', { method: 'PUT', body: { export_csv_columns: columns } }).catch(() => {});
+  }, 120);
+}
+
+function _renderExportCsvModal() {
+  const container = document.getElementById('export-csv-columns');
+  const countEl = document.getElementById('export-csv-selected-count');
+  const totalEl = document.getElementById('export-csv-total-count');
+  const masterBtn = document.getElementById('export-csv-master-btn');
+  const exportBtn = document.getElementById('export-csv-submit-btn');
+  if (!container) return;
+
+  container.innerHTML = '';
+  for (const [key, label] of _CSV_COLUMNS) {
+    const checked = _exportCsvSelected.has(key);
+    const row = document.createElement('div');
+    row.className = `export-csv-row${checked ? ' is-checked' : ''}`;
+    row.dataset.column = key;
+    row.setAttribute('role', 'checkbox');
+    row.setAttribute('aria-checked', checked ? 'true' : 'false');
+    row.tabIndex = 0;
+    row.onclick = () => _toggleExportCsvColumn(key);
+    row.onkeydown = e => {
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        _toggleExportCsvColumn(key);
+      }
+    };
+
+    const box = document.createElement('span');
+    box.className = 'export-csv-checkbox';
+    box.setAttribute('aria-hidden', 'true');
+    box.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.3 6.6 11.2 12.7 4.8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+    const text = document.createElement('span');
+    text.textContent = label;
+
+    row.appendChild(box);
+    row.appendChild(text);
+    container.appendChild(row);
+  }
+
+  const count = _exportCsvSelected.size;
+  const allOn = count === _CSV_COLUMNS.length;
+  if (countEl) countEl.textContent = String(count);
+  if (totalEl) totalEl.textContent = String(_CSV_COLUMNS.length);
+  if (masterBtn) masterBtn.textContent = allOn ? 'Clear all' : 'Select all';
+  if (exportBtn) exportBtn.disabled = count === 0;
+}
 
 function showExportCsvModal() {
-  const container = document.getElementById('export-csv-columns');
-  container.innerHTML = '';
-  for (const [key, label, checked] of _CSV_COLUMNS) {
-    const wrap = document.createElement('label');
-    wrap.style.cssText = 'display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;user-select:none';
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.value = key;
-    cb.checked = checked;
-    cb.style.cssText = 'accent-color:var(--accent);width:13px;height:13px;flex-shrink:0;cursor:pointer';
-    wrap.appendChild(cb);
-    wrap.appendChild(document.createTextNode(label));
-    container.appendChild(wrap);
-  }
+  _exportCsvSelected = new Set(_getExportCsvColumnsFromSettings());
+  _renderExportCsvModal();
   document.getElementById('export-csv-modal').style.display = '';
 }
 
@@ -14727,16 +14788,30 @@ function _closeExportCsvModal() {
   document.getElementById('export-csv-modal').style.display = 'none';
 }
 
+function _toggleExportCsvColumn(key) {
+  if (!_CSV_COLUMN_KEYS.includes(key)) return;
+  if (_exportCsvSelected.has(key)) _exportCsvSelected.delete(key);
+  else _exportCsvSelected.add(key);
+  _renderExportCsvModal();
+  _queueSaveExportCsvColumns();
+}
+
+function _toggleAllExportCsvColumns() {
+  const allOn = _exportCsvSelected.size === _CSV_COLUMNS.length;
+  _exportCsvSelected = new Set(allOn ? [] : _CSV_COLUMN_KEYS);
+  _renderExportCsvModal();
+  _queueSaveExportCsvColumns();
+}
+
 async function exportCsv() {
-  const columns = Array.from(
-    document.querySelectorAll('#export-csv-columns input[type=checkbox]:checked')
-  ).map(cb => cb.value);
+  const columns = _CSV_COLUMN_KEYS.filter(key => _exportCsvSelected.has(key));
 
   if (!columns.length) {
     toast('Select at least one column.', 'warning');
     return;
   }
 
+  _queueSaveExportCsvColumns();
   _closeExportCsvModal();
   const ts = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const defaultName = `tunebridge_library_${ts}.csv`;
@@ -19354,6 +19429,8 @@ const App = {
   showExportCsvModal,
   exportCsv,
   _closeExportCsvModal,
+  _toggleExportCsvColumn,
+  _toggleAllExportCsvColumns,
   // Library Setup Wizard
   openLibrarySetup,
   closeLibrarySetup,
