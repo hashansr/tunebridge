@@ -12337,7 +12337,7 @@ async function peqCopyToDap(peqId, dapId, dapName) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Copy failed');
-    toast(data.message || `Copied to ${dapName}`);
+    toast(`PEQ copied to ${dapName}`);
   } catch (e) {
     toast('Failed to copy PEQ: ' + e.message);
   }
