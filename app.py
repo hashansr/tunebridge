@@ -10231,6 +10231,36 @@ def _playlist_sync_candidates_for_dap(dap):
     return rows
 
 
+def _enrich_playlists_with_missing_tracks(candidates, dap, local_only_set):
+    """Add missing_track_paths to each playlist candidate based on what is in local_only_set."""
+    if not candidates:
+        return candidates
+    template = dap.get('path_template') or DEFAULT_DAP_PATH_TEMPLATE
+    playlists = load_playlists()
+    with library_lock:
+        lib_map = {t['id']: t for t in library}
+    local_only_cf = {p.casefold(): p for p in (local_only_set or [])}
+    enriched = []
+    for candidate in candidates:
+        pl = playlists.get(candidate['id'])
+        if not pl:
+            enriched.append({**candidate, 'missing_track_paths': [], 'missing_track_count': 0})
+            continue
+        missing = []
+        seen = set()
+        for tid in pl.get('tracks', []):
+            track_id = tid if isinstance(tid, str) else (tid or {}).get('id', '')
+            track = lib_map.get(track_id)
+            if not track:
+                continue
+            rel, _ = _render_device_relpath(track, template)
+            if rel and rel.casefold() in local_only_cf and rel.casefold() not in seen:
+                seen.add(rel.casefold())
+                missing.append(local_only_cf[rel.casefold()])
+        enriched.append({**candidate, 'missing_track_paths': missing, 'missing_track_count': len(missing)})
+    return enriched
+
+
 def _start_dap_sync_status_check(dap_id):
     if not dap_id:
         return False, 'missing_dap_id'
@@ -10358,6 +10388,8 @@ def sync_scan():
             }
             diff = _compute_sync_diff_for_dap(dap, ignored_keys=ignored_keys)
             playlists_out = _playlist_sync_candidates_for_dap(dap)
+            playlists_out = _enrich_playlists_with_missing_tracks(
+                playlists_out, dap, set(diff.get('local_only', [])))
             stale_count, never_exported = _playlist_sync_counts_for_dap(dap)
 
             sync_state.update({

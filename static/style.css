@@ -21405,6 +21405,22 @@ body.is-col-resizing {
   background: rgba(255,179,181,0.08);
   color: var(--accent-secondary);
 }
+.sw-via-playlist-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: rgba(83,225,111,0.10);
+  color: var(--accent-tertiary, #53e16f);
+  white-space: nowrap;
+  justify-self: start;
+}
+.sw-pl-missing-hint {
+  color: var(--accent-tertiary, #53e16f);
+  font-size: inherit;
+}
 .sw-row-size {
   font-size: 11.5px;
   color: var(--text-muted);

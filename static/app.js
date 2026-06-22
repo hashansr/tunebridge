@@ -8709,6 +8709,8 @@ async function loadSyncView() {
     syncCompletedItems: [], syncLastProgress: 0, syncRateSamples: [],
     executedPayload: null,
     mismatchWarning: 0, mismatchWarningDismissed: false,
+    playlistAutoSelected: {},  // { rel_path: Set<playlistId> } — paths auto-checked by playlists
+    toDeviceManual: new Set(), // paths explicitly toggled by the user
   };
   showViewEl('sync');
   // Highlight sync nav button
@@ -9330,6 +9332,8 @@ function _swBuildProposal(status) {
     title: p.name || p.id,
     meta: `${p.track_count ?? '?'} tracks`,
     note: p.status || 'Updated',
+    missingTrackPaths: p.missing_track_paths || [],
+    missingTrackCount: p.missing_track_count || 0,
   }));
 
   // Merge both "on device not in library" categories into one group.
@@ -9362,6 +9366,10 @@ function _swBuildProposal(status) {
 
   // Reset pagination
   _sw.pages = { toDevice: 0, toDeviceLyrics: 0, onDevice: 0, playlists: 0 };
+
+  // Reset playlist-aware auto-selection tracking
+  _sw.playlistAutoSelected = {};
+  _sw.toDeviceManual = new Set();
 
   // Initialise selection
   _sw.selection = { toDevice: {}, toDeviceLyrics: {}, onDevice: {}, playlists: {} };
@@ -9588,7 +9596,9 @@ function _swBuildGroupCard(gid, group) {
           ${_swRowThumb(item)}
           <div class="sw-row-info">
             <div class="sw-row-title" title="${esc(item.title)}">${esc(item.title)}</div>
-            <div class="sw-row-sub">${item.kind === 'playlist' ? esc(item.meta || '') : [item.artist, item.album].filter(Boolean).map(esc).join(' · ')}</div>
+            <div class="sw-row-sub">${item.kind === 'playlist'
+              ? esc(item.meta || '') + (item.missingTrackCount > 0 ? ` · <span class="sw-pl-missing-hint">${item.missingTrackCount} song${item.missingTrackCount === 1 ? '' : 's'} not on device</span>` : '')
+              : [item.artist, item.album].filter(Boolean).map(esc).join(' · ')}</div>
           </div>
           ${actionLabel ? `<span class="sw-action-chip">${esc(actionLabel)}</span>` : '<span></span>'}
           <span class="sw-row-size">${esc(_swItemSizeLabel(item))}${item.sizeLabel && item.dur ? ' · ' : ''}${item.dur ?? ''}</span>
@@ -9695,7 +9705,7 @@ function _swBuildMediaHierarchy(gid, items, sel) {
                 <div class="sw-row-title" title="${esc(item.title)}">${esc(item.title)}</div>
                 <div class="sw-row-sub">${[item.artist, item.album].filter(Boolean).map(esc).join(' · ')}</div>
               </div>
-              <span></span>
+              ${(_sw.playlistAutoSelected?.[item.id]?.size > 0) ? '<span class="sw-via-playlist-badge">via playlist</span>' : '<span></span>'}
               <span class="sw-row-size">${esc(_swItemSizeLabel(item))}${item.sizeLabel && item.dur ? ' · ' : ''}${item.dur ?? ''}</span>
             </div>`).join('')}
           </div>
@@ -9854,10 +9864,24 @@ function swToggleGroupCollapse(gid) {
 }
 
 function swToggleItem(gid, itemId) {
+  if (gid === 'playlists') {
+    const newState = !(_sw.selection?.playlists?.[itemId]);
+    _swOnPlaylistTracksToggle(itemId, newState);
+    return;
+  }
   if (!_sw.selection[gid]) _sw.selection[gid] = {};
   const newState = !_sw.selection[gid][itemId];
   _sw.selection[gid][itemId] = newState;
   if (gid === 'toDevice') {
+    // Track manual user selection so playlist deselect doesn't uncheck it
+    if (!_sw.toDeviceManual) _sw.toDeviceManual = new Set();
+    if (newState) {
+      _sw.toDeviceManual.add(itemId);
+    } else {
+      _sw.toDeviceManual.delete(itemId);
+      // Clear any playlist auto-selection claim so it stays deselected
+      if (_sw.playlistAutoSelected?.[itemId]) _sw.playlistAutoSelected[itemId].clear();
+    }
     const songItem = (_sw.proposal?.toDevice?.items ?? []).find(it => it.id === itemId);
     if (songItem) {
       const lyricId = _swFindMatchingLyricId(songItem);
@@ -9880,6 +9904,39 @@ function swToggleGroup(gid, toState) {
     for (const item of group.items) {
       const lyricId = _swFindMatchingLyricId(item);
       if (lyricId) _sw.selection.toDeviceLyrics[lyricId] = toState;
+    }
+  }
+  if (gid === 'playlists') {
+    for (const item of group.items) _swOnPlaylistTracksToggle(item.id, toState);
+    return; // _swOnPlaylistTracksToggle calls _swRenderReview
+  }
+  _swRenderReview();
+}
+
+// Auto-select or deselect toDevice items for a playlist's missing tracks.
+// Called when a playlist checkbox is toggled (individual or via Select All).
+function _swOnPlaylistTracksToggle(playlistId, checked) {
+  if (!_sw.selection) _sw.selection = {};
+  if (!_sw.selection.playlists) _sw.selection.playlists = {};
+  _sw.selection.playlists[playlistId] = checked;
+  const playlistItem = (_sw.proposal?.playlists?.items ?? []).find(p => p.id === playlistId);
+  const paths = playlistItem?.missingTrackPaths ?? [];
+  if (!paths.length) return;
+  if (!_sw.playlistAutoSelected) _sw.playlistAutoSelected = {};
+  if (!_sw.toDeviceManual) _sw.toDeviceManual = new Set();
+  if (!_sw.selection.toDevice) _sw.selection.toDevice = {};
+  for (const path of paths) {
+    if (checked) {
+      if (!_sw.playlistAutoSelected[path]) _sw.playlistAutoSelected[path] = new Set();
+      _sw.playlistAutoSelected[path].add(playlistId);
+      _sw.selection.toDevice[path] = true;
+    } else {
+      const autoSet = _sw.playlistAutoSelected[path];
+      if (autoSet) autoSet.delete(playlistId);
+      // Only deselect if the user hasn't manually checked it and no other playlist claims it
+      if (!(autoSet?.size > 0) && !_sw.toDeviceManual.has(path)) {
+        _sw.selection.toDevice[path] = false;
+      }
     }
   }
   _swRenderReview();
