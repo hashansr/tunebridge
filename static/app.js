@@ -11527,11 +11527,12 @@ const DAP_FOLDER_TOKENS = ['%artist%', '%album%', '%year%', '%genre%'];
 function _normalizeDapPreset(profile) {
   const mountName = (profile.mount_name || 'MyDAP').replace(/[\\/]/g, '').trim() || 'MyDAP';
   return {
-    label: profile.name || profile.model || 'Other',
-    mount: _mountPrefix.base + mountName,
-    folder: (profile.export_folder || 'Playlists').replace(/^[/\\]+|[/\\]+$/g, ''),
-    prefix: profile.path_prefix || '',
-    hint: profile.hint || '',
+    label:         profile.name || profile.model || 'Other',
+    mount:         _mountPrefix.base + mountName,
+    folder:        (profile.export_folder || 'Playlists').replace(/^[/\\]+|[/\\]+$/g, ''),
+    prefix:        profile.path_prefix || '',
+    hint:          profile.hint || '',
+    peq_subfolder: profile.peq_folder || '',
   };
 }
 
@@ -11926,6 +11927,16 @@ function dapModelPreset(model) {
   document.getElementById('dap-export-folder').value = preset.folder;
   document.getElementById('dap-prefix').value = preset.prefix;
   _updateDapFolderHint(model);
+  if (preset.peq_subfolder) {
+    const mountVal = document.getElementById('dap-mount')?.value || '';
+    const peqEl = document.getElementById('dap-peq-folder');
+    const current = String(peqEl?.value || '').trim();
+    const isDefault = !current || current === '~/PEQ' ||
+      Object.values(DAP_MODEL_PRESETS).some(p => current === `${mountVal}/${p.peq_subfolder || 'PEQ'}` || current === `${mountVal}/PEQ`);
+    if (peqEl && isDefault) {
+      peqEl.value = mountVal ? `${mountVal}/${preset.peq_subfolder}` : preset.peq_subfolder;
+    }
+  }
   validateDapForm(false);
 }
 

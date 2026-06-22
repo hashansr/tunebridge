@@ -277,7 +277,7 @@ _DEFAULT_GEAR_PROFILES = {
         {'model': 'mango_os',         'name': 'Mango OS (iBasso Pure Mode)',                              'playlist_format': '.m3u',  'export_folder': 'Music',                'path_prefix': '',  'mount_name': 'iBasso'},
         {'model': 'fiio_pure_music',  'name': 'FiiO Pure Music Mode',                                      'playlist_format': '.m3u8', 'export_folder': 'FiiOMusic/playlist',   'path_prefix': '',  'mount_name': 'FiiO'},
         {'model': 'sony_walkman',     'name': 'Sony Walkman App',                                          'playlist_format': '.m3u8', 'export_folder': 'Music/Playlists',      'path_prefix': '',  'mount_name': 'WALKMAN'},
-        {'model': 'rockbox',          'name': 'Rockbox',                                                   'playlist_format': '.m3u8', 'export_folder': 'Playlists',            'path_prefix': '',  'mount_name': 'Rockbox'},
+        {'model': 'rockbox',          'name': 'Rockbox',                                                   'playlist_format': '.m3u8', 'export_folder': 'Playlists',            'path_prefix': '',  'mount_name': 'Rockbox',  'peq_folder': '.rockbox/eqs'},
         {'model': 'hidizs_ap80',      'name': 'Hidizs AP80 Pro Max (Hidizs OS)',                          'playlist_format': '.m3u',  'export_folder': 'playlist_data',        'path_prefix': '..','mount_name': 'AP80'},
     ],
     'iem_types': ['IEM', 'Headphone'],
@@ -11190,6 +11190,7 @@ def _normalize_gear_profiles(raw):
             'path_prefix': str(p.get('path_prefix') or ''),
             'mount_name': str(p.get('mount_name') or p.get('mountName') or 'MyDAP'),
             'hint': str(p.get('hint') or ''),
+            'peq_folder': str(p.get('peq_folder') or ''),
         })
 
     if not out['dap_profiles']:
@@ -12774,6 +12775,64 @@ def delete_peq_profile(iid, peq_id):
     return '', 204
 
 
+def _convert_peq_to_rockbox_cfg(peq):
+    """Convert APO PEQ profile dict to Rockbox .cfg content string.
+    Returns (cfg_string, skipped_count).
+    Rockbox supports 1 low shelf + 8 peak filters + 1 high shelf.
+    All values are integers: freq in Hz, Q×10, gain×10, precut×10.
+    """
+    preamp_db = peq.get('preamp_db', 0.0) or 0.0
+    precut = max(0, round(abs(preamp_db) * 10))
+
+    enabled_filters = [f for f in peq.get('filters', []) if f.get('enabled', True)]
+
+    low_shelf = None
+    high_shelf = None
+    peaks = []
+    skipped = 0
+
+    for f in enabled_filters:
+        ftype = (f.get('type') or '').upper()
+        if ftype == 'LSC':
+            if low_shelf is None:
+                low_shelf = f
+            else:
+                skipped += 1
+        elif ftype == 'HSC':
+            if high_shelf is None:
+                high_shelf = f
+            else:
+                skipped += 1
+        elif ftype == 'PK':
+            peaks.append(f)
+        else:
+            skipped += 1  # LPQ, HPQ, NO, AP — no Rockbox equivalent
+
+    if len(peaks) > 8:
+        skipped += len(peaks) - 8
+        peaks = peaks[:8]
+
+    def _encode(f):
+        freq = int(round(float(f['fc'])))
+        q    = int(round(float(f['q']) * 10))
+        gain = int(round(float(f['gain']) * 10))
+        return f'{freq}, {q}, {gain}'
+
+    lines = [
+        '# .cfg file created by rockbox 4.0 - http://www.rockbox.org',
+        'eq enabled: on',
+        f'eq precut: {precut}',
+    ]
+    if low_shelf:
+        lines.append(f'eq low shelf filter: {_encode(low_shelf)}')
+    for i, f in enumerate(peaks, 1):
+        lines.append(f'eq peak filter {i}: {_encode(f)}')
+    if high_shelf:
+        lines.append(f'eq high shelf filter: {_encode(high_shelf)}')
+
+    return '\n'.join(lines), skipped
+
+
 @app.route('/api/iems/<iid>/peq/<peq_id>/copy', methods=['POST'])
 def copy_peq_to_dap(iid, peq_id):
     iems = load_iems()
@@ -12793,8 +12852,21 @@ def copy_peq_to_dap(iid, peq_id):
     if not device_root or not device_root.exists():
         return jsonify({'error': f"Device not mounted. Last configured path: {dap.get('mount_path', 'not set')}"}), 404
 
-    peq_dir = device_root / dap.get('peq_folder', 'PEQ')
-    peq_dir.mkdir(exist_ok=True)
+    is_rockbox = dap.get('model') == 'rockbox'
+    default_peq_folder = '.rockbox/eqs' if is_rockbox else 'PEQ'
+    peq_dir = device_root / dap.get('peq_folder', default_peq_folder)
+    peq_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = f"{iem['name']} - {peq['name']}"
+
+    if is_rockbox:
+        content, skipped = _convert_peq_to_rockbox_cfg(peq)
+        out_path = peq_dir / f"{safe_name}.cfg"
+        out_path.write_text(content, encoding='utf-8')
+        msg = f"Copied to {out_path}"
+        if skipped:
+            msg += f" ({skipped} unsupported filter(s) skipped)"
+        return jsonify({'message': msg})
 
     raw = peq.get('raw_txt', '')
     if not raw:
@@ -12804,9 +12876,8 @@ def copy_peq_to_dap(iid, peq_id):
             lines.append(f"Filter {i}: {state} {flt['type']} Fc {flt['fc']} Hz Gain {flt['gain']} dB Q {flt['q']}")
         raw = '\n'.join(lines)
 
-    out_path = peq_dir / f"{iem['name']} - {peq['name']}.txt"
-    with open(out_path, 'w', encoding='utf-8') as f:
-        f.write(raw)
+    out_path = peq_dir / f"{safe_name}.txt"
+    out_path.write_text(raw, encoding='utf-8')
     return jsonify({'message': f"Copied to {out_path}"})
 
 
