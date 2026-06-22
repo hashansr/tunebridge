@@ -18520,8 +18520,14 @@ tr:hover .track-edit-btn:hover {
 .dup-dap-select { background: var(--surface-2); border: none; border-radius: 8px; color: var(--text-primary); font-size: 13px; padding: 6px 10px; cursor: pointer; }
 
 .dup-summary-bar { background: var(--surface-2); border-radius: 8px; padding: 10px 16px; font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
+.dup-summary-bar-inner { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
 .dup-scanning-state { text-align: center; padding: 48px 0; }
+
+.dup-not-connected-state { text-align: center; padding: 48px 0; }
+.dup-nc-icon { width: 52px; height: 52px; background: var(--surface-3); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; color: var(--text-muted); }
+.dup-nc-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0 0 6px; }
+.dup-nc-sub { font-size: 13px; color: var(--text-muted); margin: 0 0 16px; }
 
 .dup-group-card { background: var(--surface-2); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
 .dup-group-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
@@ -18541,7 +18547,8 @@ tr:hover .track-edit-btn:hover {
    all remaining space; content truncates with ellipsis.                      */
 .dup-group-table { table-layout: fixed; width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px; }
 .dup-group-table th { text-align: left; font-size: 11px; color: var(--text-muted); font-weight: 500; padding: 4px 8px 6px; border-bottom: 1px solid var(--surface-3); white-space: nowrap; overflow: hidden; }
-.dup-group-table td { padding: 6px 8px; color: var(--text-secondary); border-bottom: 1px solid rgba(255,255,255,0.03); overflow: hidden; white-space: nowrap; vertical-align: middle; }
+.dup-group-table td { padding: 6px 8px; color: var(--text-secondary); border-bottom: 1px solid rgba(255,255,255,0.03); vertical-align: top; }
+.dup-cell-action, .dup-cell-fmt, .dup-cell-bitrate, .dup-cell-dur, .dup-cell-size, .dup-cell-finder { white-space: nowrap; overflow: hidden; vertical-align: middle; }
 .dup-track-row:hover td { background: var(--surface-3); }
 .dup-track-row:last-child td { border-bottom: none; }
 
@@ -18555,9 +18562,9 @@ tr:hover .track-edit-btn:hover {
 .dup-action-btn.remove.active { background: rgba(255,179,181,0.18); color: #ffb3b5; }
 .dup-action-btn.unique.active { background: rgba(255,199,82,0.18);  color: #ffc752; }
 
-/* Path cell — fills remaining space; span inside handles ellipsis */
-.dup-cell-path { overflow: hidden; }
-.dup-path-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 11px; font-family: ui-monospace, 'SF Mono', monospace; }
+/* Path cell — fills remaining space; text wraps for readability */
+.dup-cell-path { overflow: visible; vertical-align: top; padding-top: 8px !important; }
+.dup-path-text { display: block; white-space: normal; word-break: break-all; overflow: visible; color: var(--text-muted); font-size: 11px; font-family: ui-monospace, 'SF Mono', monospace; line-height: 1.5; }
 
 /* Finder button */
 .dup-cell-finder { padding: 5px 8px !important; text-align: right; }

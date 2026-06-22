@@ -16743,6 +16743,10 @@ async function _fetchLibraryDuplicates() {
 
 async function _startDapDupScan() {
   const sel = document.getElementById('dup-dap-select');
+  if (!sel.options.length) {
+    _showDupDapNotConnected('No DAPs configured. Add a DAP in the Gear section first.');
+    return;
+  }
   _dupDapId = sel.value;
   if (!_dupDapId) return;
 
@@ -16763,8 +16767,13 @@ async function _startDapDupScan() {
       } else if (res.status === 'error') {
         clearInterval(_dupPollTimer);
         _dupPollTimer = null;
-        _showDupScanning(false);
-        showToast(res.error || 'DAP scan failed', 'error');
+        const notMounted = (res.error || '').toLowerCase().includes('not mounted') || (res.error || '').toLowerCase().includes('not found');
+        if (notMounted) {
+          _showDupDapNotConnected('Connect your DAP and click Retry.');
+        } else {
+          _showDupScanning(false);
+          showToast(res.error || 'DAP scan failed', 'error');
+        }
       }
       // else still scanning — keep polling
     } catch(e) {
@@ -16784,6 +16793,25 @@ function _showDupScanning(show) {
     document.getElementById('dup-empty').style.display = 'none';
     document.getElementById('dup-summary-bar').style.display = 'none';
   }
+}
+
+function _showDupDapNotConnected(msg) {
+  _showDupScanning(false);
+  document.getElementById('dup-empty').style.display = 'none';
+  document.getElementById('dup-summary-bar').style.display = 'none';
+  document.getElementById('dup-groups-list').innerHTML = `
+    <div class="dup-not-connected-state">
+      <div class="dup-nc-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M18 8h1a4 4 0 0 1 0 8h-1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M6 8H5a4 4 0 0 0 0 8h1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="2 2"/>
+        </svg>
+      </div>
+      <p class="dup-nc-title">DAP not connected</p>
+      <p class="dup-nc-sub">${esc(msg || 'Connect your DAP and try again')}</p>
+      <button class="btn-secondary dup-btn" onclick="App.rescanDuplicates()">Retry</button>
+    </div>`;
 }
 
 function _renderDupGroups(groups) {
@@ -16807,7 +16835,10 @@ function _renderDupGroups(groups) {
     return sum + sizes.slice(1).reduce((s,v) => s + v, 0);
   }, 0);
   bar.style.display = 'block';
-  bar.innerHTML = `<span>${groups.length} duplicate group${groups.length !== 1 ? 's' : ''} · ~${_formatBytes(totalWasted)} recoverable</span>`;
+  const applyAllBtn = _dupScope === 'library'
+    ? `<button class="btn-secondary dup-btn" onclick="App._dupApplyAll()">Apply all marked</button>`
+    : '';
+  bar.innerHTML = `<div class="dup-summary-bar-inner"><span>${groups.length} duplicate group${groups.length !== 1 ? 's' : ''} · ~${_formatBytes(totalWasted)} recoverable</span>${applyAllBtn}</div>`;
 
   list.innerHTML = groups.map(g => _renderDupGroupCard(g)).join('');
 }
@@ -17098,6 +17129,68 @@ async function _dupConsolidate(key) {
   } catch(e) { showToast('Consolidate failed', 'error'); }
 }
 
+async function _dupApplyAll() {
+  const toConsolidate = [];
+  const toDelete = [];
+
+  for (const g of _dupGroups) {
+    const { keepId, removeIds } = _getDupRowActions(g.key);
+    if (keepId) {
+      let deleteIds = removeIds.length > 0 ? removeIds : [];
+      if (!deleteIds.length) {
+        const allRows = document.querySelectorAll(`.dup-row-action-group[data-group="${g.key}"]`);
+        deleteIds = Array.from(allRows).map(el => el.dataset.id).filter(id => id !== keepId);
+      }
+      if (deleteIds.length) toConsolidate.push({ key: g.key, keepId, deleteIds });
+    } else if (removeIds.length) {
+      toDelete.push({ key: g.key, ids: removeIds });
+    }
+  }
+
+  const total = toConsolidate.length + toDelete.length;
+  if (!total) { showToast('Mark Keep or Remove on some tracks first', 'error'); return; }
+
+  const parts = [];
+  if (toConsolidate.length) parts.push(`${toConsolidate.length} consolidate`);
+  if (toDelete.length) parts.push(`${toDelete.length} delete`);
+  const result = await _showDupActionModal('Apply All Marked Actions', `Process ${total} group${total !== 1 ? 's' : ''} (${parts.join(', ')})?`);
+  if (!result) return;
+
+  let consolidated = 0, deleted = 0, errors = 0;
+  const allEmptyDirs = [];
+
+  for (const op of toConsolidate) {
+    try {
+      const res = await api('/library/duplicates/consolidate', {
+        method: 'POST',
+        body: { keep_id: op.keepId, delete_ids: op.deleteIds, action: result.action, move_folder: result.moveFolder }
+      });
+      consolidated++;
+      if (res.empty_dirs) allEmptyDirs.push(...res.empty_dirs);
+    } catch(e) { errors++; }
+  }
+
+  for (const op of toDelete) {
+    try {
+      const res = await api('/library/duplicates/delete', {
+        method: 'POST',
+        body: { track_ids: op.ids, action: result.action, move_folder: result.moveFolder }
+      });
+      deleted += res.deleted || 0;
+      if (res.empty_dirs) allEmptyDirs.push(...res.empty_dirs);
+    } catch(e) { errors++; }
+  }
+
+  const summary = [];
+  if (consolidated) summary.push(`${consolidated} group${consolidated !== 1 ? 's' : ''} consolidated`);
+  if (deleted) summary.push(`${deleted} track${deleted !== 1 ? 's' : ''} deleted`);
+  if (errors) summary.push(`${errors} error${errors !== 1 ? 's' : ''}`);
+  showToast(summary.join(' · ') || 'Done', errors ? 'error' : undefined);
+
+  _showEmptyFolderCleanup([...new Set(allEmptyDirs)]);
+  await _fetchLibraryDuplicates();
+}
+
 async function _dupDapDelete(key) {
   const { removeIds } = _getDupRowActions(key);
   const relPaths = removeIds.map(id => decodeURIComponent(id));
@@ -17125,8 +17218,16 @@ function switchDupScope(scope) {
   document.getElementById('dup-tab-library').classList.toggle('active', scope === 'library');
   document.getElementById('dup-tab-dap').classList.toggle('active', scope === 'dap');
   document.getElementById('dup-dap-select').style.display = scope === 'dap' ? 'inline-block' : 'none';
-  if (scope === 'library') _fetchLibraryDuplicates();
-  else _startDapDupScan();
+  if (scope === 'library') {
+    _fetchLibraryDuplicates();
+  } else {
+    const sel = document.getElementById('dup-dap-select');
+    if (!sel.options.length) {
+      _showDupDapNotConnected('No DAPs configured. Add a DAP in the Gear section first.');
+    } else {
+      _startDapDupScan();
+    }
+  }
 }
 
 async function onDupDapChange() {
@@ -19688,6 +19789,7 @@ const App = {
   _deleteEmptyFolders,
   _dupRowAction,
   _dupOpenFinder,
+  _dupApplyAll,
   // License + donate
   _switchLicenseTab,
   _acceptLicense,

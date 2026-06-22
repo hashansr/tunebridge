@@ -15297,6 +15297,8 @@ def dap_duplicates(did):
         return jsonify({'status': 'scanning'})
     if state.get('status') == 'done':
         return jsonify({'status': 'done', 'groups': state.get('groups', [])})
+    if state.get('status') == 'error':
+        return jsonify({'status': 'error', 'error': state.get('error', 'Scan failed')})
 
     # Start background scan
     with _dap_dup_lock:
