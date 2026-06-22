@@ -16709,6 +16709,7 @@ async function loadDuplicatesView() {
   document.getElementById('dup-groups-list').innerHTML = '';
   document.getElementById('dup-empty').style.display = 'none';
   document.getElementById('dup-summary-bar').style.display = 'none';
+  document.getElementById('dup-bulk-action-bar').style.display = 'none';
 
   // Populate DAP picker; cache mount path for Open in Finder
   try {
@@ -16792,6 +16793,7 @@ function _showDupScanning(show) {
     document.getElementById('dup-groups-list').innerHTML = '';
     document.getElementById('dup-empty').style.display = 'none';
     document.getElementById('dup-summary-bar').style.display = 'none';
+    document.getElementById('dup-bulk-action-bar').style.display = 'none';
   }
 }
 
@@ -16799,6 +16801,7 @@ function _showDupDapNotConnected(msg) {
   _showDupScanning(false);
   document.getElementById('dup-empty').style.display = 'none';
   document.getElementById('dup-summary-bar').style.display = 'none';
+  document.getElementById('dup-bulk-action-bar').style.display = 'none';
   document.getElementById('dup-groups-list').innerHTML = `
     <div class="dup-not-connected-state">
       <div class="dup-nc-icon">
@@ -16819,11 +16822,13 @@ function _renderDupGroups(groups) {
   const list = document.getElementById('dup-groups-list');
   const empty = document.getElementById('dup-empty');
   const bar = document.getElementById('dup-summary-bar');
+  const bulkBar = document.getElementById('dup-bulk-action-bar');
 
   if (!groups || !groups.length) {
     list.innerHTML = '';
     empty.style.display = 'flex';
     bar.style.display = 'none';
+    bulkBar.style.display = 'none';
     return;
   }
 
@@ -16835,10 +16840,20 @@ function _renderDupGroups(groups) {
     return sum + sizes.slice(1).reduce((s,v) => s + v, 0);
   }, 0);
   bar.style.display = 'block';
-  const applyAllBtn = _dupScope === 'library'
-    ? `<button class="btn-secondary dup-btn" onclick="App._dupApplyAll()">Apply all marked</button>`
-    : '';
-  bar.innerHTML = `<div class="dup-summary-bar-inner"><span>${groups.length} duplicate group${groups.length !== 1 ? 's' : ''} · ~${_formatBytes(totalWasted)} recoverable</span>${applyAllBtn}</div>`;
+  bar.innerHTML = `<div class="dup-summary-bar-inner"><span>${groups.length} duplicate group${groups.length !== 1 ? 's' : ''} · ~${_formatBytes(totalWasted)} recoverable</span></div>`;
+
+  if (_dupScope === 'library') {
+    bulkBar.style.display = 'flex';
+    bulkBar.innerHTML = `
+      <div class="dup-bulk-action-copy">
+        <span class="dup-bulk-action-title">Ready to process marked tracks?</span>
+        <span class="dup-bulk-action-sub">Applies every Keep and Remove selection in the groups above.</span>
+      </div>
+      <button class="btn-primary dup-apply-all-btn" onclick="App._dupApplyAll()">Apply all marked</button>`;
+  } else {
+    bulkBar.style.display = 'none';
+    bulkBar.innerHTML = '';
+  }
 
   list.innerHTML = groups.map(g => _renderDupGroupCard(g)).join('');
 }
@@ -17014,6 +17029,7 @@ async function _dupIgnore(key) {
     if (remaining === 0) {
       document.getElementById('dup-empty').style.display = 'flex';
       document.getElementById('dup-summary-bar').style.display = 'none';
+      document.getElementById('dup-bulk-action-bar').style.display = 'none';
     }
     _loadDupSkipped();
   } catch(e) { showToast('Failed to ignore group', 'error'); }
@@ -17076,6 +17092,7 @@ function _removeDupGroupFromDom(key) {
   if (remaining === 0) {
     document.getElementById('dup-empty').style.display = 'flex';
     document.getElementById('dup-summary-bar').style.display = 'none';
+    document.getElementById('dup-bulk-action-bar').style.display = 'none';
   }
 }
 
