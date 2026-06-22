@@ -1000,6 +1000,25 @@ def get_flac_tag(tags, *keys):
     return None
 
 
+LRC_TIME_TAG_RE = re.compile(r'\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\]')
+LRC_METADATA_TAG_RE = re.compile(r'^\[[a-z]+:', re.IGNORECASE)
+
+
+def _detect_lyrics_status(content):
+    """Return synced/plain for LRC text while ignoring metadata tags."""
+    saw_text = False
+    for line in content.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if LRC_TIME_TAG_RE.search(s):
+            return 'synced'
+        if LRC_METADATA_TAG_RE.match(s):
+            continue
+        saw_text = True
+    return 'plain' if saw_text else None
+
+
 def scan_file(filepath):
     filepath = Path(filepath)
     music_base = get_music_base()
@@ -1022,12 +1041,9 @@ def scan_file(filepath):
         lyrics_status_from_file = None
         if has_lyrics and lyric_path:
             try:
-                for line in lyric_path.read_text(encoding='utf-8', errors='replace').splitlines():
-                    s = line.strip()
-                    if s and not s.startswith('[ti:') and not s.startswith('[ar:') \
-                            and not s.startswith('[al:') and not s.startswith('[length:'):
-                        lyrics_status_from_file = 'synced' if re.match(r'\[\d+:\d+', s) else 'plain'
-                        break
+                lyrics_status_from_file = _detect_lyrics_status(
+                    lyric_path.read_text(encoding='utf-8', errors='replace')
+                )
             except Exception:
                 pass
 
@@ -5424,12 +5440,7 @@ def api_lyrics_track(track_id):
         content = lrc_abs.read_text(encoding='utf-8', errors='replace')
     except OSError:
         return jsonify({'error': 'Could not read lyrics file'}), 500
-    is_synced = False
-    for line in content.splitlines():
-        s = line.strip()
-        if s and not re.match(r'^\[(?:ti|ar|al|by|length|re|ve):', s, re.IGNORECASE):
-            is_synced = bool(re.match(r'\[\d+:\d+', s))
-            break
+    is_synced = _detect_lyrics_status(content) == 'synced'
     return jsonify({'content': content, 'is_synced': is_synced})
 
 

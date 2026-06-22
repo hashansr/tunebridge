@@ -17619,25 +17619,52 @@ async function _loadLyricsForTrack(trackId, track) {
 }
 
 function _parseLyrics(content, isSynced) {
-  if (!isSynced) {
-    const text = content.split('\n')
-      .filter(line => !/^\[(ti|ar|al|by|length|re|ve):/i.test(line.trim()))
-      .join('\n').trim();
-    return { is_synced: false, text };
-  }
   const lines = [];
-  const rx = /\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)/g;
-  content.split('\n').forEach(raw => {
-    let m;
-    while ((m = rx.exec(raw)) !== null) {
-      const ms = (parseInt(m[1], 10) * 60 + parseFloat(m[2])) * 1000;
-      const text = (m[3] || '').trim();
-      if (text) lines.push({ ms, text });
+  let offsetMs = 0;
+  const timeRx = /\[(\d{1,3}):(\d{1,2})(?:([.:])(\d{1,3}))?\]/g;
+  const parseTimeMs = (m) => {
+    const minutes = parseInt(m[1], 10);
+    const seconds = parseInt(m[2], 10);
+    let fractionMs = 0;
+    if (m[4]) {
+      const raw = m[4].slice(0, 3);
+      const scale = raw.length === 1 ? 100 : raw.length === 2 ? 10 : 1;
+      fractionMs = parseInt(raw, 10) * scale;
     }
-    rx.lastIndex = 0;
+    return (minutes * 60 + seconds) * 1000 + fractionMs + offsetMs;
+  };
+
+  content.split('\n').forEach(raw => {
+    const trimmed = raw.trim();
+    const offsetMatch = trimmed.match(/^\[offset:\s*([+-]?\d+)\s*\]$/i);
+    if (offsetMatch) {
+      offsetMs = Number(offsetMatch[1]) || 0;
+      return;
+    }
+
+    const matches = Array.from(trimmed.matchAll(timeRx));
+    if (!matches.length) return;
+    const text = trimmed
+      .replace(timeRx, '')
+      .replace(/<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>/g, '')
+      .trim();
+    if (!text) return;
+    matches.forEach(m => lines.push({ ms: parseTimeMs(m), text }));
   });
-  lines.sort((a, b) => a.ms - b.ms);
-  return { is_synced: true, lines };
+
+  if (isSynced || lines.length) {
+    lines.sort((a, b) => a.ms - b.ms);
+    return { is_synced: true, lines };
+  }
+
+  const metadataRx = /^\[[a-z]+:/i;
+  const text = content.split('\n')
+    .filter(line => {
+      const s = line.trim();
+      return s && !metadataRx.test(s);
+    })
+    .join('\n').trim();
+  return { is_synced: false, text };
 }
 
 function _renderLyrics(parsed) {
