@@ -315,6 +315,17 @@ function _toastClassify(msg) {
 }
 
 function _toastEnqueue(item) {
+  // If the same message is already active, bump its timer and flash it instead
+  const existingEl = _toastActive.find(
+    el => el.querySelector('.toast-msg')?.textContent === item.msg
+  );
+  if (existingEl) {
+    _toastBump(existingEl, item.duration);
+    return;
+  }
+  // If the same message is already waiting in the queue, skip entirely
+  if (_toastQueue.some(q => q.msg === item.msg)) return;
+
   if (_toastActive.length < _TOAST_MAX) _toastShow(item);
   else _toastQueue.push(item);
 }
@@ -353,6 +364,15 @@ function _toastDismiss(el) {
   };
   el.addEventListener('transitionend', cleanup, { once: true });
   setTimeout(cleanup, 350); // fallback if transitionend doesn't fire
+}
+
+function _toastBump(el, duration) {
+  clearTimeout(el._toastTimer);
+  el._toastTimer = setTimeout(() => _toastDismiss(el), duration);
+  el.classList.remove('toast-bump');
+  el.getBoundingClientRect();
+  el.classList.add('toast-bump');
+  setTimeout(() => el.classList.remove('toast-bump'), 280);
 }
 
 function _showLiveToast(msg) {
@@ -10859,7 +10879,7 @@ async function showIemCompare() {
   const [primary, ...rest] = ids;
   const params = rest.map(id => `compare=${encodeURIComponent(id)}`).join('&');
   const res = await fetch(`/api/iems/${encodeURIComponent(primary)}/graph?${params}`).catch(() => null);
-  if (!res || !res.ok) { showToast('Could not load comparison data.'); return; }
+  if (!res || !res.ok) { toast('Could not load comparison data.'); return; }
   const data = await res.json();
   _iemCompareLastData = data;
   document.getElementById('iem-compare-modal').style.display = 'flex';
@@ -16739,7 +16759,7 @@ async function _fetchLibraryDuplicates() {
     _renderDupGroups(groups);
   } catch (e) {
     _showDupScanning(false);
-    showToast('Failed to load duplicates', 'error');
+    toast('Failed to load duplicates', 'error');
   }
 }
 
@@ -16774,7 +16794,7 @@ async function _startDapDupScan() {
           _showDupDapNotConnected('Connect your DAP and click Retry.');
         } else {
           _showDupScanning(false);
-          showToast(res.error || 'DAP scan failed', 'error');
+          toast(res.error || 'DAP scan failed', 'error');
         }
       }
       // else still scanning — keep polling
@@ -17000,13 +17020,13 @@ function _getDupRowActions(key) {
 async function _dupOpenFinder(btn) {
   const path  = btn.dataset.finderPath;
   const scope = btn.dataset.finderScope || 'library';
-  if (!path) { showToast('Path not available', 'error'); return; }
+  if (!path) { toast('Path not available', 'error'); return; }
   try {
     const body = scope === 'dap'
       ? { abs_path: _dupDapMountPath ? _dupDapMountPath + '/' + path : path }
       : { path };
     await api('/open-in-finder', { method: 'POST', body });
-  } catch(e) { showToast('Could not open in Finder', 'error'); }
+  } catch(e) { toast('Could not open in Finder', 'error'); }
 }
 
 function _fmtDuration(secs) {
@@ -17033,7 +17053,7 @@ async function _dupIgnore(key) {
       document.getElementById('dup-bulk-action-bar').style.display = 'none';
     }
     _loadDupSkipped();
-  } catch(e) { showToast('Failed to ignore group', 'error'); }
+  } catch(e) { toast('Failed to ignore group', 'error'); }
 }
 
 function _getDupSelectedIds(key, inputName) {
@@ -17072,13 +17092,13 @@ async function _browseDupMoveFolder() {
       _dupLastMoveFolder = res.path;
       localStorage.setItem('tb_dup_move_folder', res.path);
     }
-  } catch(e) { showToast('Folder picker unavailable', 'error'); }
+  } catch(e) { toast('Folder picker unavailable', 'error'); }
 }
 
 function _confirmDupAction() {
   const action = document.querySelector('input[name="dup-action"]:checked')?.value || 'trash';
   const moveFolder = action === 'move' ? document.getElementById('dup-move-folder-input').value.trim() : null;
-  if (action === 'move' && !moveFolder) { showToast('Please select a destination folder', 'error'); return; }
+  if (action === 'move' && !moveFolder) { toast('Please select a destination folder', 'error'); return; }
   // Persist chosen folder so next open pre-populates it
   if (action === 'move' && moveFolder) {
     _dupLastMoveFolder = moveFolder;
@@ -17138,7 +17158,7 @@ function _setDupActionDone(title, sub = '') {
 async function _dupDelete(key) {
   if (_dupActionBusy) return;
   const { removeIds: ids } = _getDupRowActions(key);
-  if (!ids.length) { showToast('Mark at least one track as Remove', 'error'); return; }
+  if (!ids.length) { toast('Mark at least one track as Remove', 'error'); return; }
 
   const result = await _showDupActionModal('Remove Tracks', `Remove ${ids.length} track${ids.length !== 1 ? 's' : ''} from your library?`);
   if (!result) return;
@@ -17171,7 +17191,7 @@ async function _dupDelete(key) {
 async function _dupConsolidate(key) {
   if (_dupActionBusy) return;
   const { keepId, removeIds } = _getDupRowActions(key);
-  if (!keepId) { showToast('Mark one track as Keep first', 'error'); return; }
+  if (!keepId) { toast('Mark one track as Keep first', 'error'); return; }
   // Delete IDs = those explicitly marked Remove; if none marked Remove, default to all-except-keep
   let deleteIds = removeIds.length > 0 ? removeIds : [];
   if (!deleteIds.length) {
@@ -17179,7 +17199,7 @@ async function _dupConsolidate(key) {
     const allGroups = document.querySelectorAll(`.dup-row-action-group[data-group="${key}"]`);
     deleteIds = Array.from(allGroups).map(g => g.dataset.id).filter(id => id !== keepId);
   }
-  if (!deleteIds.length) { showToast('Nothing to remove — only one track', 'error'); return; }
+  if (!deleteIds.length) { toast('Nothing to remove — only one track', 'error'); return; }
 
   const result = await _showDupActionModal('Consolidate Tracks', `Keep selected track and remove ${deleteIds.length} other${deleteIds.length !== 1 ? 's' : ''}? Playlist references will be updated.`);
   if (!result) return;
@@ -17223,7 +17243,7 @@ async function _dupApplyAll() {
   }
 
   const total = toConsolidate.length + toDelete.length;
-  if (!total) { showToast('Mark Keep or Remove on some tracks first', 'error'); return; }
+  if (!total) { toast('Mark Keep or Remove on some tracks first', 'error'); return; }
 
   const parts = [];
   if (toConsolidate.length) parts.push(`${toConsolidate.length} consolidate`);
@@ -17278,7 +17298,7 @@ async function _dupDapDelete(key) {
   if (_dupActionBusy) return;
   const { removeIds } = _getDupRowActions(key);
   const relPaths = removeIds.map(id => decodeURIComponent(id));
-  if (!relPaths.length) { showToast('Mark at least one track as Remove', 'error'); return; }
+  if (!relPaths.length) { toast('Mark at least one track as Remove', 'error'); return; }
   if (!await _showConfirm({
     title: 'Delete From DAP',
     message: `${relPaths.length} file${relPaths.length !== 1 ? 's' : ''} will be permanently deleted from your player.`,
@@ -17352,9 +17372,9 @@ async function _dupMarkNotDuplicate(groupKey, trackId, btnEl) {
     // If fewer than 2 rows remain, remove the whole card
     const remaining = card?.querySelectorAll('tbody tr').length || 0;
     if (remaining < 2) _removeDupGroupFromDom(groupKey);
-    showToast('Marked as not a duplicate');
+    toast('Marked as not a duplicate');
     _loadDupSkipped();
-  } catch(e) { showToast('Failed to mark track', 'error'); }
+  } catch(e) { toast('Failed to mark track', 'error'); }
 }
 
 async function _dupUndoNotDuplicate(groupKey, trackId) {
@@ -17363,9 +17383,9 @@ async function _dupUndoNotDuplicate(groupKey, trackId) {
       method: 'POST',
       body: { group_key: groupKey, track_id: trackId }
     });
-    showToast('Restored — rescan to see updated groups');
+    toast('Restored — rescan to see updated groups');
     _loadDupSkipped();
-  } catch(e) { showToast('Failed to undo', 'error'); }
+  } catch(e) { toast('Failed to undo', 'error'); }
 }
 
 async function _dupUndoIgnore(groupKey) {
@@ -17374,9 +17394,9 @@ async function _dupUndoIgnore(groupKey) {
       method: 'POST',
       body: { group_key: groupKey }
     });
-    showToast('Group restored — rescan to see it again');
+    toast('Group restored — rescan to see it again');
     _loadDupSkipped();
-  } catch(e) { showToast('Failed to restore group', 'error'); }
+  } catch(e) { toast('Failed to restore group', 'error'); }
 }
 
 async function _loadDupSkipped() {
@@ -17480,16 +17500,16 @@ function _showEmptyFolderCleanup(dirs) {
 async function _deleteEmptyFolders() {
   const checks = document.querySelectorAll('.dup-folder-check:checked');
   const dirs = Array.from(checks).map(c => c.value);
-  if (!dirs.length) { showToast('No folders selected', 'error'); return; }
+  if (!dirs.length) { toast('No folders selected', 'error'); return; }
   try {
     const res = await api('/library/duplicates/delete-folders', {
       method: 'POST',
       body: { rel_dirs: dirs }
     });
-    showToast(`Removed ${res.deleted} empty folder${res.deleted !== 1 ? 's' : ''}`);
+    toast(`Removed ${res.deleted} empty folder${res.deleted !== 1 ? 's' : ''}`);
     document.getElementById('dup-empty-folders-section').style.display = 'none';
     _pendingEmptyDirs = [];
-  } catch(e) { showToast('Failed to remove folders', 'error'); }
+  } catch(e) { toast('Failed to remove folders', 'error'); }
 }
 
 /* ── Public API ─────────────────────────────────────────────────────── */
@@ -21093,12 +21113,12 @@ async function startLibraryAnalysis() {
   const res = await fetch('/api/insights/analyse', { method: 'POST' });
   if (!res.ok) {
     const d = await res.json().catch(() => ({}));
-    showToast(d.error || 'Could not start analysis.');
+    toast(d.error || 'Could not start analysis.');
     return;
   }
   const d = await res.json().catch(() => ({}));
   if (d.already_up_to_date) {
-    showToast('Analysis is already up to date.');
+    toast('Analysis is already up to date.');
     const infoRes = await fetch('/api/insights/analyse/info').catch(() => null);
     if (infoRes && infoRes.ok) _updateAnalysisInfo(await infoRes.json());
     return;
@@ -21114,7 +21134,7 @@ async function startLibraryAnalysis() {
 async function cancelLibraryAnalysis() {
   const res = await fetch('/api/insights/analyse/cancel', { method: 'POST' });
   if (!res.ok) {
-    showToast('Could not cancel analysis.');
+    toast('Could not cancel analysis.');
     return;
   }
   // Optimistically reset UI; poller will reconcile on next tick
@@ -21138,7 +21158,7 @@ async function insightsRescanLibrary() {
 
   const res = await fetch('/api/library/scan', { method: 'POST' }).catch(() => null);
   if (!res || !res.ok) {
-    showToast('Could not start rescan.');
+    toast('Could not start rescan.');
     if (btn) { btn.disabled = false; btn.innerHTML = _refreshButtonLabel('Rescan'); }
     return;
   }

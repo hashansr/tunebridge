@@ -3049,6 +3049,12 @@ tbody tr:hover .remove-btn { opacity: 1; }
 .toast-warning { border-color: rgba(245, 197, 66, 0.12); }
 .toast-msg { flex: 1; line-height: 1.4; }
 
+@keyframes toast-bump {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.04); }
+}
+.toast-bump { animation: toast-bump 0.25s ease; }
+
 /* ── Modal ───────────────────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed;
