@@ -6466,7 +6466,52 @@ tr:hover .fav-toggle,
 }
 .peq-row-name { flex: 1; color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .peq-row-meta { color: var(--text-muted); font-size: var(--text-xs); white-space: nowrap; }
-.peq-row-actions { display: flex; gap: 6px; align-items: center; }
+.peq-row-actions { display: flex; gap: 4px; align-items: center; }
+
+.peq-action-btn {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 6px; cursor: pointer;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-muted);
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.peq-action-btn:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+
+.peq-delete-btn {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 6px; cursor: pointer;
+  background: rgba(255,179,181,0.1);
+  color: var(--accent-secondary);
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.peq-delete-btn:hover { background: rgba(255,179,181,0.22); }
+
+#peq-action-menu {
+  position: fixed; z-index: 1200;
+  background: #242424;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  min-width: 190px;
+  padding: 4px;
+  font-size: var(--text-sm);
+}
+.peq-action-menu-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 11px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text);
+  user-select: none;
+  transition: background 0.12s;
+}
+.peq-action-menu-item:hover { background: rgba(255,255,255,0.07); }
+.peq-action-menu-item--muted { color: var(--text-muted); cursor: default; pointer-events: none; }
+.peq-action-menu-sep { height: 1px; background: rgba(255,255,255,0.07); margin: 4px 0; }
 
 /* Accordion body */
 .peq-accordion {

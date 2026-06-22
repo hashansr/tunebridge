@@ -12216,7 +12216,14 @@ function _renderPeqList(profiles) {
             onclick="App.applyPeqToGraph('${p.id}')">
             ${_activePeqId === p.id ? 'Showing' : 'View on graph'}
           </button>
-          <button class="btn-danger-sm" onclick="App.deletePeq('${p.id}')">✕</button>
+          <button class="peq-action-btn" title="Download or copy to DAP"
+            data-peq-id="${p.id}" data-peq-name="${esc(p.name)}"
+            onclick="App.showPeqActionMenu(this.dataset.peqId, this.dataset.peqName, event)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          </button>
+          <button class="peq-delete-btn" title="Delete PEQ profile" onclick="App.deletePeq('${p.id}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 1.5V2.5H3C2.44772 2.5 2 2.94772 2 3.5V4.5C2 5.05228 2.44772 5.5 3 5.5H21C21.5523 5.5 22 5.05228 22 4.5V3.5C22 2.94772 21.5523 2.5 21 2.5H16V1.5C16 0.947715 15.5523 0.5 15 0.5H9C8.44772 0.5 8 0.947715 8 1.5Z"/><path d="M3.9231 7.5H20.0767L19.1344 20.2216C19.0183 21.7882 17.7135 23 16.1426 23H7.85724C6.28636 23 4.98148 21.7882 4.86544 20.2216L3.9231 7.5Z"/></svg>
+          </button>
         </div>
       </div>
       <div class="peq-accordion" id="peq-accordion-${p.id}" style="display:none">
@@ -12253,6 +12260,86 @@ async function downloadPeq(peqId, name) {
     URL.revokeObjectURL(url);
   } catch (e) {
     toast('Failed to download PEQ: ' + e.message);
+  }
+}
+
+function hidePeqActionMenu() {
+  const menu = document.getElementById('peq-action-menu');
+  if (menu) { menu.style.display = 'none'; menu._peqId = null; }
+}
+
+async function showPeqActionMenu(peqId, peqName, event) {
+  event.stopPropagation();
+  const btn = event.currentTarget;
+  const menu = document.getElementById('peq-action-menu');
+  if (!menu) return;
+
+  if (menu._peqId === peqId && menu.style.display !== 'none') {
+    hidePeqActionMenu();
+    return;
+  }
+  menu._peqId = peqId;
+
+  const _DL_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>`;
+  const _DAP_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="16" r="2"/><line x1="9" y1="7" x2="15" y2="7"/></svg>`;
+
+  menu.innerHTML = `
+    <div class="peq-action-menu-item" onclick="App.downloadPeq('${peqId}', ${JSON.stringify(peqName)})">
+      ${_DL_SVG} Download .txt
+    </div>
+    <div class="peq-action-menu-sep"></div>
+    <div class="peq-action-menu-item peq-action-menu-item--muted" id="peq-dap-loading">Loading DAPs…</div>
+  `;
+
+  // Position near the button, flip up if near bottom of viewport
+  const rect = btn.getBoundingClientRect();
+  menu.style.display = 'block';
+  const mw = 200;
+  const left = Math.max(8, Math.min(rect.right - mw, window.innerWidth - mw - 8));
+  const spaceBelow = window.innerHeight - rect.bottom;
+  // Measure after display:block so offsetHeight is accurate
+  const mh = menu.offsetHeight;
+  const top = spaceBelow > mh + 8 ? rect.bottom + 4 : rect.top - mh - 4;
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
+
+  try {
+    const daps = await fetch('/api/daps').then(r => r.json());
+    const connected = (Array.isArray(daps) ? daps : []).filter(d => d.mounted);
+    const loadingEl = document.getElementById('peq-dap-loading');
+    if (!loadingEl) return;
+    if (connected.length === 0) {
+      loadingEl.textContent = 'No DAPs connected';
+    } else {
+      loadingEl.remove();
+      connected.forEach(dap => {
+        const item = document.createElement('div');
+        item.className = 'peq-action-menu-item';
+        item.innerHTML = `${_DAP_ICON} Copy to ${esc(dap.name)}`;
+        item.onclick = () => App.peqCopyToDap(peqId, dap.id, dap.name);
+        menu.appendChild(item);
+      });
+    }
+    // Re-clamp vertical position now that we know the real height
+    const mh2 = menu.offsetHeight;
+    const top2 = spaceBelow > mh2 + 8 ? rect.bottom + 4 : rect.top - mh2 - 4;
+    menu.style.top = `${top2}px`;
+  } catch (_) { /* ignore */ }
+}
+
+async function peqCopyToDap(peqId, dapId, dapName) {
+  hidePeqActionMenu();
+  try {
+    const res = await fetch(`/api/iems/${_currentIemId}/peq/${peqId}/copy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dap_id: dapId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Copy failed');
+    toast(data.message || `Copied to ${dapName}`);
+  } catch (e) {
+    toast('Failed to copy PEQ: ' + e.message);
   }
 }
 
@@ -19862,6 +19949,9 @@ const App = {
   runHealthCheck,
   togglePeqAccordion,
   downloadPeq,
+  showPeqActionMenu,
+  hidePeqActionMenu,
+  peqCopyToDap,
   showPeqModal,
   closePeqModal,
   savePeq,
@@ -24453,6 +24543,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#ctx-menu') && !e.target.closest('#ctx-submenu')) hideCtxMenu();
     if (!e.target.closest('#playlist-ctx-menu')) hidePlaylistCtxMenu();
+    if (!e.target.closest('#peq-action-menu') && !e.target.closest('.peq-action-btn')) hidePeqActionMenu();
   });
   document.addEventListener('scroll', (e) => {
     // Ignore scrolls inside the submenu — those are intentional
@@ -24462,6 +24553,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.target?.classList?.contains('home-rail')) return;
     hideCtxMenu();
     hidePlaylistCtxMenu();
+    hidePeqActionMenu();
     _closePlExportMenu();
   }, true);
 
