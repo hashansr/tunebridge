@@ -18544,6 +18544,41 @@ tr:hover .track-edit-btn:hover {
 .dup-bulk-action-title { color: var(--text-primary); font-size: 13px; font-weight: 650; }
 .dup-bulk-action-sub { color: var(--text-muted); font-size: 12px; }
 .dup-apply-all-btn { flex-shrink: 0; padding: 8px 18px; box-shadow: 0 8px 18px rgba(56, 82, 131, 0.24); }
+.dup-bulk-action-bar.is-busy {
+  border-color: rgba(173, 198, 255, 0.32);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(173, 198, 255, 0.04);
+}
+.dup-bulk-action-bar.is-done { border-color: rgba(83, 225, 111, 0.28); }
+.dup-bulk-action-bar.is-busy .dup-bulk-action-title::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(173, 198, 255, 0.58);
+  animation: toast-pulse 1.4s ease-in-out infinite;
+}
+.dup-bulk-action-bar.is-done .dup-bulk-action-title::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: var(--accent-success);
+}
+.dup-action-busy .dup-group-card { opacity: 0.72; }
+.dup-action-busy .dup-group-card,
+.dup-action-busy .dup-bulk-action-bar {
+  transition: opacity 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+.dup-action-busy button:disabled,
+.dup-action-busy select:disabled {
+  opacity: 0.56;
+  cursor: progress;
+}
 
 .dup-scanning-state { text-align: center; padding: 48px 0; }
 

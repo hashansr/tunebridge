@@ -16693,6 +16693,7 @@ let _dupDapMountPath = null;    // Absolute mount/music path of selected DAP (fo
 let _dupPollTimer = null;
 let _dupActionResolve = null;   // Promise resolver for the action modal
 let _dupLastMoveFolder = localStorage.getItem('tb_dup_move_folder') || '';  // remembered destination
+let _dupActionBusy = false;
 
 function _formatBytes(bytes) {
   if (!bytes) return '0 B';
@@ -17096,31 +17097,79 @@ function _removeDupGroupFromDom(key) {
   }
 }
 
+function _setDupActionBusy(busy, title = '', sub = '') {
+  _dupActionBusy = !!busy;
+  const view = document.getElementById('view-duplicates');
+  const bulkBar = document.getElementById('dup-bulk-action-bar');
+  view?.classList.toggle('dup-action-busy', _dupActionBusy);
+  document.querySelectorAll('#view-duplicates button, #view-duplicates select')
+    .forEach(el => {
+      if (el.id === 'dup-action-modal-confirm' || el.closest('#dup-action-modal')) return;
+      el.disabled = _dupActionBusy;
+      el.setAttribute('aria-busy', _dupActionBusy ? 'true' : 'false');
+    });
+
+  if (!bulkBar || bulkBar.style.display === 'none') return;
+  bulkBar.classList.toggle('is-busy', _dupActionBusy);
+  bulkBar.classList.remove('is-done');
+  if (_dupActionBusy) {
+    const titleEl = bulkBar.querySelector('.dup-bulk-action-title');
+    const subEl = bulkBar.querySelector('.dup-bulk-action-sub');
+    const btn = bulkBar.querySelector('.dup-apply-all-btn');
+    if (titleEl && title) titleEl.textContent = title;
+    if (subEl && sub) subEl.textContent = sub;
+    if (btn) btn.textContent = 'Working...';
+  }
+}
+
+function _setDupActionDone(title, sub = '') {
+  const bulkBar = document.getElementById('dup-bulk-action-bar');
+  _setDupActionBusy(false);
+  if (!bulkBar || bulkBar.style.display === 'none') return;
+  bulkBar.classList.add('is-done');
+  const titleEl = bulkBar.querySelector('.dup-bulk-action-title');
+  const subEl = bulkBar.querySelector('.dup-bulk-action-sub');
+  const btn = bulkBar.querySelector('.dup-apply-all-btn');
+  if (titleEl) titleEl.textContent = title;
+  if (subEl) subEl.textContent = sub || 'Rescanning duplicate groups...';
+  if (btn) btn.textContent = 'Apply all marked';
+}
+
 async function _dupDelete(key) {
+  if (_dupActionBusy) return;
   const { removeIds: ids } = _getDupRowActions(key);
   if (!ids.length) { showToast('Mark at least one track as Remove', 'error'); return; }
 
   const result = await _showDupActionModal('Remove Tracks', `Remove ${ids.length} track${ids.length !== 1 ? 's' : ''} from your library?`);
   if (!result) return;
 
+  const live = _showLiveToast(`Deleting ${ids.length} marked track${ids.length !== 1 ? 's' : ''}...`);
+  _setDupActionBusy(true, 'Deleting marked tracks...', `${ids.length} track${ids.length !== 1 ? 's are' : ' is'} being processed.`);
   try {
     const res = await api('/library/duplicates/delete', {
       method: 'POST',
       body: { track_ids: ids, action: result.action, move_folder: result.moveFolder }
     });
-    showToast(result.action === 'trash'
+    const msg = result.action === 'trash'
       ? `Moved ${res.deleted} track${res.deleted !== 1 ? 's' : ''} to Trash`
-      : `Moved ${res.deleted} track${res.deleted !== 1 ? 's' : ''} to folder`);
+      : `Moved ${res.deleted} track${res.deleted !== 1 ? 's' : ''} to folder`;
+    live.finish(msg, 'success');
+    _setDupActionDone('Delete complete', msg);
     if (ids.length >= (document.querySelectorAll(`#dup-group-${key} tbody tr`).length)) {
       _removeDupGroupFromDom(key);
     } else {
       await _fetchLibraryDuplicates();
     }
     _showEmptyFolderCleanup(res.empty_dirs || []);
-  } catch(e) { showToast('Delete failed', 'error'); }
+  } catch(e) {
+    live.finish('Delete failed', 'error');
+  } finally {
+    _setDupActionBusy(false);
+  }
 }
 
 async function _dupConsolidate(key) {
+  if (_dupActionBusy) return;
   const { keepId, removeIds } = _getDupRowActions(key);
   if (!keepId) { showToast('Mark one track as Keep first', 'error'); return; }
   // Delete IDs = those explicitly marked Remove; if none marked Remove, default to all-except-keep
@@ -17135,18 +17184,27 @@ async function _dupConsolidate(key) {
   const result = await _showDupActionModal('Consolidate Tracks', `Keep selected track and remove ${deleteIds.length} other${deleteIds.length !== 1 ? 's' : ''}? Playlist references will be updated.`);
   if (!result) return;
 
+  const live = _showLiveToast(`Consolidating ${deleteIds.length + 1} duplicate track${deleteIds.length ? 's' : ''}...`);
+  _setDupActionBusy(true, 'Consolidating duplicate tracks...', 'Playlist references are being updated.');
   try {
     const res = await api('/library/duplicates/consolidate', {
       method: 'POST',
       body: { keep_id: keepId, delete_ids: deleteIds, action: result.action, move_folder: result.moveFolder }
     });
-    showToast(`Consolidated · updated ${res.playlists_updated} playlist${res.playlists_updated !== 1 ? 's' : ''}`);
+    const msg = `Consolidated · updated ${res.playlists_updated} playlist${res.playlists_updated !== 1 ? 's' : ''}`;
+    live.finish(msg, 'success');
+    _setDupActionDone('Consolidation complete', msg);
     _showEmptyFolderCleanup(res.empty_dirs || []);
     await _fetchLibraryDuplicates();
-  } catch(e) { showToast('Consolidate failed', 'error'); }
+  } catch(e) {
+    live.finish('Consolidate failed', 'error');
+  } finally {
+    _setDupActionBusy(false);
+  }
 }
 
 async function _dupApplyAll() {
+  if (_dupActionBusy) return;
   const toConsolidate = [];
   const toDelete = [];
 
@@ -17175,6 +17233,8 @@ async function _dupApplyAll() {
 
   let consolidated = 0, deleted = 0, errors = 0;
   const allEmptyDirs = [];
+  const live = _showLiveToast(`Applying marked actions to ${total} group${total !== 1 ? 's' : ''}...`);
+  _setDupActionBusy(true, 'Applying marked actions...', `${total} duplicate group${total !== 1 ? 's are' : ' is'} being processed.`);
 
   for (const op of toConsolidate) {
     try {
@@ -17202,13 +17262,20 @@ async function _dupApplyAll() {
   if (consolidated) summary.push(`${consolidated} group${consolidated !== 1 ? 's' : ''} consolidated`);
   if (deleted) summary.push(`${deleted} track${deleted !== 1 ? 's' : ''} deleted`);
   if (errors) summary.push(`${errors} error${errors !== 1 ? 's' : ''}`);
-  showToast(summary.join(' · ') || 'Done', errors ? 'error' : undefined);
+  const finalMsg = summary.join(' · ') || 'Done';
+  live.finish(finalMsg, errors ? 'error' : 'success');
+  _setDupActionDone(errors ? 'Finished with errors' : 'Marked actions complete', finalMsg);
 
   _showEmptyFolderCleanup([...new Set(allEmptyDirs)]);
-  await _fetchLibraryDuplicates();
+  try {
+    await _fetchLibraryDuplicates();
+  } finally {
+    _setDupActionBusy(false);
+  }
 }
 
 async function _dupDapDelete(key) {
+  if (_dupActionBusy) return;
   const { removeIds } = _getDupRowActions(key);
   const relPaths = removeIds.map(id => decodeURIComponent(id));
   if (!relPaths.length) { showToast('Mark at least one track as Remove', 'error'); return; }
@@ -17219,15 +17286,22 @@ async function _dupDapDelete(key) {
     cancelText: 'Cancel',
     danger: true,
   })) return;
+  const live = _showLiveToast(`Deleting ${relPaths.length} file${relPaths.length !== 1 ? 's' : ''} from DAP...`);
+  _setDupActionBusy(true, 'Deleting from DAP...', `${relPaths.length} file${relPaths.length !== 1 ? 's are' : ' is'} being removed.`);
   try {
     const res = await api(`/daps/${_dupDapId}/duplicates/delete`, {
       method: 'POST',
       body: { rel_paths: relPaths }
     });
-    showToast(`Deleted ${res.deleted} file${res.deleted !== 1 ? 's' : ''} from DAP`);
+    const msg = `Deleted ${res.deleted} file${res.deleted !== 1 ? 's' : ''} from DAP`;
+    live.finish(msg, 'success');
     // Rescan
     await _startDapDupScan();
-  } catch(e) { showToast('Delete failed', 'error'); }
+  } catch(e) {
+    live.finish('Delete failed', 'error');
+  } finally {
+    _setDupActionBusy(false);
+  }
 }
 
 function switchDupScope(scope) {
