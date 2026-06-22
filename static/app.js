@@ -9925,6 +9925,11 @@ function _swOnPlaylistTracksToggle(playlistId, checked) {
   if (!_sw.playlistAutoSelected) _sw.playlistAutoSelected = {};
   if (!_sw.toDeviceManual) _sw.toDeviceManual = new Set();
   if (!_sw.selection.toDevice) _sw.selection.toDevice = {};
+  if (!_sw.selection.toDeviceLyrics) _sw.selection.toDeviceLyrics = {};
+  // Build a lookup from path → song item so we can find matching lyrics
+  const songsByPath = Object.fromEntries(
+    (_sw.proposal?.toDevice?.items ?? []).map(it => [it.id, it])
+  );
   for (const path of paths) {
     if (checked) {
       if (!_sw.playlistAutoSelected[path]) _sw.playlistAutoSelected[path] = new Set();
@@ -9937,6 +9942,12 @@ function _swOnPlaylistTracksToggle(playlistId, checked) {
       if (!(autoSet?.size > 0) && !_sw.toDeviceManual.has(path)) {
         _sw.selection.toDevice[path] = false;
       }
+    }
+    // Mirror the same state onto the matching lyric file (if one exists)
+    const songItem = songsByPath[path];
+    if (songItem) {
+      const lyricId = _swFindMatchingLyricId(songItem);
+      if (lyricId) _sw.selection.toDeviceLyrics[lyricId] = checked;
     }
   }
   _swRenderReview();
