@@ -12854,7 +12854,14 @@ def copy_peq_to_dap(iid, peq_id):
 
     is_rockbox = dap.get('model') == 'rockbox'
     default_peq_folder = '.rockbox/eqs' if is_rockbox else 'PEQ'
-    peq_dir = device_root / dap.get('peq_folder', default_peq_folder)
+    peq_folder_raw = dap.get('peq_folder') or default_peq_folder
+    peq_folder_path = Path(peq_folder_raw)
+    # If peq_folder is absolute but doesn't start with the device root, treat it
+    # as device-relative (e.g. '/.rockbox/eqs/' entered relative to the SD card root).
+    if peq_folder_path.is_absolute() and not str(peq_folder_path).startswith(str(device_root)):
+        peq_dir = device_root / str(peq_folder_path).lstrip('/')
+    else:
+        peq_dir = device_root / peq_folder_path
     peq_dir.mkdir(parents=True, exist_ok=True)
 
     safe_name = f"{iem['name']} - {peq['name']}"

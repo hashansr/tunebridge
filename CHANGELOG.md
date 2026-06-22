@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: PEQ copy to DAP failed with 500 when peq_folder was stored as a device-relative absolute path (e.g. `/.rockbox/eqs/`) — resolved correctly against the device mount root
 
 ## v0.507-rc.230626-0715 · 2026-06-23
 
