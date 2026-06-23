@@ -8074,7 +8074,7 @@ async function renderHelpCenter() {
   if (!daps.length) {
     listEl.innerHTML = `
       <div class="help-device-empty">
-        No DAPs configured yet. Add one in <strong>Gear</strong> to see export path guidance here.
+        No devices are configured yet. Add one in <strong>Gear</strong> when you are ready to sync music, playlists, or PEQ files.
       </div>
     `;
     return;
@@ -8083,17 +8083,23 @@ async function renderHelpCenter() {
   listEl.innerHTML = daps.map(dap => {
     const mounted = !!dap.mounted;
     const mountPath = dap.mount_path || 'Not set';
+    const musicRoot = dap.music_root || 'Music';
     const exportFolder = dap.export_folder || 'Playlists';
-    const pathPrefix = dap.path_prefix || '(none)';
+    const pathTemplate = dap.path_template || '%artist%/%album%/%track%/%title%';
+    const pathPrefix = dap.path_prefix || 'No prefix';
+    const peqFolder = dap.peq_folder || 'PEQ';
     return `
       <div class="help-device-card">
         <div class="help-device-top">
           <div class="help-device-name">${esc(dap.name || 'Unnamed device')}</div>
-          <span class="help-device-status ${mounted ? 'ok' : 'warn'}">${mounted ? 'Connected' : `${_STATUS_ICON_NOT_CONNECTED} Not connected`}</span>
+          <span class="help-device-status ${mounted ? 'ok' : 'warn'}">${mounted ? 'Connected' : 'Not connected'}</span>
         </div>
-        <p class="help-device-kv"><strong>Mount path:</strong> <code>${esc(mountPath)}</code></p>
-        <p class="help-device-kv"><strong>Export folder:</strong> <code>${esc(exportFolder)}</code></p>
-        <p class="help-device-kv"><strong>Track path prefix:</strong> <code>${esc(pathPrefix)}</code></p>
+        <div class="help-device-kv"><span>Mount path</span><code>${esc(mountPath)}</code></div>
+        <div class="help-device-kv"><span>Music folder</span><code>${esc(musicRoot)}</code></div>
+        <div class="help-device-kv"><span>Playlist folder</span><code>${esc(exportFolder)}</code></div>
+        <div class="help-device-kv"><span>File naming</span><code>${esc(pathTemplate)}</code></div>
+        <div class="help-device-kv"><span>Path prefix</span><code>${esc(pathPrefix)}</code></div>
+        <div class="help-device-kv"><span>PEQ folder</span><code>${esc(peqFolder)}</code></div>
       </div>
     `;
   }).join('');
