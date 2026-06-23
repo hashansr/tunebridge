@@ -19,7 +19,7 @@
         <img src="/logo.png" width="26" height="26" alt="TuneBridge" style="border-radius:5px" />
         <span>TuneBridge</span>
         <div class="header-icons">
-          <button id="help-btn" class="header-orb-btn" onclick="App.showHelp()" title="Help Center" aria-label="Open Help Center">
+          <button id="help-btn" class="header-orb-btn" onclick="App.showView('help')" title="Help Center" aria-label="Open Help Center">
             <span class="help-btn-glyph" aria-hidden="true">?</span>
           </button>
           <button id="settings-btn" class="header-orb-btn" onclick="App.showView('settings')" title="Settings">
@@ -2395,6 +2395,162 @@
         </div>
       </div><!-- /view-organizer -->
 
+      <!-- Help page -->
+      <div id="view-help" class="view" style="display:none">
+        <div class="help-page-header">
+          <button class="help-back-orb" onclick="App.closeHelp()" aria-label="Back">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <h2 class="help-page-title">Help Center</h2>
+          <p class="help-lede">TuneBridge keeps your local music, playlists, devices, gear, and listening history in one place. Start with your <strong>library</strong>, then add a <strong>device</strong> when you are ready to sync.</p>
+        </div>
+
+        <div class="help-shell">
+          <nav class="help-tab-bar" aria-label="Help sections">
+            <button class="help-tab-btn active" type="button" data-help-tab="start" onclick="App.switchHelpTab('start')">Getting started</button>
+            <button class="help-tab-btn" type="button" data-help-tab="concepts" onclick="App.switchHelpTab('concepts')">How it works</button>
+            <button class="help-tab-btn" type="button" data-help-tab="paths" onclick="App.switchHelpTab('paths')">Paths &amp; files</button>
+          </nav>
+
+          <!-- ── GETTING STARTED ────────────────────────── -->
+          <div class="help-panel active" data-help-panel="start">
+            <div class="help-group">
+              <span class="help-g-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+              <span class="help-g-eyebrow">Four steps to get set up</span>
+              <span class="help-g-line"></span>
+            </div>
+            <div class="help-steps-list">
+              <div class="help-step">
+                <span class="help-num">1</span>
+                <div>
+                  <div class="help-s-title">Choose your music folder</div>
+                  <div class="help-s-desc">Pick it during setup, or change it any time in Settings → Library.</div>
+                </div>
+              </div>
+              <div class="help-step">
+                <span class="help-num">2</span>
+                <div>
+                  <div class="help-s-title">Scan the library</div>
+                  <div class="help-s-desc">TuneBridge reads your tracks, albums, tags, and artwork so it knows what you have.</div>
+                </div>
+              </div>
+              <div class="help-step">
+                <span class="help-num">3</span>
+                <div>
+                  <div class="help-s-title">Add your players in Gear</div>
+                  <div class="help-s-desc">Only needed if you want to sync music to a device. Skip this if you are listening on this Mac.</div>
+                </div>
+              </div>
+              <div class="help-step">
+                <span class="help-num">4</span>
+                <div>
+                  <div class="help-s-title">Build or import playlists</div>
+                  <div class="help-s-desc">Create them here, import existing ones, or use <strong>Sync Music</strong> to copy tracks and playlists to a device together.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── HOW IT WORKS ───────────────────────────── -->
+          <div class="help-panel" data-help-panel="concepts">
+            <div class="help-group">
+              <span class="help-g-eyebrow">Library &amp; playlists</span>
+              <span class="help-g-line"></span>
+            </div>
+            <div class="help-steps-list">
+              <div class="help-step">
+                <span class="help-s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
+                <div>
+                  <div class="help-s-title">Library</div>
+                  <div class="help-s-desc">The folder TuneBridge watches. After you add, rename, or retag music, use the scan button in the sidebar so the app refreshes its view. Your library root is set in Settings → Library.</div>
+                </div>
+              </div>
+              <div class="help-step">
+                <span class="help-s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span>
+                <div>
+                  <div class="help-s-title">Playlists</div>
+                  <div class="help-s-desc">Create playlists in TuneBridge, download them as <span class="help-chip">.m3u</span> files, or copy them straight to a connected device. Imports read <span class="help-chip">.m3u</span> and <span class="help-chip">.m3u8</span>. When an import cannot match every song, TuneBridge keeps those tracks visible so you can map them by hand.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="help-group">
+              <span class="help-g-eyebrow">Devices &amp; audio gear</span>
+              <span class="help-g-line"></span>
+            </div>
+            <div class="help-steps-list">
+              <div class="help-step">
+                <span class="help-s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span>
+                <div>
+                  <div class="help-s-title">Devices &amp; Sync</div>
+                  <div class="help-s-desc">Add each player in Gear, then set its mount path, music folder, playlist folder, and path prefix. Sync Music uses those settings to plan what needs copying. Before a large sync, check the review step. It shows what will be added, removed, and whether the device has enough space.</div>
+                </div>
+              </div>
+              <div class="help-step">
+                <span class="help-s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg></span>
+                <div>
+                  <div class="help-s-title">Gear &amp; PEQ</div>
+                  <div class="help-s-desc">Gear holds devices, IEMs, headphones, frequency response links, and PEQ profiles. PEQ files can be copied to a device when it has a PEQ folder configured. For best graph results, use a squig.link measurement URL and keep one clear profile per tuning you actually use.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="help-group">
+              <span class="help-g-eyebrow">Insights &amp; backup</span>
+              <span class="help-g-line"></span>
+            </div>
+            <div class="help-steps-list">
+              <div class="help-step">
+                <span class="help-s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+                <div>
+                  <div class="help-s-title">Insights</div>
+                  <div class="help-s-desc">Reads tags and audio analysis to show library health, genre spread, sonic shape, play history, and gear fit. Run Analyse Library for deeper results. If tags change later, use Rescan so the charts and missing tag lists catch up.</div>
+                </div>
+              </div>
+              <div class="help-step">
+                <span class="help-s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+                <div>
+                  <div class="help-s-title">Care &amp; Backup</div>
+                  <div class="help-s-desc">Backups cover playlists, devices, IEMs, settings, and app data. Take one before changing your library folder, moving to a new Mac, or making big device changes. App data lives at <span class="help-chip">~/Library/Application Support/TuneBridge</span>.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── PATHS & FILES ──────────────────────────── -->
+          <div class="help-panel" data-help-panel="paths">
+            <div class="help-group">
+              <span class="help-g-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
+              <span class="help-g-eyebrow">How playlist paths resolve</span>
+              <span class="help-g-line"></span>
+            </div>
+            <div class="help-path-card">
+              <p class="help-p-intro">Most devices expect playlist entries to point from the playlist file to the music file. If a playlist opens but tracks will not play, check the <strong>music folder</strong> and <strong>path prefix</strong> in that device profile.</p>
+              <div class="help-path-ex">
+                <div class="help-pe">
+                  <div>
+                    <div class="help-pe-label">No prefix</div>
+                    <div class="help-pe-sub">Playlist and music share a parent folder</div>
+                  </div>
+                  <code>Music/Artist/Album/01. Track Title.flac</code>
+                </div>
+                <div class="help-pe">
+                  <div>
+                    <div class="help-pe-label">Prefix <span class="help-chip">..</span></div>
+                    <div class="help-pe-sub">Playlist sits one level deeper than music</div>
+                  </div>
+                  <code>../Music/Artist/Album/01. Track Title.flac</code>
+                </div>
+              </div>
+            </div>
+            <div class="help-note">
+              <span class="help-note-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+              <p class="help-note-text">Still stuck? Open the device in <strong>Gear</strong> and run a test sync of a single playlist. TuneBridge shows the exact resolved path it writes for each track.</p>
+            </div>
+          </div>
+        </div>
+      </div><!-- /view-help -->
+
     </main>
 
   <!-- Shared Insights help popover -->
@@ -2477,117 +2633,6 @@
       <div class="modal-actions import-actions">
         <button class="btn-secondary" onclick="App.closeImportModal()">Cancel</button>
         <button class="btn-primary" id="import-confirm-btn" onclick="App.confirmImport()">Import Playlist</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Help modal -->
-  <div id="help-modal" class="modal-overlay tb-modal-overlay" style="display:none" onclick="if(event.target===this)App.closeHelp()">
-    <div class="modal modal-help tb-modal-shell tb-modal--lg">
-      <div class="modal-head modal-head-tight">
-        <h3>Help Center</h3>
-        <button class="modal-x-btn" onclick="App.closeHelp()"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6.70718 4.5858C6.31666 4.19528 5.68349 4.19528 5.29297 4.5858L4.58586 5.29291C4.19534 5.68343 4.19534 6.3166 4.58586 6.70712L9.87877 12L4.5859 17.2929C4.19537 17.6834 4.19537 18.3166 4.5859 18.7071L5.293 19.4142C5.68353 19.8048 6.31669 19.8048 6.70722 19.4142L12.0001 14.1214L17.293 19.4142C17.6835 19.8048 18.3167 19.8048 18.7072 19.4142L19.4143 18.7071C19.8048 18.3166 19.8048 17.6834 19.4143 17.2929L14.1214 12L19.4143 6.70712C19.8048 6.3166 19.8048 5.68343 19.4143 5.29291L18.7072 4.5858C18.3167 4.19528 17.6835 4.19528 17.293 4.5858L12.0001 9.87871L6.70718 4.5858Z"/></svg></button>
-      </div>
-      <div class="help-content">
-        <p class="help-intro">TuneBridge keeps your local music, playlists, devices, gear, and listening history in one place. Start with your library, then add a device when you are ready to sync.</p>
-
-        <div class="help-section help-section-hero">
-          <div class="help-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M3.5 15.5C4.05228 15.5 4.5 15.9477 4.5 16.5V19.5H19.5V16.5C19.5 15.9477 19.9477 15.5 20.5 15.5H21.5C22.0523 15.5 22.5 15.9477 22.5 16.5V20C22.5 21.3807 21.3807 22.5 20 22.5H4C2.61929 22.5 1.5 21.3807 1.5 20V16.5C1.5 15.9477 1.94772 15.5 2.5 15.5H3.5Z"/><path d="M7.07615 11.6173C7.23093 11.2436 7.59557 11 8.00003 11H10.5V3C10.5 2.44772 10.9477 2 11.5 2H12.5C13.0523 2 13.5 2.44771 13.5 3V11H16C16.4045 11 16.7691 11.2436 16.9239 11.6173C17.0787 11.991 16.9931 12.4211 16.7071 12.7071L12.7071 16.7071C12.3166 17.0976 11.6834 17.0976 11.2929 16.7071L7.29292 12.7071C7.00692 12.4211 6.92137 11.991 7.07615 11.6173Z"/></svg>
-            Start Here
-          </div>
-          <ol class="help-steps">
-            <li>Choose your music folder during setup, or change it later in Settings.</li>
-            <li>Scan the library so TuneBridge can read tracks, albums, tags, and artwork.</li>
-            <li>Add any music players in Gear if you want device sync.</li>
-            <li>Create playlists, import existing ones, or use Sync Music to copy music and playlists together.</li>
-          </ol>
-        </div>
-
-        <div class="help-grid">
-          <div class="help-card">
-            <div class="help-section-title">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
-              Library
-            </div>
-            <p>Your library is the folder TuneBridge watches. After you add, remove, rename, or retag music, use the scan button in the sidebar so the app can refresh its view.</p>
-            <div class="help-meta">
-              <span>Library root</span>
-              <code id="help-library-root">Loading…</code>
-            </div>
-          </div>
-
-          <div class="help-card">
-            <div class="help-section-title">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01" stroke-width="3"/></svg>
-              Playlists
-            </div>
-            <p>Create playlists inside TuneBridge, download them as <code>.m3u</code> files, or copy them straight to a connected device. Imports can read <code>.m3u</code> and <code>.m3u8</code> files.</p>
-            <p>When an import cannot match every song, TuneBridge keeps those tracks visible so you can review and map them by hand.</p>
-          </div>
-
-          <div class="help-card">
-            <div class="help-section-title">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01" stroke-width="3"/></svg>
-              Devices and Sync
-            </div>
-            <p>Add each player in Gear, then set its mount path, music folder, playlist folder, and path prefix. Sync Music uses those settings to plan what needs to be copied.</p>
-            <p>Before a large sync, check the review step. It shows what will be added, what will be removed, and whether the selected storage has enough space.</p>
-          </div>
-
-          <div class="help-card">
-            <div class="help-section-title">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 18V8"/><path d="M8 18V4"/><path d="M12 18v-6"/><path d="M16 18V6"/><path d="M20 18v-9"/></svg>
-              Gear and PEQ
-            </div>
-            <p>Gear is where devices, IEMs, headphones, frequency response links, and PEQ profiles live. PEQ files can be copied to a device when the device has a PEQ folder configured.</p>
-            <p>For best graph results, use a supported measurement link and keep one clear profile for each tuning you actually use.</p>
-          </div>
-
-          <div class="help-card">
-            <div class="help-section-title">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 15l3-4 3 2 5-7"/></svg>
-              Insights
-            </div>
-            <p>Insights reads tags and audio analysis to show library health, genre spread, sonic shape, play history, and gear fit. Run Analyse Library when you want deeper results.</p>
-            <p>If tags change later, use Rescan in Insights so the charts and missing tag lists catch up.</p>
-          </div>
-
-          <div class="help-card">
-            <div class="help-section-title">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 4v5c0 5-3.4 8.6-8 9-4.6-.4-8-4-8-9V7z"/><path d="M9 12l2 2 4-5"/></svg>
-              Care and Backup
-            </div>
-            <p>Backups include playlists, devices, IEMs, settings, and app data. They are useful before changing library folders, moving to a new Mac, or trying a bigger device setup.</p>
-            <div class="help-meta">
-              <span>App data</span>
-              <code id="help-data-dir">Loading…</code>
-            </div>
-          </div>
-        </div>
-
-        <div class="help-section">
-          <div class="help-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01" stroke-width="3"/></svg>
-            Your Devices
-          </div>
-          <p class="help-section-copy">This guidance comes from the device profiles you have saved in Gear.</p>
-          <div id="help-device-list" class="help-device-list">
-            <div class="help-device-empty">Loading device guidance…</div>
-          </div>
-        </div>
-
-        <div class="help-section" style="border:none;padding-bottom:0">
-          <div class="help-section-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v4H3zM3 11h18v4H3zM3 19h18v2H3z" stroke-width="1.5"/></svg>
-            Path Basics
-          </div>
-          <p class="help-section-copy">Most devices want playlist entries to point from the playlist file to the music file. If a playlist opens but songs will not play, check the music folder and path prefix in that device profile.</p>
-          <div class="help-path-grid">
-            <code class="help-code">Music/Artist/Album/01. Track Title.flac</code>
-            <code class="help-code">../Music/Artist/Album/01. Track Title.flac</code>
-          </div>
-        </div>
       </div>
     </div>
   </div>

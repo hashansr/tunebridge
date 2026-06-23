@@ -3257,189 +3257,178 @@ tbody tr:hover .remove-btn { opacity: 1; }
 /* ── Wide / help modals ──────────────────────────────────────────────── */
 .modal-wide { width: 520px; max-width: 95vw; }
 
-.modal-help {
-  width: 600px; max-width: 95vw;
-  max-height: 85vh;
+/* ── Help Center page ─────────────────────────────────────────────────── */
+#view-help {
   overflow-y: auto;
 }
-
-.help-intro {
-  margin: 0 0 14px;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.6;
+.help-page-header {
+  max-width: 1040px;
+  margin-bottom: 28px;
 }
-.help-content {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.help-section {
-  padding: 16px 0;
-}
-.help-section-hero {
-  padding-top: 4px;
-}
-.help-section + .help-section {
-  padding-top: 18px;
-  border-top: 1px solid rgba(173, 198, 255, 0.1);
-}
-.help-section-title {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 14px; font-weight: 700;
-  margin-bottom: 12px;
-  letter-spacing: 0;
-}
-.help-section-copy {
-  margin: 0 0 10px;
+.help-back-orb {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(65, 71, 85, 0.32);
   color: var(--text-sub);
-  font-size: 13px;
-  line-height: 1.6;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-bottom: 20px;
 }
-.help-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-.help-card {
-  border: 1px solid rgba(173, 198, 255, 0.12);
-  background: rgba(255, 255, 255, 0.035);
-  border-radius: 8px;
-  padding: 12px;
-}
-.help-card .help-section-title {
-  margin-bottom: 8px;
-}
-.help-card p {
-  margin: 0;
-  color: var(--text-sub);
-  font-size: 12.5px;
-  line-height: 1.55;
-}
-.help-card p + p,
-.help-card p + .help-meta {
-  margin-top: 8px;
-}
-.help-meta {
-  display: grid;
-  gap: 5px;
-  margin-top: 10px;
-}
-.help-meta span {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.help-steps {
-  padding-left: 18px;
-  display: flex; flex-direction: column; gap: 7px;
-  margin: 0;
-}
-.help-steps li { font-size: 13px; color: var(--text-sub); line-height: 1.5; }
-.help-tip {
-  display: flex; align-items: flex-start; gap: 8px;
-  margin-top: 12px; padding: 10px 12px;
-  background: rgba(173,198,255,0.06);
-  border-radius: 8px;
-  font-size: var(--text-sm); color: var(--text-sub); line-height: 1.5;
-}
-.help-tip svg { flex-shrink: 0; margin-top: 1px; color: var(--accent); }
-.help-code {
-  display: block; padding: 8px 12px;
-  background: var(--bg-elevated);
-  border-radius: 8px;
-  font-family: 'SF Mono', 'Fira Code', monospace;
-  font-size: 12px;
-  color: var(--accent-success);
-  word-break: break-all;
-}
-.help-path-grid {
-  display: grid;
-  gap: 8px;
-}
-.help-device-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-.help-device-card {
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  border-radius: 10px;
-  padding: 10px 12px;
-}
-.help-device-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.help-device-name {
-  font-size: 13px;
-  font-weight: 600;
+.help-back-orb:hover { background: var(--bg-elevated); color: var(--text); }
+.help-page-title {
+  margin: 0 0 12px;
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
   color: var(--text);
 }
-.help-device-status {
-  font-size: 11px;
-  font-weight: 600;
-  border-radius: 999px;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-}
-.help-device-status.ok {
-  color: var(--accent-success);
-  border-color: rgba(74, 222, 128, 0.35);
-  background: rgba(74, 222, 128, 0.12);
-}
-.help-device-status.warn {
-  color: #fbbf24;
-  border-color: rgba(251, 191, 36, 0.35);
-  background: rgba(251, 191, 36, 0.11);
-}
-.help-device-kv {
-  display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
-  margin: 0 0 6px;
-  font-size: 12px;
-  line-height: 1.45;
+.help-lede {
+  font-size: 15px;
   color: var(--text-sub);
+  line-height: 1.6;
+  max-width: 660px;
+  margin: 0;
 }
-.help-device-kv:last-child {
-  margin-bottom: 0;
+.help-lede strong { color: var(--text); font-weight: 600; }
+
+.help-shell {
+  max-width: 1040px;
 }
-.help-device-kv span {
+
+/* Tabs */
+.help-tab-bar {
+  display: flex;
+  gap: 30px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 4px;
+}
+.help-tab-btn {
+  appearance: none; background: none; border: none; cursor: pointer;
+  font-family: inherit; font-size: 14px; font-weight: 600;
   color: var(--text-muted);
-  font-weight: 600;
+  padding: 0 1px 13px;
+  position: relative;
+  transition: color 0.15s;
+  white-space: nowrap;
 }
-.help-device-kv code {
-  min-width: 0;
-  word-break: break-word;
+.help-tab-btn:hover { color: var(--text-sub); }
+.help-tab-btn.active { color: var(--text); }
+.help-tab-btn.active::after {
+  content: '';
+  position: absolute; left: 0; right: 0; bottom: -1px;
+  height: 2px; border-radius: 2px;
+  background: var(--accent);
 }
-.help-device-empty {
-  grid-column: 1 / -1;
-  border: 1px dashed var(--border);
-  border-radius: 10px;
-  padding: 12px;
-  font-size: 12px;
-  color: var(--text-muted);
+
+/* Panels */
+.help-panel { display: none; padding-top: 4px; }
+.help-panel.active {
+  display: block;
+  animation: helpFadeIn 0.28s ease;
 }
-@media (max-width: 740px) {
-  .help-grid,
-  .help-device-list {
-    grid-template-columns: 1fr;
-  }
-  .help-device-kv {
-    grid-template-columns: 1fr;
-    gap: 3px;
-  }
+@keyframes helpFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
 }
+
+/* Group eyebrow */
+.help-group {
+  display: flex; align-items: center; gap: 12px;
+  margin: 34px 0 4px; padding-top: 4px;
+}
+.help-group:first-child { margin-top: 28px; }
+.help-g-eyebrow {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--text-muted); white-space: nowrap;
+}
+.help-g-line { flex: 1; height: 1px; background: rgba(255, 255, 255, 0.06); }
+.help-g-icon { color: var(--text-muted); display: inline-flex; }
+
+/* Step rows */
+.help-steps-list { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; }
+.help-step {
+  display: grid; grid-template-columns: 34px 1fr; align-items: start; gap: 16px;
+  padding: 16px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.help-step:first-child { border-top: none; }
+
+/* Number badge */
+.help-num {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid rgba(173, 198, 255, 0.2);
+}
+
+/* Icon tile */
+.help-s-ico {
+  width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid rgba(173, 198, 255, 0.2);
+}
+.help-s-ico svg { width: 16px; height: 16px; }
+
+.help-s-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.help-s-desc {
+  margin-top: 4px;
+  font-size: 13.5px; color: var(--text-muted); line-height: 1.55;
+}
+.help-s-desc strong { color: var(--text-sub); font-weight: 600; }
+
+/* Inline code chip */
+.help-chip {
+  font-family: var(--tb-font-mono);
+  font-size: 12px; color: var(--text-sub);
+  background: var(--bg-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px; padding: 1px 6px; white-space: nowrap;
+}
+
+/* Path card */
+.help-path-card {
+  margin-top: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  background: var(--surface-section-gradient);
+  padding: 22px;
+}
+.help-p-intro {
+  font-size: 13.5px; color: var(--text-muted); line-height: 1.6; max-width: 640px;
+}
+.help-p-intro strong { color: var(--text-sub); font-weight: 600; }
+.help-path-ex { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+.help-pe {
+  display: grid; grid-template-columns: 150px 1fr; gap: 16px; align-items: center;
+  padding: 14px 16px; border-radius: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.help-pe-label { font-size: 12px; font-weight: 600; color: var(--text-sub); }
+.help-pe-sub { margin-top: 3px; font-size: 11.5px; color: var(--text-muted); line-height: 1.45; }
+.help-pe code {
+  font-family: var(--tb-font-mono); font-size: 13px;
+  color: var(--accent-success); word-break: break-all;
+  background: none; padding: 0; border-radius: 0;
+}
+
+/* Note callout */
+.help-note {
+  display: flex; gap: 12px; align-items: flex-start;
+  margin-top: 16px; padding: 16px 18px; border-radius: 14px;
+  background: var(--accent-dim);
+  border: 1px solid rgba(173, 198, 255, 0.2);
+}
+.help-note-ico { color: var(--accent); flex-shrink: 0; margin-top: 1px; }
+.help-note-ico svg { width: 17px; height: 17px; }
+.help-note-text { font-size: 13.5px; color: var(--text-sub); line-height: 1.6; margin: 0; }
+.help-note-text strong { color: var(--text); font-weight: 600; }
 code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px; }
 
 #import-name-input:focus { box-shadow: 0 0 0 1px var(--border-focus); background: var(--bg-hover); }
@@ -5688,7 +5677,6 @@ tr.track-selected .track-check-indicator {
 .gd-btn .tb-status-icon,
 .gear-hdr-btn .tb-status-icon,
 .btn-secondary .tb-status-icon,
-.help-device-status .tb-status-icon,
 .health-dap-row .tb-status-icon {
   width: 13px;
   height: 13px;
@@ -5698,7 +5686,6 @@ tr.track-selected .track-check-indicator {
 .btn-secondary .tb-status-icon {
   margin-right: 2px;
 }
-.help-device-status,
 .health-dap-row span:last-child {
   display: inline-flex;
   align-items: center;
@@ -7718,10 +7705,6 @@ tbody tr:hover {
 .modal-wide {
   width: min(760px, 95vw);
 }
-.modal-help {
-  width: min(760px, 95vw);
-  max-height: 88vh;
-}
 .modal h3 {
   font-size: 18px;
   margin: 0;
@@ -7812,15 +7795,12 @@ tbody tr:hover {
   font-size: 13px;
   line-height: 1.5;
 }
-.modal:not(.modal-wide):not(.modal-help) {
+.modal:not(.modal-wide) {
   width: min(440px, 92vw);
   padding: 22px 22px 18px;
 }
 .modal-wide {
   width: min(760px, 92vw);
-}
-.modal-help {
-  width: min(740px, 92vw);
 }
 .modal-head {
   margin-bottom: 14px;
@@ -8665,45 +8645,6 @@ tbody tr:hover {
   width: 150px;
 }
 
-/* Help modal content cadence */
-#help-modal .help-intro {
-  margin-bottom: 14px;
-  line-height: 1.55;
-}
-#help-modal .help-section {
-  padding: 14px 0;
-}
-#help-modal .help-section + .help-section {
-  padding-top: 14px;
-  border-top: 1px solid rgba(173, 198, 255, 0.1);
-}
-#help-modal .help-section-title {
-  margin-bottom: 8px;
-  font-size: 13px;
-  letter-spacing: 0;
-}
-#help-modal .help-grid {
-  gap: 9px;
-}
-#help-modal .help-card {
-  padding: 11px;
-}
-#help-modal .help-card p {
-  font-size: 12.5px;
-}
-#help-modal .help-steps li {
-  font-size: 12.5px;
-}
-#help-modal .help-device-list {
-  gap: 8px;
-}
-#help-modal .help-device-card {
-  padding: 9px 10px;
-}
-#help-modal .help-code {
-  padding: 7px 10px;
-}
-
 /* ML playlist generator modal */
 .ml-gen-modal {
   width: min(880px, 94vw);
@@ -9113,8 +9054,7 @@ tbody tr:hover {
 }
 
 @media (max-width: 900px) {
-  .modal-wide,
-  .modal-help {
+  .modal-wide {
     width: min(96vw, 760px);
   }
   .modal .settings-row {
@@ -22827,7 +22767,7 @@ body.is-col-resizing {
   backdrop-filter: none !important;
 }
 
-.tb-modal-overlay > .modal:not(.modal-wide):not(.modal-help) { --tb-modal-w: 560px; }
+.tb-modal-overlay > .modal:not(.modal-wide) { --tb-modal-w: 560px; }
 .tb-modal-overlay > .modal-wide { --tb-modal-w: 620px; }
 #import-modal .modal { --tb-modal-w: 760px; }
 #ml-gen-modal .modal,
@@ -23015,7 +22955,6 @@ body.is-col-resizing {
 .tb-modal-overlay .tb-modal-body,
 .tb-modal-overlay .sync-modal-body,
 .tb-modal-overlay .ml-gen-scroll,
-.tb-modal-overlay .modal-help .help-content,
 .tb-modal-overlay .artist-image-modal-body,
 .tb-modal-overlay .problem-tracks-modal-body,
 .tb-modal-overlay #genre-distribution-modal-body,

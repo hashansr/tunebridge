@@ -5069,7 +5069,6 @@ function _closeModalOverlaysForNavigation() {
   if (_isOverlayOpen('peq-modal')) closePeqModal();
   if (_isOverlayOpen('rename-modal')) document.getElementById('rename-modal').style.display = 'none';
   if (_isOverlayOpen('settings-modal')) closeSettings();
-  if (_isOverlayOpen('help-modal')) closeHelp();
   if (_isOverlayOpen('sync-modal')) closeSyncModal();
   if (_isOverlayOpen('import-modal')) closeImportModal(true);
   if (_isOverlayOpen('sr-modal')) srClose(true);
@@ -7699,7 +7698,7 @@ async function openImportWizard() {
 
 function showViewEl(name) {
   closeLyricsView();
-  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync', 'search', 'organizer'];
+  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync', 'search', 'organizer', 'help'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (!el) return;
@@ -8056,62 +8055,18 @@ async function saveSettings() {
 }
 
 /* ── Help modal ─────────────────────────────────────────────────────── */
-async function renderHelpCenter() {
-  const [settings, daps] = await Promise.all([
-    api('/settings').catch(() => ({})),
-    api('/daps').catch(() => []),
-  ]);
-
-  const libraryRoot = settings.library_path || '/Volumes/Storage/Music/FLAC';
-  const dataDir = settings._data_dir || 'App data folder';
-  const libraryRootEl = document.getElementById('help-library-root');
-  const dataDirEl = document.getElementById('help-data-dir');
-  if (libraryRootEl) libraryRootEl.textContent = libraryRoot;
-  if (dataDirEl) dataDirEl.textContent = dataDir;
-
-  const listEl = document.getElementById('help-device-list');
-  if (!listEl) return;
-  if (!daps.length) {
-    listEl.innerHTML = `
-      <div class="help-device-empty">
-        No devices are configured yet. Add one in <strong>Gear</strong> when you are ready to sync music, playlists, or PEQ files.
-      </div>
-    `;
-    return;
-  }
-
-  listEl.innerHTML = daps.map(dap => {
-    const mounted = !!dap.mounted;
-    const mountPath = dap.mount_path || 'Not set';
-    const musicRoot = dap.music_root || 'Music';
-    const exportFolder = dap.export_folder || 'Playlists';
-    const pathTemplate = dap.path_template || '%artist%/%album%/%track%/%title%';
-    const pathPrefix = dap.path_prefix || 'No prefix';
-    const peqFolder = dap.peq_folder || 'PEQ';
-    return `
-      <div class="help-device-card">
-        <div class="help-device-top">
-          <div class="help-device-name">${esc(dap.name || 'Unnamed device')}</div>
-          <span class="help-device-status ${mounted ? 'ok' : 'warn'}">${mounted ? 'Connected' : 'Not connected'}</span>
-        </div>
-        <div class="help-device-kv"><span>Mount path</span><code>${esc(mountPath)}</code></div>
-        <div class="help-device-kv"><span>Music folder</span><code>${esc(musicRoot)}</code></div>
-        <div class="help-device-kv"><span>Playlist folder</span><code>${esc(exportFolder)}</code></div>
-        <div class="help-device-kv"><span>File naming</span><code>${esc(pathTemplate)}</code></div>
-        <div class="help-device-kv"><span>Path prefix</span><code>${esc(pathPrefix)}</code></div>
-        <div class="help-device-kv"><span>PEQ folder</span><code>${esc(peqFolder)}</code></div>
-      </div>
-    `;
-  }).join('');
-}
-
 function showHelp() {
-  closeLyricsView();
-  document.getElementById('help-modal').style.display = 'flex';
-  renderHelpCenter();
+  showView('help');
 }
 function closeHelp() {
-  document.getElementById('help-modal').style.display = 'none';
+  if (_navHistory.length === 0) { showView('home'); return; }
+  navBack();
+}
+function switchHelpTab(tabName) {
+  document.querySelectorAll('.help-tab-btn').forEach(t =>
+    t.classList.toggle('active', t.dataset.helpTab === tabName));
+  document.querySelectorAll('.help-panel').forEach(p =>
+    p.classList.toggle('active', p.dataset.helpPanel === tabName));
 }
 
 /* ── Import ─────────────────────────────────────────────────────────── */
@@ -19744,6 +19699,7 @@ const App = {
   openImportWizard,
   showHelp,
   closeHelp,
+  switchHelpTab,
   triggerImport,
   handleImportFile,
   closeImportModal,

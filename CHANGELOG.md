@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Help Center converted from a modal to a full Settings-style page with three tabs (Getting started, How it works, Paths & files); reachable via the ? button, closeable via back orb
 
 ## v0.513-rc.240626-0741 · 2026-06-24
 
