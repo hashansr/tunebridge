@@ -8089,7 +8089,7 @@ async function renderHelpCenter() {
       <div class="help-device-card">
         <div class="help-device-top">
           <div class="help-device-name">${esc(dap.name || 'Unnamed device')}</div>
-          <span class="help-device-status ${mounted ? 'ok' : 'warn'}">${mounted ? 'Connected' : 'Not connected'}</span>
+          <span class="help-device-status ${mounted ? 'ok' : 'warn'}">${mounted ? 'Connected' : `${_STATUS_ICON_NOT_CONNECTED} Not connected`}</span>
         </div>
         <p class="help-device-kv"><strong>Mount path:</strong> <code>${esc(mountPath)}</code></p>
         <p class="help-device-kv"><strong>Export folder:</strong> <code>${esc(exportFolder)}</code></p>
@@ -10667,8 +10667,9 @@ const _GEAR_ICON_COMPARE = `<svg width="13" height="12" viewBox="0 0 14 12" fill
 const _GEAR_ICON_WARN = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 4.3 2.7 17.2A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`;
 const _GEAR_ICON_WARN_LARGE = `<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 4.3 2.7 17.2A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`;
 const _GEAR_ICON_CHECK_LARGE = `<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
-const _GEAR_ICON_REFRESH = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M3 12A9 9 0 0 1 18.5 5.8"/><path d="M18.5 2v3.8H22"/><path d="M5.5 22v-3.8H2"/></svg>`;
-const _GEAR_ICON_UNLINK = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/><line x1="2" y1="2" x2="22" y2="22"/></svg>`;
+const _STATUS_ICON_NOT_CONNECTED = `<span class="tb-status-icon tb-status-icon-not-connected" aria-hidden="true"></span>`;
+const _STATUS_ICON_CHECK = (animated = false) => `<span class="tb-status-icon tb-status-icon-check${animated ? ' tb-status-icon--spin' : ''}" aria-hidden="true"></span>`;
+const _CHECK_STATUS_BUTTON_HTML = (checking = false) => `<span class="gd-btn-icon">${_STATUS_ICON_CHECK(checking)}</span>${checking ? 'Checking...' : 'Check status'}`;
 
 function _prettyModelLabel(model) {
   const raw = String(model || 'generic').trim();
@@ -10810,11 +10811,11 @@ async function loadDapsView() {
         <div class="gear-row-sub">Digital audio player</div>
       </div>
       <div class="gear-row-status">
-        <span class="gear-status-dot ${connDot}"></span>
+        ${connOn ? `<span class="gear-status-dot ${connDot}"></span>` : _STATUS_ICON_NOT_CONNECTED}
         <span class="gear-status-label ${connLbl}">${connTxt}</span>
       </div>
       <div class="gear-row-status">
-        <span class="gear-status-dot ${_dotClass(musicStatus.className)}"></span>
+        ${musicStatus.text === 'Check status' ? _STATUS_ICON_CHECK(true) : `<span class="gear-status-dot ${_dotClass(musicStatus.className)}"></span>`}
         <span class="gear-status-label ${_lblClass(musicStatus.className)}">${esc(musicTxt)}</span>
       </div>
       <div class="gear-row-status">
@@ -11113,7 +11114,7 @@ async function checkAllDapSyncStatus() {
   const btn = document.getElementById('gear-check-sync-btn');
   if (btn) {
     btn.disabled = true;
-    btn.textContent = 'Checking…';
+    btn.innerHTML = `${_STATUS_ICON_CHECK(true)} Checking...`;
   }
   try {
     const res = await api('/daps/sync-status/check', { method: 'POST' });
@@ -11133,7 +11134,7 @@ async function checkAllDapSyncStatus() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = 'Check Sync Status';
+      btn.innerHTML = `${_STATUS_ICON_CHECK()} Check sync status`;
     }
   }
 }
@@ -11142,7 +11143,7 @@ async function checkDapSyncStatus(did) {
   const btn = document.getElementById('dap-check-sync-btn');
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = `<span class="gd-btn-icon">${_GEAR_ICON_REFRESH}</span>Checking...`;
+    btn.innerHTML = _CHECK_STATUS_BUTTON_HTML(true);
   }
   try {
     await api(`/daps/${did}/sync-status/check`, { method: 'POST' });
@@ -11156,7 +11157,7 @@ async function checkDapSyncStatus(did) {
     toast('Sync status check failed: ' + e.message);
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = `<span class="gd-btn-icon">${_GEAR_ICON_REFRESH}</span>Check status`;
+      btn.innerHTML = _CHECK_STATUS_BUTTON_HTML(false);
     }
   }
 }
@@ -11206,7 +11207,7 @@ function _renderDapPlaylistTable(dap, playlists) {
         <td class="dap-pl-export-cell">
           <button class="gd-row-action ${actionTone}" ${canExport ? '' : 'disabled title="Device not connected"'}
             onclick="App.dapExportPlaylist('${dap.id}','${pl.id}',this)">
-            ${dap.mounted ? 'Sync' : 'Not Connected'}
+            ${dap.mounted ? 'Sync' : `${_STATUS_ICON_NOT_CONNECTED} Not Connected`}
           </button>
         </td>
       </tr>
@@ -11293,10 +11294,10 @@ async function showDapDetail(id) {
 
       <div class="gd-actions-row">
         <button id="dap-check-sync-btn" class="gd-btn primary" onclick="App.checkDapSyncStatus('${dap.id}')" ${syncState === 'checking' ? 'disabled' : ''}>
-          <span class="gd-btn-icon">${_GEAR_ICON_REFRESH}</span>${syncState === 'checking' ? 'Checking...' : 'Check status'}
+          ${_CHECK_STATUS_BUTTON_HTML(syncState === 'checking')}
         </button>
         <button id="eject-btn-${dap.id}" class="gd-btn" data-restore-label="Unmount" ${dap.mounted ? `onclick="App.ejectDap('${dap.id}', '${esc(dap.name)}')"` : 'disabled title="Device not connected"'}>
-          <span class="gd-btn-icon">${dap.mounted ? _GEAR_ICON_EJECT : _GEAR_ICON_UNLINK}</span>${dap.mounted ? 'Unmount' : 'Not Connected'}
+          <span class="gd-btn-icon">${dap.mounted ? _GEAR_ICON_EJECT : _STATUS_ICON_NOT_CONNECTED}</span>${dap.mounted ? 'Unmount' : 'Not Connected'}
         </button>
         <span class="gd-last-sync-inline">Last synced ${esc(lastSyncLabel)}</span>
       </div>
@@ -15794,14 +15795,14 @@ function setHealthSectionExpanded(expanded) {
 async function runHealthCheck() {
   setHealthSectionExpanded(true);
   const btn = document.getElementById('health-check-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = `${_STATUS_ICON_CHECK(true)} Checking...`; }
 
   let data;
   try {
     data = await api('/health/status');
   } catch(e) {
     toast('Health check failed: ' + e.message);
-    if (btn) { btn.disabled = false; btn.textContent = 'Run health check'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = `${_STATUS_ICON_CHECK()} Run health check`; }
     return;
   }
 
@@ -15887,7 +15888,7 @@ async function runHealthCheck() {
         ? (d.mount_match_method === 'identity' ? 'ok' : 'warn')
         : 'err';
       const statusText = !d.mounted
-        ? 'Not connected'
+        ? `${_STATUS_ICON_NOT_CONNECTED} Not connected`
         : (d.mount_match_method === 'identity'
           ? 'Connected'
           : 'Connected (path-only, unverified)');
@@ -15950,7 +15951,7 @@ async function runHealthCheck() {
   const lastRun = document.getElementById('health-last-run');
   if (lastRun) lastRun.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
 
-  if (btn) { btn.disabled = false; btn.textContent = 'Run health check'; }
+  if (btn) { btn.disabled = false; btn.innerHTML = `${_STATUS_ICON_CHECK()} Run health check`; }
 }
 
 /* ── Baselines (FR tuning targets) ─────────────────────────────────── */
@@ -16992,11 +16993,7 @@ function _showDupDapNotConnected(msg) {
   document.getElementById('dup-groups-list').innerHTML = `
     <div class="dup-not-connected-state">
       <div class="dup-nc-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path d="M18 8h1a4 4 0 0 1 0 8h-1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-          <path d="M6 8H5a4 4 0 0 0 0 8h1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-          <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="2 2"/>
-        </svg>
+        ${_STATUS_ICON_NOT_CONNECTED}
       </div>
       <p class="dup-nc-title">DAP not connected</p>
       <p class="dup-nc-sub">${esc(msg || 'Connect your DAP and try again')}</p>

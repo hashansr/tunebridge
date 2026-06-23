@@ -3671,6 +3671,32 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; backgrou
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
+.tb-status-icon {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  background-color: currentColor;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+.tb-status-icon-not-connected {
+  mask-image: url('/icons/not-connected.svg');
+  -webkit-mask-image: url('/icons/not-connected.svg');
+}
+.tb-status-icon-check {
+  mask-image: url('/icons/check-status.svg');
+  -webkit-mask-image: url('/icons/check-status.svg');
+}
+.tb-status-icon--spin {
+  animation: spin 1s linear infinite;
+  transform-origin: 50% 50%;
+}
+
 #tracks-table-wrap {
   overflow-x: auto;
   border-radius: 16px;
@@ -5583,6 +5609,28 @@ tr.track-selected .track-check-indicator {
   width: 11px;
   height: 11px;
 }
+.gd-btn .tb-status-icon,
+.gear-hdr-btn .tb-status-icon,
+.btn-secondary .tb-status-icon,
+.help-device-status .tb-status-icon,
+.health-dap-row .tb-status-icon {
+  width: 13px;
+  height: 13px;
+}
+.gd-btn .tb-status-icon,
+.gear-hdr-btn .tb-status-icon,
+.btn-secondary .tb-status-icon {
+  margin-right: 2px;
+}
+.help-device-status,
+.health-dap-row span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.health-dap-row span:last-child {
+  min-width: 0;
+}
 .gear-sync-ok    {
   background: rgba(83,225,111,.14);
   color: #8ef0a1;
@@ -6832,6 +6880,14 @@ tr:hover .fav-toggle,
   align-items: center;
   gap: 7px;
   min-width: 0;
+}
+.gear-row-status .tb-status-icon {
+  color: var(--text-muted);
+  opacity: 0.72;
+}
+.gear-row-status .tb-status-icon-check {
+  color: var(--accent-warning);
+  opacity: 0.92;
 }
 .gear-status-label {
   font-size: 12.5px;
@@ -18635,6 +18691,7 @@ tr:hover .track-edit-btn:hover {
 
 .dup-not-connected-state { text-align: center; padding: 48px 0; }
 .dup-nc-icon { width: 52px; height: 52px; background: var(--surface-3); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; color: var(--text-muted); }
+.dup-nc-icon .tb-status-icon { width: 25px; height: 25px; }
 .dup-nc-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0 0 6px; }
 .dup-nc-sub { font-size: 13px; color: var(--text-muted); margin: 0 0 16px; }
 
@@ -25037,6 +25094,10 @@ body.is-col-resizing {
   line-height: 1;
   white-space: nowrap;
 }
+.gd-status-chip .tb-status-icon {
+  width: 12px;
+  height: 12px;
+}
 .gd-status-chip.warn {
   color: var(--accent-warning);
   border-color: rgba(240, 180, 41, 0.45);
@@ -25055,6 +25116,10 @@ body.is-col-resizing {
   font-size: 11.5px;
   font-weight: 500;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .gd-row-action.warn {
