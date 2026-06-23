@@ -10775,6 +10775,7 @@ async function loadDapsView() {
     const musicStatus    = _dapMusicStatus(summary, !!d.mounted);
     const playlistStatus = _dapPlaylistStatus(d, summary);
     const connOn         = !!d.mounted;
+    const isChecking     = String(summary.sync_status_state || 'estimated') === 'checking';
 
     const _dotClass = cls => cls === 'gear-sync-ok' ? 'gear-dot--on' : cls === 'gear-sync-stale' ? 'gear-dot--warn' : 'gear-dot--off';
     const _lblClass = cls => cls === 'gear-sync-ok' ? 'gear-status-label--on' : cls === 'gear-sync-stale' ? 'gear-status-label--warn' : 'gear-status-label--off';
@@ -10815,7 +10816,7 @@ async function loadDapsView() {
         <span class="gear-status-label ${connLbl}">${connTxt}</span>
       </div>
       <div class="gear-row-status">
-        ${musicStatus.text === 'Check status' ? _STATUS_ICON_CHECK(true) : `<span class="gear-status-dot ${_dotClass(musicStatus.className)}"></span>`}
+        ${musicStatus.text === 'Check status' ? _STATUS_ICON_CHECK(isChecking) : `<span class="gear-status-dot ${_dotClass(musicStatus.className)}"></span>`}
         <span class="gear-status-label ${_lblClass(musicStatus.className)}">${esc(musicTxt)}</span>
       </div>
       <div class="gear-row-status">
