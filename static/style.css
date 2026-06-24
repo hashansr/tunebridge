@@ -3265,17 +3265,6 @@ tbody tr:hover .remove-btn { opacity: 1; }
   max-width: 1040px;
   margin-bottom: 28px;
 }
-.help-back-orb {
-  width: 36px; height: 36px; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: transparent;
-  border: 1px solid rgba(65, 71, 85, 0.32);
-  color: var(--text-sub);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-  margin-bottom: 20px;
-}
-.help-back-orb:hover { background: var(--bg-elevated); color: var(--text); }
 .help-page-title {
   margin: 0 0 12px;
   font-size: 36px;
@@ -3285,7 +3274,7 @@ tbody tr:hover .remove-btn { opacity: 1; }
   color: var(--text);
 }
 .help-lede {
-  font-size: 15px;
+  font-size: 13px;
   color: var(--text-sub);
   line-height: 1.6;
   max-width: 660px;
@@ -3303,10 +3292,13 @@ tbody tr:hover .remove-btn { opacity: 1; }
   gap: 30px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   margin-bottom: 4px;
+  background: transparent;
+  padding: 0;
+  overflow: visible;
 }
 .help-tab-btn {
   appearance: none; background: none; border: none; cursor: pointer;
-  font-family: inherit; font-size: 14px; font-weight: 600;
+  font-family: inherit; font-size: 13px; font-weight: 600;
   color: var(--text-muted);
   padding: 0 1px 13px;
   position: relative;
@@ -3375,10 +3367,10 @@ tbody tr:hover .remove-btn { opacity: 1; }
 }
 .help-s-ico svg { width: 16px; height: 16px; }
 
-.help-s-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.help-s-title { font-size: 13px; font-weight: 600; color: var(--text); }
 .help-s-desc {
   margin-top: 4px;
-  font-size: 13.5px; color: var(--text-muted); line-height: 1.55;
+  font-size: 13px; color: var(--text-muted); line-height: 1.55;
 }
 .help-s-desc strong { color: var(--text-sub); font-weight: 600; }
 
@@ -3400,7 +3392,7 @@ tbody tr:hover .remove-btn { opacity: 1; }
   padding: 22px;
 }
 .help-p-intro {
-  font-size: 13.5px; color: var(--text-muted); line-height: 1.6; max-width: 640px;
+  font-size: 13px; color: var(--text-muted); line-height: 1.6; max-width: 640px;
 }
 .help-p-intro strong { color: var(--text-sub); font-weight: 600; }
 .help-path-ex { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
@@ -3427,7 +3419,7 @@ tbody tr:hover .remove-btn { opacity: 1; }
 }
 .help-note-ico { color: var(--accent); flex-shrink: 0; margin-top: 1px; }
 .help-note-ico svg { width: 17px; height: 17px; }
-.help-note-text { font-size: 13.5px; color: var(--text-sub); line-height: 1.6; margin: 0; }
+.help-note-text { font-size: 13px; color: var(--text-sub); line-height: 1.6; margin: 0; }
 .help-note-text strong { color: var(--text); font-weight: 600; }
 code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; background: var(--bg-elevated); padding: 1px 5px; border-radius: 4px; }
 

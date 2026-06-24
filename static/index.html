@@ -2398,9 +2398,6 @@
       <!-- Help page -->
       <div id="view-help" class="view" style="display:none">
         <div class="help-page-header">
-          <button class="help-back-orb" onclick="App.closeHelp()" aria-label="Back">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-          </button>
           <h2 class="help-page-title">Help Center</h2>
           <p class="help-lede">TuneBridge keeps your local music, playlists, devices, gear, and listening history in one place. Start with your <strong>library</strong>, then add a <strong>device</strong> when you are ready to sync.</p>
         </div>
@@ -2519,33 +2516,93 @@
 
           <!-- ── PATHS & FILES ──────────────────────────── -->
           <div class="help-panel" data-help-panel="paths">
+
+            <!-- Key locations -->
             <div class="help-group">
-              <span class="help-g-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
-              <span class="help-g-eyebrow">How playlist paths resolve</span>
+              <span class="help-g-eyebrow">Key locations</span>
+              <span class="help-g-line"></span>
+            </div>
+            <div class="help-steps-list">
+              <div class="help-step">
+                <span class="help-s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
+                <div>
+                  <div class="help-s-title">Music library</div>
+                  <div class="help-s-desc">The folder TuneBridge scans. Configurable in <strong>Settings → Library</strong>. Expected file structure: <span class="help-chip">Artist/Album/NN. Title.flac</span>. Artwork is cached separately and does not need to live in the music folder.</div>
+                </div>
+              </div>
+              <div class="help-step">
+                <span class="help-s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></span>
+                <div>
+                  <div class="help-s-title">App data</div>
+                  <div class="help-s-desc">Playlists, devices, IEMs, settings, and cached artwork are stored separately from your music. When running as the Mac app, data lives at <span class="help-chip">~/Library/Application Support/TuneBridge/</span>. In dev mode it uses the <span class="help-chip">data/</span> folder next to <span class="help-chip">app.py</span>.</div>
+                </div>
+              </div>
+              <div class="help-step">
+                <span class="help-s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></span>
+                <div>
+                  <div class="help-s-title">Playlist exports</div>
+                  <div class="help-s-desc">When you export or sync a playlist, TuneBridge writes a <span class="help-chip">.m3u</span> file to the device. The exact folder depends on the device profile. Each line in the file is a path to one track, relative to the playlist file or the device root.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- How paths work -->
+            <div class="help-group">
+              <span class="help-g-eyebrow">How playlist paths work</span>
               <span class="help-g-line"></span>
             </div>
             <div class="help-path-card">
-              <p class="help-p-intro">Most devices expect playlist entries to point from the playlist file to the music file. If a playlist opens but tracks will not play, check the <strong>music folder</strong> and <strong>path prefix</strong> in that device profile.</p>
+              <p class="help-p-intro">Each line in a <span class="help-chip">.m3u</span> file points from the playlist file to a music file. The right format depends on where the device expects the playlist and where the music lives. If a playlist opens on a device but tracks will not play, the <strong>path prefix</strong> in the device profile is usually the cause.</p>
               <div class="help-path-ex">
                 <div class="help-pe">
                   <div>
                     <div class="help-pe-label">No prefix</div>
-                    <div class="help-pe-sub">Playlist and music share a parent folder</div>
+                    <div class="help-pe-sub">Playlist and music share the same root</div>
                   </div>
                   <code>Music/Artist/Album/01. Track Title.flac</code>
                 </div>
                 <div class="help-pe">
                   <div>
                     <div class="help-pe-label">Prefix <span class="help-chip">..</span></div>
-                    <div class="help-pe-sub">Playlist sits one level deeper than music</div>
+                    <div class="help-pe-sub">Playlist is one folder deeper than music</div>
                   </div>
                   <code>../Music/Artist/Album/01. Track Title.flac</code>
                 </div>
               </div>
             </div>
+
+            <!-- Per-device export folders -->
+            <div class="help-group" style="margin-top: 28px;">
+              <span class="help-g-eyebrow">Export folders by device</span>
+              <span class="help-g-line"></span>
+            </div>
+            <div class="help-steps-list">
+              <div class="help-step">
+                <span class="help-s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span>
+                <div>
+                  <div class="help-s-title">Poweramp / FiiO Player</div>
+                  <div class="help-s-desc">Playlists write to <span class="help-chip">Playlists/</span> at the SD card root. Paths inside use no prefix: <span class="help-chip">Music/Artist/Album/track.flac</span>. Poweramp displays the filename as the playlist name, so rename inside the app if needed.</div>
+                </div>
+              </div>
+              <div class="help-step">
+                <span class="help-s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span>
+                <div>
+                  <div class="help-s-title">AP80 Pro Max</div>
+                  <div class="help-s-desc">Playlists write to <span class="help-chip">playlist_data/</span> at the SD card root, which is one level below where Music lives. Paths use the <span class="help-chip">..</span> prefix: <span class="help-chip">../Music/Artist/Album/track.flac</span>. Important: the device must create <span class="help-chip">playlist_data/</span> itself first. Save a dummy playlist natively on the AP80, then let TuneBridge take over.</div>
+                </div>
+              </div>
+              <div class="help-step">
+                <span class="help-s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span>
+                <div>
+                  <div class="help-s-title">HiBy OS</div>
+                  <div class="help-s-desc">Playlists write to <span class="help-chip">HiByMusic/Playlist/</span>. Paths use no prefix and are relative to the storage root. Applies to HiBy R5, R6, and similar players.</div>
+                </div>
+              </div>
+            </div>
+
             <div class="help-note">
               <span class="help-note-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
-              <p class="help-note-text">Still stuck? Open the device in <strong>Gear</strong> and run a test sync of a single playlist. TuneBridge shows the exact resolved path it writes for each track.</p>
+              <p class="help-note-text">Still stuck? Open the device in <strong>Gear</strong>, check the <strong>Export folder</strong> and <strong>Prefix</strong> fields, then try exporting a single-track playlist to see the exact path TuneBridge writes.</p>
             </div>
           </div>
         </div>
