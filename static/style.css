@@ -26255,17 +26255,67 @@ body.is-col-resizing {
   flex-direction: column;
   align-items: center;
   width: 100%;
-  padding: 40px 0 32px;
+  padding: 32px 0 100px;
+  position: relative;
 }
 
-/* 3-D perspective stage */
+/* Left/right gradient fades — pointer-events:none so clicks still work */
+.coverflow-shell::before,
+.coverflow-shell::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10%;
+  pointer-events: none;
+  z-index: 25;
+}
+.coverflow-shell::before {
+  left: 0;
+  background: linear-gradient(to right, var(--bg-base, #0d0d10) 0%, transparent 100%);
+}
+.coverflow-shell::after {
+  right: 0;
+  background: linear-gradient(to left, var(--bg-base, #0d0d10) 0%, transparent 100%);
+}
+
+/* Dark cinematic shelf behind the cards */
+.coverflow-stage-wrap {
+  position: relative;
+  width: 100%;
+  /* tall enough to show cards + reflections without clipping */
+  padding: 20px 0 0;
+  background: radial-gradient(ellipse 70% 120% at 50% 38%,
+    rgba(24,24,36,0.88) 0%,
+    rgba(8,8,12,0.96) 68%
+  );
+  /* overflow:hidden prevents horizontal scrollbar from side cards */
+  overflow: hidden;
+}
+
+/* Subtle glass-shelf line below the cards */
+.coverflow-stage-wrap::after {
+  content: '';
+  position: absolute;
+  /* sits at bottom of stage area, above the reflection zone */
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(to right,
+    transparent, rgba(255,255,255,0.07) 22%, rgba(255,255,255,0.07) 78%, transparent);
+  pointer-events: none;
+}
+
+/* 3-D perspective stage — tighter camera for dramatic depth */
 .coverflow-stage {
   position: relative;
   width: 100%;
-  height: 280px;
-  perspective: 1400px;
-  perspective-origin: 50% 38%;
+  height: 300px;
+  perspective: 920px;
+  perspective-origin: 50% 52%;
   overflow: visible;
+  pointer-events: none; /* shell receives wheel */
 }
 
 /* Individual album card */
@@ -26273,24 +26323,27 @@ body.is-col-resizing {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 220px;
-  height: 220px;
-  margin: -110px 0 0 -110px;
+  width: 230px;
+  height: 230px;
+  margin: -115px 0 0 -115px;
   cursor: pointer;
   will-change: transform, opacity;
-  transition: transform 0.32s cubic-bezier(.25,.46,.45,.94),
-              opacity   0.28s cubic-bezier(.25,.46,.45,.94);
+  /* snappy physical feel */
+  transition: transform 0.22s cubic-bezier(.33,1,.68,1),
+              opacity   0.16s ease;
   user-select: none;
+  pointer-events: auto;
 }
 
 .cf-card-img-wrap {
   width: 100%;
   height: 100%;
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 18px 56px rgba(0,0,0,0.72), 0 4px 12px rgba(0,0,0,0.4);
-  -webkit-box-reflect: below 6px
-    linear-gradient(transparent 52%, rgba(0,0,0,0.42) 100%);
+  box-shadow: 0 14px 44px rgba(0,0,0,0.75), 0 2px 8px rgba(0,0,0,0.5);
+  /* WebKit reflection — the defining iPod detail */
+  -webkit-box-reflect: below 3px
+    -webkit-linear-gradient(transparent 52%, rgba(0,0,0,0.58) 100%);
 }
 
 .cf-card img {
@@ -26298,47 +26351,61 @@ body.is-col-resizing {
   height: 100%;
   object-fit: cover;
   display: block;
-  border-radius: 10px;
+  border-radius: 8px;
   pointer-events: none;
-  background: var(--bg-elevated);
+  background: #191922;
 }
 
-/* Center card subtle glow ring */
+/* Center card: pushed forward, brighter, glowing */
+.cf-card.cf-center {
+  z-index: 20 !important;
+}
 .cf-card.cf-center .cf-card-img-wrap {
   box-shadow:
-    0 24px 72px rgba(0,0,0,0.85),
-    0 0 0 1.5px rgba(173,198,255,0.20),
-    0 4px 12px rgba(0,0,0,0.55);
+    0 0 0 1px rgba(255,255,255,0.14),
+    0 32px 90px rgba(0,0,0,0.92),
+    0 0 100px rgba(50,70,180,0.28);
 }
 
-/* Meta text below stage (clears the reflection) */
+/* Ambient glow halo behind the center card */
+.cf-card.cf-center::before {
+  content: '';
+  position: absolute;
+  inset: -28px;
+  background: radial-gradient(ellipse 90% 70% at 50% 45%,
+    rgba(70,90,200,0.22) 0%, transparent 68%);
+  pointer-events: none;
+  z-index: -1;
+  border-radius: 50%;
+}
+
+/* Meta text — sits in the reflection space below the shelf */
 .coverflow-meta {
-  margin-top: 64px;
+  margin-top: 24px;
   text-align: center;
-  min-height: 60px;
+  min-height: 56px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
+  padding: 0 16px;
 }
 
 .cf-meta-title {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: -0.015em;
-  max-width: 540px;
+  letter-spacing: -0.018em;
+  max-width: 600px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: opacity 0.18s;
 }
 
 .cf-meta-artist {
   font-size: 13px;
   color: var(--accent);
   font-weight: 500;
-  transition: opacity 0.18s;
 }
 
 .cf-meta-year {
@@ -26352,27 +26419,27 @@ body.is-col-resizing {
 .coverflow-controls {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-top: 22px;
-  width: min(520px, 80%);
+  gap: 12px;
+  margin-top: 18px;
+  width: min(480px, 78%);
 }
 
 .cf-nav-btn {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.11);
   color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, transform 0.12s;
+  transition: background 0.14s, color 0.14s, transform 0.10s;
 }
-.cf-nav-btn:hover  { background: rgba(255,255,255,0.13); color: var(--text-primary); }
-.cf-nav-btn:active { transform: scale(0.90); }
+.cf-nav-btn:hover  { background: rgba(255,255,255,0.14); color: var(--text-primary); }
+.cf-nav-btn:active { transform: scale(0.88); }
 
 /* Thin Apple-style scrubber */
 .cf-scrubber-wrap { flex: 1; }
@@ -26380,19 +26447,19 @@ body.is-col-resizing {
 .cf-scrubber {
   -webkit-appearance: none;
   width: 100%;
-  height: 3px;
+  height: 2px;
   border-radius: 2px;
-  background: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.14);
   outline: none;
   cursor: pointer;
 }
 .cf-scrubber::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 1px 5px rgba(0,0,0,0.55);
-  transition: transform 0.12s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.6);
+  transition: transform 0.10s;
 }
-.cf-scrubber::-webkit-slider-thumb:active { transform: scale(1.28); }
+.cf-scrubber::-webkit-slider-thumb:active { transform: scale(1.3); }

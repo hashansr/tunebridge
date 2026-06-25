@@ -2347,6 +2347,14 @@ function _renderAlbumGridBatches(grid, rows, artistFilter, token, start = 0) {
 
 /* ── Cover Flow ─────────────────────────────────────────────────────────── */
 
+// Classic coverflow transform parameters (index = abs(offset from center), capped at 5)
+const _CF_TX   = [0,  200,  252,  296,  334,  368];   // X translate px
+const _CF_TZ   = [60,  -15,  -40,  -65,  -88, -110];  // Z depth px (center pushes toward viewer)
+const _CF_RY   = [0,    70,   73,   75,   77,   78];   // rotateY deg
+const _CF_SC   = [1,  0.87, 0.77, 0.68,  0.60, 0.53]; // scale
+const _CF_OP   = [1,  0.90, 0.76, 0.60,  0.44, 0.28]; // opacity
+let   _cfRafId = null;
+
 function renderCoverflow(albums, _artistFilter) {
   _cfAlbums = albums;
   _cfIndex  = 0;
@@ -2374,10 +2382,21 @@ function renderCoverflow(albums, _artistFilter) {
   _cfAttachEvents();
   _cfPositionCards();
   _cfUpdateMeta();
+  _cfPreload(_cfIndex);
+}
+
+// RAF-batched position update — call this instead of _cfPositionCards directly
+function _cfScheduleUpdate() {
+  if (_cfRafId) return;
+  _cfRafId = requestAnimationFrame(() => {
+    _cfRafId = null;
+    _cfPositionCards();
+    _cfUpdateMeta();
+  });
 }
 
 function _cfPositionCards() {
-  const half = Math.floor(CF_WINDOW / 2);  // 6
+  const half = Math.floor(CF_WINDOW / 2);
 
   _cfPool.forEach((card, p) => {
     const albumIdx = (_cfIndex - half) + p;
@@ -2385,74 +2404,56 @@ function _cfPositionCards() {
     card.classList.toggle('cf-center', isCenter);
 
     if (albumIdx < 0 || albumIdx >= _cfAlbums.length) {
-      card.style.opacity        = '0';
-      card.style.pointerEvents  = 'none';
-      card.style.zIndex         = '0';
-      card.style.transform      = 'translateX(0) translateZ(-400px)';
+      card.style.cssText = 'opacity:0;pointer-events:none;z-index:0;transform:translateX(0) translateZ(-500px)';
       return;
     }
 
     const offset = albumIdx - _cfIndex;
     const abs    = Math.abs(offset);
-    const sign   = Math.sign(offset) || 1;
+    const sign   = offset < 0 ? -1 : 1;
 
-    // Load art only for visible range + 1 ahead
+    // Swap in the right image (smaller size for side cards = faster)
     const img = card.querySelector('img');
-    if (abs <= CF_VISIBLE + 1) {
+    if (abs <= CF_VISIBLE) {
       const al  = _cfAlbums[albumIdx];
-      const src = al.artwork_key
-        ? `/api/artwork/${al.artwork_key}?size=400`
-        : '';
-      if (img.dataset.src !== src) {
-        img.dataset.src = src;
-        img.src = src;
-      }
+      const sz  = abs === 0 ? 300 : 200;
+      const src = al.artwork_key ? `/api/artwork/${al.artwork_key}?size=${sz}` : '';
+      if (img.dataset.src !== src) { img.dataset.src = src; img.src = src; }
     } else {
-      img.src = '';
-      img.dataset.src = '';
+      if (img.dataset.src) { img.dataset.src = ''; img.src = ''; }
     }
 
     if (abs > CF_VISIBLE) {
-      card.style.opacity       = '0';
-      card.style.pointerEvents = 'none';
-      card.style.zIndex        = '0';
-      // Keep off-screen transform for smooth entrance
-      const tx = sign * (220 + (abs - 1) * 65);
-      card.style.transform = `translateX(${tx}px) translateZ(-180px) rotateY(${-sign * 64}deg) scale(0.55)`;
+      // Parked just off-screen so they slide in cleanly when navigated to
+      const parkTx = sign * (_CF_TX[CF_VISIBLE] + 60);
+      card.style.cssText = `opacity:0;pointer-events:none;z-index:0;transform:translateX(${parkTx}px) translateZ(${_CF_TZ[CF_VISIBLE]}px) rotateY(${-sign * _CF_RY[CF_VISIBLE]}deg) scale(${_CF_SC[CF_VISIBLE]})`;
       return;
     }
 
-    card.style.pointerEvents = 'auto';
+    const i   = Math.min(abs, _CF_TX.length - 1);
+    const tx  = sign * _CF_TX[i];
+    const tz  = _CF_TZ[i];
+    const ry  = -sign * _CF_RY[i];
+    const sc  = _CF_SC[i];
+    const op  = _CF_OP[i];
+    const zi  = 20 - abs * 2;
 
-    let tx, tz, ry, scale, opacity, zIndex;
-
-    if (offset === 0) {
-      tx      = 0;
-      tz      = 150;
-      ry      = 0;
-      scale   = 1;
-      opacity = 1;
-      zIndex  = 20;
-    } else if (abs === 1) {
-      tx      = sign * 220;
-      tz      = 0;
-      ry      = -sign * 58;
-      scale   = 0.88;
-      opacity = 0.92;
-      zIndex  = 18;
-    } else {
-      tx      = sign * (220 + (abs - 1) * 65);
-      tz      = -abs * 20;
-      ry      = -sign * 63;
-      scale   = Math.max(0.60, 0.88 - (abs - 1) * 0.07);
-      opacity = Math.max(0.18, 0.92 - abs * 0.18);
-      zIndex  = Math.max(1, 20 - abs * 2);
-    }
-
-    card.style.transform = `translateX(${tx}px) translateZ(${tz}px) rotateY(${ry}deg) scale(${scale})`;
-    card.style.opacity   = String(opacity);
-    card.style.zIndex    = String(zIndex);
+    card.style.cssText = `opacity:${op};pointer-events:auto;z-index:${zi};transform:translateX(${tx}px) translateZ(${tz}px) rotateY(${ry}deg) scale(${sc})`;
   });
+}
+
+// Eagerly load images around the current index so navigation feels instant
+function _cfPreload(centerIdx) {
+  const range = CF_VISIBLE + 3;
+  for (let i = centerIdx - range; i <= centerIdx + range; i++) {
+    if (i < 0 || i >= _cfAlbums.length) continue;
+    const al = _cfAlbums[i];
+    if (!al.artwork_key) continue;
+    const abs = Math.abs(i - centerIdx);
+    const sz  = abs === 0 ? 300 : 200;
+    const img = new Image();
+    img.src = `/api/artwork/${al.artwork_key}?size=${sz}`;
+  }
 }
 
 function _cfUpdateMeta() {
@@ -2477,8 +2478,8 @@ function _cfCardClick(p) {
   } else {
     _cfIndex = albumIdx;
     document.getElementById('cf-scrubber').value = _cfIndex;
-    _cfPositionCards();
-    _cfUpdateMeta();
+    _cfScheduleUpdate();
+    _cfPreload(_cfIndex);
   }
 }
 
@@ -2487,14 +2488,14 @@ function cfNavigate(delta) {
   if (newIdx === _cfIndex) return;
   _cfIndex = newIdx;
   document.getElementById('cf-scrubber').value = _cfIndex;
-  _cfPositionCards();
-  _cfUpdateMeta();
+  _cfScheduleUpdate();
+  _cfPreload(_cfIndex);
 }
 
 function cfSeek(val) {
   _cfIndex = Math.max(0, Math.min(_cfAlbums.length - 1, +val));
-  _cfPositionCards();
-  _cfUpdateMeta();
+  _cfScheduleUpdate();
+  _cfPreload(_cfIndex);
 }
 
 function _cfAttachEvents() {
@@ -2509,17 +2510,17 @@ function _cfAttachEvents() {
     }
   });
 
-  // Wheel on the stage — one scroll tick = one album step
-  const stage = document.getElementById('coverflow-stage');
-  if (stage) {
-    let _cfWheelTimer = null;
-    stage.addEventListener('wheel', e => {
+  // Wheel on the shell (large fixed element) — immediate, throttled by cooldown
+  const shell = document.getElementById('coverflow-shell');
+  if (shell) {
+    let _cfWheelCooldown = false;
+    shell.addEventListener('wheel', e => {
       if (!_coverflowEnabled) return;
       e.preventDefault();
-      clearTimeout(_cfWheelTimer);
-      _cfWheelTimer = setTimeout(() => {
-        cfNavigate(e.deltaY > 0 ? 1 : -1);
-      }, 40);
+      if (_cfWheelCooldown) return;
+      _cfWheelCooldown = true;
+      cfNavigate(e.deltaY > 0 ? 1 : -1);
+      setTimeout(() => { _cfWheelCooldown = false; }, 150);
     }, { passive: false });
   }
 }
