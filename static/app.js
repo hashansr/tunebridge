@@ -94,9 +94,10 @@ let _coverflowEnabled = false;
 let _cfAlbums        = [];
 let _cfIndex         = 0;
 let _cfPool          = [];
+let _cfCardByIndex   = new Map();
 let _cfEventsAttached = false;
 const CF_WINDOW  = 13;  // DOM node pool size (center ± 6)
-const CF_VISIBLE = 5;   // cards visible on each side
+const CF_VISIBLE = 6;   // cards visible on each side
 
 /* ── API helpers ────────────────────────────────────────────────────── */
 /* ── Utilities ──────────────────────────────────────────────────────── */
@@ -2386,6 +2387,7 @@ function renderCoverflow(albums, _artistFilter) {
   // Build fixed pool of DOM nodes
   if (flow) flow.innerHTML = '';
   _cfPool = [];
+  _cfCardByIndex = new Map();
   for (let p = 0; p < CF_WINDOW; p++) {
     const card = document.createElement('div');
     card.className = 'cf-card';
@@ -2401,11 +2403,9 @@ function renderCoverflow(albums, _artistFilter) {
         <img class="cf-refl-img" decoding="async" alt="">
         <div class="cf-refl-placeholder" aria-hidden="true"><div class="cf-initials"></div></div>
       </div>`;
-    const captured = p;
-    card.addEventListener('click', () => _cfCardClick(captured));
+    card.addEventListener('click', () => _cfCardClick(card));
     card.addEventListener('dblclick', () => {
-      const half = Math.floor(CF_WINDOW / 2);
-      const albumIdx = (_cfIndex - half) + captured;
+      const albumIdx = Number(card.dataset.albumIdx);
       if (albumIdx === _cfIndex) cfPlayCurrent();
     });
     flow?.appendChild(card);
@@ -2439,19 +2439,27 @@ function _cfMetrics() {
 }
 
 function _cfPositionCards() {
-  const half = Math.floor(CF_WINDOW / 2);
   const m = _cfMetrics();
   const baseScale = m.size / 300;
+  const first = Math.max(0, _cfIndex - CF_VISIBLE);
+  const last = Math.min(_cfAlbums.length - 1, _cfIndex + CF_VISIBLE);
+  const visible = new Set();
+  for (let albumIdx = first; albumIdx <= last; albumIdx++) visible.add(albumIdx);
 
-  _cfPool.forEach((card, p) => {
-    const albumIdx = (_cfIndex - half) + p;
+  for (const [albumIdx, card] of _cfCardByIndex.entries()) {
+    if (!visible.has(albumIdx)) {
+      _cfCardByIndex.delete(albumIdx);
+      card.style.cssText = 'opacity:0;pointer-events:none;z-index:0;transform:translateX(0) translateZ(-500px)';
+      card.classList.remove('cf-center', 'has-art');
+      delete card.dataset.albumIdx;
+    }
+  }
+
+  for (let albumIdx = first; albumIdx <= last; albumIdx++) {
+    const card = _cfGetCardForAlbum(albumIdx);
+    if (!card) continue;
     const isCenter = albumIdx === _cfIndex;
     card.classList.toggle('cf-center', isCenter);
-
-    if (albumIdx < 0 || albumIdx >= _cfAlbums.length) {
-      card.style.cssText = 'opacity:0;pointer-events:none;z-index:0;transform:translateX(0) translateZ(-500px)';
-      return;
-    }
 
     const d = albumIdx - _cfIndex;
     const abs = Math.abs(d);
@@ -2474,8 +2482,18 @@ function _cfPositionCards() {
     if (dim) dim.style.opacity = d === 0 ? 0 : Math.min(0.62, 0.16 + (abs - 1) * 0.13);
     const refl = card.querySelector('.cf-cover-refl');
     if (refl) refl.style.opacity = d === 0 ? 0.5 : Math.max(0, 0.34 - (abs - 1) * 0.085);
-  });
+  }
   _cfRefreshPlayOrb();
+}
+
+function _cfGetCardForAlbum(albumIdx) {
+  const existing = _cfCardByIndex.get(albumIdx);
+  if (existing) return existing;
+  const used = new Set(_cfCardByIndex.values());
+  const card = _cfPool.find(el => !used.has(el));
+  if (!card) return null;
+  _cfCardByIndex.set(albumIdx, card);
+  return card;
 }
 
 function _cfBindCard(card, al, albumIdx, abs) {
@@ -2553,10 +2571,9 @@ function _cfSelect(i, opts = {}) {
   _cfPreload(_cfIndex);
 }
 
-function _cfCardClick(p) {
+function _cfCardClick(card) {
   if (_cfDragMoved) return;
-  const half     = Math.floor(CF_WINDOW / 2);
-  const albumIdx = (_cfIndex - half) + p;
+  const albumIdx = Number(card?.dataset?.albumIdx);
   if (albumIdx < 0 || albumIdx >= _cfAlbums.length) return;
 
   if (albumIdx === _cfIndex) {
@@ -2834,6 +2851,7 @@ function renderAlbumsGrid() {
   const albumsAlphaBar = document.getElementById('albums-alpha-bar');
   const albumsEmpty = document.getElementById('albums-empty');
   const { artistFilter, base, filtered, presentLetters } = _filteredAlbumsData();
+  document.getElementById('view-albums')?.classList.toggle('coverflow-active', !!_coverflowEnabled);
   const hasFilters = !!(state.albumSearch || state.albumAlpha);
 
   if (countEl) {

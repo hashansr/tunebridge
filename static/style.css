@@ -26251,13 +26251,19 @@ body.is-col-resizing {
 /* ── Cover Flow ─────────────────────────────────────────────────────────── */
 
 .coverflow-shell {
-  width: 100%;
+  width: calc(100% + (var(--page-content-inset) * 2));
   min-height: clamp(460px, calc(100vh - 245px), 680px);
+  margin-left: calc(-1 * var(--page-content-inset));
+  margin-right: calc(-1 * var(--page-content-inset));
   position: relative;
   overflow: hidden;
   background:
     radial-gradient(120% 80% at 50% -8%, rgba(173,198,255,0.05), transparent 55%),
     #0c0c0e;
+}
+
+#view-albums.coverflow-active {
+  background: #0c0c0e;
 }
 
 .coverflow-stage {
@@ -26399,6 +26405,8 @@ body.is-col-resizing {
 
 .cf-cover-refl {
   top: 100%;
+  bottom: auto;
+  height: 100%;
   transform: scaleY(-1);
   -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0) 52%);
   mask-image: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0) 52%);
