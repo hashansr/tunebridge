@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.523-rc.260626-0748 · 2026-06-26
 - Change: Cover Flow v2 -- tighter iPod-style card stacking, steeper perspective angles, Play and Info action buttons replace nav arrows, track count in album meta, double-click to play, Enter plays album, missing-artwork placeholder
 
 ## v0.522-rc.250626-2221 · 2026-06-25
