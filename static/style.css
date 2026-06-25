@@ -26247,3 +26247,152 @@ body.is-col-resizing {
   color: var(--text-muted) !important;
   border: 1px solid rgba(255,255,255,.08) !important;
 }
+
+/* ── Cover Flow ─────────────────────────────────────────────────────────── */
+
+.coverflow-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: 40px 0 32px;
+}
+
+/* 3-D perspective stage */
+.coverflow-stage {
+  position: relative;
+  width: 100%;
+  height: 280px;
+  perspective: 1400px;
+  perspective-origin: 50% 38%;
+  overflow: visible;
+}
+
+/* Individual album card */
+.cf-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 220px;
+  height: 220px;
+  margin: -110px 0 0 -110px;
+  cursor: pointer;
+  will-change: transform, opacity;
+  transition: transform 0.32s cubic-bezier(.25,.46,.45,.94),
+              opacity   0.28s cubic-bezier(.25,.46,.45,.94);
+  user-select: none;
+}
+
+.cf-card-img-wrap {
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 18px 56px rgba(0,0,0,0.72), 0 4px 12px rgba(0,0,0,0.4);
+  -webkit-box-reflect: below 6px
+    linear-gradient(transparent 52%, rgba(0,0,0,0.42) 100%);
+}
+
+.cf-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 10px;
+  pointer-events: none;
+  background: var(--bg-elevated);
+}
+
+/* Center card subtle glow ring */
+.cf-card.cf-center .cf-card-img-wrap {
+  box-shadow:
+    0 24px 72px rgba(0,0,0,0.85),
+    0 0 0 1.5px rgba(173,198,255,0.20),
+    0 4px 12px rgba(0,0,0,0.55);
+}
+
+/* Meta text below stage (clears the reflection) */
+.coverflow-meta {
+  margin-top: 64px;
+  text-align: center;
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.cf-meta-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.015em;
+  max-width: 540px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.18s;
+}
+
+.cf-meta-artist {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 500;
+  transition: opacity 0.18s;
+}
+
+.cf-meta-year {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+
+/* Navigation controls row */
+.coverflow-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 22px;
+  width: min(520px, 80%);
+}
+
+.cf-nav-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.12s;
+}
+.cf-nav-btn:hover  { background: rgba(255,255,255,0.13); color: var(--text-primary); }
+.cf-nav-btn:active { transform: scale(0.90); }
+
+/* Thin Apple-style scrubber */
+.cf-scrubber-wrap { flex: 1; }
+
+.cf-scrubber {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.12);
+  outline: none;
+  cursor: pointer;
+}
+.cf-scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 5px rgba(0,0,0,0.55);
+  transition: transform 0.12s;
+}
+.cf-scrubber::-webkit-slider-thumb:active { transform: scale(1.28); }

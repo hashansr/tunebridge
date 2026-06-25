@@ -264,6 +264,8 @@ DEFAULT_SETTINGS = {
     'replay_gain_prompted': False,  # True once user has seen the first-run tagging modal
     # Library Organizer
     'default_organizer_template': '',   # empty = use ORGANIZER_DEFAULT_TEMPLATE constant
+    # Appearance
+    'coverflow_enabled': False,         # replace albums grid with classic Cover Flow carousel
 }
 
 _DEFAULT_GEAR_PROFILES = {

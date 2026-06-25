@@ -89,6 +89,15 @@ let _dapPlaylistSort = { col: 'name', order: 'asc' };
 let _navHistory = [];             // back stack: array of nav snapshots
 let _isNavigatingBack = false;    // suppresses history push during back/forward restoration
 
+// Cover Flow
+let _coverflowEnabled = false;
+let _cfAlbums        = [];
+let _cfIndex         = 0;
+let _cfPool          = [];
+let _cfEventsAttached = false;
+const CF_WINDOW  = 13;  // DOM node pool size (center ± 6)
+const CF_VISIBLE = 5;   // cards visible on each side
+
 /* ── API helpers ────────────────────────────────────────────────────── */
 /* ── Utilities ──────────────────────────────────────────────────────── */
 function _debounce(fn, ms) {
@@ -2301,7 +2310,7 @@ function _albumCardHtml(al, artistFilter, index = 0) {
   const eager = index < 24;
   const img = al.artwork_key
     ? `<img src="${artworkUrl(al.artwork_key)}" width="160" height="160" style="border-radius:6px;object-fit:cover" loading="${eager ? 'eager' : 'lazy'}" decoding="async" ${eager ? 'fetchpriority="high"' : ''} onerror="this.style.display='none'" />`
-    : coverPlaceholder('album', 160, '6px');
+    : coverPlaceholder('album', 160, '10px', true);
   return `
     <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
       <div class="album-thumb">
@@ -2335,6 +2344,201 @@ function _renderAlbumGridBatches(grid, rows, artistFilter, token, start = 0) {
     _scheduleIdle(() => _renderAlbumGridBatches(grid, rows, artistFilter, token, end));
   }
 }
+
+/* ── Cover Flow ─────────────────────────────────────────────────────────── */
+
+function renderCoverflow(albums, _artistFilter) {
+  _cfAlbums = albums;
+  _cfIndex  = 0;
+
+  const stage    = document.getElementById('coverflow-stage');
+  const scrubber = document.getElementById('cf-scrubber');
+  if (!stage) return;
+
+  scrubber.max   = Math.max(0, albums.length - 1);
+  scrubber.value = 0;
+
+  // Build fixed pool of DOM nodes
+  stage.innerHTML = '';
+  _cfPool = [];
+  for (let p = 0; p < CF_WINDOW; p++) {
+    const card = document.createElement('div');
+    card.className = 'cf-card';
+    card.innerHTML = '<div class="cf-card-img-wrap"><img decoding="async" alt=""></div>';
+    const captured = p;
+    card.addEventListener('click', () => _cfCardClick(captured));
+    stage.appendChild(card);
+    _cfPool.push(card);
+  }
+
+  _cfAttachEvents();
+  _cfPositionCards();
+  _cfUpdateMeta();
+}
+
+function _cfPositionCards() {
+  const half = Math.floor(CF_WINDOW / 2);  // 6
+
+  _cfPool.forEach((card, p) => {
+    const albumIdx = (_cfIndex - half) + p;
+    const isCenter = albumIdx === _cfIndex;
+    card.classList.toggle('cf-center', isCenter);
+
+    if (albumIdx < 0 || albumIdx >= _cfAlbums.length) {
+      card.style.opacity        = '0';
+      card.style.pointerEvents  = 'none';
+      card.style.zIndex         = '0';
+      card.style.transform      = 'translateX(0) translateZ(-400px)';
+      return;
+    }
+
+    const offset = albumIdx - _cfIndex;
+    const abs    = Math.abs(offset);
+    const sign   = Math.sign(offset) || 1;
+
+    // Load art only for visible range + 1 ahead
+    const img = card.querySelector('img');
+    if (abs <= CF_VISIBLE + 1) {
+      const al  = _cfAlbums[albumIdx];
+      const src = al.artwork_key
+        ? `/api/artwork/${al.artwork_key}?size=400`
+        : '';
+      if (img.dataset.src !== src) {
+        img.dataset.src = src;
+        img.src = src;
+      }
+    } else {
+      img.src = '';
+      img.dataset.src = '';
+    }
+
+    if (abs > CF_VISIBLE) {
+      card.style.opacity       = '0';
+      card.style.pointerEvents = 'none';
+      card.style.zIndex        = '0';
+      // Keep off-screen transform for smooth entrance
+      const tx = sign * (220 + (abs - 1) * 65);
+      card.style.transform = `translateX(${tx}px) translateZ(-180px) rotateY(${-sign * 64}deg) scale(0.55)`;
+      return;
+    }
+
+    card.style.pointerEvents = 'auto';
+
+    let tx, tz, ry, scale, opacity, zIndex;
+
+    if (offset === 0) {
+      tx      = 0;
+      tz      = 150;
+      ry      = 0;
+      scale   = 1;
+      opacity = 1;
+      zIndex  = 20;
+    } else if (abs === 1) {
+      tx      = sign * 220;
+      tz      = 0;
+      ry      = -sign * 58;
+      scale   = 0.88;
+      opacity = 0.92;
+      zIndex  = 18;
+    } else {
+      tx      = sign * (220 + (abs - 1) * 65);
+      tz      = -abs * 20;
+      ry      = -sign * 63;
+      scale   = Math.max(0.60, 0.88 - (abs - 1) * 0.07);
+      opacity = Math.max(0.18, 0.92 - abs * 0.18);
+      zIndex  = Math.max(1, 20 - abs * 2);
+    }
+
+    card.style.transform = `translateX(${tx}px) translateZ(${tz}px) rotateY(${ry}deg) scale(${scale})`;
+    card.style.opacity   = String(opacity);
+    card.style.zIndex    = String(zIndex);
+  });
+}
+
+function _cfUpdateMeta() {
+  const al = _cfAlbums[_cfIndex];
+  if (!al) return;
+  const titleEl  = document.getElementById('cf-title');
+  const artistEl = document.getElementById('cf-artist');
+  const yearEl   = document.getElementById('cf-year');
+  if (titleEl)  titleEl.textContent  = al.name   || '';
+  if (artistEl) artistEl.textContent = al.artist  || '';
+  if (yearEl)   yearEl.textContent   = al.year ? String(al.year) : '';
+}
+
+function _cfCardClick(p) {
+  const half     = Math.floor(CF_WINDOW / 2);
+  const albumIdx = (_cfIndex - half) + p;
+  if (albumIdx < 0 || albumIdx >= _cfAlbums.length) return;
+
+  if (albumIdx === _cfIndex) {
+    const al = _cfAlbums[_cfIndex];
+    if (al) showAlbum(al.artist, al.name);
+  } else {
+    _cfIndex = albumIdx;
+    document.getElementById('cf-scrubber').value = _cfIndex;
+    _cfPositionCards();
+    _cfUpdateMeta();
+  }
+}
+
+function cfNavigate(delta) {
+  const newIdx = Math.max(0, Math.min(_cfAlbums.length - 1, _cfIndex + delta));
+  if (newIdx === _cfIndex) return;
+  _cfIndex = newIdx;
+  document.getElementById('cf-scrubber').value = _cfIndex;
+  _cfPositionCards();
+  _cfUpdateMeta();
+}
+
+function cfSeek(val) {
+  _cfIndex = Math.max(0, Math.min(_cfAlbums.length - 1, +val));
+  _cfPositionCards();
+  _cfUpdateMeta();
+}
+
+function _cfAttachEvents() {
+  if (_cfEventsAttached) return;
+  _cfEventsAttached = true;
+
+  document.addEventListener('keydown', e => {
+    if (state.view !== 'albums' || !_coverflowEnabled) return;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      cfNavigate(e.key === 'ArrowLeft' ? -1 : 1);
+    }
+  });
+
+  // Wheel on the stage — one scroll tick = one album step
+  const stage = document.getElementById('coverflow-stage');
+  if (stage) {
+    let _cfWheelTimer = null;
+    stage.addEventListener('wheel', e => {
+      if (!_coverflowEnabled) return;
+      e.preventDefault();
+      clearTimeout(_cfWheelTimer);
+      _cfWheelTimer = setTimeout(() => {
+        cfNavigate(e.deltaY > 0 ? 1 : -1);
+      }, 40);
+    }, { passive: false });
+  }
+}
+
+async function toggleCoverflow(enabled) {
+  _coverflowEnabled = enabled;
+  _setSettingsToggleState('coverflow-toggle', 'coverflow-toggle-state', enabled);
+  try {
+    await fetch('/api/settings', {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ coverflow_enabled: enabled }),
+      keepalive: true,
+    });
+  } catch (_) {}
+  if (state.view === 'albums') renderAlbumsGrid();
+}
+
+/* ── End Cover Flow ─────────────────────────────────────────────────────── */
 
 function renderAlbumsGrid() {
   const grid = document.getElementById('albums-grid');
@@ -2398,6 +2602,20 @@ function renderAlbumsGrid() {
   }
 
   if (albumsEmpty) albumsEmpty.style.display = 'none';
+
+  // Cover Flow path
+  const cfShell = document.getElementById('coverflow-shell');
+  if (_coverflowEnabled) {
+    if (grid) { grid.innerHTML = ''; grid.style.display = 'none'; }
+    if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
+    if (paginationEl) paginationEl.style.display = 'none';
+    if (albumsAlphaBar) albumsAlphaBar.style.display = 'none';
+    if (cfShell) cfShell.style.display = 'flex';
+    renderCoverflow(filtered, artistFilter);
+    return;
+  }
+  if (cfShell) cfShell.style.display = 'none';
+
   const isList = _collectionLayout('albums').mode === 'list';
   _setCollectionVisibility('albums', grid, listWrap, paginationEl, true);
   if (isList) {
@@ -6130,7 +6348,7 @@ function _renderFavAlbumCards(rows) {
   grid.innerHTML = rows.map(al => `
     <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
       <div class="album-thumb">
-        ${thumbImg(al.artwork_key, 160, '6px', 'album')}
+        ${al.artwork_key ? thumbImg(al.artwork_key, 160, '6px', 'album') : coverPlaceholder('album', 160, '10px', true)}
         <div class="card-thumb-overlay">
           <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
             ${playSvg(15)}
@@ -15249,6 +15467,14 @@ async function loadSettings() {
     }
   } catch (_) {}
 
+  // Cover Flow toggle
+  _coverflowEnabled = !!settings.coverflow_enabled;
+  const cfToggle = document.getElementById('coverflow-toggle');
+  if (cfToggle) {
+    cfToggle.checked = _coverflowEnabled;
+    _setSettingsToggleState('coverflow-toggle', 'coverflow-toggle-state', _coverflowEnabled);
+  }
+
   showSettingsCategory(_activeSettingsCategory || 'library');
   return settings;
 }
@@ -19762,6 +19988,10 @@ const App = {
   toggleTableColumnsPopover,
   setTableColumnVisible,
   moveTableColumn,
+  // Cover Flow
+  cfNavigate,
+  cfSeek,
+  toggleCoverflow,
   // Settings
   loadSettings,
   showSettingsCategory,

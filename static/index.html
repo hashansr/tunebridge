@@ -379,6 +379,30 @@
           <p class="empty-subtitle" id="albums-empty-subtitle">Browse by artist or scan your library.</p>
           <button class="btn-secondary empty-cta" id="albums-empty-cta" style="display:none" onclick="App.clearAlbumSearch()">Clear search</button>
         </div>
+
+        <!-- Cover Flow shell — shown instead of grid when Cover Flow is enabled -->
+        <div id="coverflow-shell" class="coverflow-shell" style="display:none">
+          <div class="coverflow-stage" id="coverflow-stage">
+            <!-- JS populates pool of .cf-card nodes here -->
+          </div>
+          <div class="coverflow-meta" id="coverflow-meta">
+            <div class="cf-meta-title" id="cf-title"></div>
+            <div class="cf-meta-artist" id="cf-artist"></div>
+            <div class="cf-meta-year" id="cf-year"></div>
+          </div>
+          <div class="coverflow-controls">
+            <button class="cf-nav-btn" onclick="App.cfNavigate(-1)" aria-label="Previous album">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+            </button>
+            <div class="cf-scrubber-wrap">
+              <input type="range" id="cf-scrubber" class="cf-scrubber" min="0" step="1" value="0"
+                     oninput="App.cfSeek(+this.value)">
+            </div>
+            <button class="cf-nav-btn" onclick="App.cfNavigate(1)" aria-label="Next album">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div id="view-tracks" class="view" style="display:none">
@@ -1227,6 +1251,27 @@
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                   Report a bug or share feedback
                 </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Appearance section -->
+          <div class="settings-section settings-panel" id="settings-appearance-section" data-settings-panel="app">
+            <div class="settings-group-header">
+              <span>Appearance</span>
+              <i aria-hidden="true"></i>
+            </div>
+            <div class="settings-app-row">
+              <div class="settings-app-main">
+                <div class="settings-app-row-label">Cover Flow</div>
+                <div class="settings-app-row-hint">Browse albums in classic Cover Flow style instead of the grid view.</div>
+              </div>
+              <div class="settings-playback-actions">
+                <label class="settings-toggle">
+                  <input type="checkbox" id="coverflow-toggle" onchange="App.toggleCoverflow(this.checked)">
+                  <span class="settings-toggle-track"></span>
+                  <span class="settings-toggle-state" id="coverflow-toggle-state">Off</span>
+                </label>
               </div>
             </div>
           </div>
