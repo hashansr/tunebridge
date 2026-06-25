@@ -2948,7 +2948,7 @@ function renderAlbumsGrid() {
   document.getElementById('main')?.classList.remove('main-coverflow-active');
   if (cfShell) cfShell.style.display = 'none';
 
-  const isList = !artistFilter && _collectionLayout('albums').mode === 'list';
+  const isList = _collectionLayout('albums').mode === 'list';
   _setCollectionVisibility('albums', grid, listWrap, paginationEl, true);
   if (isList) {
     state._albumRenderToken++;
