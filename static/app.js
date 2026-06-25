@@ -2454,7 +2454,7 @@ function _cfPositionCards() {
     if (!visible.has(albumIdx)) {
       _cfCardByIndex.delete(albumIdx);
       card.style.cssText = 'opacity:0;pointer-events:none;z-index:0;transform:translateX(0) translateZ(-500px)';
-      card.classList.remove('cf-center', 'has-art');
+      card.classList.remove('cf-center', 'has-art', 'has-art-source');
       delete card.dataset.albumIdx;
     }
   }
@@ -2509,8 +2509,8 @@ function _cfBindCard(card, al, albumIdx, abs) {
   const colors = _cfPlaceholderColors(`${al.artist || ''}||${title}`);
   card.style.setProperty('--cf-p1', colors[0]);
   card.style.setProperty('--cf-p2', colors[1]);
-  card.querySelectorAll('.cf-initials').forEach(el => { el.textContent = initials; });
   const src = al.artwork_key ? `/api/artwork/${encodeURIComponent(al.artwork_key)}?size=${abs === 0 ? 300 : 220}` : '';
+  _cfSetPlaceholderNodes(card, !src, initials);
   card.classList.toggle('has-art-source', !!src);
   card.classList.toggle('has-art', !!src);
   [card.querySelector('.cf-art-img'), card.querySelector('.cf-refl-img')].forEach(img => {
@@ -2531,6 +2531,22 @@ function _cfBindCard(card, al, albumIdx, abs) {
     }
     if (src && img.complete && img.naturalWidth > 0) card.classList.add('has-art');
   });
+}
+
+function _cfSetPlaceholderNodes(card, show, initials) {
+  const art = card.querySelector('.cf-cover-art');
+  const refl = card.querySelector('.cf-cover-refl');
+  if (!show) {
+    card.querySelectorAll('.cf-cover-placeholder, .cf-refl-placeholder').forEach(el => el.remove());
+    return;
+  }
+  if (art && !art.querySelector('.cf-cover-placeholder')) {
+    art.insertAdjacentHTML('beforeend', '<div class="cf-cover-placeholder" aria-hidden="true"><div class="cf-initials"></div></div>');
+  }
+  if (refl && !refl.querySelector('.cf-refl-placeholder')) {
+    refl.insertAdjacentHTML('beforeend', '<div class="cf-refl-placeholder" aria-hidden="true"><div class="cf-initials"></div></div>');
+  }
+  card.querySelectorAll('.cf-initials').forEach(el => { el.textContent = initials; });
 }
 
 // Eagerly load images around the current index so navigation feels instant
