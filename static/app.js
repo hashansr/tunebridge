@@ -2376,6 +2376,10 @@ const CF_CTX_ITEMS = [
   ['file', 'Show file location', '<path d="M2 4.5h3.5l1 1.2H12V11H2z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>'],
 ];
 
+function _cfIsActiveAlbumsView() {
+  return state.view === 'albums' && _coverflowEnabled && !state.artist;
+}
+
 function renderCoverflow(albums, _artistFilter) {
   _cfAlbums = albums;
   _cfIndex  = 0;
@@ -2764,7 +2768,7 @@ function _cfAttachEvents() {
   _cfEventsAttached = true;
 
   document.addEventListener('keydown', e => {
-    if (state.view !== 'albums' || !_coverflowEnabled) return;
+    if (!_cfIsActiveAlbumsView()) return;
     if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
     if (e.key === 'ArrowLeft') { e.preventDefault(); cfNavigate(-1); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); cfNavigate(1); }
@@ -2809,7 +2813,7 @@ function _cfAttachEvents() {
   stage.addEventListener('pointercancel', endDrag);
 
   stage.addEventListener('wheel', e => {
-    if (!_coverflowEnabled) return;
+    if (!_cfIsActiveAlbumsView()) return;
     e.preventDefault();
     const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
     _cfWheelAcc += delta;
@@ -2853,8 +2857,9 @@ function renderAlbumsGrid() {
   const albumsAlphaBar = document.getElementById('albums-alpha-bar');
   const albumsEmpty = document.getElementById('albums-empty');
   const { artistFilter, base, filtered, presentLetters } = _filteredAlbumsData();
-  document.getElementById('view-albums')?.classList.toggle('coverflow-active', !!_coverflowEnabled);
-  document.getElementById('main')?.classList.toggle('main-coverflow-active', state.view === 'albums' && !!_coverflowEnabled);
+  const useCoverflow = !!_coverflowEnabled && !artistFilter;
+  document.getElementById('view-albums')?.classList.toggle('coverflow-active', useCoverflow);
+  document.getElementById('main')?.classList.toggle('main-coverflow-active', state.view === 'albums' && useCoverflow);
   const hasFilters = !!(state.albumSearch || state.albumAlpha);
 
   if (countEl) {
@@ -2914,7 +2919,7 @@ function renderAlbumsGrid() {
 
   // Cover Flow path
   const cfShell = document.getElementById('coverflow-shell');
-  if (_coverflowEnabled) {
+  if (useCoverflow) {
     document.getElementById('main')?.classList.add('main-coverflow-active');
     if (grid) { grid.innerHTML = ''; grid.style.display = 'none'; }
     if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
@@ -2927,7 +2932,7 @@ function renderAlbumsGrid() {
   document.getElementById('main')?.classList.remove('main-coverflow-active');
   if (cfShell) cfShell.style.display = 'none';
 
-  const isList = _collectionLayout('albums').mode === 'list';
+  const isList = !artistFilter && _collectionLayout('albums').mode === 'list';
   _setCollectionVisibility('albums', grid, listWrap, paginationEl, true);
   if (isList) {
     state._albumRenderToken++;
@@ -8252,7 +8257,7 @@ function showViewEl(name) {
   if (main) {
     main.classList.toggle('main-home-active', name === 'home');
     main.classList.toggle('main-library-active', name === 'artists' || name === 'albums');
-    main.classList.toggle('main-coverflow-active', name === 'albums' && !!_coverflowEnabled);
+    main.classList.toggle('main-coverflow-active', name === 'albums' && !!_coverflowEnabled && !state.artist);
   }
   document.body.classList.toggle('show-library-scrollbars', ['artists', 'albums', 'songs'].includes(name));
   // Clear right nav slot for non-home views (loadHome repopulates it)
