@@ -26255,95 +26255,90 @@ body.is-col-resizing {
   flex-direction: column;
   align-items: center;
   width: 100%;
-  padding: 32px 0 100px;
+  padding: 20px 0 32px;
   position: relative;
+  background: #080808;
 }
 
-/* Left/right gradient fades — pointer-events:none so clicks still work */
+/* Left/right gradient fades */
 .coverflow-shell::before,
 .coverflow-shell::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 10%;
+  width: 12%;
   pointer-events: none;
   z-index: 25;
 }
 .coverflow-shell::before {
   left: 0;
-  background: linear-gradient(to right, var(--bg-base, #0d0d10) 0%, transparent 100%);
+  background: linear-gradient(to right, #080808 0%, transparent 100%);
 }
 .coverflow-shell::after {
   right: 0;
-  background: linear-gradient(to left, var(--bg-base, #0d0d10) 0%, transparent 100%);
+  background: linear-gradient(to left, #080808 0%, transparent 100%);
 }
 
-/* Dark cinematic shelf behind the cards */
+/* Dark cinematic stage housing */
 .coverflow-stage-wrap {
   position: relative;
   width: 100%;
-  /* tall enough to show cards + reflections without clipping */
-  padding: 20px 0 0;
-  background: radial-gradient(ellipse 70% 120% at 50% 38%,
-    rgba(24,24,36,0.88) 0%,
-    rgba(8,8,12,0.96) 68%
-  );
-  /* overflow:hidden prevents horizontal scrollbar from side cards */
-  overflow: hidden;
+  padding: 12px 0 0;
+  background: #080808;
+  overflow: hidden; /* clips side cards; reflections fit within stage height */
 }
 
-/* Subtle glass-shelf line below the cards */
+/* Glass shelf line between cards and reflection */
 .coverflow-stage-wrap::after {
   content: '';
   position: absolute;
-  /* sits at bottom of stage area, above the reflection zone */
-  bottom: 0;
   left: 0;
   right: 0;
   height: 1px;
+  /* positioned at the card baseline (top + card center height) */
+  top: calc(12px + 40% + 132px); /* padding-top + card center % + half-card */
   background: linear-gradient(to right,
-    transparent, rgba(255,255,255,0.07) 22%, rgba(255,255,255,0.07) 78%, transparent);
+    transparent 5%, rgba(255,255,255,0.08) 25%, rgba(255,255,255,0.08) 75%, transparent 95%);
   pointer-events: none;
 }
 
-/* 3-D perspective stage — tighter camera for dramatic depth */
+/* 3-D perspective stage */
 .coverflow-stage {
   position: relative;
   width: 100%;
-  height: 300px;
-  perspective: 920px;
-  perspective-origin: 50% 52%;
+  height: 370px; /* card area (≈264px) + reflection zone (≈106px); fits 1280×800 app */
+  perspective: 860px;
+  perspective-origin: 50% 40%;
   overflow: visible;
-  pointer-events: none; /* shell receives wheel */
+  pointer-events: none;
 }
 
 /* Individual album card */
 .cf-card {
   position: absolute;
-  top: 50%;
+  top: 40%;          /* card center at 40% of stage → 172px from top */
   left: 50%;
-  width: 230px;
-  height: 230px;
-  margin: -115px 0 0 -115px;
+  width: 264px;
+  height: 264px;
+  margin: -132px 0 0 -132px;
   cursor: pointer;
   will-change: transform, opacity;
-  /* snappy physical feel */
-  transition: transform 0.22s cubic-bezier(.33,1,.68,1),
-              opacity   0.16s ease;
+  transition: transform 0.20s cubic-bezier(.33,1,.68,1),
+              opacity   0.15s ease;
   user-select: none;
   pointer-events: auto;
 }
 
 .cf-card-img-wrap {
+  position: relative;
   width: 100%;
   height: 100%;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 14px 44px rgba(0,0,0,0.75), 0 2px 8px rgba(0,0,0,0.5);
-  /* WebKit reflection — the defining iPod detail */
-  -webkit-box-reflect: below 3px
-    -webkit-linear-gradient(transparent 52%, rgba(0,0,0,0.58) 100%);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.8), 0 2px 8px rgba(0,0,0,0.5);
+  -webkit-box-reflect: below 2px
+    -webkit-linear-gradient(transparent 50%, rgba(0,0,0,0.5) 100%);
 }
 
 .cf-card img {
@@ -26351,52 +26346,68 @@ body.is-col-resizing {
   height: 100%;
   object-fit: cover;
   display: block;
-  border-radius: 8px;
+  border-radius: 10px;
   pointer-events: none;
-  background: #191922;
+  background: #111;
 }
 
-/* Center card: pushed forward, brighter, glowing */
+/* Placeholder for albums without artwork */
+.cf-no-art {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(145deg, #1e1e2e 0%, #111118 100%);
+  border-radius: 10px;
+  align-items: center;
+  justify-content: center;
+  font-size: 72px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.18);
+  letter-spacing: -2px;
+  pointer-events: none;
+}
+
+/* Center card: front-facing, glowing */
 .cf-card.cf-center {
   z-index: 20 !important;
 }
 .cf-card.cf-center .cf-card-img-wrap {
   box-shadow:
-    0 0 0 1px rgba(255,255,255,0.14),
-    0 32px 90px rgba(0,0,0,0.92),
-    0 0 100px rgba(50,70,180,0.28);
+    0 0 0 1px rgba(255,255,255,0.12),
+    0 28px 80px rgba(0,0,0,0.95),
+    0 0 80px rgba(60,80,200,0.22);
 }
 
-/* Ambient glow halo behind the center card */
+/* Ambient glow halo behind center */
 .cf-card.cf-center::before {
   content: '';
   position: absolute;
-  inset: -28px;
-  background: radial-gradient(ellipse 90% 70% at 50% 45%,
-    rgba(70,90,200,0.22) 0%, transparent 68%);
+  inset: -32px;
+  background: radial-gradient(ellipse 80% 65% at 50% 45%,
+    rgba(60,80,200,0.18) 0%, transparent 65%);
   pointer-events: none;
   z-index: -1;
   border-radius: 50%;
 }
 
-/* Meta text — sits in the reflection space below the shelf */
+/* Meta text row */
 .coverflow-meta {
-  margin-top: 24px;
+  margin-top: 14px;
   text-align: center;
-  min-height: 56px;
+  min-height: 52px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 0 16px;
+  gap: 3px;
+  padding: 0 20px;
 }
 
 .cf-meta-title {
   font-size: 18px;
   font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: -0.018em;
-  max-width: 600px;
+  color: #fff;
+  letter-spacing: -0.02em;
+  max-width: 560px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -26410,38 +26421,49 @@ body.is-col-resizing {
 
 .cf-meta-year {
   font-size: 11px;
-  color: var(--text-muted);
+  color: rgba(255,255,255,0.38);
   font-weight: 400;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-/* Navigation controls row */
+/* Controls: Play (left) · scrubber (center) · Info (right) */
 .coverflow-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 18px;
-  width: min(480px, 78%);
+  gap: 14px;
+  margin-top: 12px;
+  width: min(520px, 82%);
 }
 
-.cf-nav-btn {
+.cf-action-btn {
   flex-shrink: 0;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: rgba(255,255,255,0.07);
   border: 1px solid rgba(255,255,255,0.11);
-  color: var(--text-secondary);
+  color: rgba(255,255,255,0.6);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: background 0.14s, color 0.14s, transform 0.10s;
 }
-.cf-nav-btn:hover  { background: rgba(255,255,255,0.14); color: var(--text-primary); }
-.cf-nav-btn:active { transform: scale(0.88); }
+.cf-action-btn:hover  { background: rgba(255,255,255,0.14); color: #fff; }
+.cf-action-btn:active { transform: scale(0.88); }
 
-/* Thin Apple-style scrubber */
+.cf-play-btn {
+  color: var(--accent);
+  border-color: rgba(173,198,255,0.22);
+  background: rgba(173,198,255,0.07);
+}
+.cf-play-btn:hover {
+  background: rgba(173,198,255,0.16);
+  color: var(--accent);
+}
+
+/* Thin position scrubber */
 .cf-scrubber-wrap { flex: 1; }
 
 .cf-scrubber {
@@ -26449,14 +26471,14 @@ body.is-col-resizing {
   width: 100%;
   height: 2px;
   border-radius: 2px;
-  background: rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.12);
   outline: none;
   cursor: pointer;
 }
 .cf-scrubber::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 1px 4px rgba(0,0,0,0.6);

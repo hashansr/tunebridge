@@ -2347,12 +2347,13 @@ function _renderAlbumGridBatches(grid, rows, artistFilter, token, start = 0) {
 
 /* ── Cover Flow ─────────────────────────────────────────────────────────── */
 
-// Classic coverflow transform parameters (index = abs(offset from center), capped at 5)
-const _CF_TX   = [0,  200,  252,  296,  334,  368];   // X translate px
-const _CF_TZ   = [60,  -15,  -40,  -65,  -88, -110];  // Z depth px (center pushes toward viewer)
-const _CF_RY   = [0,    70,   73,   75,   77,   78];   // rotateY deg
-const _CF_SC   = [1,  0.87, 0.77, 0.68,  0.60, 0.53]; // scale
-const _CF_OP   = [1,  0.90, 0.76, 0.60,  0.44, 0.28]; // opacity
+// iPod-style coverflow transforms — offset = abs(distance from center), capped at 5
+// Tighter horizontal stack (TX increments shrink), steep angles, dramatic depth
+const _CF_TX   = [0,  158,  212,  252,  282,  306];   // compressed stack: far cards barely move
+const _CF_TZ   = [82,  -22,  -58,  -88, -112, -132];  // center pushed toward viewer
+const _CF_RY   = [0,    72,   78,   82,   85,   87];   // near-perpendicular for far cards
+const _CF_SC   = [1,  0.84, 0.71, 0.60, 0.51, 0.43];  // aggressive falloff
+const _CF_OP   = [1,  0.88, 0.72, 0.54, 0.37, 0.20];  // fade to near-invisible at edge
 let   _cfRafId = null;
 
 function renderCoverflow(albums, _artistFilter) {
@@ -2372,9 +2373,14 @@ function renderCoverflow(albums, _artistFilter) {
   for (let p = 0; p < CF_WINDOW; p++) {
     const card = document.createElement('div');
     card.className = 'cf-card';
-    card.innerHTML = '<div class="cf-card-img-wrap"><img decoding="async" alt=""></div>';
+    card.innerHTML = '<div class="cf-card-img-wrap"><img decoding="async" alt=""><div class="cf-no-art" aria-hidden="true"></div></div>';
     const captured = p;
     card.addEventListener('click', () => _cfCardClick(captured));
+    card.addEventListener('dblclick', () => {
+      const half = Math.floor(CF_WINDOW / 2);
+      const albumIdx = (_cfIndex - half) + captured;
+      if (albumIdx === _cfIndex) cfPlayCurrent();
+    });
     stage.appendChild(card);
     _cfPool.push(card);
   }
@@ -2413,14 +2419,25 @@ function _cfPositionCards() {
     const sign   = offset < 0 ? -1 : 1;
 
     // Swap in the right image (smaller size for side cards = faster)
-    const img = card.querySelector('img');
+    const img         = card.querySelector('img');
+    const placeholder = card.querySelector('.cf-no-art');
     if (abs <= CF_VISIBLE) {
       const al  = _cfAlbums[albumIdx];
       const sz  = abs === 0 ? 300 : 200;
       const src = al.artwork_key ? `/api/artwork/${al.artwork_key}?size=${sz}` : '';
       if (img.dataset.src !== src) { img.dataset.src = src; img.src = src; }
+      if (placeholder) {
+        if (!al.artwork_key) {
+          const label = (al.name || al.artist || '?').trim()[0].toUpperCase();
+          if (placeholder.textContent !== label) placeholder.textContent = label;
+          placeholder.style.display = 'flex';
+        } else {
+          placeholder.style.display = 'none';
+        }
+      }
     } else {
       if (img.dataset.src) { img.dataset.src = ''; img.src = ''; }
+      if (placeholder) placeholder.style.display = 'none';
     }
 
     if (abs > CF_VISIBLE) {
@@ -2464,7 +2481,15 @@ function _cfUpdateMeta() {
   const yearEl   = document.getElementById('cf-year');
   if (titleEl)  titleEl.textContent  = al.name   || '';
   if (artistEl) artistEl.textContent = al.artist  || '';
-  if (yearEl)   yearEl.textContent   = al.year ? String(al.year) : '';
+  if (yearEl) {
+    const parts = [];
+    if (al.year) parts.push(String(al.year));
+    if (al.track_count) parts.push(`${al.track_count} tracks`);
+    yearEl.textContent = parts.join(' · ');
+  }
+  // Keep scrubber in sync (used when navigated via keyboard/wheel, not seek)
+  const scrubber = document.getElementById('cf-scrubber');
+  if (scrubber) scrubber.value = _cfIndex;
 }
 
 function _cfCardClick(p) {
@@ -2481,6 +2506,19 @@ function _cfCardClick(p) {
     _cfScheduleUpdate();
     _cfPreload(_cfIndex);
   }
+}
+
+function cfPlayCurrent() {
+  const al = _cfAlbums[_cfIndex];
+  if (!al) return;
+  fetch(`/api/library/tracks?artist=${encodeURIComponent(al.artist)}&album=${encodeURIComponent(al.name)}`)
+    .then(r => r.json())
+    .then(tracks => { if (tracks.length) Player.playAll(tracks); });
+}
+
+function cfShowInfo() {
+  const al = _cfAlbums[_cfIndex];
+  if (al) showAlbum(al.artist, al.name);
 }
 
 function cfNavigate(delta) {
@@ -2507,6 +2545,12 @@ function _cfAttachEvents() {
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
       cfNavigate(e.key === 'ArrowLeft' ? -1 : 1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      cfPlayCurrent();
+    } else if (e.key === ' ') {
+      e.preventDefault();
+      Player.togglePlay();
     }
   });
 
@@ -19992,6 +20036,8 @@ const App = {
   // Cover Flow
   cfNavigate,
   cfSeek,
+  cfPlayCurrent,
+  cfShowInfo,
   toggleCoverflow,
   // Settings
   loadSettings,

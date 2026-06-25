@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Cover Flow v2 -- tighter iPod-style card stacking, steeper perspective angles, Play and Info action buttons replace nav arrows, track count in album meta, double-click to play, Enter plays album, missing-artwork placeholder
 
 ## v0.522-rc.250626-2221 · 2026-06-25
 - Add: Cover Flow album browser -- enable in Settings > App to replace the albums grid with a classic 3D carousel with reflections, glow, and smooth navigation; supports keyboard arrows, mouse wheel, and scrubber

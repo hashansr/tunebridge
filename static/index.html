@@ -393,15 +393,15 @@
             <div class="cf-meta-year" id="cf-year"></div>
           </div>
           <div class="coverflow-controls">
-            <button class="cf-nav-btn" onclick="App.cfNavigate(-1)" aria-label="Previous album">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+            <button class="cf-action-btn cf-play-btn" onclick="App.cfPlayCurrent()" aria-label="Play album" title="Play album (Enter)">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
             </button>
             <div class="cf-scrubber-wrap">
               <input type="range" id="cf-scrubber" class="cf-scrubber" min="0" step="1" value="0"
                      oninput="App.cfSeek(+this.value)">
             </div>
-            <button class="cf-nav-btn" onclick="App.cfNavigate(1)" aria-label="Next album">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+            <button class="cf-action-btn cf-info-btn" onclick="App.cfShowInfo()" aria-label="Open album" title="Open album">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
             </button>
           </div>
         </div>
