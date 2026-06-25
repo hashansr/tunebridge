@@ -414,12 +414,12 @@ function coverPlaceholder(kind = 'song', size = 38, rounded = '4px', full = fals
   return `<div class="cover-placeholder cover-placeholder-${validKind}" style="${style}"><img src="/icons/empty-${validKind}.svg" alt="" aria-hidden="true" loading="lazy" /></div>`;
 }
 
-function thumbImg(key, size = 38, rounded = '4px') {
+function thumbImg(key, size = 38, rounded = '4px', fallbackKind = 'song') {
   const url = artworkUrl(key);
   if (url) {
     return `<img src="${url}" width="${size}" height="${size}" style="border-radius:${rounded};object-fit:cover" loading="lazy" onerror="this.style.display='none'" />`;
   }
-  return coverPlaceholder('song', size, rounded);
+  return coverPlaceholder(fallbackKind, size, rounded);
 }
 
 const _ALBUM_HERO_FALLBACK_COLORS = {
@@ -2301,7 +2301,7 @@ function _albumCardHtml(al, artistFilter, index = 0) {
   const eager = index < 24;
   const img = al.artwork_key
     ? `<img src="${artworkUrl(al.artwork_key)}" width="160" height="160" style="border-radius:6px;object-fit:cover" loading="${eager ? 'eager' : 'lazy'}" decoding="async" ${eager ? 'fetchpriority="high"' : ''} onerror="this.style.display='none'" />`
-    : coverPlaceholder('song', 160, '6px');
+    : coverPlaceholder('album', 160, '6px');
   return `
     <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
       <div class="album-thumb">
@@ -6130,7 +6130,7 @@ function _renderFavAlbumCards(rows) {
   grid.innerHTML = rows.map(al => `
     <div class="album-card" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="App.showAlbum(this.dataset.artist, this.dataset.album)" oncontextmenu="event.preventDefault();App.showAlbumCtxMenu(event,this.dataset.artist,this.dataset.album)">
       <div class="album-thumb">
-        ${thumbImg(al.artwork_key, 160, '6px')}
+        ${thumbImg(al.artwork_key, 160, '6px', 'album')}
         <div class="card-thumb-overlay">
           <button class="card-play-btn" data-artist="${esc(al.artist)}" data-album="${esc(al.name)}" onclick="event.stopPropagation();App.playAlbum(this.dataset.artist,this.dataset.album)" title="Play album">
             ${playSvg(15)}
