@@ -2524,6 +2524,7 @@ function _cfBindCard(card, al, albumIdx, abs) {
       if (src) img.src = src;
       else img.removeAttribute('src');
     }
+    if (src && img.complete && img.naturalWidth > 0) card.classList.add('has-art');
   });
 }
 
@@ -2852,6 +2853,7 @@ function renderAlbumsGrid() {
   const albumsEmpty = document.getElementById('albums-empty');
   const { artistFilter, base, filtered, presentLetters } = _filteredAlbumsData();
   document.getElementById('view-albums')?.classList.toggle('coverflow-active', !!_coverflowEnabled);
+  document.getElementById('main')?.classList.toggle('main-coverflow-active', state.view === 'albums' && !!_coverflowEnabled);
   const hasFilters = !!(state.albumSearch || state.albumAlpha);
 
   if (countEl) {
@@ -2912,6 +2914,7 @@ function renderAlbumsGrid() {
   // Cover Flow path
   const cfShell = document.getElementById('coverflow-shell');
   if (_coverflowEnabled) {
+    document.getElementById('main')?.classList.add('main-coverflow-active');
     if (grid) { grid.innerHTML = ''; grid.style.display = 'none'; }
     if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
     if (paginationEl) paginationEl.style.display = 'none';
@@ -2920,6 +2923,7 @@ function renderAlbumsGrid() {
     renderCoverflow(filtered, artistFilter);
     return;
   }
+  document.getElementById('main')?.classList.remove('main-coverflow-active');
   if (cfShell) cfShell.style.display = 'none';
 
   const isList = _collectionLayout('albums').mode === 'list';
@@ -8247,6 +8251,7 @@ function showViewEl(name) {
   if (main) {
     main.classList.toggle('main-home-active', name === 'home');
     main.classList.toggle('main-library-active', name === 'artists' || name === 'albums');
+    main.classList.toggle('main-coverflow-active', name === 'albums' && !!_coverflowEnabled);
   }
   document.body.classList.toggle('show-library-scrollbars', ['artists', 'albums', 'songs'].includes(name));
   // Clear right nav slot for non-home views (loadHome repopulates it)

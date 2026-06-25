@@ -1720,6 +1720,14 @@ h4.settings-subsection-title {
   background: var(--app-page-gradient-library);
 }
 
+#main.main-coverflow-active {
+  background: #0c0c0e;
+}
+
+#main.main-coverflow-active #main-nav-bar {
+  background: #0c0c0e;
+}
+
 #main.main-home-active #main-nav-bar {
   background: transparent;
 }
@@ -26323,10 +26331,13 @@ body.is-col-resizing {
   bottom: 0;
   height: 2px;
   background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
+  z-index: 3;
 }
 
 .cf-art-img,
 .cf-refl-img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -26334,6 +26345,7 @@ body.is-col-resizing {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.22s ease;
+  z-index: 2;
 }
 .cf-card.has-art .cf-art-img,
 .cf-card.has-art .cf-refl-img {
@@ -26344,6 +26356,7 @@ body.is-col-resizing {
 .cf-refl-placeholder {
   position: absolute;
   inset: 0;
+  z-index: 1;
   background:
     radial-gradient(120% 80% at 22% 0%, rgba(173,198,255,0.20), transparent 55%),
     linear-gradient(155deg, var(--cf-p1, #28304a), var(--cf-p2, #111118));
@@ -26360,6 +26373,7 @@ body.is-col-resizing {
 .cf-initials {
   position: absolute;
   inset: 0;
+  z-index: 2;
   align-items: center;
   justify-content: center;
   display: flex;
@@ -26372,7 +26386,7 @@ body.is-col-resizing {
 
 .cf-card.has-art .cf-cover-placeholder,
 .cf-card.has-art .cf-refl-placeholder {
-  opacity: 0;
+  display: none;
 }
 
 .cf-cover-edge,
@@ -26382,6 +26396,7 @@ body.is-col-resizing {
   inset: 0;
   border-radius: 3px;
   pointer-events: none;
+  z-index: 4;
 }
 
 .cf-cover-edge {
