@@ -2505,9 +2505,10 @@ function _cfBindCard(card, al, albumIdx, abs) {
   const colors = _cfPlaceholderColors(`${al.artist || ''}||${title}`);
   card.style.setProperty('--cf-p1', colors[0]);
   card.style.setProperty('--cf-p2', colors[1]);
-  card.classList.remove('has-art');
   card.querySelectorAll('.cf-initials').forEach(el => { el.textContent = initials; });
   const src = al.artwork_key ? `/api/artwork/${encodeURIComponent(al.artwork_key)}?size=${abs === 0 ? 300 : 220}` : '';
+  card.classList.toggle('has-art-source', !!src);
+  card.classList.toggle('has-art', !!src);
   [card.querySelector('.cf-art-img'), card.querySelector('.cf-refl-img')].forEach(img => {
     if (!img) return;
     img.alt = title;
@@ -2516,7 +2517,7 @@ function _cfBindCard(card, al, albumIdx, abs) {
       if (img.dataset.src === src) {
         img.dataset.src = '';
         img.removeAttribute('src');
-        card.classList.remove('has-art');
+        card.classList.remove('has-art', 'has-art-source');
       }
     };
     if (img.dataset.src !== src) {

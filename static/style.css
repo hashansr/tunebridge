@@ -1728,6 +1728,10 @@ h4.settings-subsection-title {
   background: #0c0c0e;
 }
 
+#main.main-coverflow-active #view-albums {
+  background: #0c0c0e;
+}
+
 #main.main-home-active #main-nav-bar {
   background: transparent;
 }
@@ -26265,9 +26269,7 @@ body.is-col-resizing {
   margin-right: calc(-1 * var(--page-content-inset));
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(120% 80% at 50% -8%, rgba(173,198,255,0.05), transparent 55%),
-    #0c0c0e;
+  background: #0c0c0e;
 }
 
 #view-albums.coverflow-active {
@@ -26348,7 +26350,9 @@ body.is-col-resizing {
   z-index: 2;
 }
 .cf-card.has-art .cf-art-img,
-.cf-card.has-art .cf-refl-img {
+.cf-card.has-art .cf-refl-img,
+.cf-card.has-art-source .cf-art-img,
+.cf-card.has-art-source .cf-refl-img {
   opacity: 1;
 }
 
@@ -26385,7 +26389,9 @@ body.is-col-resizing {
 }
 
 .cf-card.has-art .cf-cover-placeholder,
-.cf-card.has-art .cf-refl-placeholder {
+.cf-card.has-art .cf-refl-placeholder,
+.cf-card.has-art-source .cf-cover-placeholder,
+.cf-card.has-art-source .cf-refl-placeholder {
   display: none;
 }
 
