@@ -6533,9 +6533,13 @@ function _homeArtEl(item) {
       : `<img src="${playlistArt}" loading="lazy" onerror="this.style.display='none'" />`;
   }
   const fallbackKind = kind === 'artist' ? 'artist' : (kind === 'album' ? 'album' : 'song');
-  return artworkKey
-    ? `<img src="/api/artwork/${esc(artworkKey)}" loading="lazy" onerror="this.style.display='none'" />`
-    : `<div class="home-card-art-placeholder">${coverPlaceholder(fallbackKind, 56, '14px')}</div>`;
+  if (artworkKey) {
+    return `<img src="/api/artwork/${esc(artworkKey)}" loading="lazy" onerror="this.style.display='none'" />`;
+  }
+  if (fallbackKind === 'album') {
+    return coverPlaceholder('album', 56, '10px', true);
+  }
+  return `<div class="home-card-art-placeholder">${coverPlaceholder(fallbackKind, 56, '14px')}</div>`;
 }
 
 function _homeOnClick(item) {
