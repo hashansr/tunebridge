@@ -382,27 +382,24 @@
 
         <!-- Cover Flow shell — shown instead of grid when Cover Flow is enabled -->
         <div id="coverflow-shell" class="coverflow-shell" style="display:none">
-          <div class="coverflow-stage-wrap">
-            <div class="coverflow-stage" id="coverflow-stage">
-              <!-- JS populates pool of .cf-card nodes here -->
+          <div class="coverflow-stage" id="coverflow-stage" tabindex="0" aria-label="Cover Flow album browser">
+            <div class="coverflow-flow" id="coverflow-flow"></div>
+            <div class="coverflow-details" id="coverflow-details">
+              <div class="cf-meta-title" id="cf-title"></div>
+              <div class="cf-meta-artist" id="cf-artist"></div>
+              <div class="cf-meta-row" id="cf-meta-row"></div>
             </div>
-          </div>
-          <div class="coverflow-meta" id="coverflow-meta">
-            <div class="cf-meta-title" id="cf-title"></div>
-            <div class="cf-meta-artist" id="cf-artist"></div>
-            <div class="cf-meta-year" id="cf-year"></div>
-          </div>
-          <div class="coverflow-controls">
-            <button class="cf-action-btn cf-play-btn" onclick="App.cfPlayCurrent()" aria-label="Play album" title="Play album (Enter)">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-            </button>
-            <div class="cf-scrubber-wrap">
-              <input type="range" id="cf-scrubber" class="cf-scrubber" min="0" step="1" value="0"
-                     oninput="App.cfSeek(+this.value)">
+            <div class="coverflow-stage-ctrl cf-play-orb" id="cf-play-orb">
+              <button class="cf-orb-btn" id="cf-play-btn" onclick="App.cfPlayCurrent(event)" aria-label="Play selected album" title="Play album">
+                <svg class="cf-ico" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>
+              </button>
             </div>
-            <button class="cf-action-btn cf-info-btn" onclick="App.cfShowInfo()" aria-label="Open album" title="Open album">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-            </button>
+            <div class="coverflow-stage-ctrl cf-more-orb">
+              <button class="cf-orb-btn" id="cf-actions-btn" onclick="App.cfOpenActions(event)" aria-label="Album actions" title="Album actions">
+                <svg class="cf-ico" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
+              </button>
+            </div>
+            <div class="coverflow-ctx-menu" id="coverflow-ctx-menu" aria-hidden="true"></div>
           </div>
         </div>
       </div>

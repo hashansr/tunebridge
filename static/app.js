@@ -2160,7 +2160,7 @@ function renderArtistsGrid() {
       const cta = artistsEmpty.querySelector('.empty-cta');
       if (title) title.textContent = 'No artists match your search.';
       if (hint) hint.textContent = 'Try a different search or letter.';
-      if (cta) cta.style.display = '';
+      if (cta) cta.style.display = _coverflowEnabled && !base.length ? 'none' : '';
       artistsEmpty.style.display = 'flex';
     }
     return;
@@ -2347,33 +2347,60 @@ function _renderAlbumGridBatches(grid, rows, artistFilter, token, start = 0) {
 
 /* ── Cover Flow ─────────────────────────────────────────────────────────── */
 
-// iPod-style coverflow transforms — offset = abs(distance from center), capped at 5
-// Tighter horizontal stack (TX increments shrink), steep angles, dramatic depth
-const _CF_TX   = [0,  158,  212,  252,  282,  306];   // compressed stack: far cards barely move
-const _CF_TZ   = [82,  -22,  -58,  -88, -112, -132];  // center pushed toward viewer
-const _CF_RY   = [0,    72,   78,   82,   85,   87];   // near-perpendicular for far cards
-const _CF_SC   = [1,  0.84, 0.71, 0.60, 0.51, 0.43];  // aggressive falloff
-const _CF_OP   = [1,  0.88, 0.72, 0.54, 0.37, 0.20];  // fade to near-invisible at edge
 let   _cfRafId = null;
+let   _cfDragging = false;
+let   _cfDragMoved = false;
+let   _cfDragStartX = 0;
+let   _cfDragStartIndex = 0;
+let   _cfWheelAcc = 0;
+let   _cfWheelTimer = null;
+let   _cfResizeObserver = null;
+
+const CF_ICONS = {
+  play: '<svg class="cf-ico" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>',
+  pause: '<svg class="cf-ico" viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="3" width="3" height="10" rx="1"/><rect x="9" y="3" width="3" height="10" rx="1"/></svg>',
+};
+
+const CF_CTX_ITEMS = [
+  ['play', 'Play album', '<path d="M4 2.5v9l7-4.5z"/>'],
+  ['queue', 'Add to queue', '<path d="M2 3.5h7M2 7h7M2 10.5h4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M11 7v5M8.5 9.5h5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'],
+  ['playlist', 'Add to playlist...', '<path d="M2 3.5h9M2 7h9M2 10.5h5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>'],
+  ['fav', 'Add to favourites', '<path d="M7 2.4l1.4 2.9 3.2.5-2.3 2.2.5 3.2L7 9.9 4.2 11.4l.5-3.2L2.4 5.9l3.2-.5z" fill="currentColor"/>'],
+  ['sep'],
+  ['artist', 'Show artist', '<circle cx="7" cy="5" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 11.5c0-2 1.8-3.2 4-3.2s4 1.2 4 3.2" fill="none" stroke="currentColor" stroke-width="1.3"/>'],
+  ['reveal', 'Reveal in library', '<rect x="2" y="3" width="10" height="8" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5 6.5h4M5 8.5h2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>'],
+  ['sync', 'Sync to device', '<path d="M11.5 7a4.5 4.5 0 1 1-1.3-3.2M11.5 2v2.2H9.3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>'],
+  ['sep'],
+  ['edit', 'Edit metadata', '<path d="M9.5 2.5l2 2L5 11l-2.6.6L3 9z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>'],
+  ['file', 'Show file location', '<path d="M2 4.5h3.5l1 1.2H12V11H2z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>'],
+];
 
 function renderCoverflow(albums, _artistFilter) {
   _cfAlbums = albums;
   _cfIndex  = 0;
 
-  const stage    = document.getElementById('coverflow-stage');
-  const scrubber = document.getElementById('cf-scrubber');
+  const stage = document.getElementById('coverflow-stage');
+  const flow  = document.getElementById('coverflow-flow');
   if (!stage) return;
 
-  scrubber.max   = Math.max(0, albums.length - 1);
-  scrubber.value = 0;
-
   // Build fixed pool of DOM nodes
-  stage.innerHTML = '';
+  if (flow) flow.innerHTML = '';
   _cfPool = [];
   for (let p = 0; p < CF_WINDOW; p++) {
     const card = document.createElement('div');
     card.className = 'cf-card';
-    card.innerHTML = '<div class="cf-card-img-wrap"><img decoding="async" alt=""><div class="cf-no-art" aria-hidden="true"></div></div>';
+    card.innerHTML = `
+      <div class="cf-cover-art">
+        <img class="cf-art-img" decoding="async" alt="">
+        <div class="cf-cover-placeholder" aria-hidden="true"><div class="cf-initials"></div></div>
+        <div class="cf-cover-gloss"></div>
+        <div class="cf-cover-edge"></div>
+        <div class="cf-cover-dim"></div>
+      </div>
+      <div class="cf-cover-refl">
+        <img class="cf-refl-img" decoding="async" alt="">
+        <div class="cf-refl-placeholder" aria-hidden="true"><div class="cf-initials"></div></div>
+      </div>`;
     const captured = p;
     card.addEventListener('click', () => _cfCardClick(captured));
     card.addEventListener('dblclick', () => {
@@ -2381,14 +2408,16 @@ function renderCoverflow(albums, _artistFilter) {
       const albumIdx = (_cfIndex - half) + captured;
       if (albumIdx === _cfIndex) cfPlayCurrent();
     });
-    stage.appendChild(card);
+    flow?.appendChild(card);
     _cfPool.push(card);
   }
 
+  _cfBuildCtxMenu();
   _cfAttachEvents();
   _cfPositionCards();
   _cfUpdateMeta();
   _cfPreload(_cfIndex);
+  stage.focus({ preventScroll: true });
 }
 
 // RAF-batched position update — call this instead of _cfPositionCards directly
@@ -2401,8 +2430,18 @@ function _cfScheduleUpdate() {
   });
 }
 
+function _cfMetrics() {
+  const stage = document.getElementById('coverflow-stage');
+  const w = stage?.clientWidth || window.innerWidth || 1200;
+  if (w < 760) return { base: 104, step: 40, size: 166 };
+  if (w < 1080) return { base: 126, step: 48, size: 200 };
+  return { base: 150, step: 55, size: 240 };
+}
+
 function _cfPositionCards() {
   const half = Math.floor(CF_WINDOW / 2);
+  const m = _cfMetrics();
+  const baseScale = m.size / 300;
 
   _cfPool.forEach((card, p) => {
     const albumIdx = (_cfIndex - half) + p;
@@ -2414,48 +2453,59 @@ function _cfPositionCards() {
       return;
     }
 
-    const offset = albumIdx - _cfIndex;
-    const abs    = Math.abs(offset);
-    const sign   = offset < 0 ? -1 : 1;
+    const d = albumIdx - _cfIndex;
+    const abs = Math.abs(d);
+    const sign = Math.sign(d);
+    _cfBindCard(card, _cfAlbums[albumIdx], albumIdx, abs);
 
-    // Swap in the right image (smaller size for side cards = faster)
-    const img         = card.querySelector('img');
-    const placeholder = card.querySelector('.cf-no-art');
-    if (abs <= CF_VISIBLE) {
-      const al  = _cfAlbums[albumIdx];
-      const sz  = abs === 0 ? 300 : 200;
-      const src = al.artwork_key ? `/api/artwork/${al.artwork_key}?size=${sz}` : '';
-      if (img.dataset.src !== src) { img.dataset.src = src; img.src = src; }
-      if (placeholder) {
-        if (!al.artwork_key) {
-          const label = (al.name || al.artist || '?').trim()[0].toUpperCase();
-          if (placeholder.textContent !== label) placeholder.textContent = label;
-          placeholder.style.display = 'flex';
-        } else {
-          placeholder.style.display = 'none';
-        }
-      }
+    let x, rotY, z, coverScale, opacity;
+    if (d === 0) {
+      x = 0; rotY = 0; z = 200; coverScale = 1; opacity = 1;
     } else {
-      if (img.dataset.src) { img.dataset.src = ''; img.src = ''; }
-      if (placeholder) placeholder.style.display = 'none';
+      x = sign * (m.base + (abs - 1) * m.step);
+      rotY = sign * -54;
+      z = -100 - (abs - 1) * 48;
+      coverScale = Math.max(0.58, 1 - abs * 0.055);
+      opacity = abs > 6 ? 0 : Math.max(0.14, 1 - abs * 0.15);
     }
 
-    if (abs > CF_VISIBLE) {
-      // Parked just off-screen so they slide in cleanly when navigated to
-      const parkTx = sign * (_CF_TX[CF_VISIBLE] + 60);
-      card.style.cssText = `opacity:0;pointer-events:none;z-index:0;transform:translateX(${parkTx}px) translateZ(${_CF_TZ[CF_VISIBLE]}px) rotateY(${-sign * _CF_RY[CF_VISIBLE]}deg) scale(${_CF_SC[CF_VISIBLE]})`;
-      return;
+    card.style.cssText = `opacity:${opacity};pointer-events:${opacity < 0.06 ? 'none' : 'auto'};z-index:${100 - abs};transform:scale(${baseScale}) translate3d(${x / baseScale}px,0,${z}px) rotateY(${rotY}deg) scale(${coverScale})`;
+    const dim = card.querySelector('.cf-cover-dim');
+    if (dim) dim.style.opacity = d === 0 ? 0 : Math.min(0.62, 0.16 + (abs - 1) * 0.13);
+    const refl = card.querySelector('.cf-cover-refl');
+    if (refl) refl.style.opacity = d === 0 ? 0.5 : Math.max(0, 0.34 - (abs - 1) * 0.085);
+  });
+  _cfRefreshPlayOrb();
+}
+
+function _cfBindCard(card, al, albumIdx, abs) {
+  if (!card || !al) return;
+  if (card.dataset.albumIdx === String(albumIdx)) return;
+  card.dataset.albumIdx = String(albumIdx);
+  const title = al.name || 'Unknown Album';
+  const initials = _cfInitials(title);
+  const colors = _cfPlaceholderColors(`${al.artist || ''}||${title}`);
+  card.style.setProperty('--cf-p1', colors[0]);
+  card.style.setProperty('--cf-p2', colors[1]);
+  card.classList.remove('has-art');
+  card.querySelectorAll('.cf-initials').forEach(el => { el.textContent = initials; });
+  const src = al.artwork_key ? `/api/artwork/${encodeURIComponent(al.artwork_key)}?size=${abs === 0 ? 300 : 220}` : '';
+  [card.querySelector('.cf-art-img'), card.querySelector('.cf-refl-img')].forEach(img => {
+    if (!img) return;
+    img.alt = title;
+    img.onload = () => { if (img.dataset.src === src && src) card.classList.add('has-art'); };
+    img.onerror = () => {
+      if (img.dataset.src === src) {
+        img.dataset.src = '';
+        img.removeAttribute('src');
+        card.classList.remove('has-art');
+      }
+    };
+    if (img.dataset.src !== src) {
+      img.dataset.src = src;
+      if (src) img.src = src;
+      else img.removeAttribute('src');
     }
-
-    const i   = Math.min(abs, _CF_TX.length - 1);
-    const tx  = sign * _CF_TX[i];
-    const tz  = _CF_TZ[i];
-    const ry  = -sign * _CF_RY[i];
-    const sc  = _CF_SC[i];
-    const op  = _CF_OP[i];
-    const zi  = 20 - abs * 2;
-
-    card.style.cssText = `opacity:${op};pointer-events:auto;z-index:${zi};transform:translateX(${tx}px) translateZ(${tz}px) rotateY(${ry}deg) scale(${sc})`;
   });
 }
 
@@ -2469,7 +2519,7 @@ function _cfPreload(centerIdx) {
     const abs = Math.abs(i - centerIdx);
     const sz  = abs === 0 ? 300 : 200;
     const img = new Image();
-    img.src = `/api/artwork/${al.artwork_key}?size=${sz}`;
+    img.src = `/api/artwork/${encodeURIComponent(al.artwork_key)}?size=${sz}`;
   }
 }
 
@@ -2478,42 +2528,60 @@ function _cfUpdateMeta() {
   if (!al) return;
   const titleEl  = document.getElementById('cf-title');
   const artistEl = document.getElementById('cf-artist');
-  const yearEl   = document.getElementById('cf-year');
+  const metaEl   = document.getElementById('cf-meta-row');
   if (titleEl)  titleEl.textContent  = al.name   || '';
   if (artistEl) artistEl.textContent = al.artist  || '';
-  if (yearEl) {
+  if (metaEl) {
     const parts = [];
     if (al.year) parts.push(String(al.year));
-    if (al.track_count) parts.push(`${al.track_count} tracks`);
-    yearEl.textContent = parts.join(' · ');
+    if (al.track_count) parts.push(`${al.track_count} track${Number(al.track_count) === 1 ? '' : 's'}`);
+    const fmt = _cfAlbumFormat(al);
+    metaEl.innerHTML = parts.map(esc).join('<span class="cf-meta-dot"></span>') +
+      (parts.length ? '<span class="cf-meta-dot"></span>' : '') +
+      `<span class="cf-format-badge${fmt.hi ? ' lossless' : ''}">${esc(fmt.label)}</span>`;
   }
-  // Keep scrubber in sync (used when navigated via keyboard/wheel, not seek)
-  const scrubber = document.getElementById('cf-scrubber');
-  if (scrubber) scrubber.value = _cfIndex;
+  _cfRefreshCtxLabels();
+  _cfRefreshPlayOrb();
+}
+
+function _cfSelect(i, opts = {}) {
+  const next = Math.max(0, Math.min(_cfAlbums.length - 1, Number(i) || 0));
+  if (next === _cfIndex && !opts.force) return;
+  _cfIndex = next;
+  _cfCloseActions();
+  _cfScheduleUpdate();
+  _cfPreload(_cfIndex);
 }
 
 function _cfCardClick(p) {
+  if (_cfDragMoved) return;
   const half     = Math.floor(CF_WINDOW / 2);
   const albumIdx = (_cfIndex - half) + p;
   if (albumIdx < 0 || albumIdx >= _cfAlbums.length) return;
 
   if (albumIdx === _cfIndex) {
-    const al = _cfAlbums[_cfIndex];
-    if (al) showAlbum(al.artist, al.name);
+    return;
   } else {
-    _cfIndex = albumIdx;
-    document.getElementById('cf-scrubber').value = _cfIndex;
-    _cfScheduleUpdate();
-    _cfPreload(_cfIndex);
+    _cfSelect(albumIdx);
   }
 }
 
-function cfPlayCurrent() {
+async function cfPlayCurrent(e) {
+  e?.stopPropagation?.();
+  _cfCloseActions();
   const al = _cfAlbums[_cfIndex];
   if (!al) return;
-  fetch(`/api/library/tracks?artist=${encodeURIComponent(al.artist)}&album=${encodeURIComponent(al.name)}`)
-    .then(r => r.json())
-    .then(tracks => { if (tracks.length) Player.playAll(tracks); });
+  const current = Player?.currentTrack;
+  const sameAlbum = current &&
+    String(current.album || '').toLowerCase() === String(al.name || '').toLowerCase() &&
+    String(current.album_artist || current.artist || '').toLowerCase() === String(al.artist || '').toLowerCase();
+  if (sameAlbum && Player?.isPlaying) {
+    Player.togglePlay();
+    _cfRefreshPlayOrb();
+    return;
+  }
+  await playAlbum(al.artist, al.name);
+  setTimeout(_cfRefreshPlayOrb, 80);
 }
 
 function cfShowInfo() {
@@ -2522,18 +2590,154 @@ function cfShowInfo() {
 }
 
 function cfNavigate(delta) {
-  const newIdx = Math.max(0, Math.min(_cfAlbums.length - 1, _cfIndex + delta));
-  if (newIdx === _cfIndex) return;
-  _cfIndex = newIdx;
-  document.getElementById('cf-scrubber').value = _cfIndex;
-  _cfScheduleUpdate();
-  _cfPreload(_cfIndex);
+  _cfSelect(_cfIndex + delta);
 }
 
 function cfSeek(val) {
-  _cfIndex = Math.max(0, Math.min(_cfAlbums.length - 1, +val));
-  _cfScheduleUpdate();
-  _cfPreload(_cfIndex);
+  _cfSelect(val);
+}
+
+function _cfCurrentAlbum() {
+  return _cfAlbums[_cfIndex] || null;
+}
+
+async function _cfAlbumTracks(al) {
+  if (!al) return [];
+  return api(`/library/tracks?artist=${encodeURIComponent(al.artist)}&album=${encodeURIComponent(al.name)}`).catch(() => []);
+}
+
+function _cfAlbumFormat(al) {
+  const raw = String(al?.format || al?.fmt || al?.file_format || '').trim().toUpperCase();
+  const hi = !!(al?.is_hires || al?.hi_res || al?.lossless || al?.is_lossless);
+  return { label: hi ? 'Hi-Res' : (raw || 'FLAC'), hi };
+}
+
+function _cfInitials(title) {
+  const words = String(title || '?').replace(/[()]/g, '').split(/\s+/).filter(w => /[a-z0-9]/i.test(w));
+  if (!words.length) return '?';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+function _cfHash(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+function _cfPlaceholderColors(seed) {
+  const palettes = [
+    ['#33415f', '#151722'],
+    ['#60443b', '#1b1413'],
+    ['#2f5144', '#111a17'],
+    ['#4d3d61', '#171421'],
+    ['#5c384d', '#1a1218'],
+    ['#3b5664', '#10191d'],
+  ];
+  return palettes[_cfHash(String(seed || '')) % palettes.length];
+}
+
+function _cfBuildCtxMenu() {
+  const menu = document.getElementById('coverflow-ctx-menu');
+  if (!menu) return;
+  menu.innerHTML = CF_CTX_ITEMS.map(item => item[0] === 'sep'
+    ? '<div class="cf-ctx-sep"></div>'
+    : `<button class="cf-ctx-item" data-act="${item[0]}"><svg viewBox="0 0 14 14" fill="currentColor">${item[2]}</svg><span>${item[1]}</span></button>`
+  ).join('');
+  menu.querySelectorAll('.cf-ctx-item').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      cfRunAction(btn.dataset.act, e);
+    });
+  });
+  _cfRefreshCtxLabels();
+}
+
+function _cfRefreshCtxLabels() {
+  const al = _cfCurrentAlbum();
+  const favLabel = document.querySelector('#coverflow-ctx-menu [data-act="fav"] span');
+  if (favLabel && al) {
+    const id = String(al.artwork_key || '');
+    favLabel.textContent = id && state.favourites.albums.has(id) ? 'Remove from favourites' : 'Add to favourites';
+  }
+}
+
+function cfOpenActions(e) {
+  e?.stopPropagation?.();
+  const menu = document.getElementById('coverflow-ctx-menu');
+  if (!menu) return;
+  _cfRefreshCtxLabels();
+  const open = menu.classList.toggle('open');
+  menu.setAttribute('aria-hidden', open ? 'false' : 'true');
+}
+
+function _cfCloseActions() {
+  const menu = document.getElementById('coverflow-ctx-menu');
+  if (!menu) return;
+  menu.classList.remove('open');
+  menu.setAttribute('aria-hidden', 'true');
+}
+
+async function cfRunAction(action, e) {
+  const al = _cfCurrentAlbum();
+  if (!al) return;
+  _cfCloseActions();
+  if (action === 'play') return cfPlayCurrent(e);
+  if (action === 'artist') return showArtist(al.artist);
+  if (action === 'reveal') return showAlbum(al.artist, al.name);
+  if (action === 'sync') {
+    toast('Open Sync to Device to choose this album for export.');
+    return;
+  }
+
+  const tracks = await _cfAlbumTracks(al);
+  if (!tracks.length) { toast('No tracks found'); return; }
+
+  if (action === 'queue') {
+    Player.addToQueue(tracks);
+    return;
+  }
+  if (action === 'playlist') {
+    const anchor = document.getElementById('cf-actions-btn') || e?.currentTarget;
+    await addAllToPlaylist(tracks.map(t => t.id).filter(Boolean), anchor);
+    return;
+  }
+  if (action === 'fav') {
+    const artworkKey = al.artwork_key || tracks[0]?.artwork_key || '';
+    if (!artworkKey) { toast('Album artwork key not available'); return; }
+    await toggleFavourite('albums', encodeURIComponent(artworkKey));
+    _cfRefreshCtxLabels();
+    return;
+  }
+  if (action === 'edit') {
+    state.artist = al.artist;
+    state.album = al.name;
+    openAlbumTagEditor();
+    return;
+  }
+  if (action === 'file') {
+    const target = _albumFinderTarget(tracks);
+    if (!target?.path) { toast('Path not available', 'error'); return; }
+    try {
+      await api('/open-in-finder', { method: 'POST', body: { path: target.path } });
+    } catch (_) {
+      toast('Could not open in Finder', 'error');
+    }
+  }
+}
+
+function _cfRefreshPlayOrb() {
+  const al = _cfCurrentAlbum();
+  const btn = document.getElementById('cf-play-btn');
+  const orb = document.getElementById('cf-play-orb');
+  if (!btn || !orb || !al) return;
+  const current = Player?.currentTrack;
+  const sameAlbum = current &&
+    String(current.album || '').toLowerCase() === String(al.name || '').toLowerCase() &&
+    String(current.album_artist || current.artist || '').toLowerCase() === String(al.artist || '').toLowerCase();
+  const playing = !!(sameAlbum && Player?.isPlaying);
+  btn.innerHTML = playing ? CF_ICONS.pause : CF_ICONS.play;
+  orb.classList.toggle('playing', playing);
 }
 
 function _cfAttachEvents() {
@@ -2542,30 +2746,67 @@ function _cfAttachEvents() {
 
   document.addEventListener('keydown', e => {
     if (state.view !== 'albums' || !_coverflowEnabled) return;
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      e.preventDefault();
-      cfNavigate(e.key === 'ArrowLeft' ? -1 : 1);
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      cfPlayCurrent();
-    } else if (e.key === ' ') {
-      e.preventDefault();
-      Player.togglePlay();
-    }
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); cfNavigate(-1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); cfNavigate(1); }
+    else if (e.key === 'Home') { e.preventDefault(); _cfSelect(0); }
+    else if (e.key === 'End') { e.preventDefault(); _cfSelect(_cfAlbums.length - 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); cfPlayCurrent(e); }
+    else if (e.key === ' ') { e.preventDefault(); cfPlayCurrent(e); }
+    else if (e.key === 'i' || e.key === 'I') { cfOpenActions(e); }
+    else if (e.key === 'Escape') { _cfCloseActions(); }
   });
 
-  // Wheel on the shell (large fixed element) — immediate, throttled by cooldown
-  const shell = document.getElementById('coverflow-shell');
-  if (shell) {
-    let _cfWheelCooldown = false;
-    shell.addEventListener('wheel', e => {
-      if (!_coverflowEnabled) return;
-      e.preventDefault();
-      if (_cfWheelCooldown) return;
-      _cfWheelCooldown = true;
-      cfNavigate(e.deltaY > 0 ? 1 : -1);
-      setTimeout(() => { _cfWheelCooldown = false; }, 150);
-    }, { passive: false });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#coverflow-ctx-menu') && !e.target.closest('#cf-actions-btn')) _cfCloseActions();
+  });
+
+  const stage = document.getElementById('coverflow-stage');
+  if (!stage) return;
+
+  stage.addEventListener('pointerdown', e => {
+    if (e.target.closest('.cf-orb-btn') || e.target.closest('#coverflow-ctx-menu')) return;
+    _cfDragging = true;
+    _cfDragMoved = false;
+    _cfDragStartX = e.clientX;
+    _cfDragStartIndex = _cfIndex;
+    stage.classList.add('dragging');
+    stage.setPointerCapture(e.pointerId);
+  });
+  stage.addEventListener('pointermove', e => {
+    if (!_cfDragging) return;
+    const dx = e.clientX - _cfDragStartX;
+    if (Math.abs(dx) > 4) _cfDragMoved = true;
+    _cfSelect(_cfDragStartIndex + Math.round(-dx / 90));
+  });
+  const endDrag = e => {
+    if (!_cfDragging) return;
+    _cfDragging = false;
+    stage.classList.remove('dragging');
+    try { stage.releasePointerCapture(e.pointerId); } catch (_) {}
+    setTimeout(() => { _cfDragMoved = false; }, 30);
+  };
+  stage.addEventListener('pointerup', endDrag);
+  stage.addEventListener('pointercancel', endDrag);
+
+  stage.addEventListener('wheel', e => {
+    if (!_coverflowEnabled) return;
+    e.preventDefault();
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    _cfWheelAcc += delta;
+    while (Math.abs(_cfWheelAcc) >= 60) {
+      cfNavigate(_cfWheelAcc > 0 ? 1 : -1);
+      _cfWheelAcc -= Math.sign(_cfWheelAcc) * 60;
+    }
+    clearTimeout(_cfWheelTimer);
+    _cfWheelTimer = setTimeout(() => { _cfWheelAcc = 0; }, 120);
+  }, { passive: false });
+
+  if ('ResizeObserver' in window) {
+    _cfResizeObserver = new ResizeObserver(() => _cfScheduleUpdate());
+    _cfResizeObserver.observe(stage);
+  } else {
+    window.addEventListener('resize', _cfScheduleUpdate);
   }
 }
 
@@ -2638,8 +2879,10 @@ function renderAlbumsGrid() {
       const title = albumsEmpty.querySelector('.empty-title');
       const hint = albumsEmpty.querySelector('.empty-subtitle');
       const cta = albumsEmpty.querySelector('.empty-cta');
-      if (title) title.textContent = 'No albums match your search.';
-      if (hint) hint.textContent = 'Try a different search or letter.';
+      if (title) title.textContent = _coverflowEnabled && !base.length ? 'No albums found' : 'No albums match your search.';
+      if (hint) hint.textContent = _coverflowEnabled && !base.length
+        ? 'Import music to start browsing your library in Cover Flow.'
+        : 'Try a different search or letter.';
       if (cta) cta.style.display = '';
       albumsEmpty.style.display = 'flex';
     }
@@ -20038,6 +20281,8 @@ const App = {
   cfSeek,
   cfPlayCurrent,
   cfShowInfo,
+  cfOpenActions,
+  cfRunAction,
   toggleCoverflow,
   // Settings
   loadSettings,
