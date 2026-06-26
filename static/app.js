@@ -2780,7 +2780,7 @@ async function _cfBuildDetail(al) {
     </div>
     <div class="db-actions">
       <button class="db-btn primary" id="cf-db-play">${CF_ICONS.play}Play</button>
-      <button class="db-btn ghost" id="cf-db-shuffle"><svg class="cf-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h2.4c2.8 0 3.2 8 6 8H14"/><path d="M11.5 9.5 14 12l-2.5 2.5"/><path d="M2 12h2.4c.8 0 1.4-.6 1.9-1.5"/><path d="M10.3 5.5c.5-.9 1.1-1.5 2-1.5H14"/><path d="M11.5 1.5 14 4l-2.5 2.5"/></svg>Shuffle</button>
+      <button class="db-btn ghost" id="cf-db-shuffle"><span class="tb-icon tb-icon-shuffle cf-ico" aria-hidden="true"></span>Shuffle</button>
       <button class="db-btn ghost icon" id="cf-db-more" aria-label="Album actions" aria-expanded="false">
         <svg class="cf-ico" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
       </button>
