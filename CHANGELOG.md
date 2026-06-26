@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Add: Cover Flow remembers the last selected album across navigation — returning to Albums picks up where you left off
+- Change: Cover Flow actions menu now uses the standard album context menu (matching grid/list right-click), with "Show in library" and "Show artist" as additional navigation items
 
 ## v0.534-rc.260626-1358 · 2026-06-26
 

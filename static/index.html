@@ -3432,6 +3432,15 @@
   <div id="ctx-menu">
     <div class="ctx-label" id="ctx-label"></div>
     <div class="ctx-sep"></div>
+    <div class="ctx-item" id="ctx-show-in-library-item" onclick="App.ctxShowInLibrary()" style="display:none">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Show in library
+    </div>
+    <div class="ctx-item" id="ctx-show-artist-item" onclick="App.ctxShowArtist()" style="display:none">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6"/></svg>
+      Show artist
+    </div>
+    <div class="ctx-sep" id="ctx-cf-nav-sep" style="display:none"></div>
     <div class="ctx-item" onclick="App.ctxPlayNext()">
       <span class="tb-icon tb-icon-play-next" aria-hidden="true"></span>
       Play Next

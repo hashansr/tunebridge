@@ -1504,6 +1504,8 @@ let _ctxFavTarget = null;
 let _ctxPinTarget = null; // {category, item_id} | null
 let _ctxFinderTarget = null;
 let _ctxDetailMode = null; // 'album' | 'artist' | null
+let _ctxCfArtist  = null; // set when ctx menu is opened from coverflow
+let _ctxCfAlbum   = null;
 let _playlistCtxTarget = null;
 let _playlistExportSubmenuTimer = null;
 
@@ -2397,7 +2399,10 @@ function _cfIsActiveAlbumsView() {
 
 function renderCoverflow(albums, _artistFilter) {
   _cfAlbums = albums;
-  _cfIndex  = 0;
+  // Restore last scroll position when returning to the same (unfiltered) view
+  const saved = state._cfSavedIndex || 0;
+  _cfIndex = (saved > 0 && saved < albums.length) ? saved : 0;
+  state._cfSavedIndex = _cfIndex;
   _cfDetailOpen = false;
   _cfDetailAlbum = null;
   _cfDetailTracks = [];
@@ -2607,6 +2612,7 @@ function _cfSelect(i, opts = {}) {
   const next = Math.max(0, Math.min(_cfAlbums.length - 1, Number(i) || 0));
   if (next === _cfIndex && !opts.force) return;
   _cfIndex = next;
+  state._cfSavedIndex = _cfIndex;
   _cfCloseActions();
   _cfScheduleUpdate();
   _cfPreload(_cfIndex);
@@ -2973,20 +2979,25 @@ function _cfRefreshCtxLabels() {
   }
 }
 
-function cfOpenActions(e) {
+async function cfOpenActions(e) {
   e?.stopPropagation?.();
-  const menu = document.getElementById('coverflow-ctx-menu');
-  if (!menu) return;
-  _cfRefreshCtxLabels();
-  const open = menu.classList.toggle('open');
-  menu.setAttribute('aria-hidden', open ? 'false' : 'true');
+  const al = _cfCurrentAlbum();
+  if (!al) return;
+  // Use the standard album context menu so options match the album grid
+  await showAlbumCtxMenu(_ctxAnchorEvent(e), al.artist, al.name);
+  // Show coverflow-specific navigation items
+  _ctxCfArtist = al.artist;
+  _ctxCfAlbum  = al.name;
+  const libItem    = document.getElementById('ctx-show-in-library-item');
+  const artistItem = document.getElementById('ctx-show-artist-item');
+  const cfSep      = document.getElementById('ctx-cf-nav-sep');
+  if (libItem)    libItem.style.display    = '';
+  if (artistItem) artistItem.style.display = '';
+  if (cfSep)      cfSep.style.display      = '';
 }
 
 function _cfCloseActions() {
-  const menu = document.getElementById('coverflow-ctx-menu');
-  if (!menu) return;
-  menu.classList.remove('open');
-  menu.setAttribute('aria-hidden', 'true');
+  // no-op: standard ctx menu is closed by hideCtxMenu()
 }
 
 async function cfRunAction(action, e) {
@@ -3069,7 +3080,7 @@ function _cfAttachEvents() {
     else if (e.key === 'Enter') { e.preventDefault(); cfOpenDetail(); }
     else if (e.key === ' ') { e.preventDefault(); }
     else if (e.key === 'i' || e.key === 'I') { cfOpenActions(e); }
-    else if (e.key === 'Escape') { _cfCloseActions(); }
+    else if (e.key === 'Escape') { hideCtxMenu(); }
   });
 
   document.addEventListener('click', e => {
@@ -4914,6 +4925,12 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null
   _ctxTracks = tracks;
   _ctxFavTarget = favTarget;
   _ctxPinTarget = pinTarget;
+  // Hide coverflow-only nav items by default; cfOpenAlbumCtxMenu re-shows them
+  _ctxCfArtist = null;
+  _ctxCfAlbum  = null;
+  document.getElementById('ctx-show-in-library-item')?.style && (document.getElementById('ctx-show-in-library-item').style.display = 'none');
+  document.getElementById('ctx-show-artist-item')?.style && (document.getElementById('ctx-show-artist-item').style.display = 'none');
+  document.getElementById('ctx-cf-nav-sep')?.style && (document.getElementById('ctx-cf-nav-sep').style.display = 'none');
   _ctxFinderTarget = finderTarget?.path
     ? finderTarget
     : (tracks.length === 1 ? _trackFinderTarget(tracks[0]) : null);
@@ -5363,6 +5380,19 @@ async function ctxToggleFavourite() {
   hideCtxMenu();
   if (!target?.type || !target?.id) return;
   await toggleFavourite(target.type, encodeURIComponent(target.id));
+}
+
+function ctxShowInLibrary() {
+  const artist = _ctxCfArtist;
+  const album  = _ctxCfAlbum;
+  hideCtxMenu();
+  if (artist && album) showAlbum(artist, album);
+}
+
+function ctxShowArtist() {
+  const artist = _ctxCfArtist;
+  hideCtxMenu();
+  if (artist) showArtist(artist);
 }
 
 async function ctxShowInFinder() {
@@ -20473,6 +20503,8 @@ const App = {
   ctxTogglePinPlaylist,
   _showPinnedCtxMenu,
   ctxShowInFinder,
+  ctxShowInLibrary,
+  ctxShowArtist,
   ctxFindLyrics,
   ctxEditTrackTags,
   ctxEditAlbumTags,
