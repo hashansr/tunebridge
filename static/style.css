@@ -1721,15 +1721,15 @@ h4.settings-subsection-title {
 }
 
 #main.main-coverflow-active {
-  background: #0c0c0e;
+  background: #0a0a0b;
 }
 
 #main.main-coverflow-active #main-nav-bar {
-  background: #0c0c0e;
+  background: #0a0a0b;
 }
 
 #main.main-coverflow-active #view-albums {
-  background: #0c0c0e;
+  background: #0a0a0b;
 }
 
 #main.main-home-active #main-nav-bar {
@@ -26276,7 +26276,7 @@ body.is-col-resizing {
 
 .coverflow-shell {
   width: calc(100% + (var(--page-content-inset) * 2));
-  min-height: clamp(460px, calc(100vh - 245px), 680px);
+  min-height: clamp(580px, calc(100vh - 110px), 820px);
   margin-left: calc(-1 * var(--page-content-inset));
   margin-right: calc(-1 * var(--page-content-inset));
   position: relative;
@@ -26288,7 +26288,14 @@ body.is-col-resizing {
   background: #0a0a0b;
 }
 
+#view-albums.coverflow-active .coverflow-shell {
+  margin-top: calc(-1 * (var(--tb-page-title-size) + var(--tb-page-header-margin-bottom) + 48px));
+  padding-top: calc(var(--tb-page-title-size) + var(--tb-page-header-margin-bottom) + 48px);
+}
+
 #view-albums.coverflow-active .library-page-header {
+  position: relative;
+  z-index: 220;
   background: #0a0a0b;
 }
 
