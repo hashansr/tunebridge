@@ -26288,6 +26288,10 @@ body.is-col-resizing {
   background: #0c0c0e;
 }
 
+#view-albums.coverflow-active .library-page-header {
+  background: #0c0c0e;
+}
+
 .coverflow-stage {
   position: absolute;
   inset: 0;
