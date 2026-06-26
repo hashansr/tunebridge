@@ -1725,7 +1725,7 @@ h4.settings-subsection-title {
 }
 
 #main.main-coverflow-active #main-nav-bar {
-  background: #0a0a0b;
+  background: transparent;
 }
 
 #main.main-coverflow-active #view-albums {
@@ -26607,11 +26607,11 @@ body.is-col-resizing {
 
 .coverflow-stage-ctrl {
   position: absolute;
-  bottom: calc(96px + 28px);
+  bottom: 28px;
   z-index: 200;
 }
-.cf-play-orb { left: calc(var(--page-content-inset) + 30px); }
-.cf-more-orb { right: calc(var(--page-content-inset) + 30px); }
+.cf-play-orb { left: 30px; }
+.cf-more-orb { right: 30px; }
 
 .cf-orb-btn {
   border-radius: 50%;
