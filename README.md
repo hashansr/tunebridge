@@ -39,7 +39,12 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 - A–Z sticky alpha bars on Artists and Albums pages (case-insensitive grouping)
 - "Browse All Songs" — flat track list for an entire artist
 - Full Songs view: 4300+ tracks, sortable columns, text filter, pagination (100/page)
+- Albums supports grid, dense grid, list, and Cover Flow layouts
+- Cover Flow album browser with keyboard arrows, mouse wheel, scrubber, reflections, Play / Info actions, and last-selected album memory
 - Instant search across all tracks
+- Artist detail has an independent grid/list layout preference
+- Library duplicate tools can find, review, consolidate, and update playlist references
+- Metadata/tag editing with artwork candidates and optional artist image lookup
 
 ### Playlists
 - Build playlists with drag-and-drop reordering
@@ -48,17 +53,23 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 - In-playlist text filter and sort (Original / A–Z / Album / Date)
 - Custom cover art per playlist, or auto-generated 2×2 mosaic from album art
 - M3U / M3U8 import with interactive mapping UI for unmatched tracks
+- Resolve Playlist: find missing playlist tracks, view suggested replacements, and apply replacements/removals in one step
+- Export playlists as M3U, M3U8, XML, or CSV from the playlist toolbar/context menu
+- Pin playlists in the sidebar for quick access
 - **Smart Playlist** generator:
   - quick mode: `Mix style`, `Vibe`, `Length`, optional references/genre lane
   - advanced controls in collapsible section (arc, constraints, deterministic, etc.)
   - reference-track browser modal + "use current selection" shortcut
   - regenerate for alternate high-quality candidate sets before saving
+- **Smart Rules** discovery playlists: rule-based saved playlists with refresh support
 
 ### Device Export & Sync
 - Dynamic per-DAP export pills on every playlist (download or copy directly to device)
 - DAP management: add/edit/delete with profile-driven presets (no hardcoded device list)
 - Per-playlist sync timestamps — shows stale / up-to-date badge per DAP
 - Bidirectional music sync (local ↔ DAP): scan diff, checkbox preview, file-by-file progress
+- Sync playlist selection can auto-select missing songs and marks songs added via playlists
+- Rockbox DAP PEQ copy converts APO/AutoEQ filters to Rockbox `.cfg` and saves to `/.rockbox/eqs/`
 
 ### In-App Player
 - Refreshed bottom player bar (glass shell, responsive 86px desktop height), queue drawer, PEQ popover
@@ -74,6 +85,9 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 - Double-click track to play
 - Keyboard shortcuts: Space = play/pause, Alt+←/→ = prev/next, M = mute
 - Player state persisted to localStorage and server-side SQLite state
+- Listening history and play tracking power "unheard library" discovery views
+- ReplayGain tagging/settings for track or album gain workflows
+- Optional mpv/libmpv bit-perfect playback mode with output-device handling
 - Motion polish: animated queue/PEQ panel transitions, tactile hover/press feedback, `prefers-reduced-motion` support
 
 ### Gear (IEMs & DAPs)
@@ -87,6 +101,8 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 ### Insights (Audio Analytics)
 - **Overview**: stat cards + File Format / Sample Rate / Bit Depth donut charts
 - **Tag Health**: completeness bars for title, artist, album, genre, year, album art
+- **Genre Distribution** and library coverage panels
+- **Unplayed Albums / Coverage** discovery view with playlist actions
 - **Rescan tags**: one-click re-scan with inline progress for updated library tags
 - **Sonic Profile**: compact tonal profile cards + brightness/energy histograms + tonal demand chart (requires analysis)
 - **Gear Fit**: score every IEM against your library's sonic character using two models:
@@ -99,8 +115,14 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 ### Settings & Tools
 - First-run onboarding modal for new installs (library path + folder/file format preferences)
 - Configurable music library path with Browse… folder picker
+- File Organisation page with a 5-step wizard for organising the library or importing songs
+- Template editor with field chips, separators, live path preview, and safety validation for hidden-path patterns
+- Import workflow with duplicate detection, conflict reasons, copy progress, and failed-file reporting
+- Export Library CSV with selectable columns and native macOS save dialog in the packaged app
 - Health check panel (library, squig.link, DAPs, playback runtime, database)
 - Data backup / restore (ZIP of all user data)
+- Full Help Center page with Getting Started, How It Works, and Paths & Files tabs
+- Auto-update checks and developer diagnostics for release/dev builds
 - Restart & Reload server in-app
 
 ---
