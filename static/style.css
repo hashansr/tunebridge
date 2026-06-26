@@ -26281,23 +26281,24 @@ body.is-col-resizing {
   margin-right: calc(-1 * var(--page-content-inset));
   position: relative;
   overflow: hidden;
-  background: #0c0c0e;
+  background: #0a0a0b;
 }
 
 #view-albums.coverflow-active {
-  background: #0c0c0e;
+  background: #0a0a0b;
 }
 
 #view-albums.coverflow-active .library-page-header {
-  background: #0c0c0e;
+  background: #0a0a0b;
 }
 
 .coverflow-stage {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  perspective: 1500px;
-  perspective-origin: 50% 42%;
+  background: #0a0a0b;
+  perspective: 1700px;
+  perspective-origin: 50% 44%;
   user-select: none;
   cursor: grab;
   outline: none;
@@ -26307,7 +26308,19 @@ body.is-col-resizing {
 .coverflow-flow {
   position: absolute;
   inset: 0;
+  z-index: 10;
   transform-style: preserve-3d;
+}
+
+.coverflow-stage-fade {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, #0a0a0b 0%, rgba(10,10,11,0) 16%, rgba(10,10,11,0) 84%, #0a0a0b 100%),
+    radial-gradient(140% 70% at 50% 122%, rgba(0,0,0,0.6), transparent 55%),
+    radial-gradient(120% 60% at 50% -14%, rgba(0,0,0,0.5), transparent 60%);
 }
 
 .coverflow-stage .coverflow-flow,
@@ -26339,7 +26352,7 @@ body.is-col-resizing {
 .cf-card {
   position: absolute;
   left: 50%;
-  top: 32%;
+  top: 35%;
   width: 300px;
   height: 300px;
   margin: -150px 0 0 -150px;
@@ -26468,44 +26481,41 @@ body.is-col-resizing {
 .coverflow-details {
   position: absolute;
   left: 50%;
-  bottom: 78px;
+  bottom: 58px;
   transform: translateX(-50%);
   text-align: center;
-  width: min(560px, 70%);
+  width: min(620px, 78%);
   z-index: 200;
   pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .coverflow-details::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 128%;
-  height: 175%;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(60% 60% at 50% 50%, rgba(10,10,11,0.82), rgba(10,10,11,0.4) 58%, transparent 80%);
-  z-index: -1;
-  pointer-events: none;
+  content: none;
 }
 
 .cf-meta-title {
-  font-size: 21px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  max-width: 100%;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.2;
+  line-height: 1.15;
 }
 
 .cf-meta-artist {
-  margin-top: 4px;
+  margin-top: 5px;
   display: flex;
   justify-content: center;
   min-width: 0;
+  max-width: 100%;
   font-size: 15px;
+  font-weight: 500;
   color: var(--text-sub);
 }
 
@@ -26544,8 +26554,8 @@ body.is-col-resizing {
 .cf-meta-row {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  margin-top: 9px;
+  gap: 10px;
+  margin-top: 10px;
   font-size: 12.5px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
@@ -26577,32 +26587,69 @@ body.is-col-resizing {
 
 .coverflow-stage-ctrl {
   position: absolute;
-  bottom: 26px;
+  bottom: 28px;
   z-index: 200;
 }
-.cf-play-orb { left: 34px; }
-.cf-more-orb { right: 34px; }
+.cf-play-orb { left: 30px; }
+.cf-more-orb { right: 30px; }
 
 .cf-orb-btn {
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: var(--text);
+  border: none;
+  color: var(--text-sub);
   cursor: pointer;
-  backdrop-filter: blur(10px);
-  transition: transform .12s ease, background .15s ease, border-color .15s ease;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .18s cubic-bezier(.34,.7,.3,1), box-shadow .2s ease, background .2s ease, border-color .2s ease, filter .2s ease, color .2s ease;
 }
 .cf-play-orb .cf-orb-btn { width: 36px; height: 36px; }
 .cf-more-orb  .cf-orb-btn { width: 34px; height: 34px; }
-.cf-orb-btn:hover {
-  background: rgba(255,255,255,0.13);
-  border-color: rgba(255,255,255,0.22);
+.cf-play-orb .cf-orb-btn {
+  color: #0c1933;
+  background: radial-gradient(130% 130% at 50% 14%, #cedcff 0%, #adc6ff 52%, #93b4f7 100%);
+  box-shadow:
+    0 8px 20px rgba(120,158,238,0.34),
+    0 2px 6px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    inset 0 -2px 5px rgba(46,78,150,0.28);
 }
-.cf-orb-btn:active { transform: scale(0.93); }
+.cf-more-orb .cf-orb-btn {
+  background: var(--surface-card-gradient);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.cf-play-orb .cf-orb-btn:hover {
+  transform: translateY(-1.5px) scale(1.04);
+  filter: brightness(1.03);
+  box-shadow:
+    0 12px 28px rgba(120,158,238,0.48),
+    0 3px 8px rgba(0,0,0,0.45),
+    inset 0 1px 0 rgba(255,255,255,0.65),
+    inset 0 -2px 5px rgba(46,78,150,0.28);
+}
+.cf-more-orb .cf-orb-btn:hover {
+  transform: translateY(-1.5px) scale(1.04);
+  color: var(--text);
+  background: var(--surface-card-gradient-hover);
+  border-color: rgba(255,255,255,0.14);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.09);
+}
+.cf-orb-btn:active { transform: scale(0.94); }
 .cf-orb-ico { width: 18px; height: 18px; }
+.cf-play-orb .cf-orb-ico {
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+  filter: drop-shadow(0 1px 0 rgba(255,255,255,0.35));
+}
+.cf-play-orb.playing .cf-orb-ico { margin-left: 0; }
+.cf-more-orb .cf-orb-btn svg {
+  width: 13px;
+  height: 13px;
+}
 .cf-ico {
   width: 16px;
   height: 16px;
@@ -26939,13 +26986,13 @@ body.is-col-resizing {
 @media (max-width: 760px) {
   .coverflow-shell { min-height: 420px; }
   .coverflow-details {
-    bottom: 82px;
-    width: min(420px, calc(100% - 112px));
+    bottom: 58px;
+    width: min(420px, 78%);
   }
-  .cf-meta-title { font-size: 18px; }
+  .cf-meta-title { font-size: 21px; }
   .cf-meta-artist { font-size: 13px; }
   .cf-meta-row { font-size: 11.5px; gap: 7px; }
-  .cf-play-orb { left: 22px; }
-  .cf-more-orb { right: 22px; }
+  .cf-play-orb { left: 18px; }
+  .cf-more-orb { right: 18px; }
   .coverflow-ctx-menu { right: 22px; }
 }

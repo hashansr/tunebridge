@@ -2467,9 +2467,18 @@ function _cfScheduleUpdate() {
 function _cfMetrics() {
   const stage = document.getElementById('coverflow-stage');
   const w = stage?.clientWidth || window.innerWidth || 1200;
-  if (w < 760) return { base: 104, step: 40, size: 166 };
-  if (w < 1080) return { base: 126, step: 48, size: 200 };
-  return { base: 150, step: 55, size: 240 };
+  const h = stage?.clientHeight || 560;
+  const detailBand = 168;
+  const available = Math.max(0, h - detailBand);
+  const cy = Math.max(120, (available / 2) + 8);
+  let size;
+  if (w < 760) size = Math.min(180, available * 0.78);
+  else if (w < 1080) size = Math.min(250, available * 0.80);
+  else size = Math.min(330, available * 0.82);
+  size = Math.max(140, size);
+  if (w < 760) return { base: 110, step: 40, size, cy };
+  if (w < 1080) return { base: 146, step: 52, size, cy };
+  return { base: 190, step: 62, size, cy };
 }
 
 function _cfPositionCards() {
@@ -2511,7 +2520,7 @@ function _cfPositionCards() {
       opacity = abs > 6 ? 0 : Math.max(0.14, 1 - abs * 0.15);
     }
 
-    card.style.cssText = `opacity:${opacity};pointer-events:${opacity < 0.06 ? 'none' : 'auto'};z-index:${100 - abs};transform:scale(${baseScale}) translate3d(${x / baseScale}px,0,${z}px) rotateY(${rotY}deg) scale(${coverScale})`;
+    card.style.cssText = `top:${m.cy}px;opacity:${opacity};pointer-events:${opacity < 0.06 ? 'none' : 'auto'};z-index:${100 - abs};transform:scale(${baseScale}) translate3d(${x / baseScale}px,0,${z}px) rotateY(${rotY}deg) scale(${coverScale})`;
     const dim = card.querySelector('.cf-cover-dim');
     if (dim) dim.style.opacity = d === 0 ? 0 : Math.min(0.62, 0.16 + (abs - 1) * 0.13);
     const refl = card.querySelector('.cf-cover-refl');
@@ -2604,9 +2613,10 @@ function _cfUpdateMeta() {
     if (al.year) parts.push(String(al.year));
     if (al.track_count) parts.push(`${al.track_count} track${Number(al.track_count) === 1 ? '' : 's'}`);
     const fmt = _cfAlbumFormat(al);
-    metaEl.innerHTML = parts.map(esc).join('<span class="cf-meta-dot"></span>') +
-      (parts.length ? '<span class="cf-meta-dot"></span>' : '') +
-      `<span class="cf-format-badge${fmt.hi ? ' lossless' : ''}">${esc(fmt.label)}</span>`;
+    const badge = fmt.hi
+      ? `${parts.length ? '<span class="cf-meta-dot"></span>' : ''}<span class="cf-format-badge lossless">Hi-Res</span>`
+      : '';
+    metaEl.innerHTML = parts.map(esc).join('<span class="cf-meta-dot"></span>') + badge;
   }
   _cfRefreshCtxLabels();
   _cfRefreshPlayOrb();
@@ -2745,7 +2755,6 @@ async function _cfBuildDetail(al) {
   if (!front || !back || !al) return;
   _cfDetailAlbum = al;
   _cfDetailTracks = await _cfAlbumTracks(al);
-  const fmt = _cfAlbumFormat(al);
   const colors = _cfPlaceholderColors(`${al.artist || ''}||${al.name || ''}`);
   front.innerHTML = _cfArtworkFace(al, 520);
 
@@ -2753,7 +2762,8 @@ async function _cfBuildDetail(al) {
   if (al.year) parts.push(`<span>${esc(al.year)}</span>`);
   const trackTotal = Number(_cfDetailTracks.length || al.track_count || 0);
   parts.push(`<span>${String(trackTotal)} song${trackTotal === 1 ? '' : 's'}</span>`);
-  parts.push(`<span class="cf-format-badge${fmt.hi ? ' lossless' : ''}">${esc(fmt.label)}</span>`);
+  const quality = _cfAlbumFormat(al);
+  if (quality.hi) parts.push('<span class="cf-format-badge lossless">Hi-Res</span>');
 
   const tracksHtml = _cfDetailTracks.length
     ? _cfDetailTracks.map((t, idx) => {
