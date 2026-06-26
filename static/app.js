@@ -423,7 +423,7 @@ function coverPlaceholder(kind = 'song', size = 38, rounded = '4px', full = fals
   const style = full
     ? `width:100%;height:100%;border-radius:${rounded};`
     : `width:${size}px;height:${size}px;border-radius:${rounded};`;
-  return `<div class="cover-placeholder cover-placeholder-${validKind}" style="${style}"><img src="/icons/empty-${validKind}.svg" alt="" aria-hidden="true" loading="lazy" /></div>`;
+  return `<div class="cover-placeholder cover-placeholder-${validKind}${full ? ' cover-placeholder-full' : ''}" style="${style}"><img src="/icons/empty-${validKind}.svg" alt="" aria-hidden="true" loading="lazy" /></div>`;
 }
 
 function thumbImg(key, size = 38, rounded = '4px', fallbackKind = 'song') {
