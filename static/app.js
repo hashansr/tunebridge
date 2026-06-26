@@ -2716,46 +2716,27 @@ function _cfRefreshDetailPlaying() {
   _cfMarkDetailTrack(_cfCurrentDetailTrackNumber());
 }
 
-function _cfBuildDetailMenu() {
-  const menu = document.getElementById('cf-db-menu');
-  if (!menu) return;
-  menu.innerHTML = CF_CTX_ITEMS.map(item => item[0] === 'sep'
-    ? '<div class="cf-ctx-sep"></div>'
-    : `<button class="cf-ctx-item" data-act="${item[0]}"><svg viewBox="0 0 14 14" fill="currentColor">${item[2]}</svg><span>${item[1]}</span></button>`
-  ).join('');
-  menu.querySelectorAll('.cf-ctx-item').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      cfRunDetailAction(btn.dataset.act, e);
-    });
-  });
-  _cfRefreshDetailMenuLabels();
-}
-
-function _cfRefreshDetailMenuLabels() {
-  const favLabel = document.querySelector('#cf-db-menu [data-act="fav"] span');
-  const al = _cfDetailAlbum || _cfCurrentAlbum();
-  if (favLabel && al) {
-    const id = String(al.artwork_key || _cfDetailTracks[0]?.artwork_key || '');
-    favLabel.textContent = id && state.favourites.albums.has(id) ? 'Remove from favourites' : 'Add to favourites';
-  }
-}
-
 function _cfCloseDetailMenu() {
-  const menu = document.getElementById('cf-db-menu');
   const btn = document.getElementById('cf-db-more');
-  if (menu) menu.classList.remove('open');
   if (btn) btn.setAttribute('aria-expanded', 'false');
 }
 
-function _cfToggleDetailMenu(e) {
+async function cfOpenDetailActions(e) {
+  e?.preventDefault?.();
   e?.stopPropagation?.();
-  const menu = document.getElementById('cf-db-menu');
+  const al = _cfDetailAlbum || _cfCurrentAlbum();
+  if (!al) return;
   const btn = document.getElementById('cf-db-more');
-  if (!menu) return;
-  _cfRefreshDetailMenuLabels();
-  const open = menu.classList.toggle('open');
-  btn?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  btn?.setAttribute('aria-expanded', 'true');
+  await showAlbumCtxMenu(_ctxAnchorEvent(e), al.artist, al.name);
+  _ctxCfArtist = al.artist;
+  _ctxCfAlbum = al.name;
+  const libItem = document.getElementById('ctx-show-in-library-item');
+  const artistItem = document.getElementById('ctx-show-artist-item');
+  const cfSep = document.getElementById('ctx-cf-nav-sep');
+  if (libItem) libItem.style.display = '';
+  if (artistItem) artistItem.style.display = '';
+  if (cfSep) cfSep.style.display = '';
 }
 
 async function _cfBuildDetail(al) {
@@ -2803,18 +2784,16 @@ async function _cfBuildDetail(al) {
       <button class="db-btn ghost icon" id="cf-db-more" aria-label="Album actions" aria-expanded="false">
         <svg class="cf-ico" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
       </button>
-      <div class="db-menu" id="cf-db-menu"></div>
     </div>
     <div class="db-tracks" id="cf-db-tracks">${tracksHtml}</div>`;
 
   document.getElementById('cf-db-back')?.addEventListener('click', cfCloseDetail);
   document.getElementById('cf-db-play')?.addEventListener('click', () => cfPlayDetailFrom(0));
   document.getElementById('cf-db-shuffle')?.addEventListener('click', cfShuffleDetail);
-  document.getElementById('cf-db-more')?.addEventListener('click', _cfToggleDetailMenu);
+  document.getElementById('cf-db-more')?.addEventListener('click', cfOpenDetailActions);
   back.querySelectorAll('.db-track[data-track]').forEach(row => {
     row.addEventListener('dblclick', () => cfPlayDetailFrom(Number(row.dataset.track) - 1));
   });
-  _cfBuildDetailMenu();
   _cfRefreshDetailPlaying();
 }
 
@@ -2857,51 +2836,6 @@ function cfShuffleDetail() {
     _cfRefreshPlayOrb();
     _cfRefreshDetailPlaying();
   }, 80);
-}
-
-async function cfRunDetailAction(action, e) {
-  const al = _cfDetailAlbum || _cfCurrentAlbum();
-  if (!al) return;
-  _cfCloseDetailMenu();
-  if (action === 'play') return cfPlayDetailFrom(0);
-  if (action === 'artist') return showArtist(al.artist);
-  if (action === 'reveal') return showAlbum(al.artist, al.name);
-  if (action === 'sync') {
-    toast('Open Sync to Device to choose this album for export.');
-    return;
-  }
-
-  const tracks = _cfDetailTracks.length ? _cfDetailTracks : await _cfAlbumTracks(al);
-  if (!tracks.length) { toast('No tracks found'); return; }
-
-  if (action === 'queue') return Player.addToQueue(tracks);
-  if (action === 'playlist') {
-    await addAllToPlaylist(tracks.map(t => t.id).filter(Boolean), document.getElementById('cf-db-more') || e?.currentTarget);
-    return;
-  }
-  if (action === 'fav') {
-    const artworkKey = al.artwork_key || tracks[0]?.artwork_key || '';
-    if (!artworkKey) { toast('Album artwork key not available'); return; }
-    await toggleFavourite('albums', encodeURIComponent(artworkKey));
-    _cfRefreshCtxLabels();
-    _cfRefreshDetailMenuLabels();
-    return;
-  }
-  if (action === 'edit') {
-    state.artist = al.artist;
-    state.album = al.name;
-    openAlbumTagEditor();
-    return;
-  }
-  if (action === 'file') {
-    const target = _albumFinderTarget(tracks);
-    if (!target?.path) { toast('Path not available', 'error'); return; }
-    try {
-      await api('/open-in-finder', { method: 'POST', body: { path: target.path } });
-    } catch (_) {
-      toast('Could not open in Finder', 'error');
-    }
-  }
 }
 
 async function cfPlayCurrent(e) {
@@ -3108,7 +3042,7 @@ function _cfAttachEvents() {
 
   document.addEventListener('click', e => {
     if (!e.target.closest('#coverflow-ctx-menu') && !e.target.closest('#cf-actions-btn')) _cfCloseActions();
-    if (!e.target.closest('#cf-db-menu') && !e.target.closest('#cf-db-more')) _cfCloseDetailMenu();
+    if (!e.target.closest('#cf-db-more')) _cfCloseDetailMenu();
   });
 
   const stage = document.getElementById('coverflow-stage');
