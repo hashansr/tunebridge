@@ -26534,35 +26534,6 @@ body.is-col-resizing {
   border-radius: 9999px;
 }
 
-.cf-artist-avatar {
-  align-items: center;
-  background: rgba(255,255,255,0.12);
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 50%;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.26);
-  color: rgba(246,249,255,0.74);
-  display: inline-flex;
-  flex: 0 0 23px;
-  height: 23px;
-  justify-content: center;
-  overflow: hidden;
-  width: 23px;
-}
-
-.cf-artist-avatar img,
-.cf-artist-avatar .cover-placeholder {
-  border: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  height: 100% !important;
-  object-fit: cover;
-  width: 100% !important;
-}
-
-.cf-artist-avatar.is-empty {
-  display: none;
-}
-
 .cf-artist-name {
   white-space: nowrap;
   overflow: hidden;
