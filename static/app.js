@@ -2376,6 +2376,7 @@ let   _cfTapCard = null;
 let   _cfWheelAcc = 0;
 let   _cfWheelTimer = null;
 let   _cfResizeObserver = null;
+let   _cfLayoutInstantTimer = null;
 let   _cfDetailOpen = false;
 let   _cfDetailAlbum = null;
 let   _cfDetailTracks = [];
@@ -2417,6 +2418,8 @@ function renderCoverflow(albums, _artistFilter) {
   const flow  = document.getElementById('coverflow-flow');
   if (!stage) return;
   stage.classList.remove('detail-open');
+  clearTimeout(_cfLayoutInstantTimer);
+  stage.classList.add('cf-layout-instant');
 
   // Build fixed pool of DOM nodes
   if (flow) flow.innerHTML = '';
@@ -2446,6 +2449,11 @@ function renderCoverflow(albums, _artistFilter) {
   _cfAttachEvents();
   _cfPositionCards();
   _cfUpdateMeta();
+  void stage.offsetWidth;
+  _cfLayoutInstantTimer = setTimeout(() => {
+    stage.classList.remove('cf-layout-instant');
+    _cfLayoutInstantTimer = null;
+  }, 120);
   _cfPreload(_cfIndex);
   // Only grab focus if the search input is not active (avoid stealing typing focus)
   const activeEl = document.activeElement;
@@ -3182,6 +3190,7 @@ function renderAlbumsGrid() {
   const useCoverflow = !artistFilter && _coverflowEnabled();
   document.getElementById('view-albums')?.classList.toggle('coverflow-active', useCoverflow);
   document.getElementById('main')?.classList.toggle('main-coverflow-active', state.view === 'albums' && useCoverflow);
+  document.getElementById('app')?.classList.toggle('main-coverflow-active', state.view === 'albums' && useCoverflow);
   const hasFilters = !!(state.albumSearch || state.albumAlpha);
 
   if (countEl) {
@@ -3243,6 +3252,7 @@ function renderAlbumsGrid() {
   const cfShell = document.getElementById('coverflow-shell');
   if (useCoverflow) {
     document.getElementById('main')?.classList.add('main-coverflow-active');
+    document.getElementById('app')?.classList.add('main-coverflow-active');
     if (grid) { grid.innerHTML = ''; grid.style.display = 'none'; }
     if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
     if (paginationEl) paginationEl.style.display = 'none';
@@ -3252,6 +3262,7 @@ function renderAlbumsGrid() {
     return;
   }
   document.getElementById('main')?.classList.remove('main-coverflow-active');
+  document.getElementById('app')?.classList.remove('main-coverflow-active');
   if (cfShell) cfShell.style.display = 'none';
 
   const isList = _collectionLayout(layoutKey).mode === 'list';
@@ -8599,11 +8610,13 @@ function showViewEl(name) {
     }
   });
   const main = document.getElementById('main');
+  const isCoverflowFull = name === 'albums' && _coverflowEnabled() && !state.artist;
   if (main) {
     main.classList.toggle('main-home-active', name === 'home');
     main.classList.toggle('main-library-active', name === 'artists' || name === 'albums');
-    main.classList.toggle('main-coverflow-active', name === 'albums' && _coverflowEnabled() && !state.artist);
+    main.classList.toggle('main-coverflow-active', isCoverflowFull);
   }
+  document.getElementById('app')?.classList.toggle('main-coverflow-active', isCoverflowFull);
   document.body.classList.toggle('show-library-scrollbars', ['artists', 'albums', 'songs'].includes(name));
   // Clear right nav slot for non-home views (loadHome repopulates it)
   if (name !== 'home') {
