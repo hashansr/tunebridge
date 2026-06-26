@@ -1356,9 +1356,9 @@ def do_scan():
 
     files = []
     for root, dirs, filenames in os.walk(music_base):
-        dirs[:] = sorted(d for d in dirs if not d.startswith('.'))
+        dirs[:] = sorted(d for d in dirs if not (d.startswith('.') and not d.startswith('...')))
         for fn in sorted(filenames):
-            if fn.startswith('.') or fn.startswith('._'):
+            if (fn.startswith('.') and not fn.startswith('...')) or fn.startswith('._'):
                 continue
             if fn.lower().endswith(('.flac', '.mp3', '.m4a', '.aac', '.mp4', '.wav')):
                 files.append(Path(root) / fn)

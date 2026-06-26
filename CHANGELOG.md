@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Library scan no longer skips album folders whose names begin with `...` (e.g. `...ish`, `...Nothing Like The Sun`)
 
 ## v0.543-rc.260626-1717 · 2026-06-26
 
