@@ -2476,15 +2476,14 @@ function _cfMetrics() {
   const stage = document.getElementById('coverflow-stage');
   const w = stage?.clientWidth || window.innerWidth || 1200;
   const h = stage?.clientHeight || 560;
-  const topBand = w < 760 ? 150 : (w < 1080 ? 166 : 182);
   const detailBand = 168;
-  const available = Math.max(180, h - topBand - detailBand);
+  const available = Math.max(180, h - detailBand);
+  const cy = Math.max(120, (h - detailBand) / 2 + 8);
   let size;
   if (w < 760) size = Math.min(180, available * 0.78);
   else if (w < 1080) size = Math.min(250, available * 0.80);
   else size = Math.min(330, available * 0.82);
   size = Math.max(140, size);
-  const cy = Math.max(topBand + (size / 2) + 16, topBand + (available / 2));
   if (w < 760) return { base: 110, step: 40, size, cy };
   if (w < 1080) return { base: 146, step: 52, size, cy };
   return { base: 190, step: 62, size, cy };
@@ -2665,7 +2664,7 @@ function _cfDetailEls() {
 function _cfSizeDetail() {
   const { stage, card } = _cfDetailEls();
   if (!stage || !card) return;
-  const s = Math.max(280, Math.min(460, stage.clientHeight - 120, stage.clientWidth - 100));
+  const s = Math.max(140, Math.min(_cfMetrics().size, stage.clientHeight - 120, stage.clientWidth - 100));
   card.style.width = card.style.height = s + 'px';
 }
 

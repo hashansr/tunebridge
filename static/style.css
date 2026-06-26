@@ -26610,8 +26610,8 @@ body.is-col-resizing {
   bottom: 28px;
   z-index: 200;
 }
-.cf-play-orb { left: 30px; }
-.cf-more-orb { right: 30px; }
+.cf-play-orb { left: calc(30px + var(--page-content-inset)); }
+.cf-more-orb { right: calc(30px + var(--page-content-inset)); }
 
 .cf-orb-btn {
   border-radius: 50%;
@@ -26624,16 +26624,19 @@ body.is-col-resizing {
   -webkit-tap-highlight-color: transparent;
   transition: transform .18s cubic-bezier(.34,.7,.3,1), box-shadow .2s ease, background .2s ease, border-color .2s ease, filter .2s ease, color .2s ease;
 }
-.cf-play-orb .cf-orb-btn { width: 36px; height: 36px; }
+.cf-play-orb .cf-orb-btn { width: 44px; height: 44px; }
 .cf-more-orb  .cf-orb-btn { width: 34px; height: 34px; }
 .cf-play-orb .cf-orb-btn {
-  color: #0c1933;
-  background: radial-gradient(130% 130% at 50% 14%, #cedcff 0%, #adc6ff 52%, #93b4f7 100%);
+  color: rgba(247,249,255,0.96);
+  background:
+    radial-gradient(120% 120% at 50% 14%, rgba(255,255,255,0.08), rgba(255,255,255,0) 42%),
+    linear-gradient(180deg, rgba(33,34,38,0.94), rgba(18,19,23,0.94));
+  border: 1px solid rgba(105,111,127,0.34);
+  backdrop-filter: blur(14px) saturate(130%);
   box-shadow:
-    0 8px 20px rgba(120,158,238,0.34),
-    0 2px 6px rgba(0,0,0,0.4),
-    inset 0 1px 0 rgba(255,255,255,0.55),
-    inset 0 -2px 5px rgba(46,78,150,0.28);
+    0 10px 26px rgba(0,0,0,0.42),
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 0 0 1px rgba(255,255,255,0.03);
 }
 .cf-more-orb .cf-orb-btn {
   background: var(--surface-card-gradient);
@@ -26643,12 +26646,15 @@ body.is-col-resizing {
 }
 .cf-play-orb .cf-orb-btn:hover {
   transform: translateY(-1.5px) scale(1.04);
-  filter: brightness(1.03);
+  color: #fff;
+  background:
+    radial-gradient(120% 120% at 50% 14%, rgba(255,255,255,0.12), rgba(255,255,255,0) 42%),
+    linear-gradient(180deg, rgba(39,41,47,0.96), rgba(20,21,25,0.96));
+  border-color: rgba(139,146,166,0.44);
   box-shadow:
-    0 12px 28px rgba(120,158,238,0.48),
-    0 3px 8px rgba(0,0,0,0.45),
-    inset 0 1px 0 rgba(255,255,255,0.65),
-    inset 0 -2px 5px rgba(46,78,150,0.28);
+    0 14px 32px rgba(0,0,0,0.5),
+    inset 0 1px 0 rgba(255,255,255,0.1),
+    inset 0 0 0 1px rgba(255,255,255,0.04);
 }
 .cf-more-orb .cf-orb-btn:hover {
   transform: translateY(-1.5px) scale(1.04);
@@ -26660,10 +26666,10 @@ body.is-col-resizing {
 .cf-orb-btn:active { transform: scale(0.94); }
 .cf-orb-ico { width: 18px; height: 18px; }
 .cf-play-orb .cf-orb-ico {
-  width: 12px;
-  height: 12px;
+  width: 17px;
+  height: 17px;
   margin-left: 2px;
-  filter: drop-shadow(0 1px 0 rgba(255,255,255,0.35));
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.45));
 }
 .cf-play-orb.playing .cf-orb-ico { margin-left: 0; }
 .cf-more-orb .cf-orb-btn svg {
@@ -26678,7 +26684,7 @@ body.is-col-resizing {
 
 .coverflow-ctx-menu {
   position: absolute;
-  right: 34px;
+  right: calc(34px + var(--page-content-inset));
   bottom: 90px;
   min-width: 226px;
   z-index: 240;
