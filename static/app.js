@@ -2362,8 +2362,8 @@ let   _cfDetailAlbum = null;
 let   _cfDetailTracks = [];
 
 const CF_ICONS = {
-  play: '<svg class="cf-ico" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>',
-  pause: '<svg class="cf-ico" viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="3" width="3" height="10" rx="1"/><rect x="9" y="3" width="3" height="10" rx="1"/></svg>',
+  play:  '<span class="tb-icon tb-icon-play-lg  cf-orb-ico" aria-hidden="true"></span>',
+  pause: '<span class="tb-icon tb-icon-pause-lg cf-orb-ico" aria-hidden="true"></span>',
 };
 
 const CF_CTX_ITEMS = [

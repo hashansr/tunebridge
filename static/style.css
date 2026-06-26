@@ -26548,8 +26548,6 @@ body.is-col-resizing {
 .cf-more-orb { right: 34px; }
 
 .cf-orb-btn {
-  width: 52px;
-  height: 52px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
@@ -26561,13 +26559,14 @@ body.is-col-resizing {
   backdrop-filter: blur(10px);
   transition: transform .12s ease, background .15s ease, border-color .15s ease;
 }
+.cf-play-orb .cf-orb-btn { width: 36px; height: 36px; }
+.cf-more-orb  .cf-orb-btn { width: 34px; height: 34px; }
 .cf-orb-btn:hover {
   background: rgba(255,255,255,0.13);
   border-color: rgba(255,255,255,0.22);
 }
 .cf-orb-btn:active { transform: scale(0.93); }
-.cf-play-orb .cf-orb-btn svg { margin-left: 3px; }
-.cf-play-orb.playing .cf-orb-btn svg { margin-left: 0; }
+.cf-orb-ico { width: 18px; height: 18px; }
 .cf-ico {
   width: 16px;
   height: 16px;
