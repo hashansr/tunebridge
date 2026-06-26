@@ -2422,14 +2422,14 @@ function renderCoverflow(albums, _artistFilter) {
     card.innerHTML = `
       <div class="cf-cover-art">
         <img class="cf-art-img" decoding="async" alt="">
-        <div class="cf-cover-placeholder" aria-hidden="true"><div class="cf-initials"></div></div>
+        <div class="cf-cover-placeholder" aria-hidden="true"><img class="cf-placeholder-icon" src="/icons/empty-album.svg" alt=""></div>
         <div class="cf-cover-gloss"></div>
         <div class="cf-cover-edge"></div>
         <div class="cf-cover-dim"></div>
       </div>
       <div class="cf-cover-refl">
         <img class="cf-refl-img" decoding="async" alt="">
-        <div class="cf-refl-placeholder" aria-hidden="true"><div class="cf-initials"></div></div>
+        <div class="cf-refl-placeholder" aria-hidden="true"></div>
       </div>`;
     card.style.cssText = 'opacity:0;pointer-events:none;z-index:0';
     flow?.appendChild(card);
@@ -2529,12 +2529,11 @@ function _cfBindCard(card, al, albumIdx, abs) {
   if (card.dataset.albumIdx === String(albumIdx)) return;
   card.dataset.albumIdx = String(albumIdx);
   const title = al.name || 'Unknown Album';
-  const initials = _cfInitials(title);
   const colors = _cfPlaceholderColors(`${al.artist || ''}||${title}`);
   card.style.setProperty('--cf-p1', colors[0]);
   card.style.setProperty('--cf-p2', colors[1]);
   const src = al.artwork_key ? `/api/artwork/${encodeURIComponent(al.artwork_key)}?size=${abs === 0 ? 300 : 220}` : '';
-  _cfSetPlaceholderNodes(card, !src, initials);
+  _cfSetPlaceholderNodes(card, !src);
   card.classList.toggle('has-art-source', !!src);
   card.classList.toggle('has-art', !!src);
   [card.querySelector('.cf-art-img'), card.querySelector('.cf-refl-img')].forEach(img => {
@@ -2557,7 +2556,7 @@ function _cfBindCard(card, al, albumIdx, abs) {
   });
 }
 
-function _cfSetPlaceholderNodes(card, show, initials) {
+function _cfSetPlaceholderNodes(card, show) {
   const art = card.querySelector('.cf-cover-art');
   const refl = card.querySelector('.cf-cover-refl');
   if (!show) {
@@ -2565,12 +2564,11 @@ function _cfSetPlaceholderNodes(card, show, initials) {
     return;
   }
   if (art && !art.querySelector('.cf-cover-placeholder')) {
-    art.insertAdjacentHTML('beforeend', '<div class="cf-cover-placeholder" aria-hidden="true"><div class="cf-initials"></div></div>');
+    art.insertAdjacentHTML('beforeend', '<div class="cf-cover-placeholder" aria-hidden="true"><img class="cf-placeholder-icon" src="/icons/empty-album.svg" alt=""></div>');
   }
   if (refl && !refl.querySelector('.cf-refl-placeholder')) {
-    refl.insertAdjacentHTML('beforeend', '<div class="cf-refl-placeholder" aria-hidden="true"><div class="cf-initials"></div></div>');
+    refl.insertAdjacentHTML('beforeend', '<div class="cf-refl-placeholder" aria-hidden="true"></div>');
   }
-  card.querySelectorAll('.cf-initials').forEach(el => { el.textContent = initials; });
 }
 
 // Eagerly load images around the current index so navigation feels instant
@@ -2648,13 +2646,12 @@ function _cfSizeDetail() {
 
 function _cfArtworkFace(al, size = 460) {
   const title = al?.name || 'Unknown Album';
-  const initials = _cfInitials(title);
   const colors = _cfPlaceholderColors(`${al?.artist || ''}||${title}`);
   const src = al?.artwork_key ? `/api/artwork/${encodeURIComponent(al.artwork_key)}?size=${size}` : '';
   return `
     <div class="cf-cover-art" style="--cf-p1:${esc(colors[0])};--cf-p2:${esc(colors[1])}">
       ${src ? `<img class="cf-art-img" decoding="async" alt="${esc(title)}" src="${src}">` : ''}
-      <div class="cf-cover-placeholder" aria-hidden="true"><div class="cf-initials">${esc(initials)}</div></div>
+      <div class="cf-cover-placeholder" aria-hidden="true"><img class="cf-placeholder-icon" src="/icons/empty-album.svg" alt=""></div>
       <div class="cf-cover-gloss"></div>
       <div class="cf-cover-edge"></div>
     </div>`;

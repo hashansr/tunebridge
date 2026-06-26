@@ -26406,18 +26406,15 @@ body.is-col-resizing {
   mix-blend-mode: screen;
   background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.6) 0 1.5px, transparent 1.5px 9px);
 }
-.cf-initials {
+.cf-placeholder-icon {
   position: absolute;
   inset: 0;
+  margin: auto;
+  width: 38%;
+  height: 38%;
+  object-fit: contain;
+  opacity: 0.45;
   z-index: 2;
-  align-items: center;
-  justify-content: center;
-  display: flex;
-  font-size: 58px;
-  font-weight: 800;
-  letter-spacing: -0.05em;
-  color: rgba(255,255,255,0.94);
-  text-shadow: 0 1px 1px rgba(0,0,0,0.3);
 }
 
 .cf-card.has-art .cf-cover-placeholder,
