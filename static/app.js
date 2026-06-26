@@ -2353,9 +2353,13 @@ let   _cfDragging = false;
 let   _cfDragMoved = false;
 let   _cfDragStartX = 0;
 let   _cfDragStartIndex = 0;
+let   _cfTapCard = null;
 let   _cfWheelAcc = 0;
 let   _cfWheelTimer = null;
 let   _cfResizeObserver = null;
+let   _cfDetailOpen = false;
+let   _cfDetailAlbum = null;
+let   _cfDetailTracks = [];
 
 const CF_ICONS = {
   play: '<svg class="cf-ico" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>',
@@ -2383,10 +2387,14 @@ function _cfIsActiveAlbumsView() {
 function renderCoverflow(albums, _artistFilter) {
   _cfAlbums = albums;
   _cfIndex  = 0;
+  _cfDetailOpen = false;
+  _cfDetailAlbum = null;
+  _cfDetailTracks = [];
 
   const stage = document.getElementById('coverflow-stage');
   const flow  = document.getElementById('coverflow-flow');
   if (!stage) return;
+  stage.classList.remove('detail-open');
 
   // Build fixed pool of DOM nodes
   if (flow) flow.innerHTML = '';
@@ -2407,11 +2415,6 @@ function renderCoverflow(albums, _artistFilter) {
         <img class="cf-refl-img" decoding="async" alt="">
         <div class="cf-refl-placeholder" aria-hidden="true"><div class="cf-initials"></div></div>
       </div>`;
-    card.addEventListener('click', () => _cfCardClick(card));
-    card.addEventListener('dblclick', () => {
-      const albumIdx = Number(card.dataset.albumIdx);
-      if (albumIdx === _cfIndex) cfPlayCurrent();
-    });
     card.style.cssText = 'opacity:0;pointer-events:none;z-index:0';
     flow?.appendChild(card);
     _cfPool.push(card);
@@ -2600,9 +2603,262 @@ function _cfCardClick(card) {
   if (albumIdx < 0 || albumIdx >= _cfAlbums.length) return;
 
   if (albumIdx === _cfIndex) {
-    return;
+    cfOpenDetail();
   } else {
     _cfSelect(albumIdx);
+  }
+}
+
+function _cfDetailEls() {
+  return {
+    stage: document.getElementById('coverflow-stage'),
+    card: document.getElementById('coverflow-detail-card'),
+    front: document.getElementById('coverflow-detail-front'),
+    back: document.getElementById('coverflow-detail-back'),
+  };
+}
+
+function _cfSizeDetail() {
+  const { stage, card } = _cfDetailEls();
+  if (!stage || !card) return;
+  const s = Math.max(280, Math.min(460, stage.clientHeight - 120, stage.clientWidth - 100));
+  card.style.width = card.style.height = s + 'px';
+}
+
+function _cfArtworkFace(al, size = 460) {
+  const title = al?.name || 'Unknown Album';
+  const initials = _cfInitials(title);
+  const colors = _cfPlaceholderColors(`${al?.artist || ''}||${title}`);
+  const src = al?.artwork_key ? `/api/artwork/${encodeURIComponent(al.artwork_key)}?size=${size}` : '';
+  return `
+    <div class="cf-cover-art" style="--cf-p1:${esc(colors[0])};--cf-p2:${esc(colors[1])}">
+      ${src ? `<img class="cf-art-img" decoding="async" alt="${esc(title)}" src="${src}">` : ''}
+      <div class="cf-cover-placeholder" aria-hidden="true"><div class="cf-initials">${esc(initials)}</div></div>
+      <div class="cf-cover-gloss"></div>
+      <div class="cf-cover-edge"></div>
+    </div>`;
+}
+
+function _cfDetailTrackNumber(t, fallback) {
+  const raw = t?.track_number ?? t?.track ?? t?.track_no ?? fallback;
+  const n = parseInt(String(raw).split('/')[0], 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function _cfDetailDuration(t) {
+  if (t?.duration_fmt) return t.duration_fmt;
+  const seconds = Number(t?.duration || 0);
+  if (!seconds) return '';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function _cfCurrentDetailTrackNumber() {
+  const cur = Player?.currentTrack;
+  if (!cur || !_cfDetailTracks.length) return null;
+  const idx = _cfDetailTracks.findIndex(t => String(t.id || '') === String(cur.id || ''));
+  return idx >= 0 ? idx + 1 : null;
+}
+
+function _cfMarkDetailTrack(n) {
+  const { back } = _cfDetailEls();
+  if (!back) return;
+  back.querySelectorAll('.db-track').forEach(row => {
+    row.classList.toggle('playing', Number(row.dataset.track) === Number(n));
+  });
+}
+
+function _cfRefreshDetailPlaying() {
+  if (!_cfDetailOpen) return;
+  _cfMarkDetailTrack(_cfCurrentDetailTrackNumber());
+}
+
+function _cfBuildDetailMenu() {
+  const menu = document.getElementById('cf-db-menu');
+  if (!menu) return;
+  menu.innerHTML = CF_CTX_ITEMS.map(item => item[0] === 'sep'
+    ? '<div class="cf-ctx-sep"></div>'
+    : `<button class="cf-ctx-item" data-act="${item[0]}"><svg viewBox="0 0 14 14" fill="currentColor">${item[2]}</svg><span>${item[1]}</span></button>`
+  ).join('');
+  menu.querySelectorAll('.cf-ctx-item').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      cfRunDetailAction(btn.dataset.act, e);
+    });
+  });
+  _cfRefreshDetailMenuLabels();
+}
+
+function _cfRefreshDetailMenuLabels() {
+  const favLabel = document.querySelector('#cf-db-menu [data-act="fav"] span');
+  const al = _cfDetailAlbum || _cfCurrentAlbum();
+  if (favLabel && al) {
+    const id = String(al.artwork_key || _cfDetailTracks[0]?.artwork_key || '');
+    favLabel.textContent = id && state.favourites.albums.has(id) ? 'Remove from favourites' : 'Add to favourites';
+  }
+}
+
+function _cfCloseDetailMenu() {
+  const menu = document.getElementById('cf-db-menu');
+  const btn = document.getElementById('cf-db-more');
+  if (menu) menu.classList.remove('open');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+function _cfToggleDetailMenu(e) {
+  e?.stopPropagation?.();
+  const menu = document.getElementById('cf-db-menu');
+  const btn = document.getElementById('cf-db-more');
+  if (!menu) return;
+  _cfRefreshDetailMenuLabels();
+  const open = menu.classList.toggle('open');
+  btn?.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+async function _cfBuildDetail(al) {
+  const { front, back } = _cfDetailEls();
+  if (!front || !back || !al) return;
+  _cfDetailAlbum = al;
+  _cfDetailTracks = await _cfAlbumTracks(al);
+  const fmt = _cfAlbumFormat(al);
+  const colors = _cfPlaceholderColors(`${al.artist || ''}||${al.name || ''}`);
+  front.innerHTML = _cfArtworkFace(al, 520);
+
+  const parts = [];
+  if (al.year) parts.push(`<span>${esc(al.year)}</span>`);
+  const trackTotal = Number(_cfDetailTracks.length || al.track_count || 0);
+  parts.push(`<span>${String(trackTotal)} song${trackTotal === 1 ? '' : 's'}</span>`);
+  parts.push(`<span class="cf-format-badge${fmt.hi ? ' lossless' : ''}">${esc(fmt.label)}</span>`);
+
+  const tracksHtml = _cfDetailTracks.length
+    ? _cfDetailTracks.map((t, idx) => {
+        const n = idx + 1;
+        const displayN = _cfDetailTrackNumber(t, n);
+        return `
+          <div class="db-track" data-track="${n}">
+            <span class="db-n">${esc(displayN)}</span>
+            <span class="db-eq"><i></i><i></i><i></i></span>
+            <span class="db-tt">${esc(t.title || `Track ${displayN}`)}</span>
+            <span class="db-dur">${esc(_cfDetailDuration(t))}</span>
+          </div>`;
+      }).join('')
+    : '<div class="db-track"><span class="db-tt">No tracks found</span></div>';
+
+  back.innerHTML = `
+    <div class="db-head">
+      <div class="db-accent" style="background:linear-gradient(160deg, ${esc(colors[0])}, ${esc(colors[1])});"></div>
+      <button class="db-back" id="cf-db-back" aria-label="Back to Cover Flow">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5 5.5 8l4.5 4.5"/></svg>
+      </button>
+      <div class="db-title">${esc(al.name || 'Unknown Album')}</div>
+      <div class="db-artist">${esc(al.artist || 'Unknown Artist')}</div>
+      <div class="db-meta">${parts.join('<span class="dot"></span>')}</div>
+    </div>
+    <div class="db-actions">
+      <button class="db-btn primary" id="cf-db-play">${CF_ICONS.play}Play</button>
+      <button class="db-btn ghost" id="cf-db-shuffle"><svg class="cf-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h2.4c2.8 0 3.2 8 6 8H14"/><path d="M11.5 9.5 14 12l-2.5 2.5"/><path d="M2 12h2.4c.8 0 1.4-.6 1.9-1.5"/><path d="M10.3 5.5c.5-.9 1.1-1.5 2-1.5H14"/><path d="M11.5 1.5 14 4l-2.5 2.5"/></svg>Shuffle</button>
+      <button class="db-btn ghost icon" id="cf-db-more" aria-label="Album actions" aria-expanded="false">
+        <svg class="cf-ico" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="13" cy="8" r="1.5"/></svg>
+      </button>
+      <div class="db-menu" id="cf-db-menu"></div>
+    </div>
+    <div class="db-tracks" id="cf-db-tracks">${tracksHtml}</div>`;
+
+  document.getElementById('cf-db-back')?.addEventListener('click', cfCloseDetail);
+  document.getElementById('cf-db-play')?.addEventListener('click', () => cfPlayDetailFrom(0));
+  document.getElementById('cf-db-shuffle')?.addEventListener('click', cfShuffleDetail);
+  document.getElementById('cf-db-more')?.addEventListener('click', _cfToggleDetailMenu);
+  back.querySelectorAll('.db-track[data-track]').forEach(row => {
+    row.addEventListener('click', () => cfPlayDetailFrom(Number(row.dataset.track) - 1));
+  });
+  _cfBuildDetailMenu();
+  _cfRefreshDetailPlaying();
+}
+
+async function cfOpenDetail() {
+  if (_cfDetailOpen) return;
+  const al = _cfCurrentAlbum();
+  if (!al) return;
+  _cfDetailOpen = true;
+  _cfCloseActions();
+  const { stage } = _cfDetailEls();
+  await _cfBuildDetail(al);
+  _cfSizeDetail();
+  requestAnimationFrame(() => stage?.classList.add('detail-open'));
+}
+
+function cfCloseDetail() {
+  if (!_cfDetailOpen) return;
+  _cfDetailOpen = false;
+  _cfCloseDetailMenu();
+  document.getElementById('coverflow-stage')?.classList.remove('detail-open');
+}
+
+function cfPlayDetailFrom(idx = 0) {
+  if (!_cfDetailTracks.length) { toast('No tracks found'); return; }
+  const start = Math.max(0, Math.min(Number(idx) || 0, _cfDetailTracks.length - 1));
+  const label = _cfDetailAlbum ? `Album · ${_cfDetailAlbum.name || ''}` : '';
+  Player.playAll(_cfDetailTracks, start, label, { preserveStartOnShuffle: true });
+  _cfMarkDetailTrack(start + 1);
+  setTimeout(() => {
+    _cfRefreshPlayOrb();
+    _cfRefreshDetailPlaying();
+  }, 80);
+}
+
+function cfShuffleDetail() {
+  if (!_cfDetailTracks.length) { toast('No tracks found'); return; }
+  const label = _cfDetailAlbum ? `Album · ${_cfDetailAlbum.name || ''}` : '';
+  Player.playCollectionShuffled(_cfDetailTracks, label);
+  setTimeout(() => {
+    _cfRefreshPlayOrb();
+    _cfRefreshDetailPlaying();
+  }, 80);
+}
+
+async function cfRunDetailAction(action, e) {
+  const al = _cfDetailAlbum || _cfCurrentAlbum();
+  if (!al) return;
+  _cfCloseDetailMenu();
+  if (action === 'play') return cfPlayDetailFrom(0);
+  if (action === 'artist') return showArtist(al.artist);
+  if (action === 'reveal') return showAlbum(al.artist, al.name);
+  if (action === 'sync') {
+    toast('Open Sync to Device to choose this album for export.');
+    return;
+  }
+
+  const tracks = _cfDetailTracks.length ? _cfDetailTracks : await _cfAlbumTracks(al);
+  if (!tracks.length) { toast('No tracks found'); return; }
+
+  if (action === 'queue') return Player.addToQueue(tracks);
+  if (action === 'playlist') {
+    await addAllToPlaylist(tracks.map(t => t.id).filter(Boolean), document.getElementById('cf-db-more') || e?.currentTarget);
+    return;
+  }
+  if (action === 'fav') {
+    const artworkKey = al.artwork_key || tracks[0]?.artwork_key || '';
+    if (!artworkKey) { toast('Album artwork key not available'); return; }
+    await toggleFavourite('albums', encodeURIComponent(artworkKey));
+    _cfRefreshCtxLabels();
+    _cfRefreshDetailMenuLabels();
+    return;
+  }
+  if (action === 'edit') {
+    state.artist = al.artist;
+    state.album = al.name;
+    openAlbumTagEditor();
+    return;
+  }
+  if (action === 'file') {
+    const target = _albumFinderTarget(tracks);
+    if (!target?.path) { toast('Path not available', 'error'); return; }
+    try {
+      await api('/open-in-finder', { method: 'POST', body: { path: target.path } });
+    } catch (_) {
+      toast('Could not open in Finder', 'error');
+    }
   }
 }
 
@@ -2787,25 +3043,32 @@ function _cfAttachEvents() {
   document.addEventListener('keydown', e => {
     if (!_cfIsActiveAlbumsView()) return;
     if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if (_cfDetailOpen) {
+      if (e.key === 'Escape') { e.preventDefault(); cfCloseDetail(); }
+      return;
+    }
     if (e.key === 'ArrowLeft') { e.preventDefault(); cfNavigate(-1); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); cfNavigate(1); }
     else if (e.key === 'Home') { e.preventDefault(); _cfSelect(0); }
     else if (e.key === 'End') { e.preventDefault(); _cfSelect(_cfAlbums.length - 1); }
-    else if (e.key === 'Enter') { e.preventDefault(); cfPlayCurrent(e); }
-    else if (e.key === ' ') { e.preventDefault(); cfPlayCurrent(e); }
+    else if (e.key === 'Enter') { e.preventDefault(); cfOpenDetail(); }
+    else if (e.key === ' ') { e.preventDefault(); }
     else if (e.key === 'i' || e.key === 'I') { cfOpenActions(e); }
     else if (e.key === 'Escape') { _cfCloseActions(); }
   });
 
   document.addEventListener('click', e => {
     if (!e.target.closest('#coverflow-ctx-menu') && !e.target.closest('#cf-actions-btn')) _cfCloseActions();
+    if (!e.target.closest('#cf-db-menu') && !e.target.closest('#cf-db-more')) _cfCloseDetailMenu();
   });
 
   const stage = document.getElementById('coverflow-stage');
   if (!stage) return;
 
   stage.addEventListener('pointerdown', e => {
+    if (_cfDetailOpen) return;
     if (e.target.closest('.cf-orb-btn') || e.target.closest('#coverflow-ctx-menu')) return;
+    _cfTapCard = e.target.closest('.cf-card');
     _cfDragging = true;
     _cfDragMoved = false;
     _cfDragStartX = e.clientX;
@@ -2824,6 +3087,8 @@ function _cfAttachEvents() {
     _cfDragging = false;
     stage.classList.remove('dragging');
     try { stage.releasePointerCapture(e.pointerId); } catch (_) {}
+    if (!_cfDragMoved && _cfTapCard) _cfCardClick(_cfTapCard);
+    _cfTapCard = null;
     setTimeout(() => { _cfDragMoved = false; }, 30);
   };
   stage.addEventListener('pointerup', endDrag);
@@ -2831,6 +3096,7 @@ function _cfAttachEvents() {
 
   stage.addEventListener('wheel', e => {
     if (!_cfIsActiveAlbumsView()) return;
+    if (_cfDetailOpen) return;
     e.preventDefault();
     const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
     _cfWheelAcc += delta;
@@ -2843,11 +3109,20 @@ function _cfAttachEvents() {
   }, { passive: false });
 
   if ('ResizeObserver' in window) {
-    _cfResizeObserver = new ResizeObserver(() => _cfScheduleUpdate());
+    _cfResizeObserver = new ResizeObserver(() => {
+      _cfScheduleUpdate();
+      if (_cfDetailOpen) _cfSizeDetail();
+    });
     _cfResizeObserver.observe(stage);
   } else {
-    window.addEventListener('resize', _cfScheduleUpdate);
+    window.addEventListener('resize', () => {
+      _cfScheduleUpdate();
+      if (_cfDetailOpen) _cfSizeDetail();
+    });
   }
+
+  document.getElementById('coverflow-detail-backdrop')?.addEventListener('click', cfCloseDetail);
+  window.addEventListener('tb-track-change', _cfRefreshDetailPlaying);
 }
 
 async function toggleCoverflow(enabled) {
