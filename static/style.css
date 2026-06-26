@@ -26711,6 +26711,11 @@ body.is-col-resizing {
   background: #1c1b1b;
   box-shadow: 0 30px 70px rgba(0,0,0,0.7), 0 6px 18px rgba(0,0,0,0.5);
 }
+.coverflow-detail-front,
+.coverflow-detail-front * {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
 .coverflow-detail-back {
   transform: rotateY(180deg);
   display: flex;
