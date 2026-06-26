@@ -26346,6 +26346,7 @@ body.is-col-resizing {
 
 .coverflow-stage.detail-open .coverflow-flow {
   opacity: 0;
+  transform: scale(.84);
   filter: blur(4px);
   pointer-events: none;
 }

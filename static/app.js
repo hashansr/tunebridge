@@ -2664,7 +2664,7 @@ function _cfDetailEls() {
 function _cfSizeDetail() {
   const { stage, card } = _cfDetailEls();
   if (!stage || !card) return;
-  const s = Math.max(140, Math.min(_cfMetrics().size, stage.clientHeight - 120, stage.clientWidth - 100));
+  const s = Math.max(280, Math.min(460, stage.clientHeight - 120, stage.clientWidth - 100));
   card.style.width = card.style.height = s + 'px';
 }
 
@@ -3094,6 +3094,8 @@ function _cfAttachEvents() {
       if (e.key === 'Escape') { e.preventDefault(); cfCloseDetail(); }
       return;
     }
+    const stage = document.getElementById('coverflow-stage');
+    if (document.activeElement !== stage) return;
     if (e.key === 'ArrowLeft') { e.preventDefault(); cfNavigate(-1); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); cfNavigate(1); }
     else if (e.key === 'Home') { e.preventDefault(); _cfSelect(0); }
