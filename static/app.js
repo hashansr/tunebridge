@@ -2412,6 +2412,7 @@ function renderCoverflow(albums, _artistFilter) {
       const albumIdx = Number(card.dataset.albumIdx);
       if (albumIdx === _cfIndex) cfPlayCurrent();
     });
+    card.style.cssText = 'opacity:0;pointer-events:none;z-index:0';
     flow?.appendChild(card);
     _cfPool.push(card);
   }
