@@ -2794,7 +2794,7 @@ async function _cfBuildDetail(al) {
   document.getElementById('cf-db-shuffle')?.addEventListener('click', cfShuffleDetail);
   document.getElementById('cf-db-more')?.addEventListener('click', _cfToggleDetailMenu);
   back.querySelectorAll('.db-track[data-track]').forEach(row => {
-    row.addEventListener('click', () => cfPlayDetailFrom(Number(row.dataset.track) - 1));
+    row.addEventListener('dblclick', () => cfPlayDetailFrom(Number(row.dataset.track) - 1));
   });
   _cfBuildDetailMenu();
   _cfRefreshDetailPlaying();
