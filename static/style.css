@@ -26500,9 +26500,70 @@ body.is-col-resizing {
 }
 
 .cf-meta-artist {
+  margin-top: 4px;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
   font-size: 15px;
   color: var(--text-sub);
-  margin-top: 4px;
+}
+
+.cf-artist-link {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1.25;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.cf-artist-link:hover {
+  color: var(--text);
+}
+
+.cf-artist-link:focus-visible {
+  outline: 2px solid rgba(173,198,255,0.55);
+  outline-offset: 4px;
+  border-radius: 9999px;
+}
+
+.cf-artist-avatar {
+  align-items: center;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 50%;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.26);
+  color: rgba(246,249,255,0.74);
+  display: inline-flex;
+  flex: 0 0 23px;
+  height: 23px;
+  justify-content: center;
+  overflow: hidden;
+  width: 23px;
+}
+
+.cf-artist-avatar img,
+.cf-artist-avatar .cover-placeholder {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  height: 100% !important;
+  object-fit: cover;
+  width: 100% !important;
+}
+
+.cf-artist-avatar.is-empty {
+  display: none;
+}
+
+.cf-artist-name {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -26745,6 +26806,8 @@ body.is-col-resizing {
 }
 .db-artist {
   position: relative;
+  display: flex;
+  min-width: 0;
   font-size: 13.5px;
   color: var(--text-sub);
   margin-top: 3px;

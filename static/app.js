@@ -656,6 +656,21 @@ function _albumHeroArtistHtml(name, fallbackArtworkKey = '') {
   return `<span class="album-hero-artist-link link" data-artist="${esc(artistName)}" onclick="App.showArtist(this.dataset.artist)"><span class="album-hero-artist-avatar">${avatar}</span><span class="album-hero-artist-name">${esc(artistName)}</span></span>`;
 }
 
+function _coverflowArtistHtml(name, fallbackArtworkKey = '') {
+  const artistName = String(name || '').trim();
+  if (!artistName) return '';
+  const artistData = (state.artists || []).find(a => _normArtistId(a?.name) === _normArtistId(artistName));
+  const src = _artistImageSrc({
+    name: artistName,
+    image_key: artistData?.image_key || '',
+    artwork_key: artistData?.artwork_key || fallbackArtworkKey || '',
+  });
+  const avatar = src
+    ? `<img src="${src}" alt="" loading="lazy" decoding="async" onerror="this.closest('.cf-artist-avatar')?.classList.add('is-empty'); this.remove();" />`
+    : coverPlaceholder('artist', 22, '50%', true);
+  return `<button type="button" class="cf-artist-link" data-artist="${esc(artistName)}" onclick="event.stopPropagation();App.showArtist(this.dataset.artist)"><span class="cf-artist-avatar">${avatar}</span><span class="cf-artist-name">${esc(artistName)}</span></button>`;
+}
+
 function _applyArtistCardPalette(img) {
   const card = img?.closest?.('.artist-card, .artist-detail-art-card, .home-artist-art-card, .history-artist-art-card');
   if (!card || !img.naturalWidth || !img.naturalHeight) return;
@@ -2592,7 +2607,7 @@ function _cfUpdateMeta() {
   const artistEl = document.getElementById('cf-artist');
   const metaEl   = document.getElementById('cf-meta-row');
   if (titleEl)  titleEl.textContent  = al.name   || '';
-  if (artistEl) artistEl.textContent = al.artist  || '';
+  if (artistEl) artistEl.innerHTML = _coverflowArtistHtml(al.artist, al.artwork_key);
   if (metaEl) {
     const parts = [];
     if (al.year) parts.push(String(al.year));
@@ -2770,7 +2785,7 @@ async function _cfBuildDetail(al) {
         <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5 5.5 8l4.5 4.5"/></svg>
       </button>
       <div class="db-title">${esc(al.name || 'Unknown Album')}</div>
-      <div class="db-artist">${esc(al.artist || 'Unknown Artist')}</div>
+      <div class="db-artist">${_coverflowArtistHtml(al.artist || 'Unknown Artist', al.artwork_key)}</div>
       <div class="db-meta">${parts.join('<span class="dot"></span>')}</div>
     </div>
     <div class="db-actions">
@@ -3090,7 +3105,7 @@ function _cfAttachEvents() {
 
   stage.addEventListener('pointerdown', e => {
     if (_cfDetailOpen) return;
-    if (e.target.closest('.cf-orb-btn') || e.target.closest('#coverflow-ctx-menu')) return;
+    if (e.target.closest('.cf-orb-btn') || e.target.closest('#coverflow-ctx-menu') || e.target.closest('.cf-artist-link')) return;
     _cfTapCard = e.target.closest('.cf-card');
     _cfDragging = true;
     _cfDragMoved = false;
