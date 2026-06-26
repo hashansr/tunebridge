@@ -89,8 +89,8 @@ let _dapPlaylistSort = { col: 'name', order: 'asc' };
 let _navHistory = [];             // back stack: array of nav snapshots
 let _isNavigatingBack = false;    // suppresses history push during back/forward restoration
 
-// Cover Flow
-let _coverflowEnabled = false;
+// Cover Flow — driven by collectionLayouts.albums.mode === 'coverflow'
+function _coverflowEnabled() { return _collectionLayout('albums').mode === 'coverflow'; }
 let _cfAlbums        = [];
 let _cfIndex         = 0;
 let _cfPool          = [];
@@ -255,8 +255,9 @@ function _normalizeCollectionLayoutPrefs(raw = {}) {
   const out = _cloneCollectionLayoutDefaults();
   Object.keys(out).forEach(key => {
     const row = (source[key] && typeof source[key] === 'object') ? source[key] : {};
+    const allowedModes = key === 'albums' ? ['grid', 'list', 'coverflow'] : ['grid', 'list'];
     out[key] = {
-      mode: _pickAllowed(row.mode, ['grid', 'list'], out[key].mode),
+      mode: _pickAllowed(row.mode, allowedModes, out[key].mode),
       density: Number(row.density) === 6 ? 6 : 5,
     };
   });
@@ -1799,6 +1800,9 @@ function _collectionControlHtml(key) {
   const isGrid5 = layout.mode === 'grid' && Number(layout.density) === 5;
   const isGrid6 = layout.mode === 'grid' && Number(layout.density) === 6;
   const isList = layout.mode === 'list';
+  const isCoverflow = key === 'albums' && layout.mode === 'coverflow';
+  // Coverflow button only on main albums view (hidden in artist-detail mode)
+  const showCoverflowBtn = key === 'albums' && !state.artist;
   return `
     <div class="collection-view-toggle" role="group" aria-label="Collection layout">
       <button class="collection-toggle-btn ${isGrid5 ? 'active' : ''}" onclick="App.setCollectionGridDensity('${key}',5)" title="Grid view - 5 cards per row" aria-label="Grid view, 5 cards per row" aria-pressed="${isGrid5 ? 'true' : 'false'}">
@@ -1810,6 +1814,9 @@ function _collectionControlHtml(key) {
       <button class="collection-toggle-btn ${isList ? 'active' : ''}" onclick="App.setCollectionLayoutMode('${key}','list')" title="List view" aria-label="List view" aria-pressed="${isList ? 'true' : 'false'}">
         <span class="collection-layout-icon collection-layout-icon-list" aria-hidden="true"></span>
       </button>
+      ${showCoverflowBtn ? `<button class="collection-toggle-btn ${isCoverflow ? 'active' : ''}" onclick="App.setCollectionLayoutMode('albums','coverflow')" title="Cover Flow" aria-label="Cover Flow view" aria-pressed="${isCoverflow ? 'true' : 'false'}">
+        <span class="collection-layout-icon collection-layout-icon-coverflow" aria-hidden="true"></span>
+      </button>` : ''}
     </div>
   `;
 }
@@ -1844,7 +1851,8 @@ function _rerenderCollection(key) {
 
 function setCollectionLayoutMode(key, mode) {
   if (!_COLLECTION_LAYOUT_DEFAULTS[key]) return;
-  const nextMode = _pickAllowed(mode, ['grid', 'list'], 'grid');
+  const allowedModes = key === 'albums' ? ['grid', 'list', 'coverflow'] : ['grid', 'list'];
+  const nextMode = _pickAllowed(mode, allowedModes, 'grid');
   state.collectionLayouts[key] = { ..._collectionLayout(key), mode: nextMode };
   _resetCollectionPage(key);
   if (nextMode === 'list' && key === 'albums') state._albumRenderToken++;
@@ -2161,7 +2169,7 @@ function renderArtistsGrid() {
       const cta = artistsEmpty.querySelector('.empty-cta');
       if (title) title.textContent = 'No artists match your search.';
       if (hint) hint.textContent = 'Try a different search or letter.';
-      if (cta) cta.style.display = _coverflowEnabled && !base.length ? 'none' : '';
+      if (cta) cta.style.display = _coverflowEnabled() && !base.length ? 'none' : '';
       artistsEmpty.style.display = 'flex';
     }
     return;
@@ -2381,7 +2389,7 @@ const CF_CTX_ITEMS = [
 ];
 
 function _cfIsActiveAlbumsView() {
-  return state.view === 'albums' && _coverflowEnabled && !state.artist;
+  return state.view === 'albums' && _coverflowEnabled() && !state.artist;
 }
 
 function renderCoverflow(albums, _artistFilter) {
@@ -2425,7 +2433,11 @@ function renderCoverflow(albums, _artistFilter) {
   _cfPositionCards();
   _cfUpdateMeta();
   _cfPreload(_cfIndex);
-  stage.focus({ preventScroll: true });
+  // Only grab focus if the search input is not active (avoid stealing typing focus)
+  const activeEl = document.activeElement;
+  if (!activeEl || activeEl.id !== 'albums-filter-input') {
+    stage.focus({ preventScroll: true });
+  }
 }
 
 // RAF-batched position update — call this instead of _cfPositionCards directly
@@ -3126,17 +3138,7 @@ function _cfAttachEvents() {
 }
 
 async function toggleCoverflow(enabled) {
-  _coverflowEnabled = enabled;
-  _setSettingsToggleState('coverflow-toggle', 'coverflow-toggle-state', enabled);
-  try {
-    await fetch('/api/settings', {
-      method:  'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ coverflow_enabled: enabled }),
-      keepalive: true,
-    });
-  } catch (_) {}
-  if (state.view === 'albums') renderAlbumsGrid();
+  setCollectionLayoutMode('albums', enabled ? 'coverflow' : 'grid');
 }
 
 /* ── End Cover Flow ─────────────────────────────────────────────────────── */
@@ -3149,7 +3151,7 @@ function renderAlbumsGrid() {
   const albumsAlphaBar = document.getElementById('albums-alpha-bar');
   const albumsEmpty = document.getElementById('albums-empty');
   const { artistFilter, base, filtered, presentLetters } = _filteredAlbumsData();
-  const useCoverflow = !!_coverflowEnabled && !artistFilter;
+  const useCoverflow = _coverflowEnabled() && !artistFilter;
   document.getElementById('view-albums')?.classList.toggle('coverflow-active', useCoverflow);
   document.getElementById('main')?.classList.toggle('main-coverflow-active', state.view === 'albums' && useCoverflow);
   const hasFilters = !!(state.albumSearch || state.albumAlpha);
@@ -3190,6 +3192,8 @@ function renderAlbumsGrid() {
   }
 
   if (!filtered.length) {
+    const cfShellEmpty = document.getElementById('coverflow-shell');
+    if (cfShellEmpty) cfShellEmpty.style.display = 'none';
     if (grid) grid.innerHTML = '';
     if (listWrap) { listWrap.innerHTML = ''; listWrap.style.display = 'none'; }
     if (paginationEl) paginationEl.style.display = 'none';
@@ -3197,10 +3201,8 @@ function renderAlbumsGrid() {
       const title = albumsEmpty.querySelector('.empty-title');
       const hint = albumsEmpty.querySelector('.empty-subtitle');
       const cta = albumsEmpty.querySelector('.empty-cta');
-      if (title) title.textContent = _coverflowEnabled && !base.length ? 'No albums found' : 'No albums match your search.';
-      if (hint) hint.textContent = _coverflowEnabled && !base.length
-        ? 'Import music to start browsing your library in Cover Flow.'
-        : 'Try a different search or letter.';
+      if (title) title.textContent = 'No albums match your search.';
+      if (hint) hint.textContent = 'Try a different search or letter.';
       if (cta) cta.style.display = '';
       albumsEmpty.style.display = 'flex';
     }
@@ -8549,7 +8551,7 @@ function showViewEl(name) {
   if (main) {
     main.classList.toggle('main-home-active', name === 'home');
     main.classList.toggle('main-library-active', name === 'artists' || name === 'albums');
-    main.classList.toggle('main-coverflow-active', name === 'albums' && !!_coverflowEnabled && !state.artist);
+    main.classList.toggle('main-coverflow-active', name === 'albums' && _coverflowEnabled() && !state.artist);
   }
   document.body.classList.toggle('show-library-scrollbars', ['artists', 'albums', 'songs'].includes(name));
   // Clear right nav slot for non-home views (loadHome repopulates it)
@@ -16077,11 +16079,10 @@ async function loadSettings() {
   } catch (_) {}
 
   // Cover Flow toggle
-  _coverflowEnabled = !!settings.coverflow_enabled;
-  const cfToggle = document.getElementById('coverflow-toggle');
-  if (cfToggle) {
-    cfToggle.checked = _coverflowEnabled;
-    _setSettingsToggleState('coverflow-toggle', 'coverflow-toggle-state', _coverflowEnabled);
+  // Migrate legacy coverflow_enabled setting into the layout prefs system
+  if (settings.coverflow_enabled && _collectionLayout('albums').mode !== 'coverflow') {
+    state.collectionLayouts['albums'] = { ..._collectionLayout('albums'), mode: 'coverflow' };
+    _syncCollectionLayoutControls('albums');
   }
 
   showSettingsCategory(_activeSettingsCategory || 'library');

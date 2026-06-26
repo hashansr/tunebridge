@@ -2840,6 +2840,11 @@ tbody tr:hover .remove-btn { opacity: 1; }
   -webkit-mask-image: url('/icons/layout-list.svg');
 }
 
+.collection-layout-icon-coverflow {
+  mask-image: url('/icons/layout-coverflow.svg');
+  -webkit-mask-image: url('/icons/layout-coverflow.svg');
+}
+
 .collection-list-wrap {
   margin-top: 14px;
 }

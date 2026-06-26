@@ -3,6 +3,10 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Albums search no longer loses focus or drops spaces while typing in Cover Flow mode
+- Fix: No-results empty state now hides the Cover Flow carousel correctly when search yields no matches
+- Add: Cover Flow is now a 4th layout toggle button on the Albums toolbar (alongside the two grid and list buttons)
+- Remove: Cover Flow toggle removed from Settings — use the Albums toolbar button instead
 
 ## v0.531-rc.260626-1320 · 2026-06-26
 
