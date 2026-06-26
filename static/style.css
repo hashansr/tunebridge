@@ -26403,15 +26403,6 @@ body.is-col-resizing {
     radial-gradient(120% 80% at 22% 0%, rgba(173,198,255,0.20), transparent 55%),
     linear-gradient(155deg, var(--cf-p1, #28304a), var(--cf-p2, #111118));
 }
-.cf-cover-placeholder::after,
-.cf-refl-placeholder::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  opacity: .07;
-  mix-blend-mode: screen;
-  background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.6) 0 1.5px, transparent 1.5px 9px);
-}
 .cf-placeholder-icon {
   position: absolute;
   inset: 0;
