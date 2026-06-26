@@ -10,6 +10,7 @@ const _CONTENT_SORT_DEFAULTS = {
 const _COLLECTION_LAYOUT_DEFAULTS = {
   artists: { mode: 'grid', density: 5 },
   albums: { mode: 'grid', density: 5 },
+  artist_albums: { mode: 'grid', density: 5 }, // artist detail view — no coverflow
   playlists: { mode: 'grid', density: 5 },
   fav_artists: { mode: 'grid', density: 5 },
   fav_albums: { mode: 'grid', density: 5 },
@@ -1801,8 +1802,8 @@ function _collectionControlHtml(key) {
   const isGrid6 = layout.mode === 'grid' && Number(layout.density) === 6;
   const isList = layout.mode === 'list';
   const isCoverflow = key === 'albums' && layout.mode === 'coverflow';
-  // Coverflow button only on main albums view (hidden in artist-detail mode)
-  const showCoverflowBtn = key === 'albums' && !state.artist;
+  // Coverflow button only on main albums view (artist detail uses 'artist_albums' key)
+  const showCoverflowBtn = key === 'albums';
   return `
     <div class="collection-view-toggle" role="group" aria-label="Collection layout">
       <button class="collection-toggle-btn ${isGrid5 ? 'active' : ''}" onclick="App.setCollectionGridDensity('${key}',5)" title="Grid view - 5 cards per row" aria-label="Grid view, 5 cards per row" aria-pressed="${isGrid5 ? 'true' : 'false'}">
@@ -1822,7 +1823,9 @@ function _collectionControlHtml(key) {
 }
 
 function _syncCollectionLayoutControls(key) {
-  const host = document.getElementById(`${key.replace('_', '-')}-layout-controls`);
+  // artist_albums shares the #albums-layout-controls element
+  const hostId = key === 'artist_albums' ? 'albums-layout-controls' : `${key.replace('_', '-')}-layout-controls`;
+  const host = document.getElementById(hostId);
   if (host) host.innerHTML = _collectionControlHtml(key);
   const favHost = document.getElementById('favourites-layout-controls');
   if (favHost && ((key === 'fav_artists' && state.favPanel === 'artists') || (key === 'fav_albums' && state.favPanel === 'albums'))) {
@@ -1843,7 +1846,7 @@ function _resetCollectionPage(key) {
 
 function _rerenderCollection(key) {
   if (key === 'artists') renderArtistsGrid();
-  else if (key === 'albums') renderAlbumsGrid();
+  else if (key === 'albums' || key === 'artist_albums') renderAlbumsGrid();
   else if (key === 'playlists') loadPlaylistsView();
   else if (key === 'fav_artists') loadFavArtists();
   else if (key === 'fav_albums') loadFavAlbums();
@@ -3151,7 +3154,8 @@ function renderAlbumsGrid() {
   const albumsAlphaBar = document.getElementById('albums-alpha-bar');
   const albumsEmpty = document.getElementById('albums-empty');
   const { artistFilter, base, filtered, presentLetters } = _filteredAlbumsData();
-  const useCoverflow = _coverflowEnabled() && !artistFilter;
+  const layoutKey = artistFilter ? 'artist_albums' : 'albums';
+  const useCoverflow = !artistFilter && _coverflowEnabled();
   document.getElementById('view-albums')?.classList.toggle('coverflow-active', useCoverflow);
   document.getElementById('main')?.classList.toggle('main-coverflow-active', state.view === 'albums' && useCoverflow);
   const hasFilters = !!(state.albumSearch || state.albumAlpha);
@@ -3226,12 +3230,12 @@ function renderAlbumsGrid() {
   document.getElementById('main')?.classList.remove('main-coverflow-active');
   if (cfShell) cfShell.style.display = 'none';
 
-  const isList = _collectionLayout('albums').mode === 'list';
-  _setCollectionVisibility('albums', grid, listWrap, paginationEl, true);
+  const isList = _collectionLayout(layoutKey).mode === 'list';
+  _setCollectionVisibility(layoutKey, grid, listWrap, paginationEl, true);
   if (isList) {
     state._albumRenderToken++;
     if (grid) grid.innerHTML = '';
-    _renderAlbumsList(listWrap, paginationEl, 'albums', filtered);
+    _renderAlbumsList(listWrap, paginationEl, layoutKey, filtered);
     return;
   }
   if (grid) {
@@ -3397,6 +3401,10 @@ async function loadAlbums(artistFilter = null) {
   }
   const albumClearBtn = document.getElementById('albums-filter-clear');
   if (albumClearBtn) albumClearBtn.style.display = state.albumSearch ? 'block' : 'none';
+
+  // Always re-sync layout controls: artist detail uses 'artist_albums' (no coverflow),
+  // main albums view uses 'albums' (with coverflow button)
+  _syncCollectionLayoutControls(artistFilter ? 'artist_albums' : 'albums');
 
   renderAlbumsGrid();
   if (albumsGrid) requestAnimationFrame(() => { albumsGrid.style.opacity = ''; });
