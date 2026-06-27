@@ -26815,18 +26815,41 @@ body.is-col-resizing {
 
 .db-head {
   position: relative;
-  padding: 18px 18px 12px;
+  padding: 20px 20px 16px;
   flex-shrink: 0;
   overflow: hidden;
   border-radius: 5px 5px 0 0;
 }
-.db-accent {
+.db-artbg {
   position: absolute;
   inset: 0;
-  opacity: .26;
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(180deg,#000,transparent);
-  mask-image: linear-gradient(180deg,#000,transparent);
+  filter: blur(38px) saturate(1.4);
+  transform: scale(1.7);
+  opacity: .6;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0,0,0,.4) 48%, transparent 82%);
+          mask-image: linear-gradient(180deg, #000 0%, rgba(0,0,0,.4) 48%, transparent 82%);
+}
+.db-artbg .cf-cover-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.db-artbg .cf-art-img,
+.db-artbg .cf-cover-placeholder {
+  opacity: 1;
+}
+.db-artbg .cf-placeholder-icon,
+.db-artbg .cf-cover-edge,
+.db-artbg .cf-cover-gloss {
+  display: none;
+}
+.db-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(20,21,25,0.10) 0%, rgba(23,24,28,0.48) 62%, rgba(26,26,30,0.96) 100%);
 }
 .db-back {
   position: absolute;
@@ -26843,17 +26866,70 @@ body.is-col-resizing {
   color: var(--text-sub);
   cursor: pointer;
   transition: all .14s;
-  z-index: 2;
+  z-index: 3;
 }
 .db-back:hover { background: rgba(255,255,255,0.14); color: var(--text); }
+.db-headrow {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding-right: 30px;
+}
+.db-thumb {
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+}
+.db-thumb .cf-cover-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.db-thumb .cf-art-img,
+.db-thumb .cf-cover-placeholder {
+  opacity: 1;
+}
+.db-thumb .cf-cover-art,
+.db-thumb .cf-art-img,
+.db-thumb .cf-cover-placeholder,
+.db-thumb .cf-placeholder-icon {
+  border-radius: 6px;
+}
+.db-thumb .cf-cover-gloss,
+.db-thumb .cf-cover-edge {
+  display: none;
+}
+.db-thumb .cf-placeholder-icon {
+  opacity: 0.38;
+}
+.db-thumb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+  pointer-events: none;
+}
+.db-titlecol {
+  min-width: 0;
+  flex: 1;
+}
 .db-title {
   position: relative;
-  font-size: 19px;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: 0;
   color: var(--text);
-  line-height: 1.18;
-  padding-right: 34px;
+  line-height: 1.16;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-shadow: 0 1px 14px rgba(0,0,0,0.4);
 }
 .db-artist {
   position: relative;
@@ -26861,7 +26937,10 @@ body.is-col-resizing {
   min-width: 0;
   font-size: 13.5px;
   color: var(--text-sub);
-  margin-top: 3px;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .db-meta {
   position: relative;
@@ -26872,12 +26951,13 @@ body.is-col-resizing {
   font-size: 11.5px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .db-meta .dot {
   width: 3px;
   height: 3px;
   border-radius: 50%;
-  background: #414755;
+  background: #4a505e;
 }
 
 .db-actions {

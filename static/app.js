@@ -2385,6 +2385,7 @@ const CF_ICONS = {
   play:  '<span class="tb-icon tb-icon-play-lg  cf-orb-ico" aria-hidden="true"></span>',
   pause: '<span class="tb-icon tb-icon-pause-lg cf-orb-ico" aria-hidden="true"></span>',
 };
+const CF_CLOSE_ICON = '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 3.6l6.8 6.8M10.4 3.6l-6.8 6.8"/></svg>';
 
 const CF_CTX_ITEMS = [
   ['play', 'Play album', '<path d="M4 2.5v9l7-4.5z"/>'],
@@ -2662,10 +2663,22 @@ function _cfDetailEls() {
 }
 
 function _cfSizeDetail() {
-  const { stage, card } = _cfDetailEls();
+  const { stage, card, back } = _cfDetailEls();
   if (!stage || !card) return;
   const s = Math.max(280, Math.min(460, stage.clientHeight - 120, stage.clientWidth - 100));
   card.style.width = card.style.height = s + 'px';
+  const titleCol = back?.querySelector('.db-titlecol');
+  const thumb = back?.querySelector('.db-thumb');
+  if (titleCol && thumb) {
+    const h = Math.round(titleCol.offsetHeight);
+    thumb.style.width = h + 'px';
+    thumb.style.height = h + 'px';
+    const settledH = Math.round(titleCol.offsetHeight);
+    if (settledH && settledH !== h) {
+      thumb.style.width = settledH + 'px';
+      thumb.style.height = settledH + 'px';
+    }
+  }
 }
 
 function _cfArtworkFace(al, size = 460) {
@@ -2744,15 +2757,12 @@ async function _cfBuildDetail(al) {
   if (!front || !back || !al) return;
   _cfDetailAlbum = al;
   _cfDetailTracks = await _cfAlbumTracks(al);
-  const colors = _cfPlaceholderColors(`${al.artist || ''}||${al.name || ''}`);
   front.innerHTML = _cfArtworkFace(al, 520);
 
   const parts = [];
   if (al.year) parts.push(`<span>${esc(al.year)}</span>`);
   const trackTotal = Number(_cfDetailTracks.length || al.track_count || 0);
   parts.push(`<span>${String(trackTotal)} song${trackTotal === 1 ? '' : 's'}</span>`);
-  const quality = _cfAlbumFormat(al);
-  if (quality.hi) parts.push('<span class="cf-format-badge lossless">Hi-Res</span>');
 
   const tracksHtml = _cfDetailTracks.length
     ? _cfDetailTracks.map((t, idx) => {
@@ -2770,13 +2780,17 @@ async function _cfBuildDetail(al) {
 
   back.innerHTML = `
     <div class="db-head">
-      <div class="db-accent" style="background:linear-gradient(160deg, ${esc(colors[0])}, ${esc(colors[1])});"></div>
-      <button class="db-back" id="cf-db-back" aria-label="Back to Cover Flow">
-        <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5 5.5 8l4.5 4.5"/></svg>
-      </button>
-      <div class="db-title">${esc(al.name || 'Unknown Album')}</div>
-      <div class="db-artist">${_coverflowArtistHtml(al.artist || 'Unknown Artist')}</div>
-      <div class="db-meta">${parts.join('<span class="dot"></span>')}</div>
+      <div class="db-artbg">${_cfArtworkFace(al, 320)}</div>
+      <div class="db-scrim"></div>
+      <button class="db-back" id="cf-db-back" aria-label="Close album">${CF_CLOSE_ICON}</button>
+      <div class="db-headrow">
+        <div class="db-thumb">${_cfArtworkFace(al, 180)}</div>
+        <div class="db-titlecol">
+          <div class="db-title">${esc(al.name || 'Unknown Album')}</div>
+          <div class="db-artist">${_coverflowArtistHtml(al.artist || 'Unknown Artist')}</div>
+          <div class="db-meta">${parts.join('<span class="dot"></span>')}</div>
+        </div>
+      </div>
     </div>
     <div class="db-actions">
       <button class="db-btn primary" id="cf-db-play">${CF_ICONS.play}Play</button>
