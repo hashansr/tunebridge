@@ -350,10 +350,12 @@ scan_state = {
     'status': 'idle',
     'progress': 0,
     'total': 0,
+    'total_tracks': 0,
     'new_tracks': 0,
     'added_tracks': 0,
     'removed_tracks': 0,
     'scan_failures': 0,
+    'failed_paths': [],
     'message': '',
 }
 
@@ -431,6 +433,7 @@ VALID_LISTEN_RATIO = 0.4
 
 library = []
 library_lock = threading.Lock()
+_scan_lock = threading.Lock()   # prevents concurrent scan threads
 
 # ── Performance caches ────────────────────────────────────────────────────────
 _home_cache = {'data': None, 'ts': 0}       # /api/home — 60s TTL
@@ -1021,9 +1024,10 @@ def _detect_lyrics_status(content):
     return 'plain' if saw_text else None
 
 
-def scan_file(filepath):
+def scan_file(filepath, music_base=None):
     filepath = Path(filepath)
-    music_base = get_music_base()
+    if music_base is None:
+        music_base = get_music_base()
     try:
         rel_path = str(filepath.relative_to(music_base))
         filename = filepath.name
@@ -1083,8 +1087,7 @@ def scan_file(filepath):
                 artwork_path = ARTWORK_DIR / f"{artwork_key}.jpg"
                 if not artwork_path.exists() and audio.pictures:
                     try:
-                        with open(artwork_path, 'wb') as f:
-                            f.write(audio.pictures[0].data)
+                        Image.open(io.BytesIO(audio.pictures[0].data)).convert('RGB').save(artwork_path, 'JPEG', quality=90)
                     except Exception:
                         artwork_key = None
                 elif not artwork_path.exists():
@@ -1128,8 +1131,7 @@ def scan_file(filepath):
                         artwork_path = ARTWORK_DIR / f"{artwork_key}.jpg"
                         if not artwork_path.exists():
                             try:
-                                with open(artwork_path, 'wb') as f:
-                                    f.write(val.data)
+                                Image.open(io.BytesIO(val.data)).convert('RGB').save(artwork_path, 'JPEG', quality=90)
                             except Exception:
                                 artwork_key = None
                         break
@@ -1189,8 +1191,7 @@ def scan_file(filepath):
                 artwork_path = ARTWORK_DIR / f"{artwork_key}.jpg"
                 if not artwork_path.exists():
                     try:
-                        with open(artwork_path, 'wb') as f:
-                            f.write(bytes(tags['covr'][0]))
+                        Image.open(io.BytesIO(bytes(tags['covr'][0]))).convert('RGB').save(artwork_path, 'JPEG', quality=90)
                     except Exception:
                         artwork_key = None
             elif eff_artist and album:
@@ -1245,8 +1246,7 @@ def scan_file(filepath):
                         artwork_path = ARTWORK_DIR / f"{artwork_key}.jpg"
                         if not artwork_path.exists():
                             try:
-                                with open(artwork_path, 'wb') as f:
-                                    f.write(val.data)
+                                Image.open(io.BytesIO(val.data)).convert('RGB').save(artwork_path, 'JPEG', quality=90)
                             except Exception:
                                 artwork_key = None
                         break
@@ -1287,9 +1287,10 @@ def scan_file(filepath):
         # File format from extension
         file_format = filepath.suffix.lstrip('.').upper() or None
 
-        # Date added (file modification time)
+        # File creation time (st_birthtime on macOS, st_mtime fallback on Linux)
         try:
-            date_added = int(filepath.stat().st_mtime)
+            st = filepath.stat()
+            date_added = int(getattr(st, 'st_birthtime', st.st_mtime))
         except Exception:
             date_added = None
 
@@ -1334,16 +1335,19 @@ def scan_file(filepath):
 def do_scan():
     global library, scan_state
 
-    prev_lib_by_path = {t['path']: t for t in library if t.get('path')}
+    with library_lock:
+        prev_lib_by_path = {t['path']: t for t in library if t.get('path')}
     scan_state.update({
         'status': 'scanning',
         'message': 'Finding music files...',
         'progress': 0,
         'total': 0,
+        'total_tracks': 0,
         'new_tracks': 0,
         'added_tracks': 0,
         'removed_tracks': 0,
         'scan_failures': 0,
+        'failed_paths': [],
     })
 
     music_base = get_music_base()
@@ -1370,7 +1374,7 @@ def do_scan():
     for i, filepath in enumerate(files):
         scan_state['progress'] = i + 1
         try:
-            track = scan_file(filepath)
+            track = scan_file(filepath, music_base)
         except Exception as e:
             print(f"Unexpected scan error for {filepath}: {e}")
             track = None
@@ -1423,10 +1427,11 @@ def do_scan():
     scan_failures = len(walked_rel_paths - next_paths)
     new_count     = added_count - removed_count
 
+    failed_paths_list = []
     if scan_failures > 0:
-        failed_paths = sorted(walked_rel_paths - next_paths)
+        failed_paths_list = sorted(walked_rel_paths - next_paths)[:50]
         print(f"Scan: {scan_failures} file(s) failed to parse (check mutagen/file integrity):")
-        for p in failed_paths[:20]:
+        for p in failed_paths_list[:20]:
             print(f"  ! {p}")
         if scan_failures > 20:
             print(f"  ... and {scan_failures - 20} more")
@@ -1441,6 +1446,7 @@ def do_scan():
         'added_tracks': added_count,
         'removed_tracks': removed_count,
         'scan_failures': scan_failures,
+        'failed_paths': failed_paths_list,
         'total_tracks': len(tracks),
     })
     print(f"Scan complete: {len(tracks)} tracks (+{added_count} / -{removed_count} / !{scan_failures})")
@@ -1689,9 +1695,16 @@ def library_status():
     return jsonify(result)
 
 
+def _do_scan_locked():
+    try:
+        do_scan()
+    finally:
+        _scan_lock.release()
+
+
 @app.route('/api/library/scan', methods=['POST'])
 def trigger_scan():
-    if scan_state['status'] == 'scanning':
+    if not _scan_lock.acquire(blocking=False):
         return jsonify({'message': 'Already scanning'}), 400
     if request.args.get('clean') == 'true':
         try:
@@ -1701,8 +1714,10 @@ def trigger_scan():
                 library = []
             scan_state.update({'message': 'Cache cleared — rescanning…'})
         except Exception as e:
+            _scan_lock.release()
             print(f"Error clearing cache: {e}")
-    threading.Thread(target=do_scan, daemon=True).start()
+            return jsonify({'message': f'Error clearing cache: {e}'}), 500
+    threading.Thread(target=_do_scan_locked, daemon=True).start()
     return jsonify({'message': 'Scan started'})
 
 
