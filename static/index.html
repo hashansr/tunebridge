@@ -1078,11 +1078,12 @@
             </div>
 
             <!-- Scan history -->
-            <div class="settings-group-header">
+            <div class="settings-group-header settings-group-header--toggle" onclick="App.toggleScanHistory()" aria-expanded="false" id="scan-history-header">
               <span>Scan history</span>
               <i aria-hidden="true"></i>
+              <span class="accordion-state-icon" style="width:13px;height:13px;flex-shrink:0" aria-hidden="true"></span>
             </div>
-            <div id="scan-history-container" class="scan-history-container">
+            <div id="scan-history-container" class="scan-history-container" style="display:none">
               <p class="scan-history-empty">No scans recorded yet. Run a rescan to start logging.</p>
             </div>
 

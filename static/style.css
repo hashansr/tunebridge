@@ -27105,6 +27105,16 @@ body.is-col-resizing {
 }
 
 /* ── Scan history ─────────────────────────────────────────────────────────── */
+.settings-group-header--toggle {
+  cursor: pointer;
+  user-select: none;
+}
+.settings-group-header--toggle:hover span:first-child {
+  color: var(--text-1);
+}
+.settings-group-header--toggle[aria-expanded="true"] .accordion-state-icon {
+  background-image: url('/icons/accordion-expanded.svg');
+}
 .scan-history-container {
   padding: 0 0 4px;
 }

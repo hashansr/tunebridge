@@ -1494,8 +1494,9 @@ async function pollScanStatus() {
       if (_settings && _settings.replay_gain_enabled) {
         _checkRgMissingAndNotify();
       }
-      // Refresh scan history table if settings view is open
-      if (state.view === 'settings') loadScanHistory();
+      // Refresh scan history table if the accordion is open
+      const shHeader = document.getElementById('scan-history-header');
+      if (shHeader && shHeader.getAttribute('aria-expanded') === 'true') loadScanHistory();
     }
   }
 }
@@ -8858,6 +8859,16 @@ async function rescan() {
   pollScanStatus();
 }
 
+function toggleScanHistory() {
+  const header = document.getElementById('scan-history-header');
+  const container = document.getElementById('scan-history-container');
+  if (!header || !container) return;
+  const isOpen = header.getAttribute('aria-expanded') === 'true';
+  header.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+  container.style.display = isOpen ? 'none' : '';
+  if (!isOpen) loadScanHistory();
+}
+
 async function loadScanHistory() {
   const container = document.getElementById('scan-history-container');
   if (!container) return;
@@ -16136,7 +16147,6 @@ async function loadSettings() {
   // Replay Gain — apply from server settings
   _initRgFromSettings(settings);
   loadLyricsSettings();
-  loadScanHistory();
 
   // Display app version + channel picker
   try {
@@ -20615,6 +20625,7 @@ const App = {
   rescan,
   rescanClean,
   toggleRescanMenu,
+  toggleScanHistory,
   closeRescanMenu,
   showSettings,
   closeSettings,
