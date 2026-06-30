@@ -1494,6 +1494,8 @@ async function pollScanStatus() {
       if (_settings && _settings.replay_gain_enabled) {
         _checkRgMissingAndNotify();
       }
+      // Refresh scan history table if settings view is open
+      if (state.view === 'settings') loadScanHistory();
     }
   }
 }
@@ -8856,6 +8858,74 @@ async function rescan() {
   pollScanStatus();
 }
 
+async function loadScanHistory() {
+  const container = document.getElementById('scan-history-container');
+  if (!container) return;
+  let rows;
+  try {
+    rows = await fetch('/api/library/scan/history').then(r => r.json());
+  } catch (_) {
+    return;
+  }
+  if (!Array.isArray(rows) || rows.length === 0) {
+    container.innerHTML = '<p class="scan-history-empty">No scans recorded yet. Run a rescan to start logging.</p>';
+    return;
+  }
+  const fmt = ts => {
+    const d = new Date(ts * 1000);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+      + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  };
+  const dur = (s, e) => {
+    const sec = e - s;
+    return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m ${sec % 60}s`;
+  };
+  const badge = (n, type, label) => {
+    if (n === 0) return `<span class="scan-history-badge scan-history-badge--none">${label} 0</span>`;
+    return `<span class="scan-history-badge scan-history-badge--${type}">${label} ${n}</span>`;
+  };
+  const pathList = (paths, cls) => {
+    if (!paths || paths.length === 0) return '';
+    const items = paths.map(p => `<li>${p}</li>`).join('');
+    return `<ul class="sh-path-list sh-path-list--${cls}">${items}</ul>`;
+  };
+  const rows_html = rows.map((r, i) => {
+    const hasDetail = r.added_count > 0 || r.removed_count > 0 || r.failure_count > 0;
+    const detailId = `sh-detail-${i}`;
+    let detailHtml = '';
+    if (hasDetail) {
+      const groups = [];
+      if (r.added_paths && r.added_paths.length > 0)
+        groups.push(`<div class="sh-detail-group"><div class="sh-detail-label">Added (${r.added_count})</div>${pathList(r.added_paths, 'added')}</div>`);
+      if (r.removed_paths && r.removed_paths.length > 0)
+        groups.push(`<div class="sh-detail-group"><div class="sh-detail-label">Removed (${r.removed_count})</div>${pathList(r.removed_paths, 'removed')}</div>`);
+      if (r.failed_paths && r.failed_paths.length > 0)
+        groups.push(`<div class="sh-detail-group"><div class="sh-detail-label">Unreadable (${r.failure_count})</div>${pathList(r.failed_paths, 'failed')}</div>`);
+      detailHtml = `<div class="sh-detail" id="${detailId}">${groups.join('')}</div>`;
+    }
+    return `<tr>
+      <td class="sh-date">${fmt(r.started_at)}</td>
+      <td class="sh-duration">${dur(r.started_at, r.finished_at)}</td>
+      <td class="sh-total">${r.total_tracks.toLocaleString()}</td>
+      <td>
+        <div class="sh-changes">
+          ${badge(r.added_count, 'added', '+')}
+          ${badge(r.removed_count, 'removed', '−')}
+          ${r.failure_count > 0 ? badge(r.failure_count, 'failed', '!') : ''}
+          ${hasDetail ? `<button class="sh-expand-btn" onclick="this.closest('tr').querySelector('.sh-detail').classList.toggle('open');this.textContent=this.textContent==='Details'?'Hide':'Details'">Details</button>` : ''}
+        </div>
+        ${detailHtml}
+      </td>
+    </tr>`;
+  }).join('');
+  container.innerHTML = `<table class="scan-history-table">
+    <thead><tr>
+      <th>Date</th><th>Duration</th><th>Tracks</th><th>Changes</th>
+    </tr></thead>
+    <tbody>${rows_html}</tbody>
+  </table>`;
+}
+
 async function rescanClean() {
   await api('/library/scan?clean=true', { method: 'POST' }).catch(() => {});
   pollScanStatus();
@@ -16066,6 +16136,7 @@ async function loadSettings() {
   // Replay Gain — apply from server settings
   _initRgFromSettings(settings);
   loadLyricsSettings();
+  loadScanHistory();
 
   // Display app version + channel picker
   try {

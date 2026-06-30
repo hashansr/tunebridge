@@ -1335,6 +1335,7 @@ def scan_file(filepath, music_base=None):
 def do_scan():
     global library, scan_state
 
+    scan_started_at = int(time.time())
     with library_lock:
         prev_lib_by_path = {t['path']: t for t in library if t.get('path')}
     scan_state.update({
@@ -1422,10 +1423,14 @@ def do_scan():
         print(f"[scan] Warning: could not record deleted tracks: {e}")
     next_paths = {t['path'] for t in tracks if t.get('path')}
     _prev_paths_set = set(prev_lib_by_path)
-    added_count   = len(walked_rel_paths - _prev_paths_set)
-    removed_count = len(_prev_paths_set - walked_rel_paths)
+    added_paths_set   = walked_rel_paths - _prev_paths_set
+    removed_paths_set = _prev_paths_set - walked_rel_paths
+    added_count   = len(added_paths_set)
+    removed_count = len(removed_paths_set)
     scan_failures = len(walked_rel_paths - next_paths)
     new_count     = added_count - removed_count
+    added_paths_log   = sorted(added_paths_set)[:200]
+    removed_paths_log = sorted(removed_paths_set)[:200]
 
     failed_paths_list = []
     if scan_failures > 0:
@@ -1450,6 +1455,21 @@ def do_scan():
         'total_tracks': len(tracks),
     })
     print(f"Scan complete: {len(tracks)} tracks (+{added_count} / -{removed_count} / !{scan_failures})")
+    try:
+        _db.db_save_scan_log(
+            started_at=scan_started_at,
+            finished_at=int(time.time()),
+            total_files=len(files),
+            total_tracks=len(tracks),
+            added_count=added_count,
+            removed_count=removed_count,
+            failure_count=scan_failures,
+            added_paths=added_paths_log,
+            removed_paths=removed_paths_log,
+            failed_paths=failed_paths_list,
+        )
+    except Exception as e:
+        print(f"[scan] Warning: could not save scan log: {e}")
     _invalidate_home_cache()
     global _meta_maps_cache, _stream_track_cache
     _meta_maps_cache = None
@@ -1693,6 +1713,14 @@ def library_status():
         music_base = get_music_base()
         result['path_accessible'] = bool(music_base and music_base.is_absolute() and music_base.exists())
     return jsonify(result)
+
+
+@app.route('/api/library/scan/history')
+def scan_history():
+    try:
+        return jsonify(_db.db_get_scan_history())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 def _do_scan_locked():

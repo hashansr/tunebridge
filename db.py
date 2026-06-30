@@ -53,7 +53,7 @@ def close_conn():
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 15
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -116,6 +116,8 @@ _MIGRATIONS: list[tuple] = [
     (13, 'Add organizer_templates and organizer_move_log tables', None),
     # v14: playlist_track_meta is a new table handled by create_schema().
     (14, 'Add playlist_track_meta for resolve-playlist snapshots', None),
+    # v15: scan_log is a new table handled by create_schema().
+    (15, 'Add scan_log table for scan history', None),
 ]
 
 _SCHEMA_SQL = """
@@ -503,6 +505,21 @@ CREATE TABLE IF NOT EXISTS playlist_track_meta (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ptm_playlist ON playlist_track_meta(playlist_id);
+
+-- Scan history: last 5 library scans (older rows pruned on insert)
+CREATE TABLE IF NOT EXISTS scan_log (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at    INTEGER NOT NULL,
+    finished_at   INTEGER NOT NULL,
+    total_files   INTEGER NOT NULL DEFAULT 0,
+    total_tracks  INTEGER NOT NULL DEFAULT 0,
+    added_count   INTEGER NOT NULL DEFAULT 0,
+    removed_count INTEGER NOT NULL DEFAULT 0,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    added_paths   TEXT NOT NULL DEFAULT '[]',
+    removed_paths TEXT NOT NULL DEFAULT '[]',
+    failed_paths  TEXT NOT NULL DEFAULT '[]'
+);
 """
 
 # FTS5 must be created separately (can't use IF NOT EXISTS with virtual tables the same way)
@@ -2435,3 +2452,46 @@ def db_clear_organizer_log():
         old_id = prev_run[-1][0]
         conn.execute("DELETE FROM organizer_move_log WHERE run_id = ?", (old_id,))
         conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Scan log
+# ---------------------------------------------------------------------------
+
+def db_save_scan_log(started_at: int, finished_at: int, total_files: int,
+                     total_tracks: int, added_count: int, removed_count: int,
+                     failure_count: int, added_paths: list, removed_paths: list,
+                     failed_paths: list):
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO scan_log
+           (started_at, finished_at, total_files, total_tracks,
+            added_count, removed_count, failure_count,
+            added_paths, removed_paths, failed_paths)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (started_at, finished_at, total_files, total_tracks,
+         added_count, removed_count, failure_count,
+         json.dumps(added_paths), json.dumps(removed_paths), json.dumps(failed_paths))
+    )
+    conn.execute("DELETE FROM scan_log WHERE id NOT IN (SELECT id FROM scan_log ORDER BY id DESC LIMIT 5)")
+    conn.commit()
+
+
+def db_get_scan_history() -> list:
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT id, started_at, finished_at, total_files, total_tracks,
+                  added_count, removed_count, failure_count,
+                  added_paths, removed_paths, failed_paths
+           FROM scan_log ORDER BY id DESC LIMIT 5"""
+    ).fetchall()
+    result = []
+    for r in rows:
+        entry = dict(r)
+        for key in ('added_paths', 'removed_paths', 'failed_paths'):
+            try:
+                entry[key] = json.loads(entry[key])
+            except Exception:
+                entry[key] = []
+        result.append(entry)
+    return result
