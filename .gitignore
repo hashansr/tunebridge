@@ -15,10 +15,9 @@ build/
 *.spec
 .env
 
-# Keep only the public latest installer in-repo for sharing
+# DMGs are distributed via GitHub Releases — never commit them
 !distro/
 distro/*.dmg
-!distro/TuneBridge-latest.dmg
 
 # App cache — auto-regenerated on rescan
 data/library.json

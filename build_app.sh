@@ -596,46 +596,32 @@ if [ "$BUILD_DMG" = "1" ]; then
       *)    DMG_DEST="TuneBridge-dev.dmg";     VER_DEST="version-dev.json" ;;
     esac
 
-    printf "  🔄  Syncing releases repo... "
-    _sync_ok=0
-    if GIT_LFS_SKIP_SMUDGE=1 git -C "$RELEASES_REPO" fetch origin --quiet 2>/dev/null; then
-      if git -C "$RELEASES_REPO" rebase origin/main --quiet 2>/dev/null; then
-        _sync_ok=1
-      else
-        git -C "$RELEASES_REPO" rebase --abort 2>/dev/null || true
-      fi
-    fi
-    if [ "$_sync_ok" = "1" ]; then
-      echo -e "${GREEN}done ✅${NC}"
-    else
-      echo -e "${YELLOW}skipped ⚠️${NC}"
-      _warn "Could not sync releases repo — push may fail if remote has newer commits"
-    fi
-
-    printf "  📋  Copying version artifacts to releases repo... "
-    # Prod DMG is distributed as a GitHub Release asset (enables download counting).
-    # RC/dev DMGs are still committed as raw files (releases/latest skips pre-releases).
-    if [ "$BUILD_CHANNEL" != "prod" ]; then
-      cp -f "$DISTRO_LATEST" "${RELEASES_REPO}/${DMG_DEST}"
-    fi
+    printf "  📋  Updating version metadata in releases repo... "
+    # DMGs are never committed to the repo — all channels distribute via GitHub
+    # Releases so LFS storage is never used. The repo only holds version JSON
+    # and CHANGELOG for the in-app update checker.
     cp -f "${PROJECT_DIR}/version.json" "${RELEASES_REPO}/${VER_DEST}"
     cp -f "${CHANGELOG}" "${RELEASES_REPO}/CHANGELOG.md"
     echo -e "${GREEN}done ✅${NC}"
 
-    printf "  📝  Committing releases repo... "
-    if [ "$BUILD_CHANNEL" != "prod" ]; then
-      git -C "$RELEASES_REPO" add "${DMG_DEST}" "${VER_DEST}" CHANGELOG.md
-    else
-      git -C "$RELEASES_REPO" add "${VER_DEST}" CHANGELOG.md
-    fi
-    git -C "$RELEASES_REPO" commit -m "$(echo "$BUILD_CHANNEL" | tr '[:lower:]' '[:upper:]') v${VERSION_FULL}"
+    printf "  📝  Committing releases repo (orphan — no history accumulation)... "
+    # Orphan commits mean the repo stays at exactly 1 commit. No old commits
+    # means no old file blobs ever accumulate — git storage stays near-zero.
+    (
+      cd "$RELEASES_REPO"
+      git checkout --orphan _tmp_publish 2>/dev/null
+      git add "${VER_DEST}" CHANGELOG.md
+      git commit -m "$(echo "$BUILD_CHANNEL" | tr '[:lower:]' '[:upper:]') v${VERSION_FULL}"
+      git branch -M main
+    )
     echo -e "${GREEN}done ✅${NC}"
 
     printf "  🌐  Pushing releases repo... "
-    git -C "$RELEASES_REPO" push
+    git -C "$RELEASES_REPO" push --force origin main
     echo -e "${GREEN}done ✅${NC}"
 
-    # Create GitHub Release with DMG asset for download counting
+    # All channels publish DMG as a GitHub Release asset (no LFS needed).
+    # Prod → latest (non-pre-release); RC → pre-release; dev → skipped (too noisy).
     if [ "$BUILD_CHANNEL" = "prod" ]; then
       printf "  🎁  Creating GitHub Release v${APP_VERSION}... "
       gh release create "v${APP_VERSION}" \
@@ -645,9 +631,22 @@ if [ "$BUILD_DMG" = "1" ]; then
         --notes "" \
         "${DISTRO_LATEST}#TuneBridge-latest.dmg" > /dev/null
       echo -e "${GREEN}done ✅${NC}"
+    elif [ "$BUILD_CHANNEL" = "rc" ]; then
+      printf "  🎁  Creating pre-release ${VERSION_FULL}... "
+      # Delete existing RC release/tag if present (only one RC slot kept)
+      gh release delete "rc-latest" \
+        --repo hashansr/tunebridge-releases --yes 2>/dev/null || true
+      git -C "$RELEASES_REPO" push origin :refs/tags/rc-latest 2>/dev/null || true
+      gh release create "rc-latest" \
+        --repo hashansr/tunebridge-releases \
+        --title "TuneBridge ${VERSION_FULL}" \
+        --prerelease \
+        --notes "Release candidate — not for general use." \
+        "${DISTRO_LATEST}#TuneBridge-rc.dmg" > /dev/null
+      echo -e "${GREEN}done ✅${NC}"
     fi
 
-    _ok "Published $(echo "$BUILD_CHANNEL" | tr '[:lower:]' '[:upper:]') v${VERSION_FULL} → hashansr/tunebridge-releases  (${DMG_DEST})"
+    _ok "Published $(echo "$BUILD_CHANNEL" | tr '[:lower:]' '[:upper:]') v${VERSION_FULL} → hashansr/tunebridge-releases"
   fi
 fi
 
@@ -672,8 +671,9 @@ case "$BUILD_CHANNEL" in
     echo "    /Applications/${APP_NAME}.app ✅"
     ;;
   rc)
-    echo -e "  ${BOLD}RC build — not published:${NC}"
-    echo "    Share for testing:  distro/${APP_NAME}-latest.dmg"
+    echo -e "  ${BOLD}RC build:${NC}"
+    echo "    Pre-release asset:  github.com/hashansr/tunebridge-releases/releases/tag/rc-latest"
+    echo "    Local file:         distro/${APP_NAME}-latest.dmg"
     echo "    To release:  bash build_app.sh --prod"
     echo ""
     echo -e "  ${BOLD}Local install updated:${NC}"
