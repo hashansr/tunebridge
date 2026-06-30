@@ -10058,8 +10058,9 @@ function _swParsePath(rel) {
   const folders = parts.slice(0, -1).filter(f => !/^(music|flac|audio)$/i.test(f));
   // macOS HFS stores "/" as ":" in folder names — restore for display
   const fixSlash = s => s.replace(/:/g, '/');
-  const album  = fixSlash(folders.length > 0 ? folders[folders.length - 1] : '');
-  const artist = fixSlash(folders.length > 1 ? folders[folders.length - 2] : '');
+  // With 1 folder level, it's the artist dir (no album subdir) — not the album
+  const album  = fixSlash(folders.length > 1 ? folders[folders.length - 1] : '');
+  const artist = fixSlash(folders.length > 1 ? folders[folders.length - 2] : (folders.length === 1 ? folders[0] : ''));
   return { title, artist, album };
 }
 
