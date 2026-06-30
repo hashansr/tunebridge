@@ -1494,9 +1494,8 @@ async function pollScanStatus() {
       if (_settings && _settings.replay_gain_enabled) {
         _checkRgMissingAndNotify();
       }
-      // Refresh scan history table if the accordion is open
-      const shHeader = document.getElementById('scan-history-header');
-      if (shHeader && shHeader.getAttribute('aria-expanded') === 'true') loadScanHistory();
+      // Refresh scan history if settings view is open
+      if (state.view === 'settings') loadScanHistory();
     }
   }
 }
@@ -8859,14 +8858,90 @@ async function rescan() {
   pollScanStatus();
 }
 
-function toggleScanHistory() {
-  const header = document.getElementById('scan-history-header');
-  const container = document.getElementById('scan-history-container');
-  if (!header || !container) return;
-  const isOpen = header.getAttribute('aria-expanded') === 'true';
-  header.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
-  container.style.display = isOpen ? 'none' : '';
-  if (!isOpen) loadScanHistory();
+function _parseScanPath(p) {
+  const parts = p.split('/');
+  const artist = parts[0] || '';
+  const album = parts.length >= 2 ? parts[1] : '';
+  const filename = parts[parts.length - 1] || '';
+  const stem = filename.replace(/\.[^.]+$/, '');
+  const cleaned = stem.replace(/\[(?!feat\.)[^\]]*\]/gi, '').replace(/\s{2,}/g, ' ').trim();
+  const numMatch = cleaned.match(/^(\d{1,3})[.\s]\s*(.+)$/);
+  let num = '', rest = cleaned;
+  if (numMatch) { num = numMatch[1]; rest = numMatch[2].trim(); }
+  const featMatch = rest.match(/^(.*?)\s*\[feat\.\s*([^\]]+)\]/i);
+  let title = rest, feat = '';
+  if (featMatch) { title = featMatch[1].trim(); feat = featMatch[2].trim(); }
+  return { num, title, feat, loc: [artist, album].filter(Boolean).join(' · ') };
+}
+
+function _shFileRow(path, mark) {
+  const f = _parseScanPath(path);
+  const isAdd = mark === '+';
+  const markCls = isAdd ? 'sh-file-mark--added' : 'sh-file-mark--removed';
+  const titleFull = [f.num ? `${f.num}.` : '', f.title, f.feat ? `feat. ${f.feat}` : ''].filter(Boolean).join(' ');
+  return `<div class="sh-file">
+    <span class="sh-file-mark ${markCls}">${mark}</span>
+    <span class="sh-file-title" title="${esc(titleFull)}">${f.num ? `<span class="sh-file-num">${esc(f.num)}</span> ` : ''}<span class="sh-file-name">${esc(f.title)}</span>${f.feat ? ` <span class="sh-file-feat">feat. ${esc(f.feat)}</span>` : ''}</span>
+    <span class="sh-file-loc" title="${esc(f.loc)}">${esc(f.loc)}</span>
+  </div>`;
+}
+
+function _shChangeGroup(label, paths, mark, cls) {
+  if (!paths || paths.length === 0) return '';
+  return `<div class="sh-group">
+    <div class="sh-group-label ${cls}">${label} <span class="sh-group-count">${paths.length}</span></div>
+    ${paths.map(p => _shFileRow(p, mark)).join('')}
+  </div>`;
+}
+
+function _shCard(r, isLatest, startOpen) {
+  const hasChanges = r.added_count > 0 || r.removed_count > 0;
+  const d = new Date(r.started_at * 1000);
+  const dateStr = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+    + ', ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const durSec = r.finished_at - r.started_at;
+  const durStr = durSec < 60 ? `${durSec}s` : `${Math.floor(durSec / 60)}m ${durSec % 60}s`;
+  const tracksStr = (r.total_tracks || 0).toLocaleString();
+
+  const chevron = hasChanges
+    ? `<span class="sh-chev accordion-state-icon${startOpen ? ' is-open' : ''}" aria-hidden="true"></span>`
+    : '';
+  const latestPill = isLatest ? `<span class="sh-latest-pill">LATEST</span>` : '';
+  const deltas = hasChanges
+    ? `<span class="sh-badge sh-badge--added">+${r.added_count}</span><span class="sh-badge sh-badge--removed">−${r.removed_count}</span>`
+    : `<span class="sh-no-changes">No changes</span>`;
+
+  const body = hasChanges ? `<div class="sh-body"${startOpen ? '' : ' style="display:none"'}>
+    ${_shChangeGroup('Added', r.added_paths, '+', 'sh-group-label--added')}
+    ${_shChangeGroup('Removed', r.removed_paths, '−', 'sh-group-label--removed')}
+    ${r.failure_count > 0 ? _shChangeGroup('Unreadable', r.failed_paths, '!', 'sh-group-label--failed') : ''}
+  </div>` : '';
+
+  return `<div class="sh-card${startOpen ? ' sh-card--open' : ''}${!hasChanges ? ' sh-card--static' : ''}">
+    <button class="sh-card-hdr"${hasChanges ? ' onclick="App.shToggleCard(this.closest(\'.sh-card\'))"' : ' disabled'}>
+      <span class="sh-hdr-left">${chevron}<span class="sh-date">${dateStr}</span>${latestPill}</span>
+      <span class="sh-meta">${durStr} · ${tracksStr} tracks</span>
+      <span class="sh-deltas">${deltas}</span>
+    </button>
+    ${body}
+  </div>`;
+}
+
+function shToggleCard(card) {
+  const open = !card.classList.contains('sh-card--open');
+  card.classList.toggle('sh-card--open', open);
+  const chev = card.querySelector('.sh-chev');
+  if (chev) chev.classList.toggle('is-open', open);
+  const body = card.querySelector('.sh-body');
+  if (body) body.style.display = open ? '' : 'none';
+}
+
+function shTogglePrev(btn) {
+  const list = btn.nextElementSibling;
+  const open = list.style.display === 'none';
+  list.style.display = open ? '' : 'none';
+  btn.querySelector('.accordion-state-icon').classList.toggle('is-open', open);
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
 async function loadScanHistory() {
@@ -8875,66 +8950,20 @@ async function loadScanHistory() {
   let rows;
   try {
     rows = await fetch('/api/library/scan/history').then(r => r.json());
-  } catch (_) {
-    return;
-  }
+  } catch (_) { return; }
+
   if (!Array.isArray(rows) || rows.length === 0) {
-    container.innerHTML = '<p class="scan-history-empty">No scans recorded yet. Run a rescan to start logging.</p>';
+    container.innerHTML = '<div class="sh-subhead">Scan history</div><p class="sh-empty">No scans recorded yet. Run a rescan to start logging.</p>';
     return;
   }
-  const fmt = ts => {
-    const d = new Date(ts * 1000);
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-      + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  };
-  const dur = (s, e) => {
-    const sec = e - s;
-    return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m ${sec % 60}s`;
-  };
-  const badge = (n, type, label) => {
-    if (n === 0) return `<span class="scan-history-badge scan-history-badge--none">${label} 0</span>`;
-    return `<span class="scan-history-badge scan-history-badge--${type}">${label} ${n}</span>`;
-  };
-  const pathList = (paths, cls) => {
-    if (!paths || paths.length === 0) return '';
-    const items = paths.map(p => `<li>${p}</li>`).join('');
-    return `<ul class="sh-path-list sh-path-list--${cls}">${items}</ul>`;
-  };
-  const rows_html = rows.map((r, i) => {
-    const hasDetail = r.added_count > 0 || r.removed_count > 0 || r.failure_count > 0;
-    const detailId = `sh-detail-${i}`;
-    let detailHtml = '';
-    if (hasDetail) {
-      const groups = [];
-      if (r.added_paths && r.added_paths.length > 0)
-        groups.push(`<div class="sh-detail-group"><div class="sh-detail-label">Added (${r.added_count})</div>${pathList(r.added_paths, 'added')}</div>`);
-      if (r.removed_paths && r.removed_paths.length > 0)
-        groups.push(`<div class="sh-detail-group"><div class="sh-detail-label">Removed (${r.removed_count})</div>${pathList(r.removed_paths, 'removed')}</div>`);
-      if (r.failed_paths && r.failed_paths.length > 0)
-        groups.push(`<div class="sh-detail-group"><div class="sh-detail-label">Unreadable (${r.failure_count})</div>${pathList(r.failed_paths, 'failed')}</div>`);
-      detailHtml = `<div class="sh-detail" id="${detailId}">${groups.join('')}</div>`;
-    }
-    return `<tr>
-      <td class="sh-date">${fmt(r.started_at)}</td>
-      <td class="sh-duration">${dur(r.started_at, r.finished_at)}</td>
-      <td class="sh-total">${r.total_tracks.toLocaleString()}</td>
-      <td>
-        <div class="sh-changes">
-          ${badge(r.added_count, 'added', '+')}
-          ${badge(r.removed_count, 'removed', '−')}
-          ${r.failure_count > 0 ? badge(r.failure_count, 'failed', '!') : ''}
-          ${hasDetail ? `<button class="sh-expand-btn" onclick="this.closest('tr').querySelector('.sh-detail').classList.toggle('open');this.textContent=this.textContent==='Details'?'Hide':'Details'">Details</button>` : ''}
-        </div>
-        ${detailHtml}
-      </td>
-    </tr>`;
-  }).join('');
-  container.innerHTML = `<table class="scan-history-table">
-    <thead><tr>
-      <th>Date</th><th>Duration</th><th>Tracks</th><th>Changes</th>
-    </tr></thead>
-    <tbody>${rows_html}</tbody>
-  </table>`;
+
+  const [latest, ...prev] = rows;
+  const prevToggle = prev.length > 0 ? `<button class="sh-prev-toggle" onclick="App.shTogglePrev(this)" aria-expanded="false">
+    Previous scans (${prev.length})<span class="accordion-state-icon" style="width:11px;height:11px" aria-hidden="true"></span>
+  </button>
+  <div class="sh-prev-list" style="display:none">${prev.map(r => _shCard(r, false, false)).join('')}</div>` : '';
+
+  container.innerHTML = `<div class="sh-subhead">Scan history</div>${_shCard(latest, true, true)}${prevToggle}`;
 }
 
 async function rescanClean() {
@@ -16147,6 +16176,7 @@ async function loadSettings() {
   // Replay Gain — apply from server settings
   _initRgFromSettings(settings);
   loadLyricsSettings();
+  loadScanHistory();
 
   // Display app version + channel picker
   try {
@@ -20625,7 +20655,8 @@ const App = {
   rescan,
   rescanClean,
   toggleRescanMenu,
-  toggleScanHistory,
+  shToggleCard,
+  shTogglePrev,
   closeRescanMenu,
   showSettings,
   closeSettings,

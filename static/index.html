@@ -1067,7 +1067,7 @@
                 <button class="btn-secondary" onclick="App.saveLibraryPath()">Save path</button>
               </div>
             </div>
-            <div class="settings-app-row settings-app-row-clean">
+            <div class="settings-app-row settings-app-row-clean settings-app-row--no-bottom">
               <div class="settings-app-main">
                 <div class="settings-app-row-label">Rescan library</div>
                 <div class="settings-app-row-hint">Re-read the folder for added, changed, or removed tracks.</div>
@@ -1076,15 +1076,8 @@
                 <button class="btn-secondary btn-with-icon" onclick="App.rescan()"><span class="tb-icon tb-icon-refresh" aria-hidden="true"></span>Rescan now</button>
               </div>
             </div>
-
-            <!-- Scan history -->
-            <div class="settings-group-header settings-group-header--toggle" onclick="App.toggleScanHistory()" aria-expanded="false" id="scan-history-header">
-              <span>Scan history</span>
-              <i aria-hidden="true"></i>
-              <span class="accordion-state-icon" style="width:13px;height:13px;flex-shrink:0" aria-hidden="true"></span>
-            </div>
-            <div id="scan-history-container" class="scan-history-container" style="display:none">
-              <p class="scan-history-empty">No scans recorded yet. Run a rescan to start logging.</p>
+            <div id="scan-history-container" class="scan-history-wrap">
+              <!-- populated by loadScanHistory() -->
             </div>
 
             <!-- Duplicate tracks tool -->
