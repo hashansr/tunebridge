@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.556-rc.300626-1048 · 2026-06-30
+
 ## v0.555-rc.300626-1030 · 2026-06-30
 - Fix: Tracks stored directly in the artist folder (no album subfolder) no longer appear under "Unknown" in the sync preview tree
 
