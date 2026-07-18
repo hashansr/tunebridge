@@ -13048,25 +13048,28 @@ async function showIemDetail(id) {
   const typeBadge = isHeadphone ? 'gear-badge-hp' : 'gear-badge-iem';
   const detailIcon = isHeadphone ? _HEADPHONE_SVG : _IEM_ICON_HTML;
   const hasMeasurement = !!iem.has_measurement;
-  const sourceOptions = (iem.squig_sources || []).map(s =>
-    `<option value="${esc(s.id || '')}" ${s.id === _activeIemSourceId ? 'selected' : ''}>${esc(s.label || 'Source')}</option>`
-  ).join('');
   if (_activeIemSourceId) {
     _activeIemCompareSourceIds = new Set([_activeIemSourceId]);
   } else {
     _activeIemCompareSourceIds = new Set();
   }
-  const sourceCompareControls = (iem.squig_sources || []).length > 1
-    ? `<div class="iem-source-compare-controls" id="iem-source-compare-controls">
-        <span class="iem-source-compare-label">Plot sources</span>
-        ${(iem.squig_sources || []).map(s => {
-          const sid = s.id || '';
-          const sidArg = JSON.stringify(sid).replace(/"/g, '&quot;');
-          const active = _activeIemCompareSourceIds.has(sid);
-          return `<button class="iem-source-chip${active ? ' active' : ''}" data-source-id="${esc(sid)}" type="button" onclick="App.toggleIemSourceCompare(${sidArg})" title="Toggle ${esc(s.label || 'source')} on graph">
-            <span class="iem-source-chip-check" aria-hidden="true"></span>${esc(s.label || 'Source')}
-          </button>`;
-        }).join('')}
+  const sourceSelectControl = (iem.squig_sources || []).length
+    ? `<div class="iem-source-multiselect" id="iem-source-select">
+        <button class="iem-source-select-btn" type="button" onclick="App.toggleIemSourceDropdown(event)" aria-haspopup="true" aria-expanded="false">
+          <span id="iem-source-select-label">${esc(_iemSourceSelectLabel(iem.squig_sources || []))}</span>
+          <span class="iem-source-select-caret" aria-hidden="true"></span>
+        </button>
+        <div class="iem-source-menu" id="iem-source-menu" role="menu">
+          ${(iem.squig_sources || []).map(s => {
+            const sid = s.id || '';
+            const sidArg = JSON.stringify(sid).replace(/"/g, '&quot;');
+            const active = _activeIemCompareSourceIds.has(sid);
+            return `<button class="iem-source-option${active ? ' active' : ''}" data-source-id="${esc(sid)}" type="button" onclick="App.toggleIemSourceSelection(${sidArg}, event)" role="menuitemcheckbox" aria-checked="${active ? 'true' : 'false'}">
+              <span class="iem-source-option-check" aria-hidden="true"></span>
+              <span class="iem-source-option-label">${esc(s.label || 'Source')}</span>
+            </button>`;
+          }).join('')}
+        </div>
       </div>`
     : '';
   const sourceLink = (iem.squig_sources || []).find(s => s.id === _activeIemSourceId) || (iem.squig_sources || [])[0];
@@ -13100,11 +13103,7 @@ async function showIemDetail(id) {
       </div>
 
       <div class="gd-controls-row">
-        ${sourceOptions ? `<label>Source</label>
-        <select id="iem-source-select" onchange="App.applyIemSourceToGraph(this.value)">
-          ${sourceOptions}
-        </select>` : ''}
-        ${sourceCompareControls}
+        ${sourceSelectControl ? `<label>Source</label>${sourceSelectControl}` : ''}
         <label>PEQ</label>
         <select id="peq-select" onchange="App.applyPeqToGraph(this.value)">
           <option value="">None (raw measurement)</option>
@@ -13500,37 +13499,65 @@ async function applyPeqToGraph(peqId) {
   if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId, _activeIemSourceId, [..._activeIemCompareSourceIds]);
 }
 
-async function applyIemSourceToGraph(sourceId) {
-  _activeIemSourceId = sourceId || null;
-  if (sourceId) _activeIemCompareSourceIds.add(sourceId);
-  const sel = document.getElementById('iem-source-select');
-  if (sel) sel.value = sourceId || '';
-  _syncIemSourceCompareControls();
-  if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId, _activeIemSourceId, [..._activeIemCompareSourceIds]);
+function toggleIemSourceDropdown(event) {
+  if (event) event.stopPropagation();
+  const root = document.getElementById('iem-source-select');
+  const btn = root?.querySelector('.iem-source-select-btn');
+  if (!root) return;
+  const isOpen = root.classList.toggle('open');
+  if (btn) btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
 }
 
-async function toggleIemSourceCompare(sourceId) {
+function closeIemSourceDropdown() {
+  const root = document.getElementById('iem-source-select');
+  const btn = root?.querySelector('.iem-source-select-btn');
+  if (!root) return;
+  root.classList.remove('open');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+async function toggleIemSourceSelection(sourceId, event) {
+  if (event) event.stopPropagation();
   if (!sourceId) return;
   if (_activeIemCompareSourceIds.has(sourceId)) {
     if (_activeIemCompareSourceIds.size <= 1) return;
     _activeIemCompareSourceIds.delete(sourceId);
     if (_activeIemSourceId === sourceId) {
       _activeIemSourceId = [..._activeIemCompareSourceIds][0] || null;
-      const sel = document.getElementById('iem-source-select');
-      if (sel) sel.value = _activeIemSourceId || '';
     }
   } else {
     _activeIemCompareSourceIds.add(sourceId);
+    _activeIemSourceId = sourceId;
   }
   _syncIemSourceCompareControls();
   if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId, _activeIemSourceId, [..._activeIemCompareSourceIds]);
 }
 
 function _syncIemSourceCompareControls() {
-  document.querySelectorAll('#iem-source-compare-controls .iem-source-chip').forEach(btn => {
+  const sources = _sourceOptionsFromMenu();
+  document.querySelectorAll('#iem-source-menu .iem-source-option').forEach(btn => {
     const sid = btn.dataset.sourceId || '';
-    btn.classList.toggle('active', _activeIemCompareSourceIds.has(sid));
+    const active = _activeIemCompareSourceIds.has(sid);
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-checked', active ? 'true' : 'false');
   });
+  const label = document.getElementById('iem-source-select-label');
+  if (label) label.textContent = _iemSourceSelectLabel(sources);
+}
+
+function _sourceOptionsFromMenu() {
+  return Array.from(document.querySelectorAll('#iem-source-menu .iem-source-option')).map(btn => ({
+    id: btn.dataset.sourceId || '',
+    label: btn.querySelector('.iem-source-option-label')?.textContent || 'Source',
+  }));
+}
+
+function _iemSourceSelectLabel(sources = []) {
+  const selected = (sources || []).filter(s => _activeIemCompareSourceIds.has(s.id));
+  if (!selected.length) return 'Select sources';
+  const primary = selected.find(s => s.id === _activeIemSourceId) || selected[0];
+  const extra = selected.length - 1;
+  return extra > 0 ? `${primary.label || 'Source'} + ${extra}` : (primary.label || 'Source');
 }
 
 function _defaultCustomPeqState() {
@@ -20940,8 +20967,8 @@ const App = {
   saveIem,
   deleteIem,
   applyPeqToGraph,
-  applyIemSourceToGraph,
-  toggleIemSourceCompare,
+  toggleIemSourceDropdown,
+  toggleIemSourceSelection,
   openPeqEditor,
   closePeqEditor,
   onPeqPrimaryAction,
@@ -25533,6 +25560,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!e.target.closest('.fr-ov-shell')) {
       _closeFrOverlayMenu();
     }
+    if (!e.target.closest('#iem-source-select')) {
+      closeIemSourceDropdown();
+    }
 
   });
 
@@ -25552,6 +25582,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       closePlaylistDapMenu();
       _closePlExportMenu();
       _closeFrOverlayMenu();
+      closeIemSourceDropdown();
       if (document.getElementById('confirm-modal')?.style.display !== 'none') {
         _confirmNo();
       } else {
