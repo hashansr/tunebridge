@@ -12420,6 +12420,7 @@ def iem_graph(iid):
 
     peq_id = request.args.get('peq', '')
     source_id = request.args.get('source', '')
+    source_compare_ids = [sid for sid in request.args.getlist('source_compare') if sid]
     compare_ids = request.args.getlist('compare')
     compare_source_map = {}
     for token in request.args.getlist('compare_source'):
@@ -12430,46 +12431,65 @@ def iem_graph(iid):
 
     curves = []
     targets = [iem] + [i for i in iems if i['id'] in compare_ids]
+    active_source = _resolve_iem_source(iem, source_id)
+    active_source_id = (active_source or {}).get('id')
+    group_idx = 0
 
     for idx, cur in enumerate(targets):
-        color = palette[idx % len(palette)]
-        requested_source_id = source_id if idx == 0 else compare_source_map.get(cur['id'])
-        source = _resolve_iem_source(cur, requested_source_id)
-        source_label = source.get('label') if source else None
-        name = cur['name']
-        if source_label and len(cur.get('squig_sources') or []) > 1:
-            name = f"{name} [{source_label}]"
-        mL = (source or {}).get('measurement_L') or cur.get('measurement_L')
-        mR = (source or {}).get('measurement_R') or cur.get('measurement_R')
+        source_groups = []
+        if idx == 0 and source_compare_ids:
+            seen = set()
+            by_id = {s.get('id'): s for s in (cur.get('squig_sources') or []) if s.get('id')}
+            for sid in source_compare_ids:
+                if sid in seen:
+                    continue
+                seen.add(sid)
+                src = by_id.get(sid)
+                if src:
+                    source_groups.append(src)
+        if not source_groups:
+            requested_source_id = source_id if idx == 0 else compare_source_map.get(cur['id'])
+            source_groups = [_resolve_iem_source(cur, requested_source_id)]
 
-        # Normalise: use L-channel 1 kHz as reference, apply same offset to R & PEQ
-        ref_spl = _spl_at_1khz(mL or mR)
-        offset = (NORM_REF_DB - ref_spl) if ref_spl is not None else 0.0
+        for source in source_groups:
+            color = palette[group_idx % len(palette)]
+            group_idx += 1
+            source_label = source.get('label') if source else None
+            source_key = (source or {}).get('id') or f'source-{group_idx}'
+            name = cur['name']
+            if source_label and len(cur.get('squig_sources') or []) > 1:
+                name = f"{name} [{source_label}]"
+            mL = (source or {}).get('measurement_L') or cur.get('measurement_L')
+            mR = (source or {}).get('measurement_R') or cur.get('measurement_R')
 
-        if mL:
-            curves.append({'id': f"{cur['id']}-L", 'label': f"{name} (L)",
-                           'color': color, 'dash': False, 'data': _shift(mL, offset)})
-        if mR:
-            curves.append({'id': f"{cur['id']}-R", 'label': f"{name} (R)",
-                           'color': color, 'dash': False, 'data': _shift(mR, offset)})
+            # Normalise: use L-channel 1 kHz as reference, apply same offset to R & PEQ
+            ref_spl = _spl_at_1khz(mL or mR)
+            offset = (NORM_REF_DB - ref_spl) if ref_spl is not None else 0.0
 
-        # Apply PEQ for primary IEM only (same offset keeps PEQ effect relative to normalised curve)
-        if idx == 0 and peq_id:
-            peq = next((p for p in cur.get('peq_profiles', []) if p['id'] == peq_id), None)
-            if peq:
-                peq_color = palette[(len(targets)) % len(palette)]
-                # _apply_peq re-normalises to 75 dB at 1 kHz internally, so do NOT
-                # apply the factory offset on top — that would double-shift the curve.
-                if mL:
-                    curves.append({'id': f"{cur['id']}-peq-L",
-                                   'label': f"{name} + {peq['name']} (L)",
-                                   'color': peq_color, 'dash': False,
-                                   'data': _apply_peq(mL, peq)})
-                if mR:
-                    curves.append({'id': f"{cur['id']}-peq-R",
-                                   'label': f"{name} + {peq['name']} (R)",
-                                   'color': peq_color, 'dash': False,
-                                   'data': _apply_peq(mR, peq)})
+            if mL:
+                curves.append({'id': f"{cur['id']}-{source_key}-L", 'label': f"{name} (L)",
+                               'color': color, 'dash': False, 'data': _shift(mL, offset)})
+            if mR:
+                curves.append({'id': f"{cur['id']}-{source_key}-R", 'label': f"{name} (R)",
+                               'color': color, 'dash': False, 'data': _shift(mR, offset)})
+
+            # Apply PEQ for the primary selected source only.
+            if idx == 0 and peq_id and ((source or {}).get('id') == active_source_id or not active_source_id):
+                peq = next((p for p in cur.get('peq_profiles', []) if p['id'] == peq_id), None)
+                if peq:
+                    peq_color = palette[group_idx % len(palette)]
+                    # _apply_peq re-normalises to 75 dB at 1 kHz internally, so do NOT
+                    # apply the factory offset on top — that would double-shift the curve.
+                    if mL:
+                        curves.append({'id': f"{cur['id']}-{source_key}-peq-L",
+                                       'label': f"{name} + {peq['name']} (L)",
+                                       'color': peq_color, 'dash': False,
+                                       'data': _apply_peq(mL, peq)})
+                    if mR:
+                        curves.append({'id': f"{cur['id']}-{source_key}-peq-R",
+                                       'label': f"{name} + {peq['name']} (R)",
+                                       'color': peq_color, 'dash': False,
+                                       'data': _apply_peq(mR, peq)})
 
     # Append baseline/target curves — each normalised independently
     for bl in load_baselines():
@@ -12493,7 +12513,6 @@ def iem_graph(iid):
         }
         for s in (iem.get('squig_sources') or [])
     ]
-    active_source = _resolve_iem_source(iem, source_id)
     return jsonify({
         'curves': curves,
         'iem_name': iem['name'],

@@ -12956,6 +12956,7 @@ let _iemChart = null;
 let _currentIemId = null;
 let _activePeqId = null;
 let _activeIemSourceId = null;
+let _activeIemCompareSourceIds = new Set();
 const IEM_MAX_SOURCE_ROWS = 10;
 
 function _collectIemModalRows() {
@@ -13050,6 +13051,24 @@ async function showIemDetail(id) {
   const sourceOptions = (iem.squig_sources || []).map(s =>
     `<option value="${esc(s.id || '')}" ${s.id === _activeIemSourceId ? 'selected' : ''}>${esc(s.label || 'Source')}</option>`
   ).join('');
+  if (_activeIemSourceId) {
+    _activeIemCompareSourceIds = new Set([_activeIemSourceId]);
+  } else {
+    _activeIemCompareSourceIds = new Set();
+  }
+  const sourceCompareControls = (iem.squig_sources || []).length > 1
+    ? `<div class="iem-source-compare-controls" id="iem-source-compare-controls">
+        <span class="iem-source-compare-label">Plot sources</span>
+        ${(iem.squig_sources || []).map(s => {
+          const sid = s.id || '';
+          const sidArg = JSON.stringify(sid).replace(/"/g, '&quot;');
+          const active = _activeIemCompareSourceIds.has(sid);
+          return `<button class="iem-source-chip${active ? ' active' : ''}" data-source-id="${esc(sid)}" type="button" onclick="App.toggleIemSourceCompare(${sidArg})" title="Toggle ${esc(s.label || 'source')} on graph">
+            <span class="iem-source-chip-check" aria-hidden="true"></span>${esc(s.label || 'Source')}
+          </button>`;
+        }).join('')}
+      </div>`
+    : '';
   const sourceLink = (iem.squig_sources || []).find(s => s.id === _activeIemSourceId) || (iem.squig_sources || [])[0];
   const peqOptions = (iem.peq_profiles || []).map(p =>
     `<option value="${p.id}">${esc(p.name)}</option>`
@@ -13085,6 +13104,7 @@ async function showIemDetail(id) {
         <select id="iem-source-select" onchange="App.applyIemSourceToGraph(this.value)">
           ${sourceOptions}
         </select>` : ''}
+        ${sourceCompareControls}
         <label>PEQ</label>
         <select id="peq-select" onchange="App.applyPeqToGraph(this.value)">
           <option value="">None (raw measurement)</option>
@@ -13127,7 +13147,7 @@ async function showIemDetail(id) {
   _refreshFrOverlayControls();
 
   if (hasMeasurement) {
-    await _loadIemGraph(id, null, _activeIemSourceId);
+    await _loadIemGraph(id, null, _activeIemSourceId, [..._activeIemCompareSourceIds]);
   }
 }
 
@@ -13304,10 +13324,14 @@ async function peqCopyToDap(peqId, dapId, dapName) {
   }
 }
 
-async function _loadIemGraph(iemId, peqId, sourceId = null) {
+async function _loadIemGraph(iemId, peqId, sourceId = null, compareSourceIds = null) {
   const qp = [];
   if (peqId) qp.push(`peq=${encodeURIComponent(peqId)}`);
   if (sourceId) qp.push(`source=${encodeURIComponent(sourceId)}`);
+  const sourceCompare = Array.isArray(compareSourceIds)
+    ? compareSourceIds.filter(Boolean)
+    : [..._activeIemCompareSourceIds].filter(Boolean);
+  sourceCompare.forEach(sid => qp.push(`source_compare=${encodeURIComponent(sid)}`));
   const params = qp.length ? `?${qp.join('&')}` : '';
   let data;
   try {
@@ -13318,6 +13342,7 @@ async function _loadIemGraph(iemId, peqId, sourceId = null) {
   }
   if (!data || !data.curves || !data.curves.length) return;
   _activeIemSourceId = data.selected_source_id || sourceId || _activeIemSourceId;
+  _syncIemSourceCompareControls();
 
   const canvas = document.getElementById('freq-canvas');
   if (!canvas) return;
@@ -13334,12 +13359,13 @@ async function _loadIemGraph(iemId, peqId, sourceId = null) {
     return '#5b8dee';                             // blue for L channel
   }
 
+  const comparingSources = sourceCompare.length > 1;
   const datasets = data.curves.map(c => ({
     label: c.label,
     data: c.data.map(([f, spl]) => ({ x: f, y: spl })),
-    borderColor: _iemCurveColor(c.id, c.color),
+    borderColor: comparingSources ? (c.color || _iemCurveColor(c.id, c.color)) : _iemCurveColor(c.id, c.color),
     borderWidth: c.id.startsWith('baseline-') ? 1.4 : c.dash ? 1.3 : 1.9,
-    borderDash: c.dash ? [6, 4] : undefined,
+    borderDash: c.dash ? [6, 4] : (comparingSources && c.id.endsWith('-R') ? [2, 3] : undefined),
     pointRadius: 0,
     tension: 0.3,
     // Baselines are hidden on first load — user toggles them via the legend
@@ -13471,14 +13497,40 @@ async function applyPeqToGraph(peqId) {
     const activeRow = document.getElementById(`peq-row-${peqId}`);
     if (activeRow) activeRow.classList.add('active');
   }
-  if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId, _activeIemSourceId);
+  if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId, _activeIemSourceId, [..._activeIemCompareSourceIds]);
 }
 
 async function applyIemSourceToGraph(sourceId) {
   _activeIemSourceId = sourceId || null;
+  if (sourceId) _activeIemCompareSourceIds.add(sourceId);
   const sel = document.getElementById('iem-source-select');
   if (sel) sel.value = sourceId || '';
-  if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId, _activeIemSourceId);
+  _syncIemSourceCompareControls();
+  if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId, _activeIemSourceId, [..._activeIemCompareSourceIds]);
+}
+
+async function toggleIemSourceCompare(sourceId) {
+  if (!sourceId) return;
+  if (_activeIemCompareSourceIds.has(sourceId)) {
+    if (_activeIemCompareSourceIds.size <= 1) return;
+    _activeIemCompareSourceIds.delete(sourceId);
+    if (_activeIemSourceId === sourceId) {
+      _activeIemSourceId = [..._activeIemCompareSourceIds][0] || null;
+      const sel = document.getElementById('iem-source-select');
+      if (sel) sel.value = _activeIemSourceId || '';
+    }
+  } else {
+    _activeIemCompareSourceIds.add(sourceId);
+  }
+  _syncIemSourceCompareControls();
+  if (_currentIemId) await _loadIemGraph(_currentIemId, _activePeqId, _activeIemSourceId, [..._activeIemCompareSourceIds]);
+}
+
+function _syncIemSourceCompareControls() {
+  document.querySelectorAll('#iem-source-compare-controls .iem-source-chip').forEach(btn => {
+    const sid = btn.dataset.sourceId || '';
+    btn.classList.toggle('active', _activeIemCompareSourceIds.has(sid));
+  });
 }
 
 function _defaultCustomPeqState() {
@@ -20889,6 +20941,7 @@ const App = {
   deleteIem,
   applyPeqToGraph,
   applyIemSourceToGraph,
+  toggleIemSourceCompare,
   openPeqEditor,
   closePeqEditor,
   onPeqPrimaryAction,

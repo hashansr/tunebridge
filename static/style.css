@@ -25220,6 +25220,7 @@ body.is-col-resizing {
 }
 .gd-controls-row {
   gap: 10px;
+  flex-wrap: wrap;
 }
 .gd-controls-row label {
   color: var(--text-muted);
@@ -25242,6 +25243,54 @@ body.is-col-resizing {
 .gd-controls-row select:hover,
 .gd-controls-row select:focus {
   border-color: var(--accent-hover);
+}
+.iem-source-compare-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-left: 6px;
+}
+.iem-source-compare-label {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.iem-source-chip {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.035);
+  color: var(--text-sub);
+  font-size: 12px;
+  cursor: pointer;
+}
+.iem-source-chip:hover {
+  border-color: var(--accent-hover);
+  color: var(--text);
+}
+.iem-source-chip.active {
+  border-color: rgba(173, 198, 255, 0.52);
+  background: rgba(173, 198, 255, 0.12);
+  color: var(--text);
+}
+.iem-source-chip-check {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  border: 1px solid rgba(193, 198, 215, 0.62);
+  background: rgba(255,255,255,0.02);
+}
+.iem-source-chip.active .iem-source-chip-check {
+  border-color: rgba(173, 198, 255, 0.95);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 2px rgba(34, 35, 38, 0.92);
 }
 .gd-graph-section {
   margin-top: 14px;
