@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.562-rc.180726-1928 · 2026-07-18
 - Add: Bulk tag update via CSV — export your library catalogue, edit tags in a spreadsheet, and re-import to update matching tracks. Includes column mapping, a full change preview with per-row selection, and one-click undo from Settings (Library → Bulk Tag Editing → Advanced).
 - Add: CSV export now includes every tag TuneBridge can edit (Comment, Composer, Compilation) plus a Track ID column, and always includes Track ID/File Path so exports can be re-imported cleanly.
 - Change: Rescanning your library now also reads Comment, Composer, and Compilation tags.
