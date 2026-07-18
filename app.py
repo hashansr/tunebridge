@@ -11857,6 +11857,8 @@ def dap_export_all_playlists(did):
 
 # ── IEM Management ────────────────────────────────────────────────────────────
 
+IEM_MAX_SQUIG_SOURCES = 10
+
 def _normalize_iem_source(source, idx=0):
     """Normalize a single IEM squig source record."""
     src = source if isinstance(source, dict) else {}
@@ -11930,8 +11932,8 @@ def _normalize_iem_record(iem):
         nsrc = _normalize_iem_source(src, idx)
         if nsrc.get('url') or nsrc.get('measurement_L') or nsrc.get('measurement_R'):
             norm_sources.append(nsrc)
-    if len(norm_sources) > 3:
-        norm_sources = norm_sources[:3]
+    if len(norm_sources) > IEM_MAX_SQUIG_SOURCES:
+        norm_sources = norm_sources[:IEM_MAX_SQUIG_SOURCES]
         changed = True
     if norm_sources != (iem.get('squig_sources') or []):
         iem['squig_sources'] = norm_sources
@@ -12236,8 +12238,8 @@ def create_iem():
         raw_sources = ([{'label': 'Primary', 'url': legacy_url}] if legacy_url else [])
     if not isinstance(raw_sources, list):
         return jsonify({'error': 'squig_sources must be an array'}), 400
-    if len(raw_sources) > 3:
-        return jsonify({'error': 'You can add up to 3 squig.link URLs per IEM.'}), 400
+    if len(raw_sources) > IEM_MAX_SQUIG_SOURCES:
+        return jsonify({'error': f'You can add up to {IEM_MAX_SQUIG_SOURCES} squig.link URLs per IEM.'}), 400
 
     sources = []
     first_file_key = None
@@ -12316,8 +12318,8 @@ def update_iem(iid):
             raw_sources = ([{'label': 'Primary', 'url': legacy_url}] if legacy_url else [])
         if not isinstance(raw_sources, list):
             return jsonify({'error': 'squig_sources must be an array'}), 400
-        if len(raw_sources) > 3:
-            return jsonify({'error': 'You can add up to 3 squig.link URLs per IEM.'}), 400
+        if len(raw_sources) > IEM_MAX_SQUIG_SOURCES:
+            return jsonify({'error': f'You can add up to {IEM_MAX_SQUIG_SOURCES} squig.link URLs per IEM.'}), 400
 
         force_refetch = bool(data.get('force_refetch'))
         existing_sources = iem.get('squig_sources') or []

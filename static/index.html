@@ -2964,22 +2964,10 @@
               <span>Source URLs</span>
             </label>
             <div style="flex:1;display:flex;flex-direction:column;gap:8px">
-              <div class="iem-source-grid iem-source-grid-single">
-                <div class="iem-source-row iem-source-row-single">
-                  <input id="iem-source-label-1" class="iem-source-label-input" type="text" placeholder="Label (optional)" oninput="App.iemModalChanged()" />
-                  <input id="iem-source-url-1" class="iem-source-url-input" type="text" placeholder="https://squig.link/target-curve-url" oninput="App.iemModalChanged()" />
-                </div>
-                <div class="iem-source-row iem-source-row-single">
-                  <input id="iem-source-label-2" class="iem-source-label-input" type="text" placeholder="Label (optional)" oninput="App.iemModalChanged()" />
-                  <input id="iem-source-url-2" class="iem-source-url-input" type="text" placeholder="Secondary source URL" oninput="App.iemModalChanged()" />
-                </div>
-                <div class="iem-source-row iem-source-row-single">
-                  <input id="iem-source-label-3" class="iem-source-label-input" type="text" placeholder="Label (optional)" oninput="App.iemModalChanged()" />
-                  <input id="iem-source-url-3" class="iem-source-url-input" type="text" placeholder="Tertiary source URL" oninput="App.iemModalChanged()" />
-                </div>
-              </div>
+              <div id="iem-source-grid" class="iem-source-grid iem-source-grid-single"></div>
+              <button id="iem-add-source-btn" class="btn-secondary iem-add-source-btn" type="button" onclick="App.addIemSourceRow()">+ Add more</button>
               <p id="iem-source-help" class="settings-hint dap-inline-help">
-                Add frequency response measurements from <a href="https://squig.link" target="_blank" rel="noopener" class="squig-link">squig.link</a>.
+                Add up to 10 frequency response measurements from <a href="https://squig.link" target="_blank" rel="noopener" class="squig-link">squig.link</a>.
               </p>
               <div id="iem-modal-error" class="dap-inline-validation" style="display:none"></div>
             </div>

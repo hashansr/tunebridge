@@ -6726,7 +6726,7 @@ tr:hover .fav-toggle,
 }
 .iem-source-row {
   display: grid;
-  grid-template-columns: minmax(140px, 0.45fr) minmax(0, 1fr);
+  grid-template-columns: minmax(140px, 0.45fr) minmax(0, 1fr) 34px;
   gap: 8px;
 }
 @media (max-width: 760px) {
@@ -8550,7 +8550,7 @@ tbody tr:hover {
   gap: var(--iem-source-row-gap, 6px);
 }
 #iem-modal .iem-source-row {
-  grid-template-columns: minmax(136px, var(--iem-source-label-col, 170px)) minmax(0, 1fr);
+  grid-template-columns: minmax(136px, var(--iem-source-label-col, 170px)) minmax(0, 1fr) 34px;
   gap: 8px;
   align-items: center;
 }
@@ -8565,6 +8565,33 @@ tbody tr:hover {
 }
 #iem-modal .iem-source-url-input {
   min-width: 0;
+}
+#iem-modal .iem-source-remove-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  color: rgba(229,226,225,0.78);
+  cursor: pointer;
+}
+#iem-modal .iem-source-remove-btn:hover {
+  background: rgba(244, 112, 100, 0.13);
+  border-color: rgba(244, 112, 100, 0.28);
+  color: #ff9a90;
+}
+#iem-modal .iem-source-remove-btn:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+#iem-modal .iem-add-source-btn {
+  align-self: flex-start;
+  min-height: 34px;
+  padding: 0 13px;
+  font-size: 12px;
 }
 #iem-modal .iem-modal-actions {
   margin-top: var(--iem-actions-gap-top, 8px) !important;
@@ -8588,8 +8615,16 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
   #iem-modal .iem-source-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 34px;
     gap: 6px;
+  }
+  #iem-modal .iem-source-label-input,
+  #iem-modal .iem-source-url-input {
+    grid-column: 1 / 2;
+  }
+  #iem-modal .iem-source-remove-btn {
+    grid-column: 2 / 3;
+    grid-row: 1 / span 2;
   }
 }
 .dap-template-preview {

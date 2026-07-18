@@ -5778,12 +5778,7 @@ function _collectIemModalDraft() {
     id: document.getElementById('iem-modal-id')?.value || '',
     name: document.getElementById('iem-name')?.value || '',
     type: document.getElementById('iem-type')?.value || '',
-    s1l: document.getElementById('iem-source-label-1')?.value || '',
-    s1u: document.getElementById('iem-source-url-1')?.value || '',
-    s2l: document.getElementById('iem-source-label-2')?.value || '',
-    s2u: document.getElementById('iem-source-url-2')?.value || '',
-    s3l: document.getElementById('iem-source-label-3')?.value || '',
-    s3u: document.getElementById('iem-source-url-3')?.value || '',
+    sources: _collectIemModalRows(),
   };
 }
 
@@ -12961,29 +12956,79 @@ let _iemChart = null;
 let _currentIemId = null;
 let _activePeqId = null;
 let _activeIemSourceId = null;
+const IEM_MAX_SOURCE_ROWS = 10;
+
+function _collectIemModalRows() {
+  return Array.from(document.querySelectorAll('#iem-source-grid .iem-source-row')).map((row, idx) => ({
+    id: row.dataset.sourceId || '',
+    label: row.querySelector('.iem-source-label-input')?.value || '',
+    url: row.querySelector('.iem-source-url-input')?.value || '',
+    rowIndex: idx + 1,
+  }));
+}
+
+function _iemSourceRowHtml(src = {}, idx = 0) {
+  const rowNum = idx + 1;
+  const canRemove = rowNum > 1;
+  const labelPlaceholder = rowNum === 1 ? 'Label (optional)' : `Source ${rowNum} label`;
+  const urlPlaceholder = rowNum === 1 ? 'https://squig.link/target-curve-url' : `Source ${rowNum} URL`;
+  return `
+    <div class="iem-source-row iem-source-row-single" data-source-id="${esc(src.id || '')}">
+      <input id="iem-source-label-${rowNum}" class="iem-source-label-input" type="text" placeholder="${esc(labelPlaceholder)}" value="${esc(src.label || '')}" oninput="App.iemModalChanged()" />
+      <input id="iem-source-url-${rowNum}" class="iem-source-url-input" type="text" placeholder="${esc(urlPlaceholder)}" value="${esc(src.url || '')}" oninput="App.iemModalChanged()" />
+      <button class="iem-source-remove-btn" type="button" onclick="App.removeIemSourceRow(${idx})" title="Remove source" aria-label="Remove source" ${canRemove ? '' : 'disabled'}>${_GEAR_ICON_TRASH}</button>
+    </div>
+  `;
+}
+
+function _renderIemModalSources(sources = []) {
+  const grid = document.getElementById('iem-source-grid');
+  if (!grid) return;
+  const visibleSources = (Array.isArray(sources) ? sources : []).slice(0, IEM_MAX_SOURCE_ROWS);
+  if (!visibleSources.length) visibleSources.push({});
+  grid.innerHTML = visibleSources.map((src, idx) => _iemSourceRowHtml(src, idx)).join('');
+  const addBtn = document.getElementById('iem-add-source-btn');
+  if (addBtn) {
+    const atLimit = visibleSources.length >= IEM_MAX_SOURCE_ROWS;
+    addBtn.disabled = atLimit;
+    addBtn.textContent = atLimit ? '10 measurements added' : '+ Add more';
+  }
+}
+
+function addIemSourceRow() {
+  const rows = _collectIemModalRows();
+  if (rows.length >= IEM_MAX_SOURCE_ROWS) return;
+  rows.push({});
+  _renderIemModalSources(rows);
+  document.getElementById(`iem-source-label-${rows.length}`)?.focus();
+  iemModalChanged();
+}
+
+function removeIemSourceRow(index) {
+  const rows = _collectIemModalRows();
+  if (rows.length <= 1) return;
+  rows.splice(index, 1);
+  _renderIemModalSources(rows);
+  iemModalChanged();
+}
 
 function _collectIemModalSources() {
   const sources = [];
-  for (let i = 1; i <= 3; i++) {
-    const label = (document.getElementById(`iem-source-label-${i}`)?.value || '').trim();
-    const url = (document.getElementById(`iem-source-url-${i}`)?.value || '').trim();
-    if (!url) continue;
+  _collectIemModalRows().forEach((row, idx) => {
+    const label = (row.label || '').trim();
+    const url = (row.url || '').trim();
+    if (!url) return;
     sources.push({
-      label: label || `Source ${i}`,
+      id: row.id || `src-${idx + 1}`,
+      label: label || `Source ${idx + 1}`,
       url,
     });
-  }
-  return sources.slice(0, 3);
+  });
+  return sources.slice(0, IEM_MAX_SOURCE_ROWS);
 }
 
 function _setIemModalSources(sources = []) {
-  for (let i = 1; i <= 3; i++) {
-    const src = sources[i - 1] || {};
-    const labelEl = document.getElementById(`iem-source-label-${i}`);
-    const urlEl = document.getElementById(`iem-source-url-${i}`);
-    if (labelEl) labelEl.value = src.label || '';
-    if (urlEl) urlEl.value = src.url || '';
-  }
+  _renderIemModalSources(sources);
 }
 
 async function showIemDetail(id) {
@@ -14668,7 +14713,7 @@ async function showEditIemModal(id) {
     typeSel.appendChild(opt);
   }
   document.getElementById('iem-type').value = iem.type || (typeSel && typeSel.options.length ? typeSel.options[0].value : 'IEM');
-  const srcs = (iem.squig_sources || []).slice(0, 3).map(s => ({ label: s.label || '', url: s.url || '' }));
+  const srcs = (iem.squig_sources || []).slice(0, IEM_MAX_SOURCE_ROWS).map(s => ({ id: s.id || '', label: s.label || '', url: s.url || '' }));
   if (!srcs.length && iem.squig_url) srcs.push({ label: 'Primary', url: iem.squig_url });
   _setIemModalSources(srcs);
   _closeIemHelpPanels();
@@ -14711,12 +14756,7 @@ function _restoreIemDraftFromSnapshot(snapshot) {
   document.getElementById('iem-modal-id').value = snapshot.id || '';
   document.getElementById('iem-name').value = snapshot.name || '';
   if (typeSel) typeSel.value = snapshot.type || (typeSel.options.length ? typeSel.options[0].value : 'IEM');
-  document.getElementById('iem-source-label-1').value = snapshot.s1l || '';
-  document.getElementById('iem-source-url-1').value = snapshot.s1u || '';
-  document.getElementById('iem-source-label-2').value = snapshot.s2l || '';
-  document.getElementById('iem-source-url-2').value = snapshot.s2u || '';
-  document.getElementById('iem-source-label-3').value = snapshot.s3l || '';
-  document.getElementById('iem-source-url-3').value = snapshot.s3u || '';
+  _setIemModalSources(Array.isArray(snapshot.sources) ? snapshot.sources : []);
   _updateIemModalUnsavedBanner();
 }
 
@@ -20839,6 +20879,8 @@ const App = {
   showIemDetail,
   showAddIemModal,
   showEditIemModal,
+  addIemSourceRow,
+  removeIemSourceRow,
   iemModalChanged,
   revertIemModalChanges,
   toggleIemHelp,
