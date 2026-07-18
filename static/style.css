@@ -23233,6 +23233,15 @@ body.is-col-resizing {
   color: var(--modal-text);
 }
 
+#export-csv-modal .export-csv-row.is-locked {
+  cursor: default;
+  opacity: 0.7;
+}
+
+#export-csv-modal .export-csv-row.is-locked:hover {
+  background: none;
+}
+
 #export-csv-modal .export-csv-checkbox {
   display: inline-flex;
   align-items: center;
@@ -23284,6 +23293,299 @@ body.is-col-resizing {
 
 #export-csv-modal .btn-secondary:hover {
   background: rgba(255,255,255,0.06) !important;
+}
+
+/* ── Bulk Tag Update via CSV wizard ─────────────────────────────────── */
+.csv-import-help {
+  color: var(--modal-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 4px 0 14px;
+}
+
+.csv-import-upload-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.csv-import-paste-toggle {
+  display: block;
+  margin-top: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+#csv-import-paste-wrap {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.csv-import-paste-text {
+  width: 100%;
+  resize: vertical;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--modal-hairline);
+  border-radius: 8px;
+  color: var(--modal-text);
+  font-family: var(--modal-mono);
+  font-size: 12px;
+  padding: 10px;
+}
+
+.csv-import-blank-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0 14px;
+  border-bottom: 1px solid var(--modal-hairline);
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--modal-text-sub);
+  flex-wrap: wrap;
+}
+
+.csv-import-blank-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.csv-import-label {
+  font-weight: 600;
+  color: var(--modal-text);
+}
+
+.csv-import-mapping-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.csv-import-map-row {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 4px;
+}
+
+.csv-import-map-header {
+  color: var(--modal-text);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csv-import-map-select {
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--modal-hairline);
+  border-radius: 6px;
+  color: var(--modal-text);
+  font-size: 12.5px;
+  padding: 6px 8px;
+}
+
+.csv-import-summary-bar {
+  display: flex;
+  gap: 20px;
+  padding: 12px 0 16px;
+  border-bottom: 1px solid var(--modal-hairline);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.csv-import-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.csv-import-stat strong {
+  font-size: 18px;
+  color: var(--modal-text);
+}
+
+.csv-import-stat span {
+  font-size: 11.5px;
+  color: var(--modal-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.csv-import-diff-table {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.csv-import-diff-row {
+  display: grid;
+  grid-template-columns: 20px 200px 1fr;
+  align-items: start;
+  gap: 12px;
+  padding: 9px 8px;
+  border-radius: 8px;
+}
+
+.csv-import-diff-row:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.csv-import-diff-row.has-error {
+  background: rgba(255, 107, 107, 0.06);
+}
+
+.csv-import-diff-row input[type="checkbox"] {
+  margin-top: 3px;
+}
+
+.csv-import-diff-title {
+  color: var(--modal-text);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csv-import-diff-sub {
+  color: var(--modal-text-muted);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csv-import-diff-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.csv-import-diff-chip {
+  font-size: 11.5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(173,198,255,0.12);
+  color: var(--modal-text-sub);
+  white-space: nowrap;
+}
+
+.csv-import-diff-chip--error {
+  background: rgba(255,107,107,0.15);
+  color: #ffb3b5;
+}
+
+.csv-import-diff-chip--warning {
+  background: rgba(240,180,41,0.15);
+  color: #f0c04d;
+}
+
+.csv-import-empty {
+  color: var(--modal-text-muted);
+  font-size: 13px;
+  padding: 20px 4px;
+  text-align: center;
+}
+
+.csv-import-unmatched-wrap {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--modal-hairline);
+}
+
+.csv-import-unmatched-list {
+  margin-top: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.csv-import-unmatched-item {
+  font-size: 12px;
+  color: var(--modal-text-muted);
+}
+
+.csv-import-results-summary {
+  font-size: 14px;
+  color: var(--modal-text);
+  padding: 8px 0 4px;
+}
+
+.csv-import-results-errors {
+  margin-top: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.csv-import-error-item {
+  font-size: 12px;
+  color: var(--modal-text-muted);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--modal-hairline);
+}
+
+.csv-import-footer .csv-import-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Recent bulk edits (Settings) */
+.csv-import-batches-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.csv-import-batch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+}
+
+.csv-import-batch-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.csv-import-batch-date {
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.csv-import-batch-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.csv-import-batch-undone {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.csv-import-batches-empty {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  padding: 6px 0;
 }
 
 #export-csv-modal .btn-primary {

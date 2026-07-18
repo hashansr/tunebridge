@@ -53,7 +53,7 @@ def close_conn():
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -118,6 +118,15 @@ _MIGRATIONS: list[tuple] = [
     (14, 'Add playlist_track_meta for resolve-playlist snapshots', None),
     # v15: scan_log is a new table handled by create_schema().
     (15, 'Add scan_log table for scan history', None),
+    # v16 also adds tag_batch_undone, a new table handled by create_schema().
+    (16, 'Add comment/composer/compilation to tracks; batch_id to tag_history', [
+        'ALTER TABLE tracks ADD COLUMN comment TEXT',
+        'ALTER TABLE tracks ADD COLUMN composer TEXT',
+        'ALTER TABLE tracks ADD COLUMN compilation INTEGER DEFAULT 0',
+        'ALTER TABLE tag_history ADD COLUMN batch_id TEXT',
+        'CREATE INDEX IF NOT EXISTS idx_tracks_path ON tracks(path)',
+        'CREATE INDEX IF NOT EXISTS idx_tag_history_batch ON tag_history(batch_id)',
+    ]),
 ]
 
 _SCHEMA_SQL = """
@@ -159,7 +168,10 @@ CREATE TABLE IF NOT EXISTS tracks (
     artist_sort        TEXT,
     album_sort         TEXT,
     album_artist_sort  TEXT,
-    title_sort         TEXT
+    title_sort         TEXT,
+    comment            TEXT,
+    composer           TEXT,
+    compilation        INTEGER DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_tracks_artist       ON tracks(artist COLLATE NOCASE);
@@ -170,6 +182,7 @@ CREATE INDEX IF NOT EXISTS idx_tracks_title        ON tracks(title COLLATE NOCAS
 CREATE INDEX IF NOT EXISTS idx_tracks_year         ON tracks(year);
 CREATE INDEX IF NOT EXISTS idx_tracks_date_added   ON tracks(date_added);
 CREATE INDEX IF NOT EXISTS idx_tracks_artist_album ON tracks(album_artist COLLATE NOCASE, album COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_tracks_path         ON tracks(path);
 
 -- Playlists
 CREATE TABLE IF NOT EXISTS playlists (
@@ -386,10 +399,15 @@ CREATE TABLE IF NOT EXISTS tag_history (
     field       TEXT NOT NULL,
     old_value   TEXT,
     new_value   TEXT,
-    changed_at  INTEGER NOT NULL
+    changed_at  INTEGER NOT NULL,
+    batch_id    TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_tag_history_track ON tag_history(track_id);
+-- idx_tag_history_batch is NOT created here: on upgrades, tag_history already
+-- exists without batch_id when create_schema() runs (it runs before pending
+-- migrations), so indexing that column here would fail. It's created by the
+-- migration 16 SQL list below instead, after the ALTER TABLE that adds it.
 
 -- Artist images
 CREATE TABLE IF NOT EXISTS artist_images (
@@ -519,6 +537,12 @@ CREATE TABLE IF NOT EXISTS scan_log (
     added_paths   TEXT NOT NULL DEFAULT '[]',
     removed_paths TEXT NOT NULL DEFAULT '[]',
     failed_paths  TEXT NOT NULL DEFAULT '[]'
+);
+
+-- Marks a tag_history batch_id as reverted, so the Undo action is one-shot.
+CREATE TABLE IF NOT EXISTS tag_batch_undone (
+    batch_id    TEXT PRIMARY KEY,
+    undone_at   INTEGER NOT NULL
 );
 """
 
@@ -652,8 +676,9 @@ def db_save_library(tracks):
            format, sample_rate, bits_per_sample, date_added,
            rg_track_gain, rg_album_gain, rg_track_peak, rg_album_peak,
            has_lyrics, lyric_path, lyrics_status, lyrics_fetched_at,
-           artist_sort, album_sort, album_artist_sort, title_sort)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           artist_sort, album_sort, album_artist_sort, title_sort,
+           comment, composer, compilation)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 t['id'], t.get('path', ''), t.get('filename', ''),
@@ -673,6 +698,8 @@ def db_save_library(tracks):
                 t.get('lyrics_fetched_at'),
                 t.get('artist_sort'), t.get('album_sort'),
                 t.get('album_artist_sort'), t.get('title_sort'),
+                t.get('comment'), t.get('composer'),
+                1 if str(t.get('compilation')).strip().lower() in ('1', 'true', 'yes', 'on') else 0,
             )
             for t in tracks
         ]
@@ -722,6 +749,13 @@ def db_get_track(track_id):
     """Fetch a single track by ID. Returns dict or None."""
     conn = get_conn()
     row = conn.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
+    return _row_to_track(row) if row else None
+
+
+def db_get_track_by_path(path):
+    """Fetch a single track by its library-relative path. Returns dict or None."""
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM tracks WHERE path = ?", (path,)).fetchone()
     return _row_to_track(row) if row else None
 
 
@@ -2039,21 +2073,65 @@ def db_snapshot_tags(track_id, field_values: dict):
     conn.commit()
 
 
-def db_record_tag_changes(track_id, changes: dict, old_values: dict):
-    """Record each changed field with its old and new value."""
+def db_record_tag_changes(track_id, changes: dict, old_values: dict, batch_id: str = None):
+    """Record each changed field with its old and new value.
+    batch_id groups changes from one bulk operation (e.g. a CSV import) so they
+    can be listed/undone together later; None for ad-hoc single/bulk tag edits.
+    """
     conn = get_conn()
     now = int(time.time())
     rows = [
-        (track_id, field, str(old_values.get(field, '')), str(new_val), now)
+        (track_id, field, str(old_values.get(field, '')), str(new_val), now, batch_id)
         for field, new_val in changes.items()
         if new_val is not None
     ]
     if rows:
         conn.executemany(
-            "INSERT INTO tag_history (track_id, field, old_value, new_value, changed_at) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO tag_history (track_id, field, old_value, new_value, changed_at, batch_id) VALUES (?, ?, ?, ?, ?, ?)",
             rows
         )
         conn.commit()
+
+
+def db_get_tag_batches(limit: int = 20):
+    """Return recent CSV-import batches (grouped tag_history rows), newest first."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT batch_id, MIN(changed_at) AS started_at, COUNT(DISTINCT track_id) AS track_count
+           FROM tag_history
+           WHERE batch_id IS NOT NULL AND batch_id != ''
+           GROUP BY batch_id
+           ORDER BY started_at DESC
+           LIMIT ?""",
+        (limit,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def db_get_tag_batch_changes(batch_id: str):
+    """Return all tag_history rows for a batch, ordered oldest-first (as originally applied)."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM tag_history WHERE batch_id = ? ORDER BY id ASC",
+        (batch_id,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def db_get_undone_batch_ids():
+    """Return the set of batch_ids that have already been undone."""
+    conn = get_conn()
+    rows = conn.execute("SELECT batch_id FROM tag_batch_undone").fetchall()
+    return {r['batch_id'] for r in rows}
+
+
+def db_mark_batch_undone(batch_id: str):
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR REPLACE INTO tag_batch_undone (batch_id, undone_at) VALUES (?, ?)",
+        (batch_id, int(time.time()))
+    )
+    conn.commit()
 
 
 def db_update_track_tags(track_id, changes: dict):

@@ -1005,6 +1005,39 @@ def get_flac_tag(tags, *keys):
     return None
 
 
+def _parse_compilation_flag(raw):
+    """Normalize a raw compilation tag value to '1'/'0', or None if absent."""
+    if raw is None:
+        return None
+    val = str(raw).strip().lower()
+    if not val:
+        return None
+    return '1' if val in ('1', 'true', 'yes', 'on') else '0'
+
+
+def _id3_comment(tags):
+    """Read the first COMM (comment) frame's text from an ID3 tag object (MP3/WAV)."""
+    if not tags:
+        return None
+    for key in tags.keys():
+        if str(key).startswith('COMM'):
+            frame = tags[key]
+            text = frame.text[0] if getattr(frame, 'text', None) else None
+            if text and str(text).strip():
+                return str(text).strip()
+    return None
+
+
+def _id3_compilation(tags):
+    """Read the TXXX:TCMP compilation flag from an ID3 tag object (MP3/WAV)."""
+    if not tags:
+        return None
+    frame = tags.get('TXXX:TCMP') or tags.get('TXXX:tcmp')
+    if frame and getattr(frame, 'text', None):
+        return _parse_compilation_flag(frame.text[0])
+    return None
+
+
 LRC_TIME_TAG_RE = re.compile(r'\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\]')
 LRC_METADATA_TAG_RE = re.compile(r'^\[[a-z]+:', re.IGNORECASE)
 
@@ -1062,6 +1095,9 @@ def scan_file(filepath, music_base=None):
         album_sort = None
         album_artist_sort = None
         title_sort = None
+        comment = None
+        composer = None
+        compilation = None
         if filename.lower().endswith('.flac'):
             audio = FLAC(str(filepath))
             tags = audio.tags
@@ -1079,6 +1115,9 @@ def scan_file(filepath, music_base=None):
             album_sort = get_flac_tag(tags, 'ALBUMSORT')
             album_artist_sort = get_flac_tag(tags, 'ALBUMARTISTSORT')
             title_sort = get_flac_tag(tags, 'TITLESORT')
+            comment = get_flac_tag(tags, 'COMMENT')
+            composer = get_flac_tag(tags, 'COMPOSER')
+            compilation = _parse_compilation_flag(get_flac_tag(tags, 'COMPILATION'))
 
             artwork_key = None
             eff_artist = album_artist or artist
@@ -1121,6 +1160,9 @@ def scan_file(filepath, music_base=None):
             album_sort = mp3_tag('TSOA')
             album_artist_sort = mp3_tag('TSO2')
             title_sort = mp3_tag('TSOT')
+            composer = mp3_tag('TCOM')
+            comment = _id3_comment(tags)
+            compilation = _id3_compilation(tags)
 
             artwork_key = None
             eff_artist = album_artist or artist
@@ -1183,6 +1225,11 @@ def scan_file(filepath, music_base=None):
                 disc_num = str(disk[0]) if str(disk[0]).strip() else None
             year = mp4_tag('\xa9day')
             genre = mp4_tag('\xa9gen')
+            comment = mp4_tag('\xa9cmt')
+            composer = mp4_tag('\xa9wrt')
+            cpil = tags.get('cpil')
+            if cpil and isinstance(cpil, list):
+                compilation = '1' if cpil[0] else '0'
 
             artwork_key = None
             eff_artist = album_artist or artist
@@ -1236,6 +1283,9 @@ def scan_file(filepath, music_base=None):
             album_sort = wav_tag('TSOA')
             album_artist_sort = wav_tag('TSO2')
             title_sort = wav_tag('TSOT')
+            composer = wav_tag('TCOM')
+            comment = _id3_comment(tags)
+            compilation = _id3_compilation(tags)
 
             artwork_key = None
             eff_artist = album_artist or artist
@@ -1326,6 +1376,9 @@ def scan_file(filepath, music_base=None):
             'album_sort': album_sort,
             'album_artist_sort': album_artist_sort,
             'title_sort': title_sort,
+            'comment': comment,
+            'composer': composer,
+            'compilation': compilation,
         }
     except Exception as e:
         print(f"Error scanning {filepath}: {e}")
@@ -3625,10 +3678,12 @@ _BATCH_ALBUM_FIELDS = {
 }
 
 
-def _apply_tag_edit(track_id: str, changes: dict):
+def _apply_tag_edit(track_id: str, changes: dict, batch_id: str = None):
     """
     Core helper: validate path, snapshot history, write tags to file,
     update SQLite and in-memory library.
+    batch_id, if given, groups this change with others from the same bulk
+    operation (e.g. a CSV import) in tag_history so they can be undone together.
     Returns (updated_track_dict, error_message | None).
     """
     track = _db.db_get_track(track_id)
@@ -3678,7 +3733,7 @@ def _apply_tag_edit(track_id: str, changes: dict):
 
     # Snapshot old values to tag_history after the file write succeeds.
     old_values = {field: track.get(field) for field in all_changes}
-    _db.db_record_tag_changes(track_id, all_changes, old_values)
+    _db.db_record_tag_changes(track_id, all_changes, old_values, batch_id=batch_id)
 
     # Update SQLite cache (None values become NULL for cleared fields)
     _db.db_update_track_tags(track_id, all_changes)
@@ -13179,6 +13234,7 @@ def backup_save_to_disk():
 
 
 _LIBRARY_CSV_COLUMNS = {
+    'id':              'Track ID',
     'title':           'Title',
     'artist':          'Artist',
     'album':           'Album',
@@ -13187,6 +13243,9 @@ _LIBRARY_CSV_COLUMNS = {
     'track_number':    'Track Number',
     'disc_number':     'Disc Number',
     'genre':           'Genre',
+    'comment':         'Comment',
+    'composer':        'Composer',
+    'compilation':     'Compilation',
     'duration_fmt':    'Duration',
     'format':          'Format',
     'bits_per_sample': 'Bit Depth',
@@ -13197,6 +13256,18 @@ _LIBRARY_CSV_COLUMNS = {
     'rg_track_gain':   'RG Track Gain',
     'rg_album_gain':   'RG Album Gain',
 }
+
+# Always included in every export regardless of the user's column selection —
+# these are the stable keys the CSV bulk-import wizard matches rows against.
+_LIBRARY_CSV_LOCKED_COLUMNS = ['id', 'path']
+
+
+def _resolve_csv_columns(requested):
+    """Build the final column list: locked match-key columns first, then the
+    user's valid selections (locked columns de-duped if the user picked them too)."""
+    requested = [c for c in (requested or []) if c in _LIBRARY_CSV_COLUMNS]
+    rest = [c for c in requested if c not in _LIBRARY_CSV_LOCKED_COLUMNS]
+    return _LIBRARY_CSV_LOCKED_COLUMNS + rest
 
 
 def _generate_library_csv(columns):
@@ -13235,10 +13306,7 @@ def _generate_library_csv(columns):
 @app.route('/api/library/export-csv', methods=['POST'])
 def library_export_csv():
     data = request.get_json(force=True, silent=True) or {}
-    columns = data.get('columns') or list(_LIBRARY_CSV_COLUMNS.keys())
-    columns = [c for c in columns if c in _LIBRARY_CSV_COLUMNS]
-    if not columns:
-        return jsonify({'error': 'No valid columns selected'}), 400
+    columns = _resolve_csv_columns(data.get('columns') or list(_LIBRARY_CSV_COLUMNS.keys()))
     content = _generate_library_csv(columns)
     timestamp = time.strftime('%Y%m%d')
     buf = io.BytesIO(content.encode('utf-8-sig'))
@@ -13256,10 +13324,7 @@ def library_export_csv_save_to_disk():
         if not wins:
             return jsonify({'error': 'no_window'}), 400
         data = request.get_json(force=True, silent=True) or {}
-        columns = data.get('columns') or list(_LIBRARY_CSV_COLUMNS.keys())
-        columns = [c for c in columns if c in _LIBRARY_CSV_COLUMNS]
-        if not columns:
-            return jsonify({'error': 'No valid columns selected'}), 400
+        columns = _resolve_csv_columns(data.get('columns') or list(_LIBRARY_CSV_COLUMNS.keys()))
         timestamp = time.strftime('%Y%m%d')
         default_name = f'tunebridge_library_{timestamp}.csv'
         result = wins[0].create_file_dialog(
@@ -13280,6 +13345,385 @@ def library_export_csv_save_to_disk():
         return jsonify({'error': 'not_available'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ── Bulk tag update via CSV ─────────────────────────────────────────────────
+# Two-phase, stateless: /preview computes a diff with zero side effects,
+# /apply (below, near the other background-job endpoints) performs the writes.
+# Rows are matched to tracks only via the stable id/path columns TuneBridge's
+# own export always includes — never by fuzzy text matching.
+
+_CSV_MAPPABLE_FIELDS = _EDITABLE_FIELDS  # fields offered in the column-mapping dropdown
+_CSV_YEAR_MIN, _CSV_YEAR_MAX = 1000, 2100
+_CSV_TEXT_MAX_LEN = 500
+
+
+def _csv_validate_field(field, raw_value):
+    """Validate/normalize one mapped CSV cell for a given editable field.
+    Returns (normalized_value, error_message). normalized_value is None for a
+    blank cell (the caller decides whether that means skip or clear)."""
+    if raw_value is None:
+        return None, None
+    val = str(raw_value).strip()
+    if val == '':
+        return None, None
+    if len(val) > _CSV_TEXT_MAX_LEN:
+        return None, f'Value too long (max {_CSV_TEXT_MAX_LEN} characters)'
+    if field == 'year':
+        try:
+            n = int(val[:4])
+        except ValueError:
+            return None, f'Invalid year: "{val}"'
+        if not (_CSV_YEAR_MIN <= n <= _CSV_YEAR_MAX):
+            return None, f'Year out of range: {n}'
+        return str(n), None
+    if field in ('track_number', 'disc_number'):
+        try:
+            n = int(val.split('/')[0].strip())
+        except ValueError:
+            return None, f'Invalid {field.replace("_", " ")}: "{val}"'
+        if n <= 0:
+            return None, f'{field.replace("_", " ").title()} must be a positive number'
+        return str(n), None
+    if field == 'compilation':
+        return (_parse_compilation_flag(val) or '0'), None
+    return val, None
+
+
+def _csv_resolve_match_track(match_key, key_val):
+    if match_key == 'id':
+        return _db.db_get_track(key_val)
+    return _db.db_get_track_by_path(key_val)
+
+
+def _csv_diff_rows(rows, mapping, match_key, blank_behavior):
+    """Shared parse→diff logic used by both /preview and /apply.
+    Returns (summary dict, entries list, unmatched list)."""
+    match_header = next((h for h, f in (mapping or {}).items() if f == match_key), None)
+    field_map = {
+        h: f for h, f in (mapping or {}).items()
+        if f in _CSV_MAPPABLE_FIELDS and h != match_header
+    }
+
+    entries = []
+    unmatched = []
+    seen_keys = {}
+    summary = {
+        'total_rows': len(rows), 'matched': 0, 'unmatched': 0,
+        'unchanged': 0, 'will_update': 0, 'validation_errors': 0,
+    }
+
+    if not match_header:
+        return summary, entries, unmatched
+
+    for idx, row in enumerate(rows):
+        key_val = str(row.get(match_header, '') or '').strip()
+        if not key_val:
+            unmatched.append({'row_index': idx, 'match_key_value': ''})
+            summary['unmatched'] += 1
+            continue
+
+        track = _csv_resolve_match_track(match_key, key_val)
+        if not track:
+            unmatched.append({'row_index': idx, 'match_key_value': key_val})
+            summary['unmatched'] += 1
+            continue
+
+        warnings = []
+        if key_val in seen_keys:
+            warnings.append(f'Duplicate match for this track (also on row {seen_keys[key_val]}) — last one wins')
+        seen_keys[key_val] = idx
+
+        changes = []
+        errors = []
+        for header, field in field_map.items():
+            raw = row.get(header)
+            normalized, err = _csv_validate_field(field, raw)
+            if err:
+                errors.append(f'{field}: {err}')
+                continue
+            current = track.get(field)
+            current_str = '' if current is None else str(current)
+            if normalized is None:
+                if blank_behavior == 'clear' and current_str != '' and field in _CLEARABLE_FIELDS:
+                    changes.append({'field': field, 'old_value': current, 'new_value': None})
+                continue
+            if normalized != current_str:
+                changes.append({'field': field, 'old_value': current, 'new_value': normalized})
+
+        entries.append({
+            'row_index': idx,
+            'track_id': track['id'],
+            'path': track.get('path'),
+            'title': track.get('title'),
+            'artist': track.get('artist'),
+            'changes': changes,
+            'errors': errors,
+            'warnings': warnings,
+        })
+        summary['matched'] += 1
+        if errors:
+            summary['validation_errors'] += 1
+        elif changes:
+            summary['will_update'] += 1
+        else:
+            summary['unchanged'] += 1
+
+    return summary, entries, unmatched
+
+
+@app.route('/api/library/import-csv/parse', methods=['POST'])
+def import_csv_parse():
+    """Parse an uploaded/pasted CSV. Read-only — no DB or file writes."""
+    if 'file' in request.files:
+        f = request.files['file']
+        raw = f.read()
+        try:
+            text = raw.decode('utf-8-sig')
+        except UnicodeDecodeError:
+            text = raw.decode('utf-8', errors='replace')
+    else:
+        body = request.get_json(force=True, silent=True) or {}
+        text = body.get('content', '')
+
+    if not text.strip():
+        return jsonify({'error': 'No CSV content provided'}), 400
+
+    try:
+        reader = csv.DictReader(io.StringIO(text))
+        headers = reader.fieldnames or []
+        rows = [dict(row) for row in reader]
+    except Exception as e:
+        return jsonify({'error': f'Could not parse CSV: {e}'}), 400
+
+    if not headers:
+        return jsonify({'error': 'CSV has no header row'}), 400
+
+    header_set = set(headers)
+    detected_match_key = None
+    if _LIBRARY_CSV_COLUMNS['id'] in header_set or 'id' in header_set:
+        detected_match_key = 'id'
+    elif _LIBRARY_CSV_COLUMNS['path'] in header_set or 'path' in header_set:
+        detected_match_key = 'path'
+
+    return jsonify({
+        'headers': headers,
+        'row_count': len(rows),
+        'rows': rows,
+        'sample_rows': rows[:5],
+        'detected_match_key': detected_match_key,
+    })
+
+
+@app.route('/api/library/import-csv/preview', methods=['POST'])
+def import_csv_preview():
+    """Stateless dry-run diff for a CSV bulk tag update. Zero side effects."""
+    data = request.get_json(force=True, silent=True) or {}
+    rows = data.get('rows') or []
+    mapping = data.get('mapping') or {}
+    match_key = data.get('match_key')
+    blank_behavior = data.get('blank_behavior') or 'skip'
+
+    if match_key not in ('id', 'path'):
+        return jsonify({'error': "match_key must be 'id' or 'path'"}), 400
+    if blank_behavior not in ('skip', 'clear'):
+        return jsonify({'error': "blank_behavior must be 'skip' or 'clear'"}), 400
+    if not isinstance(rows, list) or not rows:
+        return jsonify({'error': 'No rows to preview'}), 400
+    if not any(f == match_key for f in mapping.values()):
+        return jsonify({'error': f'No CSV column is mapped to the match key ({match_key})'}), 400
+
+    summary, entries, unmatched = _csv_diff_rows(rows, mapping, match_key, blank_behavior)
+    return jsonify({'summary': summary, 'entries': entries, 'unmatched': unmatched})
+
+
+# ── CSV import apply (background job) ───────────────────────────────────────
+_csv_import_generation = 0   # incremented on each new run; guards against stale threads
+_CSV_APPLY_FILE_TIMEOUT = 30  # seconds before a single tag write is abandoned
+_CSV_IMPORT_ERROR_CAP = 50
+
+csv_import_state = {
+    'status':                'idle',   # idle | running | done | error | cancelled
+    'batch_id':              None,
+    'done':                  0,
+    'total':                 0,
+    'updated':                0,
+    'skipped':               0,
+    'errors':                [],   # capped: [{row_index, path, error}]
+    'started_at':            None,
+    'completed_at':          None,
+    'artwork_may_be_stale':  False,
+}
+
+
+def _run_csv_import_apply(my_gen, batch_id, rows, mapping, match_key, blank_behavior, row_selection):
+    global csv_import_state
+    try:
+        summary, entries, _unmatched = _csv_diff_rows(rows, mapping, match_key, blank_behavior)
+        selected = set(row_selection) if row_selection is not None else None
+        to_apply = [
+            e for e in entries
+            if not e['errors'] and e['changes']
+            and (selected is None or e['row_index'] in selected)
+        ]
+
+        if _csv_import_generation != my_gen:
+            return
+        csv_import_state['total'] = len(to_apply)
+
+        artwork_fields = {'artist', 'album_artist', 'album'}
+        artwork_stale = False
+
+        for entry in to_apply:
+            if _csv_import_generation != my_gen:
+                return
+            if csv_import_state['status'] == 'cancelled':
+                break
+
+            track_id = entry['track_id']
+            changes = {c['field']: c['new_value'] for c in entry['changes']}
+            if any(f in artwork_fields for f in changes):
+                artwork_stale = True
+
+            result = [None, None]  # [updated_track, error]
+            evt = threading.Event()
+
+            def _do_apply():
+                try:
+                    result[0], result[1] = _apply_tag_edit(track_id, changes, batch_id=batch_id)
+                except Exception as e:
+                    result[1] = str(e)
+                finally:
+                    evt.set()
+
+            threading.Thread(target=_do_apply, daemon=True, name=f'csv_apply_{track_id[:12]}').start()
+
+            if not evt.wait(timeout=_CSV_APPLY_FILE_TIMEOUT):
+                err = f'Timed out after {_CSV_APPLY_FILE_TIMEOUT}s — file may be on a sleeping/disconnected drive'
+            else:
+                err = result[1]
+
+            if _csv_import_generation != my_gen:
+                return
+
+            if err:
+                csv_import_state['skipped'] += 1
+                if len(csv_import_state['errors']) < _CSV_IMPORT_ERROR_CAP:
+                    csv_import_state['errors'].append({
+                        'row_index': entry['row_index'], 'path': entry.get('path'), 'error': err,
+                    })
+            else:
+                csv_import_state['updated'] += 1
+            csv_import_state['done'] += 1
+
+        if _csv_import_generation == my_gen:
+            final = 'cancelled' if csv_import_state['status'] == 'cancelled' else 'done'
+            csv_import_state.update({
+                'status': final, 'completed_at': time.time(),
+                'artwork_may_be_stale': artwork_stale,
+            })
+    except Exception as exc:
+        print(f'CSV import apply crashed: {exc}')
+        if _csv_import_generation == my_gen:
+            csv_import_state.update({'status': 'error', 'completed_at': time.time()})
+
+
+@app.route('/api/library/import-csv/apply', methods=['POST'])
+def import_csv_apply():
+    global _csv_import_generation
+    if csv_import_state['status'] == 'running':
+        return jsonify({'error': 'A CSV import is already running'}), 409
+
+    data = request.get_json(force=True, silent=True) or {}
+    rows = data.get('rows') or []
+    mapping = data.get('mapping') or {}
+    match_key = data.get('match_key')
+    blank_behavior = data.get('blank_behavior') or 'skip'
+    row_selection = data.get('row_selection')
+
+    if match_key not in ('id', 'path'):
+        return jsonify({'error': "match_key must be 'id' or 'path'"}), 400
+    if blank_behavior not in ('skip', 'clear'):
+        return jsonify({'error': "blank_behavior must be 'skip' or 'clear'"}), 400
+    if not isinstance(rows, list) or not rows:
+        return jsonify({'error': 'No rows to apply'}), 400
+    if row_selection is not None and not isinstance(row_selection, list):
+        return jsonify({'error': 'row_selection must be a list of row indexes'}), 400
+
+    batch_id = uuid.uuid4().hex
+    _csv_import_generation += 1
+    my_gen = _csv_import_generation
+    csv_import_state.update({
+        'status': 'running', 'batch_id': batch_id, 'done': 0, 'total': 0,
+        'updated': 0, 'skipped': 0, 'errors': [], 'started_at': time.time(),
+        'completed_at': None, 'artwork_may_be_stale': False,
+    })
+    threading.Thread(
+        target=_run_csv_import_apply,
+        args=(my_gen, batch_id, rows, mapping, match_key, blank_behavior, row_selection),
+        daemon=True,
+    ).start()
+    return jsonify({'ok': True, 'batch_id': batch_id})
+
+
+@app.route('/api/library/import-csv/status')
+def import_csv_status():
+    return jsonify(dict(csv_import_state))
+
+
+@app.route('/api/library/import-csv/cancel', methods=['POST'])
+def import_csv_cancel():
+    if csv_import_state['status'] != 'running':
+        return jsonify({'error': 'Not running'}), 409
+    csv_import_state['status'] = 'cancelled'
+    return jsonify({'ok': True})
+
+
+# ── CSV import undo ──────────────────────────────────────────────────────────
+
+@app.route('/api/library/tag-batches')
+def list_tag_batches():
+    """Recent CSV-import batches available to undo."""
+    undone = _db.db_get_undone_batch_ids()
+    batches = _db.db_get_tag_batches(limit=20)
+    for b in batches:
+        b['undone'] = b['batch_id'] in undone
+    return jsonify(batches)
+
+
+@app.route('/api/library/tag-batches/<batch_id>/undo', methods=['POST'])
+def undo_tag_batch(batch_id):
+    """Revert every field changed by a CSV import batch back to its pre-import value."""
+    if batch_id in _db.db_get_undone_batch_ids():
+        return jsonify({'error': 'This batch has already been undone'}), 400
+
+    changes_rows = _db.db_get_tag_batch_changes(batch_id)
+    if not changes_rows:
+        return jsonify({'error': 'Batch not found'}), 404
+
+    # Group by track, keep the OLDEST old_value per field (the value before this batch touched it).
+    by_track = {}
+    for row in changes_rows:
+        tid = row['track_id']
+        field = row['field']
+        by_track.setdefault(tid, {})
+        if field not in by_track[tid]:
+            by_track[tid][field] = row['old_value']
+
+    updated = 0
+    errors = []
+    for track_id, field_olds in by_track.items():
+        # tag_history stores old_value as str(); an originally-empty field was
+        # therefore recorded as the literal text 'None' — treat that as empty too.
+        changes = {field: (None if old in (None, '', 'None') else old) for field, old in field_olds.items()}
+        _, err = _apply_tag_edit(track_id, changes)
+        if err:
+            errors.append({'id': track_id, 'error': err})
+            continue
+        updated += 1
+
+    _db.db_mark_batch_undone(batch_id)
+    return jsonify({'updated': updated, 'total': len(by_track), 'errors': errors})
 
 
 @app.route('/api/backup/import', methods=['POST'])

@@ -5851,6 +5851,15 @@ function _isMissingTagsBulkModalDirty() {
     .some(id => !!(document.getElementById(id)?.value || '').trim());
 }
 
+function _isCsvImportBusy() {
+  return _isOverlayOpen('csv-import-modal') && _csvImport.applyStatus === 'running';
+}
+
+function _isCsvImportModalDirty() {
+  if (!_isOverlayOpen('csv-import-modal') || _isCsvImportBusy()) return false;
+  return _csvImport.step > 1;
+}
+
 function _isAlbumArtModalDirty() {
   return _isOverlayOpen('album-art-modal') && !!(_albumArtSelectedUrl || _albumArtSelectedFile);
 }
@@ -5887,6 +5896,8 @@ async function _guardModalNavigation() {
   if (_isAlbumTagModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Album Edits?', message: "Your album tag edits haven't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
   if (_isArtistRenameModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Rename?', message: "The new artist name hasn't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
   if (_isMissingTagsBulkModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Bulk Tags?', message: "Your bulk tag edits haven't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
+  if (_isCsvImportBusy() && !await _showConfirm({ kind: 'warning', title: 'CSV Import In Progress', message: 'Leave this screen while the update is still running?', okText: 'Leave', cancelText: 'Stay' })) return false;
+  if (_isCsvImportModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard CSV Import?', message: "Your CSV import hasn't been applied.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
   if (_isAlbumArtModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Album Art?', message: "Your album art selection hasn't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
   if (_isArtistImageModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Artist Image?', message: "Your artist image selection hasn't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
   return true;
@@ -5915,6 +5926,7 @@ function _closeModalOverlaysForNavigation() {
   if (_isOverlayOpen('create-playlist-modal')) closeCreatePlaylistModal();
   if (_isOverlayOpen('dup-action-modal')) _closeDupActionModal();
   if (_isOverlayOpen('missing-tags-bulk-modal')) closeMissingTagsBulkEditor();
+  if (_isOverlayOpen('csv-import-modal')) closeCsvImportModal();
   if (_isOverlayOpen('tag-editor-modal')) {
     document.getElementById('tag-editor-modal').style.display = 'none';
     _tagEditorTrackId = null;
@@ -15908,32 +15920,37 @@ async function exportBackup() {
 }
 
 const _CSV_COLUMNS = [
-  ['title',           'Title',          true],
-  ['artist',          'Artist',         true],
-  ['album',           'Album',          true],
-  ['album_artist',    'Album Artist',   false],
-  ['year',            'Year',           true],
-  ['genre',           'Genre',          true],
-  ['track_number',    'Track Number',   true],
-  ['disc_number',     'Disc Number',    true],
-  ['duration_fmt',    'Duration',       true],
-  ['date_added',      'Date Added',     true],
-  ['format',          'Format',         true],
-  ['sample_rate',     'Sample Rate',    true],
-  ['bits_per_sample', 'Bit Depth',      true],
-  ['bitrate',         'Bitrate',        true],
-  ['rg_track_gain',   'RG Track Gain',  false],
-  ['rg_album_gain',   'RG Album Gain',  false],
-  ['path',            'File Path',      false],
+  ['id',               'Track ID',       true,  true],   // locked: always exported, used to match rows on re-import
+  ['path',              'File Path',     true,  true],   // locked: always exported, used to match rows on re-import
+  ['title',           'Title',          true,  false],
+  ['artist',          'Artist',         true,  false],
+  ['album',           'Album',          true,  false],
+  ['album_artist',    'Album Artist',   false, false],
+  ['year',            'Year',           true,  false],
+  ['genre',           'Genre',          true,  false],
+  ['comment',          'Comment',       false, false],
+  ['composer',         'Composer',      false, false],
+  ['compilation',      'Compilation',   false, false],
+  ['track_number',    'Track Number',   true,  false],
+  ['disc_number',     'Disc Number',    true,  false],
+  ['duration_fmt',    'Duration',       true,  false],
+  ['date_added',      'Date Added',     true,  false],
+  ['format',          'Format',         true,  false],
+  ['sample_rate',     'Sample Rate',    true,  false],
+  ['bits_per_sample', 'Bit Depth',      true,  false],
+  ['bitrate',         'Bitrate',        true,  false],
+  ['rg_track_gain',   'RG Track Gain',  false, false],
+  ['rg_album_gain',   'RG Album Gain',  false, false],
 ];
 const _CSV_COLUMN_KEYS = _CSV_COLUMNS.map(([key]) => key);
+const _CSV_LOCKED_COLUMN_KEYS = _CSV_COLUMNS.filter(([, , , locked]) => locked).map(([key]) => key);
 const _CSV_DEFAULT_COLUMNS = _CSV_COLUMNS.filter(([, , checked]) => checked).map(([key]) => key);
 let _exportCsvSelected = new Set(_CSV_DEFAULT_COLUMNS);
 let _exportCsvSaveTimer = null;
 
 function _normalizeExportCsvColumns(value) {
-  if (!Array.isArray(value)) return _CSV_DEFAULT_COLUMNS.slice();
-  const seen = new Set(value.filter(key => _CSV_COLUMN_KEYS.includes(key)));
+  const base = Array.isArray(value) ? value.filter(key => _CSV_COLUMN_KEYS.includes(key)) : [];
+  const seen = new Set([..._CSV_LOCKED_COLUMN_KEYS, ...base]);
   return _CSV_COLUMN_KEYS.filter(key => seen.has(key));
 }
 
@@ -15962,21 +15979,26 @@ function _renderExportCsvModal() {
   if (!container) return;
 
   container.innerHTML = '';
-  for (const [key, label] of _CSV_COLUMNS) {
+  for (const [key, label, , locked] of _CSV_COLUMNS) {
     const checked = _exportCsvSelected.has(key);
     const row = document.createElement('div');
-    row.className = `export-csv-row${checked ? ' is-checked' : ''}`;
+    row.className = `export-csv-row${checked ? ' is-checked' : ''}${locked ? ' is-locked' : ''}`;
     row.dataset.column = key;
     row.setAttribute('role', 'checkbox');
     row.setAttribute('aria-checked', checked ? 'true' : 'false');
-    row.tabIndex = 0;
-    row.onclick = () => _toggleExportCsvColumn(key);
-    row.onkeydown = e => {
-      if (e.key === ' ' || e.key === 'Enter') {
-        e.preventDefault();
-        _toggleExportCsvColumn(key);
-      }
-    };
+    if (locked) {
+      row.setAttribute('aria-disabled', 'true');
+      row.title = 'Always included — used to match rows if you re-import this CSV';
+    } else {
+      row.tabIndex = 0;
+      row.onclick = () => _toggleExportCsvColumn(key);
+      row.onkeydown = e => {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          _toggleExportCsvColumn(key);
+        }
+      };
+    }
 
     const box = document.createElement('span');
     box.className = 'export-csv-checkbox';
@@ -15984,7 +16006,7 @@ function _renderExportCsvModal() {
     box.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.3 6.6 11.2 12.7 4.8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
     const text = document.createElement('span');
-    text.textContent = label;
+    text.textContent = label + (locked ? ' (always included)' : '');
 
     row.appendChild(box);
     row.appendChild(text);
@@ -16010,7 +16032,7 @@ function _closeExportCsvModal() {
 }
 
 function _toggleExportCsvColumn(key) {
-  if (!_CSV_COLUMN_KEYS.includes(key)) return;
+  if (!_CSV_COLUMN_KEYS.includes(key) || _CSV_LOCKED_COLUMN_KEYS.includes(key)) return;
   if (_exportCsvSelected.has(key)) _exportCsvSelected.delete(key);
   else _exportCsvSelected.add(key);
   _renderExportCsvModal();
@@ -16019,7 +16041,7 @@ function _toggleExportCsvColumn(key) {
 
 function _toggleAllExportCsvColumns() {
   const allOn = _exportCsvSelected.size === _CSV_COLUMNS.length;
-  _exportCsvSelected = new Set(allOn ? [] : _CSV_COLUMN_KEYS);
+  _exportCsvSelected = new Set(allOn ? _CSV_LOCKED_COLUMN_KEYS : _CSV_COLUMN_KEYS);
   _renderExportCsvModal();
   _queueSaveExportCsvColumns();
 }
@@ -16094,6 +16116,580 @@ async function exportCsv() {
     toast('Library exported.', 'success');
   } catch {
     toast('Export failed — check the server is running.');
+  }
+}
+
+/* ── Bulk Tag Update via CSV ─────────────────────────────────────────── */
+
+const _CSV_IMPORT_STEP_LABELS = [
+  'Upload a CSV file',
+  'Map columns to tags',
+  'Review changes',
+  'Confirm update',
+  'Updating tracks…',
+  'Done',
+];
+
+const _CSV_IMPORT_FIELD_LABELS = {
+  title: 'Title', artist: 'Artist', album_artist: 'Album Artist', album: 'Album',
+  track_number: 'Track Number', disc_number: 'Disc Number', year: 'Year', genre: 'Genre',
+  comment: 'Comment', composer: 'Composer', compilation: 'Compilation',
+  artist_sort: 'Artist Sort', album_sort: 'Album Sort',
+  album_artist_sort: 'Album Artist Sort', title_sort: 'Title Sort',
+};
+const _CSV_IMPORT_FIELD_KEYS = Object.keys(_CSV_IMPORT_FIELD_LABELS);
+
+const _CSV_IMPORT_HEADER_ALIASES = {
+  title: ['title', 'song', 'track name', 'name', 'track title'],
+  artist: ['artist', 'performer'],
+  album: ['album', 'album name'],
+  album_artist: ['album artist', 'albumartist', 'album-artist'],
+  year: ['year', 'date', 'release year'],
+  genre: ['genre'],
+  track_number: ['track number', 'track #', 'track', 'tracknumber'],
+  disc_number: ['disc number', 'disc #', 'disc', 'discnumber'],
+  comment: ['comment', 'comments'],
+  composer: ['composer'],
+  compilation: ['compilation'],
+  artist_sort: ['artist sort', 'artistsort'],
+  album_sort: ['album sort', 'albumsort'],
+  album_artist_sort: ['album artist sort', 'albumartistsort'],
+  title_sort: ['title sort', 'titlesort'],
+};
+
+function _csvImportBlankState() {
+  return {
+    step: 1,
+    fileName: null,
+    headers: [],
+    rows: [],
+    mapping: {},            // { csvHeader: fieldKey | 'id' | 'path' }
+    matchKey: null,          // 'id' | 'path'
+    blankBehavior: 'skip',   // 'skip' | 'clear'
+    preview: null,            // { summary, entries, unmatched }
+    selection: new Set(),     // Set<row_index> — checked rows in the diff table
+    applyStatus: 'idle',
+    applyBatchId: null,
+    pollTimer: null,
+    showUnmatched: false,
+  };
+}
+
+let _csvImport = _csvImportBlankState();
+
+function showCsvImportModal() {
+  if (_csvImport.pollTimer) clearInterval(_csvImport.pollTimer);
+  _csvImport = _csvImportBlankState();
+  const pasteWrap = document.getElementById('csv-import-paste-wrap');
+  const pasteText = document.getElementById('csv-import-paste-text');
+  if (pasteWrap) pasteWrap.style.display = 'none';
+  if (pasteText) pasteText.value = '';
+  _csvImportShowUploadError('');
+  _csvImportRenderStep();
+  document.getElementById('csv-import-modal').style.display = '';
+}
+
+function closeCsvImportModal() {
+  if (_csvImport.pollTimer) { clearInterval(_csvImport.pollTimer); _csvImport.pollTimer = null; }
+  document.getElementById('csv-import-modal').style.display = 'none';
+}
+
+function _csvImportTogglePaste() {
+  const wrap = document.getElementById('csv-import-paste-wrap');
+  if (wrap) wrap.style.display = wrap.style.display === 'none' ? '' : 'none';
+}
+
+function _csvImportShowUploadError(msg) {
+  const box = document.getElementById('csv-import-upload-error');
+  const text = document.getElementById('csv-import-upload-error-text');
+  if (text) text.textContent = msg || '';
+  if (box) box.style.display = msg ? 'flex' : 'none';
+}
+
+async function _csvImportFileSelected(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  _csvImportShowUploadError('');
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/library/import-csv/parse', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) { _csvImportShowUploadError(data.error || 'Could not parse CSV.'); return; }
+    _csvImportApplyParsed(data, file.name);
+  } catch (e) {
+    _csvImportShowUploadError('Error: ' + e.message);
+  }
+}
+
+async function _csvImportParsePasted() {
+  const text = document.getElementById('csv-import-paste-text')?.value || '';
+  if (!text.trim()) { _csvImportShowUploadError('Paste some CSV content first.'); return; }
+  _csvImportShowUploadError('');
+  try {
+    const data = await api('/library/import-csv/parse', { method: 'POST', body: { content: text } });
+    _csvImportApplyParsed(data, 'pasted CSV');
+  } catch (e) {
+    _csvImportShowUploadError(e.message);
+  }
+}
+
+function _csvImportApplyParsed(data, fileName) {
+  if (!data.row_count) { _csvImportShowUploadError('That CSV has no data rows.'); return; }
+  const mapping = _csvImportAutoMap(data.headers);
+  const matchKey = Object.values(mapping).includes('id') ? 'id'
+                  : Object.values(mapping).includes('path') ? 'path' : null;
+  _csvImport.fileName = fileName;
+  _csvImport.headers = data.headers;
+  _csvImport.rows = data.rows;
+  _csvImport.mapping = mapping;
+  _csvImport.matchKey = matchKey;
+  _csvImport.step = 2;
+  _csvImportRenderStep();
+}
+
+function _csvImportAutoMap(headers) {
+  const labelToKey = {};
+  for (const [key, label] of _CSV_COLUMNS) labelToKey[label.trim().toLowerCase()] = key;
+
+  const mapping = {};
+  let matchKeyAssigned = false;
+  for (const header of headers) {
+    const norm = header.trim().toLowerCase();
+    let field = labelToKey[norm] || null;
+    if (!field) {
+      if (norm === 'id' || norm === 'track id') field = 'id';
+      else if (norm === 'path' || norm === 'file path') field = 'path';
+    }
+    if (!field) {
+      for (const [f, aliases] of Object.entries(_CSV_IMPORT_HEADER_ALIASES)) {
+        if (aliases.includes(norm)) { field = f; break; }
+      }
+    }
+    if (!field) continue;
+    if (field === 'id' || field === 'path') {
+      if (matchKeyAssigned) continue; // only the first id/path column becomes the match key
+      matchKeyAssigned = true;
+    }
+    mapping[header] = field;
+  }
+  return mapping;
+}
+
+function _csvImportSetBlankBehavior(val) {
+  _csvImport.blankBehavior = val;
+}
+
+function _csvImportRenderStep() {
+  for (let i = 1; i <= 6; i++) {
+    const el = document.getElementById(`csv-import-step-${i}`);
+    if (el) el.style.display = (i === _csvImport.step) ? '' : 'none';
+  }
+  const sub = document.getElementById('csv-import-step-sub');
+  if (sub) sub.textContent = `Step ${_csvImport.step} of 6 — ${_CSV_IMPORT_STEP_LABELS[_csvImport.step - 1]}`;
+
+  const backBtn = document.getElementById('csv-import-back-btn');
+  const nextBtn = document.getElementById('csv-import-next-btn');
+  const cancelBtn = document.getElementById('csv-import-cancel-btn');
+
+  if (backBtn) backBtn.style.display = [2, 3, 4].includes(_csvImport.step) ? '' : 'none';
+
+  if (cancelBtn) {
+    if (_csvImport.step === 5) {
+      cancelBtn.style.display = '';
+      cancelBtn.textContent = 'Cancel update';
+      cancelBtn.onclick = () => csvImportCancelApply();
+    } else if (_csvImport.step === 6) {
+      cancelBtn.style.display = 'none';
+    } else {
+      cancelBtn.style.display = '';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.onclick = () => closeCsvImportModal();
+    }
+  }
+
+  if (nextBtn) {
+    nextBtn.style.display = _csvImport.step === 5 ? 'none' : '';
+    if (_csvImport.step === 1) { nextBtn.textContent = 'Continue'; nextBtn.disabled = !_csvImport.rows.length; }
+    else if (_csvImport.step === 2) { nextBtn.textContent = 'Preview changes'; nextBtn.disabled = !_csvImport.matchKey; }
+    else if (_csvImport.step === 3) { nextBtn.textContent = 'Continue'; nextBtn.disabled = _csvImport.selection.size === 0; }
+    else if (_csvImport.step === 4) { nextBtn.textContent = 'Apply changes'; nextBtn.disabled = false; }
+    else if (_csvImport.step === 6) { nextBtn.textContent = 'Close'; nextBtn.disabled = false; }
+  }
+
+  if (_csvImport.step === 2) _csvImportRenderMapping();
+  if (_csvImport.step === 3) _csvImportRenderDiff();
+  if (_csvImport.step === 4) _csvImportRenderConfirm();
+}
+
+async function _csvImportNext() {
+  if (_csvImport.step === 1) {
+    _csvImport.step = 2;
+    _csvImportRenderStep();
+  } else if (_csvImport.step === 2) {
+    await _csvImportRunPreview();
+  } else if (_csvImport.step === 3) {
+    _csvImport.step = 4;
+    _csvImportRenderStep();
+  } else if (_csvImport.step === 4) {
+    await _csvImportStartApply();
+  } else if (_csvImport.step === 6) {
+    closeCsvImportModal();
+    refreshCurrentLibraryView();
+    if (state.view === 'songs') loadSongsView();
+    else if (state.view === 'playlists') loadPlaylistsView();
+    _csvImportLoadBatches();
+  }
+}
+
+function _csvImportBack() {
+  if (_csvImport.step === 2) _csvImport.step = 1;
+  else if (_csvImport.step === 3) _csvImport.step = 2;
+  else if (_csvImport.step === 4) _csvImport.step = 3;
+  _csvImportRenderStep();
+}
+
+function _csvImportRenderMapping() {
+  const container = document.getElementById('csv-import-mapping-table');
+  if (!container) return;
+  container.innerHTML = '';
+
+  for (const header of _csvImport.headers) {
+    const row = document.createElement('div');
+    row.className = 'csv-import-map-row';
+
+    const label = document.createElement('span');
+    label.className = 'csv-import-map-header';
+    label.textContent = header;
+
+    const select = document.createElement('select');
+    select.className = 'csv-import-map-select';
+
+    const optIgnore = document.createElement('option');
+    optIgnore.value = '';
+    optIgnore.textContent = 'Ignore this column';
+    select.appendChild(optIgnore);
+
+    const optId = document.createElement('option');
+    optId.value = '__id__';
+    optId.textContent = 'Match key: Track ID';
+    select.appendChild(optId);
+
+    const optPath = document.createElement('option');
+    optPath.value = '__path__';
+    optPath.textContent = 'Match key: File Path';
+    select.appendChild(optPath);
+
+    for (const field of _CSV_IMPORT_FIELD_KEYS) {
+      const opt = document.createElement('option');
+      opt.value = field;
+      opt.textContent = _CSV_IMPORT_FIELD_LABELS[field];
+      select.appendChild(opt);
+    }
+
+    const current = _csvImport.mapping[header];
+    if (current === 'id') select.value = '__id__';
+    else if (current === 'path') select.value = '__path__';
+    else select.value = current || '';
+
+    select.onchange = () => {
+      const v = select.value;
+      delete _csvImport.mapping[header];
+      if (v === '__id__' || v === '__path__') {
+        const newKey = v === '__id__' ? 'id' : 'path';
+        for (const h of Object.keys(_csvImport.mapping)) {
+          if (_csvImport.mapping[h] === 'id' || _csvImport.mapping[h] === 'path') delete _csvImport.mapping[h];
+        }
+        _csvImport.matchKey = newKey;
+        _csvImport.mapping[header] = newKey;
+      } else if (v) {
+        _csvImport.mapping[header] = v;
+      }
+      _csvImportRenderStep();
+    };
+
+    row.appendChild(label);
+    row.appendChild(select);
+    container.appendChild(row);
+  }
+
+  const summary = document.getElementById('csv-import-matchkey-summary');
+  if (summary) {
+    summary.textContent = _csvImport.matchKey
+      ? `Matching tracks by ${_csvImport.matchKey === 'id' ? 'Track ID' : 'File Path'}. Map any other columns you want to update below.`
+      : 'Map one column as the match key (Track ID or File Path) to continue.';
+  }
+}
+
+async function _csvImportRunPreview() {
+  if (!_csvImport.matchKey) { toast('Map a column as the match key first.', 'warning'); return; }
+  const nextBtn = document.getElementById('csv-import-next-btn');
+  if (nextBtn) { nextBtn.disabled = true; nextBtn.textContent = 'Checking…'; }
+  try {
+    const data = await api('/library/import-csv/preview', {
+      method: 'POST',
+      body: {
+        rows: _csvImport.rows,
+        mapping: _csvImport.mapping,
+        match_key: _csvImport.matchKey,
+        blank_behavior: _csvImport.blankBehavior,
+      },
+    });
+    _csvImport.preview = data;
+    _csvImport.selection = new Set(
+      data.entries.filter(e => !e.errors.length && e.changes.length).map(e => e.row_index)
+    );
+    _csvImport.step = 3;
+    _csvImportRenderStep();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    if (nextBtn) nextBtn.disabled = false;
+    _csvImportRenderStep();
+  }
+}
+
+function _csvImportRenderDiff() {
+  const p = _csvImport.preview;
+  if (!p) return;
+
+  const summaryEl = document.getElementById('csv-import-summary-bar');
+  if (summaryEl) {
+    const s = p.summary;
+    summaryEl.innerHTML = `
+      <div class="csv-import-stat"><strong>${s.will_update}</strong><span>will update</span></div>
+      <div class="csv-import-stat"><strong>${s.unchanged}</strong><span>unchanged</span></div>
+      <div class="csv-import-stat"><strong>${s.unmatched}</strong><span>unmatched</span></div>
+      <div class="csv-import-stat"><strong>${s.validation_errors}</strong><span>errors</span></div>
+    `;
+  }
+
+  const table = document.getElementById('csv-import-diff-table');
+  if (table) {
+    table.innerHTML = '';
+    const visible = p.entries.filter(e => e.changes.length || e.errors.length);
+    if (!visible.length) {
+      table.innerHTML = '<div class="csv-import-empty">No changes detected for any matched track.</div>';
+    }
+    for (const entry of visible) {
+      const row = document.createElement('div');
+      row.className = 'csv-import-diff-row' + (entry.errors.length ? ' has-error' : '');
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.disabled = !!entry.errors.length;
+      checkbox.checked = _csvImport.selection.has(entry.row_index);
+      checkbox.onchange = () => {
+        if (checkbox.checked) _csvImport.selection.add(entry.row_index);
+        else _csvImport.selection.delete(entry.row_index);
+        _csvImportRenderStep();
+      };
+
+      const info = document.createElement('div');
+      info.className = 'csv-import-diff-info';
+      const titleLine = document.createElement('div');
+      titleLine.className = 'csv-import-diff-title';
+      titleLine.textContent = entry.title || entry.path || entry.track_id;
+      const subLine = document.createElement('div');
+      subLine.className = 'csv-import-diff-sub';
+      subLine.textContent = entry.artist || '';
+      info.appendChild(titleLine);
+      info.appendChild(subLine);
+
+      const chips = document.createElement('div');
+      chips.className = 'csv-import-diff-chips';
+      for (const c of entry.changes) {
+        const chip = document.createElement('span');
+        chip.className = 'csv-import-diff-chip';
+        const label = _CSV_IMPORT_FIELD_LABELS[c.field] || c.field;
+        const oldV = (c.old_value === null || c.old_value === undefined || c.old_value === '') ? '(empty)' : c.old_value;
+        const newV = c.new_value === null ? '(cleared)' : c.new_value;
+        chip.textContent = `${label}: ${oldV} → ${newV}`;
+        chips.appendChild(chip);
+      }
+      for (const err of entry.errors) {
+        const chip = document.createElement('span');
+        chip.className = 'csv-import-diff-chip csv-import-diff-chip--error';
+        chip.textContent = err;
+        chips.appendChild(chip);
+      }
+      for (const w of (entry.warnings || [])) {
+        const chip = document.createElement('span');
+        chip.className = 'csv-import-diff-chip csv-import-diff-chip--warning';
+        chip.textContent = w;
+        chips.appendChild(chip);
+      }
+
+      row.appendChild(checkbox);
+      row.appendChild(info);
+      row.appendChild(chips);
+      table.appendChild(row);
+    }
+  }
+
+  const unmatchedWrap = document.getElementById('csv-import-unmatched-wrap');
+  const unmatchedToggle = document.getElementById('csv-import-unmatched-toggle');
+  const unmatchedList = document.getElementById('csv-import-unmatched-list');
+  if (unmatchedWrap) {
+    unmatchedWrap.style.display = p.unmatched.length ? '' : 'none';
+    if (unmatchedToggle) {
+      unmatchedToggle.textContent = `${_csvImport.showUnmatched ? 'Hide' : 'Show'} ${p.unmatched.length} unmatched row${p.unmatched.length === 1 ? '' : 's'}`;
+    }
+    if (unmatchedList) {
+      unmatchedList.style.display = _csvImport.showUnmatched ? '' : 'none';
+      unmatchedList.innerHTML = p.unmatched.map(u =>
+        `<div class="csv-import-unmatched-item">Row ${u.row_index + 2}: no track matches "${_esc(u.match_key_value || '(blank)')}"</div>`
+      ).join('');
+    }
+  }
+}
+
+function _csvImportToggleUnmatched() {
+  _csvImport.showUnmatched = !_csvImport.showUnmatched;
+  _csvImportRenderDiff();
+}
+
+function _csvImportRenderConfirm() {
+  const n = _csvImport.selection.size;
+  const textEl = document.getElementById('csv-import-confirm-warning-text');
+  if (textEl) {
+    textEl.textContent = `This will update tags on ${n} track${n === 1 ? '' : 's'} directly on disk. You can undo the whole import afterward from Settings → Recent bulk edits.`;
+  }
+}
+
+async function _csvImportStartApply() {
+  const n = _csvImport.selection.size;
+  if (!n) { toast('No rows selected to update.', 'warning'); return; }
+  const confirmed = await _showConfirm({
+    kind: 'warning',
+    title: `Update ${n} track${n === 1 ? '' : 's'} from CSV?`,
+    message: 'Tags will be written directly to the audio files on disk. You can undo this from Settings → Recent bulk edits afterward.',
+    okText: 'Apply changes',
+    danger: true,
+  });
+  if (!confirmed) return;
+
+  _csvImport.step = 5;
+  _csvImport.applyStatus = 'running';
+  _csvImportRenderStep();
+  _csvImportUpdateProgress({ status: 'running', done: 0, total: n, updated: 0, skipped: 0 });
+
+  try {
+    const data = await api('/library/import-csv/apply', {
+      method: 'POST',
+      body: {
+        rows: _csvImport.rows,
+        mapping: _csvImport.mapping,
+        match_key: _csvImport.matchKey,
+        blank_behavior: _csvImport.blankBehavior,
+        row_selection: Array.from(_csvImport.selection),
+      },
+    });
+    _csvImport.applyBatchId = data.batch_id;
+    _csvImport.pollTimer = setInterval(_csvImportPollStatus, 1000);
+  } catch (e) {
+    _csvImport.applyStatus = 'error';
+    toast(e.message, 'error');
+    _csvImportShowResults({ status: 'error', done: 0, total: n, updated: 0, skipped: 0, errors: [] });
+  }
+}
+
+async function _csvImportPollStatus() {
+  try {
+    const s = await api('/library/import-csv/status');
+    _csvImportUpdateProgress(s);
+    if (s.status !== 'running') {
+      clearInterval(_csvImport.pollTimer);
+      _csvImport.pollTimer = null;
+      _csvImport.applyStatus = s.status;
+      _csvImportShowResults(s);
+    }
+  } catch (e) {
+    // transient network blip — keep polling
+  }
+}
+
+function _csvImportUpdateProgress(s) {
+  const bar = document.getElementById('csv-import-progress-bar');
+  const msg = document.getElementById('csv-import-progress-msg');
+  const pct = s.total > 0 ? Math.round((s.done / s.total) * 100) : 0;
+  if (bar) bar.style.width = pct + '%';
+  if (msg) msg.textContent = `${s.done || 0} / ${s.total || 0} tracks — ${s.updated || 0} updated, ${s.skipped || 0} skipped`;
+}
+
+async function csvImportCancelApply() {
+  await api('/library/import-csv/cancel', { method: 'POST' }).catch(() => {});
+}
+
+function _csvImportShowResults(s) {
+  _csvImport.step = 6;
+  _csvImportRenderStep();
+  const summaryEl = document.getElementById('csv-import-results-summary');
+  if (summaryEl) {
+    const verb = s.status === 'cancelled' ? 'Cancelled' : (s.status === 'error' ? 'Something went wrong' : 'Done');
+    summaryEl.textContent = `${verb} — ${s.updated || 0} of ${s.total || 0} tracks updated${s.skipped ? `, ${s.skipped} skipped` : ''}.`;
+  }
+  const errorsWrap = document.getElementById('csv-import-results-errors');
+  if (errorsWrap) {
+    if (s.errors && s.errors.length) {
+      errorsWrap.style.display = '';
+      errorsWrap.innerHTML = s.errors.map(e =>
+        `<div class="csv-import-error-item">${_esc(e.path || e.row_index)}: ${_esc(e.error)}</div>`
+      ).join('');
+    } else {
+      errorsWrap.style.display = 'none';
+    }
+  }
+  const nudge = document.getElementById('csv-import-artwork-nudge');
+  if (nudge) nudge.style.display = s.artwork_may_be_stale ? '' : 'none';
+
+  toast(`Updated ${s.updated || 0}/${s.total || 0} tracks from CSV${s.skipped ? ` (${s.skipped} skipped)` : ''}.`, s.skipped ? 6000 : 'success');
+}
+
+async function _csvImportLoadBatches() {
+  const container = document.getElementById('csv-import-batches-list');
+  if (!container) return;
+  try {
+    const batches = await api('/library/tag-batches');
+    if (!batches.length) {
+      container.innerHTML = '<div class="csv-import-batches-empty">No recent CSV imports.</div>';
+      return;
+    }
+    container.innerHTML = batches.map(b => {
+      const date = new Date(b.started_at * 1000).toLocaleString();
+      return `
+        <div class="csv-import-batch-row">
+          <div class="csv-import-batch-meta">
+            <span class="csv-import-batch-date">${_esc(date)}</span>
+            <span class="csv-import-batch-count">${b.track_count} track${b.track_count === 1 ? '' : 's'}</span>
+          </div>
+          ${b.undone
+            ? '<span class="csv-import-batch-undone">Undone</span>'
+            : `<button class="btn-secondary" onclick="App.csvImportUndoBatch('${_esc(b.batch_id)}')">Undo</button>`}
+        </div>`;
+    }).join('');
+  } catch (e) {
+    container.innerHTML = '<div class="csv-import-batches-empty">Could not load recent bulk edits.</div>';
+  }
+}
+
+async function csvImportUndoBatch(batchId) {
+  const confirmed = await _showConfirm({
+    kind: 'warning',
+    title: 'Undo this bulk edit?',
+    message: 'This reverts every field this CSV import changed back to its original value, written directly to the files on disk.',
+    okText: 'Undo import',
+    danger: true,
+  });
+  if (!confirmed) return;
+  try {
+    const data = await api(`/library/tag-batches/${encodeURIComponent(batchId)}/undo`, { method: 'POST' });
+    toast(`Reverted ${data.updated}/${data.total} tracks.${data.errors.length ? ` ${data.errors.length} errors.` : ''}`, data.errors.length ? 6000 : 'success');
+    _csvImportLoadBatches();
+    refreshCurrentLibraryView();
+  } catch (e) {
+    toast(e.message, 'error');
   }
 }
 
@@ -16296,6 +16892,7 @@ async function loadSettings() {
   _initRgFromSettings(settings);
   loadLyricsSettings();
   loadScanHistory();
+  _csvImportLoadBatches();
 
   // Display app version + channel picker
   try {
@@ -19038,6 +19635,15 @@ function toggleArtworkAdvanced() {
   if (chevron) chevron.classList.toggle('is-open', open);
 }
 
+function toggleBulkTagAdvanced() {
+  const body = document.getElementById('bulk-tag-advanced-body');
+  const chevron = document.getElementById('bulk-tag-advanced-chevron');
+  if (!body) return;
+  const open = body.style.display === 'none';
+  body.style.display = open ? '' : 'none';
+  if (chevron) chevron.classList.toggle('is-open', open);
+}
+
 async function startLyricsBulk(mode = 'new') {
   try {
     _updateLyricsBulkBanner({
@@ -20857,6 +21463,7 @@ const App = {
   onLyricsServiceChange,
   toggleLyricsAdvanced,
   toggleArtworkAdvanced,
+  toggleBulkTagAdvanced,
   startLyricsBulk,
   cancelLyricsBulk,
   lyricHealthScan,
@@ -20888,6 +21495,17 @@ const App = {
   _closeExportCsvModal,
   _toggleExportCsvColumn,
   _toggleAllExportCsvColumns,
+  showCsvImportModal,
+  closeCsvImportModal,
+  _csvImportFileSelected,
+  _csvImportParsePasted,
+  _csvImportTogglePaste,
+  _csvImportSetBlankBehavior,
+  _csvImportNext,
+  _csvImportBack,
+  _csvImportToggleUnmatched,
+  csvImportCancelApply,
+  csvImportUndoBatch,
   // Library Setup Wizard
   openLibrarySetup,
   closeLibrarySetup,
