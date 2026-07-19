@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Add: DAP detail page now shows a count of tracks whose tags were edited locally since the last sync to that device, so tag changes made outside a full library rescan aren't missed.
+- Fix: IEM Match scores were unrealistically high across the board (every IEM showing 80%+ "strong fit" for every genre, with no real differentiation). The scoring curve is now steeper, so genuinely mismatched IEMs (e.g. bass-heavy sets against a mid-forward library) correctly score lower instead of blending into the same "strong fit" band as well-tuned ones.
 
 ## v0.564-rc.190726-1433 · 2026-07-19
 - Change: IEM Match accuracy overhaul: new Presence band (1.5-3 kHz) closes a scoring gap in the pinna-gain region, audio analysis now uses a true stereo downmix, match scores use non-overlapping core bands so bass and treble are no longer over-weighted, and genre fingerprints are computed in the loudness domain with genre-family consolidation. Requires a one-time library re-analysis.

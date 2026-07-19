@@ -14779,7 +14779,7 @@ _PERC_BANDS = [
 ANALYSIS_VERSION = 4
 # Persisted match-matrix payload schema version. Payloads with a different
 # version are treated as absent so stale pre-overhaul matrices never render.
-MATCH_MATRIX_VERSION = 2
+MATCH_MATRIX_VERSION = 3
 N_PERC_BANDS = len(_PERC_BANDS)
 
 # Non-overlapping core bands used for fingerprint weighting and match scores.
@@ -14888,8 +14888,13 @@ def _score_iem_17d(measurement, target_measurement=None):
     """
     Score an IEM across all 18 perceptual dimensions on a 1–10 scale each.
 
-    13 frequency-band scores: 10·exp(-0.08·|deviation_dB|)
-      — k=0.08: 0 dB→10, 3 dB→7.9, 6 dB→6.2, 10 dB→4.5, 15 dB→3.0
+    13 frequency-band scores: 10·exp(-0.20·|deviation_dB|)
+      — k=0.20: 0 dB→10, 3 dB→5.5, 6 dB→3.0, 10 dB→1.4, 15 dB→0.5
+      Calibrated against real owned IEMs: at k=0.08 every IEM in a real
+      collection scored 80-94% for every genre (Harman's own bass/pinna
+      shelf compresses how large a raw deviation looks), giving the tool
+      no discriminating power. k=0.20 restores real spread (~55-90%) and
+      correctly demotes basshead/extreme-signature IEMs as poor generalists.
     Both the IEM curve and the target are resampled onto a shared log-frequency
     grid before band means, so band averages weight each octave evenly instead
     of following the measurement's own point spacing.
@@ -14938,7 +14943,7 @@ def _score_iem_17d(measurement, target_measurement=None):
             target_band_mean[key] = float(t_spls_arr[m].mean()) if m.any() else NORM_REF_DB
 
     # ── 13 frequency-band scores ──────────────────────────────────────────────
-    k = 0.08
+    k = 0.20
     scores, deviation = {}, {}
     for key, f_lo, f_hi, _ in _PERC_BANDS:
         m   = (freqs >= f_lo) & (freqs < f_hi)
