@@ -1438,15 +1438,19 @@ def do_scan():
     try:
         conn = _db.get_conn()
         rows = conn.execute(
-            "SELECT id, lyrics_status, lyrics_fetched_at FROM tracks WHERE lyrics_status IS NOT NULL"
+            "SELECT id, lyrics_status, lyrics_fetched_at, tags_updated_at FROM tracks "
+            "WHERE lyrics_status IS NOT NULL OR tags_updated_at IS NOT NULL"
         ).fetchall()
         existing_lyrics = {r['id']: (r['lyrics_status'], r['lyrics_fetched_at']) for r in rows}
+        existing_tags_updated_at = {r['id']: int(r['tags_updated_at'] or 0) for r in rows}
         for t in tracks:
             if t.get('lyrics_status') is None and t['id'] in existing_lyrics:
                 prev_status, prev_ts = existing_lyrics[t['id']]
                 if not t.get('has_lyrics') and prev_status in ('not_found', 'instrumental', 'error'):
                     t['lyrics_status'] = prev_status
                     t['lyrics_fetched_at'] = prev_ts
+            if t['id'] in existing_tags_updated_at:
+                t['tags_updated_at'] = existing_tags_updated_at[t['id']]
     except Exception:
         pass
 
@@ -2872,8 +2876,8 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
     ))[:200]
     recent_features = _db.db_get_features_batch(recent_tids) if recent_tids else {}
     recent_bands = [f['band_energy'] for f in recent_features.values()
-                    if f and f.get('band_energy') and len(f['band_energy']) == 12 and not f.get('failed')]
-    recent_sonic = ([sum(b[i] for b in recent_bands) / len(recent_bands) for i in range(12)]
+                    if f and f.get('band_energy') and len(f['band_energy']) == N_PERC_BANDS and not f.get('failed')]
+    recent_sonic = ([sum(b[i] for b in recent_bands) / len(recent_bands) for i in range(N_PERC_BANDS)]
                     if recent_bands else None)
 
     # --- Initial scoring (no sonic) to get top 20 candidates ---
@@ -2919,7 +2923,7 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
     for t in track_by_id.values():
         tid = str(t.get('id') or '')
         f = cand_features.get(tid)
-        if not f or not f.get('band_energy') or len(f['band_energy']) != 12 or f.get('failed'):
+        if not f or not f.get('band_energy') or len(f['band_energy']) != N_PERC_BANDS or f.get('failed'):
             continue
         a_key = f"{(t.get('album_artist') or t.get('artist') or '').lower()}||{(t.get('album') or '').lower()}"
         if a_key not in album_sonic:
@@ -2947,7 +2951,7 @@ def _home_top_picks(events, albums, track_by_id, continue_keys=None, limit=5):
         sonic_aff = 0.0
         has_sonic = False
         if recent_sonic and sonic_bands:
-            avg_bands = [sum(b[i] for b in sonic_bands) / len(sonic_bands) for i in range(12)]
+            avg_bands = [sum(b[i] for b in sonic_bands) / len(sonic_bands) for i in range(N_PERC_BANDS)]
             sonic_aff = _cosine(avg_bands, recent_sonic)
             has_sonic = True
 
@@ -3736,10 +3740,11 @@ def _apply_tag_edit(track_id: str, changes: dict, batch_id: str = None):
     _db.db_record_tag_changes(track_id, all_changes, old_values, batch_id=batch_id)
 
     # Update SQLite cache (None values become NULL for cleared fields)
-    _db.db_update_track_tags(track_id, all_changes)
+    now_ts = int(time.time())
+    _db.db_update_track_tags(track_id, all_changes, tags_updated_at=now_ts)
 
     # Update in-memory library
-    _update_library_track(track_id, all_changes)
+    _update_library_track(track_id, {**all_changes, 'tags_updated_at': now_ts})
     # Home and metadata maps must refresh immediately after tag edits.
     global _meta_maps_cache
     _meta_maps_cache = None
@@ -6520,9 +6525,9 @@ def _evaluate_smart_rules(rules, match_mode='all', limit_count=50, sort_field='d
             _num_op('tf.brightness')
         elif field == 'has_analysis':
             if val:
-                where_clauses.append("tf.band_energy IS NOT NULL AND tf.analysis_version = 3")
+                where_clauses.append(f"tf.band_energy IS NOT NULL AND tf.analysis_version = {ANALYSIS_VERSION}")
             else:
-                where_clauses.append("(tf.band_energy IS NULL OR tf.analysis_version != 3)")
+                where_clauses.append(f"(tf.band_energy IS NULL OR tf.analysis_version != {ANALYSIS_VERSION})")
 
     connector = ' AND ' if match_mode == 'all' else ' OR '
     where_sql = connector.join(where_clauses) if where_clauses else '1=1'
@@ -6556,7 +6561,7 @@ def _evaluate_smart_rules(rules, match_mode='all', limit_count=50, sort_field='d
         if sonic_rules:
             total_unanalysed = conn.execute(
                 "SELECT COUNT(*) FROM tracks t LEFT JOIN track_features tf ON tf.track_id=t.id "
-                "WHERE tf.band_energy IS NULL OR tf.analysis_version != 3"
+                f"WHERE tf.band_energy IS NULL OR tf.analysis_version != {ANALYSIS_VERSION}"
             ).fetchone()[0]
             unanalysed_count = total_unanalysed
 
@@ -9815,6 +9820,7 @@ def _build_sync_track_entries(template):
             'rendered_rel': rendered_rel,
             'target_rel': target_rel,
             'warnings': warns,
+            'tags_updated_at': int((t or {}).get('tags_updated_at') or 0),
         })
 
     # A DAP path template can collapse distinct library files onto one device
@@ -10026,17 +10032,27 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
 
         manifest_seen_keys.add(matched_key)
         manifest_entry = manifest_records.get(matched_key) or {}
-        local_changed_since_manifest = not (
+        local_tags_updated_at = int(e.get('tags_updated_at') or 0)
+        tag_edit_since_sync = bool(
+            manifest_entry
+            and local_tags_updated_at
+            and local_tags_updated_at > int(manifest_entry.get('updated_at') or 0)
+        )
+        stat_changed_since_manifest = not (
             manifest_entry
             and manifest_entry.get('local_rel', '').casefold() == e['local_rel'].casefold()
             and int(manifest_entry.get('local_size') or 0) == int(src_size)
             and int(manifest_entry.get('local_mtime_ns') or 0) == int(src_mtime)
         )
+        local_changed_since_manifest = stat_changed_since_manifest or tag_edit_since_sync
         if local_changed_since_manifest and manifest_entry:
             local_copy_map[matched_rel] = e['local_rel']
             local_only_existing_sizes[matched_rel] = int(dst_size or 0)
             local_only.append(matched_rel)
-            local_only_reasons[matched_rel] = 'Local file changed since last verified sync'
+            local_only_reasons[matched_rel] = (
+                'Tags edited since last sync' if tag_edit_since_sync and not stat_changed_since_manifest
+                else 'Local file changed since last verified sync'
+            )
 
         manifest_updates[matched_key] = {
             'target_rel': matched_rel,
@@ -10296,6 +10312,29 @@ def _playlist_sync_counts_for_dap(dap):
     )
     never_exported = sum(1 for pl in playlists.values() if pl.get('id') not in exports)
     return stale_count, never_exported
+
+
+def _tag_sync_stale_count_for_dap(dap_id):
+    if not dap_id:
+        return 0
+    manifest = _get_dap_sync_manifest(dap_id)
+    if not manifest:
+        return 0
+    with library_lock:
+        by_path = {_normalize_rel(t.get('path')).casefold(): t for t in library if t.get('path')}
+    count = 0
+    for entry in manifest.values():
+        local_rel = _normalize_rel(entry.get('local_rel'))
+        if not local_rel:
+            continue
+        track = by_path.get(local_rel.casefold())
+        if not track:
+            continue
+        tags_updated_at = int(track.get('tags_updated_at') or 0)
+        manifest_updated_at = int(entry.get('updated_at') or 0)
+        if tags_updated_at and tags_updated_at > manifest_updated_at:
+            count += 1
+    return count
 
 
 def _playlist_sync_candidates_for_dap(dap):
@@ -11454,6 +11493,8 @@ def get_daps():
         )
         summary = _normalize_sync_summary(d.get('sync_summary'))
         summary['playlist_out_of_sync_count'] = int(d['stale_count']) + int(d['never_exported'])
+        d['tags_stale_count'] = _tag_sync_stale_count_for_dap(d.get('id'))
+        summary['tags_out_of_sync_count'] = d['tags_stale_count']
         d['sync_summary'] = summary
         d['last_sync_at'] = _dap_last_sync_at(d, summary)
     return jsonify(daps)
@@ -11572,6 +11613,8 @@ def get_dap(did):
     dap['never_exported'] = never_exported
     summary = _normalize_sync_summary(dap.get('sync_summary'))
     summary['playlist_out_of_sync_count'] = int(stale_count) + int(never_exported)
+    dap['tags_stale_count'] = _tag_sync_stale_count_for_dap(dap.get('id'))
+    summary['tags_out_of_sync_count'] = dap['tags_stale_count']
     dap['sync_summary'] = summary
     dap['last_sync_at'] = _dap_last_sync_at(dap, summary)
     return jsonify(dap)
@@ -14154,18 +14197,18 @@ def _load_feature_entries():
     return _db.db_load_feature_entries()
 
 
-def _has_valid_v3_payload(entry):
-    if not entry or entry.get('analysis_version') != 3:
+def _has_valid_feature_payload(entry):
+    if not entry or entry.get('analysis_version') != ANALYSIS_VERSION:
         return False
     if entry.get('failed'):
         return True
     band_energy = entry.get('band_energy') or []
-    return (entry.get('brightness') is not None and len(band_energy) == 12)
+    return (entry.get('brightness') is not None and len(band_energy) == N_PERC_BANDS)
 
 
 def _backfill_feature_source_signatures(tracks):
     """
-    Backfill source signature fields for legacy v3 cache rows.
+    Backfill source signature fields for legacy current-version cache rows.
 
     Older analysis rows may predate source signature tracking
     (source_path/source_mtime). Without this backfill, those rows look stale
@@ -14183,7 +14226,7 @@ def _backfill_feature_source_signatures(tracks):
         track = track_by_id.get(tid)
         if not track:
             continue
-        if not _has_valid_v3_payload(entry):
+        if not _has_valid_feature_payload(entry):
             continue
         if not entry.get('source_path'):
             entry['source_path'] = track.get('path')
@@ -14201,6 +14244,10 @@ def _backfill_feature_source_signatures(tracks):
 
 
 def _track_source_mtime(track):
+    # Uses the library's date_added (file birthtime at scan) as the change
+    # signal, not the file's live mtime. Stat-ing thousands of files on every
+    # info call is too slow on external volumes. Limitation: replacing a file
+    # in place while preserving its birthtime will not trigger re-analysis.
     try:
         return int(track.get('date_added') or 0)
     except Exception:
@@ -14211,7 +14258,7 @@ def _is_cached_feature_current(cached, track):
     """Return True when a cached entry is valid for the current track revision."""
     if not cached:
         return False
-    if cached.get('analysis_version') != 3:
+    if cached.get('analysis_version') != ANALYSIS_VERSION:
         return False
     if cached.get('source_path') != track.get('path'):
         return False
@@ -14220,7 +14267,7 @@ def _is_cached_feature_current(cached, track):
     if cached.get('failed'):
         return True
     band_energy = cached.get('band_energy') or []
-    return (cached.get('brightness') is not None and len(band_energy) == 12)
+    return (cached.get('brightness') is not None and len(band_energy) == N_PERC_BANDS)
 
 
 def _run_analysis():
@@ -14267,7 +14314,7 @@ def _run_analysis():
         try:
             path = Path(music_base) / source_path
             data, sr = sf.read(str(path), dtype='float32', always_2d=True)
-            mono = data[:, 0]
+            mono = data.mean(axis=1)
             total_samples = len(mono)
 
             # Multi-window analysis: 7 windows spread across the musical portion
@@ -14315,7 +14362,7 @@ def _run_analysis():
                 'brightness':      round(float(np.mean(bright_list)), 2),
                 'energy':          round(float(np.mean(energy_list)), 6),
                 'band_energy':     band_energy,
-                'analysis_version': 3,
+                'analysis_version': ANALYSIS_VERSION,
                 'cluster':         None,
                 'source_path':     source_path,
                 'source_mtime':    source_mtime,
@@ -14330,7 +14377,7 @@ def _run_analysis():
                 'brightness': None,
                 'band_energy': None,
                 'cluster': None,
-                'analysis_version': 3,
+                'analysis_version': ANALYSIS_VERSION,
                 'source_path': source_path,
                 'source_mtime': source_mtime,
                 'analysed_at': int(time.time()),
@@ -14392,14 +14439,14 @@ def insights_analyse_info():
     """Return per-track analysis coverage: how many library tracks have been processed."""
     total      = len(library)
     processed  = 0   # attempted and current for this exact file revision
-    valid      = 0   # has full v3 feature set and current
+    valid      = 0   # has full current-version feature set and current
     needs_upgrade = False
     existing_map = {f.get('track_id'): f for f in _backfill_feature_source_signatures(library)}
     for track in library:
         cached = existing_map.get(track['id'])
         if not cached:
             continue
-        if cached.get('analysis_version') != 3:
+        if cached.get('analysis_version') != ANALYSIS_VERSION:
             needs_upgrade = True
         if _is_cached_feature_current(cached, track):
             processed += 1
@@ -14707,7 +14754,7 @@ def rg_tag_cancel():
 # Insights — Phase 2 & 3: Sonic Profile + IEM-Genre Matching
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# 12 overlapping perceptual frequency-band dimensions.
+# 13 overlapping perceptual frequency-band dimensions.
 # Overlap is intentional — each dimension captures a distinct perceptual quality.
 # Format: (key, f_lo Hz, f_hi Hz, label)
 _PERC_BANDS = [
@@ -14718,6 +14765,7 @@ _PERC_BANDS = [
     ('lower_mids',   200,   500,   'Lower mids'),
     ('upper_mids',   500,  1500,   'Upper mids'),
     ('note_weight',  200,  1000,   'Note weight'),
+    ('presence',    1500,  3000,   'Presence'),
     ('lower_treble', 3000, 6000,   'Lower treble'),
     ('upper_treble', 6000, 20000,  'Upper treble'),
     ('detail',       4000, 10000,  'Detail'),
@@ -14725,10 +14773,60 @@ _PERC_BANDS = [
     ('texture',      6000, 15000,  'Texture'),
 ]
 
+# Analysis cache version. v4: true stereo downmix (was left channel only) and
+# the new 13-band table (presence band closes the 1.5-3 kHz gap). Bumping this
+# invalidates all cached track features and forces a one-time full re-analysis.
+ANALYSIS_VERSION = 4
+# Persisted match-matrix payload schema version. Payloads with a different
+# version are treated as absent so stale pre-overhaul matrices never render.
+MATCH_MATRIX_VERSION = 2
+N_PERC_BANDS = len(_PERC_BANDS)
+
+# Non-overlapping core bands used for fingerprint weighting and match scores.
+# The overlapping flavour bands (slam, note_weight, detail, sibilance, texture)
+# stay in _PERC_BANDS for the radar and character labels, but excluding them
+# here prevents bass/treble double-counting in the weighted match formula.
+# (bass/bass_feel share 80-120 Hz deliberately so 120-200 Hz warmth stays covered.)
+_MATCH_CORE_BANDS = ['sub_bass', 'bass', 'bass_feel', 'lower_mids', 'upper_mids',
+                     'presence', 'lower_treble', 'upper_treble']
+
+# Built-in Harman IE 2019 target, dB relative to 1 kHz. Transcribed from the
+# squig.link-distributed Harman in-ear target (same 711-coupler family as the
+# IEM measurements, so treble comparisons stay apples-to-apples). Above 10 kHz
+# the raw target file dives off a coupler-resonance cliff; a gentle roll-off is
+# substituted there so the upper_treble band mean stays meaningful.
+_HARMAN_IE_2019_POINTS = [
+    [20, 9.1], [30, 9.1], [40, 9.2], [50, 8.8], [60, 8.3], [80, 6.2],
+    [100, 4.0], [150, -0.2], [200, -2.0], [300, -2.2], [400, -1.6],
+    [500, -1.1], [630, -0.8], [800, -0.3], [1000, 0.0], [1250, 0.4],
+    [1600, 1.9], [2000, 4.5], [2500, 8.4], [3000, 10.1], [3500, 10.2],
+    [4000, 9.6], [5000, 8.2], [6000, 8.2], [8000, 8.1], [10000, -1.5],
+    [12000, -4.0], [15000, -7.0], [20000, -11.0],
+]
+
+_BUILTIN_TARGETS = {
+    'harman_ie_2019': {'name': 'Harman IE 2019 (recommended)',
+                       'points': _HARMAN_IE_2019_POINTS},
+}
+DEFAULT_MATCH_TARGET_ID = 'harman_ie_2019'
+
+
+def _builtin_target_measurement(target_id):
+    """Return a 300-point [[freq, spl], ...] curve for a built-in target, or None."""
+    import numpy as np
+    t = _BUILTIN_TARGETS.get(target_id)
+    if not t:
+        return None
+    bp   = np.array(t['points'], dtype=float)
+    grid = np.logspace(np.log10(20.0), np.log10(20000.0), 300)
+    spl  = np.interp(np.log10(grid), np.log10(bp[:, 0]), bp[:, 1]) + NORM_REF_DB
+    return [[float(f), float(s)] for f, s in zip(grid, spl)]
+
+
 # 5 derived perceptual dimensions (computed from IEM FR shape, not FFT energy)
 _DERIVED_DIMS = ['sound_stage', 'timbre_color', 'masking', 'layering', 'tonality']
 # When True, derived dimension average applies a small penalty to match scores (max −8%)
-# so the radar chart (17 dims) and list scores stay consistent
+# so the radar chart (18 dims) and list scores stay consistent
 _MATCH_INCLUDE_DERIVED_PENALTY = True
 
 _ALL_DIM_LABELS = {b[0]: b[3] for b in _PERC_BANDS}
@@ -14749,11 +14847,11 @@ def _load_features():
 def _library_salience(features):
     """
     Per-band salience S_b = 0.7·norm(mean) + 0.3·norm(std), sums to 1.
-    Uses the 12-band v3 scheme. Returns None if no v3 data exists.
+    Currently unused (kept for future weighting experiments).
     """
     import numpy as np
     valid = [f for f in features
-             if f.get('band_energy') and len(f['band_energy']) == 12]
+             if f.get('band_energy') and len(f['band_energy']) == N_PERC_BANDS]
     if not valid:
         return None
     matrix = np.array([f['band_energy'] for f in valid], dtype=float)
@@ -14768,12 +14866,13 @@ def _library_salience(features):
 
 def _library_shape(features, alpha=6.0):
     """
-    12-band tonal-shape profile of the library in dB-like space.
+    Per-band tonal-shape profile of the library in dB-like space.
     E_b → log → centre → normalise to [-1,1] → ×alpha.
+    Currently unused (kept for future weighting experiments).
     """
     import numpy as np
     valid = [f for f in features
-             if f.get('band_energy') and len(f['band_energy']) == 12]
+             if f.get('band_energy') and len(f['band_energy']) == N_PERC_BANDS]
     if not valid:
         return None
     E_b   = np.array([f['band_energy'] for f in valid], dtype=float).mean(axis=0)
@@ -14787,10 +14886,13 @@ def _library_shape(features, alpha=6.0):
 
 def _score_iem_17d(measurement, target_measurement=None):
     """
-    Score an IEM across all 17 perceptual dimensions on a 1–10 scale each.
+    Score an IEM across all 18 perceptual dimensions on a 1–10 scale each.
 
-    12 frequency-band scores: 10·exp(-0.08·|deviation_dB|)
+    13 frequency-band scores: 10·exp(-0.08·|deviation_dB|)
       — k=0.08: 0 dB→10, 3 dB→7.9, 6 dB→6.2, 10 dB→4.5, 15 dB→3.0
+    Both the IEM curve and the target are resampled onto a shared log-frequency
+    grid before band means, so band averages weight each octave evenly instead
+    of following the measurement's own point spacing.
 
     5 derived dimension scores computed from FR shape:
       sound_stage  — mids recession vs surrounding bands → clip(5+recession×0.5, 1,10)
@@ -14809,25 +14911,33 @@ def _score_iem_17d(measurement, target_measurement=None):
     if ref is not None:
         measurement = _shift(measurement, NORM_REF_DB - ref)
 
-    freqs = np.array([p[0] for p in measurement], dtype=float)
-    spls  = np.array([p[1] for p in measurement], dtype=float)
+    m_freqs = np.array([p[0] for p in measurement], dtype=float)
+    m_spls  = np.array([p[1] for p in measurement], dtype=float)
 
-    # Target: pre-compute band means and interpolated curve
-    t_freqs = t_spls_arr = None
-    target_band_mean = {}
+    # Shared log-frequency grid for all band means and derived dims
+    grid      = np.logspace(np.log10(20.0), np.log10(20000.0), 480)
+    log_grid  = np.log10(grid)
+    freqs     = grid
+    spls      = np.interp(log_grid, np.log10(m_freqs), m_spls)
+
+    # Target: resample onto the same grid (flat target = constant 75 dB line)
+    t_spls_arr = None
     if target_measurement and len(target_measurement) >= 50:
-        t_ref       = _spl_at_1khz(target_measurement)
-        t_meas      = _shift(target_measurement, NORM_REF_DB - t_ref) if t_ref is not None else target_measurement
-        t_freqs     = np.array([p[0] for p in t_meas], dtype=float)
-        t_spls_arr  = np.array([p[1] for p in t_meas], dtype=float)
-        for key, f_lo, f_hi, _ in _PERC_BANDS:
-            m = (t_freqs >= f_lo) & (t_freqs < f_hi)
-            target_band_mean[key] = float(t_spls_arr[m].mean()) if m.any() else NORM_REF_DB
-    else:
-        for key, *_ in _PERC_BANDS:
-            target_band_mean[key] = NORM_REF_DB
+        t_ref      = _spl_at_1khz(target_measurement)
+        t_meas     = _shift(target_measurement, NORM_REF_DB - t_ref) if t_ref is not None else target_measurement
+        t_f        = np.array([p[0] for p in t_meas], dtype=float)
+        t_s        = np.array([p[1] for p in t_meas], dtype=float)
+        t_spls_arr = np.interp(log_grid, np.log10(t_f), t_s)
 
-    # ── 12 frequency-band scores ──────────────────────────────────────────────
+    target_band_mean = {}
+    for key, f_lo, f_hi, _ in _PERC_BANDS:
+        if t_spls_arr is None:
+            target_band_mean[key] = NORM_REF_DB
+        else:
+            m = (freqs >= f_lo) & (freqs < f_hi)
+            target_band_mean[key] = float(t_spls_arr[m].mean()) if m.any() else NORM_REF_DB
+
+    # ── 13 frequency-band scores ──────────────────────────────────────────────
     k = 0.08
     scores, deviation = {}, {}
     for key, f_lo, f_hi, _ in _PERC_BANDS:
@@ -14847,8 +14957,8 @@ def _score_iem_17d(measurement, target_measurement=None):
     # ── Derived: Timbre / color ───────────────────────────────────────────────
     m_tc = (freqs >= 200) & (freqs < 6000)
     if m_tc.any():
-        ref_tc = (np.interp(freqs[m_tc], t_freqs, t_spls_arr)
-                  if t_freqs is not None else np.full(m_tc.sum(), NORM_REF_DB))
+        ref_tc = (t_spls_arr[m_tc]
+                  if t_spls_arr is not None else np.full(int(m_tc.sum()), NORM_REF_DB))
         scores['timbre_color'] = round(
             float(10.0 * np.exp(-0.05 * float(np.mean(np.abs(spls[m_tc] - ref_tc))))), 2)
     else:
@@ -14867,8 +14977,8 @@ def _score_iem_17d(measurement, target_measurement=None):
         if len(lv) >= 3 else 5.0)
 
     # ── Derived: Tonality ─────────────────────────────────────────────────────
-    ref_full = (np.interp(freqs, t_freqs, t_spls_arr)
-                if t_freqs is not None else np.full(len(freqs), NORM_REF_DB))
+    ref_full = (t_spls_arr
+                if t_spls_arr is not None else np.full(len(freqs), NORM_REF_DB))
     scores['tonality'] = round(
         float(10.0 * np.exp(-0.05 * float(np.mean(np.abs(spls - ref_full))))), 2)
 
@@ -14876,11 +14986,11 @@ def _score_iem_17d(measurement, target_measurement=None):
 
 
 def _iem_character_label(deviation):
-    """Human-readable tonal character from 12-band deviation dict."""
+    """Human-readable tonal character from the per-band deviation dict."""
     low_end  = (deviation.get('sub_bass', 0) + deviation.get('bass', 0)
                 + deviation.get('bass_feel', 0)) / 3
     body     = (deviation.get('lower_mids', 0) + deviation.get('note_weight', 0)) / 2
-    presence = deviation.get('upper_mids', 0)
+    presence = deviation.get('presence', deviation.get('upper_mids', 0))
     detail   = (deviation.get('detail', 0) + deviation.get('lower_treble', 0)) / 2
     air      = (deviation.get('upper_treble', 0) + deviation.get('texture', 0)) / 2
     tags = []
@@ -14904,8 +15014,9 @@ def _library_character_label(salience):
     return {
         'sub_bass':     'sub-bass heavy',   'bass':         'bass-driven',
         'bass_feel':    'warm and full',     'slam':         'punchy and dynamic',
-        'lower_mids':   'full lower midrange', 'upper_mids': 'presence-forward',
-        'note_weight':  'full-bodied',       'lower_treble': 'bright and detailed',
+        'lower_mids':   'full lower midrange', 'upper_mids': 'upper-mid focused',
+        'note_weight':  'full-bodied',       'presence':     'presence-forward',
+        'lower_treble': 'bright and detailed',
         'upper_treble': 'airy and extended', 'detail':       'detail-focused',
         'sibilance':    'treble-forward',    'texture':      'textured treble',
     }.get(top, 'balanced')
@@ -14996,48 +15107,70 @@ def _apply_peq(measurement, peq_profile, normalize=True):
 
 def _compute_genre_fingerprints(features, library_tracks):
     """
-    Group tracks by genre tag. Average + per-band-normalise 12-band energy.
-    Returns {slug: {genre, slug, track_count, fingerprint: {band: 0-1}}}
+    Group tracks by genre tag (folded through genre families so near-duplicate
+    tags like "Alt Rock" merge into their base genre) and build a per-band
+    fingerprint weight in [0, 1] for each genre.
+
+    Weight formula per band (log/loudness domain, referenced to the library
+    average so values stay stable when genres are added or removed):
+        loud  = clip((10·log10(E_gb) + 60) / 60, 0, 1)    absolute loudness
+        delta = 10·log10(E_gb / E_lib)                    genre emphasis, dB
+        w     = clip(loud · (1 + clip(delta/6, -0.5, 0.5)), 0, 1)
+
+    Multi-genre tracks contribute fractional weight (1/n per genre) so they no
+    longer double-count in track weighting; 'track_count' stays the distinct
+    track count for display, 'weight' carries the fractional sum for math.
+
+    Returns {slug: {genre, slug, track_count, weight, fingerprint: {band: 0-1}}}
     """
     import numpy as np
-    band_keys   = [b[0] for b in _PERC_BANDS]
-    id_to_genres = {
-        t['id']: _split_track_genres(t.get('genre')) or ['unknown']
-        for t in library_tracks
-    }
+    band_keys = [b[0] for b in _PERC_BANDS]
+    alias_to_base = _build_genre_lookup(load_genre_families())
 
-    genre_lists = {}
+    id_to_genres = {}
+    for t in library_tracks:
+        raw_genres = _split_track_genres(t.get('genre')) or ['unknown']
+        folded = []
+        for g in raw_genres:
+            base = alias_to_base.get(g, g)
+            if base not in folded:
+                folded.append(base)
+        id_to_genres[t['id']] = folded
+
+    genre_lists, genre_weights = {}, {}
+    lib_bands = []
     for f in features:
-        if f.get('failed') or not f.get('band_energy') or len(f['band_energy']) != 12:
+        if f.get('failed') or not f.get('band_energy') or len(f['band_energy']) != N_PERC_BANDS:
             continue
-        if f.get('analysis_version') != 3:
+        if f.get('analysis_version') != ANALYSIS_VERSION:
             continue
         genres = id_to_genres.get(f['track_id'], ['unknown'])
+        frac = 1.0 / len(genres)
+        lib_bands.append(f['band_energy'])
         for genre in genres:
             genre_lists.setdefault(genre, []).append(f['band_energy'])
+            genre_weights[genre] = genre_weights.get(genre, 0.0) + frac
 
     if not genre_lists:
         return {}
 
-    raw = {g: {'tc': len(bls), 'avg': np.array(bls).mean(axis=0)}
-           for g, bls in genre_lists.items()}
-
-    # Per-band min-max normalisation across genres
-    for b_i in range(len(band_keys)):
-        vals = [raw[g]['avg'][b_i] for g in raw]
-        mn, mx = min(vals), max(vals)
-        rng = mx - mn + 1e-12
-        for g in raw:
-            raw[g]['avg'][b_i] = (raw[g]['avg'][b_i] - mn) / rng
+    lib_avg = np.array(lib_bands, dtype=float).mean(axis=0)
 
     result = {}
-    for genre_key, data in raw.items():
+    for genre_key, bls in genre_lists.items():
+        avg   = np.array(bls, dtype=float).mean(axis=0)
+        loud  = np.clip((10.0 * np.log10(avg + 1e-9) + 60.0) / 60.0, 0.0, 1.0)
+        delta = 10.0 * np.log10((avg + 1e-9) / (lib_avg + 1e-9))
+        w     = np.clip(loud * (1.0 + np.clip(delta / 6.0, -0.5, 0.5)), 0.0, 1.0)
+
         genre = _genre_display_label(genre_key)
-        slug = re.sub(r'[^a-z0-9_-]', '_', genre_key.lower().strip())
+        slug  = re.sub(r'[^a-z0-9_-]', '_', genre_key.lower().strip())
         result[slug] = {
-            'genre': genre, 'slug': slug, 'track_count': data['tc'],
+            'genre': genre, 'slug': slug,
+            'track_count': len(bls),
+            'weight': round(float(genre_weights.get(genre_key, len(bls))), 3),
             'fingerprint': {k: round(float(v), 4)
-                            for k, v in zip(band_keys, data['avg'])},
+                            for k, v in zip(band_keys, w)},
         }
     return result
 
@@ -15047,23 +15180,30 @@ def _compute_genre_fingerprints(features, library_tracks):
 def _build_match_matrix(genre_fps, iem_profiles):
     """
     Compute IEM × genre match scores (0–100).
-    score(iem, genre) = Σ(energy[b] · iem_score[b]) / Σ(energy[b]) × 10
-    where energy[b] ∈ [0,1] and iem_score[b] ∈ [1,10].
+    score(iem, genre) = Σ(weight[b] · iem_score[b]) / Σ(weight[b]) × 10
+    over the non-overlapping _MATCH_CORE_BANDS only, where weight[b] ∈ [0,1]
+    and iem_score[b] ∈ [1,10]. Overlapping flavour bands stay out of the score
+    so bass/treble regions are not double-counted.
+    Genre weighting uses fractional per-track weights so multi-genre tracks
+    count once across the library.
     """
     import numpy as np
-    band_keys    = [b[0] for b in _PERC_BANDS]
-    total_tracks = sum(fp['track_count'] for fp in genre_fps.values())
+    core_keys    = _MATCH_CORE_BANDS
+    # Σ fp['weight'] equals the distinct analysed-track count (each track
+    # contributes exactly 1.0 split across its genres).
+    total_weight = sum(fp.get('weight', fp['track_count']) for fp in genre_fps.values())
+    total_tracks = int(round(total_weight))
 
     matrix = []
     iem_sw = {iem['id']: [] for iem in iem_profiles}   # [(score, weight)]
 
     for slug, fp in sorted(genre_fps.items(), key=lambda x: -x[1]['track_count']):
-        ge = np.array([fp['fingerprint'].get(k, 0.0) for k in band_keys])
+        ge = np.array([fp['fingerprint'].get(k, 0.0) for k in core_keys])
         te = ge.sum() + 1e-12
-        wt = fp['track_count'] / max(total_tracks, 1)
+        wt = fp.get('weight', fp['track_count']) / max(total_weight, 1e-9)
         matches = []
         for iem in iem_profiles:
-            is_ = np.array([iem['scores_12band'].get(k, 5.0) for k in band_keys])
+            is_ = np.array([iem['scores_12band'].get(k, 5.0) for k in core_keys])
             pct = round(min(float((ge * is_).sum() / te) * 10.0, 100.0), 1)
             if _MATCH_INCLUDE_DERIVED_PENALTY and iem.get('scores_all'):
                 d_scores = [iem['scores_all'].get(k, 5.0) for k in _DERIVED_DIMS]
@@ -15071,13 +15211,15 @@ def _build_match_matrix(genre_fps, iem_profiles):
                 # d_mean=10 → modifier 1.0 (no change); d_mean=1 → 0.92 (−8% max)
                 derived_modifier = 0.92 + (d_mean - 1.0) / 9.0 * 0.08
                 pct = round(min(pct * derived_modifier, 100.0), 1)
-            top = [band_keys[i] for i in np.argsort(-(ge * is_))[:3] if ge[i] > 0.1]
+            top = [core_keys[i] for i in np.argsort(-(ge * is_))[:3] if ge[i] > 0.1]
             matches.append({'iem_id': iem['id'], 'iem_name': iem['name'],
                             'score': pct, 'best_dimensions': top})
             iem_sw[iem['id']].append((pct, wt))
         matches.sort(key=lambda x: -x['score'])
         matrix.append({'genre': fp['genre'], 'slug': slug,
-                       'track_count': fp['track_count'], 'matches': matches})
+                       'track_count': fp['track_count'],
+                       'weight': fp.get('weight', fp['track_count']),
+                       'matches': matches})
 
     # IEM library-weighted summary
     iem_summary = []
@@ -15099,13 +15241,14 @@ def _build_match_matrix(genre_fps, iem_profiles):
         })
     iem_summary.sort(key=lambda x: -x['library_match_score'])
 
-    # Overall coverage %
-    cov_tracks = sum(
-        fp['track_count'] for slug, fp in genre_fps.items()
+    # Overall coverage % (fractional weights, so multi-genre tracks count once)
+    cov_weight = sum(
+        fp.get('weight', fp['track_count']) for slug, fp in genre_fps.items()
         if any(m['score'] >= 70 for r in matrix if r['slug'] == slug for m in r['matches'])
     )
+    cov_tracks = int(round(cov_weight))
     cov_threshold = 70
-    cov_pct = round(cov_tracks / max(total_tracks, 1) * 100, 1)
+    cov_pct = round(cov_weight / max(total_weight, 1e-9) * 100, 1)
 
     # Summary text
     good = [r['genre'] for r in matrix if max((m['score'] for m in r['matches']), default=0) >= 70]
@@ -15127,7 +15270,8 @@ def _build_match_matrix(genre_fps, iem_profiles):
         'sub_bass': 'strong sub-bass extension below 60 Hz',
         'bass': 'solid bass punch (60–120 Hz)',       'bass_feel': 'warmth (80–200 Hz)',
         'slam': 'transient attack / slam (80–150 Hz)', 'lower_mids': 'body (200–500 Hz)',
-        'upper_mids': 'presence (500 Hz–1.5 kHz)',    'note_weight': 'note weight (200 Hz–1 kHz)',
+        'upper_mids': 'upper-mid energy (500 Hz–1.5 kHz)', 'note_weight': 'note weight (200 Hz–1 kHz)',
+        'presence': 'presence and vocal clarity (1.5–3 kHz)',
         'lower_treble': 'lower treble bite (3–6 kHz)', 'upper_treble': 'upper treble air (6–20 kHz)',
         'detail': 'micro-detail (4–10 kHz)',           'sibilance': 'controlled sibilance (5–10 kHz)',
         'texture': 'surface texture (6–15 kHz)',
@@ -15138,8 +15282,8 @@ def _build_match_matrix(genre_fps, iem_profiles):
         bx = max(row['matches'], key=lambda m: m['score'], default=None)
         if bm < 65:
             fp      = genre_fps[row['slug']]
-            missing = [k for k in band_keys
-                       if fp['fingerprint'].get(k, 0) > 0.5
+            missing = [k for k in core_keys
+                       if fp['fingerprint'].get(k, 0) >= 0.65
                        and min((iem['scores_12band'].get(k, 5.0) for iem in iem_profiles),
                                default=5.0) < 6.0][:3]
             phrases = [_dphr[d] for d in missing if d in _dphr][:2]
@@ -15167,6 +15311,7 @@ def _build_match_matrix(genre_fps, iem_profiles):
         },
         'matrix': matrix, 'blindspots': blindspots, 'well_covered': well_covered,
         'band_labels': _ALL_DIM_LABELS, 'dim_keys': _ALL_DIM_KEYS,
+        'core_bands': _MATCH_CORE_BANDS,
     }
 
 
@@ -15188,7 +15333,12 @@ def _score_iem_peq_variants(iem, target_meas):
 
 
 def _load_match_data():
-    return _db.db_load_match_data()
+    data = _db.db_load_match_data()
+    # Payloads written by an older scoring pipeline are treated as absent so
+    # routes fall back to the "Run matching analysis first." prompt.
+    if data and data.get('matrix_version') != MATCH_MATRIX_VERSION:
+        return None
+    return data
 
 
 # ── API routes ────────────────────────────────────────────────────────────────
@@ -15219,10 +15369,10 @@ def insights_sonic_profile():
     sample  = _rnd.sample(valid, min(600, len(valid)))
     scatter = [{'x': round(f['brightness'], 0), 'y': round(f['energy'], 5)} for f in sample]
 
-    # 12-band energy profile (normalised to 0–1 relative to max band)
+    # Per-band energy profile (normalised to 0–1 relative to max band)
     valid12 = [f for f in features
-               if f.get('band_energy') and len(f['band_energy']) == 12
-               and f.get('analysis_version') == 3 and not f.get('failed')]
+               if f.get('band_energy') and len(f['band_energy']) == N_PERC_BANDS
+               and f.get('analysis_version') == ANALYSIS_VERSION and not f.get('failed')]
     band_profile = None
     if valid12:
         bm  = np.array([f['band_energy'] for f in valid12]).mean(axis=0)
@@ -15242,26 +15392,31 @@ def insights_sonic_profile():
 @app.route('/api/insights/matching/analyse', methods=['POST'])
 def insights_matching_analyse():
     """
-    Compute genre fingerprints + IEM 17-dim scores + match matrix.
+    Compute genre fingerprints + IEM 18-dim scores + match matrix.
     Fast (no audio I/O) — reads existing analysed track features + IEM FR curves.
     """
     features = _load_features()
     valid12  = [f for f in features
-                if f.get('band_energy') and len(f['band_energy']) == 12
-                and f.get('analysis_version') == 3 and not f.get('failed')]
+                if f.get('band_energy') and len(f['band_energy']) == N_PERC_BANDS
+                and f.get('analysis_version') == ANALYSIS_VERSION and not f.get('failed')]
     if not valid12:
-        return jsonify({'error': 'Run audio analysis first to generate 12-band track features.'}), 404
+        return jsonify({'error': 'Run audio analysis first to generate per-band track features.'}), 404
 
     body        = request.get_json(silent=True) or {}
-    target_id   = body.get('target', 'flat')
+    target_id   = body.get('target') or DEFAULT_MATCH_TARGET_ID
     target_meas = None
     baselines   = load_baselines()
-    if target_id != 'flat':
+    if target_id == 'flat':
+        pass
+    elif target_id in _BUILTIN_TARGETS:
+        target_meas = _builtin_target_measurement(target_id)
+    else:
         bl = next((b for b in baselines if b['id'] == target_id), None)
         if bl and bl.get('measurement'):
             target_meas = bl['measurement']
         else:
-            target_id = 'flat'
+            target_id   = DEFAULT_MATCH_TARGET_ID
+            target_meas = _builtin_target_measurement(target_id)
 
     iems = load_iems()
 
@@ -15283,11 +15438,12 @@ def insights_matching_analyse():
     matrix_data = _build_match_matrix(genre_fps, iem_profiles) if genre_fps else None
 
     out = {
-        'generated_at': int(time.time()),
-        'target_id':    target_id,
-        'genre_fps':    genre_fps,
-        'iem_profiles': iem_profiles,
-        'matrix_data':  matrix_data,
+        'generated_at':   int(time.time()),
+        'matrix_version': MATCH_MATRIX_VERSION,
+        'target_id':      target_id,
+        'genre_fps':      genre_fps,
+        'iem_profiles':   iem_profiles,
+        'matrix_data':    matrix_data,
     }
     try:
         _db.db_save_match_data(out)
@@ -15315,28 +15471,35 @@ def insights_matching_overview():
     # Compute these from matrix rows so overview messaging stays accurate.
     matrix_rows = md.get('matrix') or []
     threshold = int(lib_overview.get('coverage_threshold_pct') or 70)
-    total_tracks = sum(int(r.get('track_count') or 0) for r in matrix_rows)
-    covered_tracks = sum(
-        int(r.get('track_count') or 0)
+    def _row_weight(r):
+        w = r.get('weight')
+        return float(w) if w is not None else float(r.get('track_count') or 0)
+    total_weight = sum(_row_weight(r) for r in matrix_rows)
+    covered_weight = sum(
+        _row_weight(r)
         for r in matrix_rows
         if max((m.get('score', 0) for m in (r.get('matches') or [])), default=0) >= threshold
     )
-    coverage_pct = round(covered_tracks / max(total_tracks, 1) * 100, 1) if total_tracks > 0 else 0.0
+    total_tracks = int(round(total_weight))
+    covered_tracks = int(round(covered_weight))
+    coverage_pct = round(covered_weight / max(total_weight, 1e-9) * 100, 1) if total_weight > 0 else 0.0
 
     lib_overview['total_tracks'] = total_tracks
     lib_overview['covered_tracks'] = covered_tracks
     lib_overview['coverage_threshold_pct'] = threshold
     lib_overview['overall_coverage_pct'] = coverage_pct
 
-    # Build available targets: Flat/Neutral + any saved baselines
+    # Build available targets: built-ins + Flat/Neutral + any saved baselines
     bl = load_baselines()
-    available_targets = [{'id': 'flat', 'name': 'Flat / Neutral'}] + [
-        {'id': b['id'], 'name': b['name']} for b in bl
-    ]
+    available_targets = (
+        [{'id': tid, 'name': t['name']} for tid, t in _BUILTIN_TARGETS.items()]
+        + [{'id': 'flat', 'name': 'Flat / Neutral'}]
+        + [{'id': b['id'], 'name': b['name']} for b in bl]
+    )
     return jsonify({**lib_overview,
                     'band_labels':       md.get('band_labels', {}),
                     'generated_at':      data.get('generated_at'),
-                    'target_id':         data.get('target_id', 'flat'),
+                    'target_id':         data.get('target_id', DEFAULT_MATCH_TARGET_ID),
                     'available_targets': available_targets})
 
 
@@ -15351,7 +15514,8 @@ def insights_matching_matrix():
     matrix   = [dict(row, fingerprint=fps.get(row['slug'], {}).get('fingerprint', {}))
                 for row in md['matrix']]
     return jsonify({'matrix': matrix, 'band_labels': md['band_labels'],
-                    'dim_keys': md['dim_keys']})
+                    'dim_keys': md['dim_keys'],
+                    'core_bands': md.get('core_bands', _MATCH_CORE_BANDS)})
 
 
 @app.route('/api/insights/matching/recommend')
@@ -15421,10 +15585,13 @@ def insights_matching_genre_fingerprint(genre):
 @app.route('/api/insights/matching/targets')
 def insights_matching_targets():
     baselines  = load_baselines()
-    targets    = [{'id': 'flat', 'name': 'Flat / Neutral'}] + [
-        {'id': b['id'], 'name': b['name']} for b in baselines if b.get('measurement')]
+    targets    = (
+        [{'id': tid, 'name': t['name']} for tid, t in _BUILTIN_TARGETS.items()]
+        + [{'id': 'flat', 'name': 'Flat / Neutral'}]
+        + [{'id': b['id'], 'name': b['name']} for b in baselines if b.get('measurement')]
+    )
     data       = _load_match_data()
-    current_id = data.get('target_id', 'flat') if data else 'flat'
+    current_id = data.get('target_id', DEFAULT_MATCH_TARGET_ID) if data else DEFAULT_MATCH_TARGET_ID
     return jsonify({'targets': targets, 'current_target_id': current_id})
 
 

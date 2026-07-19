@@ -14381,6 +14381,29 @@ tr.player-active .track-title { color: var(--accent); }
 }
 .iemfit-reanalyse-btn:hover { color: var(--text-secondary); }
 
+/* Scoring target selector in the IEM Match header */
+.iemfit-target-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-right: 8px;
+  white-space: nowrap;
+}
+.iemfit-target-select {
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text-secondary);
+  background: var(--surface-4, #353534);
+  border: none;
+  border-radius: 99px;
+  padding: 5px 10px;
+  cursor: pointer;
+  max-width: 180px;
+}
+.iemfit-target-select:focus { outline: 1px solid rgba(173,198,255,0.4); }
+
 /* IEM score legend */
 .iemfit-score-legend {
   display: flex;

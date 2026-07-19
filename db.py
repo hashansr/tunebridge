@@ -53,7 +53,7 @@ def close_conn():
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -127,6 +127,8 @@ _MIGRATIONS: list[tuple] = [
         'CREATE INDEX IF NOT EXISTS idx_tracks_path ON tracks(path)',
         'CREATE INDEX IF NOT EXISTS idx_tag_history_batch ON tag_history(batch_id)',
     ]),
+    (17, 'Add tags_updated_at to tracks for tag-edit sync staleness detection',
+        ['ALTER TABLE tracks ADD COLUMN tags_updated_at INTEGER DEFAULT 0']),
 ]
 
 _SCHEMA_SQL = """
@@ -171,7 +173,8 @@ CREATE TABLE IF NOT EXISTS tracks (
     title_sort         TEXT,
     comment            TEXT,
     composer           TEXT,
-    compilation        INTEGER DEFAULT 0
+    compilation        INTEGER DEFAULT 0,
+    tags_updated_at    INTEGER DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_tracks_artist       ON tracks(artist COLLATE NOCASE);
@@ -677,8 +680,8 @@ def db_save_library(tracks):
            rg_track_gain, rg_album_gain, rg_track_peak, rg_album_peak,
            has_lyrics, lyric_path, lyrics_status, lyrics_fetched_at,
            artist_sort, album_sort, album_artist_sort, title_sort,
-           comment, composer, compilation)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           comment, composer, compilation, tags_updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 t['id'], t.get('path', ''), t.get('filename', ''),
@@ -700,6 +703,7 @@ def db_save_library(tracks):
                 t.get('album_artist_sort'), t.get('title_sort'),
                 t.get('comment'), t.get('composer'),
                 1 if str(t.get('compilation')).strip().lower() in ('1', 'true', 'yes', 'on') else 0,
+                int(t.get('tags_updated_at') or 0),
             )
             for t in tracks
         ]
@@ -2134,7 +2138,7 @@ def db_mark_batch_undone(batch_id: str):
     conn.commit()
 
 
-def db_update_track_tags(track_id, changes: dict):
+def db_update_track_tags(track_id, changes: dict, tags_updated_at: int = None):
     """Update specific tag fields in the tracks table. None values set the column to NULL (clear)."""
     allowed = {
         'title', 'artist', 'album_artist', 'album', 'track_number', 'disc_number',
@@ -2143,6 +2147,8 @@ def db_update_track_tags(track_id, changes: dict):
     }
     # Accept both explicit values and None (clear = set to NULL)
     clean = {k: v for k, v in changes.items() if k in allowed}
+    if tags_updated_at is not None:
+        clean['tags_updated_at'] = int(tags_updated_at or 0)
     if not clean:
         return
     if 'track_number' in clean:

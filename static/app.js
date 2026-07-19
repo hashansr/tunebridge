@@ -12179,6 +12179,7 @@ async function showDapDetail(id) {
   const syncState = String(summary.sync_status_state || 'estimated');
   const playlistOut = Number(summary.playlist_out_of_sync_count || (dap.stale_count || 0) + (dap.never_exported || 0));
   const songsToSync = Number(summary.music_out_of_sync_count || 0);
+  const tagsOut = Number(dap.tags_stale_count || summary.tags_out_of_sync_count || 0);
   const musicToAdd = Number(summary.music_to_add_count || 0);
   const musicToRemove = Number(summary.music_to_remove_count || 0);
   const hasDriveData = !!dap.mounted;
@@ -12240,6 +12241,7 @@ async function showDapDetail(id) {
           <div><label>Model</label><span>${esc(dap.model || 'generic')}</span></div>
           <div><label>Playlists out of sync</label><span class="${playlistOut ? 'warn' : ''}">${playlistOut}</span></div>
           <div><label>Music files out of sync</label><span>${songsToSync} <small>${musicToAdd} add · ${musicToRemove} remove</small></span></div>
+          <div><label>Tags changed since sync</label><span class="${tagsOut ? 'warn' : ''}">${tagsOut}</span></div>
           <div><label>Device space</label><span>${spaceFreeBytes == null ? 'Unavailable' : esc(_fmtBytes(spaceFreeBytes))}</span></div>
           <div><label>Required for add</label><span>${esc(_fmtBytes(Number(summary.space_required_bytes || 0)))}${Number(summary.space_shortfall_bytes || 0) > 0 ? ` <small class="warn">Short ${esc(_fmtBytes(Number(summary.space_shortfall_bytes || 0)))}</small>` : ''}</span></div>
         </div>
@@ -23174,7 +23176,7 @@ const _INSIGHTS_HELP = {
   gear: {
     title: 'IEM / Headphone Fit',
     body: `<p>Scores how well each IEM matches your library's tonal demands, measured against a chosen target curve.</p>
-           <p><strong>Scoring target:</strong> the FR curve each IEM is scored against. <em>Flat / Neutral</em> (default) = perfectly flat response. You can also pick any target you've added in Settings (e.g. Harman, Rtings) to score IEMs against a preferred tuning signature instead.</p>
+           <p><strong>Scoring target:</strong> the FR curve each IEM is scored against. <em>Harman IE 2019</em> (default) is the industry-standard in-ear reference with normal pinna gain and bass shelf. <em>Flat / Neutral</em> scores against a literally flat line, and you can also pick any target you've added in Settings (e.g. Rtings) to score IEMs against a preferred tuning signature instead.</p>
            <p><strong>Library character:</strong> which frequency bands your music exercises most (salience). Deviations from the target in heavily-used bands cost more points.</p>
            <p><strong>IEM Fit Score:</strong> 100% = matches the target exactly. Factory vs PEQ tabs let you compare the raw measurement against a PEQ-equalised version.</p>
            <p><strong>Band bars:</strong> deviation from the target at 0 dB centre. Left = recessed vs target; right = boosted vs target.</p>
@@ -23367,7 +23369,7 @@ function _renderInsightsSonicProfile(d) {
 
   const _sumBands = keys => keys.reduce((acc, k) => acc + Number((d.band_profile || {})[k] || 0), 0);
   const bassDemand   = _sumBands(['sub_bass', 'bass', 'bass_feel', 'slam']);
-  const midDemand    = _sumBands(['lower_mids', 'upper_mids', 'note_weight']);
+  const midDemand    = _sumBands(['lower_mids', 'upper_mids', 'note_weight', 'presence']);
   const trebleDemand = _sumBands(['lower_treble', 'upper_treble', 'detail', 'sibilance', 'texture']);
 
   const topBands = bandEntries.slice(0, 3).map(([k]) => bandLabels[k] || k).join(' · ');
@@ -23513,7 +23515,7 @@ function _renderInsightsSonicProfile(d) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 let _matchData      = null;   // cached full matrix response
-let _matchTarget    = 'flat'; // currently selected scoring target
+let _matchTarget    = 'harman_ie_2019'; // currently selected scoring target
 let _matchRadarChart = null;  // kept for compat
 let _matchRadarIems  = [];    // kept for compat
 
@@ -23557,10 +23559,17 @@ function _saveIemFitUiState() {
   } catch (_) {}
 }
 
-// ── Band keys (12 perceptual bands) ───────────────────────────────────────────
+// ── Band keys (13 perceptual bands) ───────────────────────────────────────────
 const _PERC_BAND_KEYS = [
   'sub_bass','bass','bass_feel','slam','lower_mids','upper_mids',
-  'note_weight','lower_treble','upper_treble','detail','sibilance','texture',
+  'note_weight','presence','lower_treble','upper_treble','detail','sibilance','texture',
+];
+
+// Non-overlapping core bands used for match scoring — mirrors backend
+// _MATCH_CORE_BANDS. Prefer the server-provided core_bands list when present.
+const _MATCH_CORE_BAND_KEYS_FE = [
+  'sub_bass','bass','bass_feel','lower_mids','upper_mids',
+  'presence','lower_treble','upper_treble',
 ];
 
 // Frequency ranges for each perceptual band — mirrors backend _PERC_BANDS exactly.
@@ -23573,6 +23582,7 @@ const _FR_BAND_RANGES = [
   { key: 'lower_mids',    f1: 200,  f2: 500   },
   { key: 'upper_mids',    f1: 500,  f2: 1500  },
   { key: 'note_weight',   f1: 200,  f2: 1000  },
+  { key: 'presence',      f1: 1500, f2: 3000  },
   { key: 'lower_treble',  f1: 3000, f2: 6000  },
   { key: 'upper_treble',  f1: 6000, f2: 20000 },
   { key: 'detail',        f1: 4000, f2: 10000 },
@@ -23586,8 +23596,8 @@ const _ALL_DIM_KEYS_FE = [
 const _ALL_DIM_LABELS_FE = {
   sub_bass: 'Sub Bass', bass: 'Bass', bass_feel: 'Bass Feel', slam: 'Slam',
   lower_mids: 'Low Mids', upper_mids: 'Upper Mids', note_weight: 'Note Weight',
-  lower_treble: 'Low Treble', upper_treble: 'Up Treble', detail: 'Detail',
-  sibilance: 'Sibilance', texture: 'Texture',
+  presence: 'Presence', lower_treble: 'Low Treble', upper_treble: 'Up Treble',
+  detail: 'Detail', sibilance: 'Sibilance', texture: 'Texture',
   sound_stage: 'Soundstage', timbre_color: 'Timbre', masking: 'Masking',
   layering: 'Layering', tonality: 'Tonality',
 };
@@ -23719,16 +23729,29 @@ function _buildCompactFRChart(canvas, curves, genreFingerprint = null, genreLabe
   });
 }
 
-// Recompute a genre match score for any set of 12-band IEM scores (e.g. PEQ variant)
-// fingerprint: {band: 0-1}  scores12: {band: 1-10}
+// Recompute a genre match score for any set of per-band IEM scores (e.g. PEQ variant).
+// Mirrors the server formula exactly: core bands only, then the derived-dimension
+// modifier when the five derived scores are present in scores12.
+// fingerprint: {band: 0-1}  scores12: {band/dim: 1-10}
+// Returns null when the fingerprint carries no core-band weight (caller falls
+// back to the factory score).
+const _DERIVED_DIM_KEYS_FE = ['sound_stage','timbre_color','masking','layering','tonality'];
 function _recomputeGenreScore(fingerprint, scores12) {
+  const coreKeys = _iemFitMatrixData?.core_bands || _MATCH_CORE_BAND_KEYS_FE;
   let sumEW = 0, sumE = 0;
-  for (const k of _PERC_BAND_KEYS) {
+  for (const k of coreKeys) {
     const e = fingerprint[k] ?? 0;
     sumEW += e * (scores12[k] ?? 5);
     sumE  += e;
   }
-  return sumE > 0 ? Math.min(sumEW / sumE * 10, 100) : 50;
+  if (sumE <= 0) return null;
+  let pct = Math.min(sumEW / sumE * 10, 100);
+  const derived = _DERIVED_DIM_KEYS_FE.map(k => scores12[k]).filter(v => Number.isFinite(v));
+  if (derived.length === _DERIVED_DIM_KEYS_FE.length) {
+    const dMean = derived.reduce((a, b) => a + b, 0) / derived.length;
+    pct = Math.min(pct * (0.92 + (dMean - 1) / 9 * 0.08), 100);
+  }
+  return pct;
 }
 
 // ── Score colour ──────────────────────────────────────────────────────────────
@@ -23741,15 +23764,20 @@ function _matchScoreBg(s) {
 
 function _computeIemAverageScore(iemId, peqScores12 = null) {
   if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) return null;
-  const scores = _iemFitMatrixData.matrix
-    .map(row => {
-      const factoryScore = ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null;
-      const peqScore = peqScores12 ? _recomputeGenreScore(row.fingerprint || {}, peqScores12) : null;
-      return peqScore !== null ? peqScore : factoryScore;
-    })
-    .filter(v => v !== null && Number.isFinite(v));
-  if (!scores.length) return null;
-  return scores.reduce((a, b) => a + b, 0) / scores.length;
+  // Weighted by each genre's fractional track weight — mirrors the server's
+  // library_match_score so the summary badge matches with PEQ off.
+  let sumSW = 0, sumW = 0;
+  for (const row of _iemFitMatrixData.matrix) {
+    const factoryScore = ((row.matches || []).find(m => m.iem_id === iemId) || {}).score ?? null;
+    const peqScore = peqScores12 ? _recomputeGenreScore(row.fingerprint || {}, peqScores12) : null;
+    const score = peqScore !== null ? peqScore : factoryScore;
+    if (score === null || !Number.isFinite(score)) continue;
+    const w = Number(row.weight ?? row.track_count) || 0;
+    sumSW += score * w;
+    sumW  += w;
+  }
+  if (sumW <= 0) return null;
+  return sumSW / sumW;
 }
 
 function _updateIemSummaryScore(iemId, peqScores12 = null) {
@@ -23809,11 +23837,22 @@ function _renderInsightsMatchOverview(d, errMsg) {
   if (!el) return;
   _loadIemFitUiState();
 
-  // Update section-header action button
+  // Sync target selection with what the server actually scored against
+  if (d && d.target_id) _matchTarget = d.target_id;
+
+  // Update section-header actions: target selector + analyse button
   const hdrActions = document.getElementById('iemfit-header-actions');
   if (hdrActions) {
+    const targets = (d && d.available_targets) || [];
+    const targetSel = targets.length
+      ? `<label class="iemfit-target-label">Target
+           <select class="iemfit-target-select" onchange="App.changeMatchTarget(this)">
+             ${targets.map(t => `<option value="${esc(t.id)}"${t.id === _matchTarget ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}
+           </select>
+         </label>`
+      : '';
     hdrActions.innerHTML = d
-      ? `<button class="insights-cta-btn iemfit-reanalyse-btn" onclick="App.runMatchingAnalysis()">Re-analyse</button>`
+      ? `${targetSel}<button class="insights-cta-btn iemfit-reanalyse-btn" onclick="App.runMatchingAnalysis()">Re-analyse</button>`
       : `<button class="insights-cta-btn btn-primary" onclick="App.runMatchingAnalysis()">Run Analysis</button>`;
   }
 
@@ -23826,7 +23865,7 @@ function _renderInsightsMatchOverview(d, errMsg) {
           </svg>
         </div>
         <div class="match-no-data-title">Run IEM Match Analysis</div>
-        <div class="match-no-data-desc">Scores each IEM against every genre in your library using 17 perceptual dimensions. Requires audio analysis to be completed first.${errMsg ? `<br><span style="color:var(--accent-secondary)">${esc(errMsg)}</span>` : ''}</div>
+        <div class="match-no-data-desc">Scores each IEM against every genre in your library using 18 perceptual dimensions. Requires audio analysis to be completed first.${errMsg ? `<br><span style="color:var(--accent-secondary)">${esc(errMsg)}</span>` : ''}</div>
       </div>`;
     return;
   }

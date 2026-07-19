@@ -300,6 +300,20 @@ Key findings:
 - **Effort estimate**: PoC 2–3 sessions; playlists + delta sync +3–4; transcoding pipeline +2–3; artwork +3–4; Sequoia workarounds unpredictable. Total: 10–15+ sessions for production quality.
 
 ## Last Updated
+2026-07-19 — IEM Match accuracy overhaul (analysis v4, 13 bands, Harman IE 2019 default target)
+
+- **Why**: TuneBridge match results disagreed with Hashan's outside IEM analysis (spreadsheet + squig.link reading). Root causes: a 1.5–3 kHz scoring gap (pinna-gain region unscored), a literal flat-75 dB default target that punished normal pinna gain, and band-overlap double-counting that over-weighted bass/treble.
+- **`presence` band added (1500–3000 Hz)** to `_PERC_BANDS` → 13 bands, 18 dimensions total. Closes the upper_mids→lower_treble gap exactly (no new overlap).
+- **`_MATCH_CORE_BANDS`** (8 non-overlapping bands: sub_bass, bass, bass_feel, lower_mids, upper_mids, presence, lower_treble, upper_treble) now used exclusively for fingerprint weighting + match scores. Flavour bands (slam, note_weight, detail, sibilance, texture) remain for radar/character display only.
+- **`ANALYSIS_VERSION = 4`**: true stereo downmix (`data.mean(axis=1)`, was left channel only) + 13-band energy. Invalidates all v3 cache; one-time full re-analysis required (~2 h for 5.2k tracks from external drive).
+- **`MATCH_MATRIX_VERSION = 2`**: `_load_match_data()` treats payloads with a different version as absent, so stale matrices never render.
+- **Harman IE 2019 built-in target** (`_HARMAN_IE_2019_POINTS`, id `harman_ie_2019`) is the default scoring target; transcribed from the squig.link-distributed Harman curve (verified ≤0.3 dB vs saved baseline over 200 Hz–8 kHz), with a gentle synthetic roll-off above 10 kHz replacing the coupler-resonance cliff. Flat + saved baselines remain selectable via a new Target dropdown in the IEM Match header.
+- **`_score_iem_17d`**: IEM + target now resampled onto a shared 480-point log grid before band means and derived dims (octave-even averaging instead of measurement-point-density weighting).
+- **Genre fingerprints rewritten**: genre-family folding applied (`_build_genre_lookup(load_genre_families())`); multi-genre tracks contribute fractional weight 1/n per genre (`weight` field alongside `track_count`); cross-genre min-max normalisation replaced with a stable log-loudness formula: `w = clip(loud·(1+clip(delta/6, ±0.5)), 0, 1)` where `loud = clip((10·log10(E)+60)/60, 0, 1)` and `delta = 10·log10(E_genre/E_library)`.
+- **Frontend mirrors server exactly**: `_recomputeGenreScore` uses core bands + derived modifier and returns null (not 50) on empty fingerprints; `_computeIemAverageScore` is weight-weighted like the server's `library_match_score`. Blindspot missing-dim threshold now `>= 0.65` on core bands.
+- **`_iem_character_label`** sources "forward presence" from the new presence band (previously misused upper_mids).
+- Restart note: port 5001 is usually served by the installed TuneBridge.app — `POST /api/restart` silently keeps old code there. To test Python changes, run a second instance: `TUNEBRIDGE_PORT=5011 python app.py` (SQLite is WAL so concurrent access is safe).
+
 2026-03-31 — Session 23: IEM Match module — full genre-matching, 17-dimension scoring, radar, heatmap, blindspot
 
 - **IEM Match replaces Gear Fit v2**: Complete rebuild of the Insights "Gear Fit" section into a genre-matching module serving three goals: (1) library coverage overview, (2) IEM recommender per genre, (3) blindspot detector.
