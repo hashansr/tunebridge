@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.564-rc.190726-1433 · 2026-07-19
 - Change: IEM Match accuracy overhaul: new Presence band (1.5-3 kHz) closes a scoring gap in the pinna-gain region, audio analysis now uses a true stereo downmix, match scores use non-overlapping core bands so bass and treble are no longer over-weighted, and genre fingerprints are computed in the loudness domain with genre-family consolidation. Requires a one-time library re-analysis.
 - Add: Harman IE 2019 built-in scoring target, now the default for IEM Match. A target selector in the IEM Match header switches between Harman, Flat, and any saved baselines.
 - Fix: PEQ-adjusted match scores shown in the UI now use the same formula as the server, so summary percentages match exactly.
