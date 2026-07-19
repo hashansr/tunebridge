@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.566-rc.190726-1512 · 2026-07-19
+
 ## v0.565-rc.190726-1507 · 2026-07-19
 - Add: DAP detail page now shows a count of tracks whose tags were edited locally since the last sync to that device, so tag changes made outside a full library rescan aren't missed.
 - Fix: IEM Match scores were unrealistically high across the board (every IEM showing 80%+ "strong fit" for every genre, with no real differentiation). The scoring curve is now steeper, so genuinely mismatched IEMs (e.g. bass-heavy sets against a mid-forward library) correctly score lower instead of blending into the same "strong fit" band as well-tuned ones.
