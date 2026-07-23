@@ -8970,7 +8970,7 @@ async function loadScanHistory() {
   </button>
   <div class="sh-prev-list" style="display:none">${prev.map(r => _shCard(r, false, false)).join('')}</div>` : '';
 
-  container.innerHTML = `<div class="sh-subhead">Scan history</div>${_shCard(latest, true, true)}${prevToggle}`;
+  container.innerHTML = `<div class="sh-subhead">Scan history</div>${_shCard(latest, true, false)}${prevToggle}`;
 }
 
 async function rescanClean() {
