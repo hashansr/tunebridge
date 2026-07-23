@@ -12,11 +12,21 @@ physical device attached. Mirrors the identity fields already used by
 the DAP feature's `_discover_mount_points()` / `_mac_mount_identity()`
 in app.py, so results compose cleanly with that existing pattern once
 a candidate iPod actually gets mounted.
+
+Detection tries `ioreg` first, `system_profiler` second. Verified
+against a real iPod Classic 5th Gen during Phase 0: in the sandboxed
+shell this was developed in, `system_profiler SPUSBDataType` silently
+returned an empty device list (exit 0, no error) even with the iPod
+connected — a sandbox restriction, not a real absence of the device.
+`ioreg -p IOUSB -l` was unaffected and found it correctly. Keeping
+both means the real (non-sandboxed) TuneBridge server process picks
+up whichever one macOS actually allows in a given context.
 """
 from __future__ import annotations
 
 import json
 import plistlib
+import re
 import subprocess
 import sys
 
@@ -52,17 +62,75 @@ def _walk_usb_tree(node, depth=0):
             yield from _walk_usb_tree(child, depth)
 
 
-def list_candidate_usb_ipods():
-    """Return Apple click-wheel iPods visible on the USB bus right now,
-    independent of whether they're currently mounted as a volume.
+def _list_candidate_usb_ipods_ioreg():
+    """Parse `ioreg -p IOUSB -l` text output for Apple iPod device nodes.
 
-    Each result: {name, vendor_id, product_id, serial_num, location_id}.
-    Empty list (not an exception) when nothing is connected or the
-    platform isn't macOS — this is a probe, not a hard requirement.
+    ioreg has no JSON mode worth relying on for this (`-a` plist output
+    omits some string properties in practice), so this is a small
+    line-based parser: find an `IOUSBHostDevice` node header, then
+    collect `"Key" = Value` properties until the block's closing brace.
     """
-    if sys.platform != 'darwin':
+    try:
+        proc = subprocess.run(
+            ['ioreg', '-p', 'IOUSB', '-l', '-w0'],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15,
+        )
+    except Exception:
         return []
 
+    if proc.returncode != 0 or not proc.stdout:
+        return []
+
+    lines = proc.stdout.splitlines()
+    candidates = []
+    i = 0
+    prop_re = re.compile(r'^\s*[|\s]*"([^"]+)"\s*=\s*(.*)$')
+    close_re = re.compile(r'^\s*[|\s]*\}\s*$')
+
+    while i < len(lines):
+        if '<class IOUSBHostDevice' in lines[i] or '<class IOUSBDevice' in lines[i]:
+            j = i + 1
+            # Skip forward to the opening '{' of this node's property block.
+            while j < len(lines) and '{' not in lines[j]:
+                j += 1
+                if j - i > 5:
+                    break
+            j += 1
+            props = {}
+            while j < len(lines) and not close_re.match(lines[j]):
+                m = prop_re.match(lines[j])
+                if m:
+                    key, val = m.group(1), m.group(2).strip()
+                    props[key] = val.strip('"')
+                j += 1
+            i = j
+
+            vendor_raw = props.get('idVendor', '')
+            try:
+                vendor_id = int(vendor_raw)
+            except ValueError:
+                vendor_id = None
+
+            product_name = props.get('USB Product Name') or props.get('kUSBProductString', '')
+
+            if vendor_id == APPLE_VENDOR_ID and _looks_like_clickwheel_ipod(product_name):
+                product_raw = props.get('idProduct', '')
+                candidates.append({
+                    'name': product_name,
+                    'vendor_id': hex(vendor_id),
+                    'product_id': hex(int(product_raw)) if product_raw.isdigit() else product_raw,
+                    'serial_num': props.get('USB Serial Number') or props.get('kUSBSerialNumberString', ''),
+                    'location_id': props.get('locationID', ''),
+                })
+        i += 1
+
+    return candidates
+
+
+def _list_candidate_usb_ipods_system_profiler():
     try:
         proc = subprocess.run(
             ['system_profiler', 'SPUSBDataType', '-json'],
@@ -109,6 +177,24 @@ def list_candidate_usb_ipods():
         })
 
     return candidates
+
+
+def list_candidate_usb_ipods():
+    """Return Apple click-wheel iPods visible on the USB bus right now,
+    independent of whether they're currently mounted as a volume.
+
+    Each result: {name, vendor_id, product_id, serial_num, location_id}.
+    Empty list (not an exception) when nothing is connected, the
+    platform isn't macOS, or both underlying tools are unavailable —
+    this is a probe, not a hard requirement.
+    """
+    if sys.platform != 'darwin':
+        return []
+
+    found = _list_candidate_usb_ipods_ioreg()
+    if found:
+        return found
+    return _list_candidate_usb_ipods_system_profiler()
 
 
 def diskutil_identity(mount_path: str) -> dict:
