@@ -12333,6 +12333,10 @@ async function ejectDap(dapId, name) {
     const d = await r.json();
     if (r.ok) {
       ejectToast.finish(`${name} ejected. Safe to remove.`, 'success');
+      btns.forEach(b => {
+        if (b.classList.contains('gear-icon-btn')) return;  // icon button: stays dimmed/disabled
+        b.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Ejected`;
+      });
       await loadDapsView();
       if (state.view === 'dap-detail') await showDapDetail(dapId);
     } else {
