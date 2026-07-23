@@ -16918,10 +16918,13 @@ async function loadSettings() {
   } catch (_) {}
 
   // Cover Flow toggle
-  // Migrate legacy coverflow_enabled setting into the layout prefs system
-  if (settings.coverflow_enabled && _collectionLayout('albums').mode !== 'coverflow') {
+  // One-time migration of the legacy coverflow_enabled flag into the layout prefs system.
+  // Only applies when collection_layout_prefs has never been saved — otherwise it would
+  // override the user's actual saved layout (e.g. grid) on every single app launch.
+  if (settings.coverflow_enabled && !settings.collection_layout_prefs) {
     state.collectionLayouts['albums'] = { ..._collectionLayout('albums'), mode: 'coverflow' };
     _syncCollectionLayoutControls('albums');
+    _queueSaveCollectionLayoutPrefs();
   }
 
   showSettingsCategory(_activeSettingsCategory || 'library');

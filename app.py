@@ -16724,6 +16724,10 @@ def _do_organizer_apply(plan, conflict_policy, run_id, mode='reorganize'):
                     new_track = scan_file(abs_dst)
                     if new_track:
                         with library_lock:
+                            # Overwriting an existing path reuses the same id
+                            # (md5 of relpath) — drop the stale entry first so
+                            # db_save_library() doesn't hit a duplicate PRIMARY KEY.
+                            library[:] = [t for t in library if t.get('id') != new_track['id']]
                             library.append(new_track)
                         _db.db_save_library(library)
                 except Exception as e:

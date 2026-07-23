@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Music import with "Overwrite existing" conflict handling no longer fails silently. The overwritten file's tags weren't being refreshed in the library because of an internal database conflict — the file itself was replaced on disk, but the catalogue entry stayed stale.
+- Fix: Albums view no longer forces itself back into Cover Flow on every app launch. A leftover one-time migration was re-applying an old Cover Flow flag on every startup, overriding your actual saved Grid/List preference each time.
 
 ## v0.566-rc.190726-1512 · 2026-07-19
 
