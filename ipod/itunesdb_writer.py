@@ -65,8 +65,51 @@ from iopenpod.itunesdb_writer.mhyp_writer import (  # noqa: E402
 )
 
 from .checksum import ChecksumType, checksum_type_for  # noqa: E402
+from .models import IpodPlaylist, IpodTrack  # noqa: E402
 
 DATABASE_VERSION_DEFAULT = 0x4F
+
+_WRITER_FILETYPE_EXTS = ('mp3', 'm4a', 'm4p', 'm4b', 'm4v', 'mp4', 'wav', 'aif', 'aiff', 'aac')
+
+
+def _short_filetype_from_path(device_path: str) -> str:
+    ext = device_path.rsplit('.', 1)[-1].lower() if '.' in device_path else 'm4a'
+    return ext if ext in _WRITER_FILETYPE_EXTS else 'm4a'
+
+
+def ipod_track_to_track_info(t: IpodTrack) -> TrackInfo:
+    """The single conversion path from a parsed IpodTrack to the TrackInfo
+    the writer needs — centralized here (not left as ad-hoc per-script
+    code) specifically because an early ad-hoc version of this exact
+    conversion silently dropped artwork_count/has_artwork/mhii_link/
+    sound_check/filetype_desc/comment on a real, live device before
+    that gap was caught. Every IpodTrack field that has a TrackInfo
+    counterpart must be wired through here — see
+    ipod/tests (or the Phase 2 field-diff check) for the fidelity net
+    that should catch a future omission before any live write.
+    """
+    return TrackInfo(
+        title=t.title or 'Untitled',
+        location=(':' + t.device_path.replace('/', ':')) if t.device_path else ':iPod_Control:Music:F00:UNKNOWN.m4a',
+        size=t.size_bytes, length=t.duration_ms,
+        filetype=_short_filetype_from_path(t.device_path or ''),
+        filetype_desc=t.filetype or None,
+        bitrate=t.bitrate, sample_rate=t.sample_rate or 44100,
+        artist=t.artist or None, album=t.album or None,
+        album_artist=t.album_artist or None, genre=t.genre or None,
+        composer=t.composer or None, comment=t.comment or None,
+        year=t.year, track_number=t.track_number, total_tracks=t.total_tracks,
+        disc_number=t.disc_number, total_discs=t.total_discs,
+        rating=t.rating, play_count=t.play_count,
+        date_added=t.date_added or 0, last_played=t.last_played,
+        db_track_id=t.track_id,
+        artwork_count=t.artwork_count, mhii_link=t.mhii_link,
+        sound_check=t.sound_check,
+    )
+
+
+def ipod_playlist_to_playlist_info(p: IpodPlaylist) -> PlaylistInfo:
+    return PlaylistInfo(name=p.name, track_ids=list(p.track_ids))
 
 
 # ── Small helpers ported from mhbd_writer.py (struct/zlib only, no

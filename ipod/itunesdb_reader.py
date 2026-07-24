@@ -48,6 +48,7 @@ MHOD_ALBUM = 3
 MHOD_ARTIST = 4
 MHOD_GENRE = 5
 MHOD_FILETYPE = 6
+MHOD_COMMENT = 8
 MHOD_COMPOSER = 12
 MHOD_ALBUM_ARTIST = 22
 
@@ -99,6 +100,11 @@ def _build_track(mhit: dict) -> IpodTrack | None:
         date_added=d.get('date_added', 0) or 0,
         last_played=d.get('last_played', 0) or 0,
         filetype=strings.get(MHOD_FILETYPE, ''),
+        comment=strings.get(MHOD_COMMENT, ''),
+        artwork_count=d.get('artwork_count', 0) or 0,
+        has_artwork=d.get('has_artwork', 0) or 0,
+        mhii_link=d.get('artwork_id_ref', 0) or 0,
+        sound_check=d.get('sound_check', 0) or 0,
     )
 
 

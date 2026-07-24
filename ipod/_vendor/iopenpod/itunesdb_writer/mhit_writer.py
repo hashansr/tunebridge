@@ -471,7 +471,13 @@ def write_mhit(track: TrackInfo, track_id: int, db_id_2: int = 0,
         # Extended fields
         'skip_count': _u32(track.skip_count),
         'last_skipped': _u32(track.last_skipped),
-        'has_artwork': 1 if _u16(track.artwork_count) > 0 else 2,
+        # TuneBridge patch (upstream iOpenPod only checks artwork_count):
+        # a real device library was found with 35/3286 tracks that have
+        # has_artwork=1 and artwork_id_ref (mhii_link) set to a real
+        # ArtworkDB entry, but artwork_count=0 - an artwork_count-only
+        # check silently flips these to "no artwork" on every rewrite,
+        # even though the ArtworkDB link itself is real and preserved.
+        'has_artwork': 1 if (_u16(track.artwork_count) > 0 or track.mhii_link) else 2,
         'skip_when_shuffling': 1 if _bool_flag(track.skip_when_shuffling) else 0,
         'remember_position': 1 if _bool_flag(track.remember_position) else 0,
         'use_podcast_now_playing_flag': _u8(track.podcast_flag),

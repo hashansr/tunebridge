@@ -33,6 +33,17 @@ class IpodTrack:
     date_added: int = 0            # unix timestamp
     last_played: int = 0           # unix timestamp
     filetype: str = ''             # e.g. "Apple Lossless audio file"
+    comment: str = ''
+    # Artwork/volume fields — small in count but near-universal on real
+    # libraries (confirmed 3,251/3,286 and 3,286/3,286 respectively on the
+    # Phase 2 test device). A round-trip that silently zeroes these is a
+    # real regression (lost art linkage, lost volume normalization), not
+    # cosmetic — found only by inspecting the live device after a write,
+    # not by the narrower title/count round-trip checks that came first.
+    artwork_count: int = 0
+    has_artwork: int = 0
+    mhii_link: int = 0              # raw field name: artwork_id_ref
+    sound_check: int = 0            # ReplayGain-derived volume normalization value
 
 
 @dataclass
