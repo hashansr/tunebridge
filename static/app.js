@@ -13063,6 +13063,19 @@ async function showIpodDetail(id) {
         </div>
       </details>
 
+      <section class="gd-section" id="ipod-sync-section">
+        <div class="gd-section-head">
+          <h2 class="title">Sync</h2>
+        </div>
+        <div class="gd-actions-row">
+          <button id="ipod-sync-check-btn" class="gd-btn" ${ipod.mounted && ipod.last_scanned_at ? `onclick="App.checkIpodSync('${ipod.id}')"` : 'disabled title="Scan the library above first"'}>
+            <span class="gd-btn-icon">${_STATUS_ICON_CHECK(false)}</span>Check for changes
+          </button>
+          <span class="gd-last-sync-inline" id="ipod-sync-status-line"></span>
+        </div>
+        <div id="ipod-sync-summary"></div>
+      </section>
+
       <section class="gd-section">
         <div class="gd-section-head">
           <h2 class="title">Playlists</h2>
@@ -13167,6 +13180,97 @@ async function _pollIpodScanStatus(id) {
   if (statusLine) statusLine.textContent = status.message || 'Scan complete';
   if (state.view === 'ipod-detail') showIpodDetail(id);
   loadIpodsView();
+}
+
+async function checkIpodSync(id) {
+  const btn = document.getElementById('ipod-sync-check-btn');
+  const statusLine = document.getElementById('ipod-sync-status-line');
+  if (btn) btn.disabled = true;
+  if (statusLine) statusLine.textContent = 'Comparing…';
+  document.getElementById('ipod-sync-summary').innerHTML = '';
+  try {
+    await api(`/ipods/${id}/sync/scan`, { method: 'POST' });
+  } catch (e) {
+    toast('Could not start sync check.');
+    if (btn) btn.disabled = false;
+    return;
+  }
+  _pollIpodSyncStatus(id);
+}
+
+async function _pollIpodSyncStatus(id) {
+  const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
+  const btn = document.getElementById('ipod-sync-check-btn');
+  const statusLine = document.getElementById('ipod-sync-status-line');
+  const summary = document.getElementById('ipod-sync-summary');
+  if (!status || status.ipod_id !== id) {
+    if (btn) btn.disabled = false;
+    return;
+  }
+  if (status.status === 'scanning') {
+    setTimeout(() => _pollIpodSyncStatus(id), 800);
+    return;
+  }
+  if (btn) btn.disabled = false;
+  if (status.status === 'error') {
+    if (statusLine) statusLine.textContent = '';
+    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.error || 'Sync check failed.')}</p>`;
+    return;
+  }
+  if (statusLine) statusLine.textContent = '';
+  const plan = status.plan || {};
+  if (!summary) return;
+  const nothingToDo = !plan.tracks_to_add_count && !plan.playlists_to_create_count && !plan.playlists_to_update?.length;
+  if (nothingToDo) {
+    summary.innerHTML = `<p class="muted" style="padding:8px 0">Up to date — ${plan.tracks_already_on_device || 0} tracks already on the device.</p>`;
+    return;
+  }
+  summary.innerHTML = `
+    <div class="gd-config-grid" style="margin-top:8px">
+      <div><label>Tracks to add</label><span>${plan.tracks_to_add_count || 0}</span></div>
+      <div><label>Already on device</label><span>${plan.tracks_already_on_device || 0}</span></div>
+      <div><label>Playlists to create</label><span>${plan.playlists_to_create_count || 0}</span></div>
+      <div><label>Playlists to update</label><span>${plan.playlists_to_update?.length || 0}</span></div>
+    </div>
+    <div class="gd-actions-row" style="margin-top:12px">
+      <button class="gd-btn primary" onclick="App.runIpodSync('${id}')">
+        <span class="gd-btn-icon">${_STATUS_ICON_CHECK(false)}</span>Sync now
+      </button>
+    </div>
+  `;
+}
+
+async function runIpodSync(id) {
+  const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
+  const trackIds = status?.plan?.tracks_to_add_ids || [];
+  if (!trackIds.length) { toast('Nothing to sync.'); return; }
+
+  const summary = document.getElementById('ipod-sync-summary');
+  if (summary) summary.innerHTML = '<div class="spinner-wrap" style="padding:12px 0"><div class="spinner"></div></div>';
+  try {
+    await api(`/ipods/${id}/sync/execute`, { method: 'POST', body: { track_ids: trackIds } });
+  } catch (e) {
+    toast('Could not start sync.');
+    return;
+  }
+  _pollIpodSyncExecute(id);
+}
+
+async function _pollIpodSyncExecute(id) {
+  const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
+  const summary = document.getElementById('ipod-sync-summary');
+  if (!status || status.ipod_id !== id) return;
+  if (status.status === 'copying') {
+    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.message || 'Syncing…')}</p>`;
+    setTimeout(() => _pollIpodSyncExecute(id), 800);
+    return;
+  }
+  if (status.status === 'error') {
+    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.error || 'Sync failed.')}</p>`;
+    return;
+  }
+  if (summary) summary.innerHTML = '<p class="muted" style="padding:8px 0">Sync complete.</p>';
+  if (state.view === 'ipod-detail') showIpodDetail(id);
 }
 
 async function showAddIpodModal() {
@@ -21855,6 +21959,8 @@ const App = {
   saveIpod,
   deleteIpod,
   scanIpod,
+  checkIpodSync,
+  runIpodSync,
   // IEM
   showIemDetail,
   showAddIemModal,
