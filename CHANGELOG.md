@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.569-dev.240726+32d54a6 · 2026-07-24
+
 ## v0.568 · 2026-07-24
 - Change: Settings → Scan history now always loads with the latest scan collapsed; click to expand.
 - Fix: Sync Music's eject button on the final step no longer gets stuck on "Ejecting…" after the device is safely ejected — it now shows "Ejected" once the eject completes.
