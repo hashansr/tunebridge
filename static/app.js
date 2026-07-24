@@ -8658,7 +8658,7 @@ function _pushToNavHistory() {
 }
 
 function _updateNavButtonStates() {
-  const syncBackSteps = [3, 5];
+  const syncBackSteps = [3, 5, 'ipod'];
   const inSyncBack = state.view === 'sync' && syncBackSteps.includes(_sw.step);
   const hasBack = _navHistory.length > 0 || inSyncBack;
   const backBtn = document.getElementById('nav-back-btn');
@@ -9625,7 +9625,7 @@ async function loadSyncView() {
   _sw = {
     step: 1, device: null, proposal: null, selection: {},
     filter: 'all', pages: {}, expanded: {},
-    scanPollTimer: null, syncPollTimer: null,
+    scanPollTimer: null, syncPollTimer: null, ipodPollTimer: null,
     scanStartTs: 0, syncStartTs: 0, logLines: [], syncResult: null,
     syncCompletedItems: [], syncLastProgress: 0, syncRateSamples: [],
     executedPayload: null,
@@ -9674,40 +9674,38 @@ async function loadSyncView() {
       if (!state.artists?.length) {
         state.artists = await api('/library/artists').catch(() => []);
       }
-      try {
-        const daps = await api('/daps');
-        _swRenderDeviceList(daps);
-      } catch (e) { _swRenderDeviceList([]); }
+      await _swLoadDeviceListsSilent();
       _swGoTo(3);
       _swBuildProposal(status);
       return;
     }
   } catch (_) {}
   // Idle / error / unknown — show device picker (step 1)
-  try {
-    const daps = await api('/daps');
-    _swRenderDeviceList(daps);
-  } catch (e) {
-    _swRenderDeviceList([]);
-  }
+  await _swLoadDeviceListsSilent();
   _swGoTo(1);
 }
 
 async function _swLoadDapListSilent() {
-  try {
-    const daps = await api('/daps');
-    _swRenderDeviceList(daps);
-  } catch (_) { _swRenderDeviceList([]); }
+  await _swLoadDeviceListsSilent();
+}
+
+async function _swLoadDeviceListsSilent() {
+  const [daps, ipods] = await Promise.all([
+    api('/daps').catch(() => []),
+    api('/ipods').catch(() => []),
+  ]);
+  _swRenderDeviceList(daps, ipods);
 }
 
 function _swClearTimers() {
   if (_sw.scanPollTimer) { clearInterval(_sw.scanPollTimer); _sw.scanPollTimer = null; }
   if (_sw.syncPollTimer) { clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null; }
+  if (_sw.ipodPollTimer) { clearTimeout(_sw.ipodPollTimer); _sw.ipodPollTimer = null; }
 }
 
 function _swGoTo(step) {
   _sw.step = step;
-  for (let i = 1; i <= 5; i++) {
+  for (const i of [1, 2, 3, 4, 5, 'ipod']) {
     const el = document.getElementById(`sw-step-${i}`);
     if (el) el.style.display = i === step ? '' : 'none';
   }
@@ -9719,9 +9717,12 @@ function _swGoTo(step) {
     activeEl.classList.add('sw-step-enter');
   }
   // Update step header
-  const meta = _SW_STEPS[step - 1];
+  const meta = step === 'ipod'
+    ? { title: `Sync — ${_sw.device?.name || 'iPod'}`, sub: '' }
+    : _SW_STEPS[step - 1];
   const el = n => document.getElementById(n);
-  el('sw-counter').textContent = `${step} / 5`;
+  el('sw-counter').textContent = step === 'ipod' ? '' : `${step} / 5`;
+  el('sw-counter').style.display = step === 'ipod' ? 'none' : '';
   el('sw-title').textContent = meta.title;
   const subEl = el('sw-step-sub');
   if (subEl) {
@@ -9739,6 +9740,7 @@ function _swGoTo(step) {
   if (step === 2) _swInitScanStep();
   if (step === 4) _swInitSyncStep();
   if (step === 5) _swRenderDone();
+  if (step === 'ipod') _swInitIpodStep();
 }
 
 function _swUpdateFooter(step) {
@@ -9756,16 +9758,17 @@ function _swUpdateFooter(step) {
     // 3: handled by _swUpdateReviewFooter after proposal is built
     4: 'Do not disconnect the device.',
     5: 'Safe to disconnect.',
+    ipod: 'Use Scan library and Check for changes above, then disconnect when finished.',
   };
   if (step !== 3) msgEl.textContent = msgs[step] ?? '';
 
   if (step === 5) statusEl.classList.add('sw-footer-status--success');
 
   // Cancel button
-  const cancelLabels = { 1: 'Cancel', 2: '', 3: 'Cancel', 4: '', 5: '' };
+  const cancelLabels = { 1: 'Cancel', 2: '', 3: 'Cancel', 4: '', 5: '', ipod: 'Change device' };
   cancelBtn.textContent = cancelLabels[step] || '';
   cancelBtn.disabled = false;
-  cancelBtn.style.display = (step === 1 || step === 3) ? '' : 'none';
+  cancelBtn.style.display = (step === 1 || step === 3 || step === 'ipod') ? '' : 'none';
   // Step 4 cancel calls swCancelSync, others call swCancel (via HTML onclick)
   if (step === 4) {
     cancelBtn.onclick = () => App.swCancelSync();
@@ -9780,6 +9783,7 @@ function _swUpdateFooter(step) {
     3: { label: 'Start sync', disabled: false, ghost: false },
     4: { label: 'Syncing…', disabled: true, ghost: true },
     5: { label: 'Done', disabled: false, ghost: false },
+    ipod: { label: 'Done', disabled: false, ghost: false },
   };
   const cfg = btnConfigs[step];
   primaryBtn.innerHTML = cfg.label;
@@ -9793,74 +9797,137 @@ function _swUpdateFooter(step) {
 
 /* ── Step 1: Device list ─────────────────────────────────── */
 
-function _swRenderDeviceList(daps) {
+function _swRenderDeviceList(daps, ipods = []) {
   const list = document.getElementById('sw-device-list');
   if (!list) return;
 
-  if (!daps.length) {
+  if (!daps.length && !ipods.length) {
     list.innerHTML = `<div class="sw-device-empty">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.3"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/></svg>
       <p>No devices configured.</p>
-      <p style="font-size:11px;margin-top:4px">Add a device in Gear to get started.</p>
+      <p style="font-size:11px;margin-top:4px">Add a DAP or iPod in Gear to get started.</p>
     </div>`;
     return;
   }
 
-  list.innerHTML = daps.map(dap => {
-    const connected = dap.mounted;
-    const connClass = connected ? 'sw-conn-chip--on' : 'sw-conn-chip--off';
-    const dotClass  = connected ? 'sw-conn-dot--on'  : 'sw-conn-dot--off';
-    const connText  = connected ? 'Connected' : 'Offline';
-    const lastSync = _fmtRelDate(dap.last_sync_at);
-    // Mini capacity bar (rough — we'll have real bytes after selecting)
-    const usedPct = (dap.space_used_gb && dap.space_total_gb)
-      ? Math.min(100, (dap.space_used_gb / dap.space_total_gb) * 100)
-      : 0;
-    const tight = usedPct > 95;
-    const fillClass = tight ? 'sw-mini-bar-fill--tight' : '';
-    const freeText = (dap.space_free_gb != null)
-      ? `${dap.space_free_gb.toFixed(1)} GB free`
-      : (connected ? '…' : '—');
+  const dapRows = daps.map(dap => _swDeviceRowHtml({
+    id: dap.id, type: 'dap', name: dap.name, connected: dap.mounted,
+  }));
+  const ipodRows = ipods.map(ipod => _swDeviceRowHtml({
+    id: ipod.id, type: 'ipod', name: ipod.name, connected: ipod.mounted,
+  }));
 
-    return `<button class="sw-device-row${connected ? '' : ''}" data-dap-id="${esc(dap.id)}"
-        onclick="App.swSelectDevice('${esc(dap.id)}')"
-        ${connected ? '' : 'disabled'}>
-      <div class="sw-device-icon">${_DAP_SVG_SMALL}</div>
-      <div class="sw-device-info">
-        <div class="sw-device-name">${esc(dap.name)}</div>
-        <div class="sw-conn-row">
-          <span class="sw-conn-chip ${connClass}">
-            <span class="sw-conn-dot ${dotClass}"></span>${connText}
-          </span>
-        </div>
+  const sections = [];
+  if (dapRows.length) sections.push(`<div class="sw-device-section-label">DAPs</div>${dapRows.join('')}`);
+  if (ipodRows.length) sections.push(`<div class="sw-device-section-label">iPods</div>${ipodRows.join('')}`);
+  list.innerHTML = sections.join('');
+}
+
+function _swDeviceRowHtml({ id, type, name, connected }) {
+  const connClass = connected ? 'sw-conn-chip--on' : 'sw-conn-chip--off';
+  const dotClass  = connected ? 'sw-conn-dot--on'  : 'sw-conn-dot--off';
+  const connText  = connected ? 'Connected' : 'Offline';
+  const icon = type === 'ipod' ? _IPOD_SVG_SMALL : _DAP_SVG_SMALL;
+
+  return `<button class="sw-device-row" data-dap-id="${esc(id)}" data-device-type="${type}"
+      onclick="App.swSelectDevice('${esc(id)}', '${type}')"
+      ${connected ? '' : 'disabled'}>
+    <div class="sw-device-icon">${icon}</div>
+    <div class="sw-device-info">
+      <div class="sw-device-name">${esc(name)}</div>
+      <div class="sw-conn-row">
+        <span class="sw-conn-chip ${connClass}">
+          <span class="sw-conn-dot ${dotClass}"></span>${connText}
+        </span>
       </div>
-      <div class="sw-device-radio"></div>
-    </button>`;
-  }).join('');
+    </div>
+    <div class="sw-device-radio"></div>
+  </button>`;
 }
 
 const _DAP_SVG_SMALL = `<span class="gear-mask-icon gear-mask-icon-dap" aria-hidden="true" style="width:20px;height:20px"></span>`;
+const _IPOD_SVG_SMALL = `<span class="gear-mask-icon gear-mask-icon-dap" aria-hidden="true" style="width:20px;height:20px"></span>`;
 
-async function swSelectDevice(dapId) {
+async function swSelectDevice(id, type = 'dap') {
   // Update row selection
   document.querySelectorAll('.sw-device-row').forEach(r => {
-    r.classList.toggle('sw-device-row--selected', r.dataset.dapId === dapId);
+    r.classList.toggle('sw-device-row--selected', r.dataset.dapId === id && r.dataset.deviceType === type);
   });
   // Enable primary button
   const btn = document.getElementById('sw-btn-primary');
   if (btn) { btn.disabled = false; btn.className = 'sw-btn sw-btn--primary'; }
+
+  if (type === 'ipod') {
+    try {
+      const ipod = await api(`/ipods/${id}`);
+      _sw.device = {
+        id: ipod.id, name: ipod.name, deviceType: 'ipod', mounted: ipod.mounted,
+        mount: ipod.active_mount_path, track_count: ipod.track_count,
+        playlist_count: ipod.playlist_count, last_scanned_at: ipod.last_scanned_at,
+      };
+      _swRenderIpodDetailPanel(ipod);
+    } catch (e) {
+      _sw.device = { id, name: 'iPod', deviceType: 'ipod' };
+      document.getElementById('sw-detail-empty').style.display = 'none';
+      document.getElementById('sw-detail-content').style.display = '';
+      document.getElementById('sw-detail-content').innerHTML = `<p style="color:var(--text-muted);font-size:13px">Could not load device details.</p>`;
+    }
+    if (btn) btn.innerHTML = 'Continue <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+    return;
+  }
+
   // Fetch detail for the panel
   try {
-    const dap = await api(`/daps/${dapId}`);
-    _sw.device = { id: dap.id, name: dap.name, mount: dap.active_mount_path || dap.mount_path,
+    const dap = await api(`/daps/${id}`);
+    _sw.device = { id: dap.id, name: dap.name, deviceType: 'dap', mount: dap.active_mount_path || dap.mount_path,
       capacity_bytes: dap.capacity_bytes, used_bytes: dap.used_bytes, last_sync_at: dap.last_sync_at };
     _swRenderDetailPanel(dap);
   } catch (e) {
-    _sw.device = { id: dapId, name: 'Device' };
+    _sw.device = { id, name: 'Device', deviceType: 'dap' };
     document.getElementById('sw-detail-empty').style.display = 'none';
     document.getElementById('sw-detail-content').style.display = '';
     document.getElementById('sw-detail-content').innerHTML = `<p style="color:var(--text-muted);font-size:13px">Could not load device details.</p>`;
   }
+  if (btn) btn.innerHTML = 'Scan device <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+}
+
+function _swRenderIpodDetailPanel(ipod) {
+  const empty = document.getElementById('sw-detail-empty');
+  const content = document.getElementById('sw-detail-content');
+  if (empty)   empty.style.display   = 'none';
+  if (content) content.style.display = '';
+
+  const mount = ipod.active_mount_path || '—';
+  const lastScanned = ipod.last_scanned_at ? _fmtRelDate(ipod.last_scanned_at) : 'Never';
+
+  content.innerHTML = `
+    <div class="sw-detail-hdr">
+      <div class="sw-detail-icon-tile">${_IPOD_SVG_SMALL}</div>
+      <div class="sw-detail-hdr-text">
+        <div class="sw-overline">TARGET DEVICE</div>
+        <p class="sw-detail-name">${esc(ipod.name)}</p>
+      </div>
+    </div>
+
+    <div class="sw-detail-meta-grid">
+      <div class="sw-detail-meta-cell">
+        <div class="sw-detail-meta-label">Mount</div>
+        <div class="sw-detail-meta-value" title="${esc(mount)}">${esc(mount)}</div>
+      </div>
+      <div class="sw-detail-meta-cell">
+        <div class="sw-detail-meta-label">Last scanned</div>
+        <div class="sw-detail-meta-value">${esc(lastScanned)}</div>
+      </div>
+      <div class="sw-detail-meta-cell">
+        <div class="sw-detail-meta-label">Tracks on device</div>
+        <div class="sw-detail-meta-value">${ipod.track_count ?? 0}</div>
+      </div>
+      <div class="sw-detail-meta-cell">
+        <div class="sw-detail-meta-label">Playlists on device</div>
+        <div class="sw-detail-meta-value">${ipod.playlist_count ?? 0}</div>
+      </div>
+    </div>
+  `;
 }
 
 function _swRenderDetailPanel(dap) {
@@ -9942,14 +10009,18 @@ function _swRenderDetailPanel(dap) {
 
 /* Primary action button dispatcher */
 function swPrimaryAction() {
-  const actions = { 1: swStartScan, 3: swStartSync, 5: swFinish };
+  if (_sw.step === 1 && _sw.device?.deviceType === 'ipod') {
+    _swGoTo('ipod');
+    return;
+  }
+  const actions = { 1: swStartScan, 3: swStartSync, 5: swFinish, ipod: swFinish };
   const fn = actions[_sw.step];
   if (fn) fn();
 }
 
 function swNavBack() {
-  // Back on step 3 or 5 → reset to step 1
-  if (_sw.step === 3 || _sw.step === 5) {
+  // Back on step 3, 5, or the iPod step → reset to step 1
+  if (_sw.step === 3 || _sw.step === 5 || _sw.step === 'ipod') {
     _swResetToStep1();
   }
   // Steps 2 and 4 are in-progress — back does nothing
@@ -13392,6 +13463,171 @@ async function _pollIpodSyncExecute(id) {
     toast(`${status.errors.length} song(s) failed and were skipped: ${names}${more}`);
   }
   if (state.view === 'ipod-detail') showIpodDetail(id);
+}
+
+/* ── Sync wizard iPod step ─────────────────────────────────
+   Thin, wizard-scoped duplicates of scanIpod/checkIpodSync/runIpodSync above.
+   Call the exact same /api/ipods/* routes at the same poll cadence, but render
+   into sw-ipod-* ids instead of the Gear → iPod detail page's ipod-* ids, since
+   both containers can exist in the DOM at once. The Gear detail page's own
+   functions are left completely untouched. */
+
+function _swInitIpodStep() {
+  const ipod = _sw.device;
+  if (!ipod || ipod.deviceType !== 'ipod') return;
+  const nameEl = document.getElementById('sw-ipod-device-name');
+  const scanBtn = document.getElementById('sw-ipod-scan-btn');
+  const scanStatus = document.getElementById('sw-ipod-scan-status');
+  const checkBtn = document.getElementById('sw-ipod-check-btn');
+  const syncStatus = document.getElementById('sw-ipod-sync-status');
+  const summary = document.getElementById('sw-ipod-sync-summary');
+  if (nameEl) nameEl.textContent = ipod.name || 'iPod';
+  if (scanBtn) { scanBtn.disabled = !ipod.mounted; scanBtn.title = ipod.mounted ? '' : 'Connect the iPod to scan it'; }
+  if (scanStatus) scanStatus.textContent = ipod.last_scanned_at ? `Last scanned ${esc(_fmtRelDate(ipod.last_scanned_at))}` : 'Not scanned yet';
+  if (checkBtn) { checkBtn.disabled = !(ipod.mounted && ipod.last_scanned_at); checkBtn.title = checkBtn.disabled ? 'Scan the library above first' : ''; }
+  if (syncStatus) syncStatus.textContent = '';
+  if (summary) summary.innerHTML = '';
+}
+
+async function swScanIpod() {
+  const id = _sw.device?.id;
+  if (!id) return;
+  const btn = document.getElementById('sw-ipod-scan-btn');
+  const statusLine = document.getElementById('sw-ipod-scan-status');
+  if (btn) btn.disabled = true;
+  if (statusLine) statusLine.textContent = 'Scanning…';
+  try {
+    await api(`/ipods/${id}/scan`, { method: 'POST' });
+  } catch (e) {
+    toast('Could not start scan.');
+    if (btn) btn.disabled = false;
+    return;
+  }
+  _swPollIpodScan(id);
+}
+
+async function _swPollIpodScan(id) {
+  const status = await api(`/ipods/${id}/status`).catch(() => null);
+  const btn = document.getElementById('sw-ipod-scan-btn');
+  const statusLine = document.getElementById('sw-ipod-scan-status');
+  const checkBtn = document.getElementById('sw-ipod-check-btn');
+  if (!status || status.ipod_id !== id) {
+    if (btn) btn.disabled = false;
+    return;
+  }
+  if (status.status === 'scanning') {
+    _sw.ipodPollTimer = setTimeout(() => _swPollIpodScan(id), 800);
+    return;
+  }
+  if (btn) btn.disabled = false;
+  if (status.status === 'error') {
+    toast(`Scan failed: ${status.error || 'unknown error'}`);
+    if (statusLine) statusLine.textContent = 'Scan failed';
+    return;
+  }
+  if (statusLine) statusLine.textContent = status.message || 'Scan complete';
+  if (_sw.device) _sw.device.last_scanned_at = Date.now() / 1000;
+  if (checkBtn) { checkBtn.disabled = false; checkBtn.title = ''; }
+}
+
+async function swCheckIpodSync() {
+  const id = _sw.device?.id;
+  if (!id) return;
+  const btn = document.getElementById('sw-ipod-check-btn');
+  const statusLine = document.getElementById('sw-ipod-sync-status');
+  const summary = document.getElementById('sw-ipod-sync-summary');
+  if (btn) btn.disabled = true;
+  if (statusLine) statusLine.textContent = 'Comparing…';
+  if (summary) summary.innerHTML = '';
+  try {
+    await api(`/ipods/${id}/sync/scan`, { method: 'POST' });
+  } catch (e) {
+    toast('Could not start sync check.');
+    if (btn) btn.disabled = false;
+    return;
+  }
+  _swPollIpodSyncCheck(id);
+}
+
+async function _swPollIpodSyncCheck(id) {
+  const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
+  const btn = document.getElementById('sw-ipod-check-btn');
+  const statusLine = document.getElementById('sw-ipod-sync-status');
+  const summary = document.getElementById('sw-ipod-sync-summary');
+  if (!status || status.ipod_id !== id) {
+    if (btn) btn.disabled = false;
+    return;
+  }
+  if (status.status === 'scanning') {
+    _sw.ipodPollTimer = setTimeout(() => _swPollIpodSyncCheck(id), 800);
+    return;
+  }
+  if (btn) btn.disabled = false;
+  if (status.status === 'error') {
+    if (statusLine) statusLine.textContent = '';
+    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.error || 'Sync check failed.')}</p>`;
+    return;
+  }
+  if (statusLine) statusLine.textContent = '';
+  const plan = status.plan || {};
+  if (!summary) return;
+  const nothingToDo = !plan.tracks_to_add_count && !plan.playlists_to_create_count && !plan.playlists_to_update?.length;
+  if (nothingToDo) {
+    summary.innerHTML = `<p class="muted" style="padding:8px 0">Up to date — ${plan.tracks_already_on_device || 0} tracks already on the device.</p>`;
+    return;
+  }
+  summary.innerHTML = `
+    <div class="gd-config-grid" style="margin-top:8px">
+      <div><label>Tracks to add</label><span>${plan.tracks_to_add_count || 0}</span></div>
+      <div><label>Already on device</label><span>${plan.tracks_already_on_device || 0}</span></div>
+      <div><label>Playlists to create</label><span>${plan.playlists_to_create_count || 0}</span></div>
+      <div><label>Playlists to update</label><span>${plan.playlists_to_update?.length || 0}</span></div>
+    </div>
+    <div class="gd-actions-row" style="margin-top:12px">
+      <button class="gd-btn primary" onclick="App.swRunIpodSync()">
+        <span class="gd-btn-icon">${_STATUS_ICON_CHECK(false)}</span>Sync now
+      </button>
+    </div>
+  `;
+}
+
+async function swRunIpodSync() {
+  const id = _sw.device?.id;
+  if (!id) return;
+  const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
+  const trackIds = status?.plan?.tracks_to_add_ids || [];
+  if (!trackIds.length) { toast('Nothing to sync.'); return; }
+
+  const summary = document.getElementById('sw-ipod-sync-summary');
+  if (summary) summary.innerHTML = '<div class="spinner-wrap" style="padding:12px 0"><div class="spinner"></div></div>';
+  try {
+    await api(`/ipods/${id}/sync/execute`, { method: 'POST', body: { track_ids: trackIds } });
+  } catch (e) {
+    toast('Could not start sync.');
+    return;
+  }
+  _swPollIpodSyncExecute(id);
+}
+
+async function _swPollIpodSyncExecute(id) {
+  const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
+  const summary = document.getElementById('sw-ipod-sync-summary');
+  if (!status || status.ipod_id !== id) return;
+  if (status.status === 'copying') {
+    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.message || 'Syncing…')}</p>`;
+    _sw.ipodPollTimer = setTimeout(() => _swPollIpodSyncExecute(id), 800);
+    return;
+  }
+  if (status.status === 'error') {
+    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.error || 'Sync failed.')}</p>`;
+    return;
+  }
+  if (summary) summary.innerHTML = '<p class="muted" style="padding:8px 0">Sync complete.</p>';
+  if (status.errors && status.errors.length) {
+    const names = status.errors.slice(0, 3).map(e => e.title).join(', ');
+    const more = status.errors.length > 3 ? ` and ${status.errors.length - 3} more` : '';
+    toast(`${status.errors.length} song(s) failed and were skipped: ${names}${more}`);
+  }
 }
 
 async function _pickTargetIpod() {
@@ -22153,6 +22389,9 @@ const App = {
   scanIpod,
   checkIpodSync,
   runIpodSync,
+  swScanIpod,
+  swCheckIpodSync,
+  swRunIpodSync,
   addSelectedToIpod,
   syncPlaylistToIpod,
   syncCurrentPlaylistToIpod,

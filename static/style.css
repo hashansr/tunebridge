@@ -20644,6 +20644,19 @@ body.is-col-resizing {
   gap: 6px;
 }
 
+.sw-device-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 10px 4px 2px;
+}
+
+.sw-device-section-label:first-child {
+  padding-top: 2px;
+}
+
 /* Device row button */
 .sw-device-row {
   display: grid;

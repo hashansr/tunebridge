@@ -254,7 +254,7 @@ Global `sync_state` dict tracks: `status` (idle/scanning/ready/copying/done/erro
 
 `walk_music_files(root)` — walks a directory, skips hidden/`._` files, returns sorted list of relative paths for all music file extensions.
 
-Sync button (⟳ arrows icon) in sidebar bottom bar opens `#sync-modal`. Device picker shows mount status (green "Connected" / grey "Not connected"). Scan phase shows animated progress bar. Preview phase shows two sections (copy to device ↑ / copy to local ↓) with scrollable checkbox lists — folder path in muted colour, filename in brighter. "Select all" toggle per section. Copy phase shows file-by-file progress. Done phase shows summary + any errors.
+Sync button (⟳ arrows icon) in sidebar bottom bar opens `#view-sync` — a full-page 5-step wizard (`_sw`/`sw*` functions in `static/app.js`), not the `#sync-modal` markup (that's dead/orphaned CSS from an earlier modal-based implementation). Step 1: device picker, categorised into "DAPs" and "iPods" sections, mount status shown as green "Connected" / grey "Offline" chips. Step 2: scanning with animated progress bar and live log. Step 3: review changes — filter chips + two sections (copy to device ↑ / copy to local ↓) with scrollable checkbox lists, folder path in muted colour, filename in brighter, "Select all" per section. Step 4: syncing with file-by-file progress. Step 5: done, showing summary + any errors. Selecting an iPod in Step 1 branches into a separate, lightweight `#sw-step-ipod` panel (thin wrapper around the existing iPod scan/check/sync actions, calling `/api/ipods/<id>/*` — see below) instead of steps 2-5.
 
 ## Git Workflow
 - Repo: `https://github.com/hashansr/tunebridge` (pushed, `main` branch)
@@ -284,12 +284,24 @@ Sync button (⟳ arrows icon) in sidebar bottom bar opens `#sync-modal`. Device 
 - [ ] Multiple library paths support
 - [ ] Playlist sharing / export to streaming services
 
-## Out of Scope — Researched & Decided Against
+## iPod Classic 5th Gen Sync — implemented (supersedes 2026-03-26 OOS decision)
 
-### iPod Classic 5th Gen Sync — OOS (researched 2026-03-26)
-Investigated feasibility of syncing music and playlists to an iPod Classic 5th Gen from TuneBridge. **Decision: too large and too complex, will not implement.**
+The 2026-03-26 decision below ("too large and too complex, will not implement") has been superseded: iPod sync was built across Phases 0–5 on `feature/ipod-sync` (22 commits) and verified against real iPod Classic 5th Gen hardware, including live iTunesDB writes and ArtworkDB writes. All the risks originally flagged turned out to be solvable:
 
-Key findings:
+- **Mounting**: works reliably against the test hardware/OS combination used for Phase 0's go/no-go gate.
+- **FLAC → ALAC transcoding**: implemented via `ipod/transcode.py`, shelling out to `ffmpeg`.
+- **Binary iTunesDB format**: `ipod/itunesdb_reader.py` / `ipod/itunesdb_writer.py` (built on a vendored subset of iOpenPod, `ipod/_vendor/iopenpod/`), including the scrambled-filename/F00–F49 staging logic (`_ipod_stage_device_path` in `app.py`).
+- **hash58 auth**: `ipod/_vendor/iopenpod/itunesdb_writer/hash58.py`; the test device used `hashing_scheme=0` so this path is implemented but not yet exercised against a scheme-1 device.
+- **ArtworkDB**: `ipod/artworkdb.py`, Phase 4.
+
+State: `ipods` table (SQLite) for registration/config, `ipod_tracks`/`ipod_playlists` for cached on-device listings, `ipod_itunesdb_backups` for pre-sync backups (auto-restorable). Routes under `/api/ipods*` (see `app.py`, search "Click-wheel iPods"). UI: Gear → iPods → detail page (`showIpodDetail()` in `static/app.js`) for full management (scan, config, backups, tracks, playlists), plus a lightweight `#sw-step-ipod` panel in the unified Sync wizard (`#view-sync`) for a quick scan/sync-now shortcut reachable from the same entry point as DAP sync.
+
+Deferred, not yet built: the richer iPod sync UX (accordion browse of on-device library, explicit add/remove selection, live space required/available/left calculation, combined removal+transcode+addition in one step) — would reuse `ipod/sync_planner.py::compute_sync_plan()` and the DAP wizard's Step 3 review-tree patterns.
+
+### Original OOS research (2026-03-26, historical — see above for current status)
+Investigated feasibility of syncing music and playlists to an iPod Classic 5th Gen from TuneBridge. At the time: too large and too complex, would not implement.
+
+Key findings from that research:
 - **Mounting risk**: macOS Sequoia 15.4.1+ broke iPod Classic USB disk mounting at the OS level. No app-level fix possible. Go/no-go depends entirely on whether the device mounts cleanly.
 - **No FLAC support**: iPod 5th Gen does not support FLAC. Entire library would need FLAC → ALAC transcoding via `ffmpeg` before each sync. Requires a transcoded file cache (gigabytes), invalidation logic, and re-transcode detection.
 - **Binary iTunesDB format**: Custom binary database (`iPod_Control/iTunes/iTunesDB`) with chunk-based tree structure (`mhbd/mhsd/mhlt/mhit/mhod`). Tracks stored with scrambled filenames across 50 subdirs (`F00`–`F49`). Must be read and rewritten on every sync.
