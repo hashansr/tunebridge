@@ -12268,8 +12268,13 @@ def ipod_sync_execute(iid):
     that verification is intentionally not bundled into this commit.
     """
     global ipod_sync_state
-    if ipod_sync_state.get('status') != 'ready' or ipod_sync_state.get('ipod_id') != iid:
-        return jsonify({'error': 'Run scan first'}), 400
+    # Deliberately does NOT require a prior scan/'ready' state: this route
+    # also serves explicit selections (bulk "Add to iPod", playlist sync,
+    # remove actions on the device-side lists) where the caller already
+    # knows exactly which ids they want acted on — only concurrent
+    # operations against the same device need blocking.
+    if ipod_sync_state.get('status') in ('scanning', 'copying') and ipod_sync_state.get('ipod_id') == iid:
+        return jsonify({'error': 'A sync operation is already in progress'}), 400
 
     data = request.json or {}
     add_track_ids = set(str(x) for x in (data.get('track_ids') or []))
@@ -12359,6 +12364,20 @@ def ipod_sync_execute(iid):
 
             transcode_cache_dir = DATA_DIR / 'ipod_transcode_cache'
 
+            def _as_int(val, default=0):
+                # The in-memory library cache stores some numeric tag
+                # fields (year/track_number/disc_number) as strings - found
+                # via a real crash: mixing those with the properly-typed
+                # ints from existing on-device tracks broke a sort deep in
+                # the album/artist index writer ("'<' not supported between
+                # instances of 'str' and 'int'"). The DB row itself is
+                # typed correctly; only the scanner's in-memory cache
+                # (`library`) is loose here.
+                try:
+                    return int(val)
+                except (TypeError, ValueError):
+                    return default
+
             music_base = get_music_base()
             local_id_to_db_track_id = {}
             total = len(add_track_ids)
@@ -12377,14 +12396,14 @@ def ipod_sync_execute(iid):
                 track_infos.append(TrackInfo(
                     title=t.get('title') or 'Untitled',
                     location=f':iPod_Control:Music:F00:{staged.name}',
-                    size=staged.stat().st_size, length=int((t.get('duration') or 0) * 1000),
+                    size=staged.stat().st_size, length=_as_int((t.get('duration') or 0)) * 1000,
                     filetype='m4a' if staged.suffix == '.m4a' else (staged.suffix.lstrip('.') or 'mp3'),
                     filetype_desc='Apple Lossless audio file' if staged.suffix == '.m4a' else None,
-                    bitrate=t.get('bitrate') or 0, sample_rate=44100,
+                    bitrate=_as_int(t.get('bitrate')), sample_rate=44100,
                     artist=t.get('artist') or None, album=t.get('album') or None,
                     album_artist=t.get('album_artist') or None, genre=t.get('genre') or None,
-                    track_number=t.get('track_number') or 0, disc_number=t.get('disc_number') or 1,
-                    total_discs=1, year=t.get('year') or 0,
+                    track_number=_as_int(t.get('track_number')), disc_number=_as_int(t.get('disc_number'), 1),
+                    total_discs=1, year=_as_int(t.get('year')),
                     date_added=int(time.time()), db_track_id=db_track_id,
                 ))
 

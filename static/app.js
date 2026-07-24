@@ -13092,7 +13092,7 @@ async function showIpodDetail(id) {
         <div class="dap-table-shell tb-table-shell">
           <div class="tb-table-scroll-area">
             <table class="dap-pl-table gd-playlist-table tb-table tb-table-density-compact">
-              <thead><tr><th>Title</th><th>Artist</th><th>Album</th><th>Genre</th><th>Format</th></tr></thead>
+              <thead><tr><th>Title</th><th>Artist</th><th>Album</th><th>Genre</th><th>Format</th><th></th></tr></thead>
               <tbody id="ipod-tracks-tbody"></tbody>
             </table>
           </div>
@@ -13119,6 +13119,9 @@ async function _loadIpodDetailData(id) {
           <div class="gear-row-name">${esc(p.name)}${p.is_master ? ' <span class="muted">(master)</span>' : ''}</div>
         </div>
         <div class="gear-row-status"><span class="gear-status-label gear-status-label--off">${(p.track_order || []).length} tracks</span></div>
+        <div class="gear-row-actions">
+          ${p.is_master ? '' : `<button class="gear-icon-btn" title="Remove from iPod" onclick="App.removeIpodPlaylist('${id}', '${p.device_playlist_id}', '${esc(p.name).replace(/'/g, "\\'")}')">${_GEAR_ICON_TRASH}</button>`}
+        </div>
       </div>`).join('') || '<p class="muted" style="padding:8px 0">No playlists.</p>';
   }
 
@@ -13131,10 +13134,11 @@ async function _loadIpodDetailData(id) {
         <td>${esc(t.album)}</td>
         <td>${esc(t.genre)}</td>
         <td>${esc(t.filetype)}</td>
+        <td><button class="gear-icon-btn" title="Remove from iPod" onclick="App.removeSelectedIpodTracks('${id}', ['${t.device_track_id}'])">${_GEAR_ICON_TRASH}</button></td>
       </tr>`).join('');
-    tbody.innerHTML = rows || '<tr><td colspan="5" class="muted">No tracks.</td></tr>';
+    tbody.innerHTML = rows || '<tr><td colspan="6" class="muted">No tracks.</td></tr>';
     if (tracks.length > 500) {
-      tbody.innerHTML += `<tr><td colspan="5" class="muted">…and ${tracks.length - 500} more.</td></tr>`;
+      tbody.innerHTML += `<tr><td colspan="6" class="muted">…and ${tracks.length - 500} more.</td></tr>`;
     }
   }
 }
@@ -13271,6 +13275,72 @@ async function _pollIpodSyncExecute(id) {
   }
   if (summary) summary.innerHTML = '<p class="muted" style="padding:8px 0">Sync complete.</p>';
   if (state.view === 'ipod-detail') showIpodDetail(id);
+}
+
+async function _pickTargetIpod() {
+  const ipods = await api('/ipods').catch(() => []);
+  if (!ipods.length) return null;
+  return ipods.find(i => i.mounted) || ipods[0];
+}
+
+async function _startIpodExecuteAndShow(ipodId, body, startMessage) {
+  await showIpodDetail(ipodId);
+  const summary = document.getElementById('ipod-sync-summary');
+  if (summary) summary.innerHTML = `<div class="spinner-wrap" style="padding:12px 0"><div class="spinner"></div></div>`;
+  try {
+    await api(`/ipods/${ipodId}/sync/execute`, { method: 'POST', body });
+  } catch (e) {
+    toast('Could not start sync.');
+    return;
+  }
+  toast(startMessage);
+  _pollIpodSyncExecute(ipodId);
+}
+
+async function addSelectedToIpod() {
+  const trackIds = [...state.selectedTrackIds];
+  if (!trackIds.length) return;
+  const target = await _pickTargetIpod();
+  if (!target) { toast('Add an iPod first (Gear → iPods).'); return; }
+  if (!target.mounted) { toast(`${target.name} isn't connected.`); return; }
+  const n = trackIds.length;
+  clearSelection();
+  await _startIpodExecuteAndShow(target.id, { track_ids: trackIds }, `Adding ${n} song${n === 1 ? '' : 's'} to ${target.name}…`);
+}
+
+async function syncPlaylistToIpod(playlistId, playlistName) {
+  const target = await _pickTargetIpod();
+  if (!target) { toast('Add an iPod first (Gear → iPods).'); return; }
+  if (!target.mounted) { toast(`${target.name} isn't connected.`); return; }
+  await _startIpodExecuteAndShow(target.id, { playlist_ids: [playlistId] }, `Syncing "${playlistName}" to ${target.name}…`);
+}
+
+function syncCurrentPlaylistToIpod() {
+  if (!state.playlist) return;
+  syncPlaylistToIpod(state.playlist.id, state.playlist.name);
+}
+
+async function removeSelectedIpodTracks(ipodId, deviceTrackIds) {
+  const n = deviceTrackIds.length;
+  const ok = await _showConfirm({
+    title: n === 1 ? 'Remove song from iPod' : `Remove ${n} songs from iPod`,
+    message: 'This removes the song(s) from the device the next time it syncs. Your local library is not affected.',
+    okText: 'Remove',
+    danger: true,
+  });
+  if (!ok) return;
+  await _startIpodExecuteAndShow(ipodId, { remove_track_ids: deviceTrackIds }, `Removing ${n} song${n === 1 ? '' : 's'}…`);
+}
+
+async function removeIpodPlaylist(ipodId, devicePlaylistId, name) {
+  const ok = await _showConfirm({
+    title: 'Remove playlist from iPod',
+    message: `"${name}" will be removed from the device. Its songs are not deleted, and your local library is not affected.`,
+    okText: 'Remove',
+    danger: true,
+  });
+  if (!ok) return;
+  await _startIpodExecuteAndShow(ipodId, { remove_playlist_ids: [devicePlaylistId] }, `Removing "${name}"…`);
 }
 
 async function showAddIpodModal() {
@@ -21961,6 +22031,11 @@ const App = {
   scanIpod,
   checkIpodSync,
   runIpodSync,
+  addSelectedToIpod,
+  syncPlaylistToIpod,
+  syncCurrentPlaylistToIpod,
+  removeSelectedIpodTracks,
+  removeIpodPlaylist,
   // IEM
   showIemDetail,
   showAddIemModal,
