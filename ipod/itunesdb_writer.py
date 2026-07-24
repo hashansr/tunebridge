@@ -22,6 +22,7 @@ this stays testable against a plain file path.
 """
 from __future__ import annotations
 
+import os
 import random
 import struct
 import sys
@@ -46,6 +47,7 @@ from iopenpod.itunesdb_writer.mhli_writer import write_mhli  # noqa: E402
 from iopenpod.itunesdb_writer.mhlp_writer import (  # noqa: E402
     write_mhlp_smart,
     write_mhlp_with_playlists,
+    write_mhlp_with_playlists_type3,
 )
 from iopenpod.itunesdb_writer.mhlt_writer import write_mhlt  # noqa: E402
 from iopenpod.itunesdb_writer.mhsd_writer import (  # noqa: E402
@@ -53,6 +55,7 @@ from iopenpod.itunesdb_writer.mhsd_writer import (  # noqa: E402
     write_mhsd_smart_type5,
     write_mhsd_type1,
     write_mhsd_type2,
+    write_mhsd_type3,
     write_mhsd_type4,
     write_mhsd_type8,
 )
@@ -119,6 +122,40 @@ def extract_mhsd_types_and_order(itdb_data: bytes) -> tuple[set, list]:
     return types, order
 
 
+def extract_preserved_mhsd_blobs(itdb_data: bytes) -> list[bytes]:
+    """Raw MHSD blobs for dataset types this writer doesn't generate
+    (everything except 1/2/3/4/5/6/8/10) - e.g. type 9, an opaque
+    iTunes/Genius blob observed on the real test device. Ported from
+    mhbd_writer.py::extract_preserved_mhsd_blobs(); struct-only, no
+    iopenpod.device dependency in the original body either.
+
+    Appending these verbatim after the generated datasets is what
+    closes the fidelity gap the Phase 2 round-trip proof flagged:
+    without this, a rewrite silently drops whatever iTunes-generated
+    data the device's firmware/companion app put there.
+    """
+    if len(itdb_data) < 24 or itdb_data[:4] != b'mhbd':
+        return []
+    header_length = struct.unpack('<I', itdb_data[4:8])[0]
+    itdb_data = _maybe_decompress_cdb(itdb_data)
+    children_count = struct.unpack('<I', itdb_data[0x14:0x18])[0]
+
+    generated_types = {1, 2, 3, 4, 5, 6, 8, 10}
+    blobs: list[bytes] = []
+    offset = header_length
+    for _ in range(children_count):
+        if offset + 16 > len(itdb_data):
+            break
+        if itdb_data[offset:offset + 4] != b'mhsd':
+            break
+        mhsd_total = struct.unpack('<I', itdb_data[offset + 8:offset + 12])[0]
+        mhsd_type = struct.unpack('<I', itdb_data[offset + 12:offset + 16])[0]
+        if mhsd_type not in generated_types:
+            blobs.append(bytes(itdb_data[offset:offset + mhsd_total]))
+        offset += mhsd_total
+    return blobs
+
+
 def generate_database_id() -> int:
     return random.getrandbits(64)
 
@@ -129,6 +166,7 @@ def build_itunesdb_bytes(
     reference_info: dict | None = None,
     ref_types: set | None = None,
     ref_order: list | None = None,
+    preserved_mhsd_blobs: list[bytes] | None = None,
     db_id: int | None = None,
     language: str = 'en',
     master_playlist_name: str = 'iPod',
@@ -210,18 +248,36 @@ def build_itunesdb_bytes(
     )
     mhsd_type2 = write_mhsd_type2(mhsd_type2_data)
 
+    # Type 3 (podcast-list mirror): no explicit podcast list is supported
+    # yet, so — matching write_mhbd()'s own default fallback — clone the
+    # same user playlists from type 2 into type 3. This is what closes
+    # the fidelity gap the first round-trip proof found: the real test
+    # device's file had a type-3 dataset and a rewrite that omitted it
+    # entirely was a structural difference from the original, even
+    # though no distinct podcast data was actually being lost.
+    track_album_map: dict = {}
+    for i, track in enumerate(tracks):
+        track_album_map[i + last_id + 1] = track.album or ''
+    mhsd_type3_data = write_mhlp_with_playlists_type3(
+        track_ids, playlists=remapped_playlists, db_id_2=db_id_2,
+        track_album_map=track_album_map, tracks=tracks, capabilities=None,
+        master_playlist_name=master_playlist_name,
+        next_mhip_id_start=next_track_id,
+        master_playlist_id=generate_playlist_id(),
+    )
+    mhsd_type3 = write_mhsd_type3(mhsd_type3_data)
+
     mhsd_type5 = write_mhsd_smart_type5(write_mhlp_smart([], db_id_2=db_id_2))
     mhsd_type6 = write_mhsd_empty_stub(6)
     mhsd_type10 = write_mhsd_empty_stub(10)
 
     type_to_data = {
-        1: mhsd_type1, 2: mhsd_type2, 4: mhsd_type4,
+        1: mhsd_type1, 2: mhsd_type2, 3: mhsd_type3, 4: mhsd_type4,
         5: mhsd_type5, 6: mhsd_type6, 8: mhsd_type8, 10: mhsd_type10,
     }
 
     # Preserve the reference database's dataset order/selection where we
-    # can (skips type 3/podcasts here — no podcast support in this pass),
-    # otherwise fall back to the libgpod-compatible default order.
+    # can, otherwise fall back to the libgpod-compatible default order.
     dataset_entries: list[tuple[int, bytes]] = []
     if ref_order:
         seen = set()
@@ -229,16 +285,23 @@ def build_itunesdb_bytes(
             if dtype in type_to_data and dtype not in seen and type_to_data[dtype]:
                 dataset_entries.append((dtype, type_to_data[dtype]))
                 seen.add(dtype)
-        for dtype in (1, 2, 4):
+        for dtype in (1, 3, 2, 4):
             if dtype not in seen:
                 dataset_entries.append((dtype, type_to_data[dtype]))
     else:
-        for dtype in (1, 2, 4, 8, 6, 10, 5):
+        for dtype in (1, 3, 2, 4, 8, 6, 10, 5):
             if type_to_data.get(dtype):
                 dataset_entries.append((dtype, type_to_data[dtype]))
 
     all_datasets = b''.join(data for _, data in dataset_entries)
     child_count = len(dataset_entries)
+
+    # Append preserved opaque blobs (e.g. type 9) verbatim, after the
+    # datasets we generate ourselves — same placement write_mhbd() uses.
+    for blob in (preserved_mhsd_blobs or []):
+        all_datasets += blob
+        child_count += 1
+
     total_length = MHBD_HEADER_SIZE + len(all_datasets)
 
     unk0x32 = b'\x00' * 20
@@ -308,6 +371,34 @@ def backup_itunesdb(itdb_path: str, backup_dir: Path) -> Path:
     with open(itdb_path, 'rb') as src, open(dest, 'wb') as out:
         out.write(src.read())
     return dest
+
+
+def write_ipod_itunesdb_atomic(itdb_path: str, itdb_bytes: bytes) -> None:
+    """Replace the on-device iTunesDB without ever leaving it truncated.
+
+    Writes to a temp file in the SAME directory (cross-filesystem
+    os.replace() isn't atomic - a temp file in TuneBridge's own local
+    temp dir would defeat the purpose), fsyncs it, then os.replace()s
+    it onto the real path. If anything is interrupted before the
+    replace - unplugged mid-write, app crash, power loss - the
+    original iTunesDB is untouched and only an orphaned temp file is
+    left behind, instead of a half-written, unreadable database.
+
+    Call backup_itunesdb() before this, not after - the whole point is
+    a known-good copy exists before the real file is touched at all.
+    """
+    itdb_path = Path(itdb_path)
+    tmp_path = itdb_path.with_name(f'.{itdb_path.name}.tunebridge-tmp')
+    try:
+        with open(tmp_path, 'wb') as f:
+            f.write(itdb_bytes)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, itdb_path)
+    except Exception:
+        if tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def apply_checksum(itdb_bytes: bytes, hashing_scheme: int, firewire_id: bytes | None) -> bytes:
