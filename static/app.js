@@ -8548,7 +8548,7 @@ async function openImportWizard() {
 
 function showViewEl(name) {
   closeLyricsView();
-  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync', 'search', 'organizer', 'help'];
+  const views = ['home', 'artists', 'albums', 'tracks', 'songs', 'favourites', 'fav-artists', 'fav-albums', 'fav-songs', 'playlist', 'gear', 'dap-detail', 'ipod-detail', 'iem-detail', 'settings', 'playlists', 'insights', 'library-coverage', 'missing-tags', 'history', 'duplicates', 'sync', 'search', 'organizer', 'help'];
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
     if (!el) return;
@@ -8583,6 +8583,7 @@ function setActiveNav(view) {
   const NAV_MAP = {
     'tracks': 'artists',
     'dap-detail': 'gear',
+    'ipod-detail': 'gear',
     'iem-detail': 'gear',
     'playlist': 'playlists',
     'fav-artists': 'favourites',
@@ -11983,7 +11984,7 @@ function _toggleCompareDataset(idx) {
 }
 
 async function loadGearView() {
-  await Promise.all([loadDapsView(), loadIemsView()]);
+  await Promise.all([loadDapsView(), loadIpodsView(), loadIemsView()]);
 }
 
 let _gearPlaylistsCache = { ts: 0, data: null };
@@ -12967,6 +12968,271 @@ async function deleteDap(id) {
   await api(`/daps/${id}`, { method: 'DELETE' });
   refreshSidebarSyncIndicator();
   showView('gear');
+}
+
+/* ── iPod management (feature/ipod-sync branch — Phase 1: read-only) ──
+ * Deliberately its own block, not folded into DAP management above:
+ * iPods have no path templates/export folders/PEQ settings to configure
+ * (nothing is written yet), and the "add" flow is "pick an already-
+ * mounted device" rather than "type in a mount path" — different enough
+ * to not share the DAP modal's form logic, even though it reuses the
+ * same CSS classes and .gear-row list pattern.
+ */
+
+const _IPOD_SVG = `<span class="gear-mask-icon gear-mask-icon-dap" aria-hidden="true"></span>`;
+let _ipodMountCandidates = [];
+
+async function loadIpodsView() {
+  const grid = document.getElementById('ipods-grid');
+  const empty = document.getElementById('ipods-empty');
+  if (!grid) return;
+  grid.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
+  const ipods = await api('/ipods').catch(() => []);
+  if (!ipods.length) { grid.innerHTML = ''; empty.style.display = 'flex'; return; }
+  empty.style.display = 'none';
+
+  grid.innerHTML = ipods.map(ip => {
+    const connOn = !!ip.mounted;
+    const connDot = connOn ? 'gear-dot--on' : 'gear-dot--off';
+    const connLbl = connOn ? 'gear-status-label--on' : 'gear-status-label--off';
+    const connTxt = connOn ? 'Connected' : 'Not connected';
+    const scanTxt = ip.last_scanned_at ? `${ip.track_count} tracks, ${ip.playlist_count} playlists` : 'Not scanned yet';
+    return `
+    <div class="gear-row gear-row-dap" onclick="App.showIpodDetail('${ip.id}')">
+      <span class="gear-row-icon">${_IPOD_SVG}</span>
+      <div class="gear-row-info">
+        <div class="gear-row-name">${esc(ip.name)}</div>
+        <div class="gear-row-sub">Click-wheel iPod</div>
+      </div>
+      <div class="gear-row-status">
+        ${connOn ? `<span class="gear-status-dot ${connDot}"></span>` : _STATUS_ICON_NOT_CONNECTED}
+        <span class="gear-status-label ${connLbl}">${connTxt}</span>
+      </div>
+      <div class="gear-row-status">
+        <span class="gear-status-label gear-status-label--off">${esc(scanTxt)}</span>
+      </div>
+      <div class="gear-row-actions" onclick="event.stopPropagation()">
+        <button class="gear-icon-btn" title="Delete" onclick="App.deleteIpod('${ip.id}')">${_GEAR_ICON_TRASH}</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function showIpodDetail(id) {
+  _pushToNavHistory();
+  state.view = 'ipod-detail';
+  clearSelection();
+  setActiveNav('gear');
+  showViewEl('ipod-detail');
+
+  const content = document.getElementById('ipod-detail-content');
+  content.innerHTML = '<div class="spinner-wrap" style="padding:24px 0"><div class="spinner"></div></div>';
+
+  const ipod = await api(`/ipods/${id}`);
+  const navRight = document.getElementById('main-nav-right');
+  if (navRight) {
+    navRight.innerHTML = `<button class="gd-icon-btn danger" onclick="App.deleteIpod('${ipod.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>`;
+  }
+
+  content.innerHTML = `
+    <div class="gear-detail-page dap-detail-v2">
+      <div class="gd-identity">
+        <div class="gd-badge-tile">${_IPOD_SVG}</div>
+        <div class="gd-id-text">
+          <h1>${esc(ipod.name)}</h1>
+          <div class="gd-id-sub">${esc(ipod.mounted ? (ipod.active_mount_path || 'Connected') : 'Not connected')}</div>
+        </div>
+      </div>
+
+      <div class="gd-actions-row">
+        <button id="ipod-scan-btn" class="gd-btn primary" ${ipod.mounted ? `onclick="App.scanIpod('${ipod.id}')"` : 'disabled title="Connect the iPod to scan it"'}>
+          <span class="gd-btn-icon">${_STATUS_ICON_CHECK(false)}</span>Scan library
+        </button>
+        <span class="gd-last-sync-inline" id="ipod-scan-status-line">${ipod.last_scanned_at ? `Last scanned ${esc(_fmtRelDate(ipod.last_scanned_at))}` : 'Not scanned yet'}</span>
+      </div>
+
+      <details class="gd-section gd-config">
+        <summary><span>Configuration</span><span class="gd-chevron" aria-hidden="true"></span></summary>
+        <div class="gd-config-grid">
+          <div><label>Mount path</label><span>${esc(ipod.active_mount_path || '—')}</span></div>
+          <div><label>Device class</label><span>${esc(ipod.device_class || 'Unknown')}</span></div>
+          <div><label>Database format</label><span>${esc(ipod.db_variant || 'itunesdb')}</span></div>
+          <div><label>Checksum scheme</label><span>${esc(_ipodChecksumLabel(ipod.hashing_scheme))}</span></div>
+          <div><label>Tracks on device</label><span>${ipod.track_count}</span></div>
+          <div><label>Playlists on device</label><span>${ipod.playlist_count}</span></div>
+        </div>
+      </details>
+
+      <section class="gd-section">
+        <div class="gd-section-head">
+          <h2 class="title">Playlists</h2>
+          <span class="count">· ${ipod.playlist_count} playlist${ipod.playlist_count === 1 ? '' : 's'}</span>
+        </div>
+        <div id="ipod-playlists-list" class="gear-list"></div>
+      </section>
+
+      <section class="gd-section">
+        <div class="gd-section-head">
+          <h2 class="title">Tracks</h2>
+          <span class="count">· ${ipod.track_count} track${ipod.track_count === 1 ? '' : 's'}</span>
+        </div>
+        <div class="dap-table-shell tb-table-shell">
+          <div class="tb-table-scroll-area">
+            <table class="dap-pl-table gd-playlist-table tb-table tb-table-density-compact">
+              <thead><tr><th>Title</th><th>Artist</th><th>Album</th><th>Genre</th><th>Format</th></tr></thead>
+              <tbody id="ipod-tracks-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  `;
+
+  if (ipod.track_count > 0) _loadIpodDetailData(id);
+}
+
+async function _loadIpodDetailData(id) {
+  const [tracks, playlists] = await Promise.all([
+    api(`/ipods/${id}/tracks`).catch(() => []),
+    api(`/ipods/${id}/playlists`).catch(() => []),
+  ]);
+
+  const plList = document.getElementById('ipod-playlists-list');
+  if (plList) {
+    plList.innerHTML = playlists.map(p => `
+      <div class="gear-row">
+        <span class="gear-row-icon">${_GEAR_ICON_PLAYLIST}</span>
+        <div class="gear-row-info">
+          <div class="gear-row-name">${esc(p.name)}${p.is_master ? ' <span class="muted">(master)</span>' : ''}</div>
+        </div>
+        <div class="gear-row-status"><span class="gear-status-label gear-status-label--off">${(p.track_order || []).length} tracks</span></div>
+      </div>`).join('') || '<p class="muted" style="padding:8px 0">No playlists.</p>';
+  }
+
+  const tbody = document.getElementById('ipod-tracks-tbody');
+  if (tbody) {
+    const rows = tracks.slice(0, 500).map(t => `
+      <tr>
+        <td>${esc(t.title)}</td>
+        <td>${esc(t.artist)}</td>
+        <td>${esc(t.album)}</td>
+        <td>${esc(t.genre)}</td>
+        <td>${esc(t.filetype)}</td>
+      </tr>`).join('');
+    tbody.innerHTML = rows || '<tr><td colspan="5" class="muted">No tracks.</td></tr>';
+    if (tracks.length > 500) {
+      tbody.innerHTML += `<tr><td colspan="5" class="muted">…and ${tracks.length - 500} more.</td></tr>`;
+    }
+  }
+}
+
+function _ipodChecksumLabel(scheme) {
+  const map = { 0: 'None (pre-2007 iPod)', 1: 'HASH58', 2: 'HASH72', 4: 'HASHAB' };
+  return map[scheme] ?? 'Unknown';
+}
+
+async function scanIpod(id) {
+  const btn = document.getElementById('ipod-scan-btn');
+  const statusLine = document.getElementById('ipod-scan-status-line');
+  if (btn) btn.disabled = true;
+  if (statusLine) statusLine.textContent = 'Scanning…';
+  try {
+    await api(`/ipods/${id}/scan`, { method: 'POST' });
+  } catch (e) {
+    toast('Could not start scan.');
+    if (btn) btn.disabled = false;
+    return;
+  }
+  _pollIpodScanStatus(id);
+}
+
+async function _pollIpodScanStatus(id) {
+  const status = await api(`/ipods/${id}/status`).catch(() => null);
+  const btn = document.getElementById('ipod-scan-btn');
+  const statusLine = document.getElementById('ipod-scan-status-line');
+  if (!status || status.ipod_id !== id) {
+    if (btn) btn.disabled = false;
+    return;
+  }
+  if (status.status === 'scanning') {
+    setTimeout(() => _pollIpodScanStatus(id), 800);
+    return;
+  }
+  if (btn) btn.disabled = false;
+  if (status.status === 'error') {
+    toast(`Scan failed: ${status.error || 'unknown error'}`);
+    if (statusLine) statusLine.textContent = 'Scan failed';
+    return;
+  }
+  if (statusLine) statusLine.textContent = status.message || 'Scan complete';
+  if (state.view === 'ipod-detail') showIpodDetail(id);
+  loadIpodsView();
+}
+
+async function showAddIpodModal() {
+  document.getElementById('ipod-name').value = '';
+  document.getElementById('ipod-save-btn').disabled = true;
+  const sel = document.getElementById('ipod-mount-select');
+  sel.innerHTML = '<option value="">Detecting connected iPods…</option>';
+  document.getElementById('ipod-modal').style.display = 'flex';
+
+  const { mounts } = await api('/ipods/mounts').catch(() => ({ mounts: [] }));
+  _ipodMountCandidates = mounts || [];
+  if (!_ipodMountCandidates.length) {
+    sel.innerHTML = '<option value="">No mounted iPods found</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">Select a device…</option>' +
+    _ipodMountCandidates.map((m, i) => `<option value="${i}">${esc(m.label || m.path)}</option>`).join('');
+}
+
+function onIpodMountSelect(idx) {
+  const saveBtn = document.getElementById('ipod-save-btn');
+  const nameInput = document.getElementById('ipod-name');
+  if (idx === '') { saveBtn.disabled = true; return; }
+  const m = _ipodMountCandidates[Number(idx)];
+  if (!m) { saveBtn.disabled = true; return; }
+  if (!nameInput.value.trim()) nameInput.value = m.label ? m.label.replace(/\s*\(External Drive\)\s*$/, '') : 'iPod';
+  saveBtn.disabled = false;
+}
+
+function closeIpodModal() {
+  document.getElementById('ipod-modal').style.display = 'none';
+}
+
+async function saveIpod() {
+  const sel = document.getElementById('ipod-mount-select');
+  const m = _ipodMountCandidates[Number(sel.value)];
+  if (!m) return;
+  const body = {
+    name: document.getElementById('ipod-name').value.trim() || 'iPod',
+    mount_path: m.path,
+    mount_volume_uuid: m.volume_uuid || '',
+    mount_disk_uuid: m.disk_uuid || '',
+    mount_device_identifier: m.device_identifier || '',
+  };
+  try {
+    await api('/ipods', { method: 'POST', body });
+    closeIpodModal();
+    loadIpodsView();
+  } catch (e) {
+    toast('Could not add iPod.');
+  }
+}
+
+async function deleteIpod(id) {
+  const ok = await _showConfirm({
+    title: 'Delete iPod',
+    message: 'This removes the iPod and its cached track/playlist listing from TuneBridge. Nothing on the device itself is touched.',
+    okText: 'Delete',
+  });
+  if (!ok) return;
+  await api(`/ipods/${id}`, { method: 'DELETE' });
+  if (state.view === 'ipod-detail') {
+    showView('gear');
+  } else {
+    loadIpodsView();
+  }
 }
 
 /* ── IEM management ─────────────────────────────────────────────────── */
@@ -21581,6 +21847,14 @@ const App = {
   deleteDap,
   dapExportPlaylist,
   dapExportAllPlaylists,
+  // iPod
+  showIpodDetail,
+  showAddIpodModal,
+  onIpodMountSelect,
+  closeIpodModal,
+  saveIpod,
+  deleteIpod,
+  scanIpod,
   // IEM
   showIemDetail,
   showAddIemModal,
