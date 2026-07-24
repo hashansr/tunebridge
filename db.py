@@ -2806,3 +2806,29 @@ def db_load_ipod_playlists(ipod_id) -> list:
             d['track_order'] = []
         result.append(d)
     return result
+
+
+def db_load_ipod_backups(ipod_id) -> list:
+    """Newest first - every backup_itunesdb()/ArtworkDB-backup call writes
+    a row here before its corresponding on-device write (Phase 2/4)."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM ipod_itunesdb_backups WHERE ipod_id = ? ORDER BY created_at DESC",
+        (ipod_id,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def db_get_ipod_backup(ipod_id, backup_id) -> dict | None:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM ipod_itunesdb_backups WHERE ipod_id = ? AND id = ?",
+        (ipod_id, backup_id)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def db_delete_ipod_backup(ipod_id, backup_id) -> None:
+    conn = get_conn()
+    conn.execute("DELETE FROM ipod_itunesdb_backups WHERE ipod_id = ? AND id = ?", (ipod_id, backup_id))
+    conn.commit()

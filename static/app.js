@@ -13109,6 +13109,12 @@ async function showIpodDetail(id) {
         </div>
       </details>
 
+      <details class="gd-section gd-config">
+        <summary><span>Backups</span><span class="gd-chevron" aria-hidden="true"></span></summary>
+        <p class="settings-hint">A backup of the on-device iTunesDB (and ArtworkDB, if artwork was written) is taken automatically before every sync. Restoring replaces what's currently on the device — the current state is backed up first too, so restoring is never a one-way trip.</p>
+        <div id="ipod-backups-list" class="gear-list"></div>
+      </details>
+
       <section class="gd-section" id="ipod-sync-section">
         <div class="gd-section-head">
           <h2 class="title">Sync</h2>
@@ -13148,6 +13154,66 @@ async function showIpodDetail(id) {
   `;
 
   if (ipod.track_count > 0) _loadIpodDetailData(id);
+  _loadIpodBackups(id);
+}
+
+function _fmtBytes(n) {
+  if (!n) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+async function _loadIpodBackups(id) {
+  const list = document.getElementById('ipod-backups-list');
+  if (!list) return;
+  const backups = await api(`/ipods/${id}/backups`).catch(() => []);
+  if (!backups.length) {
+    list.innerHTML = '<p class="muted" style="padding:8px 0">No backups yet — one is taken automatically the first time you sync.</p>';
+    return;
+  }
+  list.innerHTML = backups.map(b => `
+    <div class="gear-row">
+      <span class="gear-row-icon">${_GEAR_ICON_PLAYLIST}</span>
+      <div class="gear-row-main">
+        <span class="gear-row-title">${b.kind === 'artworkdb' ? 'ArtworkDB' : 'iTunesDB'} — ${esc(_fmtRelDate(b.created_at))}</span>
+        <span class="gear-row-sub">${_fmtBytes(b.size_bytes)}${b.exists ? '' : ' · missing on disk'}</span>
+      </div>
+      <div class="gear-row-actions">
+        <button class="gear-icon-btn" title="Restore" ${b.exists ? `onclick="App.restoreIpodBackup('${id}', '${b.id}', '${b.kind}')"` : 'disabled'}>${_STATUS_ICON_CHECK(false)}</button>
+        <button class="gear-icon-btn" title="Delete" onclick="App.deleteIpodBackupEntry('${id}', '${b.id}')">${_GEAR_ICON_TRASH}</button>
+      </div>
+    </div>`).join('');
+}
+
+async function restoreIpodBackup(id, backupId, kind) {
+  const ok = await _showConfirm({
+    title: 'Restore backup',
+    message: `This replaces the ${kind === 'artworkdb' ? 'ArtworkDB' : 'iTunesDB'} currently on the device with this backup. The current on-device state is backed up first, so this can be undone.`,
+    okText: 'Restore',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    await api(`/ipods/${id}/backups/${backupId}/restore`, { method: 'POST' });
+    toast('Backup restored.');
+    showIpodDetail(id);
+  } catch (e) {
+    toast('Could not restore backup.');
+  }
+}
+
+async function deleteIpodBackupEntry(id, backupId) {
+  const ok = await _showConfirm({
+    title: 'Delete backup',
+    message: 'This only removes the local backup copy — nothing on the device is affected.',
+    okText: 'Delete',
+    danger: true,
+  });
+  if (!ok) return;
+  await api(`/ipods/${id}/backups/${backupId}`, { method: 'DELETE' }).catch(() => {});
+  _loadIpodBackups(id);
 }
 
 async function _loadIpodDetailData(id) {
@@ -13320,6 +13386,11 @@ async function _pollIpodSyncExecute(id) {
     return;
   }
   if (summary) summary.innerHTML = '<p class="muted" style="padding:8px 0">Sync complete.</p>';
+  if (status.errors && status.errors.length) {
+    const names = status.errors.slice(0, 3).map(e => e.title).join(', ');
+    const more = status.errors.length > 3 ? ` and ${status.errors.length - 3} more` : '';
+    toast(`${status.errors.length} song(s) failed and were skipped: ${names}${more}`);
+  }
   if (state.view === 'ipod-detail') showIpodDetail(id);
 }
 
@@ -22076,6 +22147,8 @@ const App = {
   closeIpodModal,
   saveIpod,
   updateIpodModel,
+  restoreIpodBackup,
+  deleteIpodBackupEntry,
   deleteIpod,
   scanIpod,
   checkIpodSync,

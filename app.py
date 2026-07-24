@@ -12372,6 +12372,7 @@ def ipod_sync_execute(iid):
                 (str(uuid.uuid4()), iid, str(backup_path), int(time.time())),
             )
             _db.get_conn().commit()
+            _ipod_prune_backups(iid)
 
             info, existing_tracks, existing_playlists = parse_ipod_library(str(itdb_path))
 
@@ -12454,6 +12455,15 @@ def ipod_sync_execute(iid):
             new_art_by_db_track_id = {}
             track_info_by_db_track_id = {}
 
+            # Per-track failures (a corrupt source file, a transcode
+            # timeout, one bad disk sector) are recorded here and skipped -
+            # they must NOT abort the whole batch. Before this, a single
+            # bad file among e.g. 50 selected tracks would raise out of
+            # the loop entirely, leaving every good file already copied to
+            # the device orphaned and unreferenced, with nothing actually
+            # added to the library the user would see.
+            sync_errors = []
+
             music_base = get_music_base()
             local_id_to_db_track_id = {}
             total = len(add_track_ids)
@@ -12462,38 +12472,46 @@ def ipod_sync_execute(iid):
                 if not t or not t.get('path'):
                     continue
                 ipod_sync_state['message'] = f'Transcoding {i + 1} of {total}…'
-                # t['path'] is stored relative to the configured library
-                # root, same convention the generic Sync feature already
-                # uses (get_music_base() / local_rel) - not an absolute path.
-                source_path = music_base / t['path']
-                was_transcoded = needs_transcode(source_path)
-                staged = get_or_create_transcode(source_path, transcode_cache_dir)
-                ext = staged.suffix.lstrip('.').lower() or 'mp3'
+                try:
+                    # t['path'] is stored relative to the configured library
+                    # root, same convention the generic Sync feature already
+                    # uses (get_music_base() / local_rel) - not an absolute path.
+                    source_path = music_base / t['path']
+                    was_transcoded = needs_transcode(source_path)
+                    staged = get_or_create_transcode(source_path, transcode_cache_dir)
+                    ext = staged.suffix.lstrip('.').lower() or 'mp3'
 
-                device_path = _ipod_stage_device_path(resolved_mount, local_id, ext, used_device_paths)
-                used_device_paths.add(device_path)
-                dest = Path(resolved_mount) / device_path
-                shutil.copy2(staged, dest)
+                    device_path = _ipod_stage_device_path(resolved_mount, local_id, ext, used_device_paths)
+                    used_device_paths.add(device_path)
+                    dest = Path(resolved_mount) / device_path
+                    shutil.copy2(staged, dest)
 
-                db_track_id = abs(hash(local_id)) % (2 ** 62) + 1
+                    db_track_id = abs(hash(local_id)) % (2 ** 62) + 1
+                    track_info = TrackInfo(
+                        title=t.get('title') or 'Untitled',
+                        location=':' + device_path.replace('/', ':'),
+                        size=dest.stat().st_size, length=_as_int((t.get('duration') or 0)) * 1000,
+                        filetype='m4a' if ext == 'm4a' else ext,
+                        filetype_desc='Apple Lossless audio file' if (ext == 'm4a' and was_transcoded) else None,
+                        bitrate=_as_int(t.get('bitrate')), sample_rate=44100,
+                        artist=t.get('artist') or None, album=t.get('album') or None,
+                        album_artist=t.get('album_artist') or None, genre=t.get('genre') or None,
+                        track_number=_as_int(t.get('track_number')), disc_number=_as_int(t.get('disc_number'), 1),
+                        total_discs=1, year=_as_int(t.get('year')),
+                        date_added=int(time.time()), db_track_id=db_track_id,
+                    )
+                except Exception as e:
+                    sync_errors.append({'title': t.get('title') or local_id, 'error': str(e)})
+                    continue
+
                 local_id_to_db_track_id[local_id] = db_track_id
-                track_info = TrackInfo(
-                    title=t.get('title') or 'Untitled',
-                    location=':' + device_path.replace('/', ':'),
-                    size=dest.stat().st_size, length=_as_int((t.get('duration') or 0)) * 1000,
-                    filetype='m4a' if ext == 'm4a' else ext,
-                    filetype_desc='Apple Lossless audio file' if (ext == 'm4a' and was_transcoded) else None,
-                    bitrate=_as_int(t.get('bitrate')), sample_rate=44100,
-                    artist=t.get('artist') or None, album=t.get('album') or None,
-                    album_artist=t.get('album_artist') or None, genre=t.get('genre') or None,
-                    track_number=_as_int(t.get('track_number')), disc_number=_as_int(t.get('disc_number'), 1),
-                    total_discs=1, year=_as_int(t.get('year')),
-                    date_added=int(time.time()), db_track_id=db_track_id,
-                )
                 track_infos.append(track_info)
 
                 if art_format_defs:
-                    art_bytes = extract_art(source_path)
+                    try:
+                        art_bytes = extract_art(source_path)
+                    except Exception:
+                        art_bytes = None
                     if art_bytes:
                         new_art_by_db_track_id[db_track_id] = art_bytes
                         track_info_by_db_track_id[db_track_id] = track_info
@@ -12546,6 +12564,7 @@ def ipod_sync_execute(iid):
                         (str(uuid.uuid4()), iid, str(artworkdb_backup_path), int(time.time())),
                     )
                     _db.get_conn().commit()
+                    _ipod_prune_backups(iid)
 
                 new_artworkdb_bytes, db_track_id_to_img_id = build_artwork_update(
                     artworkdb_path, artwork_dir, art_format_defs, new_art_by_db_track_id,
@@ -12597,18 +12616,122 @@ def ipod_sync_execute(iid):
             # the way back).
             _ipod_refresh_scan_cache(iid, itdb_path)
 
+            added_ok = len(add_track_ids) - len(sync_errors)
+            message = (
+                f'Added {added_ok}, removed {len(remove_track_ids)} song(s); '
+                f'synced {len(add_playlist_ids)}, removed {len(remove_playlist_ids)} playlist(s).'
+            )
+            if sync_errors:
+                message += f' {len(sync_errors)} song(s) failed and were skipped.'
             ipod_sync_state = {
                 'status': 'done', 'ipod_id': iid, 'plan': None,
-                'message': (
-                    f'Added {len(add_track_ids)}, removed {len(remove_track_ids)} song(s); '
-                    f'synced {len(add_playlist_ids)}, removed {len(remove_playlist_ids)} playlist(s).'
-                ),
-                'error': '',
+                'message': message, 'error': '', 'errors': sync_errors,
             }
         except Exception as e:
             ipod_sync_state = {**ipod_sync_state, 'status': 'error', 'message': '', 'error': str(e)}
 
     threading.Thread(target=do_execute, daemon=True).start()
+    return jsonify({'ok': True})
+
+
+IPOD_BACKUP_RETENTION = 10
+
+
+def _ipod_prune_backups(iid, keep=IPOD_BACKUP_RETENTION):
+    """Keeps only the newest `keep` backups per iPod (iTunesDB and
+    ArtworkDB backups counted together). A full binary-database copy on
+    every write means unbounded backups would otherwise grow forever -
+    the same unbounded-growth failure mode already fixed for the
+    transcode cache in Phase 3, applied here to backups instead."""
+    backups = _db.db_load_ipod_backups(iid)  # newest first
+    for b in backups[keep:]:
+        try:
+            Path(b['backup_path']).unlink(missing_ok=True)
+        except OSError:
+            pass
+        _db.db_delete_ipod_backup(iid, b['id'])
+
+
+@app.route('/api/ipods/<iid>/backups', methods=['GET'])
+def get_ipod_backups(iid):
+    backups = _db.db_load_ipod_backups(iid)
+    result = []
+    for b in backups:
+        p = Path(b['backup_path'])
+        result.append({
+            'id': b['id'],
+            'created_at': b['created_at'],
+            'kind': 'artworkdb' if p.name.endswith('_ArtworkDB.bak') else 'itunesdb',
+            'size_bytes': p.stat().st_size if p.exists() else 0,
+            'exists': p.exists(),
+        })
+    return jsonify(result)
+
+
+@app.route('/api/ipods/<iid>/backups/<backup_id>/restore', methods=['POST'])
+def restore_ipod_backup(iid, backup_id):
+    """Copies a backed-up iTunesDB or ArtworkDB back onto the device,
+    replacing whatever's live there now - the undo path for a sync gone
+    wrong. Atomic (same helper every other on-device write in this
+    feature uses), and itself snapshots the current live file before
+    overwriting it, so a restore is never a one-way trip either.
+    """
+    backup = _db.db_get_ipod_backup(iid, backup_id)
+    if not backup:
+        return jsonify({'error': 'Backup not found'}), 404
+    backup_path = Path(backup['backup_path'])
+    if not backup_path.exists():
+        return jsonify({'error': 'Backup file is missing on disk'}), 400
+
+    ipod = next((i for i in load_ipods() if i['id'] == iid), None)
+    if not ipod:
+        return jsonify({'error': 'Not found'}), 404
+    resolved_mount, _, _ = _resolve_ipod_mount(ipod)
+    if not resolved_mount or not resolved_mount.exists():
+        return jsonify({'error': 'Device not mounted'}), 400
+
+    is_artwork = backup_path.name.endswith('_ArtworkDB.bak')
+    live_path = (
+        (resolved_mount / 'iPod_Control' / 'Artwork' / 'ArtworkDB') if is_artwork
+        else (resolved_mount / 'iPod_Control' / 'iTunes' / 'iTunesDB')
+    )
+
+    try:
+        from ipod.itunesdb_writer import write_ipod_itunesdb_atomic
+
+        # Snapshot the current (about-to-be-overwritten) live file first.
+        if live_path.exists():
+            pre_restore_dir = DATA_DIR / 'ipod_backups' / iid
+            pre_restore_dir.mkdir(parents=True, exist_ok=True)
+            suffix = 'ArtworkDB' if is_artwork else 'iTunesDB'
+            pre_restore_path = pre_restore_dir / f'{time.strftime("%Y%m%dT%H%M%S")}_{suffix}.bak'
+            shutil.copy2(live_path, pre_restore_path)
+            _db.get_conn().execute(
+                'INSERT INTO ipod_itunesdb_backups (id, ipod_id, backup_path, created_at) VALUES (?, ?, ?, ?)',
+                (str(uuid.uuid4()), iid, str(pre_restore_path), int(time.time())),
+            )
+            _db.get_conn().commit()
+            _ipod_prune_backups(iid)
+
+        write_ipod_itunesdb_atomic(str(live_path), backup_path.read_bytes())
+
+        if not is_artwork:
+            _ipod_refresh_scan_cache(iid, live_path)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    return jsonify({'ok': True})
+
+
+@app.route('/api/ipods/<iid>/backups/<backup_id>', methods=['DELETE'])
+def delete_ipod_backup(iid, backup_id):
+    backup = _db.db_get_ipod_backup(iid, backup_id)
+    if backup:
+        try:
+            Path(backup['backup_path']).unlink(missing_ok=True)
+        except OSError:
+            pass
+        _db.db_delete_ipod_backup(iid, backup_id)
     return jsonify({'ok': True})
 
 
