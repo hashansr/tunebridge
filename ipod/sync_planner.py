@@ -14,7 +14,7 @@ stable across both.
 from __future__ import annotations
 
 
-def _match_key(title: str, artist: str, album: str) -> tuple:
+def match_key(title: str, artist: str, album: str) -> tuple:
     return (
         (title or '').strip().lower(),
         (artist or '').strip().lower(),
@@ -44,14 +44,14 @@ def compute_sync_plan(local_tracks: list, local_playlists: list, ipod_tracks: li
         }
     """
     device_track_keys = {
-        _match_key(t.get('title'), t.get('artist'), t.get('album'))
+        match_key(t.get('title'), t.get('artist'), t.get('album'))
         for t in ipod_tracks
     }
 
     tracks_to_add = []
     local_key_to_id = {}
     for t in local_tracks:
-        key = _match_key(t.get('title'), t.get('artist'), t.get('album'))
+        key = match_key(t.get('title'), t.get('artist'), t.get('album'))
         local_key_to_id[t['id']] = key
         if key not in device_track_keys:
             tracks_to_add.append(t)
@@ -64,7 +64,7 @@ def compute_sync_plan(local_tracks: list, local_playlists: list, ipod_tracks: li
     # track id — those get reassigned on every write, so they're not a
     # stable membership test across a rescan).
     device_track_id_to_key = {
-        t.get('device_track_id'): _match_key(t.get('title'), t.get('artist'), t.get('album'))
+        t.get('device_track_id'): match_key(t.get('title'), t.get('artist'), t.get('album'))
         for t in ipod_tracks
     }
 

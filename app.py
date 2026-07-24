@@ -12256,8 +12256,9 @@ def ipod_sync_reset(iid):
 @app.route('/api/ipods/<iid>/sync/execute', methods=['POST'])
 def ipod_sync_execute(iid):
     """Transcodes selected tracks, copies them to the device, and rewrites
-    the on-device iTunesDB to include them (plus any selected new/updated
-    playlists) — backed up first, written atomically.
+    the on-device iTunesDB to add them, remove selected tracks/playlists,
+    and create playlists for selected local playlists (member tracks
+    included automatically) — backed up first, written atomically.
 
     NOTE: not yet exercised against a live device from this route. Built
     and unit-testable (backup/transcode/write all independently proven
@@ -12271,12 +12272,11 @@ def ipod_sync_execute(iid):
         return jsonify({'error': 'Run scan first'}), 400
 
     data = request.json or {}
-    selected_track_ids = set(str(x) for x in (data.get('track_ids') or []))
-    # selected_playlist_ids: accepted but not yet acted on below - playlist
-    # creation/update isn't wired into do_execute() yet, only new-track
-    # addition is. Flagged here rather than silently ignored.
-    selected_playlist_ids = set(str(x) for x in (data.get('playlist_ids') or []))
-    if not selected_track_ids and not selected_playlist_ids:
+    add_track_ids = set(str(x) for x in (data.get('track_ids') or []))
+    add_playlist_ids = set(str(x) for x in (data.get('playlist_ids') or []))
+    remove_track_ids = set(str(x) for x in (data.get('remove_track_ids') or []))
+    remove_playlist_ids = set(str(x) for x in (data.get('remove_playlist_ids') or []))
+    if not (add_track_ids or add_playlist_ids or remove_track_ids or remove_playlist_ids):
         return jsonify({'error': 'No items selected'}), 400
 
     ipod = next((i for i in load_ipods() if i['id'] == iid), None)
@@ -12296,11 +12296,12 @@ def ipod_sync_execute(iid):
         try:
             from ipod.itunesdb_reader import parse_ipod_library
             from ipod.itunesdb_writer import (
-                TrackInfo, apply_checksum, backup_itunesdb, build_itunesdb_bytes,
+                PlaylistInfo, TrackInfo, apply_checksum, backup_itunesdb, build_itunesdb_bytes,
                 extract_db_info, extract_mhsd_types_and_order,
                 extract_preserved_mhsd_blobs, ipod_playlist_to_playlist_info,
                 ipod_track_to_track_info, write_ipod_itunesdb_atomic,
             )
+            from ipod.sync_planner import match_key
             from ipod.transcode import get_or_create_transcode
 
             ipod_sync_state['message'] = 'Backing up current library…'
@@ -12313,16 +12314,55 @@ def ipod_sync_execute(iid):
             _db.get_conn().commit()
 
             info, existing_tracks, existing_playlists = parse_ipod_library(str(itdb_path))
-            track_infos = [ipod_track_to_track_info(t) for t in existing_tracks]
-            playlist_infos = [ipod_playlist_to_playlist_info(p) for p in existing_playlists if not p.is_master]
+
+            # Drop removed tracks/playlists up front. A dangling reference
+            # left in a *kept* playlist (pointing at a track that just got
+            # removed) is handled automatically by build_itunesdb_bytes'
+            # remap step, which silently skips any track_id it can't
+            # resolve — no separate cleanup needed here.
+            kept_tracks = [t for t in existing_tracks if str(t.track_id) not in remove_track_ids]
+            track_infos = [ipod_track_to_track_info(t) for t in kept_tracks]
+            playlist_infos = [
+                ipod_playlist_to_playlist_info(p) for p in existing_playlists
+                if not p.is_master and str(p.playlist_id) not in remove_playlist_ids
+            ]
+
+            # match_key -> db_track_id, for resolving playlist membership
+            # below (new playlists reference both pre-existing device
+            # tracks and newly-added ones, by content key since that's
+            # the only id space shared between local and device records).
+            key_to_device_db_track_id = {
+                match_key(t.title, t.artist, t.album): t.track_id for t in kept_tracks
+            }
 
             with library_lock:
                 local_by_id = {t['id']: t for t in library}
+
+            # Selecting a playlist syncs the songs within it, too - expand
+            # add_track_ids with any member track that isn't already on
+            # the device, before the transcode loop below runs. (Members
+            # already on-device don't need re-adding; they're linked by
+            # match_key when the playlist itself is built further down.)
+            if add_playlist_ids:
+                local_playlists_for_expand = load_playlists()
+                for pid in add_playlist_ids:
+                    pl = local_playlists_for_expand.get(pid)
+                    if not pl:
+                        continue
+                    for local_track_id in pl.get('tracks', []):
+                        t = local_by_id.get(local_track_id)
+                        if not t:
+                            continue
+                        key = match_key(t.get('title'), t.get('artist'), t.get('album'))
+                        if key not in key_to_device_db_track_id:
+                            add_track_ids.add(local_track_id)
+
             transcode_cache_dir = DATA_DIR / 'ipod_transcode_cache'
 
             music_base = get_music_base()
-            total = len(selected_track_ids)
-            for i, local_id in enumerate(selected_track_ids):
+            local_id_to_db_track_id = {}
+            total = len(add_track_ids)
+            for i, local_id in enumerate(add_track_ids):
                 t = local_by_id.get(local_id)
                 if not t or not t.get('path'):
                     continue
@@ -12332,6 +12372,8 @@ def ipod_sync_execute(iid):
                 # uses (get_music_base() / local_rel) - not an absolute path.
                 source_path = music_base / t['path']
                 staged = get_or_create_transcode(source_path, transcode_cache_dir)
+                db_track_id = abs(hash(local_id)) % (2 ** 62) + 1
+                local_id_to_db_track_id[local_id] = db_track_id
                 track_infos.append(TrackInfo(
                     title=t.get('title') or 'Untitled',
                     location=f':iPod_Control:Music:F00:{staged.name}',
@@ -12343,12 +12385,42 @@ def ipod_sync_execute(iid):
                     album_artist=t.get('album_artist') or None, genre=t.get('genre') or None,
                     track_number=t.get('track_number') or 0, disc_number=t.get('disc_number') or 1,
                     total_discs=1, year=t.get('year') or 0,
-                    date_added=int(time.time()), db_track_id=abs(hash(local_id)) % (2 ** 62) + 1,
+                    date_added=int(time.time()), db_track_id=db_track_id,
                 ))
 
             # NOTE: file staged in the transcode cache still needs copying
             # into iPod_Control/Music/F00/ on the device itself - the
             # binary-database write below does not move audio bytes.
+
+            # Create playlists for any selected local playlists. Member
+            # tracks come along automatically (the user's requirement:
+            # syncing a playlist syncs "the songs within" it too) -
+            # resolved by content key against whatever ends up on the
+            # device (existing tracks + this run's newly-added ones).
+            # A member track that isn't on the device and wasn't selected
+            # for addition is silently skipped, same drop-dangling-refs
+            # behavior as removal above.
+            if add_playlist_ids:
+                ipod_sync_state['message'] = 'Building playlists…'
+                local_playlists = load_playlists()
+                for pid in add_playlist_ids:
+                    pl = local_playlists.get(pid)
+                    if not pl:
+                        continue
+                    member_db_ids = []
+                    for local_track_id in pl.get('tracks', []):
+                        if local_track_id in local_id_to_db_track_id:
+                            member_db_ids.append(local_id_to_db_track_id[local_track_id])
+                            continue
+                        t = local_by_id.get(local_track_id)
+                        if not t:
+                            continue
+                        key = match_key(t.get('title'), t.get('artist'), t.get('album'))
+                        if key in key_to_device_db_track_id:
+                            member_db_ids.append(key_to_device_db_track_id[key])
+                    if member_db_ids:
+                        playlist_infos.append(PlaylistInfo(name=pl['name'], track_ids=member_db_ids))
+
             ipod_sync_state['message'] = 'Writing library…'
 
             ref_info = extract_db_info(str(itdb_path))
