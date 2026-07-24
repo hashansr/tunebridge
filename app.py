@@ -11988,6 +11988,62 @@ def _ipod_itunesdb_path(mount_path):
     return p if p.exists() else None
 
 
+def _ipod_refresh_scan_cache(iid, itdb_path):
+    """Re-parse the on-device iTunesDB and overwrite the cached
+    ipod_tracks/ipod_playlists rows to match. Shared by the read-only
+    scan route and by sync execute (right after a write): re-parsing our
+    own freshly-written file is also a free correctness check — if the
+    writer produced something the reader chokes on, that surfaces here
+    as an exception instead of silently leaving a stale cache.
+    """
+    from ipod.itunesdb_reader import parse_ipod_library
+    info, tracks, playlists = parse_ipod_library(str(itdb_path))
+
+    track_dicts = [{
+        'device_track_id': t.track_id, 'device_path': t.device_path,
+        'title': t.title, 'artist': t.artist, 'album': t.album,
+        'album_artist': t.album_artist, 'genre': t.genre,
+        'duration_ms': t.duration_ms, 'size_bytes': t.size_bytes,
+        'bitrate': t.bitrate, 'sample_rate': t.sample_rate,
+        'filetype': t.filetype, 'local_track_id': '',
+    } for t in tracks]
+    playlist_dicts = [{
+        'device_playlist_id': p.playlist_id, 'name': p.name,
+        'is_master': p.is_master, 'track_order': p.track_ids,
+        'linked_playlist_id': '',
+    } for p in playlists]
+
+    _db.db_save_ipod_scan_results(iid, track_dicts, playlist_dicts)
+
+    fresh_ipod = next((i for i in load_ipods() if i['id'] == iid), None)
+    if fresh_ipod:
+        fresh_ipod['hashing_scheme'] = info.hashing_scheme
+        save_single_ipod(fresh_ipod)
+
+    return info, tracks, playlists
+
+
+def _ipod_stage_device_path(mount_path: Path, key: str, ext: str, used_paths: set) -> str:
+    """Assigns a collision-free on-device path for a newly-added track,
+    spread across the F00-F49 subfolders real click-wheel iPods use
+    (matches the layout itunesdb_reader.py already parses back out of
+    existing devices). Deterministic per `key` (the local track id) so
+    re-running a sync for the same track lands on the same device file
+    instead of accumulating duplicates. Creates the destination folder
+    if needed; does not write the file itself.
+    """
+    ext = (ext or 'mp3').lstrip('.').lower()
+    base = hashlib.sha256(key.encode('utf-8')).hexdigest()[:12].upper()
+    folder = f'F{int(base[:2], 16) % 50:02d}'
+    rel = f'iPod_Control/Music/{folder}/{base}.{ext}'
+    n = 0
+    while rel in used_paths or (Path(mount_path) / rel).exists():
+        n += 1
+        rel = f'iPod_Control/Music/{folder}/{base}_{n}.{ext}'
+    (Path(mount_path) / rel).parent.mkdir(parents=True, exist_ok=True)
+    return rel
+
+
 @app.route('/api/ipods/mounts', methods=['GET'])
 def get_ipod_mounts():
     """Candidate iPods currently mounted as a normal volume — proven by the
@@ -12127,34 +12183,7 @@ def scan_ipod(iid):
     def do_scan():
         global ipod_scan_state
         try:
-            from ipod.itunesdb_reader import parse_ipod_library
-            info, tracks, playlists = parse_ipod_library(str(itdb_path))
-
-            track_dicts = [{
-                'device_track_id': t.track_id, 'device_path': t.device_path,
-                'title': t.title, 'artist': t.artist, 'album': t.album,
-                'album_artist': t.album_artist, 'genre': t.genre,
-                'duration_ms': t.duration_ms, 'size_bytes': t.size_bytes,
-                'bitrate': t.bitrate, 'sample_rate': t.sample_rate,
-                'filetype': t.filetype, 'local_track_id': '',
-            } for t in tracks]
-            playlist_dicts = [{
-                'device_playlist_id': p.playlist_id, 'name': p.name,
-                'is_master': p.is_master, 'track_order': p.track_ids,
-                'linked_playlist_id': '',
-            } for p in playlists]
-
-            _db.db_save_ipod_scan_results(iid, track_dicts, playlist_dicts)
-
-            # Reload rather than reuse the outer `ipod` dict: it was loaded
-            # before the scan started and db_save_ipod_scan_results() has
-            # since updated last_scanned_at directly in the DB — saving the
-            # stale in-memory copy back would overwrite that with 0.
-            fresh_ipod = next((i for i in load_ipods() if i['id'] == iid), None)
-            if fresh_ipod:
-                fresh_ipod['hashing_scheme'] = info.hashing_scheme
-                save_single_ipod(fresh_ipod)
-
+            info, tracks, playlists = _ipod_refresh_scan_cache(iid, itdb_path)
             ipod_scan_state = {
                 'status': 'done', 'ipod_id': iid,
                 'message': f'{len(tracks)} tracks, {len(playlists)} playlists', 'error': '',
@@ -12255,17 +12284,16 @@ def ipod_sync_reset(iid):
 
 @app.route('/api/ipods/<iid>/sync/execute', methods=['POST'])
 def ipod_sync_execute(iid):
-    """Transcodes selected tracks, copies them to the device, and rewrites
-    the on-device iTunesDB to add them, remove selected tracks/playlists,
-    and create playlists for selected local playlists (member tracks
-    included automatically) — backed up first, written atomically.
-
-    NOTE: not yet exercised against a live device from this route. Built
-    and unit-testable (backup/transcode/write all independently proven
-    against real hardware and real audio in earlier commits), but the
-    full execute path deserves the same real-hardware verification
-    discipline as the Phase 2 write proof before it's trusted end-to-end -
-    that verification is intentionally not bundled into this commit.
+    """Transcodes selected tracks, copies them onto the device under
+    iPod_Control/Music/F00-F49/, and rewrites the on-device iTunesDB to
+    add them, remove selected tracks/playlists, and create playlists for
+    selected local playlists (member tracks included automatically) —
+    backed up first, written atomically. Removed tracks' on-device audio
+    files are deleted only after the rewritten iTunesDB is safely on
+    disk. The cached ipod_tracks/ipod_playlists rows are refreshed by
+    re-parsing the freshly-written file, which also self-checks the
+    write (a reader failure here means the writer produced something
+    invalid — restore from ipod_itunesdb_backups if that happens).
     """
     global ipod_sync_state
     # Deliberately does NOT require a prior scan/'ready' state: this route
@@ -12307,7 +12335,7 @@ def ipod_sync_execute(iid):
                 ipod_track_to_track_info, write_ipod_itunesdb_atomic,
             )
             from ipod.sync_planner import match_key
-            from ipod.transcode import get_or_create_transcode
+            from ipod.transcode import enforce_cache_size_limit, get_or_create_transcode, needs_transcode
 
             ipod_sync_state['message'] = 'Backing up current library…'
             backup_dir = DATA_DIR / 'ipod_backups' / iid
@@ -12331,6 +12359,18 @@ def ipod_sync_execute(iid):
                 ipod_playlist_to_playlist_info(p) for p in existing_playlists
                 if not p.is_master and str(p.playlist_id) not in remove_playlist_ids
             ]
+
+            # Audio files for removed tracks are deleted from the device
+            # only after a successful write, further down — never before.
+            removed_device_paths = [
+                t.device_path for t in existing_tracks
+                if str(t.track_id) in remove_track_ids and t.device_path
+            ]
+            # Every device path currently in use, kept or removed alike -
+            # used so a newly-staged track can never collide with an
+            # existing file, including one that's about to be removed but
+            # isn't deleted until after the write below succeeds.
+            used_device_paths = {t.device_path for t in existing_tracks if t.device_path}
 
             # match_key -> db_track_id, for resolving playlist membership
             # below (new playlists reference both pre-existing device
@@ -12390,15 +12430,23 @@ def ipod_sync_execute(iid):
                 # root, same convention the generic Sync feature already
                 # uses (get_music_base() / local_rel) - not an absolute path.
                 source_path = music_base / t['path']
+                was_transcoded = needs_transcode(source_path)
                 staged = get_or_create_transcode(source_path, transcode_cache_dir)
+                ext = staged.suffix.lstrip('.').lower() or 'mp3'
+
+                device_path = _ipod_stage_device_path(resolved_mount, local_id, ext, used_device_paths)
+                used_device_paths.add(device_path)
+                dest = Path(resolved_mount) / device_path
+                shutil.copy2(staged, dest)
+
                 db_track_id = abs(hash(local_id)) % (2 ** 62) + 1
                 local_id_to_db_track_id[local_id] = db_track_id
                 track_infos.append(TrackInfo(
                     title=t.get('title') or 'Untitled',
-                    location=f':iPod_Control:Music:F00:{staged.name}',
-                    size=staged.stat().st_size, length=_as_int((t.get('duration') or 0)) * 1000,
-                    filetype='m4a' if staged.suffix == '.m4a' else (staged.suffix.lstrip('.') or 'mp3'),
-                    filetype_desc='Apple Lossless audio file' if staged.suffix == '.m4a' else None,
+                    location=':' + device_path.replace('/', ':'),
+                    size=dest.stat().st_size, length=_as_int((t.get('duration') or 0)) * 1000,
+                    filetype='m4a' if ext == 'm4a' else ext,
+                    filetype_desc='Apple Lossless audio file' if (ext == 'm4a' and was_transcoded) else None,
                     bitrate=_as_int(t.get('bitrate')), sample_rate=44100,
                     artist=t.get('artist') or None, album=t.get('album') or None,
                     album_artist=t.get('album_artist') or None, genre=t.get('genre') or None,
@@ -12406,10 +12454,6 @@ def ipod_sync_execute(iid):
                     total_discs=1, year=_as_int(t.get('year')),
                     date_added=int(time.time()), db_track_id=db_track_id,
                 ))
-
-            # NOTE: file staged in the transcode cache still needs copying
-            # into iPod_Control/Music/F00/ on the device itself - the
-            # binary-database write below does not move audio bytes.
 
             # Create playlists for any selected local playlists. Member
             # tracks come along automatically (the user's requirement:
@@ -12453,16 +12497,40 @@ def ipod_sync_execute(iid):
                 ref_types=ref_types, ref_order=ref_order, preserved_mhsd_blobs=preserved_blobs,
                 master_playlist_name=ipod.get('name') or 'iPod',
             )
-            itdb_bytes = apply_checksum(itdb_bytes, ref_info.get('hashing_scheme', 0), firewire_id=None)
+            firewire_id_hex = ipod.get('firewire_id') or None
+            firewire_id = bytes.fromhex(firewire_id_hex) if firewire_id_hex else None
+            itdb_bytes = apply_checksum(itdb_bytes, ref_info.get('hashing_scheme', 0), firewire_id=firewire_id)
 
-            # Deliberately stops short of the actual device write — see
-            # the route docstring. write_ipod_itunesdb_atomic(str(itdb_path), itdb_bytes)
-            # is the remaining line, held back pending the same real-hardware
-            # verification pass Phase 2's write got before being trusted.
+            write_ipod_itunesdb_atomic(str(itdb_path), itdb_bytes)
+
+            # Reclaim space from removed tracks only now that the rewritten
+            # iTunesDB naming them gone is safely on disk. Doing this any
+            # earlier and having the write fail after would leave the
+            # (still backed-up, still restorable) old iTunesDB referencing
+            # files that no longer exist.
+            for rel in removed_device_paths:
+                try:
+                    (Path(resolved_mount) / rel).unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+            enforce_cache_size_limit(transcode_cache_dir)
+
+            # Re-parse what was just written - refreshes the cached
+            # ipod_tracks/ipod_playlists so the UI reflects the new device
+            # state without a manual rescan, and doubles as a correctness
+            # check on the write itself (a reader failure here means the
+            # writer produced something invalid, and the backup above is
+            # the way back).
+            _ipod_refresh_scan_cache(iid, itdb_path)
+
             ipod_sync_state = {
-                'status': 'error', 'ipod_id': iid, 'plan': ipod_sync_state.get('plan'),
-                'message': '',
-                'error': 'Execute is built but not yet enabled for live writes pending hardware verification (see route docstring).',
+                'status': 'done', 'ipod_id': iid, 'plan': None,
+                'message': (
+                    f'Added {len(add_track_ids)}, removed {len(remove_track_ids)} song(s); '
+                    f'synced {len(add_playlist_ids)}, removed {len(remove_playlist_ids)} playlist(s).'
+                ),
+                'error': '',
             }
         except Exception as e:
             ipod_sync_state = {**ipod_sync_state, 'status': 'error', 'message': '', 'error': str(e)}

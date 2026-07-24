@@ -66,8 +66,15 @@ from .mhod_writer import write_mhod_string
 
 
 def _display_text(value: object, default: str) -> str:
-    text = str(value or "").strip()
-    return text or default
+    # Falls back to `default` only for a genuinely blank name — does not
+    # trim the text otherwise. `.strip()` here previously silently ate any
+    # meaningful leading/trailing whitespace on every rewrite, including
+    # Unicode spaces like U+00A0 (NBSP), which Python's str.isspace()
+    # (and therefore str.strip()) treats as whitespace. Found via a real
+    # device: a playlist named "I Miss Nu Metal\xa0" lost its trailing
+    # NBSP on the very first live write with this writer.
+    text = str(value or "")
+    return text if text.strip() else default
 
 
 @dataclass

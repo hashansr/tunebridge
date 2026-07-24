@@ -32,6 +32,16 @@ ArtworkDB link but `artwork_count=0`, which the upstream logic would
 silently flip to "no artwork" on every rewrite. Re-check this against
 upstream on any future refresh; it may get fixed there independently.
 
+**Local patch, not present upstream**: `itunesdb_writer/mhyp_writer.py`
+`_display_text()`. Upstream does `str(value or "").strip()`, silently
+trimming any leading/trailing whitespace off a playlist name on every
+rewrite — including Unicode whitespace like U+00A0 (NBSP), which
+Python's `str.strip()` treats as whitespace. Found on the first real
+Phase 3 live-write test: a real device playlist named
+"I Miss Nu Metal\xa0" lost its trailing NBSP. Patched to only fall back
+to the default name when the value is blank, without trimming
+otherwise. Re-check this against upstream on any future refresh.
+
 To refresh from upstream: re-clone iOpenPod, diff its
 `src/iopenpod/{itunesdb_parser,itunesdb_shared,itunesdb_writer}/`
 (excluding `mhbd_writer.py`, not vendored) against this directory —
