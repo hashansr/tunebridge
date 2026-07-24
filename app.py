@@ -11953,6 +11953,234 @@ def dap_export_all_playlists(did):
     })
 
 
+# ── Click-wheel iPods (feature/ipod-sync branch — Phase 1: read-only) ─────────
+#
+# Deliberately its own section, not folded into the DAP routes above: iPods
+# use a different mount-discovery strategy (proven presence of a readable
+# iPod_Control/iTunes/iTunesDB, not just a picked mount path) and a
+# different persistence shape (ipods/ipod_tracks/ipod_playlists — see
+# db.py and ipod/models.py), per the plan's isolation requirement.
+
+ipod_scan_state = {'status': 'idle', 'ipod_id': None, 'message': '', 'error': ''}
+
+
+def load_ipods():
+    return _db.db_load_ipods()
+
+
+def save_single_ipod(ipod):
+    _db.db_save_single_ipod(ipod)
+
+
+def _resolve_ipod_mount(ipod, mounts=None):
+    """Reuses the DAP feature's UUID-based mount-identity matching
+    (_resolve_dap_mount_with_method) — the ipods table has the same three
+    identity columns as daps, so the same reconnect/rename-proof lookup
+    applies unchanged."""
+    resolved_mount, matched_mount, match_method = _resolve_dap_mount_with_method(ipod, mounts)
+    return resolved_mount, matched_mount, match_method
+
+
+def _ipod_itunesdb_path(mount_path):
+    if not mount_path:
+        return None
+    p = Path(mount_path) / 'iPod_Control' / 'iTunes' / 'iTunesDB'
+    return p if p.exists() else None
+
+
+@app.route('/api/ipods/mounts', methods=['GET'])
+def get_ipod_mounts():
+    """Candidate iPods currently mounted as a normal volume — proven by the
+    presence of a readable iPod_Control/iTunes/iTunesDB, not just guessed
+    from a name. Used by the "Add iPod" flow."""
+    candidates = []
+    for m in _discover_mount_points():
+        itdb = _ipod_itunesdb_path(m.get('path'))
+        if not itdb:
+            continue
+        candidates.append({
+            'path': m.get('path'),
+            'label': m.get('label'),
+            'volume_uuid': m.get('volume_uuid', ''),
+            'disk_uuid': m.get('disk_uuid', ''),
+            'device_identifier': m.get('device_identifier', ''),
+        })
+    return jsonify({'mounts': candidates})
+
+
+@app.route('/api/ipods', methods=['GET'])
+def get_ipods():
+    ipods = load_ipods()
+    # Unlike the DAP list view, this can't use the identity-skipping fast
+    # path: ipods has no persisted mount_path fallback field, so with
+    # include_identity=False neither of _resolve_dap_mount_with_method's
+    # matching strategies can succeed and every iPod would show
+    # mounted=False even when actually connected. A realistic iPod count
+    # (0-2 devices) makes the full diskutil identity lookup cheap enough
+    # here regardless.
+    mounts = _discover_mount_points()
+    for ip in ipods:
+        resolved_mount, matched_mount, match_method = _resolve_ipod_mount(ip, mounts)
+        ip['mounted'] = bool(resolved_mount and resolved_mount.exists())
+        ip['active_mount_path'] = str(resolved_mount) if resolved_mount else ''
+        ip['mount_match_method'] = match_method or ''
+        if matched_mount:
+            ip['active_mount_label'] = matched_mount.get('label') or str(resolved_mount)
+        ip['track_count'] = _db.get_conn().execute(
+            'SELECT COUNT(*) FROM ipod_tracks WHERE ipod_id = ?', (ip['id'],)
+        ).fetchone()[0]
+        ip['playlist_count'] = _db.get_conn().execute(
+            'SELECT COUNT(*) FROM ipod_playlists WHERE ipod_id = ?', (ip['id'],)
+        ).fetchone()[0]
+    return jsonify(ipods)
+
+
+@app.route('/api/ipods', methods=['POST'])
+def create_ipod():
+    data = request.json or {}
+    mount_path = data.get('mount_path', '')
+    itdb = _ipod_itunesdb_path(mount_path)
+    if not itdb:
+        return jsonify({'error': 'No readable iPod_Control/iTunes/iTunesDB found at that mount path'}), 400
+    # _mac_mount_identity is a closure private to _discover_mount_points(),
+    # not module-level — look up the matching entry from its results instead
+    # of duplicating identity-lookup logic here.
+    identity = next(
+        (m for m in _discover_mount_points() if m.get('path') == str(mount_path)),
+        {}
+    )
+    ipod = {
+        'id': str(uuid.uuid4()),
+        'name': data.get('name') or Path(mount_path).name or 'iPod',
+        'device_class': data.get('device_class', ''),
+        'db_variant': 'itunesdb',
+        'mount_volume_uuid': _normalize_mount_id(identity.get('volume_uuid') or data.get('mount_volume_uuid')),
+        'mount_disk_uuid': _normalize_mount_id(identity.get('disk_uuid') or data.get('mount_disk_uuid')),
+        'mount_device_identifier': _normalize_mount_id(identity.get('device_identifier') or data.get('mount_device_identifier')),
+        'firewire_id': '',
+        'hashing_scheme': 0,
+        'transcode_format': 'alac',
+        'last_itunesdb_backup_path': '',
+        'last_scanned_at': 0,
+        'last_synced_at': 0,
+        'sync_summary': {},
+    }
+    save_single_ipod(ipod)
+    return jsonify(ipod), 201
+
+
+@app.route('/api/ipods/<iid>', methods=['GET'])
+def get_ipod(iid):
+    ipod = next((i for i in load_ipods() if i['id'] == iid), None)
+    if not ipod:
+        return jsonify({'error': 'Not found'}), 404
+    resolved_mount, matched_mount, match_method = _resolve_ipod_mount(ipod)
+    ipod['mounted'] = bool(resolved_mount and resolved_mount.exists())
+    ipod['active_mount_path'] = str(resolved_mount) if resolved_mount else ''
+    ipod['mount_match_method'] = match_method or ''
+    if matched_mount:
+        ipod['active_mount_label'] = matched_mount.get('label') or str(resolved_mount)
+    ipod['track_count'] = len(_db.db_load_ipod_tracks(iid))
+    ipod['playlist_count'] = len(_db.db_load_ipod_playlists(iid))
+    return jsonify(ipod)
+
+
+@app.route('/api/ipods/<iid>', methods=['PUT'])
+def update_ipod(iid):
+    data = request.json or {}
+    ipods = load_ipods()
+    ipod = next((i for i in ipods if i['id'] == iid), None)
+    if not ipod:
+        return jsonify({'error': 'Not found'}), 404
+    for k in ('name', 'device_class', 'transcode_format'):
+        if k in data:
+            ipod[k] = data[k]
+    save_single_ipod(ipod)
+    return jsonify(ipod)
+
+
+@app.route('/api/ipods/<iid>', methods=['DELETE'])
+def delete_ipod(iid):
+    _db.db_delete_ipod(iid)
+    return '', 204
+
+
+@app.route('/api/ipods/<iid>/scan', methods=['POST'])
+def scan_ipod(iid):
+    global ipod_scan_state
+    if ipod_scan_state.get('status') == 'scanning':
+        return jsonify({'error': 'A scan is already in progress'}), 400
+
+    ipod = next((i for i in load_ipods() if i['id'] == iid), None)
+    if not ipod:
+        return jsonify({'error': 'Not found'}), 404
+
+    resolved_mount, _, _ = _resolve_ipod_mount(ipod)
+    if not resolved_mount or not resolved_mount.exists():
+        return jsonify({'error': 'Device not mounted'}), 400
+    itdb_path = _ipod_itunesdb_path(resolved_mount)
+    if not itdb_path:
+        return jsonify({'error': 'iTunesDB not found on device'}), 400
+
+    ipod_scan_state = {'status': 'scanning', 'ipod_id': iid, 'message': 'Reading iTunesDB…', 'error': ''}
+
+    def do_scan():
+        global ipod_scan_state
+        try:
+            from ipod.itunesdb_reader import parse_ipod_library
+            info, tracks, playlists = parse_ipod_library(str(itdb_path))
+
+            track_dicts = [{
+                'device_track_id': t.track_id, 'device_path': t.device_path,
+                'title': t.title, 'artist': t.artist, 'album': t.album,
+                'album_artist': t.album_artist, 'genre': t.genre,
+                'duration_ms': t.duration_ms, 'size_bytes': t.size_bytes,
+                'bitrate': t.bitrate, 'sample_rate': t.sample_rate,
+                'filetype': t.filetype, 'local_track_id': '',
+            } for t in tracks]
+            playlist_dicts = [{
+                'device_playlist_id': p.playlist_id, 'name': p.name,
+                'is_master': p.is_master, 'track_order': p.track_ids,
+                'linked_playlist_id': '',
+            } for p in playlists]
+
+            _db.db_save_ipod_scan_results(iid, track_dicts, playlist_dicts)
+
+            # Reload rather than reuse the outer `ipod` dict: it was loaded
+            # before the scan started and db_save_ipod_scan_results() has
+            # since updated last_scanned_at directly in the DB — saving the
+            # stale in-memory copy back would overwrite that with 0.
+            fresh_ipod = next((i for i in load_ipods() if i['id'] == iid), None)
+            if fresh_ipod:
+                fresh_ipod['hashing_scheme'] = info.hashing_scheme
+                save_single_ipod(fresh_ipod)
+
+            ipod_scan_state = {
+                'status': 'done', 'ipod_id': iid,
+                'message': f'{len(tracks)} tracks, {len(playlists)} playlists', 'error': '',
+            }
+        except Exception as e:
+            ipod_scan_state = {'status': 'error', 'ipod_id': iid, 'message': '', 'error': str(e)}
+
+    threading.Thread(target=do_scan, daemon=True).start()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/ipods/<iid>/status', methods=['GET'])
+def ipod_scan_status(iid):
+    return jsonify(ipod_scan_state)
+
+
+@app.route('/api/ipods/<iid>/tracks', methods=['GET'])
+def get_ipod_tracks(iid):
+    return jsonify(_db.db_load_ipod_tracks(iid))
+
+
+@app.route('/api/ipods/<iid>/playlists', methods=['GET'])
+def get_ipod_playlists(iid):
+    return jsonify(_db.db_load_ipod_playlists(iid))
+
+
 # ── IEM Management ────────────────────────────────────────────────────────────
 
 IEM_MAX_SQUIG_SOURCES = 10

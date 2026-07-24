@@ -595,10 +595,15 @@ CREATE TABLE IF NOT EXISTS ipod_tracks (
 
 CREATE INDEX IF NOT EXISTS idx_ipod_tracks_ipod ON ipod_tracks(ipod_id);
 
--- Cache of on-device playlists, refreshed on each scan (Phase 1, read-only)
+-- Cache of on-device playlists, refreshed on each scan (Phase 1, read-only).
+-- device_playlist_id is TEXT, not INTEGER: real playlist_id values on the
+-- wire are unsigned 64-bit and can exceed SQLite's signed 64-bit INTEGER
+-- range (confirmed against a real device - 31 of 51 playlists on the
+-- iPod 5th Gen used during Phase 1 testing had ids > 2^63-1). It's an
+-- opaque identifier, never used arithmetically, so TEXT is correct anyway.
 CREATE TABLE IF NOT EXISTS ipod_playlists (
     ipod_id             TEXT NOT NULL REFERENCES ipods(id) ON DELETE CASCADE,
-    device_playlist_id  INTEGER NOT NULL,
+    device_playlist_id  TEXT NOT NULL,
     name                TEXT NOT NULL,
     is_master           INTEGER DEFAULT 0,
     track_order         TEXT DEFAULT '[]',
@@ -2661,4 +2666,143 @@ def db_get_scan_history() -> list:
             except Exception:
                 entry[key] = []
         result.append(entry)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Click-wheel iPods (feature/ipod-sync branch — Phase 1: read-only)
+# ---------------------------------------------------------------------------
+
+_IPOD_COLUMNS = (
+    'id', 'name', 'device_class', 'db_variant', 'mount_volume_uuid',
+    'mount_disk_uuid', 'mount_device_identifier', 'firewire_id',
+    'hashing_scheme', 'transcode_format', 'last_itunesdb_backup_path',
+    'last_scanned_at', 'last_synced_at', 'sync_summary',
+)
+
+
+def db_load_ipods() -> list:
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM ipods").fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d['sync_summary'] = json.loads(d['sync_summary']) if d['sync_summary'] else {}
+        except (json.JSONDecodeError, TypeError):
+            d['sync_summary'] = {}
+        result.append(d)
+    return result
+
+
+def db_save_single_ipod(d):
+    """Insert or update a single iPod's registration row.
+
+    Deliberately an UPSERT (INSERT ... ON CONFLICT DO UPDATE), not
+    INSERT OR REPLACE: the latter is a DELETE+INSERT under the hood, and
+    ipod_tracks/ipod_playlists reference ipods(id) ON DELETE CASCADE — a
+    REPLACE here after a scan already populated those tables would wipe
+    them out from under it. Hit exactly this bug during Phase 1 testing
+    against a real device (do_scan() calls db_save_ipod_scan_results()
+    then this function to record hashing_scheme — the second call was
+    silently deleting everything the first one had just written).
+    """
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO ipods
+           (id, name, device_class, db_variant, mount_volume_uuid, mount_disk_uuid,
+            mount_device_identifier, firewire_id, hashing_scheme, transcode_format,
+            last_itunesdb_backup_path, last_scanned_at, last_synced_at, sync_summary)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+               name=excluded.name, device_class=excluded.device_class,
+               db_variant=excluded.db_variant, mount_volume_uuid=excluded.mount_volume_uuid,
+               mount_disk_uuid=excluded.mount_disk_uuid,
+               mount_device_identifier=excluded.mount_device_identifier,
+               firewire_id=excluded.firewire_id, hashing_scheme=excluded.hashing_scheme,
+               transcode_format=excluded.transcode_format,
+               last_itunesdb_backup_path=excluded.last_itunesdb_backup_path,
+               last_scanned_at=excluded.last_scanned_at, last_synced_at=excluded.last_synced_at,
+               sync_summary=excluded.sync_summary""",
+        (
+            d['id'], d.get('name', ''), d.get('device_class', ''),
+            d.get('db_variant', 'itunesdb'), d.get('mount_volume_uuid', ''),
+            d.get('mount_disk_uuid', ''), d.get('mount_device_identifier', ''),
+            d.get('firewire_id', ''), int(d.get('hashing_scheme', 0) or 0),
+            d.get('transcode_format', 'alac'), d.get('last_itunesdb_backup_path', ''),
+            int(d.get('last_scanned_at', 0) or 0), int(d.get('last_synced_at', 0) or 0),
+            json.dumps(d.get('sync_summary', {})),
+        )
+    )
+    conn.commit()
+
+
+def db_delete_ipod(ipod_id):
+    conn = get_conn()
+    conn.execute("DELETE FROM ipods WHERE id = ?", (ipod_id,))
+    conn.commit()
+
+
+def db_save_ipod_scan_results(ipod_id, tracks, playlists):
+    """Full replace of the cached on-device track/playlist listing for one
+    iPod, following a fresh scan. `tracks`/`playlists` are lists of dicts
+    matching the ipod_tracks/ipod_playlists column shapes.
+    """
+    conn = get_conn()
+    conn.execute("DELETE FROM ipod_tracks WHERE ipod_id = ?", (ipod_id,))
+    conn.execute("DELETE FROM ipod_playlists WHERE ipod_id = ?", (ipod_id,))
+    for t in tracks:
+        conn.execute(
+            """INSERT INTO ipod_tracks
+               (ipod_id, device_track_id, device_path, title, artist, album,
+                album_artist, genre, duration_ms, size_bytes, bitrate, sample_rate,
+                filetype, local_track_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                ipod_id, t['device_track_id'], t.get('device_path', ''),
+                t.get('title', ''), t.get('artist', ''), t.get('album', ''),
+                t.get('album_artist', ''), t.get('genre', ''),
+                int(t.get('duration_ms', 0) or 0), int(t.get('size_bytes', 0) or 0),
+                int(t.get('bitrate', 0) or 0), int(t.get('sample_rate', 0) or 0),
+                t.get('filetype', ''), t.get('local_track_id', ''),
+            )
+        )
+    for p in playlists:
+        conn.execute(
+            """INSERT INTO ipod_playlists
+               (ipod_id, device_playlist_id, name, is_master, track_order, linked_playlist_id)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                ipod_id, str(p['device_playlist_id']), p.get('name', ''),
+                1 if p.get('is_master') else 0,
+                json.dumps(p.get('track_order', [])), p.get('linked_playlist_id', ''),
+            )
+        )
+    conn.execute("UPDATE ipods SET last_scanned_at = ? WHERE id = ?", (int(time.time()), ipod_id))
+    conn.commit()
+
+
+def db_load_ipod_tracks(ipod_id) -> list:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM ipod_tracks WHERE ipod_id = ? ORDER BY title COLLATE NOCASE",
+        (ipod_id,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def db_load_ipod_playlists(ipod_id) -> list:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM ipod_playlists WHERE ipod_id = ? ORDER BY is_master DESC, name COLLATE NOCASE",
+        (ipod_id,)
+    ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d['track_order'] = json.loads(d['track_order']) if d['track_order'] else []
+        except (json.JSONDecodeError, TypeError):
+            d['track_order'] = []
+        result.append(d)
     return result
