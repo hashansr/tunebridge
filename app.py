@@ -12238,6 +12238,22 @@ def get_ipod_playlists(iid):
 
 ipod_sync_state = {'status': 'idle', 'ipod_id': None, 'message': '', 'error': '', 'plan': None}
 
+# Human-readable filetype description for tracks copied as-is (no
+# transcode) — mirrors the strings iTunes itself writes for these
+# formats. Transcoded tracks are always ALAC (see get_or_create_transcode)
+# and use a fixed 'Apple Lossless audio file' string instead, set inline
+# where TrackInfo is built.
+_IPOD_NATIVE_FILETYPE_DESC = {
+    'mp3': 'MPEG audio file',
+    'm4a': 'AAC audio file',
+    'm4b': 'AAC audio file',
+    'm4p': 'AAC audio file',
+    'aac': 'AAC audio file',
+    'wav': 'WAV audio file',
+    'aif': 'AIFF audio file',
+    'aiff': 'AIFF audio file',
+}
+
 
 @app.route('/api/ipods/<iid>/sync/scan', methods=['POST'])
 def ipod_sync_scan(iid):
@@ -12492,7 +12508,10 @@ def ipod_sync_execute(iid):
                         location=':' + device_path.replace('/', ':'),
                         size=dest.stat().st_size, length=_as_int((t.get('duration') or 0)) * 1000,
                         filetype='m4a' if ext == 'm4a' else ext,
-                        filetype_desc='Apple Lossless audio file' if (ext == 'm4a' and was_transcoded) else None,
+                        filetype_desc=(
+                            'Apple Lossless audio file' if was_transcoded
+                            else _IPOD_NATIVE_FILETYPE_DESC.get(ext)
+                        ),
                         bitrate=_as_int(t.get('bitrate')), sample_rate=44100,
                         artist=t.get('artist') or None, album=t.get('album') or None,
                         album_artist=t.get('album_artist') or None, genre=t.get('genre') or None,
