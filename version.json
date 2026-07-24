@@ -1,7 +1,7 @@
 {
-  "version": "0.569",
-  "version_full": "0.569-dev.240726+32d54a6",
-  "build": 569,
-  "channel": "dev",
-  "released": "2026-07-24"
+  "version": "0.570",
+  "version_full": "0.570-rc.250726-0951",
+  "build": 570,
+  "channel": "rc",
+  "released": "2026-07-25"
 }
