@@ -547,6 +547,89 @@ CREATE TABLE IF NOT EXISTS tag_batch_undone (
     batch_id    TEXT PRIMARY KEY,
     undone_at   INTEGER NOT NULL
 );
+
+-- Click-wheel iPod sync (feature/ipod-sync branch). All five tables here
+-- are additive-only and unrelated to daps/sync_manifest — a bad write to
+-- an iPod's on-device database has much higher blast radius than the
+-- existing file-copy DAP sync, so this gets its own schema rather than
+-- reusing daps (whose columns are file-copy oriented: export_folder/
+-- path_prefix/path_template don't apply to a binary DB we fully own the
+-- read/write layout of). See ipod/rollback.sql for a one-shot teardown
+-- if this feature is ever abandoned — nothing here is ever referenced
+-- by an ALTER TABLE migration against an existing table.
+CREATE TABLE IF NOT EXISTS ipods (
+    id                        TEXT PRIMARY KEY,
+    name                      TEXT NOT NULL,
+    device_class              TEXT DEFAULT '',
+    db_variant                TEXT DEFAULT 'itunesdb',
+    mount_volume_uuid         TEXT DEFAULT '',
+    mount_disk_uuid           TEXT DEFAULT '',
+    mount_device_identifier   TEXT DEFAULT '',
+    firewire_id               TEXT DEFAULT '',
+    hashing_scheme            INTEGER DEFAULT 0,
+    transcode_format          TEXT DEFAULT 'alac',
+    last_itunesdb_backup_path TEXT DEFAULT '',
+    last_scanned_at           INTEGER DEFAULT 0,
+    last_synced_at            INTEGER DEFAULT 0,
+    sync_summary              TEXT DEFAULT '{}'
+);
+
+-- Cache of on-device tracks, refreshed on each scan (Phase 1, read-only)
+CREATE TABLE IF NOT EXISTS ipod_tracks (
+    ipod_id          TEXT NOT NULL REFERENCES ipods(id) ON DELETE CASCADE,
+    device_track_id  INTEGER NOT NULL,
+    device_path      TEXT DEFAULT '',
+    title            TEXT DEFAULT '',
+    artist           TEXT DEFAULT '',
+    album            TEXT DEFAULT '',
+    album_artist     TEXT DEFAULT '',
+    genre            TEXT DEFAULT '',
+    duration_ms      INTEGER DEFAULT 0,
+    size_bytes       INTEGER DEFAULT 0,
+    bitrate          INTEGER DEFAULT 0,
+    sample_rate      INTEGER DEFAULT 0,
+    filetype         TEXT DEFAULT '',
+    local_track_id   TEXT DEFAULT '',
+    PRIMARY KEY (ipod_id, device_track_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ipod_tracks_ipod ON ipod_tracks(ipod_id);
+
+-- Cache of on-device playlists, refreshed on each scan (Phase 1, read-only)
+CREATE TABLE IF NOT EXISTS ipod_playlists (
+    ipod_id             TEXT NOT NULL REFERENCES ipods(id) ON DELETE CASCADE,
+    device_playlist_id  INTEGER NOT NULL,
+    name                TEXT NOT NULL,
+    is_master           INTEGER DEFAULT 0,
+    track_order         TEXT DEFAULT '[]',
+    linked_playlist_id  TEXT DEFAULT '',
+    PRIMARY KEY (ipod_id, device_playlist_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ipod_playlists_ipod ON ipod_playlists(ipod_id);
+
+-- Per-track write/transcode state (Phase 3) — created now so the schema
+-- lands in one pass, unused until the write/sync path exists.
+CREATE TABLE IF NOT EXISTS ipod_sync_manifest (
+    ipod_id          TEXT NOT NULL REFERENCES ipods(id) ON DELETE CASCADE,
+    local_track_id   TEXT NOT NULL,
+    device_track_id  INTEGER DEFAULT 0,
+    local_hash       TEXT DEFAULT '',
+    transcoded_hash  TEXT DEFAULT '',
+    transcoded_path  TEXT DEFAULT '',
+    status           TEXT DEFAULT '',
+    updated_at       INTEGER DEFAULT 0,
+    PRIMARY KEY (ipod_id, local_track_id)
+);
+
+-- iTunesDB backup log, written before every on-device database write
+-- (Phase 2+) — the non-negotiable safety net from the plan.
+CREATE TABLE IF NOT EXISTS ipod_itunesdb_backups (
+    id           TEXT PRIMARY KEY,
+    ipod_id      TEXT NOT NULL REFERENCES ipods(id) ON DELETE CASCADE,
+    backup_path  TEXT NOT NULL,
+    created_at   INTEGER NOT NULL
+);
 """
 
 # FTS5 must be created separately (can't use IF NOT EXISTS with virtual tables the same way)
