@@ -12181,6 +12181,205 @@ def get_ipod_playlists(iid):
     return jsonify(_db.db_load_ipod_playlists(iid))
 
 
+# ── iPod sync (Phase 3) ────────────────────────────────────────────────────────
+#
+# Same 4-route shape as the generic Sync feature (scan/status/execute/reset),
+# but "execute" transcodes + copies files and rewrites the whole on-device
+# iTunesDB via ipod/itunesdb_writer.py, rather than a plain file copy - so it
+# always runs backup_itunesdb() first, matching the plan's hard requirement.
+
+ipod_sync_state = {'status': 'idle', 'ipod_id': None, 'message': '', 'error': '', 'plan': None}
+
+
+@app.route('/api/ipods/<iid>/sync/scan', methods=['POST'])
+def ipod_sync_scan(iid):
+    global ipod_sync_state
+    if ipod_sync_state.get('status') in ('scanning', 'copying'):
+        return jsonify({'error': 'A sync operation is already in progress'}), 400
+
+    ipod = next((i for i in load_ipods() if i['id'] == iid), None)
+    if not ipod:
+        return jsonify({'error': 'Not found'}), 404
+
+    ipod_sync_state = {'status': 'scanning', 'ipod_id': iid, 'message': 'Comparing library…', 'error': '', 'plan': None}
+
+    def do_scan():
+        global ipod_sync_state
+        try:
+            from ipod.sync_planner import compute_sync_plan
+            with library_lock:
+                local_tracks = library[:]
+            local_playlists = [
+                {'id': pid, 'name': p['name'], 'track_ids': p['tracks']}
+                for pid, p in load_playlists().items()
+            ]
+            ipod_tracks = _db.db_load_ipod_tracks(iid)
+            ipod_playlists = _db.db_load_ipod_playlists(iid)
+
+            plan = compute_sync_plan(local_tracks, local_playlists, ipod_tracks, ipod_playlists)
+
+            ipod_sync_state = {
+                'status': 'ready', 'ipod_id': iid, 'message': '', 'error': '',
+                'plan': {
+                    'tracks_to_add_ids': [t['id'] for t in plan['tracks_to_add']],
+                    'tracks_to_add_count': len(plan['tracks_to_add']),
+                    'tracks_already_on_device': plan['tracks_already_on_device'],
+                    'playlists_to_create_ids': [p['id'] for p in plan['playlists_to_create']],
+                    'playlists_to_create_count': len(plan['playlists_to_create']),
+                    'playlists_to_update': [
+                        {'playlist_id': u['playlist']['id'], 'name': u['playlist']['name'],
+                         'missing_track_ids': u['missing_track_ids']}
+                        for u in plan['playlists_to_update']
+                    ],
+                    'playlists_already_synced': plan['playlists_already_synced'],
+                },
+            }
+        except Exception as e:
+            ipod_sync_state = {'status': 'error', 'ipod_id': iid, 'message': '', 'error': str(e), 'plan': None}
+
+    threading.Thread(target=do_scan, daemon=True).start()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/ipods/<iid>/sync/status', methods=['GET'])
+def ipod_sync_status(iid):
+    return jsonify(ipod_sync_state)
+
+
+@app.route('/api/ipods/<iid>/sync/reset', methods=['POST'])
+def ipod_sync_reset(iid):
+    global ipod_sync_state
+    ipod_sync_state = {'status': 'idle', 'ipod_id': None, 'message': '', 'error': '', 'plan': None}
+    return jsonify({'ok': True})
+
+
+@app.route('/api/ipods/<iid>/sync/execute', methods=['POST'])
+def ipod_sync_execute(iid):
+    """Transcodes selected tracks, copies them to the device, and rewrites
+    the on-device iTunesDB to include them (plus any selected new/updated
+    playlists) — backed up first, written atomically.
+
+    NOTE: not yet exercised against a live device from this route. Built
+    and unit-testable (backup/transcode/write all independently proven
+    against real hardware and real audio in earlier commits), but the
+    full execute path deserves the same real-hardware verification
+    discipline as the Phase 2 write proof before it's trusted end-to-end -
+    that verification is intentionally not bundled into this commit.
+    """
+    global ipod_sync_state
+    if ipod_sync_state.get('status') != 'ready' or ipod_sync_state.get('ipod_id') != iid:
+        return jsonify({'error': 'Run scan first'}), 400
+
+    data = request.json or {}
+    selected_track_ids = set(str(x) for x in (data.get('track_ids') or []))
+    # selected_playlist_ids: accepted but not yet acted on below - playlist
+    # creation/update isn't wired into do_execute() yet, only new-track
+    # addition is. Flagged here rather than silently ignored.
+    selected_playlist_ids = set(str(x) for x in (data.get('playlist_ids') or []))
+    if not selected_track_ids and not selected_playlist_ids:
+        return jsonify({'error': 'No items selected'}), 400
+
+    ipod = next((i for i in load_ipods() if i['id'] == iid), None)
+    if not ipod:
+        return jsonify({'error': 'Not found'}), 404
+    resolved_mount, _, _ = _resolve_ipod_mount(ipod)
+    if not resolved_mount or not resolved_mount.exists():
+        return jsonify({'error': 'Device not mounted'}), 400
+    itdb_path = _ipod_itunesdb_path(resolved_mount)
+    if not itdb_path:
+        return jsonify({'error': 'iTunesDB not found on device'}), 400
+
+    ipod_sync_state = {**ipod_sync_state, 'status': 'copying', 'message': 'Starting sync…', 'error': ''}
+
+    def do_execute():
+        global ipod_sync_state
+        try:
+            from ipod.itunesdb_reader import parse_ipod_library
+            from ipod.itunesdb_writer import (
+                TrackInfo, apply_checksum, backup_itunesdb, build_itunesdb_bytes,
+                extract_db_info, extract_mhsd_types_and_order,
+                extract_preserved_mhsd_blobs, ipod_playlist_to_playlist_info,
+                ipod_track_to_track_info, write_ipod_itunesdb_atomic,
+            )
+            from ipod.transcode import get_or_create_transcode
+
+            ipod_sync_state['message'] = 'Backing up current library…'
+            backup_dir = DATA_DIR / 'ipod_backups' / iid
+            backup_path = backup_itunesdb(str(itdb_path), backup_dir)
+            _db.get_conn().execute(
+                'INSERT INTO ipod_itunesdb_backups (id, ipod_id, backup_path, created_at) VALUES (?, ?, ?, ?)',
+                (str(uuid.uuid4()), iid, str(backup_path), int(time.time())),
+            )
+            _db.get_conn().commit()
+
+            info, existing_tracks, existing_playlists = parse_ipod_library(str(itdb_path))
+            track_infos = [ipod_track_to_track_info(t) for t in existing_tracks]
+            playlist_infos = [ipod_playlist_to_playlist_info(p) for p in existing_playlists if not p.is_master]
+
+            with library_lock:
+                local_by_id = {t['id']: t for t in library}
+            transcode_cache_dir = DATA_DIR / 'ipod_transcode_cache'
+
+            music_base = get_music_base()
+            total = len(selected_track_ids)
+            for i, local_id in enumerate(selected_track_ids):
+                t = local_by_id.get(local_id)
+                if not t or not t.get('path'):
+                    continue
+                ipod_sync_state['message'] = f'Transcoding {i + 1} of {total}…'
+                # t['path'] is stored relative to the configured library
+                # root, same convention the generic Sync feature already
+                # uses (get_music_base() / local_rel) - not an absolute path.
+                source_path = music_base / t['path']
+                staged = get_or_create_transcode(source_path, transcode_cache_dir)
+                track_infos.append(TrackInfo(
+                    title=t.get('title') or 'Untitled',
+                    location=f':iPod_Control:Music:F00:{staged.name}',
+                    size=staged.stat().st_size, length=int((t.get('duration') or 0) * 1000),
+                    filetype='m4a' if staged.suffix == '.m4a' else (staged.suffix.lstrip('.') or 'mp3'),
+                    filetype_desc='Apple Lossless audio file' if staged.suffix == '.m4a' else None,
+                    bitrate=t.get('bitrate') or 0, sample_rate=44100,
+                    artist=t.get('artist') or None, album=t.get('album') or None,
+                    album_artist=t.get('album_artist') or None, genre=t.get('genre') or None,
+                    track_number=t.get('track_number') or 0, disc_number=t.get('disc_number') or 1,
+                    total_discs=1, year=t.get('year') or 0,
+                    date_added=int(time.time()), db_track_id=abs(hash(local_id)) % (2 ** 62) + 1,
+                ))
+
+            # NOTE: file staged in the transcode cache still needs copying
+            # into iPod_Control/Music/F00/ on the device itself - the
+            # binary-database write below does not move audio bytes.
+            ipod_sync_state['message'] = 'Writing library…'
+
+            ref_info = extract_db_info(str(itdb_path))
+            with open(itdb_path, 'rb') as f:
+                raw = f.read()
+            ref_types, ref_order = extract_mhsd_types_and_order(raw)
+            preserved_blobs = extract_preserved_mhsd_blobs(raw)
+
+            itdb_bytes = build_itunesdb_bytes(
+                tracks=track_infos, playlists_type2=playlist_infos, reference_info=ref_info,
+                ref_types=ref_types, ref_order=ref_order, preserved_mhsd_blobs=preserved_blobs,
+                master_playlist_name=ipod.get('name') or 'iPod',
+            )
+            itdb_bytes = apply_checksum(itdb_bytes, ref_info.get('hashing_scheme', 0), firewire_id=None)
+
+            # Deliberately stops short of the actual device write — see
+            # the route docstring. write_ipod_itunesdb_atomic(str(itdb_path), itdb_bytes)
+            # is the remaining line, held back pending the same real-hardware
+            # verification pass Phase 2's write got before being trusted.
+            ipod_sync_state = {
+                'status': 'error', 'ipod_id': iid, 'plan': ipod_sync_state.get('plan'),
+                'message': '',
+                'error': 'Execute is built but not yet enabled for live writes pending hardware verification (see route docstring).',
+            }
+        except Exception as e:
+            ipod_sync_state = {**ipod_sync_state, 'status': 'error', 'message': '', 'error': str(e)}
+
+    threading.Thread(target=do_execute, daemon=True).start()
+    return jsonify({'ok': True})
+
+
 # ── IEM Management ────────────────────────────────────────────────────────────
 
 IEM_MAX_SQUIG_SOURCES = 10
