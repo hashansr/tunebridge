@@ -48,3 +48,50 @@ To refresh from upstream: re-clone iOpenPod, diff its
 reapply the `has_artwork` patch above if it hasn't landed upstream —
 and re-run the Phase 0/2 real-device round-trip checks before trusting
 a newer version.
+
+## Phase 4: ArtworkDB (2026-07-24)
+
+`iopenpod/artworkdb_shared/`, `iopenpod/artworkdb_writer/` (all six
+files), and five files under `iopenpod/device/` — `artwork_presets.py`,
+`checksum.py`, `models.py`, `capabilities.py`, `artwork.py` — are copied
+unmodified from the same iOpenPod commit as above.
+
+Unlike `itunesdb_writer`, `artworkdb_writer` is **not** cleanly
+separated from `iopenpod.device` upstream: `ithmb_codecs.py` and
+`rgb565.py` import per-model format tables (`ITHMB_FORMAT_MAP`,
+`ArtworkFormat`) from `iopenpod.device`'s real `__init__.py`, which
+transitively pulls in USB backends (`vpd_libusb`, `vpd_usb_control`)
+and a device scanner — exactly the coupling this project avoids. The
+five files listed above were checked individually and are themselves
+dependency-free (dataclasses/tables + stdlib only); `device/__init__.py`
+in this vendor tree is **not** copied from upstream — it's a
+hand-written local file that only re-exports the specific names
+`artworkdb_shared`/`artworkdb_writer` need, sourced from those five
+clean files. `device/write_guard.py` is likewise a local stand-in (a
+one-line `DeviceWriteSafetyError` exception class) replacing upstream's
+real ~500-line device-write-safety subsystem, which `artworkdb_chunks.py`
+only needs for that one exception type — TuneBridge's own
+backup-before-write + atomic-replace pattern covers the actual safety
+net (see `ipod/artworkdb.py`).
+
+`iopenpod.artworkdb_parser` (the general ArtworkDB reader used by
+iOpenPod's own GUI, and by the already-vendored but currently-unused
+`itunesdb_parser/artwork_links.py`) is **not** vendored — TuneBridge
+only needs read access for *passthrough preservation* of existing
+artwork entries during a write, which `artworkdb_writer/artworkdb_chunks.py`'s
+own `read_existing_artwork()` already provides more directly than the
+general parser would. Revisit if `artwork_links.py`'s hydration logic
+is ever wired in.
+
+Verified: imports standalone with zero PyQt6/USB dependency;
+`capabilities_for_family_gen('iPod', '5th Gen')` resolves the correct
+real cover-art formats (1028 100×100, 1029 200×200, both RGB565_LE) —
+matches the real Phase 0 test device.
+
+To refresh from upstream: re-clone iOpenPod, diff
+`src/iopenpod/{artworkdb_shared,artworkdb_writer}/` verbatim against
+this directory, and diff `device/{artwork_presets,checksum,models,
+capabilities,artwork}.py` verbatim — but do **not** replace this
+tree's `device/__init__.py` or `device/write_guard.py` with upstream's
+versions (see above). Re-run the artwork round-trip check before
+trusting a newer version.

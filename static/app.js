@@ -12982,6 +12982,48 @@ async function deleteDap(id) {
 const _IPOD_SVG = `<span class="gear-mask-icon gear-mask-icon-dap" aria-hidden="true"></span>`;
 let _ipodMountCandidates = [];
 
+// Value = "family|generation" as stored in ipods.device_class, matching
+// iopenpod.device.capabilities' (family, generation) lookup keys exactly
+// (see ipod/artworkdb.py's cover_art_formats_for_device()). Only the
+// click-wheel families/generations this project targets are listed here
+// (Nano 5G+ use a SQLite on-device DB - Phase 6, a different code path
+// entirely, so deliberately excluded from this dropdown).
+const IPOD_MODEL_OPTIONS = [
+  { value: '', label: 'Unknown / not set' },
+  { value: 'iPod|1st Gen', label: 'iPod 1st Gen' },
+  { value: 'iPod|2nd Gen', label: 'iPod 2nd Gen' },
+  { value: 'iPod|3rd Gen', label: 'iPod 3rd Gen' },
+  { value: 'iPod|4th Gen (mono)', label: 'iPod 4th Gen (mono)' },
+  { value: 'iPod|4th Gen (photo)', label: 'iPod 4th Gen (photo)' },
+  { value: 'iPod|4th Gen (color)', label: 'iPod 4th Gen (color / U2)' },
+  { value: 'iPod|5th Gen', label: 'iPod 5th Gen (Video)' },
+  { value: 'iPod|5.5th Gen', label: 'iPod 5.5th Gen (Video, late 2006)' },
+  { value: 'iPod Classic|6th Gen', label: 'iPod Classic 6th Gen' },
+  { value: 'iPod Classic|6.5th Gen', label: 'iPod Classic 6.5th Gen' },
+  { value: 'iPod Classic|7th Gen', label: 'iPod Classic 7th Gen (160GB)' },
+  { value: 'iPod Mini|1st Gen', label: 'iPod Mini 1st Gen' },
+  { value: 'iPod Mini|2nd Gen', label: 'iPod Mini 2nd Gen' },
+  { value: 'iPod Nano|1st Gen', label: 'iPod Nano 1st Gen' },
+  { value: 'iPod Nano|2nd Gen', label: 'iPod Nano 2nd Gen' },
+  { value: 'iPod Nano|3rd Gen', label: 'iPod Nano 3rd Gen (fat)' },
+  { value: 'iPod Nano|4th Gen', label: 'iPod Nano 4th Gen' },
+];
+
+function _ipodModelOptionsHtml(selected) {
+  return IPOD_MODEL_OPTIONS.map(o =>
+    `<option value="${esc(o.value)}" ${o.value === (selected || '') ? 'selected' : ''}>${esc(o.label)}</option>`
+  ).join('');
+}
+
+async function updateIpodModel(id, deviceClass) {
+  try {
+    await api(`/ipods/${id}`, { method: 'PUT', body: { device_class: deviceClass } });
+    toast(deviceClass ? 'Model saved.' : 'Model cleared.');
+  } catch (e) {
+    toast('Could not save model.');
+  }
+}
+
 async function loadIpodsView() {
   const grid = document.getElementById('ipods-grid');
   const empty = document.getElementById('ipods-empty');
@@ -13055,7 +13097,11 @@ async function showIpodDetail(id) {
         <summary><span>Configuration</span><span class="gd-chevron" aria-hidden="true"></span></summary>
         <div class="gd-config-grid">
           <div><label>Mount path</label><span>${esc(ipod.active_mount_path || '—')}</span></div>
-          <div><label>Device class</label><span>${esc(ipod.device_class || 'Unknown')}</span></div>
+          <div><label>Model</label><span>
+            <select id="ipod-model-select" onchange="App.updateIpodModel('${ipod.id}', this.value)">
+              ${_ipodModelOptionsHtml(ipod.device_class)}
+            </select>
+          </span></div>
           <div><label>Database format</label><span>${esc(ipod.db_variant || 'itunesdb')}</span></div>
           <div><label>Checksum scheme</label><span>${esc(_ipodChecksumLabel(ipod.hashing_scheme))}</span></div>
           <div><label>Tracks on device</label><span>${ipod.track_count}</span></div>
@@ -13346,6 +13392,7 @@ async function removeIpodPlaylist(ipodId, devicePlaylistId, name) {
 async function showAddIpodModal() {
   document.getElementById('ipod-name').value = '';
   document.getElementById('ipod-save-btn').disabled = true;
+  document.getElementById('ipod-model-add-select').innerHTML = _ipodModelOptionsHtml('');
   const sel = document.getElementById('ipod-mount-select');
   sel.innerHTML = '<option value="">Detecting connected iPods…</option>';
   document.getElementById('ipod-modal').style.display = 'flex';
@@ -13380,6 +13427,7 @@ async function saveIpod() {
   if (!m) return;
   const body = {
     name: document.getElementById('ipod-name').value.trim() || 'iPod',
+    device_class: document.getElementById('ipod-model-add-select').value || '',
     mount_path: m.path,
     mount_volume_uuid: m.volume_uuid || '',
     mount_disk_uuid: m.disk_uuid || '',
@@ -22027,6 +22075,7 @@ const App = {
   onIpodMountSelect,
   closeIpodModal,
   saveIpod,
+  updateIpodModel,
   deleteIpod,
   scanIpod,
   checkIpodSync,

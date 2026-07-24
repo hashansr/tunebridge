@@ -12023,18 +12023,37 @@ def _ipod_refresh_scan_cache(iid, itdb_path):
     return info, tracks, playlists
 
 
+def _ipod_music_dir_count(mount_path: Path) -> int:
+    """How many Fxx subfolders this specific device actually has under
+    iPod_Control/Music/. Varies by model/capacity (iOpenPod's capability
+    table defaults iPod 5th Gen to 20, but the real test unit has 50 -
+    likely a higher-capacity variant), so this reads the device itself
+    rather than trusting a generic per-model default. Falls back to 20
+    (the most conservative real-world value in that table) if the
+    folder is empty or unreadable, e.g. a factory-fresh device.
+    """
+    music_dir = Path(mount_path) / 'iPod_Control' / 'Music'
+    try:
+        existing = [p for p in music_dir.iterdir() if p.is_dir() and p.name.startswith('F') and p.name[1:].isdigit()]
+    except OSError:
+        return 20
+    return len(existing) or 20
+
+
 def _ipod_stage_device_path(mount_path: Path, key: str, ext: str, used_paths: set) -> str:
     """Assigns a collision-free on-device path for a newly-added track,
-    spread across the F00-F49 subfolders real click-wheel iPods use
+    spread across the Fxx subfolders this specific device actually has
     (matches the layout itunesdb_reader.py already parses back out of
     existing devices). Deterministic per `key` (the local track id) so
     re-running a sync for the same track lands on the same device file
     instead of accumulating duplicates. Creates the destination folder
-    if needed; does not write the file itself.
+    if needed (only relevant for a factory-fresh device); does not write
+    the file itself.
     """
     ext = (ext or 'mp3').lstrip('.').lower()
     base = hashlib.sha256(key.encode('utf-8')).hexdigest()[:12].upper()
-    folder = f'F{int(base[:2], 16) % 50:02d}'
+    dir_count = _ipod_music_dir_count(mount_path)
+    folder = f'F{int(base[:2], 16) % dir_count:02d}'
     rel = f'iPod_Control/Music/{folder}/{base}.{ext}'
     n = 0
     while rel in used_paths or (Path(mount_path) / rel).exists():
@@ -12285,8 +12304,8 @@ def ipod_sync_reset(iid):
 @app.route('/api/ipods/<iid>/sync/execute', methods=['POST'])
 def ipod_sync_execute(iid):
     """Transcodes selected tracks, copies them onto the device under
-    iPod_Control/Music/F00-F49/, and rewrites the on-device iTunesDB to
-    add them, remove selected tracks/playlists, and create playlists for
+    iPod_Control/Music/Fxx/, and rewrites the on-device iTunesDB to add
+    them, remove selected tracks/playlists, and create playlists for
     selected local playlists (member tracks included automatically) —
     backed up first, written atomically. Removed tracks' on-device audio
     files are deleted only after the rewritten iTunesDB is safely on
@@ -12294,6 +12313,13 @@ def ipod_sync_execute(iid):
     re-parsing the freshly-written file, which also self-checks the
     write (a reader failure here means the writer produced something
     invalid — restore from ipod_itunesdb_backups if that happens).
+
+    If the iPod's selected model (ipods.device_class) has known ArtworkDB
+    cover-art formats, embedded art is extracted from each new track and
+    written into ArtworkDB/*.ithmb (backed up first, same as iTunesDB;
+    existing entries are preserved byte-for-byte via passthrough, never
+    re-encoded). Tracks with no embedded/folder art, or a device with no
+    known artwork formats, are unaffected either way.
     """
     global ipod_sync_state
     # Deliberately does NOT require a prior scan/'ready' state: this route
@@ -12334,6 +12360,7 @@ def ipod_sync_execute(iid):
                 extract_preserved_mhsd_blobs, ipod_playlist_to_playlist_info,
                 ipod_track_to_track_info, write_ipod_itunesdb_atomic,
             )
+            from ipod.artworkdb import build_artwork_update, cover_art_formats_for_device, extract_art
             from ipod.sync_planner import match_key
             from ipod.transcode import enforce_cache_size_limit, get_or_create_transcode, needs_transcode
 
@@ -12418,6 +12445,15 @@ def ipod_sync_execute(iid):
                 except (TypeError, ValueError):
                     return default
 
+            # Cover-art formats this specific device model wants (from the
+            # user-selected model in the Add/Edit iPod modal, ipods.device_class
+            # = "family|generation"). Empty means either an unset/unknown
+            # model or a model with no ArtworkDB at all - new tracks just
+            # get no artwork_count/mhii_link, same as before Phase 4.
+            art_format_defs = cover_art_formats_for_device(ipod.get('device_class', ''))
+            new_art_by_db_track_id = {}
+            track_info_by_db_track_id = {}
+
             music_base = get_music_base()
             local_id_to_db_track_id = {}
             total = len(add_track_ids)
@@ -12441,7 +12477,7 @@ def ipod_sync_execute(iid):
 
                 db_track_id = abs(hash(local_id)) % (2 ** 62) + 1
                 local_id_to_db_track_id[local_id] = db_track_id
-                track_infos.append(TrackInfo(
+                track_info = TrackInfo(
                     title=t.get('title') or 'Untitled',
                     location=':' + device_path.replace('/', ':'),
                     size=dest.stat().st_size, length=_as_int((t.get('duration') or 0)) * 1000,
@@ -12453,7 +12489,14 @@ def ipod_sync_execute(iid):
                     track_number=_as_int(t.get('track_number')), disc_number=_as_int(t.get('disc_number'), 1),
                     total_discs=1, year=_as_int(t.get('year')),
                     date_added=int(time.time()), db_track_id=db_track_id,
-                ))
+                )
+                track_infos.append(track_info)
+
+                if art_format_defs:
+                    art_bytes = extract_art(source_path)
+                    if art_bytes:
+                        new_art_by_db_track_id[db_track_id] = art_bytes
+                        track_info_by_db_track_id[db_track_id] = track_info
 
             # Create playlists for any selected local playlists. Member
             # tracks come along automatically (the user's requirement:
@@ -12483,6 +12526,36 @@ def ipod_sync_execute(iid):
                             member_db_ids.append(key_to_device_db_track_id[key])
                     if member_db_ids:
                         playlist_infos.append(PlaylistInfo(name=pl['name'], track_ids=member_db_ids))
+
+            # ArtworkDB is written before iTunesDB: if the process is
+            # interrupted between the two writes, the safe direction is
+            # "iTunesDB still points at old state, a few extra unreferenced
+            # ArtworkDB images exist" rather than "iTunesDB references
+            # img_ids that don't exist yet."
+            if new_art_by_db_track_id:
+                ipod_sync_state['message'] = 'Writing artwork…'
+                artworkdb_path = resolved_mount / 'iPod_Control' / 'Artwork' / 'ArtworkDB'
+                artwork_dir = artworkdb_path.parent
+                if artworkdb_path.exists():
+                    artworkdb_backup_dir = DATA_DIR / 'ipod_backups' / iid
+                    artworkdb_backup_dir.mkdir(parents=True, exist_ok=True)
+                    artworkdb_backup_path = artworkdb_backup_dir / f'{time.strftime("%Y%m%dT%H%M%S")}_ArtworkDB.bak'
+                    shutil.copy2(artworkdb_path, artworkdb_backup_path)
+                    _db.get_conn().execute(
+                        'INSERT INTO ipod_itunesdb_backups (id, ipod_id, backup_path, created_at) VALUES (?, ?, ?, ?)',
+                        (str(uuid.uuid4()), iid, str(artworkdb_backup_path), int(time.time())),
+                    )
+                    _db.get_conn().commit()
+
+                new_artworkdb_bytes, db_track_id_to_img_id = build_artwork_update(
+                    artworkdb_path, artwork_dir, art_format_defs, new_art_by_db_track_id,
+                )
+                for db_track_id, img_id in db_track_id_to_img_id.items():
+                    ti = track_info_by_db_track_id.get(db_track_id)
+                    if ti is not None:
+                        ti.artwork_count = 1
+                        ti.mhii_link = img_id
+                write_ipod_itunesdb_atomic(str(artworkdb_path), new_artworkdb_bytes)
 
             ipod_sync_state['message'] = 'Writing library…'
 
