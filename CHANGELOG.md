@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: The Playlists list in the iPod Sync wizard step had no pagination controls, unlike Artists, since a typical playlist count fell right at the (invisible) page-size threshold. Lowered the shared page size so pagination now shows for both.
 
 ## v0.574-rc.250726-1144 · 2026-07-25
 - Change: The iPod Playlists/Artists review screen in the Sync wizard now matches the look of the regular device sync review screen — same cards, checkboxes, artwork thumbnails, and pagination style throughout.

@@ -13570,7 +13570,7 @@ async function _swPollIpodScan(id) {
    to the same /api/ipods/<id>/sync/execute route already used for the
    Gear iPod detail page's add/remove actions. */
 
-const SW_IPOD_BROWSE_PAGE_SIZE = 50;
+const SW_IPOD_BROWSE_PAGE_SIZE = 25;
 
 async function _swLoadIpodLibraryBrowse(id) {
   const [tracks, playlists] = await Promise.all([
