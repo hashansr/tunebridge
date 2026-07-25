@@ -212,6 +212,8 @@ Public `App` object exposes all functions called from HTML `onclick` attributes.
 - [x] Rescan tags button — in Insights view header, POSTs to `/api/library/scan`, shows inline progress banner, reloads overview + tag health on completion
 - [x] IEM compare feature — multi-select IEMs in Gear view, floating action bar, FR overlay modal with Chart.js log-scale graph; reuses `/api/iems/<primary>/graph?compare=...` endpoint; clickable legend per curve
 - [x] Compact horizontal Gear cards — `.gear-card` is `flex-direction:row`, icon tile left + name/badges right; 2-column grid; applies to both DAPs and IEMs
+- [x] Unified Sync wizard entry point — Step 1 device picker lists DAPs and iPods in labeled sections; selecting an iPod opens a lightweight `#sw-step-ipod` panel in the same wizard chrome instead of the DAP steps 2-5
+- [x] iPod library browse accordion — inside `#sw-step-ipod`, after a scan: "Playlists" and "Artists" sections (all levels collapsed by default), Artists nest Album → Song; both top-level lists paginated at 50 items/page. Read-only browse, built from the existing `/api/ipods/<id>/tracks` and `/playlists` responses, no new backend routes
 
 ## Key Files (additional)
 | File | Purpose |
@@ -254,7 +256,7 @@ Global `sync_state` dict tracks: `status` (idle/scanning/ready/copying/done/erro
 
 `walk_music_files(root)` — walks a directory, skips hidden/`._` files, returns sorted list of relative paths for all music file extensions.
 
-Sync button (⟳ arrows icon) in sidebar bottom bar opens `#view-sync` — a full-page 5-step wizard (`_sw`/`sw*` functions in `static/app.js`), not the `#sync-modal` markup (that's dead/orphaned CSS from an earlier modal-based implementation). Step 1: device picker, categorised into "DAPs" and "iPods" sections, mount status shown as green "Connected" / grey "Offline" chips. Step 2: scanning with animated progress bar and live log. Step 3: review changes — filter chips + two sections (copy to device ↑ / copy to local ↓) with scrollable checkbox lists, folder path in muted colour, filename in brighter, "Select all" per section. Step 4: syncing with file-by-file progress. Step 5: done, showing summary + any errors. Selecting an iPod in Step 1 branches into a separate, lightweight `#sw-step-ipod` panel (thin wrapper around the existing iPod scan/check/sync actions, calling `/api/ipods/<id>/*` — see below) instead of steps 2-5.
+Sync button (⟳ arrows icon) in sidebar bottom bar opens `#view-sync` — a full-page 5-step wizard (`_sw`/`sw*` functions in `static/app.js`), not the `#sync-modal` markup (that's dead/orphaned CSS from an earlier modal-based implementation). Step 1: device picker, categorised into "DAPs" and "iPods" sections, mount status shown as green "Connected" / grey "Offline" chips. Step 2: scanning with animated progress bar and live log. Step 3: review changes — filter chips + two sections (copy to device ↑ / copy to local ↓) with scrollable checkbox lists, folder path in muted colour, filename in brighter, "Select all" per section. Step 4: syncing with file-by-file progress. Step 5: done, showing summary + any errors. Selecting an iPod in Step 1 branches into a separate, lightweight `#sw-step-ipod` panel (thin wrapper around the existing iPod scan/check/sync actions, calling `/api/ipods/<id>/*` — see below) instead of steps 2-5. Once scanned, that panel also shows a read-only "Playlists" / "Artists → Album → Song" accordion of what's on the device (`_swLoadIpodLibraryBrowse`, `_swRenderIpodPlaylistsAccordion`, `_swRenderIpodArtistsAccordion` in `static/app.js`) — all levels collapsed by default, 50 items/page pagination on the two top-level lists.
 
 ## Git Workflow
 - Repo: `https://github.com/hashansr/tunebridge` (pushed, `main` branch)
@@ -296,7 +298,7 @@ The 2026-03-26 decision below ("too large and too complex, will not implement") 
 
 State: `ipods` table (SQLite) for registration/config, `ipod_tracks`/`ipod_playlists` for cached on-device listings, `ipod_itunesdb_backups` for pre-sync backups (auto-restorable). Routes under `/api/ipods*` (see `app.py`, search "Click-wheel iPods"). UI: Gear → iPods → detail page (`showIpodDetail()` in `static/app.js`) for full management (scan, config, backups, tracks, playlists), plus a lightweight `#sw-step-ipod` panel in the unified Sync wizard (`#view-sync`) for a quick scan/sync-now shortcut reachable from the same entry point as DAP sync.
 
-Deferred, not yet built: the richer iPod sync UX (accordion browse of on-device library, explicit add/remove selection, live space required/available/left calculation, combined removal+transcode+addition in one step) — would reuse `ipod/sync_planner.py::compute_sync_plan()` and the DAP wizard's Step 3 review-tree patterns.
+Deferred, not yet built: the richer iPod sync UX — explicit add/remove selection on top of the (now built) browse accordion, live space required/available/left calculation, combined removal+transcode+addition in one step — would reuse `ipod/sync_planner.py::compute_sync_plan()` and the DAP wizard's Step 3 review-tree patterns.
 
 ### Original OOS research (2026-03-26, historical — see above for current status)
 Investigated feasibility of syncing music and playlists to an iPod Classic 5th Gen from TuneBridge. At the time: too large and too complex, would not implement.
