@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.578-rc.260726-0907 · 2026-07-26
 - Change: The iPod Sync wizard step now separates what's on the device from what's not into two clearly labelled sections ("Currently on this iPod" and "In your library, not on this iPod"), with clearer titles, empty-state messages, and instructions, and drops the extra progress-card chrome so it matches the regular device sync review screen even more closely.
 
 ## v0.577-rc.250726-1902 · 2026-07-25
