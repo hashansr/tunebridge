@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.571-rc.250726-1006 · 2026-07-25
+
 ## v0.570-rc.250726-0951 · 2026-07-25
 - Add: The Sync wizard's device picker now lists iPods alongside DAPs, in separate "DAPs" and "iPods" sections. Selecting an iPod opens a quick scan/sync-now panel right inside the wizard, so you no longer need to go to Gear to sync an iPod.
 
