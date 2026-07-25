@@ -3,8 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
-- Add: The Sync wizard's device picker now lists iPods alongside DAPs, in separate "DAPs" and "iPods" sections. Selecting an iPod opens a quick scan/sync-now panel right inside the wizard, so you no longer need to go to Gear to sync an iPod.
-- Add: After scanning an iPod in the Sync wizard, its Playlists and Artists (grouped by Album) are now browsable in a collapsible accordion, with paging for long lists.
+- Add: The Sync wizard's device picker now lists iPods alongside DAPs, in separate "DAPs" and "iPods" sections, so you no longer need to go to Gear to sync an iPod.
+- Add: After scanning an iPod in the Sync wizard, its Playlists and Artists (grouped by Album) are browsable in a collapsible accordion, with paging for long lists, and a checkbox on every playlist, artist, album, and song lets you choose what to keep on the device. Continuing takes you to a dedicated sync step that adds anything missing and removes anything you unchecked, in one pass.
 - Fix: Scanning an iPod's library on a built/installed app failed with "No module named iopenpod" — a vendored dependency wasn't being packaged into distributable builds.
 
 ## v0.569-dev.240726+32d54a6 · 2026-07-24

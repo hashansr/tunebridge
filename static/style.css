@@ -20664,6 +20664,20 @@ body.is-col-resizing {
 .sw-ipod-browse > details + details {
   margin-top: 10px;
 }
+.sw-ipod-browse-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 0 0 10px;
+}
+
+.sw-ipod-checkbox {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
 
 .sw-ipod-tree-node summary {
   display: flex;
@@ -20724,11 +20738,12 @@ body.is-col-resizing {
 
 .sw-ipod-track-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   padding: 5px 0 5px 18px;
   font-size: 12.5px;
   border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
 }
 .sw-ipod-track-title {
   color: var(--text);

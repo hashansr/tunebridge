@@ -8658,7 +8658,7 @@ function _pushToNavHistory() {
 }
 
 function _updateNavButtonStates() {
-  const syncBackSteps = [3, 5, 'ipod'];
+  const syncBackSteps = [3, 5, 'ipod', 'ipod-sync'];
   const inSyncBack = state.view === 'sync' && syncBackSteps.includes(_sw.step);
   const hasBack = _navHistory.length > 0 || inSyncBack;
   const backBtn = document.getElementById('nav-back-btn');
@@ -9625,7 +9625,7 @@ async function loadSyncView() {
   _sw = {
     step: 1, device: null, proposal: null, selection: {},
     filter: 'all', pages: {}, expanded: {},
-    scanPollTimer: null, syncPollTimer: null, ipodPollTimer: null, ipodBrowse: null,
+    scanPollTimer: null, syncPollTimer: null, ipodPollTimer: null, ipodBrowse: null, ipodSyncPhase: null,
     scanStartTs: 0, syncStartTs: 0, logLines: [], syncResult: null,
     syncCompletedItems: [], syncLastProgress: 0, syncRateSamples: [],
     executedPayload: null,
@@ -9703,9 +9703,14 @@ function _swClearTimers() {
   if (_sw.ipodPollTimer) { clearTimeout(_sw.ipodPollTimer); _sw.ipodPollTimer = null; }
 }
 
+const _SW_IPOD_STEP_META = {
+  ipod: { title: () => `${_sw.device?.name || 'iPod'} library`, sub: '' },
+  'ipod-sync': { title: () => `Sync — ${_sw.device?.name || 'iPod'}`, sub: '' },
+};
+
 function _swGoTo(step) {
   _sw.step = step;
-  for (const i of [1, 2, 3, 4, 5, 'ipod']) {
+  for (const i of [1, 2, 3, 4, 5, 'ipod', 'ipod-sync']) {
     const el = document.getElementById(`sw-step-${i}`);
     if (el) el.style.display = i === step ? '' : 'none';
   }
@@ -9717,12 +9722,12 @@ function _swGoTo(step) {
     activeEl.classList.add('sw-step-enter');
   }
   // Update step header
-  const meta = step === 'ipod'
-    ? { title: `Sync — ${_sw.device?.name || 'iPod'}`, sub: '' }
-    : _SW_STEPS[step - 1];
+  const ipodMeta = _SW_IPOD_STEP_META[step];
+  const meta = ipodMeta ? { title: ipodMeta.title(), sub: ipodMeta.sub } : _SW_STEPS[step - 1];
   const el = n => document.getElementById(n);
-  el('sw-counter').textContent = step === 'ipod' ? '' : `${step} / 5`;
-  el('sw-counter').style.display = step === 'ipod' ? 'none' : '';
+  const isIpodStep = !!ipodMeta;
+  el('sw-counter').textContent = isIpodStep ? '' : `${step} / 5`;
+  el('sw-counter').style.display = isIpodStep ? 'none' : '';
   el('sw-title').textContent = meta.title;
   const subEl = el('sw-step-sub');
   if (subEl) {
@@ -9741,6 +9746,7 @@ function _swGoTo(step) {
   if (step === 4) _swInitSyncStep();
   if (step === 5) _swRenderDone();
   if (step === 'ipod') _swInitIpodStep();
+  if (step === 'ipod-sync') _swInitIpodSyncStep();
 }
 
 function _swUpdateFooter(step) {
@@ -9758,20 +9764,24 @@ function _swUpdateFooter(step) {
     // 3: handled by _swUpdateReviewFooter after proposal is built
     4: 'Do not disconnect the device.',
     5: 'Safe to disconnect.',
-    ipod: 'Use Scan library and Check for changes above, then disconnect when finished.',
+    ipod: 'Uncheck anything you\'d like removed, then continue.',
+    'ipod-sync': 'Do not disconnect the device.',
   };
   if (step !== 3) msgEl.textContent = msgs[step] ?? '';
 
   if (step === 5) statusEl.classList.add('sw-footer-status--success');
 
   // Cancel button
-  const cancelLabels = { 1: 'Cancel', 2: '', 3: 'Cancel', 4: '', 5: '', ipod: 'Change device' };
+  const cancelLabels = { 1: 'Cancel', 2: '', 3: 'Cancel', 4: '', 5: '', ipod: 'Change device', 'ipod-sync': 'Back' };
   cancelBtn.textContent = cancelLabels[step] || '';
   cancelBtn.disabled = false;
-  cancelBtn.style.display = (step === 1 || step === 3 || step === 'ipod') ? '' : 'none';
-  // Step 4 cancel calls swCancelSync, others call swCancel (via HTML onclick)
+  cancelBtn.style.display = (step === 1 || step === 3 || step === 'ipod' || step === 'ipod-sync') ? '' : 'none';
+  // Step 4 cancel calls swCancelSync; ipod-sync calls swNavBack (returns to the
+  // browse/select step, not the device picker); others call swCancel.
   if (step === 4) {
     cancelBtn.onclick = () => App.swCancelSync();
+  } else if (step === 'ipod-sync') {
+    cancelBtn.onclick = () => App.swNavBack();
   } else {
     cancelBtn.onclick = () => App.swCancel();
   }
@@ -9783,7 +9793,8 @@ function _swUpdateFooter(step) {
     3: { label: 'Start sync', disabled: false, ghost: false },
     4: { label: 'Syncing…', disabled: true, ghost: true },
     5: { label: 'Done', disabled: false, ghost: false },
-    ipod: { label: 'Done', disabled: false, ghost: false },
+    ipod: { label: 'Continue <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>', disabled: true, ghost: false },
+    'ipod-sync': { label: 'Comparing…', disabled: true, ghost: true },
   };
   const cfg = btnConfigs[step];
   primaryBtn.innerHTML = cfg.label;
@@ -10013,13 +10024,27 @@ function swPrimaryAction() {
     _swGoTo('ipod');
     return;
   }
-  const actions = { 1: swStartScan, 3: swStartSync, 5: swFinish, ipod: swFinish };
+  if (_sw.step === 'ipod-sync') {
+    if (_sw.ipodSyncPhase === 'ready') swRunIpodSync();
+    else if (_sw.ipodSyncPhase === 'done' || _sw.ipodSyncPhase === 'error') swFinish();
+    // 'comparing' / 'syncing' — button is disabled, nothing to do
+    return;
+  }
+  const actions = { 1: swStartScan, 3: swStartSync, 5: swFinish, ipod: () => _swGoTo('ipod-sync') };
   const fn = actions[_sw.step];
   if (fn) fn();
 }
 
 function swNavBack() {
-  // Back on step 3, 5, or the iPod step → reset to step 1
+  // Back on the ipod-sync step returns to the browse/select step (not the
+  // device picker), and only once no network operation is in flight.
+  if (_sw.step === 'ipod-sync') {
+    if (_sw.ipodSyncPhase === 'comparing' || _sw.ipodSyncPhase === 'syncing') return;
+    _swClearTimers();
+    _swGoTo('ipod');
+    return;
+  }
+  // Back on step 3, 5, or the iPod browse/select step → reset to step 1
   if (_sw.step === 3 || _sw.step === 5 || _sw.step === 'ipod') {
     _swResetToStep1();
   }
@@ -13478,15 +13503,11 @@ function _swInitIpodStep() {
   const nameEl = document.getElementById('sw-ipod-device-name');
   const scanBtn = document.getElementById('sw-ipod-scan-btn');
   const scanStatus = document.getElementById('sw-ipod-scan-status');
-  const checkBtn = document.getElementById('sw-ipod-check-btn');
-  const syncStatus = document.getElementById('sw-ipod-sync-status');
-  const summary = document.getElementById('sw-ipod-sync-summary');
   if (nameEl) nameEl.textContent = ipod.name || 'iPod';
   if (scanBtn) { scanBtn.disabled = !ipod.mounted; scanBtn.title = ipod.mounted ? '' : 'Connect the iPod to scan it'; }
   if (scanStatus) scanStatus.textContent = ipod.last_scanned_at ? `Last scanned ${esc(_fmtRelDate(ipod.last_scanned_at))}` : 'Not scanned yet';
-  if (checkBtn) { checkBtn.disabled = !(ipod.mounted && ipod.last_scanned_at); checkBtn.title = checkBtn.disabled ? 'Scan the library above first' : ''; }
-  if (syncStatus) syncStatus.textContent = '';
-  if (summary) summary.innerHTML = '';
+  const primaryBtn = document.getElementById('sw-btn-primary');
+  if (primaryBtn) primaryBtn.disabled = !ipod.last_scanned_at;
   if (ipod.last_scanned_at) {
     _swLoadIpodLibraryBrowse(ipod.id);
   } else {
@@ -13516,7 +13537,6 @@ async function _swPollIpodScan(id) {
   const status = await api(`/ipods/${id}/status`).catch(() => null);
   const btn = document.getElementById('sw-ipod-scan-btn');
   const statusLine = document.getElementById('sw-ipod-scan-status');
-  const checkBtn = document.getElementById('sw-ipod-check-btn');
   if (!status || status.ipod_id !== id) {
     if (btn) btn.disabled = false;
     return;
@@ -13533,116 +13553,22 @@ async function _swPollIpodScan(id) {
   }
   if (statusLine) statusLine.textContent = status.message || 'Scan complete';
   if (_sw.device) _sw.device.last_scanned_at = Date.now() / 1000;
-  if (checkBtn) { checkBtn.disabled = false; checkBtn.title = ''; }
+  const primaryBtn = document.getElementById('sw-btn-primary');
+  if (primaryBtn) primaryBtn.disabled = false;
   _swLoadIpodLibraryBrowse(id);
 }
 
-async function swCheckIpodSync() {
-  const id = _sw.device?.id;
-  if (!id) return;
-  const btn = document.getElementById('sw-ipod-check-btn');
-  const statusLine = document.getElementById('sw-ipod-sync-status');
-  const summary = document.getElementById('sw-ipod-sync-summary');
-  if (btn) btn.disabled = true;
-  if (statusLine) statusLine.textContent = 'Comparing…';
-  if (summary) summary.innerHTML = '';
-  try {
-    await api(`/ipods/${id}/sync/scan`, { method: 'POST' });
-  } catch (e) {
-    toast('Could not start sync check.');
-    if (btn) btn.disabled = false;
-    return;
-  }
-  _swPollIpodSyncCheck(id);
-}
-
-async function _swPollIpodSyncCheck(id) {
-  const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
-  const btn = document.getElementById('sw-ipod-check-btn');
-  const statusLine = document.getElementById('sw-ipod-sync-status');
-  const summary = document.getElementById('sw-ipod-sync-summary');
-  if (!status || status.ipod_id !== id) {
-    if (btn) btn.disabled = false;
-    return;
-  }
-  if (status.status === 'scanning') {
-    _sw.ipodPollTimer = setTimeout(() => _swPollIpodSyncCheck(id), 800);
-    return;
-  }
-  if (btn) btn.disabled = false;
-  if (status.status === 'error') {
-    if (statusLine) statusLine.textContent = '';
-    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.error || 'Sync check failed.')}</p>`;
-    return;
-  }
-  if (statusLine) statusLine.textContent = '';
-  const plan = status.plan || {};
-  if (!summary) return;
-  const nothingToDo = !plan.tracks_to_add_count && !plan.playlists_to_create_count && !plan.playlists_to_update?.length;
-  if (nothingToDo) {
-    summary.innerHTML = `<p class="muted" style="padding:8px 0">Up to date — ${plan.tracks_already_on_device || 0} tracks already on the device.</p>`;
-    return;
-  }
-  summary.innerHTML = `
-    <div class="gd-config-grid" style="margin-top:8px">
-      <div><label>Tracks to add</label><span>${plan.tracks_to_add_count || 0}</span></div>
-      <div><label>Already on device</label><span>${plan.tracks_already_on_device || 0}</span></div>
-      <div><label>Playlists to create</label><span>${plan.playlists_to_create_count || 0}</span></div>
-      <div><label>Playlists to update</label><span>${plan.playlists_to_update?.length || 0}</span></div>
-    </div>
-    <div class="gd-actions-row" style="margin-top:12px">
-      <button class="gd-btn primary" onclick="App.swRunIpodSync()">
-        <span class="gd-btn-icon">${_STATUS_ICON_CHECK(false)}</span>Sync now
-      </button>
-    </div>
-  `;
-}
-
-async function swRunIpodSync() {
-  const id = _sw.device?.id;
-  if (!id) return;
-  const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
-  const trackIds = status?.plan?.tracks_to_add_ids || [];
-  if (!trackIds.length) { toast('Nothing to sync.'); return; }
-
-  const summary = document.getElementById('sw-ipod-sync-summary');
-  if (summary) summary.innerHTML = '<div class="spinner-wrap" style="padding:12px 0"><div class="spinner"></div></div>';
-  try {
-    await api(`/ipods/${id}/sync/execute`, { method: 'POST', body: { track_ids: trackIds } });
-  } catch (e) {
-    toast('Could not start sync.');
-    return;
-  }
-  _swPollIpodSyncExecute(id);
-}
-
-async function _swPollIpodSyncExecute(id) {
-  const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
-  const summary = document.getElementById('sw-ipod-sync-summary');
-  if (!status || status.ipod_id !== id) return;
-  if (status.status === 'copying') {
-    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.message || 'Syncing…')}</p>`;
-    _sw.ipodPollTimer = setTimeout(() => _swPollIpodSyncExecute(id), 800);
-    return;
-  }
-  if (status.status === 'error') {
-    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.error || 'Sync failed.')}</p>`;
-    return;
-  }
-  if (summary) summary.innerHTML = '<p class="muted" style="padding:8px 0">Sync complete.</p>';
-  if (status.errors && status.errors.length) {
-    const names = status.errors.slice(0, 3).map(e => e.title).join(', ');
-    const more = status.errors.length > 3 ? ` and ${status.errors.length - 3} more` : '';
-    toast(`${status.errors.length} song(s) failed and were skipped: ${names}${more}`);
-  }
-  _swLoadIpodLibraryBrowse(id);
-}
-
-/* ── Sync wizard iPod step: library browse accordion ─────────
+/* ── Sync wizard iPod step: library browse + keep/remove selection ───
    Playlists / Artists > Album > Song, all collapsed by default. Built
    entirely from the existing GET /ipods/<id>/tracks and /playlists
-   responses already used elsewhere — no new backend routes. Read-only:
-   no add/remove here, that's a larger follow-up. */
+   responses already used elsewhere — no new backend routes. Everything
+   starts checked ("keep"); unchecking a song/album/artist marks its
+   track(s) for removal, unchecking a playlist marks the playlist itself
+   for removal (independent of whether its tracks are kept elsewhere).
+   The next step (#sw-step-ipod-sync) sends the resulting remove_track_ids
+   / remove_playlist_ids alongside the existing add-missing-tracks plan
+   to the same /api/ipods/<id>/sync/execute route already used for the
+   Gear iPod detail page's add/remove actions. */
 
 const SW_IPOD_BROWSE_PAGE_SIZE = 50;
 
@@ -13658,12 +13584,22 @@ async function _swLoadIpodLibraryBrowse(id) {
     .filter(p => !p.is_master)
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
+  // Carry over existing keep/remove choices across a rescan of the same
+  // device (e.g. the user went Back then Continue again) — default every
+  // track/playlist to "keep" (checked) otherwise.
+  const prev = (_sw.ipodBrowse && _sw.ipodBrowse.ipodId === id) ? _sw.ipodBrowse : null;
+  const trackKeep = new Map(tracks.map(t => [t.device_track_id, prev?.trackKeep.get(t.device_track_id) ?? true]));
+  const playlistKeep = new Map(realPlaylists.map(p => [p.device_playlist_id, prev?.playlistKeep.get(p.device_playlist_id) ?? true]));
+
   _sw.ipodBrowse = {
+    ipodId: id,
     trackById,
+    trackKeep,
     playlists: realPlaylists,
+    playlistKeep,
     artistTree: _swBuildIpodArtistTree(tracks),
-    playlistsPage: 0,
-    artistsPage: 0,
+    playlistsPage: prev?.playlistsPage || 0,
+    artistsPage: prev?.artistsPage || 0,
   };
 
   const wrap = document.getElementById('sw-ipod-browse');
@@ -13689,18 +13625,27 @@ function _swBuildIpodArtistTree(tracks) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function _swRenderIpodTrackRows(trackIds, trackById, { showMeta = true } = {}) {
+function _swIpodGroupCheckState(trackIds, trackKeep) {
+  const states = trackIds.map(id => trackKeep.get(id) !== false);
+  const allChecked = states.every(Boolean);
+  const noneChecked = states.every(s => !s);
+  return { checked: allChecked, indeterminate: !allChecked && !noneChecked };
+}
+
+function _swRenderIpodTrackRows(trackIds, trackById, trackKeep, { showMeta = true } = {}) {
   if (!trackIds || !trackIds.length) return '<p class="muted" style="padding:5px 0 5px 18px">No tracks.</p>';
   return trackIds.map(tid => {
     const t = trackById.get(tid);
     if (!t) return '';
+    const checked = trackKeep.get(tid) !== false;
     const meta = showMeta
       ? `<span class="sw-ipod-track-meta">${esc(t.artist || '')}${t.album ? ' · ' + esc(t.album) : ''}</span>`
       : '';
-    return `<div class="sw-ipod-track-row">
+    return `<label class="sw-ipod-track-row">
+      <input type="checkbox" class="sw-ipod-checkbox" data-level="song" data-track-id="${tid}" ${checked ? 'checked' : ''}>
       <span class="sw-ipod-track-title">${esc(t.title || 'Untitled')}</span>
       ${meta}
-    </div>`;
+    </label>`;
   }).join('');
 }
 
@@ -13736,17 +13681,20 @@ function _swRenderIpodPlaylistsAccordion() {
   const page = browse.playlists.slice(start, start + SW_IPOD_BROWSE_PAGE_SIZE);
   list.innerHTML = page.map(p => {
     const trackCount = (p.track_order || []).length;
+    const checked = browse.playlistKeep.get(p.device_playlist_id) !== false;
     return `
     <details class="gd-config sw-ipod-tree-node">
       <summary>
+        <input type="checkbox" class="sw-ipod-checkbox" data-level="playlist" data-playlist-id="${esc(p.device_playlist_id)}" ${checked ? 'checked' : ''} onclick="event.stopPropagation()">
         <span class="sw-ipod-tree-chevron" aria-hidden="true"></span>
         <span class="sw-ipod-tree-label">${esc(p.name)}</span>
         <span class="sw-ipod-tree-count">${trackCount} track${trackCount === 1 ? '' : 's'}</span>
       </summary>
-      <div class="sw-ipod-tree-children">${_swRenderIpodTrackRows(p.track_order, browse.trackById)}</div>
+      <div class="sw-ipod-tree-children">${_swRenderIpodTrackRows(p.track_order, browse.trackById, browse.trackKeep)}</div>
     </details>`;
   }).join('');
   _swRenderIpodPager('sw-ipod-playlists-pager', browse.playlistsPage, total, 'swIpodPlaylistsPage');
+  _swBindIpodPlaylistsEvents();
 }
 
 function _swRenderIpodArtistsAccordion() {
@@ -13766,28 +13714,37 @@ function _swRenderIpodArtistsAccordion() {
   const start = browse.artistsPage * SW_IPOD_BROWSE_PAGE_SIZE;
   const page = browse.artistTree.slice(start, start + SW_IPOD_BROWSE_PAGE_SIZE);
   list.innerHTML = page.map(artist => {
-    const trackCount = artist.albums.reduce((n, al) => n + al.tracks.length, 0);
+    const allTrackIds = artist.albums.flatMap(al => al.tracks.map(t => t.device_track_id));
+    const artistState = _swIpodGroupCheckState(allTrackIds, browse.trackKeep);
     return `
-    <details class="gd-config sw-ipod-tree-node">
+    <details class="gd-config sw-ipod-tree-node sw-ipod-tree-node--artist">
       <summary>
+        <input type="checkbox" class="sw-ipod-checkbox" data-level="artist" ${artistState.checked ? 'checked' : ''} ${artistState.indeterminate ? 'data-indeterminate="1"' : ''} onclick="event.stopPropagation()">
         <span class="sw-ipod-tree-chevron" aria-hidden="true"></span>
         <span class="sw-ipod-tree-label">${esc(artist.name)}</span>
-        <span class="sw-ipod-tree-count">${trackCount} track${trackCount === 1 ? '' : 's'}</span>
+        <span class="sw-ipod-tree-count">${allTrackIds.length} track${allTrackIds.length === 1 ? '' : 's'}</span>
       </summary>
       <div class="sw-ipod-tree-children">
-        ${artist.albums.map(album => `
-        <details class="gd-config sw-ipod-tree-node sw-ipod-tree-node--album">
-          <summary>
-            <span class="sw-ipod-tree-chevron" aria-hidden="true"></span>
-            <span class="sw-ipod-tree-label">${esc(album.name)}</span>
-            <span class="sw-ipod-tree-count">${album.tracks.length} track${album.tracks.length === 1 ? '' : 's'}</span>
-          </summary>
-          <div class="sw-ipod-tree-children">${_swRenderIpodTrackRows(album.tracks.map(t => t.device_track_id), browse.trackById, { showMeta: false })}</div>
-        </details>`).join('')}
+        ${artist.albums.map(album => {
+          const albumTrackIds = album.tracks.map(t => t.device_track_id);
+          const albumState = _swIpodGroupCheckState(albumTrackIds, browse.trackKeep);
+          return `
+          <details class="gd-config sw-ipod-tree-node sw-ipod-tree-node--album">
+            <summary>
+              <input type="checkbox" class="sw-ipod-checkbox" data-level="album" ${albumState.checked ? 'checked' : ''} ${albumState.indeterminate ? 'data-indeterminate="1"' : ''} onclick="event.stopPropagation()">
+              <span class="sw-ipod-tree-chevron" aria-hidden="true"></span>
+              <span class="sw-ipod-tree-label">${esc(album.name)}</span>
+              <span class="sw-ipod-tree-count">${albumTrackIds.length} track${albumTrackIds.length === 1 ? '' : 's'}</span>
+            </summary>
+            <div class="sw-ipod-tree-children">${_swRenderIpodTrackRows(albumTrackIds, browse.trackById, browse.trackKeep, { showMeta: false })}</div>
+          </details>`;
+        }).join('')}
       </div>
     </details>`;
   }).join('');
   _swRenderIpodPager('sw-ipod-artists-pager', browse.artistsPage, total, 'swIpodArtistsPage');
+  list.querySelectorAll('input[data-indeterminate="1"]').forEach(cb => { cb.indeterminate = true; });
+  _swBindIpodArtistsEvents();
 }
 
 function swIpodPlaylistsPage(delta) {
@@ -13804,6 +13761,227 @@ function swIpodArtistsPage(delta) {
   const totalPages = Math.ceil(browse.artistTree.length / SW_IPOD_BROWSE_PAGE_SIZE);
   browse.artistsPage = Math.max(0, Math.min(totalPages - 1, browse.artistsPage + delta));
   _swRenderIpodArtistsAccordion();
+}
+
+/* Event delegation for the two accordion lists — bound once per render
+   pass (list.dataset.bound guards against double-binding across
+   re-renders, since the listener target itself is never replaced, only
+   its innerHTML). */
+
+function _swBindIpodPlaylistsEvents() {
+  const list = document.getElementById('sw-ipod-playlists-list');
+  if (!list || list.dataset.bound) return;
+  list.dataset.bound = '1';
+  list.addEventListener('change', (e) => {
+    const cb = e.target.closest('input[type="checkbox"]');
+    if (!cb) return;
+    const browse = _sw.ipodBrowse;
+    if (!browse) return;
+    if (cb.dataset.level === 'playlist') {
+      browse.playlistKeep.set(cb.dataset.playlistId, cb.checked);
+    } else if (cb.dataset.level === 'song') {
+      browse.trackKeep.set(Number(cb.dataset.trackId), cb.checked);
+    }
+  });
+}
+
+function _swBindIpodArtistsEvents() {
+  const list = document.getElementById('sw-ipod-artists-list');
+  if (!list || list.dataset.bound) return;
+  list.dataset.bound = '1';
+  list.addEventListener('change', (e) => {
+    const cb = e.target.closest('input[type="checkbox"]');
+    if (!cb) return;
+    const browse = _sw.ipodBrowse;
+    if (!browse) return;
+    const level = cb.dataset.level;
+    if (level === 'song') {
+      browse.trackKeep.set(Number(cb.dataset.trackId), cb.checked);
+      _swUpdateIpodAncestorCheckboxes(cb);
+    } else if (level === 'album') {
+      cb.indeterminate = false;
+      const albumEl = cb.closest('.sw-ipod-tree-node--album');
+      albumEl.querySelectorAll('input[data-level="song"]').forEach(songCb => {
+        songCb.checked = cb.checked;
+        browse.trackKeep.set(Number(songCb.dataset.trackId), cb.checked);
+      });
+      _swUpdateIpodAncestorCheckboxes(cb, true);
+    } else if (level === 'artist') {
+      cb.indeterminate = false;
+      const artistEl = cb.closest('.sw-ipod-tree-node--artist');
+      artistEl.querySelectorAll('input[data-level="album"]').forEach(albumCb => {
+        albumCb.checked = cb.checked;
+        albumCb.indeterminate = false;
+      });
+      artistEl.querySelectorAll('input[data-level="song"]').forEach(songCb => {
+        songCb.checked = cb.checked;
+        browse.trackKeep.set(Number(songCb.dataset.trackId), cb.checked);
+      });
+    }
+  });
+}
+
+// Bubble a song/album-level checkbox change up to its enclosing album and
+// artist checkboxes, recomputing their tri-state from their own children.
+// skipAlbumRecompute is set when the album checkbox itself was just
+// explicitly set (its state is already known, no need to re-derive it).
+function _swUpdateIpodAncestorCheckboxes(changedCb, skipAlbumRecompute = false) {
+  const albumEl = changedCb.closest('.sw-ipod-tree-node--album');
+  if (!albumEl) return;
+  const albumCb = albumEl.querySelector(':scope > summary > input[data-level="album"]');
+  if (!skipAlbumRecompute && albumCb) {
+    const songCbs = [...albumEl.querySelectorAll('input[data-level="song"]')];
+    const allChecked = songCbs.every(c => c.checked);
+    const noneChecked = songCbs.every(c => !c.checked);
+    albumCb.checked = allChecked;
+    albumCb.indeterminate = !allChecked && !noneChecked;
+  }
+  const artistEl = albumEl.closest('.sw-ipod-tree-node--artist');
+  if (!artistEl) return;
+  const artistCb = artistEl.querySelector(':scope > summary > input[data-level="artist"]');
+  if (!artistCb) return;
+  const albumCbs = [...artistEl.querySelectorAll(':scope > .sw-ipod-tree-children > details.sw-ipod-tree-node--album > summary > input[data-level="album"]')];
+  const allA = albumCbs.every(c => c.checked && !c.indeterminate);
+  const noneA = albumCbs.every(c => !c.checked && !c.indeterminate);
+  artistCb.checked = allA;
+  artistCb.indeterminate = !allA && !noneA;
+}
+
+function _swComputeIpodRemovals() {
+  const browse = _sw.ipodBrowse;
+  if (!browse) return { removeTrackIds: [], removePlaylistIds: [] };
+  const removeTrackIds = [...browse.trackKeep.entries()].filter(([, keep]) => !keep).map(([id]) => id);
+  const removePlaylistIds = [...browse.playlistKeep.entries()].filter(([, keep]) => !keep).map(([id]) => id);
+  return { removeTrackIds, removePlaylistIds };
+}
+
+/* ── Sync wizard iPod-sync step: executes the combined add/remove plan ─
+   Reached via the browse/select step's "Continue". Auto-runs the same
+   /sync/scan check the Gear iPod detail page uses (for tracks missing
+   from the device), merges in the remove_track_ids/remove_playlist_ids
+   collected from the previous step's checkboxes, and drives the wizard's
+   footer primary button through Comparing… -> Sync now -> Syncing… ->
+   Done, mirroring the DAP wizard's per-step dynamic footer pattern. */
+
+async function _swInitIpodSyncStep() {
+  const id = _sw.device?.id;
+  if (!id) return;
+  _sw.ipodSyncPhase = 'comparing';
+  const nameEl = document.getElementById('sw-ipod-sync-device-name');
+  if (nameEl) nameEl.textContent = _sw.device.name || 'iPod';
+  const statusLine = document.getElementById('sw-ipod-sync-status');
+  const summary = document.getElementById('sw-ipod-sync-summary');
+  if (statusLine) statusLine.textContent = 'Comparing…';
+  if (summary) summary.innerHTML = '';
+  const primaryBtn = document.getElementById('sw-btn-primary');
+  if (primaryBtn) { primaryBtn.disabled = true; primaryBtn.innerHTML = 'Comparing…'; }
+  try {
+    await api(`/ipods/${id}/sync/scan`, { method: 'POST' });
+  } catch (e) {
+    toast('Could not start sync check.');
+    if (statusLine) statusLine.textContent = '';
+    if (summary) summary.innerHTML = '<p class="muted" style="padding:8px 0">Could not compare with the device. Go back and try again.</p>';
+    return;
+  }
+  _swPollIpodSyncCheck(id);
+}
+
+async function _swPollIpodSyncCheck(id) {
+  const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
+  const statusLine = document.getElementById('sw-ipod-sync-status');
+  const summary = document.getElementById('sw-ipod-sync-summary');
+  const primaryBtn = document.getElementById('sw-btn-primary');
+  if (!status || status.ipod_id !== id) return;
+  if (status.status === 'scanning') {
+    _sw.ipodPollTimer = setTimeout(() => _swPollIpodSyncCheck(id), 800);
+    return;
+  }
+  if (status.status === 'error') {
+    if (statusLine) statusLine.textContent = '';
+    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.error || 'Sync check failed.')}</p>`;
+    _sw.ipodSyncPhase = 'error';
+    if (primaryBtn) { primaryBtn.disabled = false; primaryBtn.innerHTML = 'Done'; }
+    return;
+  }
+  if (statusLine) statusLine.textContent = '';
+  const plan = status.plan || {};
+  const { removeTrackIds, removePlaylistIds } = _swComputeIpodRemovals();
+  const nothingToDo = !plan.tracks_to_add_count && !removeTrackIds.length && !removePlaylistIds.length;
+
+  if (summary) {
+    summary.innerHTML = `
+      <div class="gd-config-grid" style="margin-top:8px">
+        <div><label>Tracks to add</label><span>${plan.tracks_to_add_count || 0}</span></div>
+        <div><label>Tracks to remove</label><span>${removeTrackIds.length}</span></div>
+        <div><label>Playlists to remove</label><span>${removePlaylistIds.length}</span></div>
+        <div><label>Already on device</label><span>${plan.tracks_already_on_device || 0}</span></div>
+      </div>
+      ${nothingToDo ? '<p class="muted" style="padding:8px 0">No changes to sync.</p>' : ''}
+    `;
+  }
+
+  if (nothingToDo) {
+    _sw.ipodSyncPhase = 'done';
+    if (primaryBtn) { primaryBtn.disabled = false; primaryBtn.innerHTML = 'Done'; }
+  } else {
+    _sw.ipodSyncPhase = 'ready';
+    if (primaryBtn) {
+      primaryBtn.disabled = false;
+      primaryBtn.innerHTML = 'Sync now <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+    }
+  }
+}
+
+async function swRunIpodSync() {
+  const id = _sw.device?.id;
+  if (!id) return;
+  const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
+  const trackIds = status?.plan?.tracks_to_add_ids || [];
+  const { removeTrackIds, removePlaylistIds } = _swComputeIpodRemovals();
+  if (!trackIds.length && !removeTrackIds.length && !removePlaylistIds.length) { toast('Nothing to sync.'); return; }
+
+  _sw.ipodSyncPhase = 'syncing';
+  const primaryBtn = document.getElementById('sw-btn-primary');
+  if (primaryBtn) { primaryBtn.disabled = true; primaryBtn.innerHTML = 'Syncing…'; }
+  const summary = document.getElementById('sw-ipod-sync-summary');
+  if (summary) summary.innerHTML = '<div class="spinner-wrap" style="padding:12px 0"><div class="spinner"></div></div>';
+  try {
+    await api(`/ipods/${id}/sync/execute`, {
+      method: 'POST',
+      body: { track_ids: trackIds, remove_track_ids: removeTrackIds, remove_playlist_ids: removePlaylistIds },
+    });
+  } catch (e) {
+    toast('Could not start sync.');
+    _sw.ipodSyncPhase = 'ready';
+    if (primaryBtn) { primaryBtn.disabled = false; primaryBtn.innerHTML = 'Sync now'; }
+    return;
+  }
+  _swPollIpodSyncExecute(id);
+}
+
+async function _swPollIpodSyncExecute(id) {
+  const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
+  const summary = document.getElementById('sw-ipod-sync-summary');
+  const primaryBtn = document.getElementById('sw-btn-primary');
+  if (!status || status.ipod_id !== id) return;
+  if (status.status === 'copying') {
+    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.message || 'Syncing…')}</p>`;
+    _sw.ipodPollTimer = setTimeout(() => _swPollIpodSyncExecute(id), 800);
+    return;
+  }
+  _sw.ipodSyncPhase = status.status === 'error' ? 'error' : 'done';
+  if (status.status === 'error') {
+    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.error || 'Sync failed.')}</p>`;
+  } else {
+    if (summary) summary.innerHTML = '<p class="muted" style="padding:8px 0">Sync complete.</p>';
+    if (status.errors && status.errors.length) {
+      const names = status.errors.slice(0, 3).map(e => e.title).join(', ');
+      const more = status.errors.length > 3 ? ` and ${status.errors.length - 3} more` : '';
+      toast(`${status.errors.length} song(s) failed and were skipped: ${names}${more}`);
+    }
+    _swLoadIpodLibraryBrowse(id); // refresh cached state in case the user goes Back
+  }
+  if (primaryBtn) { primaryBtn.disabled = false; primaryBtn.innerHTML = 'Done'; }
 }
 
 async function _pickTargetIpod() {
@@ -22398,6 +22576,7 @@ const App = {
   swSelectDevice,
   swPrimaryAction,
   swCancel,
+  swNavBack,
   swStartScan,
   swStartSync,
   swFinish,
@@ -22566,7 +22745,6 @@ const App = {
   checkIpodSync,
   runIpodSync,
   swScanIpod,
-  swCheckIpodSync,
   swRunIpodSync,
   swIpodPlaylistsPage,
   swIpodArtistsPage,

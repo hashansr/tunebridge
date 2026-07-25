@@ -2252,11 +2252,12 @@
               </div>
               <div class="gd-actions-row">
                 <button id="sw-ipod-scan-btn" class="gd-btn primary" disabled onclick="App.swScanIpod()">
-                  <span class="gd-btn-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Scan library
+                  <span class="gd-btn-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Scan iPod
                 </button>
                 <span class="gd-last-sync-inline" id="sw-ipod-scan-status">Not scanned yet</span>
               </div>
               <div id="sw-ipod-browse" class="sw-ipod-browse" style="display:none">
+                <p class="sw-ipod-browse-hint">Uncheck anything you'd like removed from the device. Everything is kept by default.</p>
                 <details class="gd-config sw-ipod-tree-node sw-ipod-tree-node--top" id="sw-ipod-browse-playlists">
                   <summary>
                     <span class="sw-ipod-tree-chevron" aria-hidden="true"></span>
@@ -2277,18 +2278,19 @@
                 </details>
               </div>
             </div>
-            <div class="sw-progress-card sw-card" style="margin-top:16px">
+          </div>
+
+          <!-- ── iPod sync step: runs after the browse/select step, executes the
+               combined add (missing tracks) + remove (unchecked items) sync ── -->
+          <div id="sw-step-ipod-sync" class="sw-step" style="display:none">
+            <div class="sw-progress-card sw-card">
               <div class="sw-progress-hdr">
                 <div class="sw-progress-hdr-left">
                   <span class="sw-overline">sync</span>
+                  <span class="sw-progress-phase-label" id="sw-ipod-sync-device-name">iPod</span>
                 </div>
               </div>
-              <div class="gd-actions-row">
-                <button id="sw-ipod-check-btn" class="gd-btn" disabled onclick="App.swCheckIpodSync()">
-                  <span class="gd-btn-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Check for changes
-                </button>
-                <span class="gd-last-sync-inline" id="sw-ipod-sync-status"></span>
-              </div>
+              <span class="gd-last-sync-inline" id="sw-ipod-sync-status">Comparing…</span>
               <div id="sw-ipod-sync-summary"></div>
             </div>
           </div>
