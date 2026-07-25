@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.576-rc.250726-1756 · 2026-07-25
 - Fix: Pagination controls in the Sync wizard's review cards (iPod and regular device sync alike) stayed visible even when a card was collapsed, since the pager sits outside the part of the card that's supposed to hide.
 
 ## v0.575-rc.250726-1657 · 2026-07-25
