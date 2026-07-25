@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.579-rc.260726-0931 · 2026-07-26
 - Add: iPod Sync wizard now shows live available/required/remaining storage space as you check and uncheck songs and playlists, including a capacity bar on the device picker — the same storage summary already shown for regular DAP syncs. Continuing is blocked if your selections would exceed the iPod's free space.
 - Change: The iPod Sync wizard's browse/select step now uses the same filter-chip layout as the DAP sync review screen (All / Songs / Playlists / Songs to add / Playlists to add) instead of two grouped sections, and card headers now show total size alongside track counts.
 
