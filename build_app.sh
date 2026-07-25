@@ -306,6 +306,7 @@ PYI_ARGS=(
   --collect-submodules pyloudnorm
   --add-data "${PROJECT_DIR}/static:static"
   --add-data "${PROJECT_DIR}/version.json:."
+  --add-data "${PROJECT_DIR}/ipod/_vendor:ipod/_vendor"
   --distpath "$DIST_DIR"
   --workpath "${PROJECT_DIR}/build"
   --specpath "${PROJECT_DIR}"
