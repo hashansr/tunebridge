@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.575-rc.250726-1657 · 2026-07-25
 - Fix: The Playlists list in the iPod Sync wizard step had no pagination controls, unlike Artists, since a typical playlist count fell right at the (invisible) page-size threshold. Lowered the shared page size so pagination now shows for both.
 - Add: The iPod Sync wizard step now also shows what's in your library but not yet on the device — "Songs to add" and "Playlists to add", with the same browsable, checkable cards as the on-device Playlists/Artists sections. Anything already on the iPod is left out automatically. Continuing syncs everything you've kept, removed, and added in one pass.
 
