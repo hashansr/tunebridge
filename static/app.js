@@ -9625,7 +9625,7 @@ async function loadSyncView() {
   _sw = {
     step: 1, device: null, proposal: null, selection: {},
     filter: 'all', pages: {}, expanded: {},
-    scanPollTimer: null, syncPollTimer: null, ipodPollTimer: null,
+    scanPollTimer: null, syncPollTimer: null, ipodPollTimer: null, ipodBrowse: null,
     scanStartTs: 0, syncStartTs: 0, logLines: [], syncResult: null,
     syncCompletedItems: [], syncLastProgress: 0, syncRateSamples: [],
     executedPayload: null,
@@ -13487,6 +13487,12 @@ function _swInitIpodStep() {
   if (checkBtn) { checkBtn.disabled = !(ipod.mounted && ipod.last_scanned_at); checkBtn.title = checkBtn.disabled ? 'Scan the library above first' : ''; }
   if (syncStatus) syncStatus.textContent = '';
   if (summary) summary.innerHTML = '';
+  if (ipod.last_scanned_at) {
+    _swLoadIpodLibraryBrowse(ipod.id);
+  } else {
+    const browseWrap = document.getElementById('sw-ipod-browse');
+    if (browseWrap) browseWrap.style.display = 'none';
+  }
 }
 
 async function swScanIpod() {
@@ -13528,6 +13534,7 @@ async function _swPollIpodScan(id) {
   if (statusLine) statusLine.textContent = status.message || 'Scan complete';
   if (_sw.device) _sw.device.last_scanned_at = Date.now() / 1000;
   if (checkBtn) { checkBtn.disabled = false; checkBtn.title = ''; }
+  _swLoadIpodLibraryBrowse(id);
 }
 
 async function swCheckIpodSync() {
@@ -13628,6 +13635,175 @@ async function _swPollIpodSyncExecute(id) {
     const more = status.errors.length > 3 ? ` and ${status.errors.length - 3} more` : '';
     toast(`${status.errors.length} song(s) failed and were skipped: ${names}${more}`);
   }
+  _swLoadIpodLibraryBrowse(id);
+}
+
+/* ── Sync wizard iPod step: library browse accordion ─────────
+   Playlists / Artists > Album > Song, all collapsed by default. Built
+   entirely from the existing GET /ipods/<id>/tracks and /playlists
+   responses already used elsewhere — no new backend routes. Read-only:
+   no add/remove here, that's a larger follow-up. */
+
+const SW_IPOD_BROWSE_PAGE_SIZE = 50;
+
+async function _swLoadIpodLibraryBrowse(id) {
+  const [tracks, playlists] = await Promise.all([
+    api(`/ipods/${id}/tracks`).catch(() => []),
+    api(`/ipods/${id}/playlists`).catch(() => []),
+  ]);
+  if (_sw.device?.id !== id) return; // user navigated away while this was in flight
+
+  const trackById = new Map(tracks.map(t => [t.device_track_id, t]));
+  const realPlaylists = playlists
+    .filter(p => !p.is_master)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+  _sw.ipodBrowse = {
+    trackById,
+    playlists: realPlaylists,
+    artistTree: _swBuildIpodArtistTree(tracks),
+    playlistsPage: 0,
+    artistsPage: 0,
+  };
+
+  const wrap = document.getElementById('sw-ipod-browse');
+  if (wrap) wrap.style.display = tracks.length ? '' : 'none';
+  _swRenderIpodPlaylistsAccordion();
+  _swRenderIpodArtistsAccordion();
+}
+
+function _swBuildIpodArtistTree(tracks) {
+  const artists = new Map(); // lowercased artist -> { name, albums: Map(lowercased album -> {name, tracks[]}) }
+  for (const t of tracks) {
+    const artistName = (t.artist || '').trim() || 'Unknown Artist';
+    const albumName = (t.album || '').trim() || 'Unknown Album';
+    const artistKey = artistName.toLowerCase();
+    if (!artists.has(artistKey)) artists.set(artistKey, { name: artistName, albums: new Map() });
+    const albums = artists.get(artistKey).albums;
+    const albumKey = albumName.toLowerCase();
+    if (!albums.has(albumKey)) albums.set(albumKey, { name: albumName, tracks: [] });
+    albums.get(albumKey).tracks.push(t);
+  }
+  return [...artists.values()]
+    .map(a => ({ name: a.name, albums: [...a.albums.values()].sort((x, y) => x.name.localeCompare(y.name)) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function _swRenderIpodTrackRows(trackIds, trackById, { showMeta = true } = {}) {
+  if (!trackIds || !trackIds.length) return '<p class="muted" style="padding:5px 0 5px 18px">No tracks.</p>';
+  return trackIds.map(tid => {
+    const t = trackById.get(tid);
+    if (!t) return '';
+    const meta = showMeta
+      ? `<span class="sw-ipod-track-meta">${esc(t.artist || '')}${t.album ? ' · ' + esc(t.album) : ''}</span>`
+      : '';
+    return `<div class="sw-ipod-track-row">
+      <span class="sw-ipod-track-title">${esc(t.title || 'Untitled')}</span>
+      ${meta}
+    </div>`;
+  }).join('');
+}
+
+function _swRenderIpodPager(elId, page, total, fnName) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const totalPages = Math.ceil(total / SW_IPOD_BROWSE_PAGE_SIZE);
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+  const start = page * SW_IPOD_BROWSE_PAGE_SIZE + 1;
+  const end = Math.min(total, (page + 1) * SW_IPOD_BROWSE_PAGE_SIZE);
+  el.innerHTML = `
+    <button class="gd-btn compact" ${page === 0 ? 'disabled' : ''} onclick="App.${fnName}(-1)">Prev</button>
+    <span class="sw-ipod-pager-label">${start}–${end} of ${total}</span>
+    <button class="gd-btn compact" ${page >= totalPages - 1 ? 'disabled' : ''} onclick="App.${fnName}(1)">Next</button>
+  `;
+}
+
+function _swRenderIpodPlaylistsAccordion() {
+  const browse = _sw.ipodBrowse;
+  const list = document.getElementById('sw-ipod-playlists-list');
+  const countEl = document.getElementById('sw-ipod-playlists-count');
+  if (!list || !browse) return;
+
+  const total = browse.playlists.length;
+  if (countEl) countEl.textContent = `${total} playlist${total === 1 ? '' : 's'}`;
+  if (!total) {
+    list.innerHTML = '<p class="muted" style="padding:6px 0">No playlists on this device.</p>';
+    _swRenderIpodPager('sw-ipod-playlists-pager', 0, 0, 'swIpodPlaylistsPage');
+    return;
+  }
+
+  const start = browse.playlistsPage * SW_IPOD_BROWSE_PAGE_SIZE;
+  const page = browse.playlists.slice(start, start + SW_IPOD_BROWSE_PAGE_SIZE);
+  list.innerHTML = page.map(p => {
+    const trackCount = (p.track_order || []).length;
+    return `
+    <details class="gd-config sw-ipod-tree-node">
+      <summary>
+        <span class="sw-ipod-tree-chevron" aria-hidden="true"></span>
+        <span class="sw-ipod-tree-label">${esc(p.name)}</span>
+        <span class="sw-ipod-tree-count">${trackCount} track${trackCount === 1 ? '' : 's'}</span>
+      </summary>
+      <div class="sw-ipod-tree-children">${_swRenderIpodTrackRows(p.track_order, browse.trackById)}</div>
+    </details>`;
+  }).join('');
+  _swRenderIpodPager('sw-ipod-playlists-pager', browse.playlistsPage, total, 'swIpodPlaylistsPage');
+}
+
+function _swRenderIpodArtistsAccordion() {
+  const browse = _sw.ipodBrowse;
+  const list = document.getElementById('sw-ipod-artists-list');
+  const countEl = document.getElementById('sw-ipod-artists-count');
+  if (!list || !browse) return;
+
+  const total = browse.artistTree.length;
+  if (countEl) countEl.textContent = `${total} artist${total === 1 ? '' : 's'}`;
+  if (!total) {
+    list.innerHTML = '<p class="muted" style="padding:6px 0">No tracks on this device.</p>';
+    _swRenderIpodPager('sw-ipod-artists-pager', 0, 0, 'swIpodArtistsPage');
+    return;
+  }
+
+  const start = browse.artistsPage * SW_IPOD_BROWSE_PAGE_SIZE;
+  const page = browse.artistTree.slice(start, start + SW_IPOD_BROWSE_PAGE_SIZE);
+  list.innerHTML = page.map(artist => {
+    const trackCount = artist.albums.reduce((n, al) => n + al.tracks.length, 0);
+    return `
+    <details class="gd-config sw-ipod-tree-node">
+      <summary>
+        <span class="sw-ipod-tree-chevron" aria-hidden="true"></span>
+        <span class="sw-ipod-tree-label">${esc(artist.name)}</span>
+        <span class="sw-ipod-tree-count">${trackCount} track${trackCount === 1 ? '' : 's'}</span>
+      </summary>
+      <div class="sw-ipod-tree-children">
+        ${artist.albums.map(album => `
+        <details class="gd-config sw-ipod-tree-node sw-ipod-tree-node--album">
+          <summary>
+            <span class="sw-ipod-tree-chevron" aria-hidden="true"></span>
+            <span class="sw-ipod-tree-label">${esc(album.name)}</span>
+            <span class="sw-ipod-tree-count">${album.tracks.length} track${album.tracks.length === 1 ? '' : 's'}</span>
+          </summary>
+          <div class="sw-ipod-tree-children">${_swRenderIpodTrackRows(album.tracks.map(t => t.device_track_id), browse.trackById, { showMeta: false })}</div>
+        </details>`).join('')}
+      </div>
+    </details>`;
+  }).join('');
+  _swRenderIpodPager('sw-ipod-artists-pager', browse.artistsPage, total, 'swIpodArtistsPage');
+}
+
+function swIpodPlaylistsPage(delta) {
+  const browse = _sw.ipodBrowse;
+  if (!browse) return;
+  const totalPages = Math.ceil(browse.playlists.length / SW_IPOD_BROWSE_PAGE_SIZE);
+  browse.playlistsPage = Math.max(0, Math.min(totalPages - 1, browse.playlistsPage + delta));
+  _swRenderIpodPlaylistsAccordion();
+}
+
+function swIpodArtistsPage(delta) {
+  const browse = _sw.ipodBrowse;
+  if (!browse) return;
+  const totalPages = Math.ceil(browse.artistTree.length / SW_IPOD_BROWSE_PAGE_SIZE);
+  browse.artistsPage = Math.max(0, Math.min(totalPages - 1, browse.artistsPage + delta));
+  _swRenderIpodArtistsAccordion();
 }
 
 async function _pickTargetIpod() {
@@ -22392,6 +22568,8 @@ const App = {
   swScanIpod,
   swCheckIpodSync,
   swRunIpodSync,
+  swIpodPlaylistsPage,
+  swIpodArtistsPage,
   addSelectedToIpod,
   syncPlaylistToIpod,
   syncCurrentPlaylistToIpod,
