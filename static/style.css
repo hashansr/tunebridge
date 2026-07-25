@@ -21536,6 +21536,11 @@ body.is-col-resizing {
 .sw-group-rows { display: none; }
 .sw-group-card--expanded .sw-group-rows { display: block; }
 
+/* Pagination bar lives as a sibling of .sw-group-rows, not inside it, so
+   it needs its own collapse rule — otherwise it stays visible under a
+   collapsed card header. */
+.sw-group-card:not(.sw-group-card--expanded) .sw-page-bar { display: none; }
+
 /* Pagination bar */
 .sw-page-bar {
   display: flex;
