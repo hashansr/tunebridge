@@ -9764,7 +9764,7 @@ function _swUpdateFooter(step) {
     // 3: handled by _swUpdateReviewFooter after proposal is built
     4: 'Do not disconnect the device.',
     5: 'Safe to disconnect.',
-    ipod: 'Uncheck anything you\'d like removed, then continue.',
+    ipod: 'Choose what to keep, remove, and add, then continue.',
     'ipod-sync': 'Do not disconnect the device.',
   };
   if (step !== 3) msgEl.textContent = msgs[step] ?? '';
@@ -13600,11 +13600,16 @@ async function _swLoadIpodLibraryBrowse(id) {
     artistTree: _swBuildIpodArtistTree(tracks),
     playlistsPage: prev?.playlistsPage || 0,
     artistsPage: prev?.artistsPage || 0,
+    // Kept across a rescan until the fresh one resolves, so the "add from
+    // library" cards don't flash empty/placeholder on every re-entry.
+    addPlan: prev?.addPlan || null,
   };
 
   const wrap = document.getElementById('sw-ipod-browse');
   if (wrap) wrap.style.display = tracks.length ? '' : 'none';
   _swRenderIpodGroups();
+
+  _swLoadIpodAddPlan(id); // fire-and-forget — re-renders again once the diff against the local library resolves
 }
 
 function _swBuildIpodArtistTree(tracks) {
@@ -13641,7 +13646,44 @@ function _swIpodGroupCheckState(trackIds, trackKeep) {
    data-* attributes read by *El bridge functions rather than embedding
    values straight into onclick strings, so playlist/artist/album names
    containing quotes (e.g. "Guns N' Roses") can't break the handler —
-   same pattern Step 3 itself uses (swToggleTreeNodeEl etc). */
+   same pattern Step 3 itself uses (swToggleTreeNodeEl etc).
+
+   Two "scopes" share the artist-tree renderer: 'device' (what's already
+   on the iPod — unchecking marks it for removal) and 'add' (what's in
+   the local library but not yet on the device — checking marks it for
+   sync). Matching between local library and device state is NOT
+   reinvented here: it's whatever ipod/sync_planner.py::compute_sync_plan
+   already computes (same fuzzy title/artist/album key the app's own
+   duplicate-track detection uses), reached via the existing
+   /api/ipods/<id>/sync/scan route — this file only renders/selects from
+   that result. */
+
+const IPOD_GROUP_CONFIG = {
+  device: {
+    songsGid: 'ipodArtists', songsTitle: 'Artists',
+    pillWord: 'kept', allLabel: 'Remove all', noneLabel: 'Keep all',
+    emptySongs: 'No tracks on this device.',
+  },
+  add: {
+    songsGid: 'ipodAddSongs', songsTitle: 'Songs to add',
+    pillWord: 'selected', allLabel: 'Deselect all', noneLabel: 'Select all',
+    emptySongs: 'Your library is fully synced to this device.',
+  },
+};
+
+function _swIpodTrackKeepMap(scope) {
+  const browse = _sw.ipodBrowse;
+  if (!browse) return null;
+  return scope === 'add' ? (browse.addPlan?.trackSelected || null) : browse.trackKeep;
+}
+function _swIpodArtistTreeFor(scope) {
+  const browse = _sw.ipodBrowse;
+  if (!browse) return [];
+  return scope === 'add' ? (browse.addPlan?.artistTree || []) : browse.artistTree;
+}
+function _swIpodTrackIdOf(scope, track) {
+  return scope === 'add' ? track.id : track.device_track_id;
+}
 
 function _swRenderIpodGroups() {
   const container = document.getElementById('sw-ipod-groups');
@@ -13649,7 +13691,27 @@ function _swRenderIpodGroups() {
   if (!container || !browse) return;
   container.innerHTML = '';
   container.appendChild(_swBuildIpodPlaylistsCard());
-  container.appendChild(_swBuildIpodArtistsCard());
+  container.appendChild(_swBuildIpodArtistsCard('device'));
+  if (browse.addPlan) {
+    container.appendChild(_swBuildIpodArtistsCard('add'));
+    container.appendChild(_swBuildIpodAddPlaylistsCard());
+  } else {
+    container.appendChild(_swBuildIpodComparingPlaceholder());
+  }
+}
+
+function _swBuildIpodComparingPlaceholder() {
+  const card = document.createElement('div');
+  card.className = 'sw-group-card';
+  card.innerHTML = `
+    <div class="sw-group-hdr" style="cursor:default">
+      <div class="sw-group-chev"><div class="spinner" style="width:12px;height:12px;border-width:2px"></div></div>
+      <span></span>
+      <div class="sw-group-label-col"><span class="sw-group-title">Comparing with your library…</span></div>
+      <span></span><span></span>
+    </div>
+  `;
+  return card;
 }
 
 function _swIpodPageBar(page, total, fnName) {
@@ -13674,17 +13736,19 @@ function _swIpodPageBar(page, total, fnName) {
     </div>`;
 }
 
-function _swIpodPlaylistThumb(p) {
-  return `<div class="sw-row-thumb" style="background:${_swThumbColor(p.name)}">${_swInitials(p.name)}</div>`;
+function _swIpodPlaylistThumb(name) {
+  return `<div class="sw-row-thumb" style="background:${_swThumbColor(name)}">${_swInitials(name)}</div>`;
 }
 
-function _swBuildIpodSongRow(track, showMeta = true) {
+function _swBuildIpodSongRow(track, showMeta, scope) {
   if (!track) return '';
-  const checked = _sw.ipodBrowse.trackKeep.get(track.device_track_id) !== false;
+  const trackKeep = _swIpodTrackKeepMap(scope);
+  const id = _swIpodTrackIdOf(scope, track);
+  const checked = trackKeep?.get(id) !== false;
   const sub = showMeta ? [track.artist, track.album].filter(Boolean).map(esc).join(' · ') : '';
   return `
   <div class="sw-review-row sw-tree-song${checked ? '' : ' sw-review-row--deselected'}">
-    <input type="checkbox" class="sw-check sw-item-check" data-track-id="${track.device_track_id}"
+    <input type="checkbox" class="sw-check sw-item-check" data-scope="${scope}" data-track-id="${esc(String(id))}"
       ${checked ? 'checked' : ''} onclick="event.stopPropagation();App.swIpodToggleSongEl(this)" />
     <div class="sw-row-info">
       <div class="sw-row-title" title="${esc(track.title || 'Untitled')}">${esc(track.title || 'Untitled')}</div>
@@ -13711,14 +13775,14 @@ function _swBuildIpodPlaylistRow(p) {
       </button>
       <input type="checkbox" class="sw-check" data-playlist-id="${esc(p.device_playlist_id)}"
         ${checked ? 'checked' : ''} onclick="event.stopPropagation();App.swIpodTogglePlaylistEl(this)" />
-      ${_swIpodPlaylistThumb(p)}
+      ${_swIpodPlaylistThumb(p.name)}
       <div class="sw-tree-main">
         <span class="sw-tree-title">${esc(p.name)}</span>
         <span class="sw-tree-meta">${trackIds.length} track${trackIds.length === 1 ? '' : 's'}</span>
       </div>
     </div>
     <div class="sw-tree-albums">
-      ${trackIds.length ? trackIds.map(tid => _swBuildIpodSongRow(browse.trackById.get(tid), true)).join('') : '<p class="muted" style="padding:8px 14px">No tracks.</p>'}
+      ${trackIds.length ? trackIds.map(tid => _swBuildIpodSongRow(browse.trackById.get(tid), true, 'device')).join('') : '<p class="muted" style="padding:8px 14px">No tracks.</p>'}
     </div>
   </div>`;
 }
@@ -13780,25 +13844,27 @@ function _swBuildIpodPlaylistsCard() {
   return card;
 }
 
-function _swBuildIpodArtistHierarchy(artists) {
-  const browse = _sw.ipodBrowse;
+function _swBuildIpodArtistHierarchy(artists, scope) {
+  const trackKeep = _swIpodTrackKeepMap(scope);
+  const gid = IPOD_GROUP_CONFIG[scope].songsGid;
+  const pillWord = IPOD_GROUP_CONFIG[scope].pillWord;
   return artists.map(artist => {
     const artistKey = artist.name.toLowerCase();
-    const allTrackIds = artist.albums.flatMap(al => al.tracks.map(t => t.device_track_id));
-    const artistState = _swIpodGroupCheckState(allTrackIds, browse.trackKeep);
-    const artistExpanded = _swIsTreeExpanded('ipodArtists', 'artist', artistKey);
-    const artistKept = allTrackIds.filter(id => browse.trackKeep.get(id) !== false).length;
+    const allTrackIds = artist.albums.flatMap(al => al.tracks.map(t => _swIpodTrackIdOf(scope, t)));
+    const artistState = _swIpodGroupCheckState(allTrackIds, trackKeep);
+    const artistExpanded = _swIsTreeExpanded(gid, 'artist', artistKey);
+    const artistKept = allTrackIds.filter(id => trackKeep.get(id) !== false).length;
     return `
       <div class="sw-tree-artist${artistExpanded ? ' sw-tree-artist--expanded' : ''}">
         <div class="sw-tree-row sw-tree-row--artist${artistState.checked ? '' : ' sw-tree-row--deselected'}">
           <button class="sw-tree-expand" type="button"
-            data-gid="ipodArtists" data-level="artist" data-key="${esc(artistKey)}"
+            data-gid="${gid}" data-level="artist" data-key="${esc(artistKey)}"
             onclick="event.stopPropagation();App.swIpodToggleTreeExpandEl(this)"
             aria-label="${artistExpanded ? 'Collapse' : 'Expand'} ${esc(artist.name)}" aria-expanded="${artistExpanded ? 'true' : 'false'}">
             <span class="accordion-state-icon" aria-hidden="true"></span>
           </button>
           <input type="checkbox" class="sw-check sw-tree-check"
-            data-gid="ipodArtists" data-level="artist" data-key="${esc(artistKey)}"
+            data-scope="${scope}" data-gid="${gid}" data-level="artist" data-key="${esc(artistKey)}"
             ${artistState.checked ? 'checked' : ''} data-indeterminate="${artistState.indeterminate}"
             onclick="event.stopPropagation();App.swIpodToggleTreeNodeEl(this)" />
           ${_swArtistThumb(artist.name, {})}
@@ -13806,26 +13872,26 @@ function _swBuildIpodArtistHierarchy(artists) {
             <span class="sw-tree-title">${esc(artist.name)}</span>
             <span class="sw-tree-meta">${allTrackIds.length} track${allTrackIds.length === 1 ? '' : 's'} · ${artist.albums.length} album${artist.albums.length === 1 ? '' : 's'}</span>
           </div>
-          <span class="sw-group-sel-pill">${artistKept} kept</span>
+          <span class="sw-group-sel-pill">${artistKept} ${pillWord}</span>
         </div>
         <div class="sw-tree-albums">
         ${artist.albums.map(album => {
           const albumKey = `${artistKey}::${album.name.toLowerCase()}`;
-          const albumTrackIds = album.tracks.map(t => t.device_track_id);
-          const albumState = _swIpodGroupCheckState(albumTrackIds, browse.trackKeep);
-          const albumExpanded = _swIsTreeExpanded('ipodArtists', 'album', albumKey);
-          const albumKept = albumTrackIds.filter(id => browse.trackKeep.get(id) !== false).length;
+          const albumTrackIds = album.tracks.map(t => _swIpodTrackIdOf(scope, t));
+          const albumState = _swIpodGroupCheckState(albumTrackIds, trackKeep);
+          const albumExpanded = _swIsTreeExpanded(gid, 'album', albumKey);
+          const albumKept = albumTrackIds.filter(id => trackKeep.get(id) !== false).length;
           return `
         <div class="sw-tree-album${albumExpanded ? ' sw-tree-album--expanded' : ''}">
           <div class="sw-tree-row sw-tree-row--album${albumState.checked ? '' : ' sw-tree-row--deselected'}">
             <button class="sw-tree-expand" type="button"
-              data-gid="ipodArtists" data-level="album" data-key="${esc(albumKey)}"
+              data-gid="${gid}" data-level="album" data-key="${esc(albumKey)}"
               onclick="event.stopPropagation();App.swIpodToggleTreeExpandEl(this)"
               aria-label="${albumExpanded ? 'Collapse' : 'Expand'} ${esc(album.name)}" aria-expanded="${albumExpanded ? 'true' : 'false'}">
               <span class="accordion-state-icon" aria-hidden="true"></span>
             </button>
             <input type="checkbox" class="sw-check sw-tree-check"
-              data-gid="ipodArtists" data-level="album" data-key="${esc(albumKey)}"
+              data-scope="${scope}" data-gid="${gid}" data-level="album" data-key="${esc(albumKey)}"
               ${albumState.checked ? 'checked' : ''} data-indeterminate="${albumState.indeterminate}"
               onclick="event.stopPropagation();App.swIpodToggleTreeNodeEl(this)" />
             ${_swRowThumb(album.tracks[0] || { title: album.name })}
@@ -13833,10 +13899,10 @@ function _swBuildIpodArtistHierarchy(artists) {
               <span class="sw-tree-title">${esc(album.name)}</span>
               <span class="sw-tree-meta">${albumTrackIds.length} track${albumTrackIds.length === 1 ? '' : 's'}</span>
             </div>
-            <span class="sw-group-sel-pill">${albumKept} kept</span>
+            <span class="sw-group-sel-pill">${albumKept} ${pillWord}</span>
           </div>
           <div class="sw-tree-songs">
-            ${album.tracks.slice().sort((a, b) => a.title.localeCompare(b.title)).map(t => _swBuildIpodSongRow(t, true)).join('')}
+            ${album.tracks.slice().sort((a, b) => a.title.localeCompare(b.title)).map(t => _swBuildIpodSongRow(t, true, scope)).join('')}
           </div>
         </div>`;
         }).join('')}
@@ -13845,10 +13911,11 @@ function _swBuildIpodArtistHierarchy(artists) {
   }).join('');
 }
 
-function _swBuildIpodArtistsCard() {
-  const browse = _sw.ipodBrowse;
-  const gid = 'ipodArtists';
-  const total = browse.artistTree.length;
+function _swBuildIpodArtistsCard(scope) {
+  const cfg = IPOD_GROUP_CONFIG[scope];
+  const tree = _swIpodArtistTreeFor(scope);
+  const trackKeep = _swIpodTrackKeepMap(scope);
+  const gid = cfg.songsGid;
   const isExpanded = !!_sw.expanded?.[gid];
   const toggleLabel = isExpanded ? 'Click to collapse' : 'Click to expand';
 
@@ -13856,47 +13923,49 @@ function _swBuildIpodArtistsCard() {
   card.className = 'sw-group-card' + (isExpanded ? ' sw-group-card--expanded' : '');
   card.dataset.gid = gid;
 
+  const total = tree.length;
   if (!total) {
     card.innerHTML = `
       <div class="sw-group-hdr" onclick="App.swIpodToggleGroupCollapse('${gid}')" title="${toggleLabel}" aria-expanded="${isExpanded ? 'true' : 'false'}">
         <div class="sw-group-chev"><span class="accordion-state-icon" aria-hidden="true"></span></div>
         <span></span>
-        <div class="sw-group-label-col"><span class="sw-group-title">Artists</span><span class="sw-group-count-text">0 artists</span></div>
+        <div class="sw-group-label-col"><span class="sw-group-title">${esc(cfg.songsTitle)}</span><span class="sw-group-count-text">0 artists</span></div>
         <span></span><span></span>
       </div>
-      <div class="sw-group-rows"><p class="muted" style="padding:12px 14px">No tracks on this device.</p></div>
+      <div class="sw-group-rows"><p class="muted" style="padding:12px 14px">${esc(cfg.emptySongs)}</p></div>
     `;
     return card;
   }
 
-  const allTrackIdsGlobal = browse.artistTree.flatMap(a => a.albums.flatMap(al => al.tracks.map(t => t.device_track_id)));
-  const keptCount = allTrackIdsGlobal.filter(id => browse.trackKeep.get(id) !== false).length;
+  const allTrackIdsGlobal = tree.flatMap(a => a.albums.flatMap(al => al.tracks.map(t => _swIpodTrackIdOf(scope, t))));
+  const keptCount = allTrackIdsGlobal.filter(id => trackKeep.get(id) !== false).length;
   const totalTracks = allTrackIdsGlobal.length;
   const allKept = keptCount === totalTracks;
   const someKept = keptCount > 0 && !allKept;
 
-  const page = browse.artistsPage || 0;
-  const pageArtists = browse.artistTree.slice(page * SW_IPOD_BROWSE_PAGE_SIZE, (page + 1) * SW_IPOD_BROWSE_PAGE_SIZE);
+  const page = (scope === 'add' ? _sw.ipodBrowse.addPlan.songsPage : _sw.ipodBrowse.artistsPage) || 0;
+  const pageArtists = tree.slice(page * SW_IPOD_BROWSE_PAGE_SIZE, (page + 1) * SW_IPOD_BROWSE_PAGE_SIZE);
+  const pagerFn = scope === 'add' ? 'swIpodAddSongsPage' : 'swIpodArtistsPage';
 
   card.innerHTML = `
-    <div class="sw-group-hdr" onclick="App.swIpodToggleGroupCollapse('${gid}')" title="${toggleLabel}" aria-label="${isExpanded ? 'Collapse' : 'Expand'} Artists" aria-expanded="${isExpanded ? 'true' : 'false'}">
+    <div class="sw-group-hdr" onclick="App.swIpodToggleGroupCollapse('${gid}')" title="${toggleLabel}" aria-label="${isExpanded ? 'Collapse' : 'Expand'} ${esc(cfg.songsTitle)}" aria-expanded="${isExpanded ? 'true' : 'false'}">
       <div class="sw-group-chev"><span class="accordion-state-icon" aria-hidden="true"></span></div>
       <input type="checkbox" class="sw-check" id="sw-grp-chk-${gid}"
         ${allKept ? 'checked' : ''} data-indeterminate="${someKept}"
-        onclick="event.stopPropagation();App.swIpodToggleAllArtists(this.checked)" />
+        onclick="event.stopPropagation();App.swIpodToggleAllSongs('${scope}', this.checked)" />
       <div class="sw-group-label-col">
-        <span class="sw-group-title">Artists</span>
+        <span class="sw-group-title">${esc(cfg.songsTitle)}</span>
         <span class="sw-group-count-text">${total} artist${total === 1 ? '' : 's'}</span>
       </div>
-      <span class="sw-group-sel-pill">${keptCount} kept</span>
-      <button class="sw-group-selall-btn" onclick="event.stopPropagation();App.swIpodToggleAllArtists(${!allKept})">
-        ${allKept ? 'Remove all' : 'Keep all'}
+      <span class="sw-group-sel-pill">${keptCount} ${cfg.pillWord}</span>
+      <button class="sw-group-selall-btn" onclick="event.stopPropagation();App.swIpodToggleAllSongs('${scope}', ${!allKept})">
+        ${allKept ? cfg.allLabel : cfg.noneLabel}
       </button>
     </div>
     <div class="sw-group-rows sw-tree">
-      ${_swBuildIpodArtistHierarchy(pageArtists)}
+      ${_swBuildIpodArtistHierarchy(pageArtists, scope)}
     </div>
-    ${_swIpodPageBar(page, total, 'swIpodArtistsPage')}
+    ${_swIpodPageBar(page, total, pagerFn)}
   `;
 
   const chk = card.querySelector(`#sw-grp-chk-${gid}`);
@@ -13905,10 +13974,85 @@ function _swBuildIpodArtistsCard() {
   return card;
 }
 
-/* Interaction handlers — all mutate the trackKeep/playlistKeep maps then
-   fully re-render, mirroring Step 3's own swToggleItem/swToggleTreeNode
-   pattern (_swRenderReview after every change) rather than patching the
-   DOM in place. */
+function _swBuildIpodAddPlaylistsCard() {
+  const addPlan = _sw.ipodBrowse?.addPlan;
+  const gid = 'ipodAddPlaylists';
+  const isExpanded = !!_sw.expanded?.[gid];
+  const toggleLabel = isExpanded ? 'Click to collapse' : 'Click to expand';
+
+  const card = document.createElement('div');
+  card.className = 'sw-group-card' + (isExpanded ? ' sw-group-card--expanded' : '');
+  card.dataset.gid = gid;
+
+  const playlists = addPlan?.playlists || [];
+  const total = playlists.length;
+  if (!total) {
+    card.innerHTML = `
+      <div class="sw-group-hdr" onclick="App.swIpodToggleGroupCollapse('${gid}')" title="${toggleLabel}" aria-expanded="${isExpanded ? 'true' : 'false'}">
+        <div class="sw-group-chev"><span class="accordion-state-icon" aria-hidden="true"></span></div>
+        <span></span>
+        <div class="sw-group-label-col"><span class="sw-group-title">Playlists to add</span><span class="sw-group-count-text">0 playlists</span></div>
+        <span></span><span></span>
+      </div>
+      <div class="sw-group-rows"><p class="muted" style="padding:12px 14px">All your playlists are already on this device.</p></div>
+    `;
+    return card;
+  }
+
+  const selectedCount = playlists.filter(p => addPlan.playlistSelected.get(p.id) !== false).length;
+  const allSelected = selectedCount === total;
+  const someSelected = selectedCount > 0 && !allSelected;
+
+  const page = addPlan.playlistsPage || 0;
+  const pagePlaylists = playlists.slice(page * SW_IPOD_BROWSE_PAGE_SIZE, (page + 1) * SW_IPOD_BROWSE_PAGE_SIZE);
+
+  card.innerHTML = `
+    <div class="sw-group-hdr" onclick="App.swIpodToggleGroupCollapse('${gid}')" title="${toggleLabel}" aria-label="${isExpanded ? 'Collapse' : 'Expand'} Playlists to add" aria-expanded="${isExpanded ? 'true' : 'false'}">
+      <div class="sw-group-chev"><span class="accordion-state-icon" aria-hidden="true"></span></div>
+      <input type="checkbox" class="sw-check" id="sw-grp-chk-${gid}"
+        ${allSelected ? 'checked' : ''} data-indeterminate="${someSelected}"
+        onclick="event.stopPropagation();App.swIpodToggleAllAddPlaylists(this.checked)" />
+      <div class="sw-group-label-col">
+        <span class="sw-group-title">Playlists to add</span>
+        <span class="sw-group-count-text">${total} playlist${total === 1 ? '' : 's'}</span>
+      </div>
+      <span class="sw-group-sel-pill">${selectedCount} selected</span>
+      <button class="sw-group-selall-btn" onclick="event.stopPropagation();App.swIpodToggleAllAddPlaylists(${!allSelected})">
+        ${allSelected ? 'Deselect all' : 'Select all'}
+      </button>
+    </div>
+    <div class="sw-group-rows">
+      ${pagePlaylists.map(p => {
+        const checked = addPlan.playlistSelected.get(p.id) !== false;
+        const hint = p.kind === 'create'
+          ? `New playlist · ${p.trackCount} track${p.trackCount === 1 ? '' : 's'}`
+          : `${p.missingTrackCount} track${p.missingTrackCount === 1 ? '' : 's'} missing`;
+        return `
+        <div class="sw-review-row${checked ? '' : ' sw-review-row--deselected'}">
+          <input type="checkbox" class="sw-check sw-item-check" data-playlist-id="${esc(p.id)}"
+            ${checked ? 'checked' : ''} onclick="event.stopPropagation();App.swIpodToggleAddPlaylistEl(this)" />
+          ${_swIpodPlaylistThumb(p.name)}
+          <div class="sw-row-info">
+            <div class="sw-row-title" title="${esc(p.name)}">${esc(p.name)}</div>
+            <div class="sw-row-sub">${esc(hint)}</div>
+          </div>
+          <span></span>
+          <span class="sw-row-size"></span>
+        </div>`;
+      }).join('')}
+    </div>
+    ${_swIpodPageBar(page, total, 'swIpodAddPlaylistsPage')}
+  `;
+
+  const chk = card.querySelector(`#sw-grp-chk-${gid}`);
+  if (chk && someSelected) chk.indeterminate = true;
+  return card;
+}
+
+/* Interaction handlers — all mutate the trackKeep/trackSelected/
+   playlistKeep/playlistSelected maps then fully re-render, mirroring
+   Step 3's own swToggleItem/swToggleTreeNode pattern (_swRenderReview
+   after every change) rather than patching the DOM in place. */
 
 function swIpodToggleGroupCollapse(gid) {
   if (!_sw.expanded) _sw.expanded = {};
@@ -13926,41 +14070,53 @@ function swIpodToggleTreeExpandEl(el) {
   swIpodToggleTreeExpand(el.dataset.gid, el.dataset.level, el.dataset.key);
 }
 
-function _swIpodTrackIdsForNode(level, key) {
-  const browse = _sw.ipodBrowse;
-  if (!browse) return [];
+function _swIpodTrackIdsForNode(scope, level, key) {
+  const tree = _swIpodArtistTreeFor(scope);
   if (level === 'artist') {
-    const artist = browse.artistTree.find(a => a.name.toLowerCase() === key);
-    return artist ? artist.albums.flatMap(al => al.tracks.map(t => t.device_track_id)) : [];
+    const artist = tree.find(a => a.name.toLowerCase() === key);
+    return artist ? artist.albums.flatMap(al => al.tracks.map(t => _swIpodTrackIdOf(scope, t))) : [];
   }
   if (level === 'album') {
     const sep = key.indexOf('::');
     const artistKey = key.slice(0, sep);
     const albumKey = key.slice(sep + 2);
-    const artist = browse.artistTree.find(a => a.name.toLowerCase() === artistKey);
+    const artist = tree.find(a => a.name.toLowerCase() === artistKey);
     const album = artist?.albums.find(al => al.name.toLowerCase() === albumKey);
-    return album ? album.tracks.map(t => t.device_track_id) : [];
+    return album ? album.tracks.map(t => _swIpodTrackIdOf(scope, t)) : [];
   }
   return [];
 }
 
-function swIpodSetTrackKeep(trackId, checked) {
-  _sw.ipodBrowse?.trackKeep.set(trackId, checked);
+function swIpodSetTrackKeep(scope, trackId, checked) {
+  const map = _swIpodTrackKeepMap(scope);
+  if (!map) return;
+  map.set(trackId, checked);
   _swRenderIpodGroups();
 }
 function swIpodToggleSongEl(el) {
-  swIpodSetTrackKeep(Number(el.dataset.trackId), el.checked);
+  const scope = el.dataset.scope || 'device';
+  const rawId = el.dataset.trackId;
+  swIpodSetTrackKeep(scope, scope === 'add' ? rawId : Number(rawId), el.checked);
 }
 
-function swIpodSetTrackKeepBulk(trackIds, checked) {
-  const browse = _sw.ipodBrowse;
-  if (!browse) return;
-  trackIds.forEach(id => browse.trackKeep.set(id, checked));
+function swIpodSetTrackKeepBulk(scope, trackIds, checked) {
+  const map = _swIpodTrackKeepMap(scope);
+  if (!map) return;
+  trackIds.forEach(id => map.set(id, checked));
   _swRenderIpodGroups();
 }
 function swIpodToggleTreeNodeEl(el) {
-  const trackIds = _swIpodTrackIdsForNode(el.dataset.level, el.dataset.key);
-  swIpodSetTrackKeepBulk(trackIds, el.checked);
+  const scope = el.dataset.scope || 'device';
+  const trackIds = _swIpodTrackIdsForNode(scope, el.dataset.level, el.dataset.key);
+  swIpodSetTrackKeepBulk(scope, trackIds, el.checked);
+}
+
+function swIpodToggleAllSongs(scope, toState) {
+  const tree = _swIpodArtistTreeFor(scope);
+  const map = _swIpodTrackKeepMap(scope);
+  if (!map) return;
+  tree.forEach(artist => artist.albums.forEach(al => al.tracks.forEach(t => map.set(_swIpodTrackIdOf(scope, t), toState))));
+  _swRenderIpodGroups();
 }
 
 function swIpodSetPlaylistKeep(playlistId, checked) {
@@ -13970,7 +14126,6 @@ function swIpodSetPlaylistKeep(playlistId, checked) {
 function swIpodTogglePlaylistEl(el) {
   swIpodSetPlaylistKeep(el.dataset.playlistId, el.checked);
 }
-
 function swIpodToggleAllPlaylists(toState) {
   const browse = _sw.ipodBrowse;
   if (!browse) return;
@@ -13978,10 +14133,19 @@ function swIpodToggleAllPlaylists(toState) {
   _swRenderIpodGroups();
 }
 
-function swIpodToggleAllArtists(toState) {
-  const browse = _sw.ipodBrowse;
-  if (!browse) return;
-  browse.artistTree.forEach(artist => artist.albums.forEach(al => al.tracks.forEach(t => browse.trackKeep.set(t.device_track_id, toState))));
+function swIpodSetAddPlaylistSelected(playlistId, checked) {
+  const addPlan = _sw.ipodBrowse?.addPlan;
+  if (!addPlan) return;
+  addPlan.playlistSelected.set(playlistId, checked);
+  _swRenderIpodGroups();
+}
+function swIpodToggleAddPlaylistEl(el) {
+  swIpodSetAddPlaylistSelected(el.dataset.playlistId, el.checked);
+}
+function swIpodToggleAllAddPlaylists(toState) {
+  const addPlan = _sw.ipodBrowse?.addPlan;
+  if (!addPlan) return;
+  addPlan.playlists.forEach(p => addPlan.playlistSelected.set(p.id, toState));
   _swRenderIpodGroups();
 }
 
@@ -14001,6 +14165,22 @@ function swIpodArtistsPage(delta) {
   _swRenderIpodGroups();
 }
 
+function swIpodAddSongsPage(delta) {
+  const addPlan = _sw.ipodBrowse?.addPlan;
+  if (!addPlan) return;
+  const totalPages = Math.ceil(addPlan.artistTree.length / SW_IPOD_BROWSE_PAGE_SIZE);
+  addPlan.songsPage = Math.max(0, Math.min(totalPages - 1, addPlan.songsPage + delta));
+  _swRenderIpodGroups();
+}
+
+function swIpodAddPlaylistsPage(delta) {
+  const addPlan = _sw.ipodBrowse?.addPlan;
+  if (!addPlan) return;
+  const totalPages = Math.ceil(addPlan.playlists.length / SW_IPOD_BROWSE_PAGE_SIZE);
+  addPlan.playlistsPage = Math.max(0, Math.min(totalPages - 1, addPlan.playlistsPage + delta));
+  _swRenderIpodGroups();
+}
+
 function _swComputeIpodRemovals() {
   const browse = _sw.ipodBrowse;
   if (!browse) return { removeTrackIds: [], removePlaylistIds: [] };
@@ -14009,71 +14189,120 @@ function _swComputeIpodRemovals() {
   return { removeTrackIds, removePlaylistIds };
 }
 
-/* ── Sync wizard iPod-sync step: executes the combined add/remove plan ─
-   Reached via the browse/select step's "Continue". Auto-runs the same
-   /sync/scan check the Gear iPod detail page uses (for tracks missing
-   from the device), merges in the remove_track_ids/remove_playlist_ids
-   collected from the previous step's checkboxes, and drives the wizard's
-   footer primary button through Comparing… -> Sync now -> Syncing… ->
-   Done, mirroring the DAP wizard's per-step dynamic footer pattern. */
+function _swComputeIpodAdditions() {
+  const addPlan = _sw.ipodBrowse?.addPlan;
+  if (!addPlan) return { addTrackIds: [], addPlaylistIds: [] };
+  const addTrackIds = [...addPlan.trackSelected.entries()].filter(([, sel]) => sel).map(([id]) => id);
+  const addPlaylistIds = [...addPlan.playlistSelected.entries()].filter(([, sel]) => sel).map(([id]) => id);
+  return { addTrackIds, addPlaylistIds };
+}
 
-async function _swInitIpodSyncStep() {
-  const id = _sw.device?.id;
-  if (!id) return;
-  _sw.ipodSyncPhase = 'comparing';
-  const nameEl = document.getElementById('sw-ipod-sync-device-name');
-  if (nameEl) nameEl.textContent = _sw.device.name || 'iPod';
-  const statusLine = document.getElementById('sw-ipod-sync-status');
-  const summary = document.getElementById('sw-ipod-sync-summary');
-  if (statusLine) statusLine.textContent = 'Comparing…';
-  if (summary) summary.innerHTML = '';
-  const primaryBtn = document.getElementById('sw-btn-primary');
-  if (primaryBtn) { primaryBtn.disabled = true; primaryBtn.innerHTML = 'Comparing…'; }
+/* ── Library-to-iPod diff: fetches what /api/ipods/<id>/sync/scan already
+   computes (ipod/sync_planner.py::compute_sync_plan — same fuzzy
+   title/artist/album match_key the app's own duplicate detection uses,
+   not reinvented here) and turns it into the same artist-tree / flat
+   playlist-list shapes the device-side cards already use, so the two
+   render through the shared scope-aware functions above. */
+
+async function _swLoadIpodAddPlan(id) {
   try {
     await api(`/ipods/${id}/sync/scan`, { method: 'POST' });
   } catch (e) {
-    toast('Could not start sync check.');
-    if (statusLine) statusLine.textContent = '';
-    if (summary) summary.innerHTML = '<p class="muted" style="padding:8px 0">Could not compare with the device. Go back and try again.</p>';
     return;
   }
-  _swPollIpodSyncCheck(id);
+  _swPollIpodAddPlan(id);
 }
 
-async function _swPollIpodSyncCheck(id) {
+async function _swPollIpodAddPlan(id) {
   const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
-  const statusLine = document.getElementById('sw-ipod-sync-status');
-  const summary = document.getElementById('sw-ipod-sync-summary');
-  const primaryBtn = document.getElementById('sw-btn-primary');
   if (!status || status.ipod_id !== id) return;
   if (status.status === 'scanning') {
-    _sw.ipodPollTimer = setTimeout(() => _swPollIpodSyncCheck(id), 800);
+    setTimeout(() => _swPollIpodAddPlan(id), 800);
     return;
   }
-  if (status.status === 'error') {
-    if (statusLine) statusLine.textContent = '';
-    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.error || 'Sync check failed.')}</p>`;
-    _sw.ipodSyncPhase = 'error';
-    if (primaryBtn) { primaryBtn.disabled = false; primaryBtn.innerHTML = 'Done'; }
+  if (_sw.device?.id !== id || !_sw.ipodBrowse) return; // navigated away while this was in flight
+  if (status.status === 'error' || !status.plan) {
+    _sw.ipodBrowse.addPlan = null;
+    _swRenderIpodGroups();
     return;
   }
+
+  const plan = status.plan;
+  const tracks = plan.tracks_to_add || [];
+  const trackById = new Map(tracks.map(t => [t.id, t]));
+
+  const playlists = [
+    ...(plan.playlists_to_create || []).map(p => ({ id: p.id, name: p.name, kind: 'create', trackCount: p.track_count, missingTrackCount: p.track_count })),
+    ...(plan.playlists_to_update || []).map(p => ({ id: p.playlist_id, name: p.name, kind: 'update', trackCount: p.track_count, missingTrackCount: p.missing_track_count })),
+  ].sort((a, b) => a.name.localeCompare(b.name));
+
+  // Carry over selections across a rescan, same as the device-side maps.
+  const prevAdd = _sw.ipodBrowse.addPlan;
+  const trackSelected = new Map(tracks.map(t => [t.id, prevAdd?.trackSelected.get(t.id) ?? true]));
+  const playlistSelected = new Map(playlists.map(p => [p.id, prevAdd?.playlistSelected.get(p.id) ?? true]));
+
+  _sw.ipodBrowse.addPlan = {
+    trackById,
+    trackSelected,
+    artistTree: _swBuildIpodArtistTree(tracks),
+    playlists,
+    playlistSelected,
+    songsPage: prevAdd?.songsPage || 0,
+    playlistsPage: prevAdd?.playlistsPage || 0,
+  };
+  _swRenderIpodGroups();
+}
+
+/* ── Sync wizard iPod-sync step: executes the combined add/remove plan ─
+   Reached via the browse/select step's "Continue". Everything needed —
+   which local tracks/playlists to add, which on-device tracks/playlists
+   to remove — was already computed and selected in the previous step, so
+   this step just summarises it and executes on "Sync now"; no re-scan
+   needed (POST /sync/execute doesn't require a prior 'ready' scan state).
+   Drives the wizard's footer primary button through Comparing… (only if
+   the browse step's background add-plan scan hasn't resolved yet) ->
+   Sync now -> Syncing… -> Done, mirroring the DAP wizard's per-step
+   dynamic footer pattern. */
+
+function _swInitIpodSyncStep() {
+  const id = _sw.device?.id;
+  if (!id) return;
+  const nameEl = document.getElementById('sw-ipod-sync-device-name');
+  if (nameEl) nameEl.textContent = _sw.device.name || 'iPod';
+  const statusLine = document.getElementById('sw-ipod-sync-status');
   if (statusLine) statusLine.textContent = '';
-  const plan = status.plan || {};
+  _swRenderIpodSyncSummary();
+}
+
+function _swRenderIpodSyncSummary() {
+  if (_sw.step !== 'ipod-sync') return; // user navigated away while a retry was pending
+  const summary = document.getElementById('sw-ipod-sync-summary');
+  const primaryBtn = document.getElementById('sw-btn-primary');
+  const stillComparing = !_sw.ipodBrowse?.addPlan;
+  const { addTrackIds, addPlaylistIds } = _swComputeIpodAdditions();
   const { removeTrackIds, removePlaylistIds } = _swComputeIpodRemovals();
-  const nothingToDo = !plan.tracks_to_add_count && !removeTrackIds.length && !removePlaylistIds.length;
+  const nothingToDo = !addTrackIds.length && !addPlaylistIds.length && !removeTrackIds.length && !removePlaylistIds.length;
 
   if (summary) {
-    summary.innerHTML = `
+    summary.innerHTML = stillComparing
+      ? '<p class="muted" style="padding:8px 0">Comparing with your library…</p>'
+      : `
       <div class="gd-config-grid" style="margin-top:8px">
-        <div><label>Tracks to add</label><span>${plan.tracks_to_add_count || 0}</span></div>
+        <div><label>Tracks to add</label><span>${addTrackIds.length}</span></div>
         <div><label>Tracks to remove</label><span>${removeTrackIds.length}</span></div>
+        <div><label>Playlists to add</label><span>${addPlaylistIds.length}</span></div>
         <div><label>Playlists to remove</label><span>${removePlaylistIds.length}</span></div>
-        <div><label>Already on device</label><span>${plan.tracks_already_on_device || 0}</span></div>
       </div>
       ${nothingToDo ? '<p class="muted" style="padding:8px 0">No changes to sync.</p>' : ''}
     `;
   }
 
+  if (stillComparing) {
+    _sw.ipodSyncPhase = 'comparing';
+    if (primaryBtn) { primaryBtn.disabled = true; primaryBtn.innerHTML = 'Comparing…'; }
+    _sw.ipodPollTimer = setTimeout(_swRenderIpodSyncSummary, 500);
+    return;
+  }
   if (nothingToDo) {
     _sw.ipodSyncPhase = 'done';
     if (primaryBtn) { primaryBtn.disabled = false; primaryBtn.innerHTML = 'Done'; }
@@ -14089,10 +14318,9 @@ async function _swPollIpodSyncCheck(id) {
 async function swRunIpodSync() {
   const id = _sw.device?.id;
   if (!id) return;
-  const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
-  const trackIds = status?.plan?.tracks_to_add_ids || [];
+  const { addTrackIds, addPlaylistIds } = _swComputeIpodAdditions();
   const { removeTrackIds, removePlaylistIds } = _swComputeIpodRemovals();
-  if (!trackIds.length && !removeTrackIds.length && !removePlaylistIds.length) { toast('Nothing to sync.'); return; }
+  if (!addTrackIds.length && !addPlaylistIds.length && !removeTrackIds.length && !removePlaylistIds.length) { toast('Nothing to sync.'); return; }
 
   _sw.ipodSyncPhase = 'syncing';
   const primaryBtn = document.getElementById('sw-btn-primary');
@@ -14102,7 +14330,10 @@ async function swRunIpodSync() {
   try {
     await api(`/ipods/${id}/sync/execute`, {
       method: 'POST',
-      body: { track_ids: trackIds, remove_track_ids: removeTrackIds, remove_playlist_ids: removePlaylistIds },
+      body: {
+        track_ids: addTrackIds, playlist_ids: addPlaylistIds,
+        remove_track_ids: removeTrackIds, remove_playlist_ids: removePlaylistIds,
+      },
     });
   } catch (e) {
     toast('Could not start sync.');
@@ -14133,7 +14364,7 @@ async function _swPollIpodSyncExecute(id) {
       const more = status.errors.length > 3 ? ` and ${status.errors.length - 3} more` : '';
       toast(`${status.errors.length} song(s) failed and were skipped: ${names}${more}`);
     }
-    _swLoadIpodLibraryBrowse(id); // refresh cached state in case the user goes Back
+    _swLoadIpodLibraryBrowse(id); // refresh cached state (device + add-plan) in case the user goes Back
   }
   if (primaryBtn) { primaryBtn.disabled = false; primaryBtn.innerHTML = 'Done'; }
 }
@@ -22902,13 +23133,17 @@ const App = {
   swRunIpodSync,
   swIpodPlaylistsPage,
   swIpodArtistsPage,
+  swIpodAddSongsPage,
+  swIpodAddPlaylistsPage,
   swIpodToggleGroupCollapse,
   swIpodToggleTreeExpandEl,
   swIpodToggleSongEl,
   swIpodToggleTreeNodeEl,
   swIpodTogglePlaylistEl,
   swIpodToggleAllPlaylists,
-  swIpodToggleAllArtists,
+  swIpodToggleAllSongs,
+  swIpodToggleAddPlaylistEl,
+  swIpodToggleAllAddPlaylists,
   addSelectedToIpod,
   syncPlaylistToIpod,
   syncCurrentPlaylistToIpod,

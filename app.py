@@ -12282,17 +12282,39 @@ def ipod_sync_scan(iid):
 
             plan = compute_sync_plan(local_tracks, local_playlists, ipod_tracks, ipod_playlists)
 
+            # Sizes aren't cached on local track rows (same situation as the
+            # DAP sync diff's local_only_sizes) - stat() them on demand here,
+            # same pattern _compute_sync_diff_for_dap already uses.
+            music_base = get_music_base()
+            def _local_track_size(rel_path):
+                try:
+                    p = music_base / rel_path
+                    return int(p.stat().st_size) if rel_path and p.exists() else 0
+                except Exception:
+                    return 0
+
             ipod_sync_state = {
                 'status': 'ready', 'ipod_id': iid, 'message': '', 'error': '',
                 'plan': {
                     'tracks_to_add_ids': [t['id'] for t in plan['tracks_to_add']],
+                    'tracks_to_add': [
+                        {'id': t['id'], 'title': t.get('title') or '', 'artist': t.get('artist') or 'Unknown Artist',
+                         'album': t.get('album') or 'Unknown Album', 'size_bytes': _local_track_size(t.get('path'))}
+                        for t in plan['tracks_to_add']
+                    ],
                     'tracks_to_add_count': len(plan['tracks_to_add']),
                     'tracks_already_on_device': plan['tracks_already_on_device'],
                     'playlists_to_create_ids': [p['id'] for p in plan['playlists_to_create']],
+                    'playlists_to_create': [
+                        {'id': p['id'], 'name': p['name'], 'track_count': len(p.get('track_ids', []))}
+                        for p in plan['playlists_to_create']
+                    ],
                     'playlists_to_create_count': len(plan['playlists_to_create']),
                     'playlists_to_update': [
                         {'playlist_id': u['playlist']['id'], 'name': u['playlist']['name'],
-                         'missing_track_ids': u['missing_track_ids']}
+                         'track_count': len(u['playlist'].get('track_ids', [])),
+                         'missing_track_ids': u['missing_track_ids'],
+                         'missing_track_count': len(u['missing_track_ids'])}
                         for u in plan['playlists_to_update']
                     ],
                     'playlists_already_synced': plan['playlists_already_synced'],
