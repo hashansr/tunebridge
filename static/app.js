@@ -9704,7 +9704,7 @@ function _swClearTimers() {
 }
 
 const _SW_IPOD_STEP_META = {
-  ipod: { title: () => `${_sw.device?.name || 'iPod'} library`, sub: '' },
+  ipod: { title: () => _sw.device?.name || 'iPod', sub: 'Scan your iPod, then choose what to keep, remove, and add.' },
   'ipod-sync': { title: () => `Sync — ${_sw.device?.name || 'iPod'}`, sub: '' },
 };
 
@@ -13500,10 +13500,8 @@ async function _pollIpodSyncExecute(id) {
 function _swInitIpodStep() {
   const ipod = _sw.device;
   if (!ipod || ipod.deviceType !== 'ipod') return;
-  const nameEl = document.getElementById('sw-ipod-device-name');
   const scanBtn = document.getElementById('sw-ipod-scan-btn');
   const scanStatus = document.getElementById('sw-ipod-scan-status');
-  if (nameEl) nameEl.textContent = ipod.name || 'iPod';
   if (scanBtn) { scanBtn.disabled = !ipod.mounted; scanBtn.title = ipod.mounted ? '' : 'Connect the iPod to scan it'; }
   if (scanStatus) scanStatus.textContent = ipod.last_scanned_at ? `Last scanned ${esc(_fmtRelDate(ipod.last_scanned_at))}` : 'Not scanned yet';
   const primaryBtn = document.getElementById('sw-btn-primary');
@@ -13660,14 +13658,14 @@ function _swIpodGroupCheckState(trackIds, trackKeep) {
 
 const IPOD_GROUP_CONFIG = {
   device: {
-    songsGid: 'ipodArtists', songsTitle: 'Artists',
+    songsGid: 'ipodArtists', songsTitle: 'Songs',
     pillWord: 'kept', allLabel: 'Remove all', noneLabel: 'Keep all',
-    emptySongs: 'No tracks on this device.',
+    emptySongs: "This iPod doesn't have any songs yet.",
   },
   add: {
     songsGid: 'ipodAddSongs', songsTitle: 'Songs to add',
     pillWord: 'selected', allLabel: 'Deselect all', noneLabel: 'Select all',
-    emptySongs: 'Your library is fully synced to this device.',
+    emptySongs: 'Every song in your library is already on this iPod.',
   },
 };
 
@@ -13686,17 +13684,19 @@ function _swIpodTrackIdOf(scope, track) {
 }
 
 function _swRenderIpodGroups() {
-  const container = document.getElementById('sw-ipod-groups');
+  const deviceContainer = document.getElementById('sw-ipod-groups-device');
+  const addContainer = document.getElementById('sw-ipod-groups-add');
   const browse = _sw.ipodBrowse;
-  if (!container || !browse) return;
-  container.innerHTML = '';
-  container.appendChild(_swBuildIpodPlaylistsCard());
-  container.appendChild(_swBuildIpodArtistsCard('device'));
+  if (!deviceContainer || !addContainer || !browse) return;
+  deviceContainer.innerHTML = '';
+  deviceContainer.appendChild(_swBuildIpodPlaylistsCard());
+  deviceContainer.appendChild(_swBuildIpodArtistsCard('device'));
+  addContainer.innerHTML = '';
   if (browse.addPlan) {
-    container.appendChild(_swBuildIpodArtistsCard('add'));
-    container.appendChild(_swBuildIpodAddPlaylistsCard());
+    addContainer.appendChild(_swBuildIpodArtistsCard('add'));
+    addContainer.appendChild(_swBuildIpodAddPlaylistsCard());
   } else {
-    container.appendChild(_swBuildIpodComparingPlaceholder());
+    addContainer.appendChild(_swBuildIpodComparingPlaceholder());
   }
 }
 
@@ -13707,7 +13707,7 @@ function _swBuildIpodComparingPlaceholder() {
     <div class="sw-group-hdr" style="cursor:default">
       <div class="sw-group-chev"><div class="spinner" style="width:12px;height:12px;border-width:2px"></div></div>
       <span></span>
-      <div class="sw-group-label-col"><span class="sw-group-title">Comparing with your library…</span></div>
+      <div class="sw-group-label-col"><span class="sw-group-title">Checking what's missing from this iPod…</span></div>
       <span></span><span></span>
     </div>
   `;
@@ -13806,7 +13806,7 @@ function _swBuildIpodPlaylistsCard() {
         <div class="sw-group-label-col"><span class="sw-group-title">Playlists</span><span class="sw-group-count-text">0 playlists</span></div>
         <span></span><span></span>
       </div>
-      <div class="sw-group-rows"><p class="muted" style="padding:12px 14px">No playlists on this device.</p></div>
+      <div class="sw-group-rows"><p class="muted" style="padding:12px 14px">This iPod doesn't have any playlists yet.</p></div>
     `;
     return card;
   }
@@ -13994,7 +13994,7 @@ function _swBuildIpodAddPlaylistsCard() {
         <div class="sw-group-label-col"><span class="sw-group-title">Playlists to add</span><span class="sw-group-count-text">0 playlists</span></div>
         <span></span><span></span>
       </div>
-      <div class="sw-group-rows"><p class="muted" style="padding:12px 14px">All your playlists are already on this device.</p></div>
+      <div class="sw-group-rows"><p class="muted" style="padding:12px 14px">Every playlist in your library is already on this iPod.</p></div>
     `;
     return card;
   }

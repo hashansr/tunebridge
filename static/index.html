@@ -2239,26 +2239,31 @@
             </div>
           </div>
 
-          <!-- ── iPod step: thin wizard-chrome wrapper around the existing iPod scan/sync actions
+          <!-- ── iPod step: scan + review, styled to match the DAP wizard's Step 3
+               review UI (.sw-group-card / .sw-review-groups, defined in style.css)
                (Gear → iPod detail page keeps its own copy of this UI unchanged; these are
                wizard-scoped ids/functions calling the same /api/ipods/* routes) ── -->
           <div id="sw-step-ipod" class="sw-step" style="display:none">
-            <div class="sw-progress-card sw-card">
-              <div class="sw-progress-hdr">
-                <div class="sw-progress-hdr-left">
-                  <span class="sw-overline">library on device</span>
-                  <span class="sw-progress-phase-label" id="sw-ipod-device-name">iPod</span>
+            <div class="gd-actions-row sw-ipod-scan-row">
+              <button id="sw-ipod-scan-btn" class="gd-btn primary" disabled onclick="App.swScanIpod()">
+                <span class="gd-btn-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Scan iPod
+              </button>
+              <span class="gd-last-sync-inline" id="sw-ipod-scan-status">Not scanned yet</span>
+            </div>
+            <div id="sw-ipod-browse" class="sw-ipod-browse" style="display:none">
+              <div class="sw-review-section">
+                <div class="sw-review-section-hdr">
+                  <span class="sw-review-section-label">Currently on this iPod</span>
+                  <p class="sw-review-section-sub">Uncheck anything you'd like removed from the device.</p>
                 </div>
+                <div id="sw-ipod-groups-device" class="sw-review-groups"></div>
               </div>
-              <div class="gd-actions-row">
-                <button id="sw-ipod-scan-btn" class="gd-btn primary" disabled onclick="App.swScanIpod()">
-                  <span class="gd-btn-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Scan iPod
-                </button>
-                <span class="gd-last-sync-inline" id="sw-ipod-scan-status">Not scanned yet</span>
-              </div>
-              <div id="sw-ipod-browse" class="sw-ipod-browse" style="display:none">
-                <p class="sw-ipod-browse-hint">Uncheck anything on the device you'd like removed. Check anything from your library you'd like added.</p>
-                <div id="sw-ipod-groups" class="sw-review-groups"></div>
+              <div class="sw-review-section">
+                <div class="sw-review-section-hdr">
+                  <span class="sw-review-section-label">In your library, not on this iPod</span>
+                  <p class="sw-review-section-sub">Checked items will be copied over. Uncheck anything to skip it.</p>
+                </div>
+                <div id="sw-ipod-groups-add" class="sw-review-groups"></div>
               </div>
             </div>
           </div>

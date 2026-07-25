@@ -20660,13 +20660,30 @@ body.is-col-resizing {
 /* iPod library browse (Sync wizard iPod step) — reuses the DAP wizard's
    Step 3 review UI classes (.sw-group-card, .sw-tree-artist, etc, defined
    further down) for visual consistency across the whole Sync wizard. */
+.sw-ipod-scan-row { margin-bottom: 4px; }
 .sw-ipod-browse {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
   margin-top: 16px;
 }
-.sw-ipod-browse-hint {
+.sw-review-section-hdr {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.sw-review-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--text-muted);
+}
+.sw-review-section-sub {
   font-size: 12px;
-  margin: 0 0 10px;
+  color: var(--text-muted);
+  margin: 0;
 }
 
 /* Device row button */
