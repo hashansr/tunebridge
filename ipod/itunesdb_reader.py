@@ -34,7 +34,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_VENDOR_DIR = Path(__file__).parent / '_vendor'
+# In a PyInstaller bundle, __file__ doesn't point at a real path on disk for
+# modules loaded from the frozen archive — _vendor must be found relative to
+# sys._MEIPASS instead (same idiom as _BUNDLE_DIR in app.py).
+_VENDOR_DIR = Path(sys._MEIPASS) / 'ipod' / '_vendor' if (getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')) \
+    else Path(__file__).parent / '_vendor'
 if str(_VENDOR_DIR) not in sys.path:
     sys.path.insert(0, str(_VENDOR_DIR))
 
