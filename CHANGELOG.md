@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.574-rc.250726-1144 · 2026-07-25
 - Change: The iPod Playlists/Artists review screen in the Sync wizard now matches the look of the regular device sync review screen — same cards, checkboxes, artwork thumbnails, and pagination style throughout.
 
 ## v0.573-rc.250726-1117 · 2026-07-25
