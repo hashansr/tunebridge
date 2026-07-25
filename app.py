@@ -11578,6 +11578,15 @@ def create_dap():
     return jsonify(dap), 201
 
 
+def _mount_capacity_bytes(mount_path):
+    """(capacity_bytes, used_bytes) for a mounted volume, or (None, None) if unreadable."""
+    try:
+        st = os.statvfs(mount_path)
+        return st.f_blocks * st.f_frsize, (st.f_blocks - st.f_bfree) * st.f_frsize
+    except OSError:
+        return None, None
+
+
 @app.route('/api/daps/<did>', methods=['GET'])
 def get_dap(did):
     dap = next((d for d in load_daps() if d['id'] == did), None)
@@ -11590,13 +11599,7 @@ def get_dap(did):
     if matched_mount:
         dap['active_mount_label'] = matched_mount.get('label') or str(resolved_mount)
     if dap.get('mounted') and dap.get('active_mount_path'):
-        try:
-            st = os.statvfs(dap['active_mount_path'])
-            dap['capacity_bytes'] = st.f_blocks * st.f_frsize
-            dap['used_bytes'] = (st.f_blocks - st.f_bfree) * st.f_frsize
-        except OSError:
-            dap['capacity_bytes'] = None
-            dap['used_bytes'] = None
+        dap['capacity_bytes'], dap['used_bytes'] = _mount_capacity_bytes(dap['active_mount_path'])
     else:
         dap['capacity_bytes'] = None
         dap['used_bytes'] = None
@@ -12157,6 +12160,11 @@ def get_ipod(iid):
         ipod['active_mount_label'] = matched_mount.get('label') or str(resolved_mount)
     ipod['track_count'] = len(_db.db_load_ipod_tracks(iid))
     ipod['playlist_count'] = len(_db.db_load_ipod_playlists(iid))
+    if ipod.get('mounted') and ipod.get('active_mount_path'):
+        ipod['capacity_bytes'], ipod['used_bytes'] = _mount_capacity_bytes(ipod['active_mount_path'])
+    else:
+        ipod['capacity_bytes'] = None
+        ipod['used_bytes'] = None
     return jsonify(ipod)
 
 
@@ -12293,30 +12301,54 @@ def ipod_sync_scan(iid):
                 except Exception:
                     return 0
 
+            tracks_to_add_list = [
+                {'id': t['id'], 'title': t.get('title') or '', 'artist': t.get('artist') or 'Unknown Artist',
+                 'album': t.get('album') or 'Unknown Album', 'size_bytes': _local_track_size(t.get('path'))}
+                for t in plan['tracks_to_add']
+            ]
+            # A playlist can be selected independently of the individual songs
+            # it contains (see ipod_sync_execute, which auto-expands playlist
+            # selections to include their missing member tracks) - so the
+            # frontend needs each add-playlist's own missing-track byte cost
+            # to compute accurate required-space totals without double-
+            # counting tracks that are also individually selected elsewhere.
+            track_size_by_id = {t['id']: t['size_bytes'] for t in tracks_to_add_list}
+
+            def _missing_from_add_set(track_ids):
+                missing = [tid for tid in track_ids if tid in track_size_by_id]
+                return missing, sum(track_size_by_id[tid] for tid in missing)
+
+            playlists_to_create = []
+            for p in plan['playlists_to_create']:
+                missing_ids, missing_bytes = _missing_from_add_set(p.get('track_ids', []))
+                playlists_to_create.append({
+                    'id': p['id'], 'name': p['name'], 'track_count': len(p.get('track_ids', [])),
+                    'missing_track_ids': missing_ids, 'missing_track_count': len(missing_ids),
+                    'missing_bytes': missing_bytes,
+                })
+
+            playlists_to_update = []
+            for u in plan['playlists_to_update']:
+                missing_ids = u['missing_track_ids']
+                missing_bytes = sum(track_size_by_id.get(tid, 0) for tid in missing_ids)
+                playlists_to_update.append({
+                    'playlist_id': u['playlist']['id'], 'name': u['playlist']['name'],
+                    'track_count': len(u['playlist'].get('track_ids', [])),
+                    'missing_track_ids': missing_ids, 'missing_track_count': len(missing_ids),
+                    'missing_bytes': missing_bytes,
+                })
+
             ipod_sync_state = {
                 'status': 'ready', 'ipod_id': iid, 'message': '', 'error': '',
                 'plan': {
                     'tracks_to_add_ids': [t['id'] for t in plan['tracks_to_add']],
-                    'tracks_to_add': [
-                        {'id': t['id'], 'title': t.get('title') or '', 'artist': t.get('artist') or 'Unknown Artist',
-                         'album': t.get('album') or 'Unknown Album', 'size_bytes': _local_track_size(t.get('path'))}
-                        for t in plan['tracks_to_add']
-                    ],
+                    'tracks_to_add': tracks_to_add_list,
                     'tracks_to_add_count': len(plan['tracks_to_add']),
                     'tracks_already_on_device': plan['tracks_already_on_device'],
                     'playlists_to_create_ids': [p['id'] for p in plan['playlists_to_create']],
-                    'playlists_to_create': [
-                        {'id': p['id'], 'name': p['name'], 'track_count': len(p.get('track_ids', []))}
-                        for p in plan['playlists_to_create']
-                    ],
+                    'playlists_to_create': playlists_to_create,
                     'playlists_to_create_count': len(plan['playlists_to_create']),
-                    'playlists_to_update': [
-                        {'playlist_id': u['playlist']['id'], 'name': u['playlist']['name'],
-                         'track_count': len(u['playlist'].get('track_ids', [])),
-                         'missing_track_ids': u['missing_track_ids'],
-                         'missing_track_count': len(u['missing_track_ids'])}
-                        for u in plan['playlists_to_update']
-                    ],
+                    'playlists_to_update': playlists_to_update,
                     'playlists_already_synced': plan['playlists_already_synced'],
                 },
             }

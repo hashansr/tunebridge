@@ -9764,10 +9764,10 @@ function _swUpdateFooter(step) {
     // 3: handled by _swUpdateReviewFooter after proposal is built
     4: 'Do not disconnect the device.',
     5: 'Safe to disconnect.',
-    ipod: 'Choose what to keep, remove, and add, then continue.',
+    // ipod: default text set by _swInitIpodStep, then handled by _swUpdateIpodFooter once scanned
     'ipod-sync': 'Do not disconnect the device.',
   };
-  if (step !== 3) msgEl.textContent = msgs[step] ?? '';
+  if (step !== 3 && step !== 'ipod') msgEl.textContent = msgs[step] ?? '';
 
   if (step === 5) statusEl.classList.add('sw-footer-status--success');
 
@@ -9875,6 +9875,7 @@ async function swSelectDevice(id, type = 'dap') {
         id: ipod.id, name: ipod.name, deviceType: 'ipod', mounted: ipod.mounted,
         mount: ipod.active_mount_path, track_count: ipod.track_count,
         playlist_count: ipod.playlist_count, last_scanned_at: ipod.last_scanned_at,
+        capacity_bytes: ipod.capacity_bytes, used_bytes: ipod.used_bytes,
       };
       _swRenderIpodDetailPanel(ipod);
     } catch (e) {
@@ -9911,6 +9912,24 @@ function _swRenderIpodDetailPanel(ipod) {
   const mount = ipod.active_mount_path || '—';
   const lastScanned = ipod.last_scanned_at ? _fmtRelDate(ipod.last_scanned_at) : 'Never';
 
+  const cap  = ipod.capacity_bytes ?? 0;
+  const used = ipod.used_bytes ?? 0;
+  const free = cap - used;
+  const usedPct = cap > 0 ? Math.min(100, (used / cap) * 100) : 0;
+  const tight = usedPct > 95;
+  const barClass = tight ? 'sw-cap-bar-fill--tight' : '';
+  const capacitySection = cap > 0 ? `
+    <div class="sw-cap-section">
+      <div class="sw-cap-label-row">
+        <span class="sw-overline" style="display:inline">Capacity</span>
+        <span class="sw-cap-used-text">${_fmtGB(used)} of ${_fmtGB(cap)} used</span>
+      </div>
+      <div class="sw-cap-bar-wrap">
+        <div class="sw-cap-bar-fill ${barClass}" style="width:${usedPct.toFixed(1)}%"></div>
+      </div>
+      <span class="sw-cap-free-caption">${_fmtGB(free)} free</span>
+    </div>` : '';
+
   content.innerHTML = `
     <div class="sw-detail-hdr">
       <div class="sw-detail-icon-tile">${_IPOD_SVG_SMALL}</div>
@@ -9919,6 +9938,8 @@ function _swRenderIpodDetailPanel(ipod) {
         <p class="sw-detail-name">${esc(ipod.name)}</p>
       </div>
     </div>
+
+    ${capacitySection}
 
     <div class="sw-detail-meta-grid">
       <div class="sw-detail-meta-cell">
@@ -11063,6 +11084,25 @@ function _swComputeTotals() {
   };
 }
 
+/* Shared by the DAP (Step 3) and iPod browse/select storage summaries -
+   both flows compute a {capBytes, effectiveAvailableBytes, requiredBytes,
+   remainingBytes, deleteBytes, tight} totals object and render it identically. */
+function _swStorageBarHtml(t) {
+  if (!t.capBytes) return '';
+  const diffText = t.remainingBytes >= 0
+    ? `${_fmtBytes(t.remainingBytes)} remaining`
+    : `${_fmtBytes(Math.abs(t.remainingBytes))} over`;
+  const stateClass = t.remainingBytes < 0 ? 'is-over' : (t.tight ? 'is-tight' : 'is-ok');
+  const availableLabel = t.deleteBytes > 0 ? 'Available after removals' : 'Available';
+
+  return `
+    <span class="sw-storage-summary" aria-label="${esc(`${availableLabel} ${_fmtBytes(t.effectiveAvailableBytes)}, required ${_fmtBytes(t.requiredBytes)}, ${diffText}`)}">
+      <span><strong>${esc(_fmtBytes(t.effectiveAvailableBytes))}</strong> ${availableLabel}</span>
+      <span><strong>${esc(_fmtBytes(t.requiredBytes))}</strong> Required</span>
+      <span class="${stateClass}"><strong>${esc(_fmtBytes(Math.abs(t.remainingBytes)))}</strong> ${t.remainingBytes >= 0 ? 'Remaining' : 'Over'}</span>
+    </span>`;
+}
+
 function _swStoragePhrase(t) {
   const selectedSummary = [];
   if (t.toDeviceCount) selectedSummary.push(`${t.toDeviceCount} song${t.toDeviceCount===1?'':'s'}`);
@@ -11072,22 +11112,10 @@ function _swStoragePhrase(t) {
   if (t.playlistCount) selectedSummary.push(`${t.playlistCount} playlist${t.playlistCount===1?'':'s'}`);
 
   const selectionText = selectedSummary.length ? selectedSummary.join(' · ') : 'No changes selected';
-  if (!t.capBytes) return esc(selectionText);
+  const bar = _swStorageBarHtml(t);
+  if (!bar) return esc(selectionText);
 
-  const diffText = t.remainingBytes >= 0
-    ? `${_fmtBytes(t.remainingBytes)} remaining`
-    : `${_fmtBytes(Math.abs(t.remainingBytes))} over`;
-  const stateClass = t.remainingBytes < 0 ? 'is-over' : (t.tight ? 'is-tight' : 'is-ok');
-  const availableLabel = t.deleteBytes > 0 ? 'Available after deletes' : 'Available';
-
-  return `
-    <span class="sw-storage-summary" aria-label="${esc(`${availableLabel} ${_fmtBytes(t.effectiveAvailableBytes)}, required ${_fmtBytes(t.requiredBytes)}, ${diffText}`)}">
-      <span><strong>${esc(_fmtBytes(t.effectiveAvailableBytes))}</strong> ${availableLabel}</span>
-      <span><strong>${esc(_fmtBytes(t.requiredBytes))}</strong> Required</span>
-      <span class="${stateClass}"><strong>${esc(_fmtBytes(Math.abs(t.remainingBytes)))}</strong> ${t.remainingBytes >= 0 ? 'Remaining' : 'Over'}</span>
-    </span>
-    <span class="sw-storage-selection">${esc(selectionText)}</span>
-  `;
+  return `${bar}<span class="sw-storage-selection">${esc(selectionText)}</span>`;
 }
 
 function _swUpdateReviewFooter() {
@@ -13500,12 +13528,15 @@ async function _pollIpodSyncExecute(id) {
 function _swInitIpodStep() {
   const ipod = _sw.device;
   if (!ipod || ipod.deviceType !== 'ipod') return;
+  _sw.ipodFilter = 'all';
   const scanBtn = document.getElementById('sw-ipod-scan-btn');
   const scanStatus = document.getElementById('sw-ipod-scan-status');
   if (scanBtn) { scanBtn.disabled = !ipod.mounted; scanBtn.title = ipod.mounted ? '' : 'Connect the iPod to scan it'; }
   if (scanStatus) scanStatus.textContent = ipod.last_scanned_at ? `Last scanned ${esc(_fmtRelDate(ipod.last_scanned_at))}` : 'Not scanned yet';
   const primaryBtn = document.getElementById('sw-btn-primary');
   if (primaryBtn) primaryBtn.disabled = !ipod.last_scanned_at;
+  const msgEl = document.getElementById('sw-footer-msg');
+  if (msgEl) msgEl.textContent = 'Choose what to keep, remove, and add, then continue.';
   if (ipod.last_scanned_at) {
     _swLoadIpodLibraryBrowse(ipod.id);
   } else {
@@ -13661,11 +13692,13 @@ const IPOD_GROUP_CONFIG = {
     songsGid: 'ipodArtists', songsTitle: 'Songs',
     pillWord: 'kept', allLabel: 'Remove all', noneLabel: 'Keep all',
     emptySongs: "This iPod doesn't have any songs yet.",
+    hint: 'Select artists, albums, or individual songs to keep on this iPod.',
   },
   add: {
     songsGid: 'ipodAddSongs', songsTitle: 'Songs to add',
     pillWord: 'selected', allLabel: 'Deselect all', noneLabel: 'Select all',
     emptySongs: 'Every song in your library is already on this iPod.',
+    hint: 'Select artists, albums, or individual songs to add to this iPod.',
   },
 };
 
@@ -13673,6 +13706,11 @@ function _swIpodTrackKeepMap(scope) {
   const browse = _sw.ipodBrowse;
   if (!browse) return null;
   return scope === 'add' ? (browse.addPlan?.trackSelected || null) : browse.trackKeep;
+}
+function _swIpodTrackByIdFor(scope) {
+  const browse = _sw.ipodBrowse;
+  if (!browse) return new Map();
+  return scope === 'add' ? (browse.addPlan?.trackById || new Map()) : browse.trackById;
 }
 function _swIpodArtistTreeFor(scope) {
   const browse = _sw.ipodBrowse;
@@ -13683,20 +13721,141 @@ function _swIpodTrackIdOf(scope, track) {
   return scope === 'add' ? track.id : track.device_track_id;
 }
 
+function swSetIpodFilter(f) {
+  _sw.ipodFilter = f;
+  _swRenderIpodGroups();
+}
+
 function _swRenderIpodGroups() {
-  const deviceContainer = document.getElementById('sw-ipod-groups-device');
-  const addContainer = document.getElementById('sw-ipod-groups-add');
+  const container = document.getElementById('sw-ipod-groups');
   const browse = _sw.ipodBrowse;
-  if (!deviceContainer || !addContainer || !browse) return;
-  deviceContainer.innerHTML = '';
-  deviceContainer.appendChild(_swBuildIpodPlaylistsCard());
-  deviceContainer.appendChild(_swBuildIpodArtistsCard('device'));
-  addContainer.innerHTML = '';
-  if (browse.addPlan) {
-    addContainer.appendChild(_swBuildIpodArtistsCard('add'));
-    addContainer.appendChild(_swBuildIpodAddPlaylistsCard());
-  } else {
-    addContainer.appendChild(_swBuildIpodComparingPlaceholder());
+  if (!container || !browse) return;
+
+  const filter = _sw.ipodFilter || 'all';
+  const allCards = browse.addPlan
+    ? [_swBuildIpodPlaylistsCard(), _swBuildIpodArtistsCard('device'), _swBuildIpodArtistsCard('add'), _swBuildIpodAddPlaylistsCard()]
+    : [_swBuildIpodPlaylistsCard(), _swBuildIpodArtistsCard('device'), _swBuildIpodComparingPlaceholder()];
+  const cardsByFilter = {
+    playlists: () => [_swBuildIpodPlaylistsCard()],
+    songs: () => [_swBuildIpodArtistsCard('device')],
+    addSongs: () => [browse.addPlan ? _swBuildIpodArtistsCard('add') : _swBuildIpodComparingPlaceholder()],
+    addPlaylists: () => [browse.addPlan ? _swBuildIpodAddPlaylistsCard() : _swBuildIpodComparingPlaceholder()],
+  };
+  const cards = filter === 'all' ? allCards : (cardsByFilter[filter]?.() ?? allCards);
+
+  container.innerHTML = '';
+  cards.forEach(c => container.appendChild(c));
+
+  // Filter chip badge counts
+  const songsCount = browse.trackById.size;
+  const playlistsCount = browse.playlists.length;
+  const addSongsCount = browse.addPlan ? browse.addPlan.trackById.size : 0;
+  const addPlaylistsCount = browse.addPlan ? browse.addPlan.playlists.length : 0;
+  const setChip = (id, n) => { const el = document.getElementById(`sw-ipod-chip-${id}`); if (el) el.textContent = n; };
+  setChip('songs', songsCount);
+  setChip('playlists', playlistsCount);
+  setChip('addSongs', addSongsCount);
+  setChip('addPlaylists', addPlaylistsCount);
+  setChip('all', songsCount + playlistsCount + addSongsCount + addPlaylistsCount);
+  document.querySelectorAll('#sw-ipod-filter-chips .sw-chip').forEach(c => {
+    c.classList.toggle('sw-chip--active', c.dataset.filter === filter);
+  });
+
+  _swUpdateIpodFooter();
+}
+
+/* Mirrors _swComputeTotals()/_swStoragePhrase() (the DAP Step 3 storage math)
+   so the iPod browse/select step shows the same live available/required/
+   remaining bytes as the user checks and unchecks things. The one wrinkle:
+   selecting a "playlist to add" pulls in its member tracks even if they
+   aren't individually checked in the Songs-to-add card (ipod_sync_execute
+   auto-expands playlist selections - see IPOD_GROUP_CONFIG usage above), so
+   required bytes are summed over the de-duplicated union of both rather
+   than just the checked track set. */
+function _swComputeIpodTotals() {
+  const browse = _sw.ipodBrowse;
+  if (!browse) return null;
+  const dev = _sw.device || {};
+
+  let freedBytes = 0, removedTrackCount = 0;
+  for (const [id, keep] of browse.trackKeep) {
+    if (keep === false) {
+      removedTrackCount++;
+      const t = browse.trackById.get(id);
+      if (t) freedBytes += Number(t.size_bytes) || 0;
+    }
+  }
+  let removedPlaylistCount = 0;
+  for (const p of browse.playlists) {
+    if (browse.playlistKeep.get(p.device_playlist_id) === false) removedPlaylistCount++;
+  }
+
+  let requiredBytes = 0, addedTrackCount = 0, addedPlaylistCount = 0;
+  const countedIds = new Set();
+  const addPlan = browse.addPlan;
+  if (addPlan) {
+    for (const [id, sel] of addPlan.trackSelected) {
+      if (sel === false) continue;
+      addedTrackCount++;
+      if (countedIds.has(id)) continue;
+      countedIds.add(id);
+      const t = addPlan.trackById.get(id);
+      if (t) requiredBytes += Number(t.size_bytes) || 0;
+    }
+    for (const p of addPlan.playlists) {
+      if (addPlan.playlistSelected.get(p.id) === false) continue;
+      addedPlaylistCount++;
+      for (const tid of p.missingTrackIds || []) {
+        if (countedIds.has(tid)) continue;
+        countedIds.add(tid);
+        const t = addPlan.trackById.get(tid);
+        if (t) requiredBytes += Number(t.size_bytes) || 0;
+      }
+    }
+  }
+
+  const usedBytes = dev.used_bytes ?? 0;
+  const capBytes = dev.capacity_bytes ?? 0;
+  const freeBytes = Math.max(0, capBytes - usedBytes);
+  const effectiveAvailableBytes = freeBytes + freedBytes;
+  const remainingBytes = effectiveAvailableBytes - requiredBytes;
+  const afterUsed = usedBytes - freedBytes + requiredBytes;
+  const tight = capBytes > 0 && (afterUsed / capBytes) > 0.95;
+  const outOfSpace = capBytes > 0 && remainingBytes < 0;
+  const totalChanges = removedTrackCount + removedPlaylistCount + addedTrackCount + addedPlaylistCount;
+
+  return {
+    usedBytes, capBytes, freeBytes, deleteBytes: freedBytes, requiredBytes,
+    effectiveAvailableBytes, remainingBytes, afterUsed, tight, outOfSpace,
+    removedTrackCount, removedPlaylistCount, addedTrackCount, addedPlaylistCount, totalChanges,
+  };
+}
+
+function _swUpdateIpodFooter() {
+  const t = _swComputeIpodTotals();
+  if (!t) return;
+  const msgEl = document.getElementById('sw-footer-msg');
+  const statusEl = document.getElementById('sw-footer-status');
+  if (msgEl) {
+    const selectedSummary = [];
+    if (t.addedTrackCount) selectedSummary.push(`${t.addedTrackCount} song${t.addedTrackCount === 1 ? '' : 's'} to add`);
+    if (t.addedPlaylistCount) selectedSummary.push(`${t.addedPlaylistCount} playlist${t.addedPlaylistCount === 1 ? '' : 's'} to add`);
+    if (t.removedTrackCount) selectedSummary.push(`${t.removedTrackCount} song${t.removedTrackCount === 1 ? '' : 's'} to remove`);
+    if (t.removedPlaylistCount) selectedSummary.push(`${t.removedPlaylistCount} playlist${t.removedPlaylistCount === 1 ? '' : 's'} to remove`);
+    const selectionText = selectedSummary.length ? selectedSummary.join(' · ') : 'No changes selected';
+    const bar = _swStorageBarHtml(t);
+    msgEl.innerHTML = bar ? `${bar}<span class="sw-storage-selection">${esc(selectionText)}</span>` : esc(selectionText);
+  }
+  if (statusEl) {
+    statusEl.className = 'sw-footer-status'
+      + (t.outOfSpace ? ' sw-footer-status--warn' : '')
+      + (!t.outOfSpace && t.tight ? ' sw-footer-status--tight' : '');
+  }
+  const primaryBtn = document.getElementById('sw-btn-primary');
+  if (primaryBtn) {
+    primaryBtn.disabled = t.outOfSpace;
+    primaryBtn.innerHTML = t.outOfSpace ? 'Continue'
+      : `Continue (${t.totalChanges}) <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`;
   }
 }
 
@@ -13942,6 +14101,9 @@ function _swBuildIpodArtistsCard(scope) {
   const totalTracks = allTrackIdsGlobal.length;
   const allKept = keptCount === totalTracks;
   const someKept = keptCount > 0 && !allKept;
+  const trackByIdForScope = _swIpodTrackByIdFor(scope);
+  const totalBytes = allTrackIdsGlobal.reduce((s, id) => s + (Number(trackByIdForScope.get(id)?.size_bytes) || 0), 0);
+  const totalSizeLabel = totalBytes > 0 ? _fmtBytes(totalBytes) : '';
 
   const page = (scope === 'add' ? _sw.ipodBrowse.addPlan.songsPage : _sw.ipodBrowse.artistsPage) || 0;
   const pageArtists = tree.slice(page * SW_IPOD_BROWSE_PAGE_SIZE, (page + 1) * SW_IPOD_BROWSE_PAGE_SIZE);
@@ -13955,7 +14117,8 @@ function _swBuildIpodArtistsCard(scope) {
         onclick="event.stopPropagation();App.swIpodToggleAllSongs('${scope}', this.checked)" />
       <div class="sw-group-label-col">
         <span class="sw-group-title">${esc(cfg.songsTitle)}</span>
-        <span class="sw-group-count-text">${total} artist${total === 1 ? '' : 's'}</span>
+        <span class="sw-group-count-text">${total} artist${total === 1 ? '' : 's'}${totalSizeLabel ? ` · ${esc(totalSizeLabel)}` : ''}</span>
+        <span class="sw-group-hint">${esc(cfg.hint)}</span>
       </div>
       <span class="sw-group-sel-pill">${keptCount} ${cfg.pillWord}</span>
       <button class="sw-group-selall-btn" onclick="event.stopPropagation();App.swIpodToggleAllSongs('${scope}', ${!allKept})">
@@ -14232,8 +14395,8 @@ async function _swPollIpodAddPlan(id) {
   const trackById = new Map(tracks.map(t => [t.id, t]));
 
   const playlists = [
-    ...(plan.playlists_to_create || []).map(p => ({ id: p.id, name: p.name, kind: 'create', trackCount: p.track_count, missingTrackCount: p.track_count })),
-    ...(plan.playlists_to_update || []).map(p => ({ id: p.playlist_id, name: p.name, kind: 'update', trackCount: p.track_count, missingTrackCount: p.missing_track_count })),
+    ...(plan.playlists_to_create || []).map(p => ({ id: p.id, name: p.name, kind: 'create', trackCount: p.track_count, missingTrackCount: p.missing_track_count, missingTrackIds: p.missing_track_ids, missingBytes: p.missing_bytes })),
+    ...(plan.playlists_to_update || []).map(p => ({ id: p.playlist_id, name: p.name, kind: 'update', trackCount: p.track_count, missingTrackCount: p.missing_track_count, missingTrackIds: p.missing_track_ids, missingBytes: p.missing_bytes })),
   ].sort((a, b) => a.name.localeCompare(b.name));
 
   // Carry over selections across a rescan, same as the device-side maps.
@@ -23131,6 +23294,7 @@ const App = {
   runIpodSync,
   swScanIpod,
   swRunIpodSync,
+  swSetIpodFilter,
   swIpodPlaylistsPage,
   swIpodArtistsPage,
   swIpodAddSongsPage,

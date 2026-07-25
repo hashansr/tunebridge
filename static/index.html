@@ -2251,20 +2251,14 @@
               <span class="gd-last-sync-inline" id="sw-ipod-scan-status">Not scanned yet</span>
             </div>
             <div id="sw-ipod-browse" class="sw-ipod-browse" style="display:none">
-              <div class="sw-review-section">
-                <div class="sw-review-section-hdr">
-                  <span class="sw-review-section-label">Currently on this iPod</span>
-                  <p class="sw-review-section-sub">Uncheck anything you'd like removed from the device.</p>
-                </div>
-                <div id="sw-ipod-groups-device" class="sw-review-groups"></div>
+              <div class="sw-filter-chips" id="sw-ipod-filter-chips">
+                <button class="sw-chip sw-chip--active" data-filter="all" onclick="App.swSetIpodFilter('all')">All <span class="sw-chip-badge" id="sw-ipod-chip-all">0</span></button>
+                <button class="sw-chip" data-filter="songs" onclick="App.swSetIpodFilter('songs')">Songs <span class="sw-chip-badge" id="sw-ipod-chip-songs">0</span></button>
+                <button class="sw-chip" data-filter="playlists" onclick="App.swSetIpodFilter('playlists')">Playlists <span class="sw-chip-badge" id="sw-ipod-chip-playlists">0</span></button>
+                <button class="sw-chip" data-filter="addSongs" onclick="App.swSetIpodFilter('addSongs')">Songs to add <span class="sw-chip-badge" id="sw-ipod-chip-addSongs">0</span></button>
+                <button class="sw-chip" data-filter="addPlaylists" onclick="App.swSetIpodFilter('addPlaylists')">Playlists to add <span class="sw-chip-badge" id="sw-ipod-chip-addPlaylists">0</span></button>
               </div>
-              <div class="sw-review-section">
-                <div class="sw-review-section-hdr">
-                  <span class="sw-review-section-label">In your library, not on this iPod</span>
-                  <p class="sw-review-section-sub">Checked items will be copied over. Uncheck anything to skip it.</p>
-                </div>
-                <div id="sw-ipod-groups-add" class="sw-review-groups"></div>
-              </div>
+              <div id="sw-ipod-groups" class="sw-review-groups"></div>
             </div>
           </div>
 
