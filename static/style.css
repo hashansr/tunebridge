@@ -20657,124 +20657,16 @@ body.is-col-resizing {
   padding-top: 2px;
 }
 
-/* iPod library browse accordion (Sync wizard iPod step) */
+/* iPod library browse (Sync wizard iPod step) — reuses the DAP wizard's
+   Step 3 review UI classes (.sw-group-card, .sw-tree-artist, etc, defined
+   further down) for visual consistency across the whole Sync wizard. */
 .sw-ipod-browse {
   margin-top: 16px;
-}
-.sw-ipod-browse > details + details {
-  margin-top: 10px;
 }
 .sw-ipod-browse-hint {
   color: var(--text-muted);
   font-size: 12px;
   margin: 0 0 10px;
-}
-
-.sw-ipod-checkbox {
-  flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  cursor: pointer;
-  accent-color: var(--accent);
-}
-
-.sw-ipod-tree-node summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 0;
-  list-style: none;
-  cursor: pointer;
-  border-bottom: 1px solid var(--hairline);
-}
-.sw-ipod-tree-node summary::-webkit-details-marker {
-  display: none;
-}
-.sw-ipod-tree-node--top > summary {
-  padding: 6px 0 10px;
-}
-.sw-ipod-tree-chevron {
-  width: 8px;
-  height: 8px;
-  border-top: 1.5px solid var(--text-muted);
-  border-right: 1.5px solid var(--text-muted);
-  transform: rotate(45deg);
-  transition: transform 0.18s ease;
-  flex-shrink: 0;
-}
-.sw-ipod-tree-node[open] > summary > .sw-ipod-tree-chevron {
-  transform: rotate(135deg);
-}
-.sw-ipod-tree-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sw-ipod-tree-node--top > summary > .sw-ipod-tree-label {
-  font-size: 13.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: var(--text-muted);
-}
-.sw-ipod-tree-count {
-  color: var(--text-muted);
-  font-size: 11.5px;
-  flex-shrink: 0;
-}
-.sw-ipod-tree-children {
-  padding-left: 18px;
-}
-.sw-ipod-tree-node--album {
-  margin-top: 2px;
-}
-.sw-ipod-tree-node--album > summary {
-  padding: 6px 0;
-}
-
-.sw-ipod-track-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 0 5px 18px;
-  font-size: 12.5px;
-  border-bottom: 1px solid var(--hairline);
-  cursor: pointer;
-}
-.sw-ipod-track-title {
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sw-ipod-track-meta {
-  color: var(--text-muted);
-  font-size: 11.5px;
-  flex-shrink: 0;
-  margin-left: auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 45%;
-}
-
-.sw-ipod-pager {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding-top: 10px;
-}
-.sw-ipod-pager .gd-btn.compact {
-  margin-left: 0;
-}
-.sw-ipod-pager-label {
-  color: var(--text-muted);
-  font-size: 11.5px;
 }
 
 /* Device row button */

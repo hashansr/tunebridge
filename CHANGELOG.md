@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: The iPod Playlists/Artists review screen in the Sync wizard now matches the look of the regular device sync review screen — same cards, checkboxes, artwork thumbnails, and pagination style throughout.
 
 ## v0.573-rc.250726-1117 · 2026-07-25
 - Add: The Sync wizard's device picker now lists iPods alongside DAPs, in separate "DAPs" and "iPods" sections, so you no longer need to go to Gear to sync an iPod.
