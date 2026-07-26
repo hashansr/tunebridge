@@ -20697,6 +20697,10 @@ body.is-col-resizing {
 .sw-ipod-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .sw-ipod-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .sw-ipod-panel > header > b { color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; }
+.sw-ipod-actions { display: inline-flex; align-items: center; gap: 8px; }
+.sw-ipod-select-all { padding: 5px 8px; border: 0; border-radius: 6px; color: var(--text-muted); background: transparent; cursor: pointer; font: 600 10.5px inherit; white-space: nowrap; }
+.sw-ipod-select-all:hover:not(:disabled) { color: var(--accent); background: var(--accent-dim); }
+.sw-ipod-select-all:disabled { cursor: default; opacity: .45; }
 .sw-ipod-tabs { display: inline-flex; gap: 3px; padding: 3px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 999px; }
 .sw-ipod-tabs button { border: 0; border-radius: 999px; padding: 6px 13px; color: var(--text-sub); background: transparent; font: 600 11.5px inherit; cursor: pointer; }
 .sw-ipod-tabs button.active { color: var(--accent); background: var(--accent-dim); }
@@ -20713,8 +20717,9 @@ body.is-col-resizing {
 .sw-ipod-group-head:hover { background: rgba(255,255,255,.02); }
 .sw-ipod-check { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 .sw-ipod-check:disabled { opacity: 1; cursor: default; }
-.sw-ipod-thumb { width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; color: rgba(229,226,225,.85); font-size: 9.5px; font-weight: 700; letter-spacing: -.01em; }
+.sw-ipod-thumb { position: relative; width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; color: rgba(229,226,225,.85); font-size: 9.5px; font-weight: 700; letter-spacing: -.01em; }
 .sw-ipod-thumb svg { width: 14px; height: 14px; }
+.sw-ipod-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .sw-ipod-group-copy { min-width: 0; }
 .sw-ipod-group-copy b, .sw-ipod-group-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sw-ipod-group-copy b { color: var(--text); font-size: 12.5px; font-weight: 600; }
@@ -20724,6 +20729,13 @@ body.is-col-resizing {
 .sw-ipod-group-head i { color: var(--text-muted); font-size: 20px; font-style: normal; line-height: 1; transform-origin: center; transition: transform .15s; }
 .sw-ipod-group-head i.open { transform: rotate(90deg); }
 .sw-ipod-group-body { padding: 2px 8px 8px; border-top: 1px solid rgba(255,255,255,.06); }
+.sw-ipod-album { margin: 5px 0 8px; overflow: hidden; border: 1px solid rgba(255,255,255,.05); border-radius: 8px; background: rgba(0,0,0,.12); }
+.sw-ipod-album-head { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-bottom: 1px solid rgba(255,255,255,.05); }
+.sw-ipod-album-head .sw-ipod-thumb { width: 24px; height: 24px; border-radius: 6px; }
+.sw-ipod-album-head b, .sw-ipod-album-head small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sw-ipod-album-head b { color: var(--text-sub); font-size: 11.5px; font-weight: 600; }
+.sw-ipod-album-head small { margin-top: 1px; color: var(--text-muted); font-size: 10px; }
+.sw-ipod-album-songs { padding: 2px 4px 4px; }
 .sw-ipod-track { display: grid; grid-template-columns: 17px 26px minmax(0,1fr) 84px; align-items: center; gap: 11px; padding: 6px 8px; border-radius: 7px; }
 .sw-ipod-track:hover { background: rgba(255,255,255,.03); }
 .sw-ipod-track.is-device { opacity: .55; }
