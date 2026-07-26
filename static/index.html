@@ -2239,27 +2239,14 @@
             </div>
           </div>
 
-          <!-- ── iPod step: scan + review, styled to match the DAP wizard's Step 3
-               review UI (.sw-group-card / .sw-review-groups, defined in style.css)
-               (Gear → iPod detail page keeps its own copy of this UI unchanged; these are
-               wizard-scoped ids/functions calling the same /api/ipods/* routes) ── -->
+          <!-- ── iPod sync review. The content is rendered from the device scan and
+               library diff in app.js; its shell deliberately differs from the generic
+               wizard steps to match the dedicated iPod review design. ── -->
           <div id="sw-step-ipod" class="sw-step" style="display:none">
-            <div class="gd-actions-row sw-ipod-scan-row">
-              <button id="sw-ipod-scan-btn" class="gd-btn primary" disabled onclick="App.swScanIpod()">
-                <span class="gd-btn-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>Scan iPod
-              </button>
-              <span class="gd-last-sync-inline" id="sw-ipod-scan-status">Not scanned yet</span>
-            </div>
             <div id="sw-ipod-browse" class="sw-ipod-browse" style="display:none">
-              <div class="sw-filter-chips" id="sw-ipod-filter-chips">
-                <button class="sw-chip sw-chip--active" data-filter="all" onclick="App.swSetIpodFilter('all')">All <span class="sw-chip-badge" id="sw-ipod-chip-all">0</span></button>
-                <button class="sw-chip" data-filter="songs" onclick="App.swSetIpodFilter('songs')">Songs <span class="sw-chip-badge" id="sw-ipod-chip-songs">0</span></button>
-                <button class="sw-chip" data-filter="playlists" onclick="App.swSetIpodFilter('playlists')">Playlists <span class="sw-chip-badge" id="sw-ipod-chip-playlists">0</span></button>
-                <button class="sw-chip" data-filter="addSongs" onclick="App.swSetIpodFilter('addSongs')">Songs to add <span class="sw-chip-badge" id="sw-ipod-chip-addSongs">0</span></button>
-                <button class="sw-chip" data-filter="addPlaylists" onclick="App.swSetIpodFilter('addPlaylists')">Playlists to add <span class="sw-chip-badge" id="sw-ipod-chip-addPlaylists">0</span></button>
-              </div>
-              <div id="sw-ipod-groups" class="sw-review-groups"></div>
+              <div id="sw-ipod-review" class="sw-ipod-review"></div>
             </div>
+            <div id="sw-ipod-empty" class="sw-ipod-empty" style="display:none"></div>
           </div>
 
           <!-- ── iPod sync step: runs after the browse/select step, executes the
