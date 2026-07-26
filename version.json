@@ -1,7 +1,7 @@
 {
-  "version": "0.580",
-  "version_full": "0.580-rc.260726-1838",
-  "build": 580,
+  "version": "0.581",
+  "version_full": "0.581-rc.270726-0835",
+  "build": 581,
   "channel": "rc",
-  "released": "2026-07-26"
+  "released": "2026-07-27"
 }
