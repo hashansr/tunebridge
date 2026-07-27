@@ -2252,15 +2252,70 @@
           <!-- ── iPod sync step: runs after the browse/select step, executes the
                combined add (missing tracks) + remove (unchecked items) sync ── -->
           <div id="sw-step-ipod-sync" class="sw-step" style="display:none">
-            <div class="sw-progress-card sw-card">
-              <div class="sw-progress-hdr">
-                <div class="sw-progress-hdr-left">
-                  <span class="sw-overline">sync</span>
-                  <span class="sw-progress-phase-label" id="sw-ipod-sync-device-name">iPod</span>
+            <!-- Pre-sync summary (Comparing… / counts grid), shown until
+                 swRunIpodSync() fires and swaps in the progress view below.
+                 No separate device name/status header here: the shared
+                 wizard title above already carries that, same as step 2. -->
+            <div id="sw-ipod-sync-pre" class="sw-progress-card sw-card">
+              <div id="sw-ipod-sync-summary"></div>
+            </div>
+
+            <!-- In-flight progress view — structural clone of #sw-step-4's
+                 sync card, hidden until swRunIpodSync() starts. innerHTML is
+                 swapped for a .sw-error-card / done panel on terminal states,
+                 same pattern as _swHandleSyncError/_swHandleSyncCancelled. -->
+            <div class="sw-progress-card sw-card" id="sw-ipod-sync-card" style="display:none">
+              <div class="sw-sync-caution-bar" id="sw-ipod-sync-caution-bar">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span>Keep <strong id="sw-ipod-caution-device-name">your device</strong> connected and don't close TuneBridge until the sync finishes.</span>
+              </div>
+              <div class="sw-sync-hero">
+                <div class="sw-sync-hero-row">
+                  <div class="sw-big-pct" id="sw-ipod-sync-pct">0%</div>
+                  <div class="sw-sync-stats" aria-label="Sync progress statistics">
+                    <div class="sw-sync-stat">
+                      <span class="sw-sync-stat-key">Items</span>
+                      <span class="sw-sync-stat-val" id="sw-ipod-sync-items">0 <small>/ 0</small></span>
+                    </div>
+                    <div class="sw-sync-stat">
+                      <span class="sw-sync-stat-key">Time left</span>
+                      <span class="sw-sync-stat-val" id="sw-ipod-sync-time-left">--</span>
+                    </div>
+                    <div class="sw-sync-stat">
+                      <span class="sw-sync-stat-key">Rate</span>
+                      <span class="sw-sync-stat-val" id="sw-ipod-sync-rate">--</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="sw-bar-wrap">
+                  <div class="sw-bar sw-bar--sync" id="sw-ipod-sync-bar" style="width:0%"></div>
                 </div>
               </div>
-              <span class="gd-last-sync-inline" id="sw-ipod-sync-status">Comparing…</span>
-              <div id="sw-ipod-sync-summary"></div>
+              <div class="sw-sync-current-wrap" id="sw-ipod-sync-current-wrap" style="display:none">
+                <span class="sw-current-spinner" aria-hidden="true"></span>
+                <div class="sw-current-file">
+                  <span class="sw-current-kicker">In progress</span>
+                  <span class="sw-sync-current-label" id="sw-ipod-sync-current"></span>
+                  <span class="sw-sync-current-meta" id="sw-ipod-sync-current-meta"></span>
+                </div>
+                <span class="sw-sync-file-pct" id="sw-ipod-sync-file-pct">0%</span>
+              </div>
+              <div class="sw-progress-body">
+                <div class="sw-phases-wrap">
+                  <div class="sw-section-hdr">
+                    <span class="sw-overline">Progress</span>
+                    <span class="sw-section-meta" id="sw-ipod-sync-phase-meta">Step 1 of 7</span>
+                  </div>
+                  <div class="sw-phases-col" id="sw-ipod-sync-phases"><!-- populated by JS --></div>
+                </div>
+                <div class="sw-log-col">
+                  <div class="sw-log-hdr">
+                    <span class="sw-overline">Recently completed</span>
+                    <span class="sw-log-count" id="sw-ipod-sync-log-count">0 items</span>
+                  </div>
+                  <div class="sw-completed-feed feed-fade" id="sw-ipod-sync-log"></div>
+                </div>
+              </div>
             </div>
           </div>
 

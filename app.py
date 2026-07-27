@@ -12288,7 +12288,24 @@ def get_ipod_playlists(iid):
 # iTunesDB via ipod/itunesdb_writer.py, rather than a plain file copy - so it
 # always runs backup_itunesdb() first, matching the plan's hard requirement.
 
-ipod_sync_state = {'status': 'idle', 'ipod_id': None, 'message': '', 'error': '', 'plan': None}
+
+def _ipod_sync_idle_state():
+    """Full idle/reset shape for ipod_sync_state. Listed explicitly (not
+    relying on missing-key defaults client-side) so every poll response
+    has a consistent shape, matching the generic sync_state convention.
+    'phase' is a string enum ('backup'|'remove'|'transcode_copy'|
+    'playlists'|'artwork'|'write'|'verify') set directly by do_execute at
+    each stage transition - simpler than the generic feature's frontend
+    regex heuristic since the backend always knows its own stage."""
+    return {
+        'status': 'idle', 'ipod_id': None, 'message': '', 'error': '', 'plan': None,
+        'phase': '', 'progress': 0, 'total': 0, 'current': '',
+        'current_file_done': 0, 'current_file_total': 0,
+        'completed_items': [], 'errors': [], 'cancel_requested': False,
+    }
+
+
+ipod_sync_state = _ipod_sync_idle_state()
 
 # Human-readable filetype description for tracks copied as-is (no
 # transcode) — mirrors the strings iTunes itself writes for these
@@ -12317,7 +12334,7 @@ def ipod_sync_scan(iid):
     if not ipod:
         return jsonify({'error': 'Not found'}), 404
 
-    ipod_sync_state = {'status': 'scanning', 'ipod_id': iid, 'message': 'Comparing library…', 'error': '', 'plan': None}
+    ipod_sync_state = {**_ipod_sync_idle_state(), 'status': 'scanning', 'ipod_id': iid, 'message': 'Comparing library…'}
 
     def do_scan():
         global ipod_sync_state
@@ -12383,6 +12400,7 @@ def ipod_sync_scan(iid):
                 })
 
             ipod_sync_state = {
+                **_ipod_sync_idle_state(),
                 'status': 'ready', 'ipod_id': iid, 'message': '', 'error': '',
                 'plan': {
                     'tracks_to_add_ids': [t['id'] for t in plan['tracks_to_add']],
@@ -12397,7 +12415,7 @@ def ipod_sync_scan(iid):
                 },
             }
         except Exception as e:
-            ipod_sync_state = {'status': 'error', 'ipod_id': iid, 'message': '', 'error': str(e), 'plan': None}
+            ipod_sync_state = {**_ipod_sync_idle_state(), 'status': 'error', 'ipod_id': iid, 'error': str(e)}
 
     threading.Thread(target=do_scan, daemon=True).start()
     return jsonify({'ok': True})
@@ -12411,7 +12429,23 @@ def ipod_sync_status(iid):
 @app.route('/api/ipods/<iid>/sync/reset', methods=['POST'])
 def ipod_sync_reset(iid):
     global ipod_sync_state
-    ipod_sync_state = {'status': 'idle', 'ipod_id': None, 'message': '', 'error': '', 'plan': None}
+    ipod_sync_state = _ipod_sync_idle_state()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/ipods/<iid>/sync/cancel', methods=['POST'])
+def ipod_sync_cancel(iid):
+    # Mirrors sync_cancel(): cooperative flag, checked at the top of each
+    # removal/add/playlist loop iteration in do_execute. Once the run has
+    # moved past playlist-building into the artwork/iTunesDB write phases
+    # it's a point of no return - those are single atomic operations that
+    # shouldn't be interrupted, so cancellation is refused from there on.
+    global ipod_sync_state
+    if ipod_sync_state.get('status') != 'copying':
+        return jsonify({'error': 'No sync in progress'}), 400
+    if ipod_sync_state.get('phase') in ('artwork', 'write', 'verify'):
+        return jsonify({'error': 'Cannot cancel, the sync is finalizing'}), 409
+    ipod_sync_state['cancel_requested'] = True
     return jsonify({'ok': True})
 
 
@@ -12462,10 +12496,23 @@ def ipod_sync_execute(iid):
     if not itdb_path:
         return jsonify({'error': 'iTunesDB not found on device'}), 400
 
-    ipod_sync_state = {**ipod_sync_state, 'status': 'copying', 'message': 'Starting sync…', 'error': ''}
+    ipod_sync_state = {
+        **_ipod_sync_idle_state(), 'status': 'copying', 'ipod_id': iid,
+        'message': 'Starting sync…', 'phase': 'backup',
+    }
 
     def do_execute():
         global ipod_sync_state
+
+        def push_completed(title, subtitle, size_bytes, kind):
+            # Same shape/insert-and-cap-24 convention as the generic Sync
+            # feature's push_completed closure (app.py ~10866) — newest
+            # first, capped so the payload never grows unbounded.
+            ipod_sync_state['completed_items'] = ([{
+                'kind': kind, 'title': title or 'Untitled', 'subtitle': subtitle or '',
+                'size_bytes': size_bytes,
+            }] + ipod_sync_state['completed_items'])[:24]
+        ipod_sync_state['phase'] = 'backup'  # defense-in-depth re-set, mirrors the route handler's initial value
         try:
             from ipod.itunesdb_reader import parse_ipod_library
             from ipod.itunesdb_writer import (
@@ -12490,17 +12537,47 @@ def ipod_sync_execute(iid):
 
             info, existing_tracks, existing_playlists = parse_ipod_library(str(itdb_path))
 
+            ipod_sync_state['phase'] = 'remove'
+
             # Drop removed tracks/playlists up front. A dangling reference
             # left in a *kept* playlist (pointing at a track that just got
             # removed) is handled automatically by build_itunesdb_bytes'
             # remap step, which silently skips any track_id it can't
-            # resolve — no separate cleanup needed here.
-            kept_tracks = [t for t in existing_tracks if str(t.track_id) not in remove_track_ids]
-            track_infos = [ipod_track_to_track_info(t) for t in kept_tracks]
-            playlist_infos = [
-                ipod_playlist_to_playlist_info(p) for p in existing_playlists
-                if not p.is_master and str(p.playlist_id) not in remove_playlist_ids
-            ]
+            # resolve — no separate cleanup needed here. Looped (rather
+            # than a plain comprehension) so each removal shows up in the
+            # progress feed. Worded as "marked for removal" / "removed"
+            # in the present-tense-but-not-yet-final sense: the on-device
+            # audio file and the iTunesDB entry are only actually gone
+            # once the rewritten iTunesDB is safely written further down
+            # — if the run errors or is cancelled first, nothing here
+            # has actually changed on disk yet.
+            kept_tracks = []
+            track_infos = []
+            for t in existing_tracks:
+                if ipod_sync_state.get('cancel_requested'):
+                    ipod_sync_state['status'] = 'cancelled'
+                    return
+                if str(t.track_id) in remove_track_ids:
+                    ipod_sync_state['progress'] += 1
+                    ipod_sync_state['current'] = f'✖ Device delete: {t.title or t.track_id}'
+                    push_completed(t.title, 'Marked for removal', None, 'remove')
+                    continue
+                kept_tracks.append(t)
+                track_infos.append(ipod_track_to_track_info(t))
+
+            playlist_infos = []
+            for p in existing_playlists:
+                if p.is_master:
+                    continue
+                if ipod_sync_state.get('cancel_requested'):
+                    ipod_sync_state['status'] = 'cancelled'
+                    return
+                if str(p.playlist_id) in remove_playlist_ids:
+                    ipod_sync_state['progress'] += 1
+                    ipod_sync_state['current'] = f'✖ Playlist: {p.name}'
+                    push_completed(p.name, 'Playlist removed', None, 'remove')
+                    continue
+                playlist_infos.append(ipod_playlist_to_playlist_info(p))
 
             # Audio files for removed tracks are deleted from the device
             # only after a successful write, further down — never before.
@@ -12543,6 +12620,14 @@ def ipod_sync_execute(iid):
                         key = match_key(t.get('title'), t.get('artist'), t.get('album'))
                         if key not in key_to_device_db_track_id:
                             add_track_ids.add(local_track_id)
+
+            # Finalized only now that playlist-member expansion above has
+            # had a chance to grow add_track_ids - progress already
+            # accumulated from the removal loops above carries forward.
+            ipod_sync_state['total'] = (
+                len(add_track_ids) + len(remove_track_ids)
+                + len(add_playlist_ids) + len(remove_playlist_ids)
+            )
 
             transcode_cache_dir = DATA_DIR / 'ipod_transcode_cache'
 
@@ -12598,9 +12683,20 @@ def ipod_sync_execute(iid):
                     "with: brew install ffmpeg"
                 )
 
+            ipod_sync_state['phase'] = 'transcode_copy'
+
             local_id_to_db_track_id = {}
+            staged_paths_this_run = []  # for cancel cleanup - only this run's new files, never pre-existing ones
             total = len(add_track_ids)
             for i, local_id in enumerate(add_track_ids):
+                if ipod_sync_state.get('cancel_requested'):
+                    for p in staged_paths_this_run:
+                        try:
+                            (Path(resolved_mount) / p).unlink(missing_ok=True)
+                        except OSError:
+                            pass
+                    ipod_sync_state['status'] = 'cancelled'
+                    return
                 t = local_by_id.get(local_id)
                 if not t or not t.get('path'):
                     continue
@@ -12611,13 +12707,36 @@ def ipod_sync_execute(iid):
                     # uses (get_music_base() / local_rel) - not an absolute path.
                     source_path = music_base / t['path']
                     was_transcoded = needs_transcode(source_path)
+                    if was_transcoded:
+                        # No easy incremental byte progress for ffmpeg without
+                        # parsing its stderr/-progress output - left at 0/0 so
+                        # the frontend's existing fileTotal>0 guard shows no
+                        # bar during this sub-state, then lights up once the
+                        # on-device copy below starts.
+                        ipod_sync_state['current'] = f"⇄ Transcode: {t.get('title') or local_id}"
+                        ipod_sync_state['current_file_done'] = 0
+                        ipod_sync_state['current_file_total'] = 0
                     staged = get_or_create_transcode(source_path, transcode_cache_dir)
                     ext = staged.suffix.lstrip('.').lower() or 'mp3'
 
                     device_path = _ipod_stage_device_path(resolved_mount, local_id, ext, used_device_paths)
                     used_device_paths.add(device_path)
                     dest = Path(resolved_mount) / device_path
-                    shutil.copy2(staged, dest)
+                    ipod_sync_state['current'] = f'→ Device: {device_path}'
+                    # _chunked_copy (already generic - see the DAP sync
+                    # feature's identical usage) gives real byte-level
+                    # per-file progress for this copy step, and honors
+                    # cancel_requested mid-file, cleaning up its own
+                    # partial dst on cancel.
+                    if not _chunked_copy(staged, dest, ipod_sync_state):
+                        for p in staged_paths_this_run:
+                            try:
+                                (Path(resolved_mount) / p).unlink(missing_ok=True)
+                            except OSError:
+                                pass
+                        ipod_sync_state['status'] = 'cancelled'
+                        return
+                    staged_paths_this_run.append(device_path)
 
                     db_track_id = abs(hash(local_id)) % (2 ** 62) + 1
                     track_info = TrackInfo(
@@ -12642,6 +12761,8 @@ def ipod_sync_execute(iid):
 
                 local_id_to_db_track_id[local_id] = db_track_id
                 track_infos.append(track_info)
+                ipod_sync_state['progress'] += 1
+                push_completed(track_info.title, t.get('artist'), track_info.size, 'add')
 
                 if art_format_defs:
                     try:
@@ -12660,10 +12781,19 @@ def ipod_sync_execute(iid):
             # A member track that isn't on the device and wasn't selected
             # for addition is silently skipped, same drop-dangling-refs
             # behavior as removal above.
+            ipod_sync_state['phase'] = 'playlists'
             if add_playlist_ids:
                 ipod_sync_state['message'] = 'Building playlists…'
                 local_playlists = load_playlists()
                 for pid in add_playlist_ids:
+                    if ipod_sync_state.get('cancel_requested'):
+                        for p in staged_paths_this_run:
+                            try:
+                                (Path(resolved_mount) / p).unlink(missing_ok=True)
+                            except OSError:
+                                pass
+                        ipod_sync_state['status'] = 'cancelled'
+                        return
                     pl = local_playlists.get(pid)
                     if not pl:
                         continue
@@ -12680,12 +12810,17 @@ def ipod_sync_execute(iid):
                             member_db_ids.append(key_to_device_db_track_id[key])
                     if member_db_ids:
                         playlist_infos.append(PlaylistInfo(name=pl['name'], track_ids=member_db_ids))
+                    ipod_sync_state['progress'] += 1
+                    ipod_sync_state['current'] = f"↻ Playlist: {pl['name']}"
+                    push_completed(pl['name'], f'{len(member_db_ids)} track(s)', None, 'playlist')
 
             # ArtworkDB is written before iTunesDB: if the process is
             # interrupted between the two writes, the safe direction is
             # "iTunesDB still points at old state, a few extra unreferenced
             # ArtworkDB images exist" rather than "iTunesDB references
             # img_ids that don't exist yet."
+            ipod_sync_state['phase'] = 'artwork'  # point of no return - cancel is refused past this point
+            ipod_sync_state['current'] = ''
             if new_art_by_db_track_id:
                 ipod_sync_state['message'] = 'Writing artwork…'
                 artworkdb_path = resolved_mount / 'iPod_Control' / 'Artwork' / 'ArtworkDB'
@@ -12712,6 +12847,7 @@ def ipod_sync_execute(iid):
                         ti.mhii_link = img_id
                 write_ipod_itunesdb_atomic(str(artworkdb_path), new_artworkdb_bytes)
 
+            ipod_sync_state['phase'] = 'write'
             ipod_sync_state['message'] = 'Writing library…'
 
             ref_info = extract_db_info(str(itdb_path))
@@ -12744,6 +12880,7 @@ def ipod_sync_execute(iid):
 
             enforce_cache_size_limit(transcode_cache_dir)
 
+            ipod_sync_state['phase'] = 'verify'
             # Re-parse what was just written - refreshes the cached
             # ipod_tracks/ipod_playlists so the UI reflects the new device
             # state without a manual rescan, and doubles as a correctness
@@ -12760,8 +12897,8 @@ def ipod_sync_execute(iid):
             if sync_errors:
                 message += f' {len(sync_errors)} song(s) failed and were skipped.'
             ipod_sync_state = {
-                'status': 'done', 'ipod_id': iid, 'plan': None,
-                'message': message, 'error': '', 'errors': sync_errors,
+                **ipod_sync_state, 'status': 'done', 'ipod_id': iid, 'plan': None, 'phase': 'done',
+                'message': message, 'error': '', 'errors': sync_errors, 'current': '',
             }
         except Exception as e:
             ipod_sync_state = {**ipod_sync_state, 'status': 'error', 'message': '', 'error': str(e)}

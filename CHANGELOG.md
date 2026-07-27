@@ -3,6 +3,11 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Add: iPod sync now shows real-time progress, including a live progress bar, item counts, time remaining, a "now processing" row (with a visible FLAC to ALAC conversion step), a phase checklist, and a feed of recently completed items, matching the detail already shown for DAP syncing.
+- Add: iPod syncs can now be cancelled while in progress; cancellation is safely refused once the on-device library write has begun.
+- Add: iPod sync now shows a summary screen on completion, including a list of any songs that failed to sync.
+- Fix: A background refresh after finishing an iPod sync could overwrite the "Done" button with stale "Continue" text from the previous screen.
+- Fix: The iPod sync screen's title no longer shows a "Sync" prefix and stray dash; it now matches the plain device name shown on the previous step.
 
 ## v0.592-rc.270726-1616 · 2026-07-27
 

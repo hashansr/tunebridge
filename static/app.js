@@ -9599,6 +9599,24 @@ const _SW_SYNC_PHASES = [
   'Ejecting safely',
 ];
 
+// iPod sync execute step — the backend sets an explicit 'phase' string on
+// ipod_sync_state at each stage transition (simpler and more robust than
+// the generic sync feature's frontend regex heuristic, since do_execute
+// always knows exactly which stage it's in), so the index lookup here is
+// a direct map rather than a guess.
+const _SW_IPOD_SYNC_PHASES = [
+  'Backing up library',
+  'Removing tracks & playlists',
+  'Transcoding & copying tracks',
+  'Building playlists',
+  'Writing artwork',
+  'Writing library',
+  'Verifying',
+];
+const _SW_IPOD_PHASE_TO_INDEX = {
+  backup: 0, remove: 1, transcode_copy: 2, playlists: 3, artwork: 4, write: 5, verify: 6,
+};
+
 // Keep a reference to the legacy poll timer var name
 let _syncPollTimer = null;
 
@@ -9629,6 +9647,9 @@ async function loadSyncView() {
     scanStartTs: 0, syncStartTs: 0, logLines: [], syncResult: null,
     syncCompletedItems: [], syncLastProgress: 0, syncRateSamples: [],
     executedPayload: null,
+    // iPod sync progress step — distinct from ipodPollTimer, which already
+    // serves the unrelated "still comparing" self-poll in _swRenderIpodSyncSummary
+    ipodSyncExecTimer: null, ipodSyncCompletedItems: [], ipodSyncRateSamples: [], ipodSyncStartTs: 0,
     mismatchWarning: 0, mismatchWarningDismissed: false,
     playlistAutoSelected: {},  // { rel_path: Set<playlistId> } — paths auto-checked by playlists
     toDeviceManual: new Set(), // paths explicitly toggled by the user
@@ -9701,11 +9722,16 @@ function _swClearTimers() {
   if (_sw.scanPollTimer) { clearInterval(_sw.scanPollTimer); _sw.scanPollTimer = null; }
   if (_sw.syncPollTimer) { clearInterval(_sw.syncPollTimer); _sw.syncPollTimer = null; }
   if (_sw.ipodPollTimer) { clearTimeout(_sw.ipodPollTimer); _sw.ipodPollTimer = null; }
+  if (_sw.ipodSyncExecTimer) { clearInterval(_sw.ipodSyncExecTimer); _sw.ipodSyncExecTimer = null; }
 }
 
+// Both iPod steps show the same plain device-name title (no "Sync" prefix,
+// no extra song-count/storage/connection/status chrome) — that richer detail
+// belongs to each step's own body, not the shared wizard header.
+const _swIpodTitle = () => _sw.device?.name || 'iPod';
 const _SW_IPOD_STEP_META = {
-  ipod: { title: () => _sw.device?.name || 'iPod', sub: 'Scan your iPod, then choose what to keep, remove, and add.' },
-  'ipod-sync': { title: () => `Sync — ${_sw.device?.name || 'iPod'}`, sub: '' },
+  ipod: { title: _swIpodTitle, sub: 'Scan your iPod, then choose what to keep, remove, and add.' },
+  'ipod-sync': { title: _swIpodTitle, sub: '' },
 };
 
 function _swGoTo(step) {
@@ -10142,7 +10168,7 @@ function _swResumeSync() {
   _sw.syncLastProgress = 0;
   _sw.syncRateSamples = [];
   _swRenderPhases('sw-sync-phases', _SW_SYNC_PHASES, -1);
-  _swUpdateSyncHeroStats(0, 0, 0, 0);
+  _swUpdateSyncHeroStats('sync', 0, 0, 0, 0);
   _swUpdateSyncPhaseMeta(0);
   const log = document.getElementById('sw-sync-log');
   if (log) log.innerHTML = _swRenderCompletedPlaceholder();
@@ -11243,7 +11269,7 @@ function _swInitSyncStep() {
   if (bar) bar.style.width = '0%';
   const pct = document.getElementById('sw-sync-pct');
   if (pct) pct.textContent = '0%';
-  _swUpdateSyncHeroStats(0, 0, 0, 0);
+  _swUpdateSyncHeroStats('sync', 0, 0, 0, 0);
   _swUpdateSyncPhaseMeta(0);
   _swResetCurrentFileUI();
   _swRegisterUnloadGuard();
@@ -11296,7 +11322,7 @@ async function _swPollSync() {
 
   _swSetProgress('sync', pct);
   _swUpdateSyncRateSamples(status);
-  _swUpdateSyncHeroStats(progress, total, elapsed, _swAverageSyncRate());
+  _swUpdateSyncHeroStats('sync', progress, total, elapsed, _swAverageSyncRate());
 
   const phase = status.message ?? '';
   _swRenderCompletedFeed(status);
@@ -11370,8 +11396,8 @@ function _swFormatEta(seconds) {
   return mins ? `~${hours}h ${mins}m` : `~${hours}h`;
 }
 
-function _swUpdateSyncHeroStats(progress, total, elapsed, bytesPerSec) {
-  const itemsEl = document.getElementById('sw-sync-items');
+function _swUpdateSyncHeroStats(which, progress, total, elapsed, bytesPerSec) {
+  const itemsEl = document.getElementById(`sw-${which}-items`);
   if (itemsEl) {
     itemsEl.innerHTML = `${Math.max(0, progress).toLocaleString()} <small>/ ${Math.max(0, total).toLocaleString()}</small>`;
   }
@@ -11379,10 +11405,10 @@ function _swUpdateSyncHeroStats(progress, total, elapsed, bytesPerSec) {
   const itemRate = elapsed > 0 ? progress / elapsed : 0;
   const remainingItems = Math.max(0, total - progress);
   const eta = itemRate > 0 && remainingItems > 0 ? remainingItems / itemRate : 0;
-  const etaEl = document.getElementById('sw-sync-time-left');
+  const etaEl = document.getElementById(`sw-${which}-time-left`);
   if (etaEl) etaEl.textContent = total > 0 && progress < total ? _swFormatEta(eta) : '--';
 
-  const rateEl = document.getElementById('sw-sync-rate');
+  const rateEl = document.getElementById(`sw-${which}-rate`);
   if (rateEl) {
     if (bytesPerSec > 0) {
       const pretty = _fmtBytes(bytesPerSec).split(' ');
@@ -11393,25 +11419,26 @@ function _swUpdateSyncHeroStats(progress, total, elapsed, bytesPerSec) {
   }
 }
 
-function _swUpdateSyncRateSamples(status) {
+function _swUpdateSyncRateSamples(status, stateKey = 'syncRateSamples') {
   const now = Date.now() / 1000;
   const done = Number(status?.current_file_done ?? 0);
   const current = String(status?.current ?? '');
-  const last = _sw.syncRateSamples[_sw.syncRateSamples.length - 1];
+  const samples = _sw[stateKey] || [];
+  const last = samples[samples.length - 1];
   if (current && done > 0) {
-    _sw.syncRateSamples.push({ t: now, done, current });
+    samples.push({ t: now, done, current });
   } else if (!current) {
-    _sw.syncRateSamples = [];
+    _sw[stateKey] = [];
     return;
   }
-  _sw.syncRateSamples = _sw.syncRateSamples
+  _sw[stateKey] = samples
     .filter(s => s.current === current && now - s.t <= 8)
     .slice(-12);
-  if (last && last.current !== current) _sw.syncRateSamples = [{ t: now, done, current }];
+  if (last && last.current !== current) _sw[stateKey] = [{ t: now, done, current }];
 }
 
-function _swAverageSyncRate() {
-  const samples = _sw.syncRateSamples || [];
+function _swAverageSyncRate(stateKey = 'syncRateSamples') {
+  const samples = _sw[stateKey] || [];
   if (samples.length < 2) return 0;
   const first = samples[0];
   const last = samples[samples.length - 1];
@@ -11429,13 +11456,16 @@ function _swUpdateSyncPhaseMeta(activeIndex) {
 
 function _swParseCurrentSyncItem(raw) {
   const text = String(raw || '').trim();
-  const clean = text.replace(/^(→ Device:|← Local:|✖ Device delete:|↻ Playlist:)\s*/i, '').trim();
+  const clean = text.replace(/^(→ Device:|← Local:|✖ Device delete:|↻ Playlist:|⇄ Transcode:)\s*/i, '').trim();
   const parts = clean.split(/[\\/]/).filter(Boolean);
   const title = parts.pop() || clean || 'Preparing next item';
   let subtitle = parts.join(' · ');
   if (/^← Local:/i.test(text)) subtitle = subtitle ? `${subtitle} · copied to library` : 'Copied to library';
-  if (/^✖/i.test(text)) subtitle = subtitle ? `${subtitle} · deleting from device` : 'Deleting from device';
+  // "Marked for removal" rather than a past-tense "Deleted" - the change is
+  // only final once the atomic device-database write at the end commits.
+  if (/^✖/i.test(text)) subtitle = subtitle ? `${subtitle} · marked for removal` : 'Marked for removal';
   if (/^↻ Playlist:/i.test(text)) subtitle = 'Playlist file';
+  if (/^⇄ Transcode:/i.test(text)) subtitle = 'Converting to ALAC';
   return { title, subtitle };
 }
 
@@ -11443,12 +11473,12 @@ function _swRenderCompletedPlaceholder() {
   return `<div class="sw-completed-empty">Completed files will appear here as they finish.</div>`;
 }
 
-function _swRenderCompletedFeed(status) {
-  const feed = document.getElementById('sw-sync-log');
+function _swRenderCompletedFeed(status, logId = 'sw-sync-log', countId = 'sw-sync-log-count', stateKey = 'syncCompletedItems') {
+  const feed = document.getElementById(logId);
   if (!feed) return;
   const incoming = Array.isArray(status?.completed_items) ? status.completed_items : [];
-  _sw.syncCompletedItems = incoming.slice(0, 24);
-  const shown = _sw.syncCompletedItems.slice(0, 8);
+  _sw[stateKey] = incoming.slice(0, 24);
+  const shown = _sw[stateKey].slice(0, 8);
   if (!shown.length) {
     feed.innerHTML = _swRenderCompletedPlaceholder();
   } else {
@@ -11463,8 +11493,8 @@ function _swRenderCompletedFeed(status) {
       </div>`;
     }).join('');
   }
-  const count = Number(status?.progress ?? _sw.syncCompletedItems.length);
-  const countEl = document.getElementById('sw-sync-log-count');
+  const count = Number(status?.progress ?? _sw[stateKey].length);
+  const countEl = document.getElementById(countId);
   if (countEl) countEl.textContent = `${Math.max(0, count).toLocaleString()} transferred`;
 }
 
@@ -13944,7 +13974,7 @@ function _swRenderIpodReview() {
     const key = `add-artist-${sourceIndex}`; const tracks = artist.albums.flatMap(a => a.tracks); const ids = tracks.map(t => t.id);
     const count = ids.filter(id => plan.trackSelected.get(id) !== false).length; const all = count === ids.length;
     const totalBytes = tracks.reduce((sum, track) => sum + (Number(track.size_bytes) || 0), 0);
-    return `<article class="sw-ipod-group"><button class="sw-ipod-group-head" data-key="${key}" onclick="App.swIpodReviewToggle(this)">${_swIpodReviewCheck(all, count > 0 && !all, `data-scope="library" data-type="songs" data-index="${sourceIndex}" onclick="event.stopPropagation();App.swIpodReviewToggleGroup(this)"`)}${_swIpodReviewThumb({ name: artist.name, artwork_key: tracks[0]?.artwork_key }, 'artist')}<span class="sw-ipod-group-copy"><b>${esc(artist.name)}</b><small>${count} selected · ${tracks.length - count} not selected · ${_fmtBytes(totalBytes)}</small></span><em class="is-new">${count}/${tracks.length}</em><span class="sw-ipod-svg sw-ipod-svg--chev${state.open.has(key) ? ' open' : ''}"></span></button>${state.open.has(key) ? `<div class="sw-ipod-group-body">${artist.albums.map((album, albumIndex) => albumBlock(album, 'library', sourceIndex, albumIndex)).join('')}</div>` : ''}</article>`;
+    return `<article class="sw-ipod-group"><button class="sw-ipod-group-head" data-key="${key}" onclick="App.swIpodReviewToggle(this)">${_swIpodReviewCheck(all, count > 0 && !all, `data-scope="library" data-type="songs" data-index="${sourceIndex}" onclick="event.stopPropagation();App.swIpodReviewToggleGroup(this)"`)}${_swIpodReviewThumb({ name: artist.name, artwork_key: tracks[0]?.artwork_key }, 'artist')}<span class="sw-ipod-group-copy"><b>${esc(artist.name)}</b><small>${count} selected · ${_fmtBytes(totalBytes)}</small></span><em class="is-new">${count}/${tracks.length}</em><span class="sw-ipod-svg sw-ipod-svg--chev${state.open.has(key) ? ' open' : ''}"></span></button>${state.open.has(key) ? `<div class="sw-ipod-group-body">${artist.albums.map((album, albumIndex) => albumBlock(album, 'library', sourceIndex, albumIndex)).join('')}</div>` : ''}</article>`;
   };
   const addPlaylist = (playlist, sourceIndex) => {
     const key = `add-playlist-${sourceIndex}`; const checked = plan.playlistSelected.get(playlist.id) !== false;
@@ -14055,6 +14085,12 @@ function _swComputeIpodTotals() {
 }
 
 function _swUpdateIpodFooter() {
+  // _swLoadIpodLibraryBrowse() (called after a sync finishes, to refresh
+  // cached state in case the user goes Back) re-renders the review UI in
+  // the background regardless of which step is currently showing - without
+  // this guard its footer update lands even after the user has moved on to
+  // the ipod-sync step, clobbering the "Done"/progress footer that step owns.
+  if (_sw.step !== 'ipod') return;
   const t = _swComputeIpodTotals();
   if (!t) return;
   const msgEl = document.getElementById('sw-footer-msg');
@@ -14649,10 +14685,13 @@ async function _swPollIpodAddPlan(id) {
 function _swInitIpodSyncStep() {
   const id = _sw.device?.id;
   if (!id) return;
-  const nameEl = document.getElementById('sw-ipod-sync-device-name');
-  if (nameEl) nameEl.textContent = _sw.device.name || 'iPod';
-  const statusLine = document.getElementById('sw-ipod-sync-status');
-  if (statusLine) statusLine.textContent = '';
+  // Show the pre-sync summary card, hide the in-flight progress card until
+  // swRunIpodSync() actually starts (mirrors the DAP wizard keeping its
+  // review and sync steps as separate divs rather than one collapsed view).
+  const pre = document.getElementById('sw-ipod-sync-pre');
+  if (pre) pre.style.display = '';
+  const card = document.getElementById('sw-ipod-sync-card');
+  if (card) card.style.display = 'none';
   _swRenderIpodSyncSummary();
 }
 
@@ -14707,8 +14746,6 @@ async function swRunIpodSync() {
   _sw.ipodSyncPhase = 'syncing';
   const primaryBtn = document.getElementById('sw-btn-primary');
   if (primaryBtn) { primaryBtn.disabled = true; primaryBtn.innerHTML = 'Syncing…'; }
-  const summary = document.getElementById('sw-ipod-sync-summary');
-  if (summary) summary.innerHTML = '<div class="spinner-wrap" style="padding:12px 0"><div class="spinner"></div></div>';
   try {
     await api(`/ipods/${id}/sync/execute`, {
       method: 'POST',
@@ -14723,31 +14760,273 @@ async function swRunIpodSync() {
     if (primaryBtn) { primaryBtn.disabled = false; primaryBtn.innerHTML = 'Sync now'; }
     return;
   }
-  _swPollIpodSyncExecute(id);
+  _swInitIpodSyncExecuteUI(id);
 }
 
-async function _swPollIpodSyncExecute(id) {
-  const status = await api(`/ipods/${id}/sync/status`).catch(() => null);
-  const summary = document.getElementById('sw-ipod-sync-summary');
-  const primaryBtn = document.getElementById('sw-btn-primary');
+// Inner content of #sw-ipod-sync-card — structural clone of #sw-step-4's
+// sync card (see static/index.html) with sw-sync-* ids renamed to
+// sw-ipod-sync-*. Kept as a template string (not just static HTML) so a
+// Retry after an error/cancelled card-swap can restore it.
+function _swIpodSyncCardTemplate() {
+  return `
+    <div class="sw-sync-caution-bar" id="sw-ipod-sync-caution-bar">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>Keep <strong id="sw-ipod-caution-device-name">your device</strong> connected and don't close TuneBridge until the sync finishes.</span>
+    </div>
+    <div class="sw-sync-hero">
+      <div class="sw-sync-hero-row">
+        <div class="sw-big-pct" id="sw-ipod-sync-pct">0%</div>
+        <div class="sw-sync-stats" aria-label="Sync progress statistics">
+          <div class="sw-sync-stat">
+            <span class="sw-sync-stat-key">Items</span>
+            <span class="sw-sync-stat-val" id="sw-ipod-sync-items">0 <small>/ 0</small></span>
+          </div>
+          <div class="sw-sync-stat">
+            <span class="sw-sync-stat-key">Time left</span>
+            <span class="sw-sync-stat-val" id="sw-ipod-sync-time-left">--</span>
+          </div>
+          <div class="sw-sync-stat">
+            <span class="sw-sync-stat-key">Rate</span>
+            <span class="sw-sync-stat-val" id="sw-ipod-sync-rate">--</span>
+          </div>
+        </div>
+      </div>
+      <div class="sw-bar-wrap">
+        <div class="sw-bar sw-bar--sync" id="sw-ipod-sync-bar" style="width:0%"></div>
+      </div>
+    </div>
+    <div class="sw-sync-current-wrap" id="sw-ipod-sync-current-wrap" style="display:none">
+      <span class="sw-current-spinner" aria-hidden="true"></span>
+      <div class="sw-current-file">
+        <span class="sw-current-kicker">In progress</span>
+        <span class="sw-sync-current-label" id="sw-ipod-sync-current"></span>
+        <span class="sw-sync-current-meta" id="sw-ipod-sync-current-meta"></span>
+      </div>
+      <span class="sw-sync-file-pct" id="sw-ipod-sync-file-pct">0%</span>
+    </div>
+    <div class="sw-progress-body">
+      <div class="sw-phases-wrap">
+        <div class="sw-section-hdr">
+          <span class="sw-overline">Progress</span>
+          <span class="sw-section-meta" id="sw-ipod-sync-phase-meta">Step 1 of ${_SW_IPOD_SYNC_PHASES.length}</span>
+        </div>
+        <div class="sw-phases-col" id="sw-ipod-sync-phases"></div>
+      </div>
+      <div class="sw-log-col">
+        <div class="sw-log-hdr">
+          <span class="sw-overline">Recently completed</span>
+          <span class="sw-log-count" id="sw-ipod-sync-log-count">0 items</span>
+        </div>
+        <div class="sw-completed-feed feed-fade" id="sw-ipod-sync-log"></div>
+      </div>
+    </div>`;
+}
+
+function _swResetIpodSyncCurrentFileUI() {
+  const wrap = document.getElementById('sw-ipod-sync-current-wrap');
+  if (wrap) wrap.style.display = 'none';
+  const cur = document.getElementById('sw-ipod-sync-current');
+  if (cur) cur.textContent = '';
+  const meta = document.getElementById('sw-ipod-sync-current-meta');
+  if (meta) meta.textContent = '';
+  const pct = document.getElementById('sw-ipod-sync-file-pct');
+  if (pct) pct.textContent = '0%';
+  const cautionName = document.getElementById('sw-ipod-caution-device-name');
+  if (cautionName) cautionName.textContent = _sw.device?.name || 'your device';
+}
+
+function _swUpdateIpodSyncPhaseMeta(activeIndex) {
+  const meta = document.getElementById('sw-ipod-sync-phase-meta');
+  if (!meta) return;
+  const step = Math.max(1, Math.min(_SW_IPOD_SYNC_PHASES.length, activeIndex + 1));
+  meta.textContent = `Step ${step} of ${_SW_IPOD_SYNC_PHASES.length}`;
+}
+
+function _swInitIpodSyncExecuteUI(id) {
+  const pre = document.getElementById('sw-ipod-sync-pre');
+  if (pre) pre.style.display = 'none';
+  const card = document.getElementById('sw-ipod-sync-card');
+  if (card) {
+    card.style.display = '';
+    // Restore normal progress markup if a prior attempt swapped in an error/done card
+    if (!document.getElementById('sw-ipod-sync-phases')) card.innerHTML = _swIpodSyncCardTemplate();
+  }
+
+  _sw.ipodSyncCompletedItems = [];
+  _sw.ipodSyncRateSamples = [];
+  _sw.ipodSyncStartTs = Date.now() / 1000;
+
+  _swRenderPhases('sw-ipod-sync-phases', _SW_IPOD_SYNC_PHASES, -1);
+  const log = document.getElementById('sw-ipod-sync-log');
+  if (log) log.innerHTML = _swRenderCompletedPlaceholder();
+  _swSetProgress('ipod-sync', 0);
+  _swUpdateSyncHeroStats('ipod-sync', 0, 0, 0, 0);
+  _swUpdateIpodSyncPhaseMeta(0);
+  _swResetIpodSyncCurrentFileUI();
+  _swRegisterUnloadGuard();
+
+  _sw.ipodSyncExecTimer = setInterval(() => _swPollIpodSync(id), 600);
+}
+
+async function _swPollIpodSync(id) {
+  if (_sw.step !== 'ipod-sync') { clearInterval(_sw.ipodSyncExecTimer); _sw.ipodSyncExecTimer = null; return; }
+  let status;
+  try { status = await api(`/ipods/${id}/sync/status`); } catch (_) { return; }
   if (!status || status.ipod_id !== id) return;
-  if (status.status === 'copying') {
-    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.message || 'Syncing…')}</p>`;
-    _sw.ipodPollTimer = setTimeout(() => _swPollIpodSyncExecute(id), 800);
+
+  const progress = Number(status.progress ?? 0);
+  const total = Number(status.total ?? 0);
+  const pct = _swSyncProgressPercent(status);
+  const elapsed = (Date.now() / 1000) - _sw.ipodSyncStartTs;
+
+  _swSetProgress('ipod-sync', pct);
+  _swUpdateSyncRateSamples(status, 'ipodSyncRateSamples');
+  _swUpdateSyncHeroStats('ipod-sync', progress, total, elapsed, _swAverageSyncRate('ipodSyncRateSamples'));
+  _swRenderCompletedFeed(status, 'sw-ipod-sync-log', 'sw-ipod-sync-log-count', 'ipodSyncCompletedItems');
+
+  // Per-item current label + thin secondary progress bar (only meaningful
+  // during the on-device copy sub-step — transcoding has no byte progress,
+  // see do_execute, so current_file_total stays 0 and this reads 0%).
+  const curWrap = document.getElementById('sw-ipod-sync-current-wrap');
+  const curEl   = document.getElementById('sw-ipod-sync-current');
+  if (status.current && curEl) {
+    const current = _swParseCurrentSyncItem(status.current);
+    curEl.textContent = current.title;
+    const currentMeta = document.getElementById('sw-ipod-sync-current-meta');
+    if (currentMeta) currentMeta.textContent = current.subtitle;
+    if (curWrap) curWrap.style.display = '';
+    const fileTotal = Number(status.current_file_total ?? 0);
+    const fileDone  = Number(status.current_file_done  ?? 0);
+    const filePct   = document.getElementById('sw-ipod-sync-file-pct');
+    if (filePct) filePct.textContent = fileTotal > 0 ? `${Math.round((fileDone / fileTotal) * 100)}%` : '0%';
+  } else if (curWrap) {
+    curWrap.style.display = 'none';
+  }
+
+  // Backend sends an explicit phase string, so no regex heuristic needed here.
+  const phaseIndex = _SW_IPOD_PHASE_TO_INDEX[status.phase] ?? 0;
+  _swRenderPhases('sw-ipod-sync-phases', _SW_IPOD_SYNC_PHASES, phaseIndex);
+  _swUpdateIpodSyncPhaseMeta(phaseIndex);
+
+  // Cancel is only safe before the artwork/write/verify phases begin —
+  // matches the backend's own 409 cutoff in ipod_sync_cancel.
+  const cancelBtn = document.getElementById('sw-btn-cancel');
+  if (cancelBtn && _sw.step === 'ipod-sync' && _sw.ipodSyncPhase === 'syncing') {
+    const cancellable = phaseIndex < _SW_IPOD_PHASE_TO_INDEX.artwork;
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.display = '';
+    cancelBtn.disabled = !cancellable;
+    cancelBtn.onclick = () => App.swCancelIpodSync();
+  }
+
+  if (status.status === 'cancelled') {
+    clearInterval(_sw.ipodSyncExecTimer); _sw.ipodSyncExecTimer = null;
+    _swUnregisterUnloadGuard();
+    _swHandleIpodSyncCancelled();
     return;
   }
-  _sw.ipodSyncPhase = status.status === 'error' ? 'error' : 'done';
   if (status.status === 'error') {
-    if (summary) summary.innerHTML = `<p class="muted" style="padding:8px 0">${esc(status.error || 'Sync failed.')}</p>`;
-  } else {
-    if (summary) summary.innerHTML = '<p class="muted" style="padding:8px 0">Sync complete.</p>';
-    if (status.errors && status.errors.length) {
-      const names = status.errors.slice(0, 3).map(e => e.title).join(', ');
-      const more = status.errors.length > 3 ? ` and ${status.errors.length - 3} more` : '';
-      toast(`${status.errors.length} song(s) failed and were skipped: ${names}${more}`);
-    }
-    _swLoadIpodLibraryBrowse(id); // refresh cached state (device + add-plan) in case the user goes Back
+    clearInterval(_sw.ipodSyncExecTimer); _sw.ipodSyncExecTimer = null;
+    _swUnregisterUnloadGuard();
+    _swHandleIpodSyncError(status.error || 'Sync failed.');
+    return;
   }
+  if (status.status === 'done') {
+    clearInterval(_sw.ipodSyncExecTimer); _sw.ipodSyncExecTimer = null;
+    _swUnregisterUnloadGuard();
+    _swSetProgress('ipod-sync', 100);
+    _swRenderPhases('sw-ipod-sync-phases', _SW_IPOD_SYNC_PHASES, _SW_IPOD_SYNC_PHASES.length);
+    _swUpdateIpodSyncPhaseMeta(_SW_IPOD_SYNC_PHASES.length - 1);
+    _swRenderCompletedFeed(status, 'sw-ipod-sync-log', 'sw-ipod-sync-log-count', 'ipodSyncCompletedItems');
+    _swHandleIpodSyncDone(status);
+  }
+}
+
+async function swCancelIpodSync() {
+  const id = _sw.device?.id;
+  if (!id) return;
+  const cancelBtn = document.getElementById('sw-btn-cancel');
+  if (cancelBtn) { cancelBtn.disabled = true; cancelBtn.textContent = 'Stopping…'; }
+  try {
+    await api(`/ipods/${id}/sync/cancel`, { method: 'POST' });
+  } catch (e) {
+    // 409 once past the point of no return — the poller will carry the
+    // run through to 'done' on its own, just let the user know why their
+    // cancel didn't take.
+    toast('Too late to cancel, finishing up…');
+    if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.textContent = 'Cancel'; }
+  }
+  // Poller will detect 'cancelled' status and call _swHandleIpodSyncCancelled
+}
+
+function _swHandleIpodSyncCancelled() {
+  const card = document.getElementById('sw-ipod-sync-card');
+  if (!card) return;
+  card.innerHTML = `<div class="sw-error-card">
+    <div class="sw-error-icon" style="color:var(--text-muted)">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    </div>
+    <div class="sw-error-title" style="color:var(--text-sub)">Sync cancelled</div>
+    <div class="sw-error-detail">Tracks copied before cancellation were removed again. Nothing was written to your iPod's library.</div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="sw-btn sw-btn--secondary" onclick="App.swNavBack()">Back</button>
+      <button class="sw-btn sw-btn--primary" onclick="App.swRunIpodSync()">Retry</button>
+    </div>
+  </div>`;
+  const cancelBtn = document.getElementById('sw-btn-cancel');
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  const primaryBtn = document.getElementById('sw-btn-primary');
+  if (primaryBtn) primaryBtn.style.display = 'none';
+}
+
+function _swHandleIpodSyncError(msg) {
+  const card = document.getElementById('sw-ipod-sync-card');
+  if (!card) return;
+  card.innerHTML = `<div class="sw-error-card">
+    <div class="sw-error-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="3"/></svg></div>
+    <div class="sw-error-title">Sync failed</div>
+    <div class="sw-error-detail">${esc(msg)}</div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="sw-btn sw-btn--secondary" onclick="App.swNavBack()">Back</button>
+      <button class="sw-btn sw-btn--primary" onclick="App.swRunIpodSync()">Retry</button>
+    </div>
+  </div>`;
+  const cancelBtn = document.getElementById('sw-btn-cancel');
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  const primaryBtn = document.getElementById('sw-btn-primary');
+  if (primaryBtn) primaryBtn.style.display = 'none';
+}
+
+// Compact done panel (not a Step-5 clone — no storage bar/changelog, just
+// closure proportional to the new in-progress richness above).
+function _swHandleIpodSyncDone(status) {
+  _sw.ipodSyncPhase = 'done';
+  if (status.errors && status.errors.length) {
+    const names = status.errors.slice(0, 3).map(e => e.title).join(', ');
+    const more = status.errors.length > 3 ? ` and ${status.errors.length - 3} more` : '';
+    toast(`${status.errors.length} song(s) failed and were skipped: ${names}${more}`);
+  }
+  setTimeout(() => {
+    const card = document.getElementById('sw-ipod-sync-card');
+    if (card) {
+      const errors = status.errors ?? [];
+      card.innerHTML = `
+        <div class="sw-done-hero">
+          <div class="sw-done-check-circle">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div class="sw-done-hero-text">
+            <span class="sw-overline sw-overline--success">COMPLETE</span>
+            <div class="sw-done-hero-title" style="font-size:14px">${esc(status.message || 'Sync complete.')}</div>
+          </div>
+        </div>
+        ${errors.length ? `<div class="sw-error-detail" style="margin-top:10px">${errors.length} song(s) failed: ${esc(errors.slice(0, 5).map(e => e.title).join(', '))}${errors.length > 5 ? ` and ${errors.length - 5} more` : ''}</div>` : ''}`;
+    }
+  }, 500);
+  if (_sw.device?.id) _swLoadIpodLibraryBrowse(_sw.device.id); // refresh cached state (device + add-plan) in case the user goes Back
+  const cancelBtn = document.getElementById('sw-btn-cancel');
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  const primaryBtn = document.getElementById('sw-btn-primary');
   if (primaryBtn) { primaryBtn.disabled = false; primaryBtn.innerHTML = 'Done'; }
 }
 
@@ -23543,6 +23822,7 @@ const App = {
   runIpodSync,
   swScanIpod,
   swRunIpodSync,
+  swCancelIpodSync,
   swSetIpodFilter,
   swIpodReviewToggle: _swIpodReviewToggle,
   swIpodReviewSetTab: _swIpodReviewSetTab,

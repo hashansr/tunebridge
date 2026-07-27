@@ -21063,7 +21063,7 @@ body.is-col-resizing {
   flex-direction: column;
   gap: 18px;
 }
-#sw-step-4 .sw-progress-card { gap: 22px; }
+#sw-step-4 .sw-progress-card, #sw-step-ipod-sync .sw-progress-card { gap: 22px; }
 
 .sw-progress-hdr {
   display: flex;
@@ -21104,7 +21104,7 @@ body.is-col-resizing {
   color: var(--text);
   line-height: 1;
 }
-#sw-step-4 .sw-big-pct {
+#sw-step-4 .sw-big-pct, #sw-step-ipod-sync .sw-big-pct {
   font-size: 60px;
   letter-spacing: -0.04em;
   line-height: 0.85;
@@ -21243,7 +21243,7 @@ body.is-col-resizing {
   flex: 1;
   min-height: 0;
 }
-#sw-step-4 .sw-progress-body {
+#sw-step-4 .sw-progress-body, #sw-step-ipod-sync .sw-progress-body {
   grid-template-columns: 260px 1fr;
   gap: 24px;
 }
@@ -21314,7 +21314,7 @@ body.is-col-resizing {
 
 /* Phases list */
 .sw-phases-col { display: flex; flex-direction: column; gap: 6px; }
-#sw-step-4 .sw-phases-col { gap: 0; }
+#sw-step-4 .sw-phases-col, #sw-step-ipod-sync .sw-phases-col { gap: 0; }
 .sw-phase-row {
   display: flex;
   align-items: center;
@@ -21325,14 +21325,14 @@ body.is-col-resizing {
 .sw-phase-row--done   { color: var(--text-muted); }
 .sw-phase-row--active { color: var(--text); }
 .sw-phase-row--pending { opacity: 0.5; }
-#sw-step-4 .sw-phase-row {
+#sw-step-4 .sw-phase-row, #sw-step-ipod-sync .sw-phase-row {
   gap: 11px;
   min-height: 30px;
   padding: 8px 0;
   font-size: 13px;
 }
-#sw-step-4 .sw-phase-row--done { color: var(--text-sub); }
-#sw-step-4 .sw-phase-row--active { color: var(--text); font-weight: 600; }
+#sw-step-4 .sw-phase-row--done, #sw-step-ipod-sync .sw-phase-row--done { color: var(--text-sub); }
+#sw-step-4 .sw-phase-row--active, #sw-step-ipod-sync .sw-phase-row--active { color: var(--text); font-weight: 600; }
 .sw-phase-icon {
   width: 16px; height: 16px;
   flex-shrink: 0;
@@ -21442,7 +21442,7 @@ body.is-col-resizing {
 }
 
 @media (max-width: 900px) {
-  #sw-step-4 .sw-progress-body {
+  #sw-step-4 .sw-progress-body, #sw-step-ipod-sync .sw-progress-body {
     grid-template-columns: 1fr;
   }
   .sw-sync-stats {
@@ -21462,7 +21462,7 @@ body.is-col-resizing {
     white-space: normal;
     margin-left: 0;
   }
-  #sw-step-4 .sw-big-pct {
+  #sw-step-4 .sw-big-pct, #sw-step-ipod-sync .sw-big-pct {
     font-size: 48px;
   }
   .sw-sync-stats {
