@@ -13964,8 +13964,6 @@ function _swRenderIpodReview() {
   const onTracks = browse.trackById.size;
   const onPlaylists = browse.playlists.length;
   const totals = _swComputeIpodTotals();
-  const used = Number(device.used_bytes || 0);
-  const capacity = Number(device.capacity_bytes || 0);
   const selectedSongs = plan ? [...plan.trackSelected.values()].filter(v => v !== false).length : 0;
   const selectedPlaylists = plan ? [...plan.playlistSelected.values()].filter(v => v !== false).length : 0;
   const allSongsSelected = plan && [...plan.trackSelected.values()].every(value => value !== false);
@@ -14026,7 +14024,7 @@ function _swRenderIpodReview() {
   const leftPlaylists = paginate('left', devicePlaylists, p => devicePlaylist(p, browse.playlists.indexOf(p)), 'playlists');
   const rightSongs = plan ? paginate('right', addArtists, a => addArtist(a, plan.artistTree.indexOf(a)), 'artists') : '<div class="sw-ipod-loading">Comparing your library with this iPod…</div>';
   const rightPlaylists = plan ? paginate('right', addPlaylists, p => addPlaylist(p, plan.playlists.indexOf(p)), 'playlists') : '<div class="sw-ipod-loading">Comparing your library with this iPod…</div>';
-  root.innerHTML = `<section class="sw-ipod-hero"><span class="sw-ipod-device-icon">${_IPOD_SVG_SMALL}</span><span class="sw-ipod-identity"><span class="sw-ipod-title-row"><h2>${esc(device.name || 'iPod')}</h2></span><p>${esc(device.model || 'iPod')} <b></b> Scanned ${esc(lastScan)}</p></span><div class="sw-ipod-stats"><span><b>${onTracks.toLocaleString()}</b><small>Songs on iPod</small></span><span><b>${onPlaylists}</b><small>Playlists on iPod</small></span><span><b>${_fmtGB(used)}</b><small>Storage used</small></span><span><b>${_fmtGB(Math.max(0, capacity - used))}</b><small>Space available</small></span></div></section>
+  root.innerHTML = `<section class="sw-ipod-hero"><span class="sw-ipod-device-icon">${_IPOD_SVG_SMALL}</span><span class="sw-ipod-identity"><span class="sw-ipod-title-row"><h2>${esc(device.name || 'iPod')}</h2></span><p>${esc(device.model || 'iPod')} <b></b> Scanned ${esc(lastScan)}</p></span><div class="sw-ipod-stats"><span><b>${onTracks.toLocaleString()}</b><small>Songs on iPod</small></span><span><b>${onPlaylists}</b><small>Playlists on iPod</small></span></div></section>
     <section class="sw-ipod-columns">
       <div class="sw-ipod-panel"><header><span class="sw-ipod-panel-title"><b>On this iPod now</b><button class="sw-ipod-rescan" id="sw-ipod-scan-btn" onclick="App.swScanIpod()"><span class="sw-ipod-svg sw-ipod-svg--refresh"></span>Rescan</button></span><span class="sw-ipod-tabs"><button class="${state.leftTab === 'songs' ? 'active' : ''}" onclick="App.swIpodReviewSetTab('left','songs')">Songs</button><button class="${state.leftTab === 'playlists' ? 'active' : ''}" onclick="App.swIpodReviewSetTab('left','playlists')">Playlists</button></span></header><label class="sw-ipod-search"><span class="sw-ipod-svg sw-ipod-svg--search"></span><input data-side="left" value="${esc(state.leftQuery)}" oninput="App.swIpodReviewSearch('left',this.value)" placeholder="Search ${state.leftTab === 'songs' ? 'artists on this iPod' : 'playlists on this iPod'}…">${state.leftQuery ? '<button type="button" class="sw-ipod-search-clear" onclick="App.swIpodReviewClearSearch(\'left\')" aria-label="Clear search"><span class="sw-ipod-svg sw-ipod-svg--close"></span></button>' : ''}</label><div class="sw-ipod-list"><div class="sw-ipod-list-head">${state.leftTab === 'songs' ? `${deviceArtists.length} artists · ${onTracks.toLocaleString()} tracks` : `${devicePlaylists.length} playlists`}<label class="sw-ipod-list-toggle"><input type="checkbox" ${state.leftTab === 'songs' ? (allDeviceSongsKept ? 'checked' : '') : (allDevicePlaylistsKept ? 'checked' : '')} onchange="App.swIpodReviewToggleAll('device','${state.leftTab}')"> Keep all</label></div><div class="sw-ipod-list-body" data-side="left">${state.leftTab === 'songs' ? leftSongs : leftPlaylists || '<div class="sw-ipod-loading">No matching playlists.</div>'}</div></div></div>
       <div class="sw-ipod-panel"><header><b>Add from your library</b><span class="sw-ipod-tabs"><button class="${state.rightTab === 'songs' ? 'active' : ''}" onclick="App.swIpodReviewSetTab('right','songs')">Songs <small>${selectedSongs.toLocaleString()}</small></button><button class="${state.rightTab === 'playlists' ? 'active' : ''}" onclick="App.swIpodReviewSetTab('right','playlists')">Playlists <small>${selectedPlaylists}</small></button></span></header><label class="sw-ipod-search"><span class="sw-ipod-svg sw-ipod-svg--search"></span><input data-side="right" value="${esc(state.rightQuery)}" oninput="App.swIpodReviewSearch('right',this.value)" placeholder="Search ${state.rightTab === 'songs' ? 'artists, tracks, albums' : 'playlists'}…">${state.rightQuery ? '<button type="button" class="sw-ipod-search-clear" onclick="App.swIpodReviewClearSearch(\'right\')" aria-label="Clear search"><span class="sw-ipod-svg sw-ipod-svg--close"></span></button>' : ''}</label><div class="sw-ipod-list"><div class="sw-ipod-list-head">${state.rightTab === 'songs' ? `${addArtists.length} artists · ${selectedSongs.toLocaleString()} songs selected to add` : `${selectedPlaylists} playlists selected to add`}<label class="sw-ipod-list-toggle"><input type="checkbox" ${state.rightTab === 'songs' ? (allSongsSelected ? 'checked' : '') : (allPlaylistsSelected ? 'checked' : '')} ${plan ? '' : 'disabled'} onchange="App.swIpodReviewToggleAll('library','${state.rightTab}')"> Select all</label></div><div class="sw-ipod-list-body" data-side="right">${state.rightTab === 'songs' ? rightSongs : rightPlaylists}</div></div></div>
@@ -14141,10 +14139,16 @@ function _swUpdateIpodFooter() {
   }
 
   if (msgEl) {
-    const count = `${t.addedTrackCount} song${t.addedTrackCount === 1 ? '' : 's'} · ${t.addedPlaylistCount} playlist${t.addedPlaylistCount === 1 ? '' : 's'} to add`;
-    const usedPct = t.capBytes ? Math.min(100, (t.usedBytes / t.capBytes) * 100) : 0;
-    const addPct = t.capBytes ? Math.max(0, (t.requiredBytes / t.capBytes) * 100) : 0;
-    msgEl.innerHTML = t.capBytes ? `<div class="sw-ipod-footer-storage"><div class="sw-ipod-footer-bar"><i style="width:${usedPct}%"></i><b class="${t.tight ? 'tight' : ''}" style="left:${usedPct}%;width:${addPct}%"></b></div><div class="sw-ipod-footer-legend"><span><strong>${esc(count)}</strong></span><span>${esc(_fmtGB(t.requiredBytes))} required</span><span class="${t.tight || t.outOfSpace ? 'tight' : ''}">${esc(_fmtGB(Math.max(0, t.remainingBytes)))} free after sync</span></div></div>` : esc(count);
+    const selected = [];
+    if (t.addedTrackCount) selected.push(`${t.addedTrackCount} song${t.addedTrackCount === 1 ? '' : 's'} to add`);
+    if (t.addedPlaylistCount) selected.push(`${t.addedPlaylistCount} playlist${t.addedPlaylistCount === 1 ? '' : 's'} to add`);
+    if (t.removedTrackCount) selected.push(`${t.removedTrackCount} song${t.removedTrackCount === 1 ? '' : 's'} removed`);
+    if (t.removedPlaylistCount) selected.push(`${t.removedPlaylistCount} playlist${t.removedPlaylistCount === 1 ? '' : 's'} removed`);
+    const selectionText = selected.length ? selected.join(' · ') : 'No changes selected';
+    const storageSummary = _swStorageBarHtml(t);
+    msgEl.innerHTML = storageSummary
+      ? `${storageSummary}<span class="sw-storage-selection">${esc(selectionText)}</span>`
+      : esc(selectionText);
   }
   if (statusEl) {
     statusEl.className = 'sw-footer-status'
