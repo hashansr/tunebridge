@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.589-rc.270726-1512 · 2026-07-27
+
 ## v0.588-rc.270726-1433 · 2026-07-27
 - Change: SortableJS and Chart.js are now bundled with the app instead of loaded from a CDN at startup, so drag-and-drop and charts keep working offline and no longer contact a third party on every launch.
 - Add: Settings health check now detects ffmpeg (required for syncing FLAC to click-wheel iPods) and offers a one-click "Install ffmpeg" button, matching the existing mpv check.
