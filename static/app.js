@@ -9647,8 +9647,8 @@ async function loadSyncView() {
     scanStartTs: 0, syncStartTs: 0, logLines: [], syncResult: null,
     syncCompletedItems: [], syncLastProgress: 0, syncRateSamples: [],
     executedPayload: null,
-    // iPod sync progress step — distinct from ipodPollTimer, which already
-    // serves the unrelated "still comparing" self-poll in _swRenderIpodSyncSummary
+    // iPod sync progress step — distinct from ipodPollTimer, which serves
+    // the unrelated device-scan poll on the browse step
     ipodSyncExecTimer: null, ipodSyncCompletedItems: [], ipodSyncRateSamples: [], ipodSyncStartTs: 0,
     mismatchWarning: 0, mismatchWarningDismissed: false,
     playlistAutoSelected: {},  // { rel_path: Set<playlistId> } — paths auto-checked by playlists
@@ -9774,7 +9774,6 @@ function _swGoTo(step) {
   if (step === 4) _swInitSyncStep();
   if (step === 5) _swRenderDone();
   if (step === 'ipod') _swInitIpodStep();
-  if (step === 'ipod-sync') _swInitIpodSyncStep();
 }
 
 function _swUpdateFooter(step) {
@@ -9799,17 +9798,18 @@ function _swUpdateFooter(step) {
 
   if (step === 5) statusEl.classList.add('sw-footer-status--success');
 
-  // Cancel button
-  const cancelLabels = { 1: 'Cancel', 2: '', 3: 'Cancel', 4: '', 5: '', ipod: 'Change device', 'ipod-sync': 'Back' };
+  // Cancel button. ipod-sync's "Cancel"/swCancelIpodSync wiring here is a
+  // placeholder immediately overridden by _swInitIpodSyncExecuteUI (there's
+  // no "not syncing yet" moment on this step to show anything else for -
+  // swStartIpodSync() only ever reaches it already mid-sync).
+  const cancelLabels = { 1: 'Cancel', 2: '', 3: 'Cancel', 4: '', 5: '', ipod: 'Change device', 'ipod-sync': 'Cancel' };
   cancelBtn.textContent = cancelLabels[step] || '';
   cancelBtn.disabled = false;
   cancelBtn.style.display = (step === 1 || step === 3 || step === 'ipod' || step === 'ipod-sync') ? '' : 'none';
-  // Step 4 cancel calls swCancelSync; ipod-sync calls swNavBack (returns to the
-  // browse/select step, not the device picker); others call swCancel.
   if (step === 4) {
     cancelBtn.onclick = () => App.swCancelSync();
   } else if (step === 'ipod-sync') {
-    cancelBtn.onclick = () => App.swNavBack();
+    cancelBtn.onclick = () => App.swCancelIpodSync();
   } else {
     cancelBtn.onclick = () => App.swCancel();
   }
@@ -9822,7 +9822,7 @@ function _swUpdateFooter(step) {
     4: { label: 'Syncing…', disabled: true, ghost: true },
     5: { label: 'Done', disabled: false, ghost: false },
     ipod: { label: 'Continue <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>', disabled: true, ghost: false },
-    'ipod-sync': { label: 'Comparing…', disabled: true, ghost: true },
+    'ipod-sync': { label: 'Syncing…', disabled: true, ghost: true },
   };
   const cfg = btnConfigs[step];
   primaryBtn.innerHTML = cfg.label;
@@ -10074,21 +10074,24 @@ function swPrimaryAction() {
     return;
   }
   if (_sw.step === 'ipod-sync') {
-    if (_sw.ipodSyncPhase === 'ready') swRunIpodSync();
-    else if (_sw.ipodSyncPhase === 'done' || _sw.ipodSyncPhase === 'error') swFinish();
-    // 'comparing' / 'syncing' — button is disabled, nothing to do
+    // Reached only once already syncing or finished — there's no separate
+    // "ready to start" state on this step anymore (swStartIpodSync starts
+    // the sync immediately as part of navigating here from the browse step).
+    if (_sw.ipodSyncPhase === 'done' || _sw.ipodSyncPhase === 'error') swFinish();
     return;
   }
-  const actions = { 1: swStartScan, 3: swStartSync, 5: swFinish, ipod: () => _swGoTo('ipod-sync') };
+  const actions = { 1: swStartScan, 3: swStartSync, 5: swFinish, ipod: swStartIpodSync };
   const fn = actions[_sw.step];
   if (fn) fn();
 }
 
 function swNavBack() {
   // Back on the ipod-sync step returns to the browse/select step (not the
-  // device picker), and only once no network operation is in flight.
+  // device picker), and only once no sync is actively running (from the
+  // step's own inline Back button on the error/cancelled cards, or the
+  // done panel - there's no footer path here anymore, see _swUpdateFooter).
   if (_sw.step === 'ipod-sync') {
-    if (_sw.ipodSyncPhase === 'comparing' || _sw.ipodSyncPhase === 'syncing') return;
+    if (_sw.ipodSyncPhase === 'syncing') return;
     _swClearTimers();
     _swGoTo('ipod');
     return;
@@ -14095,6 +14098,20 @@ function _swUpdateIpodFooter() {
   if (!t) return;
   const msgEl = document.getElementById('sw-footer-msg');
   const statusEl = document.getElementById('sw-footer-status');
+  const primaryBtn = document.getElementById('sw-btn-primary');
+
+  // Additions aren't known yet (the background diff against the local
+  // library hasn't resolved) - hold "Continue" rather than letting the user
+  // advance to a real sync with an incomplete plan. _swPollIpodAddPlan()
+  // re-renders once it resolves, which re-runs this function and clears
+  // the gate below.
+  if (!_sw.ipodBrowse?.addPlan) {
+    if (msgEl) msgEl.textContent = 'Comparing with your library…';
+    if (statusEl) statusEl.className = 'sw-footer-status';
+    if (primaryBtn) { primaryBtn.disabled = true; primaryBtn.innerHTML = 'Comparing…'; }
+    return;
+  }
+
   if (msgEl) {
     const count = `${t.addedTrackCount} song${t.addedTrackCount === 1 ? '' : 's'} · ${t.addedPlaylistCount} playlist${t.addedPlaylistCount === 1 ? '' : 's'} to add`;
     const usedPct = t.capBytes ? Math.min(100, (t.usedBytes / t.capBytes) * 100) : 0;
@@ -14106,7 +14123,6 @@ function _swUpdateIpodFooter() {
       + (t.outOfSpace ? ' sw-footer-status--warn' : '')
       + (!t.outOfSpace && t.tight ? ' sw-footer-status--tight' : '');
   }
-  const primaryBtn = document.getElementById('sw-btn-primary');
   if (primaryBtn) {
     primaryBtn.disabled = t.outOfSpace;
     primaryBtn.innerHTML = t.outOfSpace ? 'Continue'
@@ -14672,71 +14688,27 @@ async function _swPollIpodAddPlan(id) {
 }
 
 /* ── Sync wizard iPod-sync step: executes the combined add/remove plan ─
-   Reached via the browse/select step's "Continue". Everything needed —
-   which local tracks/playlists to add, which on-device tracks/playlists
-   to remove — was already computed and selected in the previous step, so
-   this step just summarises it and executes on "Sync now"; no re-scan
-   needed (POST /sync/execute doesn't require a prior 'ready' scan state).
-   Drives the wizard's footer primary button through Comparing… (only if
-   the browse step's background add-plan scan hasn't resolved yet) ->
-   Sync now -> Syncing… -> Done, mirroring the DAP wizard's per-step
-   dynamic footer pattern. */
+   Reached only from the browse/select step's "Continue" — which/what to
+   add/remove was already computed and selected there, and that step's own
+   footer already gates on the background add-plan diff having resolved
+   (see _swUpdateIpodFooter's "still comparing" branch), so by the time
+   swStartIpodSync() runs there's nothing left to confirm; it goes straight
+   into the real sync, matching the DAP wizard's review step going straight
+   from "Continue" into its syncing screen with no intermediate screen. */
 
-function _swInitIpodSyncStep() {
-  const id = _sw.device?.id;
-  if (!id) return;
-  // Show the pre-sync summary card, hide the in-flight progress card until
-  // swRunIpodSync() actually starts (mirrors the DAP wizard keeping its
-  // review and sync steps as separate divs rather than one collapsed view).
-  const pre = document.getElementById('sw-ipod-sync-pre');
-  if (pre) pre.style.display = '';
-  const card = document.getElementById('sw-ipod-sync-card');
-  if (card) card.style.display = 'none';
-  _swRenderIpodSyncSummary();
-}
-
-function _swRenderIpodSyncSummary() {
-  if (_sw.step !== 'ipod-sync') return; // user navigated away while a retry was pending
-  const summary = document.getElementById('sw-ipod-sync-summary');
-  const primaryBtn = document.getElementById('sw-btn-primary');
-  const stillComparing = !_sw.ipodBrowse?.addPlan;
+function swStartIpodSync() {
+  if (!_sw.ipodBrowse?.addPlan) return; // still comparing — Continue is disabled while this is true
   const { addTrackIds, addPlaylistIds } = _swComputeIpodAdditions();
   const { removeTrackIds, removePlaylistIds } = _swComputeIpodRemovals();
-  const nothingToDo = !addTrackIds.length && !addPlaylistIds.length && !removeTrackIds.length && !removePlaylistIds.length;
-
-  if (summary) {
-    summary.innerHTML = stillComparing
-      ? '<p class="muted" style="padding:8px 0">Comparing with your library…</p>'
-      : `
-      <div class="gd-config-grid" style="margin-top:8px">
-        <div><label>Tracks to add</label><span>${addTrackIds.length}</span></div>
-        <div><label>Tracks to remove</label><span>${removeTrackIds.length}</span></div>
-        <div><label>Playlists to add</label><span>${addPlaylistIds.length}</span></div>
-        <div><label>Playlists to remove</label><span>${removePlaylistIds.length}</span></div>
-      </div>
-      ${nothingToDo ? '<p class="muted" style="padding:8px 0">No changes to sync.</p>' : ''}
-    `;
-  }
-
-  if (stillComparing) {
-    _sw.ipodSyncPhase = 'comparing';
-    if (primaryBtn) { primaryBtn.disabled = true; primaryBtn.innerHTML = 'Comparing…'; }
-    _sw.ipodPollTimer = setTimeout(_swRenderIpodSyncSummary, 500);
+  if (!addTrackIds.length && !addPlaylistIds.length && !removeTrackIds.length && !removePlaylistIds.length) {
+    toast('Nothing to sync.');
     return;
   }
-  if (nothingToDo) {
-    _sw.ipodSyncPhase = 'done';
-    if (primaryBtn) { primaryBtn.disabled = false; primaryBtn.innerHTML = 'Done'; }
-  } else {
-    _sw.ipodSyncPhase = 'ready';
-    if (primaryBtn) {
-      primaryBtn.disabled = false;
-      primaryBtn.innerHTML = 'Sync now <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
-    }
-  }
+  _swGoTo('ipod-sync');
+  swRunIpodSync();
 }
 
-async function swRunIpodSync() {
+function swRunIpodSync() {
   const id = _sw.device?.id;
   if (!id) return;
   const { addTrackIds, addPlaylistIds } = _swComputeIpodAdditions();
@@ -14744,23 +14716,17 @@ async function swRunIpodSync() {
   if (!addTrackIds.length && !addPlaylistIds.length && !removeTrackIds.length && !removePlaylistIds.length) { toast('Nothing to sync.'); return; }
 
   _sw.ipodSyncPhase = 'syncing';
-  const primaryBtn = document.getElementById('sw-btn-primary');
-  if (primaryBtn) { primaryBtn.disabled = true; primaryBtn.innerHTML = 'Syncing…'; }
-  try {
-    await api(`/ipods/${id}/sync/execute`, {
-      method: 'POST',
-      body: {
-        track_ids: addTrackIds, playlist_ids: addPlaylistIds,
-        remove_track_ids: removeTrackIds, remove_playlist_ids: removePlaylistIds,
-      },
-    });
-  } catch (e) {
-    toast('Could not start sync.');
-    _sw.ipodSyncPhase = 'ready';
-    if (primaryBtn) { primaryBtn.disabled = false; primaryBtn.innerHTML = 'Sync now'; }
-    return;
-  }
+  // Progress UI goes up immediately, POST fires in the background - mirrors
+  // the DAP wizard's _swInitSyncStep(), which doesn't wait on the execute
+  // response either before showing the syncing screen.
   _swInitIpodSyncExecuteUI(id);
+  api(`/ipods/${id}/sync/execute`, {
+    method: 'POST',
+    body: {
+      track_ids: addTrackIds, playlist_ids: addPlaylistIds,
+      remove_track_ids: removeTrackIds, remove_playlist_ids: removePlaylistIds,
+    },
+  }).catch(e => _swHandleIpodSyncError(String(e)));
 }
 
 // Inner content of #sw-ipod-sync-card — structural clone of #sw-step-4's
@@ -14843,11 +14809,8 @@ function _swUpdateIpodSyncPhaseMeta(activeIndex) {
 }
 
 function _swInitIpodSyncExecuteUI(id) {
-  const pre = document.getElementById('sw-ipod-sync-pre');
-  if (pre) pre.style.display = 'none';
   const card = document.getElementById('sw-ipod-sync-card');
   if (card) {
-    card.style.display = '';
     // Restore normal progress markup if a prior attempt swapped in an error/done card
     if (!document.getElementById('sw-ipod-sync-phases')) card.innerHTML = _swIpodSyncCardTemplate();
   }
@@ -14864,6 +14827,17 @@ function _swInitIpodSyncExecuteUI(id) {
   _swUpdateIpodSyncPhaseMeta(0);
   _swResetIpodSyncCurrentFileUI();
   _swRegisterUnloadGuard();
+
+  // Set immediately rather than waiting for the first poll tick, so the
+  // footer never flashes _swUpdateFooter()'s default "Back" label for this
+  // step (there's no "not syncing yet" state to go Back from anymore).
+  const cancelBtn = document.getElementById('sw-btn-cancel');
+  if (cancelBtn) {
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.display = '';
+    cancelBtn.disabled = false;
+    cancelBtn.onclick = () => App.swCancelIpodSync();
+  }
 
   _sw.ipodSyncExecTimer = setInterval(() => _swPollIpodSync(id), 600);
 }
@@ -14960,6 +14934,7 @@ async function swCancelIpodSync() {
 }
 
 function _swHandleIpodSyncCancelled() {
+  _sw.ipodSyncPhase = 'cancelled'; // clears swNavBack()'s "sync in progress" guard so its inline Back button works
   const card = document.getElementById('sw-ipod-sync-card');
   if (!card) return;
   card.innerHTML = `<div class="sw-error-card">
@@ -14980,6 +14955,7 @@ function _swHandleIpodSyncCancelled() {
 }
 
 function _swHandleIpodSyncError(msg) {
+  _sw.ipodSyncPhase = 'error'; // clears swNavBack()'s "sync in progress" guard so its inline Back button works
   const card = document.getElementById('sw-ipod-sync-card');
   if (!card) return;
   card.innerHTML = `<div class="sw-error-card">

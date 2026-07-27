@@ -2252,19 +2252,13 @@
           <!-- ── iPod sync step: runs after the browse/select step, executes the
                combined add (missing tracks) + remove (unchecked items) sync ── -->
           <div id="sw-step-ipod-sync" class="sw-step" style="display:none">
-            <!-- Pre-sync summary (Comparing… / counts grid), shown until
-                 swRunIpodSync() fires and swaps in the progress view below.
-                 No separate device name/status header here: the shared
-                 wizard title above already carries that, same as step 2. -->
-            <div id="sw-ipod-sync-pre" class="sw-progress-card sw-card">
-              <div id="sw-ipod-sync-summary"></div>
-            </div>
-
-            <!-- In-flight progress view — structural clone of #sw-step-4's
-                 sync card, hidden until swRunIpodSync() starts. innerHTML is
-                 swapped for a .sw-error-card / done panel on terminal states,
-                 same pattern as _swHandleSyncError/_swHandleSyncCancelled. -->
-            <div class="sw-progress-card sw-card" id="sw-ipod-sync-card" style="display:none">
+            <!-- Reached only once the browse step's "Continue" has already
+                 kicked off swRunIpodSync() (no separate confirm-the-counts
+                 screen — the browse step's own footer covers that, including
+                 waiting on the "still comparing" diff). innerHTML is swapped
+                 for a .sw-error-card / done panel on terminal states, same
+                 pattern as _swHandleSyncError/_swHandleSyncCancelled. -->
+            <div class="sw-progress-card sw-card" id="sw-ipod-sync-card">
               <div class="sw-sync-caution-bar" id="sw-ipod-sync-caution-bar">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 <span>Keep <strong id="sw-ipod-caution-device-name">your device</strong> connected and don't close TuneBridge until the sync finishes.</span>
