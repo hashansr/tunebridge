@@ -873,55 +873,31 @@
           <h2 class="tb-page-title">Gear</h2>
         </div>
 
-        <!-- DAPs section -->
+        <!-- Devices section (DAPs + iPods, unified list) -->
         <div class="gear-sec-hdr">
           <div class="gear-sec-hdr-left">
-            <span class="gear-eyebrow">Digital Audio Players</span>
+            <span class="gear-eyebrow">Devices</span>
           </div>
           <div class="gear-sec-hdr-right">
             <button id="gear-check-sync-btn" class="gear-hdr-btn" onclick="App.checkAllDapSyncStatus()">
               <span class="tb-status-icon tb-status-icon-check" aria-hidden="true"></span>
               Check sync status
             </button>
-            <button class="gear-hdr-btn gear-hdr-btn--primary" onclick="App.showAddDapModal()">
+            <button class="gear-hdr-btn gear-hdr-btn--primary" onclick="App.showAddDeviceModal()">
               <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M6 1.5V10.5M1.5 6H10.5"/></svg>
               Add device
             </button>
           </div>
         </div>
-        <div id="gear-daps-panel">
-          <div id="daps-grid" class="gear-list"></div>
-          <div id="daps-empty" class="empty-state" style="display:none">
+        <div id="gear-devices-panel">
+          <div id="devices-grid" class="gear-list"></div>
+          <div id="devices-empty" class="empty-state" style="display:none">
             <div class="empty-icon-circle">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="12" y1="6" x2="12" y2="7"/></svg>
             </div>
             <p class="empty-title">No devices added yet.</p>
-            <p class="empty-subtitle">Add a DAP to track playlist sync status and export directly to your device.</p>
-            <button class="btn-secondary empty-cta" onclick="App.showAddDapModal()">+ Add device</button>
-          </div>
-        </div>
-
-        <!-- iPods section (feature/ipod-sync — Phase 1: read-only browse) -->
-        <div class="gear-sec-hdr gear-sec-hdr--secondary">
-          <div class="gear-sec-hdr-left">
-            <span class="gear-eyebrow">iPods</span>
-          </div>
-          <div class="gear-sec-hdr-right">
-            <button class="gear-hdr-btn gear-hdr-btn--primary" onclick="App.showAddIpodModal()">
-              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M6 1.5V10.5M1.5 6H10.5"/></svg>
-              Add iPod
-            </button>
-          </div>
-        </div>
-        <div id="gear-ipods-panel">
-          <div id="ipods-grid" class="gear-list"></div>
-          <div id="ipods-empty" class="empty-state" style="display:none">
-            <div class="empty-icon-circle">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><circle cx="12" cy="15" r="3.5"/></svg>
-            </div>
-            <p class="empty-title">No iPods added yet.</p>
-            <p class="empty-subtitle">Connect a click-wheel iPod and mount it, then add it here to browse its library. Read-only for now.</p>
-            <button class="btn-secondary empty-cta" onclick="App.showAddIpodModal()">+ Add iPod</button>
+            <p class="empty-subtitle">Add a DAP or iPod to track sync status and manage your library on the go.</p>
+            <button class="btn-secondary empty-cta" onclick="App.showAddDeviceModal()">+ Add device</button>
           </div>
         </div>
 
@@ -2979,6 +2955,36 @@
   </div>
 
   <!-- DAP add/edit modal -->
+  <div id="device-type-modal" class="modal-overlay tb-modal-overlay" style="display:none">
+    <div class="modal tb-modal-shell tb-modal--sm">
+      <div class="modal-head modal-head-spaced">
+        <h3>Add Device</h3>
+        <button class="modal-x-btn" onclick="App.closeDeviceTypeModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6.70718 4.5858C6.31666 4.19528 5.68349 4.19528 5.29297 4.5858L4.58586 5.29291C4.19534 5.68343 4.19534 6.3166 4.58586 6.70712L9.87877 12L4.5859 17.2929C4.19537 17.6834 4.19537 18.3166 4.5859 18.7071L5.293 19.4142C5.68353 19.8048 6.31669 19.8048 6.70722 19.4142L12.0001 14.1214L17.293 19.4142C17.6835 19.8048 18.3167 19.8048 18.7072 19.4142L19.4143 18.7071C19.8048 18.3166 19.8048 17.6834 19.4143 17.2929L14.1214 12L19.4143 6.70712C19.8048 6.3166 19.8048 5.68343 19.4143 5.29291L18.7072 4.5858C18.3167 4.19528 17.6835 4.19528 17.293 4.5858L12.0001 9.87871L6.70718 4.5858Z"/></svg></button>
+      </div>
+      <p class="settings-hint" style="margin:-6px 0 14px">What kind of device would you like to add?</p>
+      <div class="device-type-options">
+        <button type="button" class="device-type-option" onclick="App.chooseDeviceType('dap')">
+          <span class="device-type-option-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="3"/><line x1="12" y1="6" x2="12" y2="7"/></svg>
+          </span>
+          <span class="device-type-option-text">
+            <span class="device-type-option-title">Digital Audio Player</span>
+            <span class="device-type-option-sub">Poweramp, FiiO, Hiby, etc.</span>
+          </span>
+        </button>
+        <button type="button" class="device-type-option" onclick="App.chooseDeviceType('ipod')">
+          <span class="device-type-option-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><circle cx="12" cy="15" r="3.5"/></svg>
+          </span>
+          <span class="device-type-option-text">
+            <span class="device-type-option-title">iPod (Click-wheel)</span>
+            <span class="device-type-option-sub">iPod Classic, Nano, Mini, etc.</span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="dap-modal" class="modal-overlay tb-modal-overlay" style="display:none">
     <div class="modal modal-wide dap-modal-shell tb-modal-shell tb-modal--md">
       <div class="modal-head modal-head-spaced">

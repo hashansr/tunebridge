@@ -2753,6 +2753,58 @@ tbody tr:hover .remove-btn { opacity: 1; }
 }
 .empty-cta { margin-top: 4px; }
 
+/* ── Device-type picker modal (Add DAP vs Add iPod) ───────────────────── */
+.device-type-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.device-type-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: var(--tb-radius-lg, 14px);
+  border: 1px solid var(--tb-border-soft);
+  background: var(--bg-elevated);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.device-type-option:hover {
+  background: var(--bg-hover);
+  border-color: rgba(173, 198, 255, 0.3);
+}
+.device-type-option-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.device-type-option-icon svg { width: 20px; height: 20px; }
+.device-type-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.device-type-option-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.device-type-option-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 /* ── Songs view ──────────────────────────────────────────────────────── */
 .view-songs { min-height: 100%; }
 .songs-toolbar {
@@ -15430,7 +15482,7 @@ body.is-col-resizing {
   letter-spacing: 0.03em;
   min-height: 20px;
 }
-#view-gear #daps-empty.empty-state,
+#view-gear #devices-empty.empty-state,
 #view-gear #iems-empty.empty-state {
   border-radius: 1.1rem;
   border: 1px solid rgba(173, 198, 255, 0.12);

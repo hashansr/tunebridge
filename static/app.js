@@ -11749,6 +11749,7 @@ const _GEAR_ICON_WARN = `<svg width="12" height="12" viewBox="0 0 24 24" fill="n
 const _GEAR_ICON_WARN_LARGE = `<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 4.3 2.7 17.2A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`;
 const _GEAR_ICON_CHECK_LARGE = `<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
 const _STATUS_ICON_NOT_CONNECTED = `<span class="tb-status-icon tb-status-icon-not-connected" aria-hidden="true"></span>`;
+const _PL_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M15.75 6C15.75 6.41421 15.4142 6.75 15 6.75H3C2.58579 6.75 2.25 6.41421 2.25 6C2.25 5.58579 2.58579 5.25 3 5.25H15C15.4142 5.25 15.75 5.58579 15.75 6Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M13.75 10C13.75 10.4142 13.4142 10.75 13 10.75H3C2.58579 10.75 2.25 10.4142 2.25 10C2.25 9.58579 2.58579 9.25 3 9.25H13C13.4142 9.25 13.75 9.58579 13.75 10Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M9.75 14C9.75 14.4142 9.41421 14.75 9 14.75H3C2.58579 14.75 2.25 14.4142 2.25 14C2.25 13.5858 2.58579 13.25 3 13.25H9C9.41421 13.25 9.75 13.5858 9.75 14Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M8.75 18C8.75 18.4142 8.41421 18.75 8 18.75H3C2.58579 18.75 2.25 18.4142 2.25 18C2.25 17.5858 2.58579 17.25 3 17.25H8C8.41421 17.25 8.75 17.5858 8.75 18Z"/><path d="M17 7.25C17.4142 7.25 17.75 7.58579 17.75 8C17.75 9.79493 19.2051 11.25 21 11.25C21.4142 11.25 21.75 11.5858 21.75 12C21.75 12.4142 21.4142 12.75 21 12.75C19.7428 12.75 18.5997 12.2616 17.75 11.4641V16.5C17.75 18.2949 16.2949 19.75 14.5 19.75C12.7051 19.75 11.25 18.2949 11.25 16.5C11.25 14.7051 12.7051 13.25 14.5 13.25C15.1443 13.25 15.7449 13.4375 16.25 13.7609V8C16.25 7.58579 16.5858 7.25 17 7.25Z"/></svg>`;
 const _STATUS_ICON_CHECK = (animated = false) => `<span class="tb-status-icon tb-status-icon-check${animated ? ' tb-status-icon--spin' : ''}" aria-hidden="true"></span>`;
 const _CHECK_STATUS_BUTTON_HTML = (checking = false) => `<span class="gd-btn-icon">${_STATUS_ICON_CHECK(checking)}</span>${checking ? 'Checking...' : 'Check status'}`;
 
@@ -11838,54 +11839,41 @@ function _gearStatusPillHtml(iconSvg, className, text) {
   return `<span class="gear-sync-badge ${className}"><span class="gear-pill-icon">${iconSvg}</span><span>${esc(text)}</span></span>`;
 }
 
-async function loadDapsView() {
-  document.getElementById('daps-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
-  const daps = await api('/daps').catch(() => []);
-  refreshSidebarSyncIndicator(daps);
-  const grid  = document.getElementById('daps-grid');
-  const empty = document.getElementById('daps-empty');
+function _buildDapRowHtml(d) {
+  const summary        = d.sync_summary || {};
+  const musicStatus    = _dapMusicStatus(summary, !!d.mounted);
+  const playlistStatus = _dapPlaylistStatus(d, summary);
+  const connOn         = !!d.mounted;
+  const isChecking     = String(summary.sync_status_state || 'estimated') === 'checking';
 
-  // Update section header count and pending badge
-  if (!daps.length) { grid.innerHTML = ''; empty.style.display = 'flex'; return; }
-  empty.style.display = 'none';
+  const _dotClass = cls => cls === 'gear-sync-ok' ? 'gear-dot--on' : cls === 'gear-sync-stale' ? 'gear-dot--warn' : 'gear-dot--off';
+  const _lblClass = cls => cls === 'gear-sync-ok' ? 'gear-status-label--on' : cls === 'gear-sync-stale' ? 'gear-status-label--warn' : 'gear-status-label--off';
 
-  const _PL_ICON = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M15.75 6C15.75 6.41421 15.4142 6.75 15 6.75H3C2.58579 6.75 2.25 6.41421 2.25 6C2.25 5.58579 2.58579 5.25 3 5.25H15C15.4142 5.25 15.75 5.58579 15.75 6Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M13.75 10C13.75 10.4142 13.4142 10.75 13 10.75H3C2.58579 10.75 2.25 10.4142 2.25 10C2.25 9.58579 2.58579 9.25 3 9.25H13C13.4142 9.25 13.75 9.58579 13.75 10Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M9.75 14C9.75 14.4142 9.41421 14.75 9 14.75H3C2.58579 14.75 2.25 14.4142 2.25 14C2.25 13.5858 2.58579 13.25 3 13.25H9C9.41421 13.25 9.75 13.5858 9.75 14Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M8.75 18C8.75 18.4142 8.41421 18.75 8 18.75H3C2.58579 18.75 2.25 18.4142 2.25 18C2.25 17.5858 2.58579 17.25 3 17.25H8C8.41421 17.25 8.75 17.5858 8.75 18Z"/><path d="M17 7.25C17.4142 7.25 17.75 7.58579 17.75 8C17.75 9.79493 19.2051 11.25 21 11.25C21.4142 11.25 21.75 11.5858 21.75 12C21.75 12.4142 21.4142 12.75 21 12.75C19.7428 12.75 18.5997 12.2616 17.75 11.4641V16.5C17.75 18.2949 16.2949 19.75 14.5 19.75C12.7051 19.75 11.25 18.2949 11.25 16.5C11.25 14.7051 12.7051 13.25 14.5 13.25C15.1443 13.25 15.7449 13.4375 16.25 13.7609V8C16.25 7.58579 16.5858 7.25 17 7.25Z"/></svg>`;
+  // Connection column
+  const connDot = connOn ? 'gear-dot--on' : 'gear-dot--off';
+  const connLbl = connOn ? 'gear-status-label--on' : 'gear-status-label--off';
+  const connTxt = connOn ? 'Connected' : 'Not connected';
 
-  grid.innerHTML = daps.map(d => {
-    const summary        = d.sync_summary || {};
-    const musicStatus    = _dapMusicStatus(summary, !!d.mounted);
-    const playlistStatus = _dapPlaylistStatus(d, summary);
-    const connOn         = !!d.mounted;
-    const isChecking     = String(summary.sync_status_state || 'estimated') === 'checking';
+  // Music sync column
+  const musicTextMap = { 'Check status': 'Check status', 'Library in sync': 'Synched', 'Library update needed': 'Out of sync' };
+  const musicTxt = musicTextMap[musicStatus.text] || musicStatus.text;
 
-    const _dotClass = cls => cls === 'gear-sync-ok' ? 'gear-dot--on' : cls === 'gear-sync-stale' ? 'gear-dot--warn' : 'gear-dot--off';
-    const _lblClass = cls => cls === 'gear-sync-ok' ? 'gear-status-label--on' : cls === 'gear-sync-stale' ? 'gear-status-label--warn' : 'gear-status-label--off';
+  // Playlist sync column — plain muted text, no dot, just counts
+  const never = Number(d.never_exported || 0);
+  const stale = Number(d.stale_count || 0);
+  let plTxt;
+  if (playlistStatus.className === 'gear-sync-ok') {
+    plTxt = 'Synched';
+  } else if (playlistStatus.className === 'gear-sync-neutral') {
+    plTxt = 'Check status';
+  } else {
+    const parts = [];
+    if (never > 0) parts.push(`${never} new`);
+    if (stale > 0) parts.push(`${stale} updated`);
+    plTxt = parts.length ? parts.join(', ') : 'Out of sync';
+  }
 
-    // Connection column
-    const connDot = connOn ? 'gear-dot--on' : 'gear-dot--off';
-    const connLbl = connOn ? 'gear-status-label--on' : 'gear-status-label--off';
-    const connTxt = connOn ? 'Connected' : 'Not connected';
-
-    // Music sync column
-    const musicTextMap = { 'Check status': 'Check status', 'Library in sync': 'Synched', 'Library update needed': 'Out of sync' };
-    const musicTxt = musicTextMap[musicStatus.text] || musicStatus.text;
-
-    // Playlist sync column — plain muted text, no dot, just counts
-    const never = Number(d.never_exported || 0);
-    const stale = Number(d.stale_count || 0);
-    let plTxt;
-    if (playlistStatus.className === 'gear-sync-ok') {
-      plTxt = 'Synched';
-    } else if (playlistStatus.className === 'gear-sync-neutral') {
-      plTxt = 'Check status';
-    } else {
-      const parts = [];
-      if (never > 0) parts.push(`${never} new`);
-      if (stale > 0) parts.push(`${stale} updated`);
-      plTxt = parts.length ? parts.join(', ') : 'Out of sync';
-    }
-
-    return `
+  return `
     <div class="gear-row gear-row-dap" onclick="App.showDapDetail('${d.id}')">
       <span class="gear-row-icon">${_DAP_SVG}</span>
       <div class="gear-row-info">
@@ -11910,7 +11898,6 @@ async function loadDapsView() {
         <button class="gear-icon-btn" title="Delete" onclick="App.deleteDap('${d.id}')">${_GEAR_ICON_TRASH}</button>
       </div>
     </div>`;
-  }).join('');
 }
 
 /* ── IEM compare state ───────────────────────────────────────────────── */
@@ -12143,7 +12130,7 @@ function _toggleCompareDataset(idx) {
 }
 
 async function loadGearView() {
-  await Promise.all([loadDapsView(), loadIpodsView(), loadIemsView()]);
+  await Promise.all([loadDevicesView(), loadIemsView()]);
 }
 
 let _gearPlaylistsCache = { ts: 0, data: null };
@@ -12203,12 +12190,12 @@ async function checkAllDapSyncStatus() {
     const started = Array.isArray(res.started) ? res.started : [];
     if (!started.length) {
       toast('No mounted DAPs available for live sync check.');
-      await loadDapsView();
+      await loadDevicesView();
       return;
     }
     toast(`Checking sync status for ${started.length} device${started.length === 1 ? '' : 's'}…`);
     await _pollSyncCheckCompletion(started, async () => {
-      await loadDapsView();
+      await loadDevicesView();
       toast('Sync status check complete.');
     });
   } catch (e) {
@@ -12232,7 +12219,7 @@ async function checkDapSyncStatus(did) {
     toast('Checking sync status…');
     await _pollSyncCheckCompletion([did], async () => {
       await showDapDetail(did);
-      await loadDapsView();
+      await loadDevicesView();
       toast('Sync status updated.');
     });
   } catch (e) {
@@ -12467,7 +12454,7 @@ async function dapExportAllPlaylists(dapId, btn) {
     const failed = Number(res?.failed_count || 0);
     toast(`Playlists synced: ${exported}${failed ? `, failed: ${failed}` : ''}`, 'success');
     await showDapDetail(dapId);
-    await loadDapsView();
+    await loadDevicesView();
   } catch (e) {
     toast('Playlist sync failed: ' + e.message);
     if (btn) {
@@ -12497,7 +12484,7 @@ async function ejectDap(dapId, name) {
         if (b.classList.contains('gear-icon-btn')) return;  // icon button: stays dimmed/disabled
         b.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Ejected`;
       });
-      await loadDapsView();
+      await loadDevicesView();
       if (state.view === 'dap-detail') await showDapDetail(dapId);
     } else {
       ejectToast.finish(d.error || 'Eject failed.', 'error');
@@ -12542,6 +12529,23 @@ async function ejectIpod(ipodId, name) {
   } catch (e) {
     ejectToast.finish('Eject failed.', 'error');
     btns.forEach(b => { b.disabled = false; b.innerHTML = b.dataset.restoreLabel || 'Eject'; });
+  }
+}
+
+function showAddDeviceModal() {
+  document.getElementById('device-type-modal').style.display = 'flex';
+}
+
+function closeDeviceTypeModal() {
+  document.getElementById('device-type-modal').style.display = 'none';
+}
+
+function chooseDeviceType(type) {
+  closeDeviceTypeModal();
+  if (type === 'ipod') {
+    showAddIpodModal();
+  } else {
+    showAddDapModal();
   }
 }
 
@@ -13211,22 +13215,13 @@ async function updateIpodModel(id, deviceClass) {
   }
 }
 
-async function loadIpodsView() {
-  const grid = document.getElementById('ipods-grid');
-  const empty = document.getElementById('ipods-empty');
-  if (!grid) return;
-  grid.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
-  const ipods = await api('/ipods').catch(() => []);
-  if (!ipods.length) { grid.innerHTML = ''; empty.style.display = 'flex'; return; }
-  empty.style.display = 'none';
-
-  grid.innerHTML = ipods.map(ip => {
-    const connOn = !!ip.mounted;
-    const connDot = connOn ? 'gear-dot--on' : 'gear-dot--off';
-    const connLbl = connOn ? 'gear-status-label--on' : 'gear-status-label--off';
-    const connTxt = connOn ? 'Connected' : 'Not connected';
-    const scanTxt = ip.last_scanned_at ? `${ip.track_count} tracks, ${ip.playlist_count} playlists` : 'Not scanned yet';
-    return `
+function _buildIpodRowHtml(ip) {
+  const connOn = !!ip.mounted;
+  const connDot = connOn ? 'gear-dot--on' : 'gear-dot--off';
+  const connLbl = connOn ? 'gear-status-label--on' : 'gear-status-label--off';
+  const connTxt = connOn ? 'Connected' : 'Not connected';
+  const scanTxt = ip.last_scanned_at ? `${ip.track_count} tracks, ${ip.playlist_count} playlists` : 'Not scanned yet';
+  return `
     <div class="gear-row gear-row-dap" onclick="App.showIpodDetail('${ip.id}')">
       <span class="gear-row-icon">${_IPOD_SVG}</span>
       <div class="gear-row-info">
@@ -13240,11 +13235,34 @@ async function loadIpodsView() {
       <div class="gear-row-status">
         <span class="gear-status-label gear-status-label--off">${esc(scanTxt)}</span>
       </div>
+      <div><span class="gear-row-type-tag">iPod</span></div>
       <div class="gear-row-actions" onclick="event.stopPropagation()">
         <button class="gear-icon-btn" title="Delete" onclick="App.deleteIpod('${ip.id}')">${_GEAR_ICON_TRASH}</button>
       </div>
     </div>`;
-  }).join('');
+}
+
+async function loadDevicesView() {
+  const grid = document.getElementById('devices-grid');
+  const empty = document.getElementById('devices-empty');
+  if (!grid) return;
+  grid.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
+
+  const [daps, ipods] = await Promise.all([
+    api('/daps').catch(() => []),
+    api('/ipods').catch(() => []),
+  ]);
+  refreshSidebarSyncIndicator(daps);
+
+  if (!daps.length && !ipods.length) { grid.innerHTML = ''; empty.style.display = 'flex'; return; }
+  empty.style.display = 'none';
+
+  const devices = [
+    ...daps.map(d => ({ name: d.name, html: _buildDapRowHtml(d) })),
+    ...ipods.map(ip => ({ name: ip.name, html: _buildIpodRowHtml(ip) })),
+  ].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
+
+  grid.innerHTML = devices.map(d => d.html).join('');
 }
 
 async function showIpodDetail(id) {
@@ -13482,7 +13500,7 @@ async function _pollIpodScanStatus(id) {
   }
   if (statusLine) statusLine.textContent = status.message || 'Scan complete';
   if (state.view === 'ipod-detail') showIpodDetail(id);
-  loadIpodsView();
+  loadDevicesView();
 }
 
 async function checkIpodSync(id) {
@@ -15272,7 +15290,7 @@ async function saveIpod() {
   try {
     await api('/ipods', { method: 'POST', body });
     closeIpodModal();
-    loadIpodsView();
+    loadDevicesView();
   } catch (e) {
     toast('Could not add iPod.');
   }
@@ -15289,7 +15307,7 @@ async function deleteIpod(id) {
   if (state.view === 'ipod-detail') {
     showView('gear');
   } else {
-    loadIpodsView();
+    loadDevicesView();
   }
 }
 
@@ -23911,6 +23929,10 @@ const App = {
   deleteBaseline,
   toggleBaselineColorPicker,
   selectBaselineColor,
+  // Device (DAP + iPod)
+  showAddDeviceModal,
+  closeDeviceTypeModal,
+  chooseDeviceType,
   // DAP
   checkAllDapSyncStatus,
   checkDapSyncStatus,

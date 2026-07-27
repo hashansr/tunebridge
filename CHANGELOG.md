@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: DAPs and iPods are now added through a single "Add device" button that first asks which type of device you're adding, then shows the matching form, instead of two separate add buttons.
+- Change: The Gear page now shows DAPs and iPods together in one combined "Devices" list instead of two separate sections, with iPods marked with an "iPod" tag.
 
 ## v0.598-rc.270726-2118 · 2026-07-27
 
