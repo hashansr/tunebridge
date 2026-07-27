@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.597-rc.270726-2109 · 2026-07-27
 - Fix: The Done button on the iPod sync completion screen looked enabled but couldn't be clicked.
 
 ## v0.596-rc.270726-2034 · 2026-07-27
