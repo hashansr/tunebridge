@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.594-rc.270726-1748 · 2026-07-27
 - Remove: The redundant confirm-the-counts screen before an iPod sync starts. Clicking Continue on the review screen now starts the sync directly, matching how syncing works for other devices.
 - Fix: The iPod review screen's Continue button now waits for the library comparison to finish before it can be used, instead of allowing a sync to start with an incomplete list of what's missing.
 - Fix: The Back button on a failed or cancelled iPod sync screen did nothing; it now correctly returns to the review screen.
