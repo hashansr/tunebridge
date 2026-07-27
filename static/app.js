@@ -13172,6 +13172,7 @@ async function deleteDap(id) {
 
 const _IPOD_SVG = `<span class="gear-mask-icon gear-mask-icon-dap" aria-hidden="true"></span>`;
 let _ipodMountCandidates = [];
+let _ipodSaveInFlight = false;
 
 // Value = "family|generation" as stored in ipods.device_class, matching
 // iopenpod.device.capabilities' (family, generation) lookup keys exactly
@@ -15245,7 +15246,10 @@ async function removeIpodPlaylist(ipodId, devicePlaylistId, name) {
 
 async function showAddIpodModal() {
   document.getElementById('ipod-name').value = '';
-  document.getElementById('ipod-save-btn').disabled = true;
+  const saveBtn = document.getElementById('ipod-save-btn');
+  saveBtn.disabled = true;
+  saveBtn.classList.remove('is-saving');
+  saveBtn.removeAttribute('aria-busy');
   document.getElementById('ipod-model-add-select').innerHTML = _ipodModelOptionsHtml('');
   const sel = document.getElementById('ipod-mount-select');
   sel.innerHTML = '<option value="">Detecting connected iPods…</option>';
@@ -15262,6 +15266,7 @@ async function showAddIpodModal() {
 }
 
 function onIpodMountSelect(idx) {
+  if (_ipodSaveInFlight) return;
   const saveBtn = document.getElementById('ipod-save-btn');
   const nameInput = document.getElementById('ipod-name');
   if (idx === '') { saveBtn.disabled = true; return; }
@@ -15276,9 +15281,15 @@ function closeIpodModal() {
 }
 
 async function saveIpod() {
+  if (_ipodSaveInFlight) return;
   const sel = document.getElementById('ipod-mount-select');
   const m = _ipodMountCandidates[Number(sel.value)];
   if (!m) return;
+  const saveBtn = document.getElementById('ipod-save-btn');
+  _ipodSaveInFlight = true;
+  saveBtn.disabled = true;
+  saveBtn.classList.add('is-saving');
+  saveBtn.setAttribute('aria-busy', 'true');
   const body = {
     name: document.getElementById('ipod-name').value.trim() || 'iPod',
     device_class: document.getElementById('ipod-model-add-select').value || '',
@@ -15289,10 +15300,15 @@ async function saveIpod() {
   };
   try {
     await api('/ipods', { method: 'POST', body });
+    _ipodSaveInFlight = false;
     closeIpodModal();
     loadDevicesView();
   } catch (e) {
     toast('Could not add iPod.');
+    _ipodSaveInFlight = false;
+    saveBtn.disabled = false;
+    saveBtn.classList.remove('is-saving');
+    saveBtn.removeAttribute('aria-busy');
   }
 }
 

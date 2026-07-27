@@ -22355,6 +22355,23 @@ body.is-col-resizing {
 .eject-dots span:nth-child(2) { animation-delay: 0.2s; }
 .eject-dots span:nth-child(3) { animation-delay: 0.4s; }
 
+/* Add iPod — retain the save action's width while the request is in flight. */
+#ipod-save-btn .ipod-save-progress { display: none; }
+#ipod-save-btn.is-saving .ipod-save-label { display: none; }
+#ipod-save-btn.is-saving .ipod-save-progress {
+  display: inline-flex;
+  align-items: center;
+}
+#ipod-save-btn.is-saving:disabled {
+  opacity: 0.82 !important;
+  cursor: wait !important;
+  filter: none;
+}
+.ipod-save-dots { display: inline-flex; gap: 1px; margin-left: 1px; }
+.ipod-save-dots span { animation: eject-dot-blink 1.2s infinite; line-height: 1; }
+.ipod-save-dots span:nth-child(2) { animation-delay: 0.2s; }
+.ipod-save-dots span:nth-child(3) { animation-delay: 0.4s; }
+
 /* Eject button in sync Done footer */
 #sw-eject-wrap { display: flex; align-items: center; flex-shrink: 0; }
 .sw-eject-btn { font-family: inherit; }
@@ -23809,6 +23826,7 @@ body.is-col-resizing {
 }
 
 #dap-modal .dap-modal-scroll,
+#ipod-modal .dap-modal-scroll,
 #iem-modal .iem-modal-scroll {
   max-height: none !important;
   display: flex !important;
@@ -23818,6 +23836,7 @@ body.is-col-resizing {
   padding: 0 !important;
 }
 #dap-modal .dap-form-section,
+#ipod-modal .dap-form-section,
 #iem-modal .iem-form-section,
 .tb-modal-overlay .ml-gen-section,
 .tb-modal-overlay .sr-section {
@@ -23827,9 +23846,15 @@ body.is-col-resizing {
   background: transparent !important;
 }
 #dap-modal .settings-row:first-of-type,
+#ipod-modal .settings-row:first-of-type,
 #iem-modal .settings-row:first-of-type,
 .tb-modal-overlay .ml-gen-section .ml-gen-row:first-of-type {
   border-top: 1px solid var(--modal-hairline) !important;
+}
+#ipod-modal .ipod-mount-help {
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: none;
 }
 #dap-modal .dap-advanced-box,
 #dap-modal #dap-template-preview,
