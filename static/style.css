@@ -20670,7 +20670,7 @@ body.is-col-resizing {
 }
 
 /* Dedicated iPod review — faithful to the two-column scan/review handoff. */
-.sw-body--ipod-review { padding: 14px 32px 0; gap: 0; overflow: hidden; }
+.sw-body--ipod-review { padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 8px) 32px 0; gap: 0; overflow: hidden; }
 .sw-body--ipod-review .sw-step-header { display: none; }
 .sw-body--ipod-review #sw-step-ipod { min-height: 0; overflow: hidden; }
 .sw-body--ipod-review .sw-ipod-browse { flex: 1; min-height: 0; margin: 0; overflow: hidden; }
@@ -20732,16 +20732,16 @@ body.is-col-resizing {
 .sw-ipod-group-copy small { margin-top: 1px; color: var(--text-muted); font-size: 10.5px; }
 .sw-ipod-group-head em { padding: 2px 9px; border-radius: 999px; color: var(--text-sub); background: rgba(255,255,255,.06); font-size: 10px; font-style: normal; font-weight: 700; white-space: nowrap; }
 .sw-ipod-group-head em.is-new { color: var(--accent); background: var(--accent-dim); }
-.sw-ipod-group-body { margin-left: 14px; padding: 3px 5px 5px 10px; border-top: 1px solid rgba(255,255,255,.06); border-left: 1px solid rgba(173,198,255,.18); }
-.sw-ipod-group-body > .sw-ipod-track { margin-left: 10px; }
-.sw-ipod-album { margin: 4px 0 5px; overflow: hidden; border: 1px solid rgba(255,255,255,.05); border-radius: 8px; background: rgba(0,0,0,.12); }
+.sw-ipod-group-body { padding: 2px 4px 4px; }
+.sw-ipod-group-body > .sw-ipod-track { margin-left: 28px; }
+.sw-ipod-album { margin: 1px 0 2px 28px; overflow: hidden; }
 .sw-ipod-album-head { display: grid; grid-template-columns: 16px 24px minmax(0,1fr) 12px; align-items: center; width: 100%; gap: 9px; padding: 7px 9px; border: 0; color: inherit; text-align: left; background: transparent; cursor: pointer; }
 .sw-ipod-album-head:hover { background: rgba(255,255,255,.025); }
 .sw-ipod-album-head .sw-ipod-thumb { width: 24px; height: 24px; border-radius: 6px; }
 .sw-ipod-album-head b, .sw-ipod-album-head small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sw-ipod-album-head b { color: var(--text-sub); font-size: 11.5px; font-weight: 600; }
 .sw-ipod-album-head small { margin-top: 1px; color: var(--text-muted); font-size: 10px; }
-.sw-ipod-album-songs { margin-left: 13px; padding: 2px 3px 3px 7px; border-left: 1px solid rgba(173,198,255,.14); }
+.sw-ipod-album-songs { margin-left: 28px; padding: 1px 0 2px; }
 .sw-ipod-track { display: grid; grid-template-columns: 16px 24px minmax(0,1fr) 74px; align-items: center; gap: 9px; padding: 5px 6px; border-radius: 6px; }
 .sw-ipod-track:hover { background: rgba(255,255,255,.03); }
 .sw-ipod-track.is-device { opacity: .55; }
@@ -20771,7 +20771,7 @@ body.is-col-resizing {
 .sw-ipod-footer-legend { display: flex; gap: 16px; color: var(--text-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .sw-ipod-footer-legend strong { color: var(--text-sub); font-weight: 600; }
 .sw-ipod-footer-legend .tight { color: var(--accent-warning); }
-@media (max-width: 860px) { .sw-body--ipod-review { padding: 14px 18px 0; overflow-y: auto; } .sw-body--ipod-review #sw-step-ipod, .sw-body--ipod-review .sw-ipod-browse { overflow: visible; } .sw-ipod-columns { grid-template-columns: 1fr; } .sw-ipod-list { min-height: 360px; } .sw-ipod-stats { gap: 12px; } .sw-ipod-stats small { display: none; } .sw-footer--ipod-review { padding: 12px 18px; } .sw-ipod-footer-legend { gap: 8px; flex-wrap: wrap; } }
+@media (max-width: 860px) { .sw-body--ipod-review { padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 8px) 18px 0; overflow-y: auto; } .sw-body--ipod-review #sw-step-ipod, .sw-body--ipod-review .sw-ipod-browse { overflow: visible; } .sw-ipod-columns { grid-template-columns: 1fr; } .sw-ipod-list { min-height: 360px; } .sw-ipod-stats { gap: 12px; } .sw-ipod-stats small { display: none; } .sw-footer--ipod-review { padding: 12px 18px; } .sw-ipod-footer-legend { gap: 8px; flex-wrap: wrap; } }
 
 /* Device row button */
 .sw-device-row {
