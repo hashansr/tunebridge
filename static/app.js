@@ -15091,7 +15091,7 @@ async function _swHandleIpodSyncDone(status) {
             <div class="sw-change-title">${esc(it.title || 'Untitled')}</div>
             <div class="sw-change-sub">${esc(it.subtitle || '')}</div>
           </div>
-          <span class="sw-change-size">${Number.isFinite(Number(it.size_bytes)) ? esc(_fmtBytes(Number(it.size_bytes))) : ''}</span>
+          <span class="sw-change-size">${it.size_bytes != null && Number.isFinite(Number(it.size_bytes)) ? esc(_fmtBytes(Number(it.size_bytes))) : ''}</span>
         </div>`).join('')}
         ${g.items.length > 4 ? `<div class="sw-change-more">+${g.items.length - 4} more</div>` : ''}
       </div>`).join('')
