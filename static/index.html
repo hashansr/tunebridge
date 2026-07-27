@@ -8,8 +8,8 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon_32.png?v=2" />
   <link rel="apple-touch-icon" sizes="180x180" href="/favicon_180.png?v=2" />
   <link rel="stylesheet" href="/style.css?v=79" />
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="/vendor/sortable-1.15.2.min.js"></script>
+  <script src="/vendor/chart-4.4.0.umd.min.js"></script>
 </head>
 <body>
   <div id="app">
@@ -4579,7 +4579,7 @@
       <div id="license-tab-license" class="license-scroll-body">
         <pre class="license-text">TuneBridge License
 
-Copyright © 2025 Hashan Ranatunga. All Rights Reserved.
+Copyright © 2025-2026 Hashan Ranatunga. All Rights Reserved.
 
 GRANT OF LICENSE
 You are granted a personal, limited, revocable license to install and
@@ -4622,6 +4622,7 @@ Automatic (no setup required):
   • iTunes Search API: fetches album artwork and release metadata
   • MusicBrainz: fetches album and artist metadata
   • LrcLib: fetches song lyrics
+  • GitHub: checks for new app versions (no data about you is sent)
 
 Optional (only when you add an API key in Settings):
   • Last.fm: fetches artist images and biography
@@ -4630,20 +4631,27 @@ Optional (only when you add an API key in Settings):
 Gear section only (only when you use the IEM library):
   • squig.link: fetches headphone frequency response measurements
 
-No personal data (your name, email, location, or listening history)
-is included in any of these requests. Queries contain only the track
-title, artist name, or album name needed to find the right result.
+No personal data (your name, email, or location) is included in any
+of these requests. Queries contain only the track title, artist name,
+or album name needed to find the right result.
 
 THIRD-PARTY SERVICES
 Each service listed above has its own privacy policy. TuneBridge has
 no control over how they handle requests made to their servers.
+
+LISTENING HISTORY
+TuneBridge can record what you play locally to power features like
+recently played and listening statistics (track title, artist, album,
+time played, how long you listened). This is enabled by default,
+stored only on this device, and never transmitted anywhere. You can
+turn it off or clear it at any time from Settings.
 
 DATA STORAGE
 All your data (playlists, settings, listening history) is stored
 locally on this device in:
   ~/Library/Application Support/TuneBridge/
 
-Questions: mail@hashanr.com</pre>
+Questions: hashan.sr@gmail.com</pre>
       </div>
 
       <div class="license-modal-actions">

@@ -119,7 +119,7 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 - Template editor with field chips, separators, live path preview, and safety validation for hidden-path patterns
 - Import workflow with duplicate detection, conflict reasons, copy progress, and failed-file reporting
 - Export Library CSV with selectable columns and native macOS save dialog in the packaged app
-- Health check panel (library, squig.link, DAPs, playback runtime, database)
+- Health check panel (library, squig.link, DAPs, playback runtime, iPod sync/ffmpeg, database)
 - Data backup / restore (ZIP of all user data)
 - Full Help Center page with Getting Started, How It Works, and Paths & Files tabs
 - Auto-update checks and developer diagnostics for release/dev builds
@@ -136,6 +136,7 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 ### Developer Requirements
 - Python 3.10+
 - Homebrew (optional, required only for mpv bit-perfect output): `brew install mpv`
+- ffmpeg (required only for syncing to click-wheel iPods — used to transcode FLAC to ALAC, since those devices can't play FLAC): `brew install ffmpeg`. Detected and installable in-app from the Settings health check panel.
 
 ---
 
@@ -264,6 +265,12 @@ DAP export behavior is profile-driven and not hardcoded in UI logic.
   - path prefix
   - suggested mount name
 - Add/edit DAP modal and export logic consume this profile registry at runtime.
+
+---
+
+## License & Privacy
+
+TuneBridge is proprietary — see [`LICENSE`](LICENSE) for terms and [`NOTICES`](NOTICES) for third-party attributions. The full privacy policy is published alongside end-user releases: [tunebridge-releases/PRIVACY.md](https://github.com/hashansr/tunebridge-releases/blob/main/PRIVACY.md).
 
 ---
 

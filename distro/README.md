@@ -3,7 +3,7 @@
 This folder is the public handoff location for installer artifacts.
 
 - `TuneBridge-latest.dmg`: latest shareable macOS installer build.
-- Current release: `v0.542` (`2026-06-26`).
+- Current release version: see `version.json` in this repo, or the [tunebridge-releases](https://github.com/hashansr/tunebridge-releases) `version.json` / latest GitHub Release (this note is not auto-updated by `build_app.sh`, so treat it only as a description of the folder, not a live version pointer).
 
 Older timestamped DMGs remain local-only and are not committed.
 

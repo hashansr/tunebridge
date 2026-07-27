@@ -62,7 +62,7 @@ python-mpv
            https://www.gnu.org/licenses/lgpl-2.1.txt
 
 ────────────────────────────────────────────────────────────────────────────────
-JAVASCRIPT LIBRARIES (bundled via CDN at runtime)
+JAVASCRIPT LIBRARIES (bundled locally in static/vendor/, no network fetch)
 ────────────────────────────────────────────────────────────────────────────────
 
 SortableJS v1.15.2
@@ -74,6 +74,20 @@ Chart.js v4.4.0
   Copyright © 2014-2025 Chart.js Contributors
   License: MIT — https://opensource.org/licenses/MIT
   Source: https://github.com/chartjs/Chart.js
+
+────────────────────────────────────────────────────────────────────────────────
+VENDORED SOURCE (copied into ipod/_vendor/, not a pip dependency)
+────────────────────────────────────────────────────────────────────────────────
+
+iOpenPod (partial: itunesdb_parser, itunesdb_shared, itunesdb_writer,
+artworkdb_shared, artworkdb_writer, and select device/ modules)
+  Copyright © 2025 John Gibbons
+  License: MIT — https://opensource.org/licenses/MIT
+  Source: https://github.com/TheRealSavi/iOpenPod
+  Note: Only the GUI-free binary iTunesDB/ArtworkDB parsing and writing
+  modules are vendored, with two small local patches — see
+  ipod/_vendor/NOTICE.md for the full breakdown. Used to read and write
+  the on-device library database for click-wheel iPod sync.
 
 ────────────────────────────────────────────────────────────────────────────────
 

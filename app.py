@@ -76,6 +76,7 @@ def _find_executable(name):
     fallbacks = {
         'brew': ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'],
         'mpv': ['/opt/homebrew/bin/mpv', '/usr/local/bin/mpv'],
+        'ffmpeg': ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg'],
     }
     for p in fallbacks.get(name, []):
         if os.path.isfile(p) and os.access(p, os.X_OK):
@@ -8068,6 +8069,37 @@ def player_install_mpv():
     }), (200 if MPV_AVAILABLE else 500)
 
 
+@app.route('/api/ipods/install_ffmpeg', methods=['POST'])
+def ipods_install_ffmpeg():
+    """Install ffmpeg via Homebrew, needed to transcode FLAC -> ALAC for
+    click-wheel iPod sync (mirrors player_install_mpv's brew flow)."""
+    if _find_executable('ffmpeg'):
+        return jsonify({'ok': True, 'ffmpeg_path': _find_executable('ffmpeg')})
+    brew = _find_executable('brew')
+    if not brew:
+        return jsonify({
+            'ok': False,
+            'error': 'Homebrew not found in app PATH. Ensure Homebrew is installed at /opt/homebrew or /usr/local, then retry.',
+        }), 400
+    try:
+        proc = subprocess.run(
+            [brew, 'install', 'ffmpeg', '--quiet'],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            timeout=1800, env=_runtime_env(),
+        )
+    except subprocess.TimeoutExpired:
+        return jsonify({'ok': False, 'error': 'ffmpeg install timed out'}), 500
+    if proc.returncode != 0:
+        msg = (proc.stderr or proc.stdout or 'brew install ffmpeg failed').strip()
+        return jsonify({'ok': False, 'error': msg[-1200:]}), 500
+    ffmpeg_path = _find_executable('ffmpeg')
+    return jsonify({
+        'ok': bool(ffmpeg_path),
+        'ffmpeg_path': ffmpeg_path,
+        'error': None if ffmpeg_path else 'brew install completed but ffmpeg still not found',
+    }), (200 if ffmpeg_path else 500)
+
+
 @app.route('/api/player/audio_devices')
 def player_audio_devices():
     """Return the list of audio output devices mpv can see."""
@@ -9001,6 +9033,18 @@ def health_status():
         'runtime': runtime,
         'missing_dependency': missing_dependency,
         'fix_actions': ['install_mpv'] if missing_dependency else [],
+    }
+
+    # 4b. Click-wheel iPod sync dependency (ffmpeg does FLAC -> ALAC transcoding;
+    # not needed for DAP export/sync, only for iPods, which can't play FLAC).
+    ffmpeg_path = _find_executable('ffmpeg')
+    result['ipod_sync'] = {
+        'ok': bool(ffmpeg_path),
+        'ffmpeg_available': bool(ffmpeg_path),
+        'ffmpeg_path': ffmpeg_path,
+        'missing_dependency': not bool(ffmpeg_path),
+        'fix_hint': 'brew install ffmpeg',
+        'fix_actions': [] if ffmpeg_path else ['install_ffmpeg'],
     }
 
     # 5. Database status
@@ -12535,6 +12579,25 @@ def ipod_sync_execute(iid):
             sync_errors = []
 
             music_base = get_music_base()
+
+            # Fail fast with one clear message instead of one cryptic
+            # "[Errno 2] No such file or directory: 'ffmpeg'" per track:
+            # ffmpeg is a hard requirement for any track that isn't
+            # already in an iPod-native format, since no click-wheel iPod
+            # can play FLAC. Checked here rather than at scan time so it
+            # never blocks a device-only removal/playlist-only sync that
+            # doesn't add any new audio.
+            if any(
+                needs_transcode(music_base / local_by_id[local_id]['path'])
+                for local_id in add_track_ids
+                if local_by_id.get(local_id, {}).get('path')
+            ) and not _find_executable('ffmpeg'):
+                raise RuntimeError(
+                    "ffmpeg is required to convert FLAC (and other non-native "
+                    "formats) for this device, but it wasn't found. Install it "
+                    "with: brew install ffmpeg"
+                )
+
             local_id_to_db_track_id = {}
             total = len(add_track_ids)
             for i, local_id in enumerate(add_track_ids):

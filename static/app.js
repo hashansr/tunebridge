@@ -19000,6 +19000,21 @@ async function installMpv() {
   }
 }
 
+async function installFfmpeg() {
+  const buttons = document.querySelectorAll('.health-action-btn[onclick="App.installFfmpeg()"]');
+  buttons.forEach(b => { b.disabled = true; b.textContent = 'Installing...'; });
+  try {
+    const res = await fetch('/api/ipods/install_ffmpeg', { method: 'POST' });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Install failed');
+    toast('ffmpeg ready. iPod sync can now convert FLAC.');
+    await runHealthCheck();
+  } catch (e) {
+    toast('ffmpeg install failed: ' + e.message);
+    buttons.forEach(b => { b.disabled = false; b.textContent = 'Install ffmpeg'; });
+  }
+}
+
 async function retryMpvDetection() {
   const btn = document.getElementById('mpv-retry-btn');
   if (btn) {
@@ -19485,6 +19500,20 @@ async function runHealthCheck() {
       </div>
     </div>`;
 
+  // iPod sync dependency (ffmpeg — FLAC -> ALAC transcoding for click-wheel iPods)
+  const ipodSync = data.ipod_sync || {};
+  const ipodSyncActions = Array.isArray(ipodSync.fix_actions) && ipodSync.fix_actions.includes('install_ffmpeg')
+    ? `<div class="health-actions"><button class="btn-secondary health-action-btn" onclick="App.installFfmpeg()">Install ffmpeg</button></div>`
+    : '';
+  const ipodSyncHtml = `
+    <div class="health-item">
+      ${dot(!!ipodSync.ok)}
+      <div class="health-item-body">
+        <div class="health-item-label">iPod Sync (ffmpeg)</div>
+        <div class="health-item-detail">${ipodSync.ffmpeg_available ? `Found${ipodSync.ffmpeg_path ? `<br>${esc(ipodSync.ffmpeg_path)}` : ''}` : 'Not found — required to sync FLAC to click-wheel iPods'}${ipodSyncActions}</div>
+      </div>
+    </div>`;
+
   // Database
   const db = data.database || {};
   const dbDetail = db.ok
@@ -19500,7 +19529,7 @@ async function runHealthCheck() {
     </div>`;
 
   const grid = document.getElementById('health-grid');
-  if (grid) grid.innerHTML = libHtml + integrationsHtml + dapHtml + playbackHtml + storageHtml;
+  if (grid) grid.innerHTML = libHtml + integrationsHtml + dapHtml + playbackHtml + ipodSyncHtml + storageHtml;
 
   const lastRun = document.getElementById('health-last-run');
   if (lastRun) lastRun.textContent = 'Last checked: ' + new Date().toLocaleTimeString();
@@ -23403,6 +23432,7 @@ const App = {
   setAudioDevice,
   retryMpvDetection,
   installMpv,
+  installFfmpeg,
   browseFolder,
   exportBackup,
   importBackup,
