@@ -14867,13 +14867,21 @@ function _swInitIpodSyncExecuteUI(id) {
     cancelBtn.onclick = () => App.swCancelIpodSync();
   }
 
-  // Clear any leftover done-state chrome from a prior attempt (Retry doesn't
-  // go through _swGoTo, which is what normally resets the footer message/
-  // status class) - #sw-eject-wrap in particular is a footer slot shared
-  // with the DAP wizard's own Step 5 and is never cleared by that flow either.
+  // Clear any leftover done/error-state chrome from a prior attempt (Retry
+  // doesn't go through _swGoTo, which is what normally resets the footer via
+  // _swUpdateFooter) - the error/cancelled handlers hide the primary button
+  // entirely, and #sw-eject-wrap is a footer slot shared with the DAP
+  // wizard's own Step 5 that's never cleared by that flow either.
   const footerMsg = document.getElementById('sw-footer-msg');
   if (footerMsg) footerMsg.textContent = 'Do not disconnect the device.';
   document.getElementById('sw-footer-status')?.classList.remove('sw-footer-status--success');
+  const primaryBtn = document.getElementById('sw-btn-primary');
+  if (primaryBtn) {
+    primaryBtn.style.display = '';
+    primaryBtn.disabled = true;
+    primaryBtn.className = 'sw-btn sw-btn--ghost';
+    primaryBtn.innerHTML = 'Syncing…';
+  }
   const ejectWrap = document.getElementById('sw-eject-wrap');
   if (ejectWrap) ejectWrap.innerHTML = '';
 
@@ -15132,7 +15140,14 @@ async function _swHandleIpodSyncDone(status) {
   const cancelBtn = document.getElementById('sw-btn-cancel');
   if (cancelBtn) cancelBtn.style.display = 'none';
   const primaryBtn = document.getElementById('sw-btn-primary');
-  if (primaryBtn) { primaryBtn.disabled = false; primaryBtn.innerHTML = 'Done'; }
+  if (primaryBtn) {
+    // Also drop the "ghost" class _swUpdateFooter set for the 'syncing'
+    // config (static/app.js ~9825) - .sw-btn--ghost has pointer-events:none,
+    // so leaving it in place makes the button unclickable even once enabled.
+    primaryBtn.className = 'sw-btn sw-btn--primary';
+    primaryBtn.disabled = false;
+    primaryBtn.innerHTML = 'Done';
+  }
 
   const ejectWrap = document.getElementById('sw-eject-wrap');
   if (ejectWrap && devId) {

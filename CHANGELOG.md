@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: The Done button on the iPod sync completion screen looked enabled but couldn't be clicked.
 
 ## v0.596-rc.270726-2034 · 2026-07-27
 - Change: The iPod sync completion screen now matches the one shown after syncing other devices, with a summary of what was added/removed/synced, a breakdown of changed tracks and playlists, and current storage space.
