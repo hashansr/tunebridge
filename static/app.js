@@ -12517,6 +12517,34 @@ async function ejectDap(dapId, name) {
   }
 }
 
+// Mirrors ejectDap() against the iPod-specific route - only ever called from
+// the sync wizard's done screen today, so there's no DAP-detail-style view
+// to refresh afterward.
+async function ejectIpod(ipodId, name) {
+  const btns = document.querySelectorAll(`#eject-btn-${ipodId}`);
+  const ejectToast = _showLiveToast(`Ejecting ${name}`);
+  btns.forEach(b => {
+    b.disabled = true;
+    b.innerHTML = `Ejecting<span class="eject-dots"><span>.</span><span>.</span><span>.</span></span>`;
+  });
+  try {
+    const r = await fetch(`/api/ipods/${ipodId}/eject`, { method: 'POST' });
+    const d = await r.json();
+    if (r.ok) {
+      ejectToast.finish(`${name} ejected. Safe to remove.`, 'success');
+      btns.forEach(b => {
+        b.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Ejected`;
+      });
+    } else {
+      ejectToast.finish(d.error || 'Eject failed.', 'error');
+      btns.forEach(b => { b.disabled = false; b.innerHTML = b.dataset.restoreLabel || 'Eject'; });
+    }
+  } catch (e) {
+    ejectToast.finish('Eject failed.', 'error');
+    btns.forEach(b => { b.disabled = false; b.innerHTML = b.dataset.restoreLabel || 'Eject'; });
+  }
+}
+
 async function showAddDapModal() {
   _ensureGearProfileSelects();
   const firstModel = Object.keys(DAP_MODEL_PRESETS)[0] || 'other';
@@ -14839,6 +14867,16 @@ function _swInitIpodSyncExecuteUI(id) {
     cancelBtn.onclick = () => App.swCancelIpodSync();
   }
 
+  // Clear any leftover done-state chrome from a prior attempt (Retry doesn't
+  // go through _swGoTo, which is what normally resets the footer message/
+  // status class) - #sw-eject-wrap in particular is a footer slot shared
+  // with the DAP wizard's own Step 5 and is never cleared by that flow either.
+  const footerMsg = document.getElementById('sw-footer-msg');
+  if (footerMsg) footerMsg.textContent = 'Do not disconnect the device.';
+  document.getElementById('sw-footer-status')?.classList.remove('sw-footer-status--success');
+  const ejectWrap = document.getElementById('sw-eject-wrap');
+  if (ejectWrap) ejectWrap.innerHTML = '';
+
   _sw.ipodSyncExecTimer = setInterval(() => _swPollIpodSync(id), 600);
 }
 
@@ -14973,37 +15011,133 @@ function _swHandleIpodSyncError(msg) {
   if (primaryBtn) primaryBtn.style.display = 'none';
 }
 
-// Compact done panel (not a Step-5 clone — no storage bar/changelog, just
-// closure proportional to the new in-progress richness above).
-function _swHandleIpodSyncDone(status) {
+// Mirrors the DAP wizard's Step 5 done screen (_swRenderDone) - same hero/
+// stat-tiles/changelog/storage-now layout and classes, adapted to what the
+// iPod sync execute route reports: completed_items grouped by kind instead
+// of separate toDevice/onDevice/playlist arrays, and structured counts
+// (added_count etc.) instead of diffing a pre-sync proposal against the
+// submitted payload. Changelog rows use a colored-initials thumb (no album
+// lookup - completed_items don't carry album info) rather than _swRowThumb.
+async function _swHandleIpodSyncDone(status) {
   _sw.ipodSyncPhase = 'done';
-  if (status.errors && status.errors.length) {
-    const names = status.errors.slice(0, 3).map(e => e.title).join(', ');
-    const more = status.errors.length > 3 ? ` and ${status.errors.length - 3} more` : '';
-    toast(`${status.errors.length} song(s) failed and were skipped: ${names}${more}`);
+  const errors = status.errors ?? [];
+  if (errors.length) {
+    const names = errors.slice(0, 3).map(e => e.title).join(', ');
+    const more = errors.length > 3 ? ` and ${errors.length - 3} more` : '';
+    toast(`${errors.length} song(s) failed and were skipped: ${names}${more}`);
   }
+
+  const devId = _sw.device?.id;
+  const devName = _sw.device?.name || 'iPod';
+  const addedCount = Number(status.added_count ?? 0);
+  const removedCount = Number(status.removed_track_count ?? 0);
+  const playlistSyncedCount = Number(status.playlist_synced_count ?? 0);
+  const playlistRemovedCount = Number(status.playlist_removed_count ?? 0);
+  const doneOps = addedCount + removedCount + playlistSyncedCount + playlistRemovedCount;
+
+  // iPods compute capacity/used live from the mount rather than caching it
+  // on the row, so the pre-sync _sw.device snapshot is stale by now - fetch
+  // fresh numbers for an accurate "storage now" card, falling back to the
+  // stale snapshot if the request fails.
+  let cap = _sw.device?.capacity_bytes ?? 0;
+  let used = _sw.device?.used_bytes ?? 0;
+  if (devId) {
+    const fresh = await api('/ipods').then(list => list.find(i => i.id === devId)).catch(() => null);
+    if (fresh) { cap = fresh.capacity_bytes ?? cap; used = fresh.used_bytes ?? used; }
+  }
+  if (_sw.step !== 'ipod-sync') return; // navigated away while that fetch was in flight
+
   setTimeout(() => {
     const card = document.getElementById('sw-ipod-sync-card');
-    if (card) {
-      const errors = status.errors ?? [];
-      card.innerHTML = `
-        <div class="sw-done-hero">
-          <div class="sw-done-check-circle">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    if (!card) return;
+
+    const metaParts = [];
+    if (doneOps > 0) metaParts.push(`${doneOps} item${doneOps === 1 ? '' : 's'} synced`);
+    if (errors.length) metaParts.push(`${errors.length} error${errors.length === 1 ? '' : 's'}`);
+    if (!metaParts.length) metaParts.push('Nothing to sync');
+    const metaHTML = metaParts.map((p, i) => i === 0 ? p : `<span class="sw-done-meta-dot"></span>${p}`).join('');
+
+    const tiles = [
+      { label: 'Added to iPod', value: addedCount, unit: addedCount === 1 ? 'track' : 'tracks' },
+      { label: 'Removed', value: removedCount, unit: removedCount === 1 ? 'track' : 'tracks' },
+      { label: 'Playlists synced', value: playlistSyncedCount, unit: playlistSyncedCount === 1 ? 'playlist' : 'playlists' },
+      { label: 'Playlists removed', value: playlistRemovedCount, unit: playlistRemovedCount === 1 ? 'playlist' : 'playlists' },
+    ];
+    const tilesHTML = tiles.map(t => `
+      <div class="sw-stat-tile">
+        <div class="sw-stat-tile-label">${esc(t.label)}</div>
+        <div class="sw-stat-tile-value">${t.value}</div>
+        <div class="sw-stat-tile-unit">${esc(t.unit)}</div>
+      </div>`).join('');
+
+    const items = status.completed_items ?? [];
+    const groupDefs = [
+      { kind: 'add', dot: 'accent', label: n => `Added ${n} track${n === 1 ? '' : 's'} to ${devName}` },
+      { kind: 'remove', dot: 'danger', label: n => `Removed ${n} track${n === 1 ? '' : 's'} from ${devName}` },
+      { kind: 'playlist', dot: 'success', label: n => `Synced ${n} playlist${n === 1 ? '' : 's'}` },
+      { kind: 'playlist_remove', dot: 'muted', label: n => `Removed ${n} playlist${n === 1 ? '' : 's'}` },
+    ];
+    const groups = groupDefs
+      .map(g => ({ ...g, items: items.filter(it => it.kind === g.kind) }))
+      .filter(g => g.items.length);
+    const changelogHTML = `<div class="sw-overline" style="margin-bottom:8px">What changed</div>`
+      + (groups.length ? groups.map(g => `
+      <div class="sw-change-group">
+        <div class="sw-change-group-hdr"><span class="sw-change-dot sw-change-dot--${g.dot}"></span>${esc(g.label(g.items.length))}</div>
+        ${g.items.slice(0, 4).map(it => `
+        <div class="sw-change-item">
+          <div class="sw-row-thumb" style="background:${_swThumbColor(it.title)}">${_swInitials(it.title)}</div>
+          <div class="sw-change-text-col">
+            <div class="sw-change-title">${esc(it.title || 'Untitled')}</div>
+            <div class="sw-change-sub">${esc(it.subtitle || '')}</div>
           </div>
-          <div class="sw-done-hero-text">
-            <span class="sw-overline sw-overline--success">COMPLETE</span>
-            <div class="sw-done-hero-title" style="font-size:14px">${esc(status.message || 'Sync complete.')}</div>
-          </div>
+          <span class="sw-change-size">${Number.isFinite(Number(it.size_bytes)) ? esc(_fmtBytes(Number(it.size_bytes))) : ''}</span>
+        </div>`).join('')}
+        ${g.items.length > 4 ? `<div class="sw-change-more">+${g.items.length - 4} more</div>` : ''}
+      </div>`).join('')
+      : '<p style="color:var(--text-muted);font-size:13px">No file changes this sync.</p>');
+
+    const pct = cap > 0 ? Math.min(100, (used / cap) * 100) : 0;
+    const storageHTML = cap > 0 ? `
+      <div class="sw-overline" style="margin-bottom:8px">Storage now</div>
+      <div class="sw-cap-bar-wrap"><div class="sw-cap-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
+      <div class="sw-storage-bar-label">${esc(_fmtGB(used))} used, ${esc(_fmtGB(Math.max(0, cap - used)))} free</div>` : '';
+
+    card.innerHTML = `
+      <div class="sw-done-hero">
+        <div class="sw-done-check-circle">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
-        ${errors.length ? `<div class="sw-error-detail" style="margin-top:10px">${errors.length} song(s) failed: ${esc(errors.slice(0, 5).map(e => e.title).join(', '))}${errors.length > 5 ? ` and ${errors.length - 5} more` : ''}</div>` : ''}`;
-    }
+        <div class="sw-done-hero-text">
+          <span class="sw-overline sw-overline--success">COMPLETE</span>
+          <h2 class="sw-done-hero-title">${esc(devName)} is up to date</h2>
+          <div class="sw-done-hero-meta">${metaHTML}</div>
+        </div>
+      </div>
+      <div class="sw-stat-tiles">${tilesHTML}</div>
+      <div class="sw-done-body">
+        <div class="sw-changelog-card sw-card">${changelogHTML}</div>
+        <div class="sw-done-right">
+          ${storageHTML ? `<div class="sw-storage-now-card sw-card">${storageHTML}</div>` : ''}
+        </div>
+      </div>`;
   }, 500);
-  if (_sw.device?.id) _swLoadIpodLibraryBrowse(_sw.device.id); // refresh cached state (device + add-plan) in case the user goes Back
+
+  if (devId) _swLoadIpodLibraryBrowse(devId); // refresh cached state (device + add-plan) in case the user goes Back
+
+  const footerMsg = document.getElementById('sw-footer-msg');
+  if (footerMsg) footerMsg.textContent = 'Safe to disconnect.';
+  document.getElementById('sw-footer-status')?.classList.add('sw-footer-status--success');
+
   const cancelBtn = document.getElementById('sw-btn-cancel');
   if (cancelBtn) cancelBtn.style.display = 'none';
   const primaryBtn = document.getElementById('sw-btn-primary');
   if (primaryBtn) { primaryBtn.disabled = false; primaryBtn.innerHTML = 'Done'; }
+
+  const ejectWrap = document.getElementById('sw-eject-wrap');
+  if (ejectWrap && devId) {
+    ejectWrap.innerHTML = `<button id="eject-btn-${devId}" class="sw-btn sw-btn--secondary sw-eject-btn" onclick="App.ejectIpod('${devId}', '${devName.replace(/'/g, "\\'")}')">${_GEAR_ICON_EJECT} Eject ${esc(devName)}</button>`;
+  }
 }
 
 async function _pickTargetIpod() {
@@ -23763,6 +23897,7 @@ const App = {
   checkDapSyncStatus,
   sortDapPlaylistStatus,
   ejectDap,
+  ejectIpod,
   showDapDetail,
   showAddDapModal,
   showEditDapModal,

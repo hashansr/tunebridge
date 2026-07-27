@@ -12232,6 +12232,27 @@ def delete_ipod(iid):
     return '', 204
 
 
+@app.route('/api/ipods/<iid>/eject', methods=['POST'])
+def eject_ipod(iid):
+    # Mirrors eject_dap() exactly, against the iPod's own mount/sync state.
+    ipod = next((i for i in load_ipods() if i['id'] == iid), None)
+    if not ipod:
+        return jsonify({'error': 'Not found'}), 404
+    mount, _, _ = _resolve_ipod_mount(ipod)
+    if not mount or not mount.exists():
+        return jsonify({'error': 'Device is not connected'}), 400
+    if ipod_sync_state.get('status') in ('scanning', 'copying') and ipod_sync_state.get('ipod_id') == iid:
+        return jsonify({'error': 'A sync operation is in progress, wait for it to finish before ejecting.'}), 409
+    result = subprocess.run(
+        ['diskutil', 'eject', str(mount)],
+        capture_output=True, text=True, timeout=60
+    )
+    if result.returncode == 0:
+        return jsonify({'success': True, 'message': f'{ipod["name"]} ejected safely.'})
+    msg = result.stderr.strip() or 'Eject failed, the device may be busy.'
+    return jsonify({'error': msg}), 500
+
+
 @app.route('/api/ipods/<iid>/scan', methods=['POST'])
 def scan_ipod(iid):
     global ipod_scan_state
@@ -12302,6 +12323,8 @@ def _ipod_sync_idle_state():
         'phase': '', 'progress': 0, 'total': 0, 'current': '',
         'current_file_done': 0, 'current_file_total': 0,
         'completed_items': [], 'errors': [], 'cancel_requested': False,
+        'added_count': 0, 'removed_track_count': 0,
+        'playlist_synced_count': 0, 'playlist_removed_count': 0,
     }
 
 
@@ -12575,7 +12598,7 @@ def ipod_sync_execute(iid):
                 if str(p.playlist_id) in remove_playlist_ids:
                     ipod_sync_state['progress'] += 1
                     ipod_sync_state['current'] = f'✖ Playlist: {p.name}'
-                    push_completed(p.name, 'Playlist removed', None, 'remove')
+                    push_completed(p.name, 'Playlist removed', None, 'playlist_remove')
                     continue
                 playlist_infos.append(ipod_playlist_to_playlist_info(p))
 
@@ -12899,6 +12922,10 @@ def ipod_sync_execute(iid):
             ipod_sync_state = {
                 **ipod_sync_state, 'status': 'done', 'ipod_id': iid, 'plan': None, 'phase': 'done',
                 'message': message, 'error': '', 'errors': sync_errors, 'current': '',
+                # Structured counts for the done screen's stat tiles - avoids
+                # the frontend having to parse them back out of the message.
+                'added_count': added_ok, 'removed_track_count': len(remove_track_ids),
+                'playlist_synced_count': len(add_playlist_ids), 'playlist_removed_count': len(remove_playlist_ids),
             }
         except Exception as e:
             ipod_sync_state = {**ipod_sync_state, 'status': 'error', 'message': '', 'error': str(e)}
