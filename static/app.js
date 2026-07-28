@@ -12544,22 +12544,25 @@ function chooseDeviceType(type) {
   closeDeviceTypeModal();
   if (type === 'ipod') {
     showAddIpodModal();
+  } else if (type === 'rockbox') {
+    showAddDapModal('rockbox');
   } else {
     showAddDapModal();
   }
 }
 
-async function showAddDapModal() {
+async function showAddDapModal(preferredModel = '') {
   _ensureGearProfileSelects();
   const firstModel = Object.keys(DAP_MODEL_PRESETS)[0] || 'other';
-  const firstPreset = DAP_MODEL_PRESETS[firstModel] || { folder: 'Playlists', prefix: '' };
+  const selectedModel = DAP_MODEL_PRESETS[preferredModel] ? preferredModel : firstModel;
+  const firstPreset = DAP_MODEL_PRESETS[selectedModel] || { folder: 'Playlists', prefix: '' };
   document.getElementById('dap-modal-title').textContent = 'Add Device';
   document.getElementById('dap-modal-id').value = '';
   document.getElementById('dap-mount-volume-uuid').value = '';
   document.getElementById('dap-mount-disk-uuid').value = '';
   document.getElementById('dap-mount-device-identifier').value = '';
   document.getElementById('dap-name').value = '';
-  document.getElementById('dap-model').value = firstModel;
+  document.getElementById('dap-model').value = selectedModel;
   document.getElementById('dap-mount').value = '';
   document.getElementById('dap-mount').dataset.prevMountForPeq = '';
   document.getElementById('dap-mount-manual-toggle').checked = false;
@@ -12570,7 +12573,7 @@ async function showAddDapModal() {
   document.getElementById('dap-export-folder').value = firstPreset.folder || 'Playlists';
   document.getElementById('dap-peq-folder').value = '';
   document.getElementById('dap-prefix').value = firstPreset.prefix || '';
-  dapModelPreset(firstModel);
+  dapModelPreset(selectedModel);
   dapTemplateChanged();
   _closeDapHelpPanels();
   document.getElementById('dap-modal').style.display = 'flex';
