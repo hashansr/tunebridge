@@ -4121,10 +4121,10 @@ async function renderDapExportPills(pid) {
   }
   if (divider) divider.style.display = '';
 
-  const svgDevice = `<span class="gear-device-icon gear-device-icon--dap dap-export-icon" aria-hidden="true"></span>`;
   const latestFavAt = Math.max(0, ...((state.favouritesMeta.songs || []).map(r => Number(r.added_at || 0))));
   const favExports = state.favouritesMeta.dap_exports || {};
   container.innerHTML = connected.map(dap => {
+    const svgDevice = `<span class="gear-device-icon gear-device-icon--${dap.model === 'rockbox' ? 'ipod' : 'dap'} dap-export-icon" aria-hidden="true"></span>`;
     const isFavUpToDate = Number(favExports[dap.id] || 0) >= latestFavAt && latestFavAt > 0;
     const label = isFavVirtual
       ? (isFavUpToDate ? `Copy to ${dap.name} (up to date)` : `Copy to ${dap.name}`)
@@ -9855,7 +9855,7 @@ function _swRenderDeviceList(daps, ipods = []) {
   }
 
   const dapRows = daps.map(dap => _swDeviceRowHtml({
-    id: dap.id, type: 'dap', name: dap.name, connected: dap.mounted,
+    id: dap.id, type: 'dap', iconType: dap.model === 'rockbox' ? 'ipod' : 'dap', name: dap.name, connected: dap.mounted,
   }));
   const ipodRows = ipods.map(ipod => _swDeviceRowHtml({
     id: ipod.id, type: 'ipod', name: ipod.name, connected: ipod.mounted,
@@ -9867,11 +9867,11 @@ function _swRenderDeviceList(daps, ipods = []) {
   list.innerHTML = sections.join('');
 }
 
-function _swDeviceRowHtml({ id, type, name, connected }) {
+function _swDeviceRowHtml({ id, type, iconType = type, name, connected }) {
   const connClass = connected ? 'sw-conn-chip--on' : 'sw-conn-chip--off';
   const dotClass  = connected ? 'sw-conn-dot--on'  : 'sw-conn-dot--off';
   const connText  = connected ? 'Connected' : 'Offline';
-  const icon = type === 'ipod' ? _IPOD_SVG_SMALL : _DAP_SVG_SMALL;
+  const icon = iconType === 'ipod' ? _IPOD_SVG_SMALL : _DAP_SVG_SMALL;
 
   return `<button class="sw-device-row" data-dap-id="${esc(id)}" data-device-type="${type}"
       onclick="App.swSelectDevice('${esc(id)}', '${type}')"
@@ -10028,7 +10028,7 @@ function _swRenderDetailPanel(dap) {
 
   content.innerHTML = `
     <div class="sw-detail-hdr">
-      <div class="sw-detail-icon-tile">${_DAP_SVG_SMALL}</div>
+      <div class="sw-detail-icon-tile">${_dapDeviceIcon(dap, true)}</div>
       <div class="sw-detail-hdr-text">
         <div class="sw-overline">TARGET DEVICE</div>
         <p class="sw-detail-name">${esc(dap.name)}</p>
@@ -11740,6 +11740,11 @@ function syncScanAgain() { loadSyncView(); }
 
 // Icon used for all DAP rows/headers
 const _DAP_SVG = `<span class="gear-device-icon gear-device-icon--dap" aria-hidden="true"></span>`;
+function _dapDeviceIcon(dap, small = false) {
+  const isRockbox = String(dap?.model || '').toLowerCase() === 'rockbox';
+  if (isRockbox) return small ? _IPOD_SVG_SMALL : _IPOD_SVG;
+  return small ? _DAP_SVG_SMALL : _DAP_SVG;
+}
 const _IEM_ICON_HTML = `<img src="icons/earphone-1-svgrepo-com.svg" alt="" class="gear-iem-icon-image" loading="lazy" decoding="async" />`;
 const _HEADPHONE_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`;
 const _GEAR_DOTS = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`;
@@ -11867,7 +11872,7 @@ function _buildDapRowHtml(d) {
 
   return `
     <div class="gear-row gear-row-dap" onclick="App.showDapDetail('${d.id}')">
-      <span class="gear-row-icon">${_DAP_SVG}</span>
+      <span class="gear-row-icon">${_dapDeviceIcon(d)}</span>
       <div class="gear-row-info">
         <div class="gear-row-name">${esc(d.name)}</div>
         <div class="gear-row-sub">Digital audio player</div>
@@ -12336,7 +12341,7 @@ async function showDapDetail(id) {
   document.getElementById('dap-detail-content').innerHTML = `
     <div class="gear-detail-page dap-detail-v2">
       <div class="gd-identity">
-        <div class="gd-badge-tile">${_DAP_SVG}</div>
+        <div class="gd-badge-tile">${_dapDeviceIcon(dap)}</div>
         <div class="gd-id-text">
           <h1>${esc(dap.name)}</h1>
           <div class="gd-id-sub">${identityMeta.map(esc).join(' · ')}</div>
@@ -13346,11 +13351,11 @@ function _ipodDetailPagination(page, pageCount, label, kind) {
   const atStart = page <= 0;
   const atEnd = page >= pageCount - 1;
   return `<div class="ipod-detail-pagination"><span>${esc(label)}</span><div>
-    <button aria-label="First page" ${atStart ? 'disabled' : ''} onclick="App.ipodDetailPage('${kind}',0)">«</button>
+    <button class="ipod-detail-pagination-icon" aria-label="First page" ${atStart ? 'disabled' : ''} onclick="App.ipodDetailPage('${kind}',0)"><img src="icons/first.svg" alt="" aria-hidden="true"></button>
     <button aria-label="Previous page" ${atStart ? 'disabled' : ''} onclick="App.ipodDetailPage('${kind}',${page - 1})">‹</button>
     <b>Page ${page + 1} of ${pageCount}</b>
     <button aria-label="Next page" ${atEnd ? 'disabled' : ''} onclick="App.ipodDetailPage('${kind}',${page + 1})">›</button>
-    <button class="ipod-detail-last-page" aria-label="Last page" ${atEnd ? 'disabled' : ''} onclick="App.ipodDetailPage('${kind}',${pageCount - 1})">${_IPOD_DETAIL_CHEVRON}</button>
+    <button class="ipod-detail-pagination-icon" aria-label="Last page" ${atEnd ? 'disabled' : ''} onclick="App.ipodDetailPage('${kind}',${pageCount - 1})"><img src="icons/last.svg" alt="" aria-hidden="true"></button>
   </div></div>`;
 }
 
