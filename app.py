@@ -12934,7 +12934,7 @@ def ipod_sync_execute(iid):
     return jsonify({'ok': True})
 
 
-IPOD_BACKUP_RETENTION = 10
+IPOD_BACKUP_RETENTION = 5
 
 
 def _ipod_prune_backups(iid, keep=IPOD_BACKUP_RETENTION):
@@ -12954,6 +12954,9 @@ def _ipod_prune_backups(iid, keep=IPOD_BACKUP_RETENTION):
 
 @app.route('/api/ipods/<iid>/backups', methods=['GET'])
 def get_ipod_backups(iid):
+    # Apply a lowered retention limit to pre-existing backups as soon as a
+    # device is viewed, not only after its next sync or restore.
+    _ipod_prune_backups(iid)
     backups = _db.db_load_ipod_backups(iid)
     result = []
     for b in backups:

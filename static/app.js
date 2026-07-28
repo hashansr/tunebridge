@@ -13261,20 +13261,27 @@ async function showIpodDetail(id) {
   if (navRight) navRight.innerHTML = '';
 
   try {
-    const [ipod, tracks, playlists, backups] = await Promise.all([
+    const [ipod, tracks, playlists, backups, artists, albums] = await Promise.all([
       api(`/ipods/${id}`),
       api(`/ipods/${id}/tracks`).catch(() => []),
       api(`/ipods/${id}/playlists`).catch(() => []),
       api(`/ipods/${id}/backups`).catch(() => []),
+      state.artists?.length ? Promise.resolve(state.artists) : api('/library/artists').catch(() => []),
+      state.albums?.length ? Promise.resolve(state.albums) : api('/library/albums').catch(() => []),
     ]);
     if (state.view !== 'ipod-detail') return;
+    if (!state.artists?.length) state.artists = artists;
+    if (!state.albums?.length) state.albums = albums;
+    if (navRight) {
+      navRight.innerHTML = `<button class="gd-icon-btn danger" onclick="App.deleteIpod('${ipod.id}')" title="Remove iPod" aria-label="Remove iPod">${_GEAR_ICON_TRASH}</button><button class="gd-icon-btn ipod-detail-nav-icon" onclick="App.ipodDetailRename()" title="Rename iPod" aria-label="Rename iPod">${_IPOD_DETAIL_MORE}</button>`;
+    }
     _ipodDetailUi = {
       id,
       ipod,
       tracks,
       playlists,
       backups,
-      openSections: new Set(['configuration', 'backups', 'playlists', 'tracks']),
+      openSections: new Set(['playlists', 'tracks']),
       openArtists: new Set(),
       openAlbums: new Set(),
       showAllBackups: false,
@@ -13291,17 +13298,32 @@ async function showIpodDetail(id) {
 
 let _ipodDetailUi = null;
 const IPOD_DETAIL_PAGE_SIZE = 10;
-const _IPOD_DETAIL_BACK = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2 4 7l5 5"/></svg>';
-const _IPOD_DETAIL_MORE = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.35"/><circle cx="8" cy="8" r="1.35"/><circle cx="13" cy="8" r="1.35"/></svg>';
-const _IPOD_DETAIL_REFRESH = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7a5 5 0 1 1-1.5-3.6"/><path d="M12 1.5V4h-2.5"/></svg>';
-const _IPOD_DETAIL_CHEVRON = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 2 5 5-5 5"/></svg>';
-const _IPOD_DETAIL_SEARCH = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="4.2"/><path d="m12 12-2.4-2.4"/></svg>';
-const _IPOD_DETAIL_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12.5 5 5L20 6.5"/></svg>';
-const _IPOD_DETAIL_DEVICE = '<svg viewBox="0 0 30 34" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="3" y="1.5" width="24" height="31" rx="4"/><rect x="6.5" y="4.5" width="17" height="12" rx="1" opacity=".45"/><circle cx="15" cy="24.5" r="4.4"/><circle cx="15" cy="24.5" r="1.2" fill="currentColor" opacity=".7"/></svg>';
-const _IPOD_DETAIL_BACKUP = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8m0 0-3-3m3 3 3-3"/><path d="M2.5 10v2.5A1.5 1.5 0 0 0 4 14h8a1.5 1.5 0 0 0 1.5-1.5V10"/></svg>';
-const _IPOD_DETAIL_PLAYLIST = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M3 3.5h8M3 7h8M3 10.5h8M1 3.5h.01M1 7h.01M1 10.5h.01"/></svg>';
-const _IPOD_DETAIL_ALBUM = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/></svg>';
-const _IPOD_DETAIL_TRACK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M6 12V3.5l8-1.3V10"/><circle cx="4.3" cy="12" r="1.8"/><circle cx="12.3" cy="10.5" r="1.8"/></svg>';
+const _IPOD_DETAIL_MORE = '<img src="icons/dots-3-horizontal.svg" alt="" aria-hidden="true">';
+const _IPOD_DETAIL_REFRESH = '<img src="icons/refresh-cw-svgrepo-com.svg" alt="" aria-hidden="true">';
+const _IPOD_DETAIL_CHEVRON = _GEAR_CHEVRON;
+const _IPOD_DETAIL_SEARCH = '<img src="icons/search.svg" alt="" aria-hidden="true">';
+const _IPOD_DETAIL_CHECK = '<img src="icons/checkmark.svg" alt="" aria-hidden="true">';
+const _IPOD_DETAIL_DEVICE = _IPOD_SVG;
+const _IPOD_DETAIL_BACKUP = '<img src="icons/history.svg" alt="" aria-hidden="true">';
+
+function _ipodDetailThumb(item = {}, kind = 'track') {
+  const artistName = item.artist || item.name || '';
+  let src = item.artwork_key ? artworkUrl(item.artwork_key) : '';
+  if (kind === 'playlist') {
+    const playlist = item.linked_playlist_id
+      ? { id: item.linked_playlist_id }
+      : (state.playlists || []).find(p => String(p.name || '').toLocaleLowerCase() === String(item.name || '').toLocaleLowerCase());
+    if (playlist?.id) src = `/api/playlists/${encodeURIComponent(playlist.id)}/artwork`;
+  } else if (kind === 'artist') {
+    const artist = (state.artists || []).find(a => _normArtistId(a?.name) === _normArtistId(item.name || artistName));
+    src = _artistImageSrc({ name: item.name || artistName, image_key: artist?.image_key || '', artwork_key: artist?.artwork_key || item.artwork_key || '' });
+  } else if (!src) {
+    const album = (state.albums || []).find(a => _swNorm(a?.name) === _swNorm(item.album) && _swNorm(a?.artist) === _swNorm(item.artist));
+    src = album?.artwork_key ? artworkUrl(album.artwork_key) : '';
+  }
+  const fallback = kind === 'artist' ? 'artist' : kind === 'playlist' ? 'playlist' : kind === 'album' ? 'album' : 'song';
+  return `<span class="ipod-detail-thumb ipod-detail-thumb--${kind}">${src ? `<img src="${esc(src)}" alt="" loading="lazy" decoding="async" onerror="this.remove()">` : coverPlaceholder(fallback, 34, kind === 'artist' ? '50%' : '8px')}</span>`;
+}
 
 function _ipodDetailArtistGroups(tracks) {
   const artists = new Map();
@@ -13324,7 +13346,7 @@ function _ipodDetailPagination(page, pageCount, label, kind) {
   const atStart = page <= 0;
   const atEnd = page >= pageCount - 1;
   return `<div class="ipod-detail-pagination"><span>${esc(label)}</span><div>
-    <button aria-label="First page" ${atStart ? 'disabled' : ''} onclick="App.ipodDetailPage('${kind}',0)">${_IPOD_DETAIL_BACK}</button>
+    <button aria-label="First page" ${atStart ? 'disabled' : ''} onclick="App.ipodDetailPage('${kind}',0)">«</button>
     <button aria-label="Previous page" ${atStart ? 'disabled' : ''} onclick="App.ipodDetailPage('${kind}',${page - 1})">‹</button>
     <b>Page ${page + 1} of ${pageCount}</b>
     <button aria-label="Next page" ${atEnd ? 'disabled' : ''} onclick="App.ipodDetailPage('${kind}',${page + 1})">›</button>
@@ -13338,10 +13360,10 @@ function _renderIpodDetail() {
   if (!ui || !content || state.view !== 'ipod-detail') return;
   const { ipod, tracks, playlists, backups } = ui;
   const isOpen = name => ui.openSections.has(name);
-  const sectionHead = (name, title, count, action = '') => `<div class="ipod-detail-section-head${name === 'sync' ? ' static' : ''}" ${name === 'sync' ? '' : `onclick="App.toggleIpodDetailSection('${name}')"`}>
+  const sectionHead = (name, title, count, action = '') => `<div class="ipod-detail-section-head" onclick="App.toggleIpodDetailSection('${name}')">
     <span class="ipod-detail-section-title">${title}</span>${count != null ? `<span class="ipod-detail-section-count">· ${esc(String(count))}</span>` : ''}
     <span class="ipod-detail-section-right" onclick="event.stopPropagation()">${action}</span>
-    ${name === 'sync' ? '' : `<span class="ipod-detail-chevron${isOpen(name) ? ' open' : ''}">${_IPOD_DETAIL_CHEVRON}</span>`}
+    <span class="ipod-detail-chevron${isOpen(name) ? ' open' : ''}">${_IPOD_DETAIL_CHEVRON}</span>
   </div>`;
   const modelControl = `<select class="ipod-detail-select" onchange="App.updateIpodModel('${ipod.id}', this.value)">${_ipodModelOptionsHtml(ipod.device_class)}</select>`;
   const config = isOpen('configuration') ? `<div class="ipod-detail-deflist">
@@ -13367,7 +13389,7 @@ function _renderIpodDetail() {
   const playlistRows = filteredPlaylists.slice(plStart, plStart + IPOD_DETAIL_PAGE_SIZE).map((playlist, index) => {
     const count = Array.isArray(playlist.track_order) ? playlist.track_order.length : (playlist.track_count || 0);
     const sourceIndex = playlists.indexOf(playlist);
-    return `<div class="ipod-detail-playlist-row"><span class="ipod-detail-row-icon">${_IPOD_DETAIL_PLAYLIST}</span><span class="ipod-detail-playlist-name">${esc(playlist.name || 'Untitled playlist')}${playlist.is_master ? '<em>MASTER</em>' : ''}</span><span class="ipod-detail-playlist-count">${Number(count).toLocaleString()} tracks</span><button class="ipod-detail-icon-btn" title="More actions" aria-label="More actions" ${playlist.is_master ? 'disabled' : `onclick="App.ipodDetailRemovePlaylist(${sourceIndex})"`}>${playlist.is_master ? _IPOD_DETAIL_MORE : _GEAR_ICON_TRASH}</button></div>`;
+    return `<div class="ipod-detail-playlist-row">${_ipodDetailThumb(playlist, 'playlist')}<span class="ipod-detail-playlist-name">${esc(playlist.name || 'Untitled playlist')}${playlist.is_master ? '<em>MASTER</em>' : ''}</span><span class="ipod-detail-playlist-count">${Number(count).toLocaleString()} tracks</span><button class="ipod-detail-icon-btn" title="More actions" aria-label="More actions" ${playlist.is_master ? 'disabled' : `onclick="App.ipodDetailRemovePlaylist(${sourceIndex})"`}>${playlist.is_master ? _IPOD_DETAIL_MORE : _GEAR_ICON_TRASH}</button></div>`;
   }).join('') || '<p class="ipod-detail-empty">No matching playlists.</p>';
   const playlistsBody = isOpen('playlists') ? `<div class="ipod-detail-list">${playlistRows}</div>${_ipodDetailPagination(ui.playlistPage, plPages, filteredPlaylists.length ? `${plStart + 1}–${Math.min(filteredPlaylists.length, plStart + IPOD_DETAIL_PAGE_SIZE)} of ${filteredPlaylists.length}` : '0 playlists', 'playlists')}</div>` : '';
   const needle = ui.trackQuery.trim().toLocaleLowerCase();
@@ -13380,19 +13402,18 @@ function _renderIpodDetail() {
     const albums = group.albums.map(album => {
       const albumKey = `${group.key}\u0000${album.key}`;
       const albumOpen = ui.openAlbums.has(albumKey);
-      return `<div class="ipod-detail-album"><button class="ipod-detail-album-head" onclick="App.ipodDetailToggleAlbum('${encodeURIComponent(group.key)}','${encodeURIComponent(album.key)}')"><span class="ipod-detail-album-icon">${_IPOD_DETAIL_ALBUM}</span><span><b>${esc(album.name)}</b><small>${album.tracks.length} track${album.tracks.length === 1 ? '' : 's'}</small></span><i class="ipod-detail-chevron${albumOpen ? ' open' : ''}">${_IPOD_DETAIL_CHEVRON}</i></button>${albumOpen ? `<div class="ipod-detail-leaves">${album.tracks.map(track => `<div class="ipod-detail-leaf"><span class="ipod-detail-album-icon">${_IPOD_DETAIL_TRACK}</span><span><b>${esc(track.title || 'Untitled')}</b><small>${esc(track.genre || 'Unknown genre')}</small></span><em>${esc(_ipodDetailFormat(track.filetype))}</em><button class="ipod-detail-icon-btn danger" title="Remove track" aria-label="Remove ${esc(track.title || 'track')}" onclick="App.removeSelectedIpodTracks('${ipod.id}', [${JSON.stringify(String(track.device_track_id))}])">${_GEAR_ICON_TRASH}</button></div>`).join('')}</div>` : ''}</div>`;
+      return `<div class="ipod-detail-album"><button class="ipod-detail-album-head" onclick="App.ipodDetailToggleAlbum('${encodeURIComponent(group.key)}','${encodeURIComponent(album.key)}')">${_ipodDetailThumb({ ...album.tracks[0], album: album.name }, 'album')}<span><b>${esc(album.name)}</b><small>${album.tracks.length} track${album.tracks.length === 1 ? '' : 's'}</small></span><i class="ipod-detail-chevron${albumOpen ? ' open' : ''}">${_IPOD_DETAIL_CHEVRON}</i></button>${albumOpen ? `<div class="ipod-detail-leaves">${album.tracks.map(track => `<div class="ipod-detail-leaf">${_ipodDetailThumb(track, 'track')}<span><b>${esc(track.title || 'Untitled')}</b><small>${esc(track.genre || 'Unknown genre')}</small></span><em>${esc(_ipodDetailFormat(track.filetype))}</em><button class="ipod-detail-icon-btn danger" title="Remove track" aria-label="Remove ${esc(track.title || 'track')}" onclick="App.removeSelectedIpodTracks('${ipod.id}', [${JSON.stringify(String(track.device_track_id))}])">${_GEAR_ICON_TRASH}</button></div>`).join('')}</div>` : ''}</div>`;
     }).join('');
-    return `<div class="ipod-detail-artist"><button class="ipod-detail-artist-head" onclick="App.ipodDetailToggleArtist('${encodeURIComponent(group.key)}')"><span class="ipod-detail-row-icon">${_IPOD_DETAIL_TRACK}</span><span><b>${esc(group.name)}</b><small>${group.albums.length} album${group.albums.length === 1 ? '' : 's'}</small></span><em>${group.tracks.length} tracks</em><i class="ipod-detail-chevron${artistOpen ? ' open' : ''}">${_IPOD_DETAIL_CHEVRON}</i></button>${artistOpen ? `<div class="ipod-detail-artist-body">${albums}</div>` : ''}</div>`;
+    return `<div class="ipod-detail-artist"><button class="ipod-detail-artist-head" onclick="App.ipodDetailToggleArtist('${encodeURIComponent(group.key)}')">${_ipodDetailThumb({ name: group.name, artwork_key: group.tracks[0]?.artwork_key }, 'artist')}<span><b>${esc(group.name)}</b><small>${group.albums.length} album${group.albums.length === 1 ? '' : 's'}</small></span><em>${group.tracks.length} tracks</em><i class="ipod-detail-chevron${artistOpen ? ' open' : ''}">${_IPOD_DETAIL_CHEVRON}</i></button>${artistOpen ? `<div class="ipod-detail-artist-body">${albums}</div>` : ''}</div>`;
   }).join('') || '<p class="ipod-detail-empty">No matching tracks.</p>';
   const tracksBody = isOpen('tracks') ? `<div class="ipod-detail-artists">${trackRows}</div>${_ipodDetailPagination(ui.trackPage, trackPages, `${artistGroups.length} artists · ${artistGroups.length ? `${trackStart + 1}–${Math.min(artistGroups.length, trackStart + IPOD_DETAIL_PAGE_SIZE)}` : '0'} shown`, 'tracks')}` : '';
   const syncAction = `<button id="ipod-sync-check-btn" class="ipod-detail-btn small ghost" ${ipod.mounted && ipod.last_scanned_at ? `onclick="App.checkIpodSync('${ipod.id}')"` : 'disabled title="Scan the library above first"'}>${_IPOD_DETAIL_REFRESH} Check for changes</button>`;
   content.innerHTML = `<div class="ipod-detail-page">
-    <div class="ipod-detail-chrome"><button class="ipod-detail-back" title="Back to Gear" aria-label="Back to Gear" onclick="App.navBack()">${_IPOD_DETAIL_BACK}</button><span><button class="ipod-detail-icon-btn" title="Rename iPod" aria-label="Rename iPod" onclick="App.ipodDetailRename()">${_IPOD_DETAIL_MORE}</button><button class="ipod-detail-icon-btn danger" title="Remove iPod" aria-label="Remove iPod" onclick="App.deleteIpod('${ipod.id}')">${_GEAR_ICON_TRASH}</button></span></div>
     <div class="ipod-detail-identity"><span class="ipod-detail-badge">${_IPOD_DETAIL_DEVICE}</span><span><h1>${esc(ipod.name || 'iPod')}</h1><p>${esc(ipod.mounted ? (ipod.active_mount_path || 'Connected') : 'Not connected')}</p></span></div>
     <div class="ipod-detail-action-row"><button id="ipod-scan-btn" class="ipod-detail-btn primary" ${ipod.mounted ? `onclick="App.scanIpod('${ipod.id}')"` : 'disabled title="Connect the iPod to scan it"'}>${_IPOD_DETAIL_REFRESH} Scan library</button><span id="ipod-scan-status-line">${ipod.last_scanned_at ? `Last scanned ${esc(_fmtRelDate(ipod.last_scanned_at))}` : 'Not scanned yet'}</span></div>
     <section class="ipod-detail-section">${sectionHead('configuration', 'Configuration', '6 fields')}${config}</section>
     <section class="ipod-detail-section">${sectionHead('backups', 'Backups', backups.length)}${backupsBody}</section>
-    <section class="ipod-detail-section ipod-detail-sync">${sectionHead('sync', 'Sync', null, syncAction)}<div id="ipod-sync-summary" class="ipod-detail-note">No changes checked yet this session — run a check to compare your library against what’s on this iPod.</div><span id="ipod-sync-status-line" class="ipod-detail-sync-status"></span></section>
+    <section class="ipod-detail-section ipod-detail-sync">${sectionHead('sync', 'Sync', null, syncAction)}${isOpen('sync') ? '<div id="ipod-sync-summary" class="ipod-detail-note">No changes checked yet this session — run a check to compare your library against what’s on this iPod.</div><span id="ipod-sync-status-line" class="ipod-detail-sync-status"></span>' : ''}</section>
     <section class="ipod-detail-section">${sectionHead('playlists', 'Playlists', `${Number(ipod.playlist_count || playlists.length).toLocaleString()} playlists`, `<label class="ipod-detail-search">${_IPOD_DETAIL_SEARCH}<input value="${esc(ui.playlistQuery)}" placeholder="Search playlists…" oninput="App.ipodDetailSetQuery('playlists',this.value)"></label>`)}${playlistsBody}</section>
     <section class="ipod-detail-section">${sectionHead('tracks', 'Tracks', `${Number(ipod.track_count || tracks.length).toLocaleString()} tracks`, `<label class="ipod-detail-search">${_IPOD_DETAIL_SEARCH}<input value="${esc(ui.trackQuery)}" placeholder="Search artists, tracks, albums…" oninput="App.ipodDetailSetQuery('tracks',this.value)"></label>`)}${tracksBody}</section>
   </div>`;
@@ -13401,6 +13422,7 @@ function _renderIpodDetail() {
 function _ipodDetailFormat(filetype) {
   const value = String(filetype || '').trim();
   if (!value) return 'AUDIO';
+  if (/apple\s+lossless/i.test(value)) return 'ALAC';
   return value.toUpperCase().replace(/^MPEG AUDIO$/i, 'MP3');
 }
 
@@ -13567,6 +13589,10 @@ async function _pollIpodScanStatus(id) {
 }
 
 async function checkIpodSync(id) {
+  if (_ipodDetailUi?.id === id && !_ipodDetailUi.openSections.has('sync')) {
+    _ipodDetailUi.openSections.add('sync');
+    _renderIpodDetail();
+  }
   const btn = document.getElementById('ipod-sync-check-btn');
   const statusLine = document.getElementById('ipod-sync-status-line');
   if (btn) btn.disabled = true;
@@ -13616,8 +13642,27 @@ async function _pollIpodSyncStatus(id) {
       <span><b>${plan.playlists_to_create_count || 0}</b> playlists to create</span>
       <span><b>${plan.playlists_to_update?.length || 0}</b> playlists to update</span>
     </div>
-    <button class="ipod-detail-btn primary ipod-detail-sync-now" onclick="App.runIpodSync('${id}')">${_IPOD_DETAIL_REFRESH} Sync now</button>
+    <button class="ipod-detail-btn primary ipod-detail-sync-now" onclick="App.openIpodSyncWizard('${id}')">${_IPOD_DETAIL_REFRESH} Sync now</button>
   `;
+}
+
+async function openIpodSyncWizard(ipodId) {
+  // The iPod flow uses its own second wizard stage (sw-step-ipod), where
+  // the user can review device contents and select exactly what to sync.
+  state.view = 'sync';
+  clearSelection();
+  setActiveNav('sync');
+  showViewEl('sync');
+  await loadSyncView();
+  const ipod = await api(`/ipods/${ipodId}`).catch(() => null);
+  if (!ipod) { toast('Could not load this iPod.'); return; }
+  _sw.device = {
+    id: ipod.id, name: ipod.name, deviceType: 'ipod', mounted: ipod.mounted,
+    mount: ipod.active_mount_path, track_count: ipod.track_count,
+    playlist_count: ipod.playlist_count, last_scanned_at: ipod.last_scanned_at,
+    capacity_bytes: ipod.capacity_bytes, used_bytes: ipod.used_bytes,
+  };
+  _swGoTo('ipod');
 }
 
 async function runIpodSync(id) {
@@ -24054,6 +24099,7 @@ const App = {
   deleteIpod,
   scanIpod,
   checkIpodSync,
+  openIpodSyncWizard,
   runIpodSync,
   swScanIpod,
   swRunIpodSync,
