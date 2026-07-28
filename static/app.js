@@ -9660,6 +9660,9 @@ async function loadSyncView() {
   // Highlight sync nav button
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.getElementById('sync-nav-btn')?.classList.add('sw-nav-active');
+  // Show a loading state immediately — device list + status check below are async
+  const deviceListEl = document.getElementById('sw-device-list');
+  if (deviceListEl) deviceListEl.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
   // Prefetch albums for artwork display in Step 3 (fire-and-forget)
   if (!state.albums?.length) {
     api('/library/albums').then(a => { state.albums = a; }).catch(() => {});

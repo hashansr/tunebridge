@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Show a loading spinner while devices load on the Sync screen's device picker, instead of a blank gap
 
 ## v0.610-rc.280726-1435 · 2026-07-28
 
