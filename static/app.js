@@ -11842,39 +11842,35 @@ function _gearStatusPillHtml(iconSvg, className, text) {
   return `<span class="gear-sync-badge ${className}"><span class="gear-pill-icon">${iconSvg}</span><span>${esc(text)}</span></span>`;
 }
 
-function _gearStatusValue(variant, text) {
-  return `<span class="gear-row-value gear-row-value--${variant}">${esc(text)}</span>`;
+function _gearStatusChip(variant, text, withDot = false) {
+  return `<span class="gear-status-chip gear-status-chip--${variant}">${withDot ? '<span class="gear-status-dot"></span>' : ''}${esc(text)}</span>`;
 }
 
 function _dapSyncChip(d, summary, isChecking) {
-  if (isChecking) return _gearStatusValue('muted', 'Checking status');
+  if (isChecking) return _gearStatusChip('muted', 'Checking sync status');
   const musicChanges = Number(summary.music_to_add_count || 0) + Number(summary.music_to_remove_count || 0);
   const playlistChanges = Number(d.never_exported || 0) + Number(d.stale_count || 0);
   const changes = musicChanges + playlistChanges;
   const hasLiveStatus = !!d.mounted && String(summary.sync_status_state || 'estimated') === 'verified' && Number(summary.last_verified_at || 0) > 0;
-  if (!hasLiveStatus) return _gearStatusValue('muted', 'Check status');
-  if (!changes) return _gearStatusValue('sub', 'Up to date');
-  return _gearStatusValue('warning', `${changes} pending`);
+  if (!hasLiveStatus) return _gearStatusChip('muted', 'Check sync status');
+  if (!changes) return _gearStatusChip('success', 'Up to date');
+  return _gearStatusChip('warning', `${changes} update${changes === 1 ? '' : 's'} pending`);
 }
 
 function _buildDapRowHtml(d) {
   const summary        = d.sync_summary || {};
   const connOn         = !!d.mounted;
   const isChecking     = String(summary.sync_status_state || 'estimated') === 'checking';
-  const isIpodLike     = /ipod|rockbox/i.test(`${d.name || ''} ${d.model || ''}`);
-  const subLabel       = isIpodLike
-    ? `Click-wheel iPod${/rockbox/i.test(`${d.name || ''} ${d.model || ''}`) ? ' · RockBox firmware' : ''}`
-    : 'Digital audio player';
 
   return `
     <div class="gear-row gear-row-dap" onclick="App.showDapDetail('${d.id}')">
-      <span class="gear-row-icon">${isIpodLike ? _IPOD_SVG : _DAP_SVG}</span>
+      <span class="gear-row-icon">${_DAP_SVG}</span>
       <div class="gear-row-info">
         <div class="gear-row-name">${esc(d.name)}</div>
-        <div class="gear-row-sub">${subLabel}</div>
+        <div class="gear-row-sub">Digital audio player</div>
       </div>
-      <div class="gear-row-values">
-        ${_gearStatusValue(connOn ? 'sub' : 'muted', connOn ? 'Connected' : 'Not connected')}
+      <div class="gear-row-chips">
+        ${_gearStatusChip(connOn ? 'success' : 'muted', connOn ? 'Connected' : 'Not connected', true)}
         ${_dapSyncChip(d, summary, isChecking)}
       </div>
       ${_GEAR_CHEVRON}
@@ -11893,7 +11889,7 @@ async function loadIemsView() {
   const empty = document.getElementById('iems-empty');
   const cmpBtn = document.getElementById('iems-compare-btn');
   const count = document.getElementById('gear-iems-count');
-  if (count) count.textContent = `· ${iems.length}`;
+  if (count) count.textContent = `· ${iems.length} ${iems.length === 1 ? 'IEM' : 'IEMs'}`;
   if (!iems.length) {
     grid.innerHTML = '';
     empty.style.display = 'flex';
@@ -11930,8 +11926,8 @@ function _renderIemCards(iems) {
         <div class="gear-row-name">${esc(i.name)}</div>
         <div class="gear-row-sub">${subLabel}</div>
       </div>
-      <div class="gear-row-values">
-        ${_gearStatusValue(peqCount > 0 ? 'sub' : 'muted', peqStr)}
+      <div class="gear-row-chips">
+        ${_gearStatusChip(peqCount > 0 ? 'accent' : 'muted', peqStr)}
       </div>
       ${endControl}
     </div>`;
@@ -13213,8 +13209,8 @@ function _buildIpodRowHtml(ip) {
         <div class="gear-row-name">${esc(ip.name)}</div>
         <div class="gear-row-sub">${esc(scanTxt)}</div>
       </div>
-      <div class="gear-row-values">
-        ${_gearStatusValue(connOn ? 'sub' : 'muted', connOn ? 'Connected' : 'Not connected')}
+      <div class="gear-row-chips">
+        ${_gearStatusChip(connOn ? 'success' : 'muted', connOn ? 'Connected' : 'Not connected', true)}
       </div>
       ${_GEAR_CHEVRON}
     </div>`;
@@ -13234,7 +13230,7 @@ async function loadDevicesView() {
 
   const count = document.getElementById('gear-devices-count');
   const total = daps.length + ipods.length;
-  if (count) count.textContent = `· ${total}`;
+  if (count) count.textContent = `· ${total} ${total === 1 ? 'device' : 'devices'}`;
 
   if (!daps.length && !ipods.length) { grid.innerHTML = ''; empty.style.display = 'flex'; return; }
   empty.style.display = 'none';
