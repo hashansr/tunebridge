@@ -11736,7 +11736,7 @@ function syncScanAgain() { loadSyncView(); }
 /* ── DAP management ─────────────────────────────────────────────────── */
 
 // Icon used for all DAP rows/headers
-const _DAP_SVG = `<span class="gear-mask-icon gear-mask-icon-dap" aria-hidden="true"></span>`;
+const _DAP_SVG = `<svg viewBox="0 0 36 40" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="4" y="2" width="28" height="36" rx="4"/><rect x="7.5" y="5" width="21" height="14" rx="1" opacity=".45"/><circle cx="18" cy="29" r="5"/><circle cx="18" cy="29" r="1.4" fill="currentColor" opacity=".7"/></svg>`;
 const _IEM_ICON_HTML = `<img src="icons/earphone-1-svgrepo-com.svg" alt="" class="gear-iem-icon-image" loading="lazy" decoding="async" />`;
 const _HEADPHONE_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`;
 const _GEAR_DOTS = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`;
@@ -11747,6 +11747,7 @@ const _GEAR_ICON_EDIT = `<svg width="14" height="14" viewBox="0 0 24 24" fill="c
 const _GEAR_ICON_TRASH = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 1.5V2.5H3C2.44772 2.5 2 2.94772 2 3.5V4.5C2 5.05228 2.44772 5.5 3 5.5H21C21.5523 5.5 22 5.05228 22 4.5V3.5C22 2.94772 21.5523 2.5 21 2.5H16V1.5C16 0.947715 15.5523 0.5 15 0.5H9C8.44772 0.5 8 0.947715 8 1.5Z"/><path d="M3.9231 7.5H20.0767L19.1344 20.2216C19.0183 21.7882 17.7135 23 16.1426 23H7.85724C6.28636 23 4.98148 21.7882 4.86544 20.2216L3.9231 7.5Z"/></svg>`;
 const _GEAR_ICON_EQ = `<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M3 12V8M3 6V2M7 12V9M7 7V2M11 12V6M11 4V2"/><circle cx="3" cy="7" r="1.2" fill="currentColor"/><circle cx="7" cy="8" r="1.2" fill="currentColor"/><circle cx="11" cy="5" r="1.2" fill="currentColor"/></svg>`;
 const _GEAR_ICON_COMPARE = `<svg width="13" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><rect x="0.5" y="1.5" width="5" height="9" rx="1"/><rect x="8.5" y="1.5" width="5" height="9" rx="1"/><path d="M5.5 6h3"/></svg>`;
+const _GEAR_CHEVRON = `<svg class="gear-row-chevron" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 2 5 5-5 5"/></svg>`;
 const _GEAR_ICON_WARN = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 4.3 2.7 17.2A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`;
 const _GEAR_ICON_WARN_LARGE = `<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 4.3 2.7 17.2A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`;
 const _GEAR_ICON_CHECK_LARGE = `<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
@@ -11841,39 +11842,25 @@ function _gearStatusPillHtml(iconSvg, className, text) {
   return `<span class="gear-sync-badge ${className}"><span class="gear-pill-icon">${iconSvg}</span><span>${esc(text)}</span></span>`;
 }
 
+function _gearStatusChip(variant, text, withDot = false) {
+  return `<span class="gear-status-chip gear-status-chip--${variant}">${withDot ? '<span class="gear-status-dot"></span>' : ''}${esc(text)}</span>`;
+}
+
+function _dapSyncChip(d, summary, isChecking) {
+  if (isChecking) return _gearStatusChip('muted', 'Checking sync status');
+  const musicChanges = Number(summary.music_to_add_count || 0) + Number(summary.music_to_remove_count || 0);
+  const playlistChanges = Number(d.never_exported || 0) + Number(d.stale_count || 0);
+  const changes = musicChanges + playlistChanges;
+  const hasLiveStatus = !!d.mounted && String(summary.sync_status_state || 'estimated') === 'verified' && Number(summary.last_verified_at || 0) > 0;
+  if (!hasLiveStatus) return _gearStatusChip('muted', 'Check sync status');
+  if (!changes) return _gearStatusChip('success', 'Up to date');
+  return _gearStatusChip('warning', `${changes} update${changes === 1 ? '' : 's'} pending`);
+}
+
 function _buildDapRowHtml(d) {
   const summary        = d.sync_summary || {};
-  const musicStatus    = _dapMusicStatus(summary, !!d.mounted);
-  const playlistStatus = _dapPlaylistStatus(d, summary);
   const connOn         = !!d.mounted;
   const isChecking     = String(summary.sync_status_state || 'estimated') === 'checking';
-
-  const _dotClass = cls => cls === 'gear-sync-ok' ? 'gear-dot--on' : cls === 'gear-sync-stale' ? 'gear-dot--warn' : 'gear-dot--off';
-  const _lblClass = cls => cls === 'gear-sync-ok' ? 'gear-status-label--on' : cls === 'gear-sync-stale' ? 'gear-status-label--warn' : 'gear-status-label--off';
-
-  // Connection column
-  const connDot = connOn ? 'gear-dot--on' : 'gear-dot--off';
-  const connLbl = connOn ? 'gear-status-label--on' : 'gear-status-label--off';
-  const connTxt = connOn ? 'Connected' : 'Not connected';
-
-  // Music sync column
-  const musicTextMap = { 'Check status': 'Check status', 'Library in sync': 'Synched', 'Library update needed': 'Out of sync' };
-  const musicTxt = musicTextMap[musicStatus.text] || musicStatus.text;
-
-  // Playlist sync column — plain muted text, no dot, just counts
-  const never = Number(d.never_exported || 0);
-  const stale = Number(d.stale_count || 0);
-  let plTxt;
-  if (playlistStatus.className === 'gear-sync-ok') {
-    plTxt = 'Synched';
-  } else if (playlistStatus.className === 'gear-sync-neutral') {
-    plTxt = 'Check status';
-  } else {
-    const parts = [];
-    if (never > 0) parts.push(`${never} new`);
-    if (stale > 0) parts.push(`${stale} updated`);
-    plTxt = parts.length ? parts.join(', ') : 'Out of sync';
-  }
 
   return `
     <div class="gear-row gear-row-dap" onclick="App.showDapDetail('${d.id}')">
@@ -11882,23 +11869,11 @@ function _buildDapRowHtml(d) {
         <div class="gear-row-name">${esc(d.name)}</div>
         <div class="gear-row-sub">Digital audio player</div>
       </div>
-      <div class="gear-row-status">
-        ${connOn ? `<span class="gear-status-dot ${connDot}"></span>` : _STATUS_ICON_NOT_CONNECTED}
-        <span class="gear-status-label ${connLbl}">${connTxt}</span>
+      <div class="gear-row-chips">
+        ${_gearStatusChip(connOn ? 'success' : 'muted', connOn ? 'Connected' : 'Not connected', true)}
+        ${_dapSyncChip(d, summary, isChecking)}
       </div>
-      <div class="gear-row-status">
-        ${musicStatus.text === 'Check status' ? _STATUS_ICON_CHECK(isChecking) : `<span class="gear-status-dot ${_dotClass(musicStatus.className)}"></span>`}
-        <span class="gear-status-label ${_lblClass(musicStatus.className)}">${esc(musicTxt)}</span>
-      </div>
-      <div class="gear-row-status">
-        <span class="gear-pl-icon">${_PL_ICON}</span>
-        <span class="gear-status-label gear-status-label--off">${esc(plTxt)}</span>
-      </div>
-      <div class="gear-row-actions" onclick="event.stopPropagation()">
-        ${connOn ? `<button class="gear-icon-btn" id="eject-btn-${d.id}" title="Safely eject" onclick="App.ejectDap('${d.id}', '${esc(d.name)}')">${_GEAR_ICON_EJECT}</button>` : ''}
-        <button class="gear-icon-btn" title="Edit" onclick="App.showEditDapModal('${d.id}')">${_GEAR_ICON_EDIT}</button>
-        <button class="gear-icon-btn" title="Delete" onclick="App.deleteDap('${d.id}')">${_GEAR_ICON_TRASH}</button>
-      </div>
+      ${_GEAR_CHEVRON}
     </div>`;
 }
 
@@ -11913,6 +11888,8 @@ async function loadIemsView() {
   const grid  = document.getElementById('iems-grid');
   const empty = document.getElementById('iems-empty');
   const cmpBtn = document.getElementById('iems-compare-btn');
+  const count = document.getElementById('gear-iems-count');
+  if (count) count.textContent = `· ${iems.length} ${iems.length === 1 ? 'IEM' : 'IEMs'}`;
   if (!iems.length) {
     grid.innerHTML = '';
     empty.style.display = 'flex';
@@ -11933,17 +11910,15 @@ function _renderIemCards(iems) {
     const typeLabel   = String(i.type || 'IEM');
     const isHeadphone = /headphone|over-?ear|on-?ear/i.test(typeLabel);
     const peqCount    = i.peq_profiles?.length || 0;
-    const peqStr      = peqCount > 0 ? `${peqCount} PEQ ${peqCount === 1 ? 'profile' : 'profiles'}` : '—';
+    const peqStr      = peqCount > 0 ? `${peqCount} PEQ ${peqCount === 1 ? 'profile' : 'profiles'}` : 'No PEQ profile';
     const isSelected  = _iemCompareSelected.has(i.id);
     const clickAction = _iemCompareMode
       ? `App.toggleIemCompareSelect('${i.id}', event)`
       : `App.showIemDetail('${i.id}')`;
     const subLabel = isHeadphone ? 'Headphones' : 'In-ear monitor';
-    const actions = _iemCompareMode
+    const endControl = _iemCompareMode
       ? `<div class="gear-compare-check${isSelected ? ' checked' : ''}"></div>`
-      : `<button class="gear-hdr-btn gear-hdr-btn--sm gear-hdr-btn--ghost" onclick="App.openPeqEditor({iemId:'${i.id}',mode:'create'});event.stopPropagation()">${_GEAR_ICON_EQ} Edit PEQ</button>
-         <button class="gear-icon-btn" title="Edit" onclick="App.showEditIemModal('${i.id}');event.stopPropagation()">${_GEAR_ICON_EDIT}</button>
-         <button class="gear-icon-btn" title="Delete" onclick="App.deleteIem('${i.id}');event.stopPropagation()">${_GEAR_ICON_TRASH}</button>`;
+      : _GEAR_CHEVRON;
     return `
     <div class="gear-row gear-row-iem${isSelected ? ' gear-row--selected' : ''}" id="gear-iem-card-${i.id}" onclick="${clickAction}">
       <span class="gear-row-icon">${isHeadphone ? _HEADPHONE_SVG : _IEM_ICON_HTML}</span>
@@ -11951,9 +11926,10 @@ function _renderIemCards(iems) {
         <div class="gear-row-name">${esc(i.name)}</div>
         <div class="gear-row-sub">${subLabel}</div>
       </div>
-      <div><span class="gear-row-type-tag">${esc(typeLabel)}</span></div>
-      <div class="gear-row-peq">${peqStr}</div>
-      <div class="gear-row-actions" onclick="event.stopPropagation()">${actions}</div>
+      <div class="gear-row-chips">
+        ${_gearStatusChip(peqCount > 0 ? 'accent' : 'muted', peqStr)}
+      </div>
+      ${endControl}
     </div>`;
   }).join('');
 }
@@ -13175,7 +13151,7 @@ async function deleteDap(id) {
  * same CSS classes and .gear-row list pattern.
  */
 
-const _IPOD_SVG = `<span class="gear-mask-icon gear-mask-icon-dap" aria-hidden="true"></span>`;
+const _IPOD_SVG = `<svg viewBox="0 0 34 40" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="6" y="2" width="22" height="36" rx="5"/><circle cx="17" cy="25" r="8.5"/><circle cx="17" cy="25" r="1.6" fill="currentColor"/></svg>`;
 let _ipodMountCandidates = [];
 let _ipodSaveInFlight = false;
 
@@ -13223,28 +13199,20 @@ async function updateIpodModel(id, deviceClass) {
 
 function _buildIpodRowHtml(ip) {
   const connOn = !!ip.mounted;
-  const connDot = connOn ? 'gear-dot--on' : 'gear-dot--off';
-  const connLbl = connOn ? 'gear-status-label--on' : 'gear-status-label--off';
-  const connTxt = connOn ? 'Connected' : 'Not connected';
-  const scanTxt = ip.last_scanned_at ? `${ip.track_count} tracks, ${ip.playlist_count} playlists` : 'Not scanned yet';
+  const scanTxt = ip.last_scanned_at
+    ? `Click-wheel iPod · ${ip.track_count} tracks · ${ip.playlist_count} playlists`
+    : 'Click-wheel iPod · Not scanned yet';
   return `
     <div class="gear-row gear-row-dap" onclick="App.showIpodDetail('${ip.id}')">
       <span class="gear-row-icon">${_IPOD_SVG}</span>
       <div class="gear-row-info">
         <div class="gear-row-name">${esc(ip.name)}</div>
-        <div class="gear-row-sub">Click-wheel iPod</div>
+        <div class="gear-row-sub">${esc(scanTxt)}</div>
       </div>
-      <div class="gear-row-status">
-        ${connOn ? `<span class="gear-status-dot ${connDot}"></span>` : _STATUS_ICON_NOT_CONNECTED}
-        <span class="gear-status-label ${connLbl}">${connTxt}</span>
+      <div class="gear-row-chips">
+        ${_gearStatusChip(connOn ? 'success' : 'muted', connOn ? 'Connected' : 'Not connected', true)}
       </div>
-      <div class="gear-row-status">
-        <span class="gear-status-label gear-status-label--off">${esc(scanTxt)}</span>
-      </div>
-      <div><span class="gear-row-type-tag">iPod</span></div>
-      <div class="gear-row-actions" onclick="event.stopPropagation()">
-        <button class="gear-icon-btn" title="Delete" onclick="App.deleteIpod('${ip.id}')">${_GEAR_ICON_TRASH}</button>
-      </div>
+      ${_GEAR_CHEVRON}
     </div>`;
 }
 
@@ -13259,6 +13227,10 @@ async function loadDevicesView() {
     api('/ipods').catch(() => []),
   ]);
   refreshSidebarSyncIndicator(daps);
+
+  const count = document.getElementById('gear-devices-count');
+  const total = daps.length + ipods.length;
+  if (count) count.textContent = `· ${total} ${total === 1 ? 'device' : 'devices'}`;
 
   if (!daps.length && !ipods.length) { grid.innerHTML = ''; empty.style.display = 'flex'; return; }
   empty.style.display = 'none';

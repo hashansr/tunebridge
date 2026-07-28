@@ -27960,3 +27960,209 @@ body.is-col-resizing {
 .sh-prev-toggle:hover { color: var(--text-1); }
 
 .sh-prev-list { margin-top: 6px; }
+
+/* ── Gear page redesign ─────────────────────────────────────────────── */
+#view-gear {
+  padding: 32px 40px 96px;
+  background: var(--app-page-gradient);
+}
+
+#view-gear .gear-page-header {
+  margin: 0 0 40px;
+}
+
+#view-gear .tb-page-title {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+#view-gear .gear-sec-hdr {
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#view-gear .gear-sec-hdr--secondary {
+  margin-top: 44px;
+}
+
+#view-gear .gear-sec-hdr-left {
+  gap: 10px;
+  flex: 0 1 auto;
+}
+
+#view-gear .gear-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+#view-gear .gear-hdr-count {
+  font-size: 11px;
+}
+
+#view-gear .gear-sec-hdr-right {
+  margin-left: auto;
+  gap: 8px;
+}
+
+#view-gear .gear-hdr-btn {
+  height: 32px;
+  padding: 0 15px;
+  background: transparent;
+  border-color: rgba(65, 71, 85, 0.32);
+  font-size: 12.5px;
+}
+
+#view-gear .gear-hdr-btn:hover {
+  background: var(--bg-elevated);
+  border-color: var(--accent);
+}
+
+#view-gear .gear-hdr-btn--primary {
+  padding: 0 16px;
+  border-color: transparent;
+  background: var(--accent);
+}
+
+#view-gear .gear-list {
+  padding: 0;
+}
+
+#view-gear .gear-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 72px;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  transition: background 0.14s ease;
+}
+
+#view-gear .gear-row:hover {
+  background: var(--bg-hover);
+}
+
+#view-gear .gear-row:last-child {
+  border-bottom: 0;
+}
+
+#view-gear .gear-row-icon {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--accent);
+}
+
+#view-gear .gear-row-icon svg,
+#view-gear .gear-row-icon .gear-iem-icon-image {
+  width: 20px;
+  height: 20px;
+}
+
+#view-gear .gear-row-icon .gear-mask-icon {
+  width: 20px;
+  height: 20px;
+}
+
+#view-gear .gear-row-info {
+  flex: 1;
+}
+
+#view-gear .gear-row-name {
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+#view-gear .gear-row-sub {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+#view-gear .gear-row-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+#view-gear .gear-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+#view-gear .gear-status-chip--success {
+  color: var(--accent-success);
+  background: rgba(83, 225, 111, 0.12);
+}
+
+#view-gear .gear-status-chip--warning {
+  color: var(--accent-warning);
+  background: rgba(240, 180, 41, 0.12);
+}
+
+#view-gear .gear-status-chip--muted {
+  color: var(--text-muted);
+  background: rgba(107, 107, 123, 0.15);
+}
+
+#view-gear .gear-status-chip--accent {
+  color: var(--accent);
+  background: rgba(173, 198, 255, 0.12);
+}
+
+#view-gear .gear-status-chip .gear-status-dot {
+  background: currentColor;
+  box-shadow: none;
+  opacity: 1;
+}
+
+#view-gear .gear-row-chevron {
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+#view-gear .gear-row--selected,
+#view-gear .gear-row--selected:hover {
+  background: rgba(173, 198, 255, 0.10);
+}
+
+#view-gear .gear-compare-check {
+  margin-left: 4px;
+}
+
+@media (max-width: 760px) {
+  #view-gear { padding: 28px 20px 96px; }
+  #view-gear .gear-page-header { margin-bottom: 30px; }
+  #view-gear .gear-sec-hdr { align-items: flex-start; flex-wrap: wrap; }
+  #view-gear .gear-sec-hdr-right { width: 100%; margin-left: 0; flex-wrap: wrap; }
+  #view-gear .gear-row { padding: 14px 8px; gap: 10px; }
+  #view-gear .gear-row-chips { justify-content: flex-start; }
+}
+
+@media (max-width: 560px) {
+  #view-gear .gear-row { align-items: flex-start; flex-wrap: wrap; }
+  #view-gear .gear-row-info { min-width: calc(100% - 58px); }
+  #view-gear .gear-row-chips { width: calc(100% - 58px); margin-left: 54px; }
+  #view-gear .gear-row-chevron { position: absolute; right: 8px; top: 28px; }
+}

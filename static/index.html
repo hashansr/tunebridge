@@ -869,14 +869,15 @@
 
       <!-- Gear view (DAPs + IEMs) -->
       <div id="view-gear" class="view" style="display:none">
-        <div class="tb-page-header">
+        <div class="tb-page-header gear-page-header">
           <h2 class="tb-page-title">Gear</h2>
         </div>
 
         <!-- Devices section (DAPs + iPods, unified list) -->
-        <div class="gear-sec-hdr">
+        <div class="gear-sec-hdr" id="gear-devices-header">
           <div class="gear-sec-hdr-left">
             <span class="gear-eyebrow">Devices</span>
+            <span id="gear-devices-count" class="gear-hdr-count"></span>
           </div>
           <div class="gear-sec-hdr-right">
             <button id="gear-check-sync-btn" class="gear-hdr-btn" onclick="App.checkAllDapSyncStatus()">
@@ -902,9 +903,10 @@
         </div>
 
         <!-- IEMs section -->
-        <div class="gear-sec-hdr gear-sec-hdr--secondary">
+        <div class="gear-sec-hdr gear-sec-hdr--secondary" id="gear-listening-header">
           <div class="gear-sec-hdr-left">
             <span class="gear-eyebrow">Listening Gear</span>
+            <span id="gear-iems-count" class="gear-hdr-count"></span>
           </div>
           <div class="gear-sec-hdr-right">
             <button id="iems-create-peq-btn" class="gear-hdr-btn" onclick="App.openPeqEditor({ mode: 'create' })">
