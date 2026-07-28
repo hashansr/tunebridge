@@ -5909,7 +5909,9 @@ function _closeModalOverlaysForNavigation() {
     _resetMlPreviewState();
     closeMlPlaylistGenerator();
   }
+  if (_isOverlayOpen('device-type-modal')) closeDeviceTypeModal();
   if (_isOverlayOpen('dap-modal')) closeDapModal();
+  if (_isOverlayOpen('ipod-modal')) closeIpodModal();
   if (_isOverlayOpen('iem-modal')) closeIemModal();
   if (_isOverlayOpen('peq-modal')) closePeqModal();
   if (_isOverlayOpen('rename-modal')) document.getElementById('rename-modal').style.display = 'none';
