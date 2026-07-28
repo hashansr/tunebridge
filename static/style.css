@@ -20729,14 +20729,11 @@ body.is-col-resizing {
 .sw-footer--ipod-review { padding: 13px 40px; border-color: rgba(255,255,255,0.06); background: rgba(19,19,19,.8); backdrop-filter: blur(16px); }
 .sw-footer--ipod-review .sw-footer-status { align-items: stretch; }
 .sw-ipod-review { display: flex; flex-direction: column; flex: 1; min-height: 0; max-width: 1360px; width: 100%; margin: 0 auto; }
-.sw-ipod-chrome { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; padding-top: 12px; }
-.sw-ipod-back { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 1px solid rgba(65,71,85,.38); border-radius: 50%; color: var(--text-sub); background: transparent; cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease; }
-.sw-ipod-back svg { width: 16px; height: 16px; }
-.sw-ipod-back:hover { color: var(--text); background: var(--bg-elevated); border-color: rgba(173,198,255,.32); }
+.sw-ipod-chrome { display: flex; justify-content: flex-end; flex-shrink: 0; padding-top: 2px; }
 .sw-ipod-rescan { display: inline-flex; align-items: center; gap: 9px; padding: 10px 20px; border: 0; border-radius: 999px; color: #0c1933; background: linear-gradient(135deg, #b9cdfb, #9fbcfd); box-shadow: 0 6px 18px rgba(173,198,255,.22); cursor: pointer; font: 700 13px inherit; transition: filter .15s ease, box-shadow .15s ease; }
 .sw-ipod-rescan:hover:not(:disabled) { filter: brightness(1.05); box-shadow: 0 8px 22px rgba(173,198,255,.32); }
 .sw-ipod-rescan:disabled { cursor: default; opacity: .45; }
-.sw-ipod-hero { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding: 0 0 16px; border-bottom: 1px solid rgba(255,255,255,.06); flex-shrink: 0; }
+.sw-ipod-hero { display: flex; align-items: center; gap: 16px; margin-top: 10px; padding: 0 0 14px; border-bottom: 1px solid rgba(255,255,255,.06); flex-shrink: 0; }
 .sw-ipod-device-icon { width: 50px; height: 50px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--accent); background: var(--bg-elevated); border: 1px solid rgba(65,71,85,.38); }
 .sw-ipod-device-icon .gear-mask-icon { width: 25px !important; height: 25px !important; }
 .sw-ipod-identity { min-width: 0; }
@@ -20748,7 +20745,7 @@ body.is-col-resizing {
 .sw-ipod-stats > span { text-align: right; }
 .sw-ipod-stats b { display: block; font-size: 18px; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
 .sw-ipod-stats small { display: block; margin-top: 2px; color: var(--text-muted); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
-.sw-ipod-columns { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 22px; flex: 1; min-height: 0; margin-top: 16px; padding: 0 0 16px; }
+.sw-ipod-columns { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 22px; flex: 1; min-height: 0; margin-top: 14px; padding: 0 0 16px; }
 .sw-ipod-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .sw-ipod-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .sw-ipod-panel > header > b { color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; }
@@ -20759,12 +20756,12 @@ body.is-col-resizing {
 .sw-ipod-svg--close { width: 10px; height: 10px; -webkit-mask-image: url('/icons/close.svg'); mask-image: url('/icons/close.svg'); }
 .sw-ipod-svg--chev { color: var(--text-muted); -webkit-mask-image: url('/icons/accordion-collapsed.svg'); mask-image: url('/icons/accordion-collapsed.svg'); transition: transform .15s; }
 .sw-ipod-svg--chev.open { transform: rotate(90deg); }
-.sw-ipod-tabs { display: inline-flex; gap: 4px; padding: 4px; background: var(--bg-elevated); border: 1px solid rgba(65,71,85,.38); border-radius: 999px; }
-.sw-ipod-tabs button { display: inline-flex; align-items: center; gap: 7px; border: 1px solid transparent; border-radius: 999px; padding: 8px 16px; color: var(--text-sub); background: transparent; font: 600 12.5px inherit; cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.sw-ipod-tabs { display: inline-flex; gap: 2px; padding: 3px; background: var(--bg-elevated); border: 1px solid rgba(65,71,85,.38); border-radius: 999px; }
+.sw-ipod-tabs button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; border-radius: 999px; padding: 6px 11px; color: var(--text-sub); background: transparent; font: 600 12px inherit; cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease; white-space: nowrap; }
 .sw-ipod-tabs button.active { color: var(--accent); background: var(--accent-dim); border-color: rgba(173,198,255,.3); }
-.sw-ipod-tabs small { font-size: 11px; font-weight: 700; margin-left: 1px; opacity: .85; font-variant-numeric: tabular-nums; }
-.sw-ipod-svg--song { width: 13px; height: 13px; -webkit-mask-image: url('/icons/empty-song.svg'); mask-image: url('/icons/empty-song.svg'); }
-.sw-ipod-svg--playlist { width: 13px; height: 13px; -webkit-mask-image: url('/icons/empty-playlist.svg'); mask-image: url('/icons/empty-playlist.svg'); }
+.sw-ipod-tabs small { font-size: 10.5px; font-weight: 700; margin-left: 1px; opacity: .85; font-variant-numeric: tabular-nums; }
+.sw-ipod-svg--song { width: 12px; height: 12px; -webkit-mask-image: url('/icons/songs.svg'); mask-image: url('/icons/songs.svg'); }
+.sw-ipod-svg--playlist { width: 12px; height: 12px; -webkit-mask-image: url('/icons/playlist.svg'); mask-image: url('/icons/playlist.svg'); }
 .sw-ipod-search { display: flex; align-items: center; gap: 8px; padding: 8px 14px; margin-bottom: 10px; color: var(--text-muted); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 999px; line-height: 1; }
 .sw-ipod-search input { min-width: 0; flex: 1; padding: 0; color: var(--text); background: none; border: 0; outline: 0; font: 12.5px inherit; }
 .sw-ipod-search input::placeholder { color: var(--text-muted); }
