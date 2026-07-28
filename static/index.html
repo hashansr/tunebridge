@@ -869,9 +869,14 @@
 
       <!-- Gear view (DAPs + IEMs) -->
       <div id="view-gear" class="view" style="display:none">
-        <div class="tb-page-header gear-page-header">
-          <h2 class="tb-page-title">Gear</h2>
-        </div>
+        <div class="gear-window">
+          <div class="gear-window-titlebar" aria-label="Gear window title bar">
+            <span class="gear-window-control gear-window-control--close" aria-hidden="true"></span>
+            <span class="gear-window-control gear-window-control--minimize" aria-hidden="true"></span>
+            <span class="gear-window-control gear-window-control--zoom" aria-hidden="true"></span>
+            <span class="gear-window-title">Gear</span>
+          </div>
+          <div class="gear-window-content">
 
         <!-- Devices section (DAPs + iPods, unified list) -->
         <div class="gear-sec-hdr" id="gear-devices-header">
@@ -932,6 +937,8 @@
             <p class="empty-title">No gear added yet.</p>
             <p class="empty-subtitle">Add IEMs or headphones to upload PEQ files and view frequency response graphs.</p>
             <button class="btn-secondary empty-cta" onclick="App.showAddIemModal()">+ Add IEM / Headphone</button>
+          </div>
+        </div>
           </div>
         </div>
 
