@@ -11869,13 +11869,14 @@ function _buildDapRowHtml(d) {
   const summary        = d.sync_summary || {};
   const connOn         = !!d.mounted;
   const isChecking     = String(summary.sync_status_state || 'estimated') === 'checking';
+  const subtitle       = String(d.model || '').toLowerCase() === 'rockbox' ? 'Rockbox OS' : 'Digital audio player';
 
   return `
     <div class="gear-row gear-row-dap" onclick="App.showDapDetail('${d.id}')">
       <span class="gear-row-icon">${_dapDeviceIcon(d)}</span>
       <div class="gear-row-info">
         <div class="gear-row-name">${esc(d.name)}</div>
-        <div class="gear-row-sub">Digital audio player</div>
+        <div class="gear-row-sub">${subtitle}</div>
       </div>
       <div class="gear-row-chips">
         ${_gearStatusChip(connOn ? 'success' : 'muted', connOn ? 'Connected' : 'Not connected', true)}
@@ -13396,7 +13397,7 @@ function _renderIpodDetail() {
     const sourceIndex = playlists.indexOf(playlist);
     return `<div class="ipod-detail-playlist-row">${_ipodDetailThumb(playlist, 'playlist')}<span class="ipod-detail-playlist-name">${esc(playlist.name || 'Untitled playlist')}${playlist.is_master ? '<em>MASTER</em>' : ''}</span><span class="ipod-detail-playlist-count">${Number(count).toLocaleString()} tracks</span><button class="ipod-detail-icon-btn" title="More actions" aria-label="More actions" ${playlist.is_master ? 'disabled' : `onclick="App.ipodDetailRemovePlaylist(${sourceIndex})"`}>${playlist.is_master ? _IPOD_DETAIL_MORE : _GEAR_ICON_TRASH}</button></div>`;
   }).join('') || '<p class="ipod-detail-empty">No matching playlists.</p>';
-  const playlistsBody = isOpen('playlists') ? `<div class="ipod-detail-list">${playlistRows}</div>${_ipodDetailPagination(ui.playlistPage, plPages, filteredPlaylists.length ? `${plStart + 1}–${Math.min(filteredPlaylists.length, plStart + IPOD_DETAIL_PAGE_SIZE)} of ${filteredPlaylists.length}` : '0 playlists', 'playlists')}</div>` : '';
+  const playlistsBody = isOpen('playlists') ? `<div class="ipod-detail-list">${playlistRows}</div>${_ipodDetailPagination(ui.playlistPage, plPages, filteredPlaylists.length ? `${plStart + 1}–${Math.min(filteredPlaylists.length, plStart + IPOD_DETAIL_PAGE_SIZE)} of ${filteredPlaylists.length}` : '0 playlists', 'playlists')}` : '';
   const needle = ui.trackQuery.trim().toLocaleLowerCase();
   const artistGroups = _ipodDetailArtistGroups(tracks).filter(group => !needle || `${group.name} ${group.tracks.map(t => `${t.title || ''} ${t.album || ''} ${t.genre || ''}`).join(' ')}`.toLocaleLowerCase().includes(needle));
   const trackPages = Math.max(1, Math.ceil(artistGroups.length / IPOD_DETAIL_PAGE_SIZE));
