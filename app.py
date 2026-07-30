@@ -12647,7 +12647,6 @@ def ipod_sync_execute(iid):
                     for local_track_id in pl.get('tracks', []):
                         t = local_by_id.get(local_track_id)
                         if not t:
-                            missing_member_titles.append(str(local_track_id))
                             continue
                         key = match_key(t.get('title'), t.get('artist'), t.get('album'))
                         if key not in key_to_device_db_track_id:
@@ -12876,6 +12875,7 @@ def ipod_sync_execute(iid):
                             continue
                         t = local_by_id.get(local_track_id)
                         if not t:
+                            missing_member_titles.append(str(local_track_id))
                             continue
                         key = match_key(t.get('title'), t.get('artist'), t.get('album'))
                         if key in key_to_device_db_track_id:
