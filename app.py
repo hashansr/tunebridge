@@ -12329,6 +12329,7 @@ def _ipod_sync_idle_state():
         'completed_items': [], 'errors': [], 'cancel_requested': False,
         'added_count': 0, 'removed_track_count': 0,
         'playlist_synced_count': 0, 'playlist_removed_count': 0,
+        'playlist_errors': [], 'playlist_failed_count': 0,
     }
 
 
@@ -12646,6 +12647,7 @@ def ipod_sync_execute(iid):
                     for local_track_id in pl.get('tracks', []):
                         t = local_by_id.get(local_track_id)
                         if not t:
+                            missing_member_titles.append(str(local_track_id))
                             continue
                         key = match_key(t.get('title'), t.get('artist'), t.get('album'))
                         if key not in key_to_device_db_track_id:
@@ -12692,6 +12694,7 @@ def ipod_sync_execute(iid):
             # the device orphaned and unreferenced, with nothing actually
             # added to the library the user would see.
             sync_errors = []
+            playlist_errors = []
 
             music_base = get_music_base()
 
@@ -12827,6 +12830,15 @@ def ipod_sync_execute(iid):
                         new_art_by_db_track_id[db_track_id] = art_bytes
                         track_info_by_db_track_id[db_track_id] = track_info
 
+                # Keep the transcode cache bounded *during* a large sync.
+                # Previously it was cleaned only after the entire batch, so
+                # thousands of FLAC conversions could fill the Mac's disk and
+                # then fail one by one, while incomplete playlists were still
+                # reported as synced.  The file has already been copied to the
+                # iPod at this point, so it is safe for LRU eviction.
+                if was_transcoded:
+                    enforce_cache_size_limit(transcode_cache_dir)
+
             # Create playlists for any selected local playlists. Member
             # tracks come along automatically (the user's requirement:
             # syncing a playlist syncs "the songs within" it too) -
@@ -12836,6 +12848,7 @@ def ipod_sync_execute(iid):
             # for addition is silently skipped, same drop-dangling-refs
             # behavior as removal above.
             ipod_sync_state['phase'] = 'playlists'
+            synced_playlist_count = 0
             if add_playlist_ids:
                 ipod_sync_state['message'] = 'Building playlists…'
                 local_playlists = load_playlists()
@@ -12850,8 +12863,13 @@ def ipod_sync_execute(iid):
                         return
                     pl = local_playlists.get(pid)
                     if not pl:
+                        playlist_errors.append({
+                            'title': str(pid),
+                            'error': 'The selected local playlist no longer exists.',
+                        })
                         continue
                     member_db_ids = []
+                    missing_member_titles = []
                     for local_track_id in pl.get('tracks', []):
                         if local_track_id in local_id_to_db_track_id:
                             member_db_ids.append(local_id_to_db_track_id[local_track_id])
@@ -12862,8 +12880,32 @@ def ipod_sync_execute(iid):
                         key = match_key(t.get('title'), t.get('artist'), t.get('album'))
                         if key in key_to_device_db_track_id:
                             member_db_ids.append(key_to_device_db_track_id[key])
-                    if member_db_ids:
-                        playlist_infos.append(PlaylistInfo(name=pl['name'], track_ids=member_db_ids))
+                        else:
+                            missing_member_titles.append(t.get('title') or local_track_id)
+
+                    # A playlist selection promises its complete contents.
+                    # Do not create a partial (or empty) playlist and then
+                    # report it as synced when a member track failed to copy.
+                    if missing_member_titles:
+                        playlist_errors.append({
+                            'title': pl['name'],
+                            'error': f'{len(missing_member_titles)} track(s) could not be added.',
+                            'missing_track_count': len(missing_member_titles),
+                        })
+                        ipod_sync_state['progress'] += 1
+                        ipod_sync_state['current'] = f"! Playlist incomplete: {pl['name']}"
+                        continue
+
+                    # Selected update candidates replace the prior playlist
+                    # by name.  Keeping both produced duplicate playlists;
+                    # filtering first also makes retrying a sync idempotent.
+                    playlist_name_key = (pl['name'] or '').strip().casefold()
+                    playlist_infos = [
+                        info for info in playlist_infos
+                        if (info.name or '').strip().casefold() != playlist_name_key
+                    ]
+                    playlist_infos.append(PlaylistInfo(name=pl['name'], track_ids=member_db_ids))
+                    synced_playlist_count += 1
                     ipod_sync_state['progress'] += 1
                     ipod_sync_state['current'] = f"↻ Playlist: {pl['name']}"
                     push_completed(pl['name'], f'{len(member_db_ids)} track(s)', None, 'playlist')
@@ -12946,17 +12988,20 @@ def ipod_sync_execute(iid):
             added_ok = len(add_track_ids) - len(sync_errors)
             message = (
                 f'Added {added_ok}, removed {len(remove_track_ids)} song(s); '
-                f'synced {len(add_playlist_ids)}, removed {len(remove_playlist_ids)} playlist(s).'
+                f'synced {synced_playlist_count}, removed {len(remove_playlist_ids)} playlist(s).'
             )
             if sync_errors:
                 message += f' {len(sync_errors)} song(s) failed and were skipped.'
+            if playlist_errors:
+                message += f' {len(playlist_errors)} playlist(s) were not changed because one or more tracks were unavailable.'
             ipod_sync_state = {
                 **ipod_sync_state, 'status': 'done', 'ipod_id': iid, 'plan': None, 'phase': 'done',
                 'message': message, 'error': '', 'errors': sync_errors, 'current': '',
                 # Structured counts for the done screen's stat tiles - avoids
                 # the frontend having to parse them back out of the message.
                 'added_count': added_ok, 'removed_track_count': len(remove_track_ids),
-                'playlist_synced_count': len(add_playlist_ids), 'playlist_removed_count': len(remove_playlist_ids),
+                'playlist_synced_count': synced_playlist_count, 'playlist_removed_count': len(remove_playlist_ids),
+                'playlist_errors': playlist_errors, 'playlist_failed_count': len(playlist_errors),
             }
         except Exception as e:
             ipod_sync_state = {**ipod_sync_state, 'status': 'error', 'message': '', 'error': str(e)}

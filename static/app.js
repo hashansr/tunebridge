@@ -15208,10 +15208,12 @@ function _swHandleIpodSyncError(msg) {
 async function _swHandleIpodSyncDone(status) {
   _sw.ipodSyncPhase = 'done';
   const errors = status.errors ?? [];
-  if (errors.length) {
-    const names = errors.slice(0, 3).map(e => e.title).join(', ');
-    const more = errors.length > 3 ? ` and ${errors.length - 3} more` : '';
-    toast(`${errors.length} song(s) failed and were skipped: ${names}${more}`);
+  const playlistErrors = status.playlist_errors ?? [];
+  const errorCount = errors.length + playlistErrors.length;
+  if (errorCount) {
+    const names = [...errors, ...playlistErrors].slice(0, 3).map(e => e.title).join(', ');
+    const more = errorCount > 3 ? ` and ${errorCount - 3} more` : '';
+    toast(`${errorCount} item(s) could not be synced: ${names}${more}`);
   }
 
   const devId = _sw.device?.id;
@@ -15240,7 +15242,7 @@ async function _swHandleIpodSyncDone(status) {
 
     const metaParts = [];
     if (doneOps > 0) metaParts.push(`${doneOps} item${doneOps === 1 ? '' : 's'} synced`);
-    if (errors.length) metaParts.push(`${errors.length} error${errors.length === 1 ? '' : 's'}`);
+    if (errorCount) metaParts.push(`${errorCount} error${errorCount === 1 ? '' : 's'}`);
     if (!metaParts.length) metaParts.push('Nothing to sync');
     const metaHTML = metaParts.map((p, i) => i === 0 ? p : `<span class="sw-done-meta-dot"></span>${p}`).join('');
 
@@ -15296,8 +15298,8 @@ async function _swHandleIpodSyncDone(status) {
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
         <div class="sw-done-hero-text">
-          <span class="sw-overline sw-overline--success">COMPLETE</span>
-          <h2 class="sw-done-hero-title">${esc(devName)} is up to date</h2>
+          <span class="sw-overline sw-overline--success">${errorCount ? 'COMPLETE WITH ISSUES' : 'COMPLETE'}</span>
+          <h2 class="sw-done-hero-title">${errorCount ? `${esc(devName)} needs attention` : `${esc(devName)} is up to date`}</h2>
           <div class="sw-done-hero-meta">${metaHTML}</div>
         </div>
       </div>

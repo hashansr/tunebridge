@@ -17,6 +17,7 @@ back in the original plan, not a hypothetical.
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -27,6 +28,25 @@ _NATIVE_FORMATS = {'.mp3', '.m4a', '.m4b', '.m4p', '.aac', '.wav', '.aif', '.aif
 
 class TranscodeError(RuntimeError):
     pass
+
+
+def ffmpeg_executable() -> str:
+    """Return an ffmpeg binary that works for both terminal and app launches.
+
+    A GUI-launched app on macOS often has a small PATH.  Checking for ffmpeg
+    with a broader PATH elsewhere but then invoking the bare ``ffmpeg`` name
+    made a large sync look as if each FLAC were individually corrupt.  Resolve
+    the executable once and give subprocess its absolute path instead.
+    """
+    found = shutil.which('ffmpeg')
+    if found:
+        return found
+    for candidate in ('/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg'):
+        if Path(candidate).is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    raise TranscodeError(
+        'ffmpeg is required to convert this track for an iPod, but was not found.'
+    )
 
 
 def file_hash(path) -> str:
@@ -53,7 +73,7 @@ def transcode_flac_to_alac(src_path, dest_path, timeout: int = 300) -> None:
         # container from the destination filename's extension, and the
         # temp path used during a safe write (name.m4a.tmp) ends in
         # .tmp, not .m4a - without this it fails to find a muxer at all.
-        ['ffmpeg', '-y', '-i', str(src_path), '-c:a', 'alac', '-vn', '-f', 'mp4', str(dest_path)],
+        [ffmpeg_executable(), '-y', '-i', str(src_path), '-c:a', 'alac', '-vn', '-f', 'mp4', str(dest_path)],
         capture_output=True, timeout=timeout,
     )
     if result.returncode != 0 or not Path(dest_path).exists():
@@ -88,9 +108,9 @@ def get_or_create_transcode(source_path, cache_dir: Path) -> Path:
 
 def enforce_cache_size_limit(cache_dir: Path, max_bytes: int = TRANSCODE_CACHE_MAX_BYTES) -> int:
     """LRU eviction (oldest mtime first) until the cache is back under
-    max_bytes. Returns the number of files removed. Call this after a
-    sync completes, not on every single transcode — cheap enough either
-    way at realistic library sizes, but there's no need."""
+    max_bytes. Returns the number of files removed. The iPod sync calls
+    this after each copied transcode so a large batch cannot consume all
+    local disk space."""
     if not cache_dir.exists():
         return 0
     files = sorted(cache_dir.glob('*.m4a'), key=lambda p: p.stat().st_mtime)
