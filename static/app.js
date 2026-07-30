@@ -14881,16 +14881,57 @@ async function _swPollIpodAddPlan(id) {
   _swRenderIpodGroups();
 }
 
+/* ── Stale playlist-track warning ────────────────────────────────────
+   A playlist's stored track list is never pruned on its own when a song
+   is moved/renamed/deleted from the library (see /api/playlists/check-stale
+   in app.py) - so a playlist selected for iPod sync can silently carry
+   dead references forever. Surfaced here, before the sync actually starts,
+   rather than only after the fact, so the user gets to choose what happens
+   instead of just being told about it in the done screen. */
+
+let _ipodStaleResolve = null;
+
+async function _checkIpodPlaylistsStale(playlistIds) {
+  if (!playlistIds.length) return [];
+  try {
+    const res = await api('/playlists/check-stale', { method: 'POST', body: { playlist_ids: playlistIds } });
+    return res.results || [];
+  } catch (e) {
+    return []; // best-effort - never block a sync because this check itself failed
+  }
+}
+
+function _showIpodStaleWarning(affected) {
+  const list = document.getElementById('ipod-stale-list');
+  if (list) {
+    list.innerHTML = affected.map(p => `
+      <div class="confirm-context-strip">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <div class="confirm-context-primary">${esc(p.name)}</div>
+          <div class="confirm-context-secondary">${p.stale_count} of ${p.total_count} track${p.total_count === 1 ? '' : 's'} no longer in your library</div>
+        </div>
+      </div>`).join('');
+  }
+  document.getElementById('ipod-stale-modal').style.display = 'flex';
+  return new Promise(resolve => { _ipodStaleResolve = resolve; });
+}
+
+function _ipodStaleChoose(choice) {
+  document.getElementById('ipod-stale-modal').style.display = 'none';
+  if (_ipodStaleResolve) { _ipodStaleResolve(choice); _ipodStaleResolve = null; }
+}
+
 /* ── Sync wizard iPod-sync step: executes the combined add/remove plan ─
    Reached only from the browse/select step's "Continue" — which/what to
    add/remove was already computed and selected there, and that step's own
    footer already gates on the background add-plan diff having resolved
    (see _swUpdateIpodFooter's "still comparing" branch), so by the time
-   swStartIpodSync() runs there's nothing left to confirm; it goes straight
-   into the real sync, matching the DAP wizard's review step going straight
-   from "Continue" into its syncing screen with no intermediate screen. */
+   swStartIpodSync() runs there's nothing left to confirm (beyond the stale-
+   track check below); it goes straight into the real sync, matching the DAP
+   wizard's review step going straight from "Continue" into its syncing
+   screen with no intermediate screen. */
 
-function swStartIpodSync() {
+async function swStartIpodSync() {
   if (!_sw.ipodBrowse?.addPlan) return; // still comparing — Continue is disabled while this is true
   const { addTrackIds, addPlaylistIds } = _swComputeIpodAdditions();
   const { removeTrackIds, removePlaylistIds } = _swComputeIpodRemovals();
@@ -14898,6 +14939,36 @@ function swStartIpodSync() {
     toast('Nothing to sync.');
     return;
   }
+
+  const affected = await _checkIpodPlaylistsStale(addPlaylistIds);
+  if (affected.length) {
+    const choice = await _showIpodStaleWarning(affected);
+    if (choice === 'cancel') return;
+    if (choice === 'resolve') {
+      const ids = affected.map(p => p.id);
+      const res = await api('/playlists/prune-stale', { method: 'POST', body: { playlist_ids: ids } }).catch(() => null);
+      const totalRemoved = res ? Object.values(res.removed || {}).reduce((a, b) => a + b, 0) : 0;
+      toast(totalRemoved ? `Removed ${totalRemoved} unavailable track reference(s). Review and sync again when ready.` : 'Could not clean up those playlists.');
+      const id = _sw.device?.id;
+      if (id) _swLoadIpodAddPlan(id); // refresh so the review reflects the cleaned-up playlists
+      return;
+    }
+    if (choice === 'skip_playlists') {
+      const skipIds = new Set(affected.map(p => p.id));
+      for (const pid of skipIds) _sw.ipodBrowse.addPlan.playlistSelected.set(pid, false);
+      _swRenderIpodGroups();
+      const remaining = _swComputeIpodAdditions();
+      const remainingRemovals = _swComputeIpodRemovals();
+      if (!remaining.addTrackIds.length && !remaining.addPlaylistIds.length
+        && !remainingRemovals.removeTrackIds.length && !remainingRemovals.removePlaylistIds.length) {
+        toast('Nothing left to sync.');
+        return;
+      }
+    }
+    // choice === 'skip_songs' falls through unchanged - the server already
+    // skips any track no longer in the library and reports it, per playlist.
+  }
+
   _swGoTo('ipod-sync');
   swRunIpodSync();
 }
@@ -15387,6 +15458,20 @@ async function syncPlaylistToIpod(playlistId, playlistName) {
   const target = await _pickTargetIpod();
   if (!target) { toast('Add an iPod first (Gear → iPods).'); return; }
   if (!target.mounted) { toast(`${target.name} isn't connected.`); return; }
+
+  const affected = await _checkIpodPlaylistsStale([playlistId]);
+  if (affected.length) {
+    const choice = await _showIpodStaleWarning(affected);
+    if (choice === 'cancel' || choice === 'skip_playlists') return; // nothing else to sync for a single playlist
+    if (choice === 'resolve') {
+      const res = await api('/playlists/prune-stale', { method: 'POST', body: { playlist_ids: [playlistId] } }).catch(() => null);
+      const removed = res?.removed?.[playlistId] || 0;
+      toast(removed ? `Removed ${removed} unavailable track reference(s) from "${playlistName}". Sync again when ready.` : 'Could not clean up that playlist.');
+      return;
+    }
+    // choice === 'skip_songs' falls through unchanged.
+  }
+
   await _startIpodExecuteAndShow(target.id, { playlist_ids: [playlistId] }, `Syncing "${playlistName}" to ${target.name}…`);
 }
 
@@ -23835,6 +23920,7 @@ const App = {
   _confirmYes,
   _confirmNo,
   _confirmAlt,
+  _ipodStaleChoose,
   deletePlaylist,
   deleteCurrentPlaylist,
   openRenameModal,
