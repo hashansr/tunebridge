@@ -2997,7 +2997,7 @@ tbody tr:hover .remove-btn { opacity: 1; }
   color: var(--text);
 }
 .ipod-detail-page button, .ipod-detail-page input, .ipod-detail-page select { font-family: var(--font-sans); }
-.ipod-detail-identity, .ipod-detail-action-row, .ipod-detail-section-head, .ipod-detail-section-right, .ipod-detail-pagination, .ipod-detail-pagination > div, .ipod-detail-search { display: flex; align-items: center; }
+.ipod-detail-identity, .ipod-detail-action-row, .ipod-detail-section-head, .ipod-detail-section-right, .ipod-detail-pagination, .ipod-detail-pagination > div, .ipod-detail-search, .ipod-detail-backup-actions { display: flex; align-items: center; }
 .ipod-detail-icon-btn {
   border: 1px solid transparent; background: transparent; color: var(--text-muted); cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center; transition: .12s ease;
@@ -3041,12 +3041,14 @@ tbody tr:hover .remove-btn { opacity: 1; }
 .ipod-detail-deflist > div > span.muted { color: var(--text-muted); }
 .ipod-detail-select { min-width: 0; height: 30px; padding: 0 26px 0 9px; border: 1px solid var(--ipod-border-strong); border-radius: 8px; background: var(--bg-elevated); color: var(--text); font: 12px var(--ipod-mono); }
 .ipod-detail-note { margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-panel-gradient); color: var(--text-muted); font-size: 11.5px; line-height: 1.55; }
-.ipod-detail-backup-row { min-height: 56px; display: grid; grid-template-columns: 34px minmax(0,1fr) auto; align-items: center; gap: 14px; padding: 10px 4px; border-bottom: 1px solid var(--ipod-hairline); }
+.ipod-detail-backup-row { min-height: 56px; display: grid; grid-template-columns: 34px minmax(0,1fr) auto auto; align-items: center; gap: 14px; padding: 10px 4px; border-bottom: 1px solid var(--ipod-hairline); }
 .ipod-detail-row-icon { border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-sub); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
 .ipod-detail-row-icon { width: 34px; height: 34px; border-radius: 9px; }
 .ipod-detail-row-icon svg, .ipod-detail-row-icon img { width: 13px; height: 13px; }
 .ipod-detail-backup-name, .ipod-detail-playlist-name { min-width: 0; overflow: hidden; color: var(--text); font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .ipod-detail-backup-size, .ipod-detail-playlist-count { color: var(--text-muted); font: 11px var(--ipod-mono); white-space: nowrap; }
+.ipod-detail-backup-actions { gap: 4px; opacity: 0; transition: opacity .15s; }
+.ipod-detail-backup-row:hover .ipod-detail-backup-actions { opacity: 1; }
 .ipod-detail-more-backups { margin-top: 12px; }
 .ipod-detail-sync .ipod-detail-section-head { margin-bottom: 18px; }
 .ipod-detail-sync .ipod-detail-note { margin-bottom: 0; }
@@ -3109,6 +3111,7 @@ tbody tr:hover .remove-btn { opacity: 1; }
   .ipod-detail-section-right { order: 3; width: calc(100% - 28px); margin-left: 0; }
   .ipod-detail-search { width: 100%; }
   .ipod-detail-backup-row { grid-template-columns: 34px minmax(0,1fr) auto; }
+  .ipod-detail-backup-actions { grid-column: 2 / -1; justify-content: flex-end; opacity: 1; }
   .ipod-detail-playlist-row { grid-template-columns: 34px minmax(0,1fr); }
   .ipod-detail-playlist-count { grid-column: 2; text-align: left; }
   .ipod-detail-pagination { align-items: flex-start; flex-direction: column; }

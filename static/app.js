@@ -8577,7 +8577,9 @@ function showViewEl(name) {
   // Clear right nav slot for non-home views (loadHome repopulates it)
   if (name !== 'home') {
     const navRight = document.getElementById('main-nav-right');
-    if (navRight) navRight.innerHTML = '';
+    if (navRight) {
+      navRight.innerHTML = `<button class="gd-icon-btn danger" onclick="App.deleteIpod('${ipod.id}')" title="Remove iPod" aria-label="Remove iPod">${_GEAR_ICON_TRASH}</button><button class="gd-icon-btn ipod-detail-nav-icon" onclick="App.ipodDetailRename()" title="Rename iPod" aria-label="Rename iPod">${_IPOD_DETAIL_MORE}</button>`;
+    }
   }
 }
 
@@ -13302,6 +13304,7 @@ async function showIpodDetail(id) {
 
 let _ipodDetailUi = null;
 const IPOD_DETAIL_PAGE_SIZE = 10;
+const _IPOD_DETAIL_MORE = '<img src="icons/dots-3-horizontal.svg" alt="" aria-hidden="true">';
 const _IPOD_DETAIL_REFRESH = '<img src="icons/refresh-cw-svgrepo-com.svg" alt="" aria-hidden="true">';
 const _IPOD_DETAIL_CHEVRON = _GEAR_CHEVRON;
 const _IPOD_DETAIL_SEARCH = '<img src="icons/search.svg" alt="" aria-hidden="true">';
@@ -13368,10 +13371,10 @@ function _renderIpodDetail() {
     <span class="ipod-detail-section-right" onclick="event.stopPropagation()">${action}</span>
     <span class="ipod-detail-chevron${isOpen(name) ? ' open' : ''}">${_IPOD_DETAIL_CHEVRON}</span>
   </div>`;
-  const modelLabel = IPOD_MODEL_OPTIONS.find(option => option.value === (ipod.device_class || ''))?.label || 'Unknown / not set';
+  const modelControl = `<select class="ipod-detail-select" onchange="App.updateIpodModel('${ipod.id}', this.value)">${_ipodModelOptionsHtml(ipod.device_class)}</select>`;
   const config = isOpen('configuration') ? `<div class="ipod-detail-deflist">
     <div><label>Mount path</label><span>${esc(ipod.active_mount_path || '—')}</span></div>
-    <div><label>Model</label><span>${esc(modelLabel)}</span></div>
+    <div><label>Model</label>${modelControl}</div>
     <div><label>Database format</label><span>${esc(ipod.db_variant || 'iTunesDB')}</span></div>
     <div><label>Checksum scheme</label><span class="muted">${esc(_ipodChecksumLabel(ipod.hashing_scheme))}</span></div>
     <div><label>Tracks on device</label><span>${Number(ipod.track_count || 0).toLocaleString()}</span></div>
@@ -13381,8 +13384,9 @@ function _renderIpodDetail() {
   const backupRows = shownBackups.length ? shownBackups.map(backup => `<div class="ipod-detail-backup-row">
     <span class="ipod-detail-row-icon">${_IPOD_DETAIL_BACKUP}</span><span class="ipod-detail-backup-name">${esc(backup.kind === 'artworkdb' ? 'ArtworkDB' : 'iTunesDB')} — ${esc(_fmtRelDate(backup.created_at))}</span>
     <span class="ipod-detail-backup-size">${_fmtBytes(backup.size_bytes)}${backup.exists ? '' : ' · missing'}</span>
+    <span class="ipod-detail-backup-actions"><button class="ipod-detail-btn small ghost" ${backup.exists ? `onclick="App.restoreIpodBackup('${ipod.id}', '${backup.id}', '${backup.kind}')"` : 'disabled'}>${_IPOD_DETAIL_REFRESH} Restore</button><button class="ipod-detail-icon-btn danger" title="Delete backup" aria-label="Delete backup" onclick="App.deleteIpodBackupEntry('${ipod.id}', '${backup.id}')">${_GEAR_ICON_TRASH}</button></span>
   </div>`).join('') : '<p class="ipod-detail-empty">No backups yet — one is taken automatically before the first sync.</p>';
-  const backupsBody = isOpen('backups') ? `<div class="ipod-detail-note">A backup of the on-device iTunesDB (and ArtworkDB, if artwork was written) is taken automatically before every sync.</div>${backupRows}${!ui.showAllBackups && backups.length > 3 ? `<button class="ipod-detail-btn small ghost ipod-detail-more-backups" onclick="App.ipodDetailShowAllBackups()">Show ${backups.length - 3} more backups</button>` : ''}` : '';
+  const backupsBody = isOpen('backups') ? `<div class="ipod-detail-note">A backup of the on-device iTunesDB (and ArtworkDB, if artwork was written) is taken automatically before every sync. Restoring replaces what’s currently on the device; the current state is backed up first too.</div>${backupRows}${!ui.showAllBackups && backups.length > 3 ? `<button class="ipod-detail-btn small ghost ipod-detail-more-backups" onclick="App.ipodDetailShowAllBackups()">Show ${backups.length - 3} more backups</button>` : ''}` : '';
   const plNeedle = ui.playlistQuery.trim().toLocaleLowerCase();
   const filteredPlaylists = playlists.filter(p => String(p.name || '').toLocaleLowerCase().includes(plNeedle));
   const plPages = Math.max(1, Math.ceil(filteredPlaylists.length / IPOD_DETAIL_PAGE_SIZE));
