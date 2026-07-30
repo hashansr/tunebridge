@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.626-rc.300726-2129 · 2026-07-30
 - Fix: iPod playlists that had one or more tracks previously removed from the library no longer fail to sync entirely — they now sync with just those tracks skipped, and the sync summary calls out what was skipped instead of blocking the whole playlist forever.
 
 ## v0.625-rc.300726-2052 · 2026-07-30
