@@ -12535,6 +12535,14 @@ def ipod_sync_execute(iid):
     def do_execute():
         global ipod_sync_state
 
+        # A failure after copying media but before writing iTunesDB used to
+        # strand otherwise-valid audio files under iPod_Control/Music.  Keep
+        # this state outside the try block so the error handler can remove
+        # only files staged by this run, and only while the database remains
+        # untouched.
+        staged_paths_this_run = []
+        itunesdb_written = False
+
         def push_completed(title, subtitle, size_bytes, kind):
             # Same shape/insert-and-cap-24 convention as the generic Sync
             # feature's push_completed closure (app.py ~10866) — newest
@@ -12739,8 +12747,80 @@ def ipod_sync_execute(iid):
             ipod_sync_state['phase'] = 'transcode_copy'
             ipod_sync_state['work_started_at'] = time.time()
 
+            def _db_track_id_for_local(local_id):
+                # Python's built-in hash is process-randomized.  A stable ID
+                # lets an interrupted run safely reconstruct its iTunesDB
+                # entries from the already-staged, deterministically-named
+                # files on a subsequent sync.
+                return int(hashlib.sha256(local_id.encode('utf-8')).hexdigest()[:15], 16) + 1
+
+            def _make_local_track_info(t, local_id, device_path, device_file, was_transcoded):
+                ext = device_file.suffix.lstrip('.').lower() or 'm4a'
+                return TrackInfo(
+                    title=t.get('title') or 'Untitled',
+                    location=':' + device_path.replace('/', ':'),
+                    size=device_file.stat().st_size, length=_as_int((t.get('duration') or 0)) * 1000,
+                    filetype='m4a' if ext == 'm4a' else ext,
+                    filetype_desc=(
+                        'Apple Lossless audio file' if was_transcoded
+                        else _IPOD_NATIVE_FILETYPE_DESC.get(ext)
+                    ),
+                    bitrate=_as_int(t.get('bitrate')), sample_rate=44100,
+                    artist=t.get('artist') or None, album=t.get('album') or None,
+                    album_artist=t.get('album_artist') or None, genre=t.get('genre') or None,
+                    track_number=_as_int(t.get('track_number')), disc_number=_as_int(t.get('disc_number'), 1),
+                    total_discs=1, year=_as_int(t.get('year')),
+                    date_added=int(time.time()), db_track_id=_db_track_id_for_local(local_id),
+                )
+
+            # Recover files left by an interrupted sync.  File names are
+            # deterministic from the local track id, so this is unambiguous
+            # and avoids consuming another ~126 GiB by copying them again.
+            music_dir = Path(resolved_mount) / 'iPod_Control' / 'Music'
+            orphan_paths_by_stem = {}
+            try:
+                orphan_paths_by_stem = {
+                    p.stem.upper(): str(p.relative_to(resolved_mount))
+                    for p in music_dir.rglob('*') if p.is_file()
+                }
+            except OSError:
+                pass
+
             local_id_to_db_track_id = {}
-            staged_paths_this_run = []  # for cancel cleanup - only this run's new files, never pre-existing ones
+            recovered_track_count = 0
+            for local_id in tuple(add_track_ids):
+                t = local_by_id.get(local_id)
+                if not t or not t.get('path'):
+                    continue
+                stem = hashlib.sha256(local_id.encode('utf-8')).hexdigest()[:12].upper()
+                device_path = orphan_paths_by_stem.get(stem)
+                if not device_path:
+                    continue
+                device_file = Path(resolved_mount) / device_path
+                try:
+                    track_info = _make_local_track_info(
+                        t, local_id, device_path, device_file,
+                        needs_transcode(music_base / t['path']),
+                    )
+                except OSError:
+                    continue
+                local_id_to_db_track_id[local_id] = track_info.db_track_id
+                track_infos.append(track_info)
+                key_to_device_db_track_id[match_key(t.get('title'), t.get('artist'), t.get('album'))] = track_info.db_track_id
+                add_track_ids.remove(local_id)
+                recovered_track_count += 1
+                push_completed(track_info.title, 'Restored existing iPod file', track_info.size, 'add')
+
+            # add_track_ids now represents only audio that still needs a
+            # physical copy; recovered files count as completed index work.
+            ipod_sync_state['progress'] += recovered_track_count
+            ipod_sync_state['total'] = (
+                len(add_track_ids) + recovered_track_count + len(remove_track_ids)
+                + len(add_playlist_ids) + len(remove_playlist_ids)
+            )
+            ipod_sync_state['work_bytes_total'] = sum(
+                _source_size(local_id) for local_id in add_track_ids
+            )
             total = len(add_track_ids)
             for i, local_id in enumerate(add_track_ids):
                 if ipod_sync_state.get('cancel_requested'):
@@ -12793,23 +12873,8 @@ def ipod_sync_execute(iid):
                         return
                     staged_paths_this_run.append(device_path)
 
-                    db_track_id = abs(hash(local_id)) % (2 ** 62) + 1
-                    track_info = TrackInfo(
-                        title=t.get('title') or 'Untitled',
-                        location=':' + device_path.replace('/', ':'),
-                        size=dest.stat().st_size, length=_as_int((t.get('duration') or 0)) * 1000,
-                        filetype='m4a' if ext == 'm4a' else ext,
-                        filetype_desc=(
-                            'Apple Lossless audio file' if was_transcoded
-                            else _IPOD_NATIVE_FILETYPE_DESC.get(ext)
-                        ),
-                        bitrate=_as_int(t.get('bitrate')), sample_rate=44100,
-                        artist=t.get('artist') or None, album=t.get('album') or None,
-                        album_artist=t.get('album_artist') or None, genre=t.get('genre') or None,
-                        track_number=_as_int(t.get('track_number')), disc_number=_as_int(t.get('disc_number'), 1),
-                        total_discs=1, year=_as_int(t.get('year')),
-                        date_added=int(time.time()), db_track_id=db_track_id,
-                    )
+                    track_info = _make_local_track_info(t, local_id, device_path, dest, was_transcoded)
+                    db_track_id = track_info.db_track_id
                 except Exception as e:
                     sync_errors.append({'title': t.get('title') or local_id, 'error': str(e)})
                     continue
@@ -12962,6 +13027,7 @@ def ipod_sync_execute(iid):
             itdb_bytes = apply_checksum(itdb_bytes, ref_info.get('hashing_scheme', 0), firewire_id=firewire_id)
 
             write_ipod_itunesdb_atomic(str(itdb_path), itdb_bytes)
+            itunesdb_written = True
 
             # Reclaim space from removed tracks only now that the rewritten
             # iTunesDB naming them gone is safely on disk. Doing this any
@@ -12987,7 +13053,7 @@ def ipod_sync_execute(iid):
 
             added_ok = len(add_track_ids) - len(sync_errors)
             message = (
-                f'Added {added_ok}, removed {len(remove_track_ids)} song(s); '
+                f'Added {added_ok}, indexed {recovered_track_count}, removed {len(remove_track_ids)} song(s); '
                 f'synced {synced_playlist_count}, removed {len(remove_playlist_ids)} playlist(s).'
             )
             if sync_errors:
@@ -13002,8 +13068,15 @@ def ipod_sync_execute(iid):
                 'added_count': added_ok, 'removed_track_count': len(remove_track_ids),
                 'playlist_synced_count': synced_playlist_count, 'playlist_removed_count': len(remove_playlist_ids),
                 'playlist_errors': playlist_errors, 'playlist_failed_count': len(playlist_errors),
+                'recovered_track_count': recovered_track_count,
             }
         except Exception as e:
+            if not itunesdb_written:
+                for rel in staged_paths_this_run:
+                    try:
+                        (Path(resolved_mount) / rel).unlink(missing_ok=True)
+                    except OSError:
+                        pass
             ipod_sync_state = {**ipod_sync_state, 'status': 'error', 'message': '', 'error': str(e)}
 
     threading.Thread(target=do_execute, daemon=True).start()
