@@ -13233,10 +13233,8 @@ async function loadDevicesView() {
   if (!grid) return;
   grid.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
 
-  const [daps, ipods] = await Promise.all([
-    api('/daps').catch(() => []),
-    api('/ipods').catch(() => []),
-  ]);
+  const daps = await api('/daps').catch(() => []);
+  const ipods = await api('/ipods').catch(() => []);
   refreshSidebarSyncIndicator(daps);
 
   const count = document.getElementById('gear-devices-count');

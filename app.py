@@ -15006,6 +15006,10 @@ def _discover_mount_points(include_identity=True):
                 ['diskutil', 'info', '-plist', path_str],
                 capture_output=True,
                 check=False,
+                # A stalled diskutil process must not block the Gear page.
+                # Falling back to an unresolved mount is preferable to
+                # withholding every registered device from the UI.
+                timeout=2,
             )
             if proc.returncode != 0 or not proc.stdout:
                 return info
