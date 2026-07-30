@@ -12322,6 +12322,10 @@ def _ipod_sync_idle_state():
         'status': 'idle', 'ipod_id': None, 'message': '', 'error': '', 'plan': None,
         'phase': '', 'progress': 0, 'total': 0, 'current': '',
         'current_file_done': 0, 'current_file_total': 0,
+        # Media work is deliberately tracked separately from item progress.
+        # A single item can take much longer than another when it needs
+        # transcoding, so the client uses these byte weights for its ETA.
+        'work_bytes_done': 0, 'work_bytes_total': 0, 'work_started_at': 0,
         'completed_items': [], 'errors': [], 'cancel_requested': False,
         'added_count': 0, 'removed_track_count': 0,
         'playlist_synced_count': 0, 'playlist_removed_count': 0,
@@ -12378,6 +12382,7 @@ def ipod_sync_scan(iid):
             # DAP sync diff's local_only_sizes) - stat() them on demand here,
             # same pattern _compute_sync_diff_for_dap already uses.
             music_base = get_music_base()
+
             def _local_track_size(rel_path):
                 try:
                     p = music_base / rel_path
@@ -12452,6 +12457,8 @@ def ipod_sync_status(iid):
 @app.route('/api/ipods/<iid>/sync/reset', methods=['POST'])
 def ipod_sync_reset(iid):
     global ipod_sync_state
+    if ipod_sync_state.get('status') in ('scanning', 'copying'):
+        return jsonify({'error': 'Cannot reset while sync is in progress'}), 409
     ipod_sync_state = _ipod_sync_idle_state()
     return jsonify({'ok': True})
 
@@ -12688,6 +12695,27 @@ def ipod_sync_execute(iid):
 
             music_base = get_music_base()
 
+            # Source-byte weights include the cost of both transcoding and
+            # copying a song.  They are not exposed as the copy rate (which
+            # uses the actual staged-file bytes); they are used solely for a
+            # stable remaining-time estimate once at least one song has
+            # completed.  Missing files carry no weight and will be reported
+            # as per-track errors by the loop below.
+            def _source_size(local_id):
+                t = local_by_id.get(local_id) or {}
+                rel_path = t.get('path')
+                if not rel_path:
+                    return 0
+                try:
+                    return max(0, int((music_base / rel_path).stat().st_size))
+                except OSError:
+                    return 0
+
+            ipod_sync_state['work_bytes_total'] = sum(
+                _source_size(local_id) for local_id in add_track_ids
+            )
+            ipod_sync_state['work_bytes_done'] = 0
+
             # Fail fast with one clear message instead of one cryptic
             # "[Errno 2] No such file or directory: 'ffmpeg'" per track:
             # ffmpeg is a hard requirement for any track that isn't
@@ -12707,6 +12735,7 @@ def ipod_sync_execute(iid):
                 )
 
             ipod_sync_state['phase'] = 'transcode_copy'
+            ipod_sync_state['work_started_at'] = time.time()
 
             local_id_to_db_track_id = {}
             staged_paths_this_run = []  # for cancel cleanup - only this run's new files, never pre-existing ones
@@ -12729,6 +12758,7 @@ def ipod_sync_execute(iid):
                     # root, same convention the generic Sync feature already
                     # uses (get_music_base() / local_rel) - not an absolute path.
                     source_path = music_base / t['path']
+                    source_size = _source_size(local_id)
                     was_transcoded = needs_transcode(source_path)
                     if was_transcoded:
                         # No easy incremental byte progress for ffmpeg without
@@ -12785,6 +12815,7 @@ def ipod_sync_execute(iid):
                 local_id_to_db_track_id[local_id] = db_track_id
                 track_infos.append(track_info)
                 ipod_sync_state['progress'] += 1
+                ipod_sync_state['work_bytes_done'] += source_size
                 push_completed(track_info.title, t.get('artist'), track_info.size, 'add')
 
                 if art_format_defs:
