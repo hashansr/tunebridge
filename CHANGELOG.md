@@ -3,8 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
-- Add: Syncing a playlist to an iPod now warns first if any of its songs have been moved, renamed, or removed from your library, and lets you choose to sync anyway (skipping just those songs), skip the affected playlists, clean them up before syncing, or cancel.
-- Add: A "clean up" option for playlists with missing songs removes just those dangling entries, so the playlist can sync normally afterward.
+- Add: Syncing a playlist to an iPod now warns first if any of its songs have been moved, renamed, or removed from your library, and lets you choose to sync anyway (skipping just those songs), skip the affected playlists, resolve them right there (same replace/remove flow as Playlist › Resolve Playlist), or cancel.
 
 ## v0.626-rc.300726-2129 · 2026-07-30
 - Fix: iPod playlists that had one or more tracks previously removed from the library no longer fail to sync entirely — they now sync with just those tracks skipped, and the sync summary calls out what was skipped instead of blocking the whole playlist forever.

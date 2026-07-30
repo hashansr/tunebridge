@@ -14910,6 +14910,7 @@ function _showIpodStaleWarning(affected) {
           <div class="confirm-context-primary">${esc(p.name)}</div>
           <div class="confirm-context-secondary">${p.stale_count} of ${p.total_count} track${p.total_count === 1 ? '' : 's'} no longer in your library</div>
         </div>
+        <button class="confirm-btn-secondary" style="flex-shrink:0" onclick="App._ipodStaleResolveRow('${esc(p.id)}')">Resolve</button>
       </div>`).join('');
   }
   document.getElementById('ipod-stale-modal').style.display = 'flex';
@@ -14919,6 +14920,17 @@ function _showIpodStaleWarning(affected) {
 function _ipodStaleChoose(choice) {
   document.getElementById('ipod-stale-modal').style.display = 'none';
   if (_ipodStaleResolve) { _ipodStaleResolve(choice); _ipodStaleResolve = null; }
+}
+
+// Resolving a single affected playlist reuses the exact same Resolve
+// Playlist modal as Playlist detail → "..." → Resolve Playlist (and the
+// playlist-row right-click menu) - same per-track replace/remove flow,
+// not a separate bulk delete. Closes this warning first since the two
+// modals shouldn't be stacked; the caller treats 'resolving' like a
+// cancel (don't start the sync - the user re-triggers it once they're done).
+function _ipodStaleResolveRow(pid) {
+  _ipodStaleChoose('resolving');
+  openResolveModal(pid);
 }
 
 /* ── Sync wizard iPod-sync step: executes the combined add/remove plan ─
@@ -14943,16 +14955,11 @@ async function swStartIpodSync() {
   const affected = await _checkIpodPlaylistsStale(addPlaylistIds);
   if (affected.length) {
     const choice = await _showIpodStaleWarning(affected);
-    if (choice === 'cancel') return;
-    if (choice === 'resolve') {
-      const ids = affected.map(p => p.id);
-      const res = await api('/playlists/prune-stale', { method: 'POST', body: { playlist_ids: ids } }).catch(() => null);
-      const totalRemoved = res ? Object.values(res.removed || {}).reduce((a, b) => a + b, 0) : 0;
-      toast(totalRemoved ? `Removed ${totalRemoved} unavailable track reference(s). Review and sync again when ready.` : 'Could not clean up those playlists.');
-      const id = _sw.device?.id;
-      if (id) _swLoadIpodAddPlan(id); // refresh so the review reflects the cleaned-up playlists
-      return;
-    }
+    // 'cancel' and 'resolving' (the user clicked Resolve on a row, which
+    // opens the Resolve Playlist modal for that one playlist) both mean
+    // "don't start the sync now" - the resolve modal, if open, handles its
+    // own refresh; the user re-triggers the sync manually once ready.
+    if (choice === 'cancel' || choice === 'resolving') return;
     if (choice === 'skip_playlists') {
       const skipIds = new Set(affected.map(p => p.id));
       for (const pid of skipIds) _sw.ipodBrowse.addPlan.playlistSelected.set(pid, false);
@@ -15462,13 +15469,10 @@ async function syncPlaylistToIpod(playlistId, playlistName) {
   const affected = await _checkIpodPlaylistsStale([playlistId]);
   if (affected.length) {
     const choice = await _showIpodStaleWarning(affected);
-    if (choice === 'cancel' || choice === 'skip_playlists') return; // nothing else to sync for a single playlist
-    if (choice === 'resolve') {
-      const res = await api('/playlists/prune-stale', { method: 'POST', body: { playlist_ids: [playlistId] } }).catch(() => null);
-      const removed = res?.removed?.[playlistId] || 0;
-      toast(removed ? `Removed ${removed} unavailable track reference(s) from "${playlistName}". Sync again when ready.` : 'Could not clean up that playlist.');
-      return;
-    }
+    // 'cancel', 'skip_playlists' (nothing else to sync for a single
+    // playlist), and 'resolving' (Resolve Playlist modal is now open for
+    // this playlist) all mean don't start the sync now.
+    if (choice === 'cancel' || choice === 'skip_playlists' || choice === 'resolving') return;
     // choice === 'skip_songs' falls through unchanged.
   }
 
@@ -23921,6 +23925,7 @@ const App = {
   _confirmNo,
   _confirmAlt,
   _ipodStaleChoose,
+  _ipodStaleResolveRow,
   deletePlaylist,
   deleteCurrentPlaylist,
   openRenameModal,

@@ -4993,9 +4993,11 @@ def check_playlists_stale():
     playlist was built) - and how many. A playlist's stored track list is
     never pruned on its own (get_playlist() just silently drops unknown
     ids when rendering), so these dangling references can otherwise sit
-    invisible forever. Read-only; see /api/playlists/prune-stale to
-    actually remove them. Used to warn before an iPod sync, but not
-    iPod-specific - any playlist can accumulate stale references.
+    invisible forever. Read-only; see /api/playlists/<pid>/resolve to
+    actually fix them (same per-track replace/remove flow as the
+    playlist detail view's "Resolve Playlist"). Used to warn before an
+    iPod sync, but not iPod-specific - any playlist can accumulate stale
+    references.
     """
     data = request.json or {}
     ids = [str(x) for x in (data.get('playlist_ids') or [])]
@@ -5015,38 +5017,6 @@ def check_playlists_stale():
                 'stale_count': stale_count, 'total_count': len(track_ids),
             })
     return jsonify({'results': results})
-
-
-@app.route('/api/playlists/prune-stale', methods=['POST'])
-def prune_stale_playlist_tracks():
-    """Removes track ids from the given playlists that no longer exist in
-    the library. This is the actual fix for what check-stale reports -
-    once a track's local file is gone/renamed, the reference isn't coming
-    back on a retry, so the only real "resolution" is dropping it (the
-    user can always re-add the retitled/rediscovered track normally
-    afterward)."""
-    data = request.json or {}
-    ids = [str(x) for x in (data.get('playlist_ids') or [])]
-    playlists = load_playlists()
-    with library_lock:
-        lib_ids = {t['id'] for t in library}
-    removed = {}
-    changed = False
-    for pid in ids:
-        pl = playlists.get(pid)
-        if not pl:
-            continue
-        before = pl.get('tracks', [])
-        after = [tid for tid in before if tid in lib_ids]
-        n_removed = len(before) - len(after)
-        removed[pid] = n_removed
-        if n_removed:
-            pl['tracks'] = after
-            pl['updated_at'] = int(time.time())
-            changed = True
-    if changed:
-        save_playlists(playlists)
-    return jsonify({'removed': removed})
 
 
 @app.route('/api/playlists/<pid>/tracks', methods=['POST'])
