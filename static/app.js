@@ -8577,9 +8577,7 @@ function showViewEl(name) {
   // Clear right nav slot for non-home views (loadHome repopulates it)
   if (name !== 'home') {
     const navRight = document.getElementById('main-nav-right');
-    if (navRight) {
-      navRight.innerHTML = `<button class="gd-icon-btn danger" onclick="App.deleteIpod('${ipod.id}')" title="Remove iPod" aria-label="Remove iPod">${_GEAR_ICON_TRASH}</button><button class="gd-icon-btn ipod-detail-nav-icon" onclick="App.ipodDetailRename()" title="Rename iPod" aria-label="Rename iPod">${_IPOD_DETAIL_MORE}</button>`;
-    }
+    if (navRight) navRight.innerHTML = '';
   }
 }
 
@@ -11895,7 +11893,7 @@ let _iemCompareChart    = null;
 
 async function loadIemsView() {
   document.getElementById('iems-grid').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
-  const iems  = await _gearLoadList('/iems', 'tunebridge:gear:iems');
+  const iems  = await api('/iems').catch(() => []);
   const grid  = document.getElementById('iems-grid');
   const empty = document.getElementById('iems-empty');
   const cmpBtn = document.getElementById('iems-compare-btn');
@@ -12120,36 +12118,6 @@ function _toggleCompareDataset(idx) {
 
 async function loadGearView() {
   await Promise.all([loadDevicesView(), loadIemsView()]);
-}
-
-const GEAR_LIST_REQUEST_TIMEOUT_MS = 6000;
-
-function _gearListCacheRead(key) {
-  try {
-    const cached = JSON.parse(localStorage.getItem(key) || '[]');
-    return Array.isArray(cached) ? cached : [];
-  } catch (_) {
-    return [];
-  }
-}
-
-function _gearListCacheWrite(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
-}
-
-async function _gearLoadList(path, cacheKey) {
-  const controller = typeof AbortController === 'function' ? new AbortController() : null;
-  const timeout = controller ? setTimeout(() => controller.abort(), GEAR_LIST_REQUEST_TIMEOUT_MS) : null;
-  try {
-    const value = await api(path, controller ? { signal: controller.signal } : {});
-    const list = Array.isArray(value) ? value : [];
-    _gearListCacheWrite(cacheKey, list);
-    return list;
-  } catch (_) {
-    return _gearListCacheRead(cacheKey);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
 }
 
 let _gearPlaylistsCache = { ts: 0, data: null };
@@ -13263,8 +13231,8 @@ async function loadDevicesView() {
   if (!grid) return;
   grid.innerHTML = '<div class="spinner-wrap"><div class="spinner"></div></div>';
 
-  const daps = await _gearLoadList('/daps', 'tunebridge:gear:daps');
-  const ipods = await _gearLoadList('/ipods', 'tunebridge:gear:ipods');
+  const daps = await api('/daps').catch(() => []);
+  const ipods = await api('/ipods').catch(() => []);
   refreshSidebarSyncIndicator(daps);
 
   const count = document.getElementById('gear-devices-count');
@@ -13308,7 +13276,9 @@ async function showIpodDetail(id) {
     if (state.view !== 'ipod-detail') return;
     if (!state.artists?.length) state.artists = artists;
     if (!state.albums?.length) state.albums = albums;
-    if (navRight) navRight.innerHTML = '';
+    if (navRight) {
+      navRight.innerHTML = `<button class="gd-icon-btn danger" onclick="App.deleteIpod('${ipod.id}')" title="Remove iPod" aria-label="Remove iPod">${_GEAR_ICON_TRASH}</button><button class="gd-icon-btn ipod-detail-nav-icon" onclick="App.ipodDetailRename()" title="Rename iPod" aria-label="Rename iPod">${_IPOD_DETAIL_MORE}</button>`;
+    }
     _ipodDetailUi = {
       id,
       ipod,
