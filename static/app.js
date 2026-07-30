@@ -13718,11 +13718,19 @@ async function _pollIpodSyncExecute(id) {
     if (summary) summary.innerHTML = `<span class="ipod-detail-sync-error">${esc(status.error || 'Sync failed.')}</span>`;
     return;
   }
-  if (summary) summary.innerHTML = `<span class="ipod-detail-sync-ok">${_IPOD_DETAIL_CHECK} Sync complete.</span>`;
+  const blockingPlaylistErrors = (status.playlist_errors ?? []).filter(e => !e.warning_only);
+  if (summary) {
+    summary.innerHTML = blockingPlaylistErrors.length
+      ? `<span class="ipod-detail-sync-error">${esc(status.message || 'Some playlists could not be synced.')}</span>`
+      : `<span class="ipod-detail-sync-ok">${_IPOD_DETAIL_CHECK} Sync complete.</span>`;
+  }
   if (status.errors && status.errors.length) {
     const names = status.errors.slice(0, 3).map(e => e.title).join(', ');
     const more = status.errors.length > 3 ? ` and ${status.errors.length - 3} more` : '';
     toast(`${status.errors.length} song(s) failed and were skipped: ${names}${more}`);
+  } else if (blockingPlaylistErrors.length) {
+    const names = blockingPlaylistErrors.slice(0, 3).map(e => e.title).join(', ');
+    toast(`${blockingPlaylistErrors.length} playlist(s) could not be synced: ${names}`);
   }
   if (state.view === 'ipod-detail') showIpodDetail(id);
 }
@@ -15208,12 +15216,20 @@ function _swHandleIpodSyncError(msg) {
 async function _swHandleIpodSyncDone(status) {
   _sw.ipodSyncPhase = 'done';
   const errors = status.errors ?? [];
-  const playlistErrors = status.playlist_errors ?? [];
+  // Playlists that synced with some already-deleted-from-library tracks
+  // skipped are informational, not failures - they're flagged separately
+  // (warning_only) so they don't drag the done screen into "needs
+  // attention" for something a retry could never fix anyway.
+  const playlistErrors = (status.playlist_errors ?? []).filter(e => !e.warning_only);
+  const playlistWarnings = (status.playlist_errors ?? []).filter(e => e.warning_only);
   const errorCount = errors.length + playlistErrors.length;
   if (errorCount) {
     const names = [...errors, ...playlistErrors].slice(0, 3).map(e => e.title).join(', ');
     const more = errorCount > 3 ? ` and ${errorCount - 3} more` : '';
     toast(`${errorCount} item(s) could not be synced: ${names}${more}`);
+  } else if (playlistWarnings.length) {
+    const names = playlistWarnings.slice(0, 3).map(e => e.title).join(', ');
+    toast(`Synced with some skipped tracks (no longer in your library): ${names}`);
   }
 
   const devId = _sw.device?.id;
