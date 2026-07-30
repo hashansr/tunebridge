@@ -11744,7 +11744,7 @@ function syncScanAgain() { loadSyncView(); }
 const _DAP_SVG = `<span class="gear-device-icon gear-device-icon--dap" aria-hidden="true"></span>`;
 function _dapDeviceIcon(dap, small = false) {
   const isRockbox = String(dap?.model || '').toLowerCase() === 'rockbox';
-  if (isRockbox) return small ? _IPOD_SVG_SMALL : _IPOD_SVG;
+  if (isRockbox) return `<span class="gear-device-icon gear-device-icon--ipod" aria-hidden="true"></span>`;
   return small ? _DAP_SVG_SMALL : _DAP_SVG;
 }
 const _IEM_ICON_HTML = `<img src="icons/earphone-1-svgrepo-com.svg" alt="" class="gear-iem-icon-image" loading="lazy" decoding="async" />`;
