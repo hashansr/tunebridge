@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.628-rc.310726-1501 · 2026-07-31
+
 ## v0.627-rc.310726-1418 · 2026-07-31
 - Add: Syncing a playlist to an iPod now warns first if any of its songs have been moved, renamed, or removed from your library, and lets you choose to sync anyway (skipping just those songs), skip the affected playlists, resolve them right there (same replace/remove flow as Playlist › Resolve Playlist), or cancel.
 - Fix: Cancelling an in-progress iPod sync used to delete every song already copied during that run and write nothing to the device, discarding potentially hours of transcoding work. Cancelling now keeps everything already copied/decided and writes the device library with just that, so nothing already done is lost - only the remaining, not-yet-reached songs and playlists are skipped.
