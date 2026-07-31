@@ -3,6 +3,10 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Songs from hi-res FLAC albums (96kHz/176.4kHz/192kHz remasters) would silently skip during playback after syncing to a click-wheel iPod, since they were transcoded to ALAC at their original high sample rate, above what the device can decode. These are now downsampled to a safe rate before transcoding, and a failed/out-of-range transcode is now caught and reported as a sync error instead of being written to the device silently. Albums already synced before this fix need to be removed and re-added once to pick up the corrected audio.
+- Fix: Removing and re-adding the same song to an iPod in one sync (the exact step needed to fix the hi-res skip issue above) could leave that song pointing at a file that no longer existed on the device, so it would vanish from playback entirely instead of being repaired. The device-side sync no longer confuses a file that's about to be deleted with a reusable leftover from an interrupted sync.
+- Fix: Album artwork was never showing up on click-wheel iPods for any track. Every already-on-device song was silently losing its permanent artwork link on each sync, because the sync was writing that song's temporary on-device slot number into the field that's supposed to hold its permanent ID - so on the very next sync, its cover art could no longer be found. Existing songs affected by this need one more sync (which will now keep their permanent ID stable) before their artwork reappears.
+- Fix: Storage numbers in the sync wizard (and elsewhere) read noticeably smaller than what Finder shows for the same device, e.g. a device Finder calls 255.7 GB appeared as 238.1 GB - both were correct byte counts, just computed with two different meanings of "GB". Now computed the same way Finder/macOS does, so the numbers match.
 
 ## v0.628-rc.310726-1501 · 2026-07-31
 

@@ -17,6 +17,7 @@ back in the original plan, not a hypothetical.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -24,6 +25,21 @@ from pathlib import Path
 
 TRANSCODE_CACHE_MAX_BYTES = 5 * 1024 ** 3  # 5 GB
 _NATIVE_FORMATS = {'.mp3', '.m4a', '.m4b', '.m4p', '.aac', '.wav', '.aif', '.aiff'}
+
+# Click-wheel iPods (including iPod Classic 5.5G) cannot decode ALAC above
+# this rate - the track is accepted onto the device with a correct-looking
+# title/runtime but is silently skipped during playback, with no error
+# anywhere. Hi-res FLAC sources (96kHz, 176.4kHz, 192kHz remasters) must be
+# downsampled before transcode; standard 44.1/48kHz sources pass through
+# untouched.
+_MAX_IPOD_SAMPLE_RATE = 48000
+
+# Bump whenever transcode_flac_to_alac()'s ffmpeg arguments change, so a
+# stale cache entry produced by the old logic (e.g. an un-clamped hi-res
+# transcode from before the sample-rate fix) is never silently reused -
+# the cache key is otherwise just the source file's content hash, which
+# doesn't change when only the transcode logic does.
+TRANSCODE_FORMAT_VERSION = 2
 
 
 class TranscodeError(RuntimeError):
@@ -49,6 +65,48 @@ def ffmpeg_executable() -> str:
     )
 
 
+def ffprobe_executable() -> str:
+    """Same PATH-resolution rationale as ffmpeg_executable() - ffprobe ships
+    alongside ffmpeg in the same install, so a GUI launch's narrow PATH
+    misses it for the same reason."""
+    found = shutil.which('ffprobe')
+    if found:
+        return found
+    for candidate in ('/opt/homebrew/bin/ffprobe', '/usr/local/bin/ffprobe'):
+        if Path(candidate).is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    raise TranscodeError(
+        'ffprobe is required to convert this track for an iPod, but was not found.'
+    )
+
+
+def probe_audio(path) -> dict:
+    """Real sample rate (Hz) of the first audio stream and duration (ms) of
+    the container, read straight from the file's bytes rather than trusted
+    from source tags. Used both to decide whether a source needs
+    downsampling before transcode, and to verify what ffmpeg actually
+    produced afterwards."""
+    result = subprocess.run(
+        [ffprobe_executable(), '-v', 'error', '-select_streams', 'a:0',
+         '-show_entries', 'stream=sample_rate:format=duration',
+         '-of', 'json', str(path)],
+        capture_output=True, timeout=30,
+    )
+    if result.returncode != 0:
+        raise TranscodeError(
+            f'ffprobe failed for {path}: '
+            f'{result.stderr.decode("utf-8", errors="replace")[-400:]}'
+        )
+    data = json.loads(result.stdout)
+    streams = data.get('streams') or []
+    if not streams or not streams[0].get('sample_rate'):
+        raise TranscodeError(f'ffprobe found no audio stream in {path}')
+    return {
+        'sample_rate': int(streams[0]['sample_rate']),
+        'duration_ms': int(round(float(data['format']['duration']) * 1000)),
+    }
+
+
 def file_hash(path) -> str:
     """Content hash, used as the cache key — an edited/retagged source
     file naturally invalidates its old transcode without any separate
@@ -67,18 +125,48 @@ def needs_transcode(source_path) -> bool:
 def transcode_flac_to_alac(src_path, dest_path, timeout: int = 300) -> None:
     """Losslessly transcode to ALAC (in an .m4a container) via ffmpeg.
     Raises TranscodeError on failure - callers should surface this per
-    track, not let one bad file abort an entire sync."""
-    result = subprocess.run(
+    track, not let one bad file abort an entire sync.
+
+    Source sample rate is clamped to _MAX_IPOD_SAMPLE_RATE when it exceeds
+    it (see that constant's docstring for why); 44.1/48kHz sources are left
+    exactly as before, untouched.
+    """
+    src_probe = probe_audio(src_path)
+    cmd = [ffmpeg_executable(), '-y', '-i', str(src_path), '-c:a', 'alac', '-vn']
+    if src_probe['sample_rate'] > _MAX_IPOD_SAMPLE_RATE:
+        cmd += ['-ar', str(_MAX_IPOD_SAMPLE_RATE)]
+    cmd += [
         # -f mp4 forced explicitly: ffmpeg otherwise sniffs the output
         # container from the destination filename's extension, and the
         # temp path used during a safe write (name.m4a.tmp) ends in
         # .tmp, not .m4a - without this it fails to find a muxer at all.
-        [ffmpeg_executable(), '-y', '-i', str(src_path), '-c:a', 'alac', '-vn', '-f', 'mp4', str(dest_path)],
-        capture_output=True, timeout=timeout,
-    )
+        '-f', 'mp4', str(dest_path),
+    ]
+    result = subprocess.run(cmd, capture_output=True, timeout=timeout)
     if result.returncode != 0 or not Path(dest_path).exists():
         stderr_tail = result.stderr.decode('utf-8', errors='replace')[-800:]
         raise TranscodeError(f'ffmpeg failed for {src_path}: {stderr_tail}')
+
+    # Defensive verification: a "successful" ffmpeg run (exit 0, file
+    # exists) that still produced an out-of-range or truncated file would
+    # otherwise be written straight into the iTunesDB with no error
+    # surfaced anywhere - exactly what let the un-clamped sample rate go
+    # unnoticed before this fix. Duration tolerance is generous since ALAC
+    # framing can shift the reported length slightly from the source.
+    out_probe = probe_audio(dest_path)
+    if out_probe['sample_rate'] > _MAX_IPOD_SAMPLE_RATE:
+        raise TranscodeError(
+            f'transcode of {src_path} produced {out_probe["sample_rate"]}Hz ALAC, '
+            f'above the {_MAX_IPOD_SAMPLE_RATE}Hz iPod playback ceiling'
+        )
+    if out_probe['duration_ms'] <= 0 or (
+        src_probe['duration_ms'] > 0
+        and abs(out_probe['duration_ms'] - src_probe['duration_ms']) > 2000
+    ):
+        raise TranscodeError(
+            f'transcode of {src_path} has implausible duration '
+            f'({out_probe["duration_ms"]}ms vs source {src_probe["duration_ms"]}ms)'
+        )
 
 
 def get_or_create_transcode(source_path, cache_dir: Path) -> Path:
@@ -92,7 +180,7 @@ def get_or_create_transcode(source_path, cache_dir: Path) -> Path:
 
     cache_dir.mkdir(parents=True, exist_ok=True)
     h = file_hash(source_path)
-    dest = cache_dir / f'{h}.m4a'
+    dest = cache_dir / f'{h}_v{TRANSCODE_FORMAT_VERSION}.m4a'
     if dest.exists() and dest.stat().st_size > 0:
         dest.touch()  # bump mtime so LRU eviction treats it as recently used
         return dest

@@ -9522,21 +9522,26 @@ async function applyResolve() {
 
 /* ── Sync Wizard ─────────────────────────────────────────────────────── */
 
-// Utility: format bytes
+// Utility: format bytes. Decimal (1000-based), matching Finder/macOS/Apple's
+// own marketed-capacity convention - a device Finder calls "255.7 GB" was
+// previously shown here as "238.1 GB" because this used 1024-based division
+// while labeling the result "GB" (that's actually GiB). Same byte count,
+// different unit, and the mismatch was indistinguishable from a real
+// capacity-tracking bug at a glance.
 function _fmtBytes(bytes) {
   const n = Number(bytes);
   if (!Number.isFinite(n) || n < 0) return '—';
   if (n === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let v = n, i = 0;
-  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  while (v >= 1000 && i < units.length - 1) { v /= 1000; i++; }
   const d = v >= 100 || i === 0 ? 0 : (v >= 10 ? 1 : 2);
   return `${v.toFixed(d)} ${units[i]}`;
 }
 
 function _fmtGB(bytes) {
   if (!Number.isFinite(Number(bytes))) return '—';
-  return (Number(bytes) / (1024 ** 3)).toFixed(1) + ' GB';
+  return (Number(bytes) / (1000 ** 3)).toFixed(1) + ' GB';
 }
 
 function _fmtSecs(s) {
@@ -13472,7 +13477,12 @@ function _fmtBytes(n) {
   if (!n) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
   let i = 0;
-  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  // Decimal (1000-based) - matches Finder/macOS/Apple's marketed capacity,
+  // same fix as the other _fmtBytes definition earlier in this file (this
+  // one wins at runtime for all call sites since JS function declarations
+  // in the same scope share one name; both are kept in sync here rather
+  // than de-duplicated to keep this change scoped to the units bug).
+  while (n >= 1000 && i < units.length - 1) { n /= 1000; i++; }
   return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
@@ -13820,11 +13830,21 @@ async function _swPollIpodScan(id) {
 const SW_IPOD_BROWSE_PAGE_SIZE = 25;
 
 async function _swLoadIpodLibraryBrowse(id) {
-  const [tracks, playlists] = await Promise.all([
+  const [tracks, playlists, ipod] = await Promise.all([
     api(`/ipods/${id}/tracks`).catch(() => []),
     api(`/ipods/${id}/playlists`).catch(() => []),
+    // Re-fetches live capacity/used bytes so the storage summary reflects
+    // the device's actual free space right now - _sw.device otherwise only
+    // ever gets these from the one-time swSelectDevice() call in Step 1,
+    // which goes stale the moment a sync (in this session or an earlier
+    // one) changes how much space is actually used on the device.
+    api(`/ipods/${id}`).catch(() => null),
   ]);
   if (_sw.device?.id !== id) return; // user navigated away while this was in flight
+  if (ipod && _sw.device) {
+    _sw.device.capacity_bytes = ipod.capacity_bytes;
+    _sw.device.used_bytes = ipod.used_bytes;
+  }
 
   const trackById = new Map(tracks.map(t => [t.device_track_id, t]));
   const realPlaylists = playlists

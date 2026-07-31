@@ -106,7 +106,21 @@ def ipod_track_to_track_info(t: IpodTrack) -> TrackInfo:
         disc_number=t.disc_number, total_discs=t.total_discs,
         rating=t.rating, play_count=t.play_count,
         date_added=t.date_added or 0, last_played=t.last_played,
-        db_track_id=t.track_id,
+        # Bug fix: this used to be t.track_id (the sequential 32-bit MHIT
+        # slot position, offset 0x10), which build_itunesdb_bytes()
+        # renumbers on every rewrite. Writing that back out as the
+        # persistent 64-bit dbid (offset 0x70) silently replaced every
+        # kept/existing track's real dbid with its current slot number on
+        # every single sync - severing the dbid match ArtworkDB's MHII
+        # songId field relies on to find a track's artwork (confirmed via
+        # a live device: every existing track's on-disk db_track_id had
+        # collapsed to equal its track_id, while the ArtworkDB entry its
+        # own artwork_id_ref pointed to still carried the *original*,
+        # correct 64-bit id in songId - a mismatch that breaks artwork
+        # for any track surviving a second sync). t.track_id remains only
+        # as a defensive fallback for a track parsed with db_track_id
+        # unset (0), which should not happen for a normally-parsed record.
+        db_track_id=t.db_track_id or t.track_id,
         artwork_count=t.artwork_count, mhii_link=t.mhii_link,
         sound_check=t.sound_check,
     )

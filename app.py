@@ -12605,7 +12605,9 @@ def ipod_sync_execute(iid):
             )
             from ipod.artworkdb import build_artwork_update, cover_art_formats_for_device, extract_art
             from ipod.sync_planner import match_key
-            from ipod.transcode import enforce_cache_size_limit, get_or_create_transcode, needs_transcode
+            from ipod.transcode import (
+                enforce_cache_size_limit, get_or_create_transcode, needs_transcode, probe_audio,
+            )
 
             ipod_sync_state['message'] = 'Backing up current library…'
             backup_dir = DATA_DIR / 'ipod_backups' / iid
@@ -12710,8 +12712,17 @@ def ipod_sync_execute(iid):
             # below (new playlists reference both pre-existing device
             # tracks and newly-added ones, by content key since that's
             # the only id space shared between local and device records).
+            # Must be t.db_track_id (the persistent 64-bit id), not
+            # t.track_id (the sequential slot position) - these values
+            # get matched against TrackInfo.db_track_id further down
+            # (build_itunesdb_bytes' db_track_id_to_track_id remap), which
+            # ipod_track_to_track_info() now also sources from
+            # t.db_track_id. Using track_id here previously "worked" only
+            # because ipod_track_to_track_info() had the same bug and used
+            # t.track_id too - fixing one without the other would have
+            # broken playlist-member resolution for kept tracks.
             key_to_device_db_track_id = {
-                match_key(t.title, t.artist, t.album): t.track_id for t in kept_tracks
+                match_key(t.title, t.artist, t.album): (t.db_track_id or t.track_id) for t in kept_tracks
             }
 
             with library_lock:
@@ -12832,16 +12843,28 @@ def ipod_sync_execute(iid):
 
             def _make_local_track_info(t, local_id, device_path, device_file, was_transcoded):
                 ext = device_file.suffix.lstrip('.').lower() or 'm4a'
+                # sample_rate/length are measured from the real on-device file
+                # rather than trusted from source tags: transcode.py may clamp
+                # a hi-res source's sample rate before encoding to ALAC, and a
+                # stale value here (previously hardcoded to 44100 always) is
+                # exactly what let that mismatch go unnoticed in the iTunesDB
+                # and in this app's own device-track diagnostic cache.
+                try:
+                    probed = probe_audio(device_file)
+                except Exception:
+                    probed = None
+                sample_rate = probed['sample_rate'] if probed else 44100
+                length = probed['duration_ms'] if probed else _as_int((t.get('duration') or 0)) * 1000
                 return TrackInfo(
                     title=t.get('title') or 'Untitled',
                     location=':' + device_path.replace('/', ':'),
-                    size=device_file.stat().st_size, length=_as_int((t.get('duration') or 0)) * 1000,
+                    size=device_file.stat().st_size, length=length,
                     filetype='m4a' if ext == 'm4a' else ext,
                     filetype_desc=(
                         'Apple Lossless audio file' if was_transcoded
                         else _IPOD_NATIVE_FILETYPE_DESC.get(ext)
                     ),
-                    bitrate=_as_int(t.get('bitrate')), sample_rate=44100,
+                    bitrate=_as_int(t.get('bitrate')), sample_rate=sample_rate,
                     artist=t.get('artist') or None, album=t.get('album') or None,
                     album_artist=t.get('album_artist') or None, genre=t.get('genre') or None,
                     track_number=_as_int(t.get('track_number')), disc_number=_as_int(t.get('disc_number'), 1),
@@ -12853,12 +12876,24 @@ def ipod_sync_execute(iid):
             # deterministic from the local track id, so this is unambiguous
             # and avoids consuming another ~126 GiB by copying them again.
             music_dir = Path(resolved_mount) / 'iPod_Control' / 'Music'
+            removed_device_paths_set = set(removed_device_paths)
             orphan_paths_by_stem = {}
             try:
-                orphan_paths_by_stem = {
-                    p.stem.upper(): str(p.relative_to(resolved_mount))
-                    for p in music_dir.rglob('*') if p.is_file()
-                }
+                for p in music_dir.rglob('*'):
+                    if not p.is_file():
+                        continue
+                    rel = str(p.relative_to(resolved_mount))
+                    # A file this same run is about to delete (removed_device_paths,
+                    # set above) is never a safe orphan to recover: remove + re-add
+                    # of the same local track - the exact remediation flow for a
+                    # track that needs re-transcoding - shares that track's
+                    # deterministic stem between the old (removed) and new
+                    # (re-added) entries. Recovering it here would hand the new
+                    # entry a device_path the removal step deletes moments later,
+                    # leaving a dangling iTunesDB reference with no file behind it.
+                    if rel in removed_device_paths_set:
+                        continue
+                    orphan_paths_by_stem[p.stem.upper()] = rel
             except OSError:
                 pass
 

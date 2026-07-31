@@ -12,6 +12,19 @@ from dataclasses import dataclass, field
 @dataclass
 class IpodTrack:
     track_id: int
+    # The MHIT chunk's own persistent 64-bit id (raw field name:
+    # db_track_id, offset 0x70) - NOT the same value as track_id above,
+    # which is the sequential 32-bit slot position (offset 0x10) and is
+    # reassigned every time build_itunesdb_bytes() renumbers tracks.
+    # wikiPodLinux documents this 64-bit id as the value that "joins an
+    # iTunesDB mhit with an ArtworkDB mhii" (ArtworkDB's MHII songId
+    # field) - losing it on every round-trip silently breaks the
+    # artwork link for any track that survives a second sync, even
+    # though artwork_id_ref/mhii_link (below) still round-trips fine.
+    # Defaults to 0 only for callers that construct an IpodTrack without
+    # having parsed a real device record (there is no legitimate 0 value
+    # once parsed - see ipod/itunesdb_reader.py::_build_track()).
+    db_track_id: int = 0
     title: str = ''
     artist: str = ''
     album: str = ''

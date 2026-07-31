@@ -83,6 +83,14 @@ def _build_track(mhit: dict) -> IpodTrack | None:
     strings = _mhit_strings(d)
     return IpodTrack(
         track_id=track_id,
+        # See IpodTrack.db_track_id docstring in ipod/models.py: this is
+        # the MHIT chunk's real persistent 64-bit id (offset 0x70), a
+        # different field from track_id (offset 0x10) above. The
+        # vendored parser already extracts it into `d` via the shared
+        # MHIT_FIELDS/read_fields() machinery - this was previously the
+        # only place in TuneBridge that silently dropped it instead of
+        # carrying it into the clean IpodTrack shape.
+        db_track_id=int(d.get('db_track_id') or 0),
         title=strings.get(MHOD_TITLE, ''),
         artist=strings.get(MHOD_ARTIST, ''),
         album=strings.get(MHOD_ALBUM, ''),
