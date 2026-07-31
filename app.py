@@ -12576,6 +12576,16 @@ def ipod_sync_execute(iid):
         staged_paths_this_run = []
         itunesdb_written = False
 
+        # A user-requested cancel used to delete every file staged_paths_this_run
+        # had copied so far and abort with nothing written - discarding real,
+        # already-finished transcode+copy work (potentially hours of it) instead
+        # of just stopping. Found via a real full-library sync: cancelling partway
+        # through wiped ~2200 already-completed tracks. Cancel now stops adding
+        # *further* items but keeps everything already copied/decided, then falls
+        # through to the same write step a normal completion uses - so whatever
+        # got done before the cancel is what ends up on the device, not nothing.
+        was_cancelled = False
+
         def push_completed(title, subtitle, size_bytes, kind):
             # Same shape/insert-and-cap-24 convention as the generic Sync
             # feature's push_completed closure (app.py ~10866) — newest
@@ -12625,10 +12635,15 @@ def ipod_sync_execute(iid):
             # has actually changed on disk yet.
             kept_tracks = []
             track_infos = []
-            for t in existing_tracks:
+            for i, t in enumerate(existing_tracks):
                 if ipod_sync_state.get('cancel_requested'):
-                    ipod_sync_state['status'] = 'cancelled'
-                    return
+                    was_cancelled = True
+                    # Whatever wasn't reached yet is left exactly as it was -
+                    # not removed, since its removal was never decided.
+                    for t2 in existing_tracks[i:]:
+                        kept_tracks.append(t2)
+                        track_infos.append(ipod_track_to_track_info(t2))
+                    break
                 if str(t.track_id) in remove_track_ids:
                     ipod_sync_state['progress'] += 1
                     ipod_sync_state['current'] = f'✖ Device delete: {t.title or t.track_id}'
@@ -12638,25 +12653,53 @@ def ipod_sync_execute(iid):
                 track_infos.append(ipod_track_to_track_info(t))
 
             playlist_infos = []
-            for p in existing_playlists:
-                if p.is_master:
-                    continue
-                if ipod_sync_state.get('cancel_requested'):
-                    ipod_sync_state['status'] = 'cancelled'
-                    return
-                if str(p.playlist_id) in remove_playlist_ids:
-                    ipod_sync_state['progress'] += 1
-                    ipod_sync_state['current'] = f'✖ Playlist: {p.name}'
-                    push_completed(p.name, 'Playlist removed', None, 'playlist_remove')
-                    continue
-                playlist_infos.append(ipod_playlist_to_playlist_info(p))
+            if not was_cancelled:
+                for i, p in enumerate(existing_playlists):
+                    if p.is_master:
+                        continue
+                    if ipod_sync_state.get('cancel_requested'):
+                        was_cancelled = True
+                        # Same "leave whatever wasn't reached yet exactly as it
+                        # was" rule as the track-removal loop above.
+                        for p2 in existing_playlists[i:]:
+                            if not p2.is_master:
+                                playlist_infos.append(ipod_playlist_to_playlist_info(p2))
+                        break
+                    if str(p.playlist_id) in remove_playlist_ids:
+                        ipod_sync_state['progress'] += 1
+                        ipod_sync_state['current'] = f'✖ Playlist: {p.name}'
+                        push_completed(p.name, 'Playlist removed', None, 'playlist_remove')
+                        continue
+                    playlist_infos.append(ipod_playlist_to_playlist_info(p))
+            else:
+                for p in existing_playlists:
+                    if not p.is_master:
+                        playlist_infos.append(ipod_playlist_to_playlist_info(p))
 
             # Audio files for removed tracks are deleted from the device
             # only after a successful write, further down — never before.
+            # Based on which tracks actually ended up dropped from
+            # kept_tracks, not the raw remove_track_ids request - a
+            # cancel mid-removal-loop leaves some requested removals
+            # un-actioned (see the loop above), and their files must not
+            # be deleted since their entries are still in track_infos.
+            kept_track_ids = {t.track_id for t in kept_tracks}
             removed_device_paths = [
                 t.device_path for t in existing_tracks
-                if str(t.track_id) in remove_track_ids and t.device_path
+                if t.track_id not in kept_track_ids and t.device_path
             ]
+            if was_cancelled:
+                # Cancelled during the removal phase - stop before
+                # starting any new add work too. Mutated in place
+                # (not rebound) - these are closure variables from the
+                # enclosing route function, and assigning `name = ...`
+                # to a closure variable anywhere in this nested function
+                # makes Python treat it as local for the *entire*
+                # function body, breaking every earlier read of it with
+                # UnboundLocalError (the exact bug class this whole cancel
+                # fix exists to move away from).
+                add_track_ids.clear()
+                add_playlist_ids.clear()
             # Every device path currently in use, kept or removed alike -
             # used so a newly-staged track can never collide with an
             # existing file, including one that's about to be removed but
@@ -12855,15 +12898,14 @@ def ipod_sync_execute(iid):
                 _source_size(local_id) for local_id in add_track_ids
             )
             total = len(add_track_ids)
+            added_track_count = 0
             for i, local_id in enumerate(add_track_ids):
                 if ipod_sync_state.get('cancel_requested'):
-                    for p in staged_paths_this_run:
-                        try:
-                            (Path(resolved_mount) / p).unlink(missing_ok=True)
-                        except OSError:
-                            pass
-                    ipod_sync_state['status'] = 'cancelled'
-                    return
+                    # Whatever was already transcoded and copied this run
+                    # (staged_paths_this_run) stays - only the tracks not
+                    # yet reached simply don't get added this time.
+                    was_cancelled = True
+                    break
                 t = local_by_id.get(local_id)
                 if not t or not t.get('path'):
                     continue
@@ -12895,15 +12937,13 @@ def ipod_sync_execute(iid):
                     # feature's identical usage) gives real byte-level
                     # per-file progress for this copy step, and honors
                     # cancel_requested mid-file, cleaning up its own
-                    # partial dst on cancel.
+                    # partial dst on cancel. Files already fully copied
+                    # earlier in staged_paths_this_run are untouched -
+                    # only this one, still-partial file was ever at risk,
+                    # and _chunked_copy already removed it.
                     if not _chunked_copy(staged, dest, ipod_sync_state):
-                        for p in staged_paths_this_run:
-                            try:
-                                (Path(resolved_mount) / p).unlink(missing_ok=True)
-                            except OSError:
-                                pass
-                        ipod_sync_state['status'] = 'cancelled'
-                        return
+                        was_cancelled = True
+                        break
                     staged_paths_this_run.append(device_path)
 
                     track_info = _make_local_track_info(t, local_id, device_path, dest, was_transcoded)
@@ -12914,6 +12954,7 @@ def ipod_sync_execute(iid):
 
                 local_id_to_db_track_id[local_id] = db_track_id
                 track_infos.append(track_info)
+                added_track_count += 1
                 ipod_sync_state['progress'] += 1
                 ipod_sync_state['work_bytes_done'] += source_size
                 push_completed(track_info.title, t.get('artist'), track_info.size, 'add')
@@ -12951,13 +12992,12 @@ def ipod_sync_execute(iid):
                 local_playlists = load_playlists()
                 for pid in add_playlist_ids:
                     if ipod_sync_state.get('cancel_requested'):
-                        for p in staged_paths_this_run:
-                            try:
-                                (Path(resolved_mount) / p).unlink(missing_ok=True)
-                            except OSError:
-                                pass
-                        ipod_sync_state['status'] = 'cancelled'
-                        return
+                        # Playlists not reached yet just don't get built
+                        # this run - nothing to preserve, and everything
+                        # already staged this run (tracks and playlists
+                        # built so far) is kept, same as the track loop.
+                        was_cancelled = True
+                        break
                     pl = local_playlists.get(pid)
                     if not pl:
                         playlist_errors.append({
@@ -13112,7 +13152,7 @@ def ipod_sync_execute(iid):
             # the way back).
             _ipod_refresh_scan_cache(iid, itdb_path)
 
-            added_ok = len(add_track_ids) - len(sync_errors)
+            added_ok = added_track_count
             blocking_playlist_errors = [pe for pe in playlist_errors if not pe.get('warning_only')]
             playlist_warnings = [pe for pe in playlist_errors if pe.get('warning_only')]
             message = (
@@ -13125,8 +13165,16 @@ def ipod_sync_execute(iid):
                 message += f' {len(blocking_playlist_errors)} playlist(s) were not changed because one or more tracks were unavailable.'
             if playlist_warnings:
                 message += f' {len(playlist_warnings)} playlist(s) synced with some track(s) skipped (no longer in your library).'
+            if was_cancelled:
+                # Everything reported above genuinely happened and is on
+                # the device - cancelling stops the run early, it doesn't
+                # discard the work already done. Whatever wasn't reached
+                # yet (remaining songs/playlists) simply wasn't attempted
+                # and can be picked up by running the sync again.
+                message = 'Stopped early. ' + message
             ipod_sync_state = {
-                **ipod_sync_state, 'status': 'done', 'ipod_id': iid, 'plan': None, 'phase': 'done',
+                **ipod_sync_state, 'status': 'cancelled' if was_cancelled else 'done',
+                'ipod_id': iid, 'plan': None, 'phase': 'done',
                 'message': message, 'error': '', 'errors': sync_errors, 'current': '',
                 # Structured counts for the done screen's stat tiles - avoids
                 # the frontend having to parse them back out of the message.
@@ -13134,6 +13182,7 @@ def ipod_sync_execute(iid):
                 'playlist_synced_count': synced_playlist_count, 'playlist_removed_count': len(remove_playlist_ids),
                 'playlist_errors': playlist_errors, 'playlist_failed_count': len(blocking_playlist_errors),
                 'playlist_warnings': playlist_warnings, 'playlist_warning_count': len(playlist_warnings),
+                'was_cancelled': was_cancelled,
                 'recovered_track_count': recovered_track_count,
             }
         except Exception as e:

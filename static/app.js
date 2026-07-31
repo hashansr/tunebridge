@@ -13722,7 +13722,9 @@ async function _pollIpodSyncExecute(id) {
   if (summary) {
     summary.innerHTML = blockingPlaylistErrors.length
       ? `<span class="ipod-detail-sync-error">${esc(status.message || 'Some playlists could not be synced.')}</span>`
-      : `<span class="ipod-detail-sync-ok">${_IPOD_DETAIL_CHECK} Sync complete.</span>`;
+      : status.was_cancelled
+        ? `<span class="ipod-detail-sync-ok">${_IPOD_DETAIL_CHECK} Stopped early - kept what was already synced.</span>`
+        : `<span class="ipod-detail-sync-ok">${_IPOD_DETAIL_CHECK} Sync complete.</span>`;
   }
   if (status.errors && status.errors.length) {
     const names = status.errors.slice(0, 3).map(e => e.title).join(', ');
@@ -15186,19 +15188,18 @@ async function _swPollIpodSync(id) {
     cancelBtn.onclick = () => App.swCancelIpodSync();
   }
 
-  if (status.status === 'cancelled') {
-    clearInterval(_sw.ipodSyncExecTimer); _sw.ipodSyncExecTimer = null;
-    _swUnregisterUnloadGuard();
-    _swHandleIpodSyncCancelled();
-    return;
-  }
   if (status.status === 'error') {
     clearInterval(_sw.ipodSyncExecTimer); _sw.ipodSyncExecTimer = null;
     _swUnregisterUnloadGuard();
     _swHandleIpodSyncError(status.error || 'Sync failed.');
     return;
   }
-  if (status.status === 'done') {
+  // 'cancelled' now carries the same real added/synced counts 'done' does -
+  // cancelling stops the run early rather than discarding what it already
+  // copied/indexed (see ipod_sync_execute in app.py). Routed through the
+  // same done-summary renderer so the user sees what's actually on the
+  // device, not a blanket "nothing was written".
+  if (status.status === 'done' || status.status === 'cancelled') {
     clearInterval(_sw.ipodSyncExecTimer); _sw.ipodSyncExecTimer = null;
     _swUnregisterUnloadGuard();
     _swSetProgress('ipod-sync', 100);
@@ -15223,28 +15224,8 @@ async function swCancelIpodSync() {
     toast('Too late to cancel, finishing up…');
     if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.textContent = 'Cancel'; }
   }
-  // Poller will detect 'cancelled' status and call _swHandleIpodSyncCancelled
-}
-
-function _swHandleIpodSyncCancelled() {
-  _sw.ipodSyncPhase = 'cancelled'; // clears swNavBack()'s "sync in progress" guard so its inline Back button works
-  const card = document.getElementById('sw-ipod-sync-card');
-  if (!card) return;
-  card.innerHTML = `<div class="sw-error-card">
-    <div class="sw-error-icon" style="color:var(--text-muted)">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-    </div>
-    <div class="sw-error-title" style="color:var(--text-sub)">Sync cancelled</div>
-    <div class="sw-error-detail">Tracks copied before cancellation were removed again. Nothing was written to your iPod's library.</div>
-    <div style="display:flex;gap:10px;margin-top:4px">
-      <button class="sw-btn sw-btn--secondary" onclick="App.swReturnToIpodSyncReview()">Back to sync</button>
-      <button class="sw-btn sw-btn--primary" onclick="App.swRunIpodSync()">Retry</button>
-    </div>
-  </div>`;
-  const cancelBtn = document.getElementById('sw-btn-cancel');
-  if (cancelBtn) cancelBtn.style.display = 'none';
-  const primaryBtn = document.getElementById('sw-btn-primary');
-  if (primaryBtn) primaryBtn.style.display = 'none';
+  // Poller will detect 'cancelled' status and route it through
+  // _swHandleIpodSyncDone, same as a normal completion.
 }
 
 async function swReturnToIpodSyncReview() {
@@ -15309,6 +15290,9 @@ async function _swHandleIpodSyncDone(status) {
     const names = playlistWarnings.slice(0, 3).map(e => e.title).join(', ');
     toast(`Synced with some skipped tracks (no longer in your library): ${names}`);
   }
+
+  const wasCancelled = !!status.was_cancelled;
+  if (wasCancelled) toast('Stopped early - everything synced so far was kept.');
 
   const devId = _sw.device?.id;
   const devName = _sw.device?.name || 'iPod';
@@ -15392,8 +15376,8 @@ async function _swHandleIpodSyncDone(status) {
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
         <div class="sw-done-hero-text">
-          <span class="sw-overline sw-overline--success">${errorCount ? 'COMPLETE WITH ISSUES' : 'COMPLETE'}</span>
-          <h2 class="sw-done-hero-title">${errorCount ? `${esc(devName)} needs attention` : `${esc(devName)} is up to date`}</h2>
+          <span class="sw-overline sw-overline--success">${wasCancelled ? 'STOPPED EARLY' : (errorCount ? 'COMPLETE WITH ISSUES' : 'COMPLETE')}</span>
+          <h2 class="sw-done-hero-title">${wasCancelled ? `Stopped - kept what was already synced` : (errorCount ? `${esc(devName)} needs attention` : `${esc(devName)} is up to date`)}</h2>
           <div class="sw-done-hero-meta">${metaHTML}</div>
         </div>
       </div>
