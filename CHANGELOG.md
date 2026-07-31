@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.630 · 2026-07-31
+
 ## v0.629-rc.310726-1604 · 2026-07-31
 - Fix: Songs from hi-res FLAC albums (96kHz/176.4kHz/192kHz remasters) would silently skip during playback after syncing to a click-wheel iPod, since they were transcoded to ALAC at their original high sample rate, above what the device can decode. These are now downsampled to a safe rate before transcoding, and a failed/out-of-range transcode is now caught and reported as a sync error instead of being written to the device silently. Albums already synced before this fix need to be removed and re-added once to pick up the corrected audio.
 - Fix: Removing and re-adding the same song to an iPod in one sync (the exact step needed to fix the hi-res skip issue above) could leave that song pointing at a file that no longer existed on the device, so it would vanish from playback entirely instead of being repaired. The device-side sync no longer confuses a file that's about to be deleted with a reusable leftover from an interrupted sync.
