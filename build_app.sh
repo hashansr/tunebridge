@@ -85,21 +85,25 @@ _git_prepare() {
 }
 
 _git_restore() {
+  # Always restore stashed work, regardless of which branch we started on
+  # (previously this was nested inside the "not main" branch below, so a
+  # build started directly on main would stash dirty work and never pop it)
+  if [ "$_DID_STASH" = "1" ]; then
+    git -C "$PROJECT_DIR" stash pop 2>/dev/null || {
+      # Resolve any conflicts by keeping the stashed (working) versions
+      git -C "$PROJECT_DIR" diff --name-only --diff-filter=U 2>/dev/null \
+        | while IFS= read -r f; do
+            git -C "$PROJECT_DIR" checkout --theirs -- "$f" 2>/dev/null || true
+          done
+      git -C "$PROJECT_DIR" reset HEAD -- 2>/dev/null || true
+    }
+    _DID_STASH=0
+  fi
+
   # Always switch back to the original branch (called from trap too)
   if [ -n "$_ORIGINAL_BRANCH" ] && [ "$_ORIGINAL_BRANCH" != "main" ]; then
     git -C "$PROJECT_DIR" merge --abort 2>/dev/null || true
     git -C "$PROJECT_DIR" checkout "$_ORIGINAL_BRANCH" 2>/dev/null || true
-    if [ "$_DID_STASH" = "1" ]; then
-      git -C "$PROJECT_DIR" stash pop 2>/dev/null || {
-        # Resolve any conflicts by keeping the stashed (working) versions
-        git -C "$PROJECT_DIR" diff --name-only --diff-filter=U 2>/dev/null \
-          | while IFS= read -r f; do
-              git -C "$PROJECT_DIR" checkout --theirs -- "$f" 2>/dev/null || true
-            done
-        git -C "$PROJECT_DIR" reset HEAD -- 2>/dev/null || true
-      }
-      _DID_STASH=0
-    fi
     # Sync version.json back so next build increments from the correct number
     git -C "$PROJECT_DIR" show main:version.json > "${PROJECT_DIR}/version.json" 2>/dev/null || true
   fi
