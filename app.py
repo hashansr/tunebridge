@@ -1822,10 +1822,17 @@ def get_tracks():
     if album_filter:
         tracks = [t for t in tracks if (t.get('album') or '').lower() == album_filter.lower()]
     if search:
-        tracks = [t for t in tracks if
-                  search in (t.get('title') or '').lower() or
-                  search in (t.get('artist') or '').lower() or
-                  search in (t.get('album') or '').lower()]
+        # Search words across the combined metadata rather than requiring the
+        # complete query to occur in one field. This makes a resolver prefill
+        # such as "Baby You're Out Mac DeMarco" find the expected track.
+        terms = _norm_resolve(search).split()
+        tracks = [t for t in tracks if all(
+            term in _norm_resolve(' '.join([
+                t.get('title') or '', t.get('artist') or '',
+                t.get('album') or '', t.get('album_artist') or '',
+            ]))
+            for term in terms
+        )]
 
     # Sort by artist → album → track number
     def sort_key(t):
@@ -5143,18 +5150,41 @@ def _resolve_score(snapshot, candidate):
     return score
 
 
-def _find_candidates(snapshot, lib_tracks, max_results=5):
+def _resolve_track_is_available(track, music_base):
+    """Return whether a cached library record still points at a readable file."""
+    if not track or not track.get('path'):
+        return False
+    try:
+        rel_path = Path(str(track['path']))
+        if rel_path.is_absolute():
+            return False
+        return (music_base / rel_path).is_file()
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+def _find_candidates(snapshot, lib_tracks, max_results=5, music_base=None, exclude_ids=()):
+    """Return the best usable library replacements for a missing track."""
     scored = []
+    excluded = set(exclude_ids)
     for t in lib_tracks:
+        if t.get('id') in excluded:
+            continue
         s = _resolve_score(snapshot, t)
-        if s >= 2:
+        # A cached library record can outlive its file until the next rescan.
+        # Never suggest it as a replacement in the meantime.
+        if s >= 2 and (music_base is None or _resolve_track_is_available(t, music_base)):
             scored.append((s, t))
-    scored.sort(key=lambda x: -x[0])
-    return [
+    scored.sort(key=lambda x: (
+        -x[0], _norm_resolve(x[1].get('title') or ''),
+        _norm_resolve(x[1].get('artist') or ''), x[1].get('id') or '',
+    ))
+    candidates = [
         {'id': t['id'], 'title': t.get('title', ''), 'artist': t.get('artist', ''),
          'album': t.get('album', ''), 'score': s}
         for s, t in scored[:max_results]
     ]
+    return candidates, len(scored)
 
 
 @app.route('/api/playlists/<pid>/resolve', methods=['GET'])
@@ -5167,6 +5197,11 @@ def resolve_playlist_check(pid):
         lib_list = list(library)
     track_ids = _db.db_get_playlist_tracks(pid)
     all_meta  = _db.db_get_all_track_meta(pid)
+    music_base = get_music_base()
+    if not music_base.is_dir():
+        return jsonify({
+            'error': 'Music library folder is unavailable. Reconnect it or update Settings → Library, then try again.'
+        }), 409
 
     # Build deleted-track lookup: {md5(rel_path) → {title, artist, album}}
     conn = _db.get_conn()
@@ -5185,11 +5220,30 @@ def resolve_playlist_check(pid):
         ).fetchall()
     }
 
+    availability = {}
+
+    def is_available(track):
+        if not track:
+            return False
+        tid = track.get('id')
+        if tid not in availability:
+            availability[tid] = _resolve_track_is_available(track, music_base)
+        return availability[tid]
+
     missing = []
     for tid in track_ids:
-        if tid not in lib_map:
+        source_track = lib_map.get(tid)
+        if not is_available(source_track):
             # snapshot priority: playlist_track_meta → deleted_tracks
             snapshot = all_meta.get(tid) or deleted_map.get(tid)
+            if not snapshot and source_track:
+                # If the file disappeared after the last rescan, use the cached
+                # library metadata so the user still sees a meaningful row.
+                snapshot = {
+                    'title': source_track.get('title'),
+                    'artist': source_track.get('artist'),
+                    'album': source_track.get('album'),
+                }
 
             # artwork key from snapshot artist+album (only if the jpg exists)
             artwork_key = None
@@ -5201,20 +5255,27 @@ def resolve_playlist_check(pid):
             # Check if organizer moved this track to a new ID that is in the library
             candidates = []
             org_new_id = organizer_map.get(tid)
-            if org_new_id and org_new_id in lib_map:
+            if org_new_id and is_available(lib_map.get(org_new_id)):
                 t = lib_map[org_new_id]
                 candidates.append({
                     'id': t['id'], 'title': t.get('title', ''),
                     'artist': t.get('artist', ''), 'album': t.get('album', ''),
                     'score': 6, 'auto': True,
                 })
+            auto_candidate_count = len(candidates)
             if snapshot:
-                others = [c for c in _find_candidates(snapshot, lib_list)
-                          if c['id'] != org_new_id]
+                others, candidate_count = _find_candidates(
+                    snapshot, lib_list, music_base=music_base,
+                    exclude_ids={tid, org_new_id},
+                )
                 candidates.extend(others[:5 - len(candidates)])
+            else:
+                candidate_count = 0
             missing.append({
                 'track_id': tid, 'snapshot': snapshot,
                 'artwork_key': artwork_key, 'candidates': candidates,
+                'candidate_count': candidate_count + auto_candidate_count,
+                'missing_reason': 'file_unavailable' if source_track else 'not_in_library',
             })
     return jsonify({'ok': True, 'all_present': not missing,
                     'missing': missing, 'total_tracks': len(track_ids)})
@@ -5225,15 +5286,37 @@ def resolve_playlist_apply(pid):
     playlists = load_playlists()
     if pid not in playlists:
         return jsonify({'error': 'Not found'}), 404
-    data         = request.json or {}
-    replacements = {r['old_track_id']: r['new_track_id'] for r in data.get('replacements', [])}
-    removals     = set(data.get('removals', []))
+    data = request.json or {}
+    replacement_items = data.get('replacements', [])
+    removal_items = data.get('removals', [])
+    if not isinstance(replacement_items, list) or not isinstance(removal_items, list):
+        return jsonify({'error': 'replacements and removals must be lists'}), 400
+    if any(not isinstance(r, dict) or not r.get('old_track_id') or not r.get('new_track_id')
+           for r in replacement_items):
+        return jsonify({'error': 'Each replacement needs an old_track_id and new_track_id'}), 400
+    replacements = {str(r['old_track_id']): str(r['new_track_id']) for r in replacement_items}
+    removals = {str(track_id) for track_id in removal_items if track_id}
     overlap      = removals & set(replacements)
     if overlap:
         return jsonify({'error': 'track_id appears in both replacements and removals'}), 400
     with library_lock:
         lib_map = {t['id']: t for t in library}
     track_ids = _db.db_get_playlist_tracks(pid)
+    requested_sources = removals | set(replacements)
+    unknown_sources = requested_sources - set(track_ids)
+    if unknown_sources:
+        return jsonify({'error': 'One or more selected tracks are not in this playlist'}), 400
+
+    music_base = get_music_base()
+    unavailable_replacements = [
+        new_id for new_id in replacements.values()
+        if not _resolve_track_is_available(lib_map.get(new_id), music_base)
+    ]
+    if unavailable_replacements:
+        return jsonify({
+            'error': 'One or more replacement tracks are no longer available. Reopen Resolve Playlist and choose another track.'
+        }), 409
+
     new_tracks, applied = [], 0
     for tid in track_ids:
         if tid in removals:

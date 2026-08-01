@@ -9273,6 +9273,14 @@ let _resolveData        = null;
 let _resolveActions     = {};
 let _resolveSearchTimers = {};
 
+// Values interpolated into the resolver's inline click handlers must be valid
+// JavaScript strings as well as safe HTML attribute content.  `esc()` alone
+// only protects the HTML; it leaves apostrophes able to terminate a
+// single-quoted JavaScript argument.
+function _resolveJsArg(value) {
+  return esc(JSON.stringify(String(value ?? '')));
+}
+
 async function ctxPlaylistResolve() {
   const target = _playlistCtxTarget;
   hidePlaylistCtxMenu();
@@ -9368,7 +9376,7 @@ function _renderResolveModal(data) {
 }
 
 function _renderResolveMissingRow(entry) {
-  const { track_id, snapshot, artwork_key, candidates } = entry;
+  const { track_id, snapshot, artwork_key, candidates, candidate_count, missing_reason } = entry;
   const hasSnap  = !!(snapshot?.title || snapshot?.artist);
   const title    = snapshot?.title  || 'Unknown Track';
   const artist   = snapshot?.artist || '';
@@ -9376,6 +9384,10 @@ function _renderResolveMissingRow(entry) {
   const tesc     = esc(track_id);
   const prefill  = hasSnap ? esc((snapshot.title || '') + (snapshot.artist ? ' ' + snapshot.artist : '')) : '';
   const hasCands = !!(candidates && candidates.length);
+  const trackArg = _resolveJsArg(track_id);
+  const statusText = missing_reason === 'file_unavailable'
+    ? 'File is no longer available at its saved location'
+    : 'No longer in the scanned library';
 
   const artHtml = artwork_key
     ? `<img class="resolve-thumb" src="/api/artwork/${esc(artwork_key)}" alt="" onerror="this.style.display='none'">`
@@ -9385,12 +9397,15 @@ function _renderResolveMissingRow(entry) {
     const autoBadge = c.auto
       ? `<span class="resolve-cand-auto">moved</span>`
       : `<span class="resolve-cand-score">${c.score}</span>`;
-    return `<div class="resolve-candidate${c.auto ? ' resolve-candidate--auto' : ''}" onclick="App._resolveSelectCandidate('${tesc}','${esc(c.id)}','${esc(c.title)}','${esc(c.artist)}')">
+    return `<div class="resolve-candidate${c.auto ? ' resolve-candidate--auto' : ''}" onclick="App._resolveSelectCandidate(${trackArg},${_resolveJsArg(c.id)},${_resolveJsArg(c.title)},${_resolveJsArg(c.artist)})">
       ${autoBadge}
       <span class="resolve-cand-title">${esc(c.title)}</span>
       <span class="resolve-cand-meta">${esc(c.artist)}${c.album ? ' · ' + esc(c.album) : ''}</span>
     </div>`;
   }).join('');
+  const candidateHint = Number(candidate_count || 0) > (candidates || []).length
+    ? `<div class="resolve-candidate-hint">Showing the ${Math.min((candidates || []).length, 5)} closest of ${Number(candidate_count)} matches. Search to choose any library track.</div>`
+    : '';
 
   return `<div class="map-row resolve-row${hasCands ? ' resolve-row--has-cands' : ''}" id="resolve-row-${tesc}">
     <div class="map-row-source resolve-source">
@@ -9405,28 +9420,29 @@ function _renderResolveMissingRow(entry) {
           ${artist && album ? `<span class="map-crumb-sep">›</span>` : ''}
           ${album ? `<span>${esc(album)}</span>` : ''}
         </div>` : ''}
+        <div class="resolve-missing-status">${statusText}</div>
       </div>
     </div>
     <div class="map-row-target">
       <div id="resolve-resolved-${tesc}" class="map-mapped" style="display:none">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         <span id="resolve-resolved-label-${tesc}" class="map-mapped-label"></span>
-        <button class="map-clear-btn" onclick="App._resolveClearAction('${tesc}')" title="Clear">✕</button>
+        <button class="map-clear-btn" onclick="App._resolveClearAction(${trackArg})" title="Clear">✕</button>
       </div>
       <div id="resolve-remove-badge-${tesc}" class="resolve-remove-badge" style="display:none">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         Remove from playlist
-        <button class="map-clear-btn" onclick="App._resolveClearAction('${tesc}')" title="Clear">✕</button>
+        <button class="map-clear-btn" onclick="App._resolveClearAction(${trackArg})" title="Clear">✕</button>
       </div>
       <div id="resolve-search-wrap-${tesc}">
-        ${candHtml ? `<div class="resolve-candidates">${candHtml}</div>` : ''}
+        ${candHtml ? `<div class="resolve-candidates">${candHtml}</div>${candidateHint}` : ''}
         <div class="resolve-search-row">
           <input type="text" id="resolve-input-${tesc}" class="map-input"
                  placeholder="Search to replace…" value="${prefill}"
                  oninput="App._resolveSearch('${tesc}', this.value)"
                  onfocus="App._resolveSearch('${tesc}', this.value)" />
           <div id="resolve-results-${tesc}" class="map-results" style="display:none"></div>
-          <button class="resolve-remove-btn" onclick="App._resolveMarkRemove('${tesc}')">Remove</button>
+          <button class="resolve-remove-btn" onclick="App._resolveMarkRemove(${trackArg})">Remove</button>
         </div>
       </div>
     </div>
@@ -9439,14 +9455,18 @@ async function _resolveSearch(trackId, query) {
   if (!resultsEl) return;
   if (!query.trim()) { resultsEl.style.display = 'none'; return; }
   _resolveSearchTimers[trackId] = setTimeout(async () => {
-    const tracks = await api(`/library/tracks?q=${encodeURIComponent(query)}`).catch(() => []);
+    const requestedQuery = query.trim();
+    const tracks = await api(`/library/tracks?q=${encodeURIComponent(requestedQuery)}`).catch(() => []);
+    const input = document.getElementById(`resolve-input-${trackId}`);
+    // Ignore a slower response for text the user has already replaced.
+    if (!input || input.value.trim() !== requestedQuery) return;
     const top = (Array.isArray(tracks) ? tracks : []).slice(0, 6);
     if (!top.length) {
       resultsEl.innerHTML = `<div class="map-result-none">No results found</div>`;
     } else {
       resultsEl.innerHTML = top.map(t =>
         `<div class="map-result-item"
-              onclick="App._resolveSelectCandidate('${trackId}','${esc(t.id)}','${esc(t.title)}','${esc(t.artist)}')">
+              onclick="App._resolveSelectCandidate(${_resolveJsArg(trackId)},${_resolveJsArg(t.id)},${_resolveJsArg(t.title)},${_resolveJsArg(t.artist)})">
           <span class="map-result-title">${esc(t.title)}</span>
           <span class="map-result-meta">${esc(t.artist)}${t.album ? ' · ' + esc(t.album) : ''}</span>
         </div>`

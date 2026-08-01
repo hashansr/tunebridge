@@ -3766,6 +3766,12 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; backgrou
   min-width: 0;
 }
 .resolve-track-info { min-width: 0; flex: 1; }
+.resolve-missing-status {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.25;
+}
 
 /* Album art thumbnail */
 .resolve-thumb {
@@ -3855,6 +3861,12 @@ code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; backgrou
   flex-direction: column;
   gap: 3px;
   margin-bottom: 6px;
+}
+.resolve-candidate-hint {
+  margin: -2px 2px 7px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.3;
 }
 .resolve-candidate {
   display: flex;
