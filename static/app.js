@@ -716,6 +716,20 @@ function playSvg(size = 14) {
   return `<svg class="icon-play-svg" style="--play-icon-size:${Number(size) || 14}px" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.50632 3.14928C6.1753 2.29363 4.4248 3.24931 4.4248 4.83164V19.1683C4.4248 20.7506 6.1753 21.7063 7.50632 20.8507L18.6571 13.6823C19.8817 12.8951 19.8817 11.1049 18.6571 10.3176L7.50632 3.14928Z"/></svg>`;
 }
 
+// House style for inline "X" close/remove icons: viewBox 0 0 12 12, stroke-width 1.8, currentColor.
+function _SMALL_X_ICON(size = 10) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg>`;
+}
+
+// House style for inline checkmark icons: viewBox 0 0 24 24, stroke-width 2.5, currentColor (unless tinted).
+function _CHECK_ICON(size = 14, color = 'currentColor', cls = '') {
+  const clsAttr = cls ? ` class="${cls}"` : '';
+  return `<svg${clsAttr} width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+}
+
+// House style for the search (magnifying glass) icon: viewBox 0 0 24 24, stroke-width 2, currentColor.
+const _SEARCH_ICON_HTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Search`;
+
 function nowPlayingSvg(size = 11) {
   return `<svg class="track-now-playing-icon" width="${size}" height="${size}" viewBox="0 0 11 11" aria-hidden="true" focusable="false"><rect x="1" y="2" width="2.5" height="7" rx="1" fill="currentColor" opacity="0.92"><animate attributeName="height" values="7;3;7" dur="0.9s" repeatCount="indefinite"></animate><animate attributeName="y" values="2;4;2" dur="0.9s" repeatCount="indefinite"></animate></rect><rect x="7.5" y="2" width="2.5" height="7" rx="1" fill="currentColor" opacity="0.92"><animate attributeName="height" values="7;5;7" dur="0.7s" repeatCount="indefinite"></animate><animate attributeName="y" values="2;3;2" dur="0.7s" repeatCount="indefinite"></animate></rect></svg>`;
 }
@@ -2387,7 +2401,7 @@ const CF_ICONS = {
   play:  '<span class="tb-icon tb-icon-play-lg  cf-orb-ico" aria-hidden="true"></span>',
   pause: '<span class="tb-icon tb-icon-pause-lg cf-orb-ico" aria-hidden="true"></span>',
 };
-const CF_CLOSE_ICON = '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 3.6l6.8 6.8M10.4 3.6l-6.8 6.8"/></svg>';
+const CF_CLOSE_ICON = _SMALL_X_ICON(13);
 
 const CF_CTX_ITEMS = [
   ['play', 'Play album', '<path d="M4 2.5v9l7-4.5z"/>'],
@@ -3846,7 +3860,7 @@ function trackRow(t, num, inPlaylist) {
        </div>`
     : '';
 
-  const checkIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+  const checkIcon = _CHECK_ICON(10);
   const nowPlayingIcon = nowPlayingSvg(11);
   const playIcon  = playSvg(12);
   const fmtDate = t.date_added ? new Date(t.date_added * 1000).toLocaleDateString() : '';
@@ -8189,8 +8203,8 @@ function focusSidebarSearch() {
 }
 
 const _SEARCH_RAIL_NAV_SVG = {
-  left: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>`,
-  right: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>`,
+  left: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`,
+  right: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`,
 };
 
 function _searchRailSectionHtml(railId, title, seeAllCount, seeAllCat) {
@@ -9093,7 +9107,7 @@ function showImportModal(data) {
 
       // Pre-fill search with the most useful terms
       const preSearch = [displayTitle, displayArtist].filter(Boolean).join(' ');
-      const checkIcon = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+      const checkIcon = _CHECK_ICON(11, 'var(--accent-success,#4ade80)');
       return `<div class="map-row">
         <div class="map-row-source" title="${esc(e.path)}">
           <div class="map-row-title">${esc(displayTitle)}</div>
@@ -9425,7 +9439,7 @@ function _renderResolveMissingRow(entry) {
     </div>
     <div class="map-row-target">
       <div id="resolve-resolved-${tesc}" class="map-mapped" style="display:none">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        ${_CHECK_ICON(11, 'var(--accent-success,#4ade80)')}
         <span id="resolve-resolved-label-${tesc}" class="map-mapped-label"></span>
         <button class="map-clear-btn" onclick="App._resolveClearAction(${trackArg})" title="Clear">✕</button>
       </div>
@@ -10573,7 +10587,7 @@ function _swBuildGroupCard(gid, group) {
         <span class="sw-page-count">${page + 1} / ${totalPages}</span>
         <button class="sw-page-btn" ${page >= totalPages - 1 ? 'disabled' : ''} onclick="event.stopPropagation();App.swReviewPage('${gid}',${page+1})">
           Next
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
       </div>
     </div>` : '';
@@ -11541,7 +11555,7 @@ function _swRenderCompletedFeed(status, logId = 'sw-sync-log', countId = 'sw-syn
       const subtitle = item?.subtitle || (item?.kind === 'playlist' ? 'Playlist file' : 'Transferred');
       const size = Number.isFinite(Number(item?.size_bytes)) ? _fmtBytes(Number(item.size_bytes)) : '--';
       return `<div class="sw-completed-row">
-        <span class="sw-completed-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+        <span class="sw-completed-icon">${_CHECK_ICON(14)}</span>
         <span class="sw-completed-name"><span class="sw-completed-title">${esc(title)}</span><span class="sw-completed-sub">${esc(subtitle)}</span></span>
         <span class="sw-completed-size">${esc(size)}</span>
       </div>`;
@@ -11746,7 +11760,7 @@ function _swRenderPhases(containerId, phases, activeIndex) {
     if (i < activeIndex)  state = 'done';
     if (i === activeIndex) state = 'active';
     const icon = state === 'done'
-      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>`
+      ? _CHECK_ICON(14, 'var(--accent-success)')
       : state === 'active'
       ? `<svg class="sw-spinner-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>`
       : `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="3" opacity="0.4"/></svg>`;
@@ -12515,7 +12529,7 @@ async function ejectDap(dapId, name) {
       ejectToast.finish(`${name} ejected. Safe to remove.`, 'success');
       btns.forEach(b => {
         if (b.classList.contains('gear-icon-btn')) return;  // icon button: stays dimmed/disabled
-        b.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Ejected`;
+        b.innerHTML = `${_CHECK_ICON(14)} Ejected`;
       });
       await loadDevicesView();
       if (state.view === 'dap-detail') await showDapDetail(dapId);
@@ -12553,7 +12567,7 @@ async function ejectIpod(ipodId, name) {
     if (r.ok) {
       ejectToast.finish(`${name} ejected. Safe to remove.`, 'success');
       btns.forEach(b => {
-        b.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Ejected`;
+        b.innerHTML = `${_CHECK_ICON(14)} Ejected`;
       });
     } else {
       ejectToast.finish(d.error || 'Eject failed.', 'error');
@@ -14396,7 +14410,7 @@ function _swIpodPageBar(page, total, fnName) {
         <span class="sw-page-count">${page + 1} / ${totalPages}</span>
         <button class="sw-page-btn" ${page >= totalPages - 1 ? 'disabled' : ''} onclick="event.stopPropagation();App.${fnName}(1)">
           Next
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
       </div>
     </div>`;
@@ -15413,7 +15427,7 @@ async function _swHandleIpodSyncDone(status) {
     card.innerHTML = `
       <div class="sw-done-hero">
         <div class="sw-done-check-circle">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          ${_CHECK_ICON(22)}
         </div>
         <div class="sw-done-hero-text">
           <span class="sw-overline sw-overline--success">${wasCancelled ? 'STOPPED EARLY' : (errorCount ? 'COMPLETE WITH ISSUES' : 'COMPLETE')}</span>
@@ -16886,7 +16900,7 @@ function renderPeqEditorBands() {
           <button type="button" class="peq-step-btn" onclick="event.stopPropagation();App.stepPeqParam('q', ${i}, 1)" aria-label="Increase band ${i + 1} Q">+</button>
         </div>
         <button class="peq-band-clear-btn" type="button" onclick="event.stopPropagation();App.clearPeqBand(${i})" title="Clear band ${i + 1}" aria-label="Clear band ${i + 1}">
-          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"/></svg>
+          ${_SMALL_X_ICON(10)}
         </button>
       </div>`;
   }).join('');
@@ -18413,7 +18427,7 @@ function renderSongsTable() {
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
       <td class="col-num" data-col="track_number" onclick="App.toggleTrackSelection('${t.id}', ${globalIdx}, event)">
         <div class="num-cell">
-          <span class="track-check-indicator"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <span class="track-check-indicator">${_CHECK_ICON(10)}</span>
           <span class="track-num">${t.track_number || (globalIdx + 1)}</span>
         </div>
       </td>
@@ -23462,7 +23476,7 @@ function _orgWizRenderRail() {
   _orgWiz.templates.forEach(t => {
     const chip = document.createElement('button');
     chip.className = 'orgw-tmpl-chip' + (t.id === _orgWiz.activeId ? ' active' : '');
-    chip.innerHTML = `<span>${_esc(t.name)}</span><span class="orgw-chip-x"><svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></span>`;
+    chip.innerHTML = `<span>${_esc(t.name)}</span><span class="orgw-chip-x">${_SMALL_X_ICON(8)}</span>`;
     chip.querySelector('.orgw-chip-x').addEventListener('mousedown', e => {
       e.preventDefault(); e.stopPropagation();
       if (_orgWiz.templates.length <= 1) return;
@@ -23519,7 +23533,7 @@ function _orgWizMakeChip(key) {
   chip.className = 'orgw-ftag token-tag';
   chip.setAttribute('contenteditable', 'false');
   chip.dataset.field = key; chip.dataset.token = key;
-  chip.innerHTML = `<span class="orgw-ft-name">${_ORG_FIELDS[key] || key}</span><span class="orgw-ft-x"><svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></span>`;
+  chip.innerHTML = `<span class="orgw-ft-name">${_ORG_FIELDS[key] || key}</span><span class="orgw-ft-x">${_SMALL_X_ICON(8)}</span>`;
   chip.querySelector('.orgw-ft-x').addEventListener('mousedown', e => {
     e.preventDefault(); e.stopPropagation();
     chip.remove(); _orgWizSerialize(); _orgWizRenderLivePreview(); _orgWizSyncFooter();
@@ -24777,11 +24791,11 @@ function coverageSetValue(value) {
 }
 
 function _discoverCheckSvg() {
-  return `<svg class="discover-check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+  return _CHECK_ICON(12, 'currentColor', 'discover-check');
 }
 
 function _discoverChevronSvg(open) {
-  return `<svg class="discover-pill-chevron${open ? ' open' : ''}" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>`;
+  return `<svg class="discover-pill-chevron${open ? ' open' : ''}" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
 }
 
 function _discoverRenderFilterRail() {
@@ -27896,11 +27910,11 @@ function _renderArtworkCandidatePage(prefix, mode) {
   const prevDisabled = page <= 0 ? 'disabled' : '';
   pager.innerHTML = `
     <button type="button" class="artist-image-page-btn" onclick="App.${prevFn}(-1)" ${prevDisabled} aria-label="Previous page">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
     </button>
     <span>Page ${page + 1} of ${totalPages}</span>
     <button type="button" class="artist-image-page-btn" onclick="App.${prevFn}(1)" ${nextDisabled} aria-label="Next page">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
     </button>
   `;
   pager.style.display = '';
@@ -27974,7 +27988,7 @@ function _resetAlbumArtSearchBtn() {
   const btn = document.getElementById('aa-search-btn');
   if (!btn) return;
   btn.disabled = false;
-  btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Search`;
+  btn.innerHTML = _SEARCH_ICON_HTML;
 }
 
 async function searchAlbumArt() {
@@ -28175,7 +28189,7 @@ function openArtistImageModal() {
   // Reset search button state
   const searchBtn = document.getElementById('ai-search-btn');
   searchBtn.disabled = false;
-  searchBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Search`;
+  searchBtn.innerHTML = _SEARCH_ICON_HTML;
 
   // Pre-select preferred service
   const svc = document.getElementById('ai-service-select');
@@ -28233,7 +28247,7 @@ async function searchArtistImages() {
 
   const _resetSearchBtn = () => {
     btn.disabled = false;
-    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Search`;
+    btn.innerHTML = _SEARCH_ICON_HTML;
   };
 
   try {

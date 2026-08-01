@@ -131,9 +131,22 @@ Module-level globals for Gear views:
 - `_baselines` — cached baseline list (loaded on Settings view open)
 - `_selectedBaselineColor` — currently chosen swatch for next baseline add
 - `BASELINE_COLORS` — 10-colour design-system palette for baseline swatch picker
-- `_DAP_SVG` — inline SVG string used for all DAP card/header icons
+- `_DAP_SVG` — CSS mask-icon span (`<span class="gear-device-icon gear-device-icon--dap">`, masks `/icons/dap.svg`) used for all DAP card/header icons; despite the name, no longer literal inline SVG markup
 
 Public `App` object exposes all functions called from HTML `onclick` attributes.
+
+## Iconography House Style
+No icon library — every icon is hand-written inline SVG (in `index.html` markup or `app.js`/`player.js` template strings), or a CSS mask-icon span referencing a file in `static/icons/` (used for a handful of "system" icons: primary nav Playlists/Gear, `_DAP_SVG`, `_GEAR_ICON_MUSIC`, `_GEAR_ICON_PLAYLIST`, the player transport bar). When adding a new icon:
+- **Outline style by default**: `fill="none" stroke="currentColor"`, not a filled glyph, unless matching an existing filled-icon family (nav icons, star, modal-header close `X`, trash/edit glyphs — these are established filled exceptions, don't convert them piecemeal).
+- **`viewBox="0 0 24 24"`** unless the icon is a genuinely different aspect ratio (e.g. a flat wide chevron) — 24×24 is the dominant convention across the app.
+- **`currentColor`** for stroke/fill so buttons inherit hover/active text color. Only hardcode a color when it's a deliberate modal-tile accent tint that's meant to stay fixed regardless of button state — and prefer an existing CSS var (`var(--accent-warning)`, `var(--accent-success)`) over a raw hex value.
+- **Canonical shared shapes** — reuse these, don't hand-cut a new variant:
+  - Close/remove "X": `viewBox 0 0 12 12`, `stroke-width 1.8`, `d="M2 2l8 8M10 2l-8 8"` — helper `_SMALL_X_ICON(size)` in `app.js`. (The larger filled 24-viewBox modal-header close button, `.modal-x-btn`, is a separate deliberate style — leave it as is.)
+  - Checkmark: `viewBox 0 0 24 24`, `stroke-width 2.5`, `<polyline points="20 6 9 17 4 12"/>` — helper `_CHECK_ICON(size, color, cls)` in `app.js`.
+  - Search (magnifying glass): `viewBox 0 0 24 24`, `stroke-width 2`, `<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>` — constant `_SEARCH_ICON_HTML` in `app.js`.
+  - Directional chevron: `viewBox 0 0 24 24`, `stroke-width 2`, `stroke-linecap/linejoin="round"`, `<polyline points="9 18 15 12 9 6"/>` (right; rotate points for other directions, e.g. `"6 9 12 15 18 9"` for down).
+  - Trash: the two-path sharp-corner bin (`_GEAR_ICON_TRASH` in `app.js`), reused verbatim wherever a delete icon is needed.
+- **Hoist into a named constant** in `app.js` (following `_GEAR_ICON_*`, `_SMALL_X_ICON`, `_CHECK_ICON`, `_SEARCH_ICON_HTML`) whenever the same icon markup would otherwise be copy-pasted at 2+ call sites in JS — this is what prevents silent stroke-width/path drift over time. Icons that only ever appear once in static `index.html` markup don't need this (no build step to share JS constants into raw HTML).
 
 ## Features Implemented
 - [x] DAP management — add/edit/delete DAPs with model presets (Poweramp, Hiby OS, FiiO Player, Other), SVG icon (no emoji), per-playlist sync status tracking (never / stale / up-to-date), one-click export to mounted device

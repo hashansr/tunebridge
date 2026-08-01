@@ -2417,8 +2417,8 @@ const Player = (function () {
 
   function _queueChevronHtml(expanded) {
     return expanded
-      ? `<svg class="queue-section-chevron queue-section-chevron-down" width="11" height="8" viewBox="0 0 12 8" fill="none" aria-hidden="true"><path d="M1 1.5L6 6L11 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
-      : `<svg class="queue-section-chevron" width="8" height="11" viewBox="0 0 8 12" fill="none" aria-hidden="true"><path d="M1.5 1L6 6L1.5 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      ? `<svg class="queue-section-chevron queue-section-chevron-down" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>`
+      : `<svg class="queue-section-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>`;
   }
 
   function _destroyQueueSortables() {
@@ -2515,8 +2515,8 @@ const Player = (function () {
       : (isQueue || isAutoplay ? _queueGripHtml() : '<div class="queue-drag-spacer"></div>');
     const remove = isRemovable
       ? `<button class="queue-item-remove" onclick="event.stopPropagation();Player.removeFromQueue(${realIdx})" title="Remove from queue" aria-label="Remove from queue">
-          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <path d="M2 2l8 8M10 2l-8 8"/>
           </svg>
         </button>`
       : '';

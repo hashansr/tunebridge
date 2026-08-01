@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Standardised close ("X"), checkmark, search, chevron, and delete icons across the app to consistent shapes, sizes, and stroke weights that were previously drifting between screens.
 
 ## v0.631-rc.020826-0938 · 2026-08-02
 

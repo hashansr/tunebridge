@@ -30,7 +30,7 @@
 
       <div id="sidebar-search-wrap">
         <div id="sidebar-search-field">
-          <svg class="sidebar-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <svg class="sidebar-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input id="sidebar-search-input" type="search" placeholder="Search…" autocomplete="off" spellcheck="false"
             aria-label="Search artists, songs, playlists"
             oninput="App.onSidebarSearchInput(this.value)"
@@ -286,7 +286,7 @@
       <div id="view-search" class="view" style="display:none">
         <div id="search-results-empty" class="search-results-empty" style="display:none">
           <div class="empty-icon-circle">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           </div>
           <p class="empty-title">No results found</p>
           <p class="empty-subtitle" id="search-no-results-hint"></p>
@@ -1841,7 +1841,7 @@
         <div class="tb-table-shell insights-missing-tags-shell">
           <div class="tb-table-toolbar-inside insights-missing-tags-controls">
             <div class="tb-filter-wrap">
-              <span class="tb-filter-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+              <span class="tb-filter-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
               <input id="insights-missing-tags-search" class="tb-filter-input" type="text" placeholder="Filter tracks…" oninput="App.setMissingTagsSearch(this.value)" />
             </div>
             <select id="insights-missing-tags-filter" class="tb-filter-select" onchange="App.setMissingTagsFilter(this.value)">
@@ -1977,7 +1977,7 @@
                 <p class="tb-modal-subtitle export-csv-subtitle">Choose the columns to include. Your selection is remembered for next time.</p>
               </div>
             </div>
-            <button class="modal-x-btn" type="button" aria-label="Close" onclick="App._closeExportCsvModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg></button>
+            <button class="modal-x-btn" type="button" aria-label="Close" onclick="App._closeExportCsvModal()"><svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l8 8M10 2l-8 8"/></svg></button>
           </div>
           <div class="tb-modal-body export-csv-body">
             <div class="export-csv-toolbar">
@@ -2093,7 +2093,7 @@
                 <p class="tb-modal-subtitle" id="csv-import-step-sub">Step 1 of 6 — Upload a CSV file</p>
               </div>
             </div>
-            <button class="modal-x-btn" type="button" aria-label="Close" onclick="App.closeCsvImportModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg></button>
+            <button class="modal-x-btn" type="button" aria-label="Close" onclick="App.closeCsvImportModal()"><svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 2l8 8M10 2l-8 8"/></svg></button>
           </div>
           <div class="tb-modal-body csv-import-body">
 
@@ -2402,7 +2402,7 @@
           <div id="sw-step-5" class="sw-step" style="display:none">
             <div class="sw-done-hero" id="sw-done-hero">
               <div class="sw-done-check-circle">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               </div>
               <div class="sw-done-hero-text">
                 <span class="sw-overline sw-overline--success">COMPLETE</span>
@@ -2604,7 +2604,7 @@
                 <div class="orgw-select-wrap">
                   <button class="orgw-select-pill" id="orgw-conflict-pill">
                     <span id="orgw-conflict-label">Keep both (add suffix)</span>
-                    <span class="orgw-chev"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4l3.5 3.5L9.5 4"/></svg></span>
+                    <span class="orgw-chev"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
                   </button>
                   <div class="orgw-select-menu" id="orgw-conflict-menu">
                     <button data-policy="keep_both">Keep both (add suffix)</button>
@@ -3839,7 +3839,7 @@
       Resolve Playlist
     </div>
     <div class="ctx-item ctx-item-danger" id="playlist-ctx-delete-item" onclick="App.ctxPlaylistDelete()">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 1.5V2.5H3C2.448 2.5 2 2.948 2 3.5v1C2 5.052 2.448 5.5 3 5.5h18c.552 0 1-.448 1-1v-1c0-.552-.448-1-1-1h-5v-1c0-.552-.448-1-1-1H9c-.552 0-1 .448-1 1Z"/><path d="M3.923 7.5h16.154l-.943 12.722A3 3 0 0 1 16.143 23H7.857a3 3 0 0 1-2.992-2.778L3.923 7.5Z"/></svg>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 1.5V2.5H3C2.44772 2.5 2 2.94772 2 3.5V4.5C2 5.05228 2.44772 5.5 3 5.5H21C21.5523 5.5 22 5.05228 22 4.5V3.5C22 2.94772 21.5523 2.5 21 2.5H16V1.5C16 0.947715 15.5523 0.5 15 0.5H9C8.44772 0.5 8 0.947715 8 1.5Z"/><path d="M3.9231 7.5H20.0767L19.1344 20.2216C19.0183 21.7882 17.7135 23 16.1426 23H7.85724C6.28636 23 4.98148 21.7882 4.86544 20.2216L3.9231 7.5Z"/></svg>
       Delete
     </div>
   </div>
@@ -3906,7 +3906,7 @@
         Checking playlist…
       </div>
       <div id="resolve-all-ok" class="resolve-all-ok-state" style="display:none">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success,#4ade80)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success,#4ade80)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         <p>All tracks are present in your library.</p>
       </div>
       <div id="resolve-missing-wrap" style="display:none; padding: 0 24px 0">
@@ -4538,7 +4538,7 @@
             <option value="fanart">Fanart.tv</option>
           </select>
           <button class="btn-primary ai-search-btn-inner" id="aa-search-btn" onclick="App.searchAlbumArt()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             Search
           </button>
         </div>
@@ -4610,7 +4610,7 @@
             <option value="fanart">Fanart.tv</option>
           </select>
           <button class="btn-primary ai-search-btn-inner" id="ai-search-btn" onclick="App.searchArtistImages()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             Search
           </button>
         </div>
