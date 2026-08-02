@@ -14098,7 +14098,11 @@ function _swRenderIpodGroups() {
    add-plan data model and sync executor untouched while giving the review
    screen the two independent browsers specified by the design handoff. */
 function _swIpodReviewState() {
-  return _sw.ipodReview ||= { leftTab: 'songs', rightTab: 'songs', leftQuery: '', rightQuery: '', open: new Set(), leftPage: 0, rightPage: 0 };
+  return _sw.ipodReview ||= {
+    leftTab: 'songs', rightTab: 'songs', leftQuery: '', rightQuery: '', open: new Set(),
+    leftSongsPage: 0, leftPlaylistsPage: 0,
+    rightSongsPage: 0, rightPlaylistsPage: 0,
+  };
 }
 function _swIpodReviewToggle(el) {
   const state = _swIpodReviewState();
@@ -14109,19 +14113,20 @@ function _swIpodReviewToggle(el) {
 function _swIpodReviewSetTab(side, tab) {
   const state = _swIpodReviewState();
   state[`${side}Tab`] = tab;
-  state[`${side}Page`] = 0;
   _swRenderIpodReview();
 }
 function _swIpodReviewSearch(side, value) {
   const state = _swIpodReviewState();
   state[`${side}Query`] = value;
-  state[`${side}Page`] = 0;
+  const tab = state[`${side}Tab`];
+  state[`${side}${tab[0].toUpperCase()}${tab.slice(1)}Page`] = 0;
   _swRenderIpodReview();
 }
 function _swIpodReviewClearSearch(side) {
   const state = _swIpodReviewState();
   state[`${side}Query`] = '';
-  state[`${side}Page`] = 0;
+  const tab = state[`${side}Tab`];
+  state[`${side}${tab[0].toUpperCase()}${tab.slice(1)}Page`] = 0;
   _swRenderIpodReview();
   document.querySelector(`.sw-ipod-search input[data-side="${side}"]`)?.focus();
 }
@@ -14136,9 +14141,10 @@ function _swIpodReviewToggleAll(scope, type) {
   selections.forEach((_, id) => selections.set(id, selectAll));
   _swRenderIpodReview();
 }
-function _swIpodReviewPage(side, delta) {
+function _swIpodReviewPage(side, tab, delta) {
   const state = _swIpodReviewState();
-  state[`${side}Page`] = Math.max(0, state[`${side}Page`] + delta);
+  const pageKey = `${side}${tab[0].toUpperCase()}${tab.slice(1)}Page`;
+  state[pageKey] = Math.max(0, (state[pageKey] || 0) + delta);
   _swRenderIpodReview();
 }
 function _swIpodReviewToggleGroup(el) {
@@ -14282,21 +14288,21 @@ function _swRenderIpodReview() {
     return `<article class="sw-ipod-group"><button class="sw-ipod-group-head" data-key="${key}" onclick="App.swIpodReviewToggle(this)">${_swIpodReviewCheck(checked, false, `data-scope="library" data-type="playlists" data-index="${sourceIndex}" onclick="event.stopPropagation();App.swIpodReviewToggleGroup(this)"`)}${_swIpodReviewThumb(playlist, 'playlist')}<span class="sw-ipod-group-copy"><b>${esc(playlist.name)}</b><small>${playlist.missingTrackCount || tracks.length} track${(playlist.missingTrackCount || tracks.length) === 1 ? '' : 's'} to add</small></span><em class="${checked ? 'is-new' : ''}">${checked ? 'Selected' : 'Not selected'}</em><span class="sw-ipod-svg sw-ipod-svg--chev${state.open.has(key) ? ' open' : ''}"></span></button>${state.open.has(key) ? `<div class="sw-ipod-group-body">${tracks.map(track => trackRow(track, plan.trackSelected.get(track.id) !== false, 'library')).join('') || '<p class="sw-ipod-no-tracks">No additional tracks required.</p>'}</div>` : ''}</article>`;
   };
   const pageSize = 25;
-  const paginate = (side, items, render, noun) => {
-    const pageKey = `${side}Page`;
+  const paginate = (side, tab, items, render, noun) => {
+    const pageKey = `${side}${tab[0].toUpperCase()}${tab.slice(1)}Page`;
     const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
-    state[pageKey] = Math.min(state[pageKey], totalPages - 1);
+    state[pageKey] = Math.min(Number.isInteger(state[pageKey]) ? state[pageKey] : 0, totalPages - 1);
     const start = state[pageKey] * pageSize;
     const rows = items.slice(start, start + pageSize).map(render).join('');
-    const pager = totalPages > 1 ? `<div class="sw-ipod-pager"><span>Showing ${start + 1}–${Math.min(start + pageSize, items.length)} of ${items.length} ${noun}</span><button ${state[pageKey] === 0 ? 'disabled' : ''} onclick="App.swIpodReviewPage('${side}',-1)">Prev</button><b>${state[pageKey] + 1} / ${totalPages}</b><button ${state[pageKey] >= totalPages - 1 ? 'disabled' : ''} onclick="App.swIpodReviewPage('${side}',1)">Next</button></div>` : '';
+    const pager = totalPages > 1 ? `<div class="sw-ipod-pager"><span>Showing ${start + 1}–${Math.min(start + pageSize, items.length)} of ${items.length} ${noun}</span><button ${state[pageKey] === 0 ? 'disabled' : ''} onclick="App.swIpodReviewPage('${side}','${tab}',-1)">Prev</button><b>${state[pageKey] + 1} / ${totalPages}</b><button ${state[pageKey] >= totalPages - 1 ? 'disabled' : ''} onclick="App.swIpodReviewPage('${side}','${tab}',1)">Next</button></div>` : '';
     return rows + pager;
   };
-  const leftSongs = paginate('left', deviceArtists, a => deviceArtist(a, browse.artistTree.indexOf(a)), 'artists');
-  const leftPlaylists = paginate('left', devicePlaylists, p => devicePlaylist(p, browse.playlists.indexOf(p)), 'playlists');
+  const leftSongs = paginate('left', 'songs', deviceArtists, a => deviceArtist(a, browse.artistTree.indexOf(a)), 'artists');
+  const leftPlaylists = paginate('left', 'playlists', devicePlaylists, p => devicePlaylist(p, browse.playlists.indexOf(p)), 'playlists');
   const rightSongs = plan
-    ? paginate('right', addArtists, artist => addArtist(artist, plan.artistTree.indexOf(artist)), 'artists')
+    ? paginate('right', 'songs', addArtists, artist => addArtist(artist, plan.artistTree.indexOf(artist)), 'artists')
     : '<div class="sw-ipod-loading">Comparing your library with this iPod…</div>';
-  const rightPlaylists = plan ? paginate('right', addPlaylists, p => addPlaylist(p, plan.playlists.indexOf(p)), 'playlists') : '<div class="sw-ipod-loading">Comparing your library with this iPod…</div>';
+  const rightPlaylists = plan ? paginate('right', 'playlists', addPlaylists, p => addPlaylist(p, plan.playlists.indexOf(p)), 'playlists') : '<div class="sw-ipod-loading">Comparing your library with this iPod…</div>';
   root.innerHTML = `<div class="sw-ipod-chrome"><div class="sw-ipod-stats"><span><b>${onTracks.toLocaleString()}</b><small>Songs on iPod</small></span><span><b>${onPlaylists}</b><small>Playlists on iPod</small></span></div><button class="sw-ipod-rescan sw-ipod-refresh" id="sw-ipod-refresh-btn" onclick="App.swRefreshIpodConnection()"><span class="sw-ipod-svg sw-ipod-svg--refresh"></span>Refresh connection</button><button class="sw-ipod-rescan" id="sw-ipod-scan-btn" onclick="App.swScanIpod()"><span class="sw-ipod-svg sw-ipod-svg--refresh"></span>Rescan iPod</button></div>
     <section class="sw-ipod-hero"><span class="sw-ipod-device-icon">${_IPOD_SVG_SMALL}</span><span class="sw-ipod-identity"><span class="sw-ipod-title-row"><h2>${esc(device.name || 'iPod')}</h2></span><p>${esc(device.model || 'iPod')} <b></b> Scanned ${esc(lastScan)}</p></span></section>
     <section class="sw-ipod-columns">
