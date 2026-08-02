@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.637 · 2026-08-03
+
 ## v0.636-rc.030826-0820 · 2026-08-03
 - Fix: Album art on a click-wheel iPod would only show on the "Now Playing" screen for one song per album, even though every song had a correctly-linked cover - because when several songs shared the exact same picture, they were all made to share one internal artwork record too, and the device only displays "Now Playing" art for whichever one song that shared record still remembers as its owner. Every song with art now gets its own record (still reusing the same image data underneath, so this doesn't use extra space), so "Now Playing" art now shows correctly for every song, not just one per album.
 
