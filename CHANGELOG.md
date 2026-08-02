@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.633-rc.030826-0740 · 2026-08-03
 - Fix: The delete and edit/rename buttons on a DAP, IEM, or iPod's detail page no longer stay pinned to the top of the screen while scrolling — they now sit next to the device name at the top of the page like everything else.
 - Fix: Songs synced to a click-wheel iPod from 24-bit FLAC sources could stutter or skip unpredictably during playback, because they were transcoded to ALAC keeping the original 24-bit depth, which these devices only support through an unreliable on-device workaround. Audio transcoded for these devices is now always converted down to 16-bit, and the resulting files are also restructured the way iTunes always produced them for these devices, which may further reduce skipping/start-up delay. Songs already synced before this fix need to be removed and re-added once to pick up the corrected audio.
 - Fix: The bitrate reported for songs on a click-wheel iPod (and used by the device to size its playback buffer) was carried over unchanged from the original FLAC file even after transcoding to ALAC, so it could read far higher than the ALAC file's real bitrate, especially for hi-res sources - contributing to the stutter/skip issue above. It's now measured from the actual transcoded file, and that file is also correctly marked as variable-bitrate (how ALAC actually works) instead of constant-bitrate.
