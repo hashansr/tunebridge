@@ -20853,6 +20853,12 @@ body.is-col-resizing {
   gap: 8px;
 }
 
+.sw-device-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .sw-device-list {
   display: flex;
   flex-direction: column;
@@ -20896,6 +20902,8 @@ body.is-col-resizing {
 .sw-ipod-rescan { display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px; border: 0; border-radius: 999px; color: #0c1933; background: linear-gradient(135deg, #b9cdfb, #9fbcfd); box-shadow: 0 6px 18px rgba(173,198,255,.22); cursor: pointer; font: 600 13px inherit; transition: filter .15s ease, box-shadow .15s ease; }
 .sw-ipod-rescan:hover:not(:disabled) { filter: brightness(1.05); box-shadow: 0 8px 22px rgba(173,198,255,.32); }
 .sw-ipod-rescan:disabled { cursor: default; opacity: .45; }
+.sw-ipod-refresh { color: var(--text-sub); background: var(--bg-elevated); border: 1px solid var(--border); box-shadow: none; }
+.sw-ipod-refresh:hover:not(:disabled) { border-color: rgba(173,198,255,.4); box-shadow: none; }
 .sw-ipod-hero { display: flex; align-items: center; gap: 16px; min-height: 50px; margin-top: 0; padding: 0 0 14px; border-bottom: 1px solid rgba(255,255,255,.06); flex-shrink: 0; }
 .sw-ipod-device-icon { width: 50px; height: 50px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--accent); background: var(--bg-elevated); border: 1px solid rgba(65,71,85,.38); }
 .sw-ipod-device-icon .gear-mask-icon,
