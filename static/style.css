@@ -1761,13 +1761,6 @@ h4.settings-subsection-title {
   transform: translateY(-1px);
 }
 
-#main-nav-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  pointer-events: auto;
-}
-
 :root {
   --main-nav-overlay-clearance: calc(var(--main-nav-btn-size) + var(--main-nav-title-gap));
 }
@@ -3008,6 +3001,7 @@ tbody tr:hover .remove-btn { opacity: 1; }
 .ipod-detail-icon-btn.danger:hover:not(:disabled) { color: var(--accent-secondary); }
 .ipod-detail-icon-btn:disabled { opacity: .35; cursor: default; }
 .ipod-detail-identity { gap: 20px; margin-top: 20px; }
+.ipod-detail-identity-actions { display: flex; gap: 4px; margin-left: auto; align-self: flex-start; }
 .ipod-detail-badge { width: 56px; height: 56px; flex: 0 0 auto; border-radius: 12px; border: 1px solid var(--ipod-border-strong); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; background: var(--bg-elevated); }
 .ipod-detail-badge .gear-device-icon { width: 26px; height: 28px; }
 .ipod-detail-identity h1 { margin: 0; color: var(--text); font-size: 30px; font-weight: 800; letter-spacing: -.025em; line-height: 1.05; }
@@ -25351,6 +25345,8 @@ body.is-col-resizing {
   gap: 4px;
 }
 .gd-identity-actions {
+  display: flex;
+  gap: 4px;
   margin-left: auto;
   align-self: flex-start;
   padding-top: 2px;

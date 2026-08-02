@@ -34,12 +34,23 @@ _NATIVE_FORMATS = {'.mp3', '.m4a', '.m4b', '.m4p', '.aac', '.wav', '.aif', '.aif
 # untouched.
 _MAX_IPOD_SAMPLE_RATE = 48000
 
+# Click-wheel iPods only handle 24-bit ALAC via an unofficial, unreliable
+# real-time truncation to 16-bit during playback (confirmed against a real
+# iPod Classic 5th Gen: every synced 24-bit-sourced ALAC file - both ones
+# that played fine and ones that stuttered every ~2s - decoded as "from
+# 24-bit source" per afinfo; real iTunes itself never pre-truncated 24-bit
+# files before sync, relying on this same shaky on-device path). Forcing
+# 16-bit here, like iTunes' own contemporaries did in practice, avoids that
+# marginal decode path entirely rather than gambling on it per-track.
+_TARGET_SAMPLE_FMT = 's16p'
+
 # Bump whenever transcode_flac_to_alac()'s ffmpeg arguments change, so a
 # stale cache entry produced by the old logic (e.g. an un-clamped hi-res
-# transcode from before the sample-rate fix) is never silently reused -
-# the cache key is otherwise just the source file's content hash, which
-# doesn't change when only the transcode logic does.
-TRANSCODE_FORMAT_VERSION = 2
+# transcode from before the sample-rate fix, or a 24-bit transcode from
+# before the bit-depth fix) is never silently reused - the cache key is
+# otherwise just the source file's content hash, which doesn't change when
+# only the transcode logic does.
+TRANSCODE_FORMAT_VERSION = 3
 
 
 class TranscodeError(RuntimeError):
@@ -81,14 +92,21 @@ def ffprobe_executable() -> str:
 
 
 def probe_audio(path) -> dict:
-    """Real sample rate (Hz) of the first audio stream and duration (ms) of
-    the container, read straight from the file's bytes rather than trusted
-    from source tags. Used both to decide whether a source needs
-    downsampling before transcode, and to verify what ffmpeg actually
-    produced afterwards."""
+    """Real sample rate (Hz), sample format, bitrate (kbps) of the first
+    audio stream, and duration (ms) of the container, read straight from
+    the file's bytes rather than trusted from source tags. Used both to
+    decide whether a source needs downsampling/bit-depth conversion before
+    transcode, to verify what ffmpeg actually produced afterwards, and to
+    populate the iTunesDB bitrate/sample_rate fields from the real
+    on-device file rather than stale source-tag values.
+
+    bitrate_kbps comes from the container's overall bit_rate (ffprobe
+    reports bits/sec) - ALAC has no fixed encoder bitrate, so this is
+    measured, not requested, and will legitimately vary per track.
+    """
     result = subprocess.run(
         [ffprobe_executable(), '-v', 'error', '-select_streams', 'a:0',
-         '-show_entries', 'stream=sample_rate:format=duration',
+         '-show_entries', 'stream=sample_rate,sample_fmt:format=duration,bit_rate',
          '-of', 'json', str(path)],
         capture_output=True, timeout=30,
     )
@@ -101,9 +119,13 @@ def probe_audio(path) -> dict:
     streams = data.get('streams') or []
     if not streams or not streams[0].get('sample_rate'):
         raise TranscodeError(f'ffprobe found no audio stream in {path}')
+    fmt = data.get('format') or {}
+    bit_rate = fmt.get('bit_rate')
     return {
         'sample_rate': int(streams[0]['sample_rate']),
-        'duration_ms': int(round(float(data['format']['duration']) * 1000)),
+        'sample_fmt': streams[0].get('sample_fmt') or '',
+        'bitrate_kbps': int(bit_rate) // 1000 if bit_rate else 0,
+        'duration_ms': int(round(float(fmt['duration']) * 1000)),
     }
 
 
@@ -129,13 +151,27 @@ def transcode_flac_to_alac(src_path, dest_path, timeout: int = 300) -> None:
 
     Source sample rate is clamped to _MAX_IPOD_SAMPLE_RATE when it exceeds
     it (see that constant's docstring for why); 44.1/48kHz sources are left
-    exactly as before, untouched.
+    exactly as before, untouched. Bit depth is always forced down to
+    _TARGET_SAMPLE_FMT (16-bit) regardless of source, since click-wheel
+    iPods only decode 24-bit ALAC via an unreliable on-device truncation
+    (see that constant's docstring).
     """
     src_probe = probe_audio(src_path)
     cmd = [ffmpeg_executable(), '-y', '-i', str(src_path), '-c:a', 'alac', '-vn']
     if src_probe['sample_rate'] > _MAX_IPOD_SAMPLE_RATE:
         cmd += ['-ar', str(_MAX_IPOD_SAMPLE_RATE)]
     cmd += [
+        # Forces 16-bit output with proper triangular dither applied
+        # during the same conversion - a bare -sample_fmt would truncate
+        # without dithering. dither_method=triangular_hp is a standard,
+        # uncontroversial choice for a lossless-to-16-bit-lossless step.
+        '-af', f'aresample=osf={_TARGET_SAMPLE_FMT}:dither_method=triangular_hp',
+        # +faststart moves the moov atom to the front of the file, matching
+        # what real iTunes produced for iPod-bound files. Confirmed via afinfo
+        # every ffmpeg-transcoded file was "not optimized" (moov after mdat)
+        # before this - a real (if lower-confidence than bit depth) source of
+        # extra seek latency at track-open on the 5th Gen's mechanical HDD.
+        '-movflags', '+faststart',
         # -f mp4 forced explicitly: ffmpeg otherwise sniffs the output
         # container from the destination filename's extension, and the
         # temp path used during a safe write (name.m4a.tmp) ends in
@@ -148,16 +184,23 @@ def transcode_flac_to_alac(src_path, dest_path, timeout: int = 300) -> None:
         raise TranscodeError(f'ffmpeg failed for {src_path}: {stderr_tail}')
 
     # Defensive verification: a "successful" ffmpeg run (exit 0, file
-    # exists) that still produced an out-of-range or truncated file would
-    # otherwise be written straight into the iTunesDB with no error
-    # surfaced anywhere - exactly what let the un-clamped sample rate go
-    # unnoticed before this fix. Duration tolerance is generous since ALAC
-    # framing can shift the reported length slightly from the source.
+    # exists) that still produced an out-of-range, wrong-bit-depth, or
+    # truncated file would otherwise be written straight into the iTunesDB
+    # with no error surfaced anywhere - exactly what let the un-clamped
+    # sample rate go unnoticed before that fix, and the same class of bug
+    # this bit-depth check exists to catch. Duration tolerance is generous
+    # since ALAC framing can shift the reported length slightly from the
+    # source.
     out_probe = probe_audio(dest_path)
     if out_probe['sample_rate'] > _MAX_IPOD_SAMPLE_RATE:
         raise TranscodeError(
             f'transcode of {src_path} produced {out_probe["sample_rate"]}Hz ALAC, '
             f'above the {_MAX_IPOD_SAMPLE_RATE}Hz iPod playback ceiling'
+        )
+    if not out_probe['sample_fmt'].startswith('s16'):
+        raise TranscodeError(
+            f'transcode of {src_path} produced {out_probe["sample_fmt"]!r} ALAC, '
+            f'expected 16-bit ({_TARGET_SAMPLE_FMT})'
         )
     if out_probe['duration_ms'] <= 0 or (
         src_probe['duration_ms'] > 0

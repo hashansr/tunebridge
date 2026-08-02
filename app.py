@@ -12926,18 +12926,30 @@ def ipod_sync_execute(iid):
 
             def _make_local_track_info(t, local_id, device_path, device_file, was_transcoded):
                 ext = device_file.suffix.lstrip('.').lower() or 'm4a'
-                # sample_rate/length are measured from the real on-device file
-                # rather than trusted from source tags: transcode.py may clamp
-                # a hi-res source's sample rate before encoding to ALAC, and a
-                # stale value here (previously hardcoded to 44100 always) is
-                # exactly what let that mismatch go unnoticed in the iTunesDB
-                # and in this app's own device-track diagnostic cache.
+                # sample_rate/length/bitrate are measured from the real
+                # on-device file rather than trusted from source tags:
+                # transcode.py may clamp a hi-res source's sample rate before
+                # encoding to ALAC, and a stale value here (previously
+                # hardcoded to 44100 always) is exactly what let that
+                # mismatch go unnoticed in the iTunesDB and in this app's own
+                # device-track diagnostic cache. bitrate is the same story -
+                # the original FLAC's bitrate (t.get('bitrate')) can be
+                # wildly higher than the real transcoded ALAC's (confirmed on
+                # a real device: a 192kHz/24-bit/5039kbps FLAC source
+                # produced a 48kHz-clamped ALAC whose real measured bitrate
+                # was ~1775kbps, but the FLAC's stale 5039 value was what got
+                # written) - only fall back to the source tag if probing the
+                # actual copied file fails outright.
                 try:
                     probed = probe_audio(device_file)
                 except Exception:
                     probed = None
                 sample_rate = probed['sample_rate'] if probed else 44100
                 length = probed['duration_ms'] if probed else _as_int((t.get('duration') or 0)) * 1000
+                bitrate = (
+                    probed['bitrate_kbps'] if (probed and probed.get('bitrate_kbps'))
+                    else _as_int(t.get('bitrate'))
+                )
                 return TrackInfo(
                     title=t.get('title') or 'Untitled',
                     location=':' + device_path.replace('/', ':'),
@@ -12947,7 +12959,17 @@ def ipod_sync_execute(iid):
                         'Apple Lossless audio file' if was_transcoded
                         else _IPOD_NATIVE_FILETYPE_DESC.get(ext)
                     ),
-                    bitrate=_as_int(t.get('bitrate')), sample_rate=sample_rate,
+                    bitrate=bitrate, sample_rate=sample_rate,
+                    # ALAC (every transcoded track) is inherently variable-
+                    # bitrate with no CBR mode - leaving vbr at its False
+                    # default here (as every track did before this fix) tells
+                    # the device's anti-skip/read-ahead buffering that these
+                    # are constant-rate streams, which combined with the
+                    # stale-bitrate bug above under-provisions the buffer
+                    # relative to real data consumption. Native passthrough
+                    # formats (MP3/AAC/etc.) are left at the default rather
+                    # than guessing their source encoder's VBR-ness.
+                    vbr=was_transcoded,
                     artist=t.get('artist') or None, album=t.get('album') or None,
                     album_artist=t.get('album_artist') or None, genre=t.get('genre') or None,
                     track_number=_as_int(t.get('track_number')), disc_number=_as_int(t.get('disc_number'), 1),
@@ -13078,13 +13100,40 @@ def ipod_sync_execute(iid):
                 push_completed(track_info.title, t.get('artist'), track_info.size, 'add')
 
                 if art_format_defs:
-                    try:
-                        art_bytes = extract_art(source_path)
-                    except Exception:
-                        art_bytes = None
+                    # Prefer the app's own shared, already-deduplicated
+                    # album-art cache (same key every other view uses) over
+                    # re-extracting from this one track's own file tags -
+                    # extraction is per-file and silently comes up empty for
+                    # any track whose individual file lacks an embedded
+                    # picture, even when sibling tracks on the same album (or
+                    # the cache) have it. Only fall back to per-file
+                    # extraction on a cache miss, and record it in
+                    # sync_errors (already surfaced in the sync completion
+                    # UI) when both come up empty, instead of the track
+                    # silently ending up with no art at all.
+                    art_bytes = None
+                    eff_artist = t.get('album_artist') or t.get('artist')
+                    album = t.get('album')
+                    if eff_artist and album:
+                        cached_art_path = ARTWORK_DIR / f"{get_artwork_key(eff_artist, album)}.jpg"
+                        if cached_art_path.exists():
+                            try:
+                                art_bytes = cached_art_path.read_bytes()
+                            except OSError:
+                                art_bytes = None
+                    if not art_bytes:
+                        try:
+                            art_bytes = extract_art(source_path)
+                        except Exception:
+                            art_bytes = None
                     if art_bytes:
                         new_art_by_db_track_id[db_track_id] = art_bytes
                         track_info_by_db_track_id[db_track_id] = track_info
+                    else:
+                        sync_errors.append({
+                            'title': t.get('title') or local_id,
+                            'error': 'No album artwork found (cache or embedded)',
+                        })
 
                 # Keep the transcode cache bounded *during* a large sync.
                 # Previously it was cleaned only after the entire batch, so

@@ -7905,8 +7905,6 @@ async function loadHome() {
   _homeLoading = true;
   setActiveNav('home');
   showViewEl('home');
-  const navRight = document.getElementById('main-nav-right');
-  if (navRight) navRight.innerHTML = '';
 
   let data;
   try {
@@ -8588,11 +8586,6 @@ function showViewEl(name) {
     main.classList.toggle('main-coverflow-active', name === 'albums' && _coverflowEnabled() && !state.artist);
   }
   document.body.classList.toggle('show-library-scrollbars', ['artists', 'albums', 'songs'].includes(name));
-  // Clear right nav slot for non-home views (loadHome repopulates it)
-  if (name !== 'home') {
-    const navRight = document.getElementById('main-nav-right');
-    if (navRight) navRight.innerHTML = '';
-  }
 }
 
 function setActiveNav(view) {
@@ -12385,13 +12378,6 @@ async function showDapDetail(id) {
   )) : null;
   const lastSyncTs = summary.last_sync_at || dap.last_sync_at || 0;
   const activeMountPath = dap.active_mount_path || dap.mount_path || '';
-  const navRight = document.getElementById('main-nav-right');
-  if (navRight) {
-    navRight.innerHTML = `
-      <button class="gd-icon-btn danger" onclick="App.deleteDap('${dap.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
-      <button class="gd-icon-btn" onclick="App.showEditDapModal('${dap.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
-    `;
-  }
   const lastSyncLabel = lastSyncTs ? _fmtRelDate(lastSyncTs) : 'never';
   const identityMeta = [_prettyModelLabel(dap.model)];
   if (dap.mounted && spaceFreeBytes != null && spaceTotalBytes != null) {
@@ -12406,6 +12392,10 @@ async function showDapDetail(id) {
         <div class="gd-id-text">
           <h1>${esc(dap.name)}</h1>
           <div class="gd-id-sub">${identityMeta.map(esc).join(' · ')}</div>
+        </div>
+        <div class="gd-identity-actions">
+          <button class="gd-icon-btn danger" onclick="App.deleteDap('${dap.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
+          <button class="gd-icon-btn" onclick="App.showEditDapModal('${dap.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
         </div>
       </div>
 
@@ -13321,8 +13311,6 @@ async function showIpodDetail(id) {
 
   const content = document.getElementById('ipod-detail-content');
   content.innerHTML = '<div class="spinner-wrap" style="padding:24px 0"><div class="spinner"></div></div>';
-  const navRight = document.getElementById('main-nav-right');
-  if (navRight) navRight.innerHTML = '';
 
   try {
     const [ipod, tracks, playlists, backups, artists, albums] = await Promise.all([
@@ -13336,9 +13324,6 @@ async function showIpodDetail(id) {
     if (state.view !== 'ipod-detail') return;
     if (!state.artists?.length) state.artists = artists;
     if (!state.albums?.length) state.albums = albums;
-    if (navRight) {
-      navRight.innerHTML = `<button class="gd-icon-btn danger" onclick="App.deleteIpod('${ipod.id}')" title="Remove iPod" aria-label="Remove iPod">${_GEAR_ICON_TRASH}</button><button class="gd-icon-btn ipod-detail-nav-icon" onclick="App.ipodDetailRename()" title="Rename iPod" aria-label="Rename iPod">${_IPOD_DETAIL_MORE}</button>`;
-    }
     _ipodDetailUi = {
       id,
       ipod,
@@ -13472,7 +13457,7 @@ function _renderIpodDetail() {
   const tracksBody = isOpen('tracks') ? `<div class="ipod-detail-artists">${trackRows}</div>${_ipodDetailPagination(ui.trackPage, trackPages, `${artistGroups.length} artists · ${artistGroups.length ? `${trackStart + 1}–${Math.min(artistGroups.length, trackStart + IPOD_DETAIL_PAGE_SIZE)}` : '0'} shown`, 'tracks')}` : '';
   const syncAction = `<button id="ipod-sync-check-btn" class="ipod-detail-btn small ghost" ${ipod.mounted && ipod.last_scanned_at ? `onclick="App.checkIpodSync('${ipod.id}')"` : 'disabled title="Scan the library above first"'}>${_IPOD_DETAIL_REFRESH} Check for changes</button>`;
   content.innerHTML = `<div class="ipod-detail-page">
-    <div class="ipod-detail-identity"><span class="ipod-detail-badge">${_IPOD_DETAIL_DEVICE}</span><span><h1>${esc(ipod.name || 'iPod')}</h1><p>${esc(ipod.mounted ? (ipod.active_mount_path || 'Connected') : 'Not connected')}</p></span></div>
+    <div class="ipod-detail-identity"><span class="ipod-detail-badge">${_IPOD_DETAIL_DEVICE}</span><span><h1>${esc(ipod.name || 'iPod')}</h1><p>${esc(ipod.mounted ? (ipod.active_mount_path || 'Connected') : 'Not connected')}</p></span><span class="ipod-detail-identity-actions"><button class="ipod-detail-icon-btn danger" onclick="App.deleteIpod('${ipod.id}')" title="Remove iPod" aria-label="Remove iPod">${_GEAR_ICON_TRASH}</button><button class="ipod-detail-icon-btn ipod-detail-nav-icon" onclick="App.ipodDetailRename()" title="Rename iPod" aria-label="Rename iPod">${_IPOD_DETAIL_MORE}</button></span></div>
     <div class="ipod-detail-action-row"><button id="ipod-scan-btn" class="ipod-detail-btn primary" ${ipod.mounted ? `onclick="App.scanIpod('${ipod.id}')"` : 'disabled title="Connect the iPod to scan it"'}>${_IPOD_DETAIL_REFRESH} Scan library</button><span id="ipod-scan-status-line">${ipod.last_scanned_at ? `Last scanned ${esc(_fmtRelDate(ipod.last_scanned_at))}` : 'Not scanned yet'}</span></div>
     <section class="ipod-detail-section">${sectionHead('configuration', 'Configuration', '6 fields')}${config}</section>
     <section class="ipod-detail-section">${sectionHead('backups', 'Backups', backups.length)}${backupsBody}</section>
@@ -15754,14 +15739,6 @@ async function showIemDetail(id) {
     `<option value="${p.id}">${esc(p.name)}</option>`
   ).join('');
 
-  const navRight = document.getElementById('main-nav-right');
-  if (navRight) {
-    navRight.innerHTML = `
-      <button class="gd-icon-btn danger" onclick="App.deleteIem('${iem.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
-      <button class="gd-icon-btn" onclick="App.showEditIemModal('${iem.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
-    `;
-  }
-
   document.getElementById('iem-detail-content').innerHTML = `
     <div class="gear-detail-page iem-detail-v2">
       <div class="gd-identity iem">
@@ -15776,6 +15753,10 @@ async function showIemDetail(id) {
             ${(iem.squig_sources || []).length ? `${(iem.squig_sources || []).length} measurement source${(iem.squig_sources || []).length === 1 ? '' : 's'}` : 'Add a squig.link source to import frequency response'}
             ${sourceLink && sourceLink.url ? ` · <a href="${esc(sourceLink.url)}" target="_blank" class="gd-src-link">squig.link</a>` : ''}
           </div>
+        </div>
+        <div class="gd-identity-actions">
+          <button class="gd-icon-btn danger" onclick="App.deleteIem('${iem.id}')" title="Delete" aria-label="Delete">${_GEAR_ICON_TRASH}</button>
+          <button class="gd-icon-btn" onclick="App.showEditIemModal('${iem.id}')" title="Edit" aria-label="Edit">${_GEAR_ICON_EDIT}</button>
         </div>
       </div>
 
