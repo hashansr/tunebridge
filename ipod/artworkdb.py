@@ -144,10 +144,26 @@ def build_artwork_update(
 ) -> tuple[bytes, dict[int, int]]:
     """Builds updated ArtworkDB bytes: all existing entries preserved
     byte-for-byte via passthrough (no re-encoding, no ithmb data moved),
-    plus one new entry per unique art image among `new_art_by_db_track_id`
-    (deduplicated by content hash within this batch only - see module
-    docstring in the caller for why cross-batch dedup against the full
-    existing library isn't attempted).
+    plus one new MHII entry *per track* in `new_art_by_db_track_id` - even
+    when many tracks share pixel-identical art (the common case: every
+    track on an album usually carries the same embedded cover, and the
+    iPod sync's artwork step now also prefers one shared per-album cache
+    file, making identical bytes across many tracks routine rather than
+    incidental). Each MHII's own db_track_id must match the track that
+    actually uses it: wikiPodLinux documents this field as what the
+    firmware's "Now Playing" screen joins art to, and it was confirmed
+    empirically against a real iPod Classic 5th Gen this session - tracks
+    sharing a *single* deduplicated MHII (one image, one fixed
+    db_track_id, N tracks pointed at it via their own mhii_link) showed
+    correct, byte-valid artwork data on every check *except* actual
+    on-device "Now Playing" rendering, which stayed blank for every track
+    other than whichever one happened to own that MHII's db_track_id.
+    Real iTunes-written libraries follow the same one-MHII-per-track
+    shape, so this isn't a scale concern - Only the underlying pixel
+    bytes/ithmb storage are deduplicated by content hash (within this
+    batch only - see module docstring in the caller for why cross-batch
+    dedup against the full existing library isn't attempted); the MHII
+    metadata entries themselves are not.
 
     Returns (new_artworkdb_bytes, {db_track_id: img_id}) - the mapping
     is what the caller wires into each new track's TrackInfo.mhii_link.
@@ -178,7 +194,13 @@ def build_artwork_update(
         ))
         format_locations_map[img_id] = locations
 
-    hash_to_img_id: dict[str, int] = {}
+    # hash -> (formats, locations, src_img_size) for the *pixel storage*
+    # only - reused across tracks so identical art is never re-encoded or
+    # re-appended to the .ithmb files twice. Deliberately NOT a hash ->
+    # img_id map: every track still gets its own MHII entry/img_id (see
+    # docstring above for why one shared entry breaks Now Playing art for
+    # every track except its one recorded owner).
+    hash_to_payload: dict[str, tuple[dict[int, object], dict[int, IthmbLocation], int]] = {}
     db_track_id_to_img_id: dict[int, int] = {}
     next_img_id = ref['next_mhii_id']
 
@@ -188,29 +210,36 @@ def build_artwork_update(
         if not art_bytes:
             continue
         h = art_hash(art_bytes)
-        if h in hash_to_img_id:
-            db_track_id_to_img_id[db_track_id] = hash_to_img_id[h]
-            continue
+        cached = hash_to_payload.get(h)
+        if cached is None:
+            img = image_from_bytes(art_bytes)
+            if img is None:
+                continue
+            formats = {}
+            locations = {}
+            for fmt_id, fmt in format_defs.items():
+                payload = encode_image_for_format(img, fmt_id, fmt_override=fmt)
+                offset = _append_ithmb_bytes(ithmb_paths[fmt_id], payload.data)
+                formats[fmt_id] = payload
+                locations[fmt_id] = IthmbLocation(ithmb_paths[fmt_id].name, offset)
+            cached = (formats, locations, len(art_bytes))
+            hash_to_payload[h] = cached
 
-        img = image_from_bytes(art_bytes)
-        if img is None:
-            continue
-
+        formats, locations, src_img_size = cached
         img_id = next_img_id
         next_img_id += 1
-        hash_to_img_id[h] = img_id
         db_track_id_to_img_id[db_track_id] = img_id
 
-        formats = {}
-        locations = {}
-        for fmt_id, fmt in format_defs.items():
-            payload = encode_image_for_format(img, fmt_id, fmt_override=fmt)
-            offset = _append_ithmb_bytes(ithmb_paths[fmt_id], payload.data)
-            formats[fmt_id] = payload
-            locations[fmt_id] = IthmbLocation(ithmb_paths[fmt_id].name, offset)
+        # A fresh ArtworkEntry per track (own img_id, own db_track_id) even
+        # though `formats`/`locations` - and thus the actual pixel bytes on
+        # disk - are shared/reused verbatim across every track with this
+        # same hash. `formats` holds the already-encoded payload objects
+        # from the first track that hit this hash; passing the identical
+        # objects again here is intentional (no data is copied or
+        # re-appended) - only the MHII metadata differs per entry.
         entries.append(ArtworkEntry(
             img_id=img_id, db_track_id=db_track_id, art_hash=h,
-            src_img_size=len(art_bytes), formats=formats,
+            src_img_size=src_img_size, formats=formats,
         ))
         format_locations_map[img_id] = locations
 
