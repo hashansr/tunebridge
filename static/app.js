@@ -19140,6 +19140,11 @@ function _csvImportRenderMapping() {
     label.className = 'csv-import-map-header';
     label.textContent = header;
 
+    const connector = document.createElement('span');
+    connector.className = 'csv-import-map-connector';
+    connector.setAttribute('aria-hidden', 'true');
+    connector.innerHTML = '<svg viewBox="0 0 20 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6h16M13 2l4 4-4 4"/></svg>';
+
     const select = document.createElement('select');
     select.className = 'csv-import-map-select';
 
@@ -19187,6 +19192,7 @@ function _csvImportRenderMapping() {
     };
 
     row.appendChild(label);
+    row.appendChild(connector);
     row.appendChild(select);
     container.appendChild(row);
   }
