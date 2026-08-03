@@ -1089,6 +1089,23 @@
               <!-- populated by loadScanHistory() -->
             </div>
 
+            <div class="settings-group-header">
+              <span>Artist display</span>
+              <i aria-hidden="true"></i>
+            </div>
+            <div class="settings-rg-row">
+              <div class="settings-rg-meta">
+                <span class="settings-rg-label">List artists by</span>
+                <span class="settings-rg-sub">Choose the tag used for artists, album attribution, search results, and artist links throughout your library.</span>
+              </div>
+              <div class="settings-rg-actions">
+                <select id="artist-listing-field-select" class="settings-select" onchange="App.saveArtistListingField(this.value)" aria-label="List artists by">
+                  <option value="artist">Artist tag</option>
+                  <option value="album_artist">Album Artist tag</option>
+                </select>
+              </div>
+            </div>
+
             <!-- Duplicate tracks tool -->
             <div class="settings-group-header">
               <span>Maintenance</span>

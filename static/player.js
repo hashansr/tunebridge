@@ -2531,7 +2531,7 @@ const Player = (function () {
         </div>
         <div class="queue-item-info">
           <div class="queue-item-title">${_esc(t.title)}</div>
-          <div class="queue-item-artist">${_esc(t.artist)}</div>
+          <div class="queue-item-artist">${_esc(_displayArtist(t))}</div>
         </div>
         <div class="queue-item-trailing">
           <span class="queue-item-dur">${_esc(t.duration_fmt || '')}</span>
@@ -2739,6 +2739,15 @@ const Player = (function () {
     return !!(track.bits_per_sample && track.sample_rate);
   }
 
+  function _displayArtist(track) {
+    if (!track) return '';
+    if (track.display_artist) return track.display_artist;
+    // app.js owns this preference and loads after player.js. Resolve it when
+    // rendering, with the raw Artist tag as a safe fallback during startup.
+    if (typeof window._listedArtist === 'function') return window._listedArtist(track);
+    return track.artist || track.album_artist || '';
+  }
+
   /* ── UI update helpers ──────────────────────────────────────────────── */
   function _updateTrackUI(track) {
     const titleEl   = document.getElementById('player-title');
@@ -2776,11 +2785,12 @@ const Player = (function () {
       artistEl.style.removeProperty('--marquee-dist');
       artistEl.style.removeProperty('--marquee-dur');
       const parts = [];
-      if (track.artist) parts.push(`<span class="player-nav-link" data-nav="artist">${_esc(track.artist)}</span>`);
-      if (track.artist && track.album) parts.push(`<span class="player-nav-sep"> · </span>`);
+      const artistName = _displayArtist(track);
+      if (artistName) parts.push(`<span class="player-nav-link" data-nav="artist">${_esc(artistName)}</span>`);
+      if (artistName && track.album) parts.push(`<span class="player-nav-sep"> · </span>`);
       if (track.album)  parts.push(`<span class="player-nav-link" data-nav="album">${_esc(track.album)}</span>`);
       artistEl.innerHTML = parts.join('');
-      artistEl.dataset.artist = track.artist || '';
+      artistEl.dataset.artist = artistName;
       artistEl.dataset.album  = track.album  || '';
       // Apply marquee after paint
       requestAnimationFrame(() => {
@@ -3551,7 +3561,7 @@ const Player = (function () {
     const sourceType = String(ctx.sourceType || 'unknown').toLowerCase();
     const sourceId = String(ctx.sourceId || '');
     const sourceLabel = String(ctx.sourceLabel || ps.playbackContextLabel || '');
-    const artist = String(track.album_artist || track.artist || '');
+    const artist = String(_displayArtist(track) || '');
     const album = String(track.album || '');
 
     let kind = 'album';

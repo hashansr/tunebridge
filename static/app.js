@@ -3846,6 +3846,7 @@ function _lyricsCell(t) {
 /* ── Track row (library) ────────────────────────────────────────────── */
 function trackRow(t, num, inPlaylist) {
   const trackNumLabel = inPlaylist ? String(num) : _formatTrackNumber(t.track_number, num);
+  const artistName = _listedArtist(t);
   const isFavVirtualPlaylist = !!(inPlaylist && state.playlist?.is_favourites);
   const removeAction = inPlaylist
     ? `<button class="remove-btn" onclick="event.stopPropagation();${isFavVirtualPlaylist ? `App.removeSongFromFavourites('${t.id}')` : `App.removeFromPlaylist('${t.id}')`}" title="${isFavVirtualPlaylist ? 'Remove from favourites' : 'Remove from playlist'}">
@@ -3882,7 +3883,7 @@ function trackRow(t, num, inPlaylist) {
             <div class="track-title-line">
               <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
             </div>
-            <div class="track-artist" title="${esc(t.artist)}">${esc(t.artist)}</div>
+            <div class="track-artist" title="${esc(artistName)}">${esc(artistName)}</div>
           </div>
         </div>
       </td>
@@ -3898,7 +3899,7 @@ function trackRow(t, num, inPlaylist) {
         </div>
       </td>
       ${sharedTitleCells}
-      <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
+      <td data-col="artist" class="cell-artist" title="${esc(artistName)}">${esc(artistName)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
       <td data-col="genre" class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
       ${_lyricsCell(t)}
@@ -3938,7 +3939,7 @@ function trackRow(t, num, inPlaylist) {
         </div>
       </td>
       ${sharedTitleCells}
-      <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
+      <td data-col="artist" class="cell-artist" title="${esc(artistName)}">${esc(artistName)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
       <td data-col="genre" class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)">${esc(t.genre || '')}</td>
       ${_lyricsCell(t)}
@@ -7045,6 +7046,7 @@ function setFavAlbumsSort(mode) {
 function _favSongRow(t, idx) {
   const nowPlayingIcon = nowPlayingSvg(11);
   const playIcon = playSvg(12);
+  const artistName = _listedArtist(t);
   return `
     <tr data-id="${t.id}" ondblclick="Player.playTrackById('${t.id}')" oncontextmenu="App.showTrackCtxMenu(event,'${t.id}')">
       <td class="col-num" data-col="track_number">
@@ -7065,11 +7067,11 @@ function _favSongRow(t, idx) {
             <div class="track-title-line">
               <div class="track-title" title="${esc(t.title)}">${esc(t.title)}</div>
             </div>
-            <div class="track-artist" title="${esc(t.artist)}">${esc(t.artist)}</div>
+            <div class="track-artist" title="${esc(artistName)}">${esc(artistName)}</div>
           </div>
         </div>
       </td>
-      <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
+      <td data-col="artist" class="cell-artist" title="${esc(artistName)}">${esc(artistName)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
       <td data-col="genre" class="col-genre" style="color:var(--text-muted);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
       ${_lyricsCell(t)}
@@ -8108,7 +8110,7 @@ async function homeOpenItem(kind, trackIdEnc = '', artistEnc = '', albumEnc = ''
   if (kindNorm === 'playlist' && playlistId) { openPlaylist(playlistId); return; }
   const t = await _homeResolveTrackById(trackId);
   if (!t) return;
-  const liveArtist = String(t.album_artist || t.artist || '').trim();
+  const liveArtist = String(_listedArtist(t) || '').trim();
   const liveAlbum = String(t.album || '').trim();
   if (liveArtist && liveAlbum) { showAlbum(liveArtist, liveAlbum); return; }
   if (liveArtist) showArtist(liveArtist);
@@ -8390,7 +8392,7 @@ function _renderSearchTopGrid(items) {
     if (type === 'track') {
       title = item.title || 'Unknown';
       subtitle = `Song · ${item.artist || ''}`;
-      onclick = `App.showAlbum('${esc(item.album_artist || item.artist || '')}','${esc(item.album || '')}')`;
+      onclick = `App.showAlbum('${esc(item.artist || '')}','${esc(item.album || '')}')`;
       onplay = `event.stopPropagation();Player.playTrackById('${esc(item.id)}')`;
     } else if (type === 'album') {
       title = item.name || item.title;
@@ -8427,7 +8429,9 @@ function _renderSearchTopGrid(items) {
 function _renderSearchSongs(tracks) {
   const tbody = document.getElementById('search-songs-tbody');
   if (!tbody) return;
-  tbody.innerHTML = tracks.map(t => `
+  tbody.innerHTML = tracks.map(t => {
+    const artistName = _listedArtist(t);
+    return `
     <tr data-id="${esc(t.id)}" ondblclick="Player.playTrackById('${esc(t.id)}')"
         oncontextmenu="App.showTrackCtxMenu(event,'${esc(t.id)}')">
       <td data-col="title">
@@ -8443,15 +8447,16 @@ function _renderSearchSongs(tracks) {
             <div class="track-title-line">
               <div class="track-title" title="${esc(t.title || 'Unknown')}">${esc(t.title || 'Unknown')}</div>
             </div>
-            <div class="track-artist" title="${esc(t.artist || '')}">${esc(t.artist || '')}</div>
+            <div class="track-artist" title="${esc(artistName)}">${esc(artistName)}</div>
           </div>
         </div>
       </td>
-      <td data-col="artist" class="cell-artist" title="${esc(t.artist || '')}">${esc(t.artist || '')}</td>
+      <td data-col="artist" class="cell-artist" title="${esc(artistName)}">${esc(artistName)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album || '')}">${esc(t.album || '')}</td>
       <td data-col="duration" class="col-dur">${esc(t.duration_fmt || '')}</td>
       <td data-col="genre" class="col-genre" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
 
 function _renderSearchArtists(artists) {
@@ -18523,6 +18528,7 @@ function renderSongsTable() {
 
   tbody.innerHTML = page.map((t, i) => {
     const globalIdx = start + i;
+    const artistName = _listedArtist(t);
     const fmtDate = t.date_added ? new Date(t.date_added * 1000).toLocaleDateString() : '';
     const bitrate = t.bitrate ? t.bitrate + ' kbps' : '';
     const sampleRate = t.sample_rate ? `${t.sample_rate} Hz` : '';
@@ -18550,7 +18556,7 @@ function renderSongsTable() {
           </div>
         </div>
       </td>
-      <td data-col="artist" class="cell-artist" title="${esc(t.artist)}">${esc(t.artist)}</td>
+      <td data-col="artist" class="cell-artist" title="${esc(artistName)}">${esc(artistName)}</td>
       <td data-col="album" class="cell-album" title="${esc(t.album)}">${esc(t.album)}</td>
       <td data-col="genre" style="color:var(--text-sub);font-size:var(--text-sm)" title="${esc(t.genre || '')}">${esc(t.genre || '')}</td>
       ${_lyricsCell(t)}
@@ -19566,6 +19572,8 @@ async function loadSettings() {
   }
   const inp = document.getElementById('lib-path-input');
   if (inp) inp.value = settings.library_path || '/Volumes/Storage/Music/FLAC';
+  const artistListingField = document.getElementById('artist-listing-field-select');
+  if (artistListingField) artistListingField.value = settings.artist_listing_field === 'album_artist' ? 'album_artist' : 'artist';
   const powerampMount = document.getElementById('s-poweramp-mount');
   if (powerampMount) powerampMount.value = settings.poweramp_mount || '';
   const powerampPrefix = document.getElementById('s-poweramp-prefix');
@@ -19710,6 +19718,37 @@ async function setListeningTracking(enabled) {
     if (toggle) toggle.checked = !enabled;
     _setSettingsToggleState('listening-tracking-toggle', 'listening-tracking-state', !enabled, true);
     toast('Could not update listening history');
+  }
+}
+
+function _listedArtist(track) {
+  if (!track) return 'Unknown Artist';
+  if (track.display_artist) return track.display_artist;
+  const field = _settings?.artist_listing_field === 'album_artist' ? 'album_artist' : 'artist';
+  const fallback = field === 'album_artist' ? 'artist' : 'album_artist';
+  return track[field] || track[fallback] || 'Unknown Artist';
+}
+window._listedArtist = _listedArtist;
+
+async function saveArtistListingField(value) {
+  const field = value === 'album_artist' ? 'album_artist' : 'artist';
+  const select = document.getElementById('artist-listing-field-select');
+  if (select) select.disabled = true;
+  try {
+    _settings = await api('/settings', { method: 'PUT', body: { artist_listing_field: field } });
+    // All artist and album collections are keyed by the selected tag. Drop the
+    // old client-side collections so subsequent screens cannot mix the two.
+    state.artists = [];
+    state.albums = [];
+    state.tracks = [];
+    _homeLastData = null;
+    _homeLastStatsData = {};
+    toast(`Artists are now listed by ${field === 'album_artist' ? 'Album Artist' : 'Artist'} tag`);
+  } catch (_) {
+    if (select) select.value = _settings?.artist_listing_field === 'album_artist' ? 'album_artist' : 'artist';
+    toast('Could not update artist display preference');
+  } finally {
+    if (select) select.disabled = false;
   }
 }
 
@@ -24270,6 +24309,7 @@ const App = {
   toggleLyricsAdvanced,
   toggleArtworkAdvanced,
   toggleBulkTagAdvanced,
+  saveArtistListingField,
   startLyricsBulk,
   cancelLyricsBulk,
   lyricHealthScan,

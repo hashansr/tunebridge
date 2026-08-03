@@ -234,6 +234,9 @@ DEFAULT_SETTINGS = {
     'library_path':     '',
     'library_structure': 'artist_album_track',
     'preferred_audio_format': 'flac',
+    # The tag used for artist collections, album attribution, and artist links.
+    # Keep the per-track Artist tag as the default for new and existing libraries.
+    'artist_listing_field': 'artist',  # 'artist' | 'album_artist'
     'onboarding_completed': False,
     'poweramp_mount':   '/Volumes/FIIO M21',
     'ap80_mount':       '/Volumes/AP80',
@@ -1566,6 +1569,34 @@ def save_settings(s):
     _db.db_save_settings(s)
 
 
+def artist_listing_field():
+    """Return the configured source tag for artist-oriented library views."""
+    return 'album_artist' if load_settings().get('artist_listing_field') == 'album_artist' else 'artist'
+
+
+def listed_artist(track, field=None):
+    """Return the artist name used throughout the library for *track*.
+
+    A missing preferred tag falls back to the other artist tag. This keeps tracks
+    with incomplete metadata discoverable without silently grouping them as
+    "Unknown Artist".
+    """
+    field = field or artist_listing_field()
+    fallback = 'artist' if field == 'album_artist' else 'album_artist'
+    return (
+        str(track.get(field) or '').strip()
+        or str(track.get(fallback) or '').strip()
+        or 'Unknown Artist'
+    )
+
+
+def _with_listed_artist(track, field=None):
+    """Add the presentation artist without changing the underlying ID3 fields."""
+    out = dict(track)
+    out['display_artist'] = listed_artist(track, field)
+    return out
+
+
 def load_playlists():
     return _db.db_load_playlists()
 
@@ -1812,13 +1843,14 @@ def get_tracks():
     search = request.args.get('q', '').lower().strip()
     artist_filter = request.args.get('artist', '')
     album_filter = request.args.get('album', '')
+    listing_field = artist_listing_field()
 
     with library_lock:
         tracks = library[:]
 
     if artist_filter:
         af = artist_filter.lower()
-        tracks = [t for t in tracks if (t.get('artist') or '').lower() == af or (t.get('album_artist') or '').lower() == af]
+        tracks = [t for t in tracks if listed_artist(t, listing_field).lower() == af]
     if album_filter:
         tracks = [t for t in tracks if (t.get('album') or '').lower() == album_filter.lower()]
     if search:
@@ -1834,17 +1866,17 @@ def get_tracks():
             for term in terms
         )]
 
-    # Sort by artist → album → track number
+    # Sort by the same artist tag that powers artist collections.
     def sort_key(t):
         tn = t.get('track_number') or '999'
         try:
             tn = int(tn)
         except Exception:
             tn = 999
-        return (t.get('artist') or '', t.get('album') or '', tn)
+        return (artist_sort_key(listed_artist(t, listing_field)), t.get('album') or '', tn)
 
     tracks.sort(key=sort_key)
-    return jsonify(tracks)
+    return jsonify([_with_listed_artist(t, listing_field) for t in tracks])
 
 
 def _read_file_only_tags(path: Path) -> dict:
@@ -1881,20 +1913,21 @@ def get_track_by_id(track_id):
         return jsonify({'error': 'Track not found'}), 404
     abs_path = get_music_base() / Path(t['path'])
     t.update(_read_file_only_tags(abs_path))
-    return jsonify(t)
+    return jsonify(_with_listed_artist(t))
 
 
 @app.route('/api/library/artists')
 def get_artists():
     with library_lock:
         tracks = library[:]
+    listing_field = artist_listing_field()
 
     # Pre-load artist image keys so we can annotate each artist
     artist_image_keys = _db.db_get_all_artist_image_keys()
 
     artists = {}
     for t in tracks:
-        name = t.get('album_artist') or t.get('artist') or 'Unknown Artist'
+        name = listed_artist(t, listing_field)
         key = name.lower()
         if key not in artists:
             artists[key] = {'name': name, 'albums': set(), 'track_count': 0, 'artwork_key': None}
@@ -1919,17 +1952,18 @@ def get_artists():
 @app.route('/api/library/albums')
 def get_albums():
     artist_filter = request.args.get('artist', '')
+    listing_field = artist_listing_field()
 
     with library_lock:
         tracks = library[:]
 
     if artist_filter:
         af = artist_filter.lower()
-        tracks = [t for t in tracks if (t.get('artist') or '').lower() == af or (t.get('album_artist') or '').lower() == af]
+        tracks = [t for t in tracks if listed_artist(t, listing_field).lower() == af]
 
     albums = {}
     for t in tracks:
-        artist = t.get('album_artist') or t.get('artist') or 'Unknown Artist'
+        artist = listed_artist(t, listing_field)
         album = t.get('album') or 'Unknown Album'
         key = f"{artist.lower()}||{album.lower()}"
         if key not in albums:
@@ -1957,6 +1991,7 @@ def library_songs():
     q = request.args.get('q', '').strip().lower()
     sort_by = request.args.get('sort', 'title')
     order = request.args.get('order', 'asc')
+    listing_field = artist_listing_field()
 
     with library_lock:
         tracks = library[:]
@@ -1966,7 +2001,7 @@ def library_songs():
 
     sort_keys = {
         'title': lambda t: (t.get('title') or '').lower(),
-        'artist': lambda t: artist_sort_key(t.get('artist') or ''),
+        'artist': lambda t: artist_sort_key(listed_artist(t, listing_field)),
         'album': lambda t: (t.get('album') or '').lower(),
         'year': lambda t: t.get('year') or '0000',
         'genre': lambda t: (t.get('genre') or '').lower(),
@@ -1980,7 +2015,7 @@ def library_songs():
     key_fn = sort_keys.get(sort_by, sort_keys['title'])
     tracks.sort(key=key_fn, reverse=(order == 'desc'))
 
-    return jsonify(tracks)
+    return jsonify([_with_listed_artist(t, listing_field) for t in tracks])
 
 
 # ── Search ranking helpers ───────────────────────────────────────────────────
@@ -2118,6 +2153,7 @@ def global_search():
 
     with library_lock:
         tracks = library[:]
+    listing_field = artist_listing_field()
 
     _play_stats = _db.db_load_play_stats()
 
@@ -2143,7 +2179,7 @@ def global_search():
     artists_map = {}
     artist_tracks_map = {}
     for t in tracks:
-        name = t.get('album_artist') or t.get('artist') or 'Unknown Artist'
+        name = listed_artist(t, listing_field)
         key = name.lower()
         if key not in artists_map:
             artists_map[key] = {'name': name, 'albums': set(), 'track_count': 0, 'artwork_key': None}
@@ -2184,7 +2220,7 @@ def global_search():
         title_score = _title_match_score(t.get('title') or '', q)
         if title_score >= 99:
             continue
-        artist_key = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').lower()
+        artist_key = listed_artist(t, listing_field).lower()
         rel = _track_relevance_score(t, q, _play_stats)
         add_artist_candidate(
             artist_key,
@@ -2210,7 +2246,7 @@ def global_search():
     albums_map = {}
     for t in tracks:
         album_name = t.get('album') or 'Unknown Album'
-        artist = t.get('album_artist') or t.get('artist') or 'Unknown Artist'
+        artist = listed_artist(t, listing_field)
         key = artist.lower() + '|' + album_name.lower()
         if key not in albums_map:
             albums_map[key] = {'name': album_name, 'artist': artist, 'artwork_key': t.get('artwork_key') or '', 'track_count': 0}
@@ -2237,7 +2273,7 @@ def global_search():
 
     for t in tracks:
         album_name = t.get('album') or 'Unknown Album'
-        artist = t.get('album_artist') or t.get('artist') or 'Unknown Artist'
+        artist = listed_artist(t, listing_field)
         key = artist.lower() + '|' + album_name.lower()
 
         album_rank = _field_match_rank(album_name, q, allow_fuzzy_album=True)
@@ -2294,11 +2330,12 @@ def global_search():
                 'kind': 'track',
                 'id': item.get('id'),
                 'title': item.get('title') or 'Unknown',
-                'artist': item.get('artist') or '',
+                'artist': listed_artist(item, listing_field),
                 'album_artist': item.get('album_artist') or item.get('artist') or '',
                 'album': item.get('album') or '',
                 'artwork_key': item.get('artwork_key') or '',
-                'subtitle': f"Song · {item.get('artist') or ''}".strip(),
+                'display_artist': listed_artist(item, listing_field),
+                'subtitle': f"Song · {listed_artist(item, listing_field)}".strip(),
             }
         elif kind == 'album':
             album_artist = item.get('artist') or 'Unknown Artist'
@@ -2354,7 +2391,7 @@ def global_search():
     for idx, t in enumerate(title_matches[:8]):
         rel = _track_relevance_score(t, q, _play_stats)
         add_top('track', t, (rel, idx))
-        artist_key = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').lower()
+        artist_key = listed_artist(t, listing_field).lower()
         if artist_key in artists_map:
             add_top('artist', artists_map[artist_key], (rel, idx + 20))
         album_key = artist_key + '|' + (t.get('album') or 'Unknown Album').lower()
@@ -2369,7 +2406,7 @@ def global_search():
         artist_albums = {}
         for t in artist_tracks:
             album_name = t.get('album') or 'Unknown Album'
-            key = (t.get('album_artist') or t.get('artist') or artist.get('name') or 'Unknown Artist').lower() + '|' + album_name.lower()
+            key = listed_artist(t, listing_field).lower() + '|' + album_name.lower()
             if key in albums_map:
                 artist_albums[key] = albums_map[key]
         for album in sorted(artist_albums.values(), key=lambda a: (-(a.get('track_count') or 0), (a.get('name') or '').lower()))[:3]:
@@ -2388,7 +2425,7 @@ def global_search():
                 playlist_tracks.append(track)
         for t in playlist_tracks[:4]:
             add_top('track', t, (playlist_rank + 1, idx))
-            artist_key = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').lower()
+            artist_key = listed_artist(t, listing_field).lower()
             if artist_key in artists_map:
                 add_top('artist', artists_map[artist_key], (playlist_rank + 2, idx))
             album_key = artist_key + '|' + (t.get('album') or 'Unknown Album').lower()
@@ -2405,7 +2442,9 @@ def global_search():
                 top_results.append(top_buckets[kind].pop(0)[1])
 
     return jsonify({
-        'artists': matched_artists, 'tracks': matched_tracks, 'playlists': matched_playlists,
+        'artists': matched_artists,
+        'tracks': [_with_listed_artist(t, listing_field) for t in matched_tracks],
+        'playlists': matched_playlists,
         'albums': matched_albums,
         'top_results': top_results,
         'total_artists': total_artists, 'total_tracks': total_tracks, 'total_playlists': total_playlists,
@@ -2444,8 +2483,9 @@ def _music_meta_maps():
     albums = {}
     artists = {}
     artist_image_keys = _db.db_get_all_artist_image_keys()
+    listing_field = artist_listing_field()
     for t in tracks:
-        artist = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').strip()
+        artist = listed_artist(t, listing_field)
         album = (t.get('album') or 'Unknown Album').strip()
         key = f"{artist.lower()}||{album.lower()}"
         slot = albums.get(key)
@@ -2481,10 +2521,11 @@ def _music_meta_maps():
     return result
 
 
-def _recently_added_items(tracks, albums, playlists, limit=10):
+def _recently_added_items(tracks, albums, playlists, limit=10, listing_field=None):
     now = int(time.time())
     seven_days_ago = now - 7 * 86400
     track_by_id = {str(t.get('id')): t for t in tracks if t.get('id')}
+    listing_field = listing_field or artist_listing_field()
 
     def _display_album_artist(names):
         counts = {}
@@ -2511,7 +2552,7 @@ def _recently_added_items(tracks, albums, playlists, limit=10):
     recent_album_groups = {}
     for t in tracks:
         album = (t.get('album') or 'Unknown Album').strip()
-        artist = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').strip()
+        artist = listed_artist(t, listing_field)
         artwork_key = str(t.get('artwork_key') or '').strip()
         # Featured-track albums sometimes arrive with each track's featured
         # credit copied into album_artist. Strip the feature suffix for this
@@ -2566,7 +2607,7 @@ def _recently_added_items(tracks, albums, playlists, limit=10):
             aid = str(t.get('id') or '').strip()
             if not aid:
                 continue
-            a_artist = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').strip().lower()
+            a_artist = listed_artist(t, listing_field).lower()
             a_album = (t.get('album') or 'Unknown Album').strip().lower()
             akey = f"{a_artist}||{a_album}"
             if akey not in album_first_track_id:
@@ -2791,7 +2832,7 @@ def _home_continue_listening(recent_contexts, events, albums, artists_map, playl
         q_idx = int(player_state.get('queueIdx') or -1)
         if queue and 0 <= q_idx < len(queue):
             t = queue[q_idx] or {}
-            a = (t.get('album_artist') or t.get('artist') or '').strip()
+            a = listed_artist(t)
             al = (t.get('album') or '').strip()
             if a and al:
                 info = albums.get(f"{a.lower()}||{al.lower()}")
@@ -3476,6 +3517,7 @@ def home():
             return jsonify(_home_cache['data'])
 
     settings = load_settings()
+    listing_field = artist_listing_field()
     player_state = _db.db_get_player_state()
     try:
         cutoff = _current_listen_cutoff()
@@ -3483,6 +3525,13 @@ def home():
         tracks, track_by_id, albums, artists_map = _music_meta_maps()
         playlists = load_playlists()
         events = _db.db_load_play_events_since(cutoff, limit=20000)
+        # Play events retain the original Artist tag for historical integrity.
+        # Project their artist into the active listing field for Home grouping.
+        events = [
+            {**event, 'artist': listed_artist(track_by_id[str(event.get('track_id') or '')], listing_field)}
+            if str(event.get('track_id') or '') in track_by_id else event
+            for event in events
+        ]
         recent_contexts = (player_state.get('recentContexts')
                            if isinstance(player_state.get('recentContexts'), list) else [])
 
@@ -3499,7 +3548,10 @@ def home():
         top_picks = _home_top_picks(events, albums, track_by_id, continue_keys=continue_keys, limit=10)
         listen_next_artists = _home_listen_next(events, artists_map, albums, limit=10)
         because_you_listened = top_picks[:10]
-        recently_added = _recently_added_items(tracks, albums, playlists, limit=10)
+        recently_added = _recently_added_items(
+            tracks, albums, playlists, limit=10,
+            listing_field=listing_field,
+        )
 
         # Library summary for header strip
         with library_lock:
@@ -6924,6 +6976,14 @@ def history_view():
 
     sessions_all = _collapse_history_sessions(rows)
     sessions = sessions_all[:limit]
+    listing_field = artist_listing_field()
+    with library_lock:
+        live_tracks = {str(t.get('id')): t for t in library if t.get('id')}
+
+    def session_artist(session):
+        track = live_tracks.get(str(session.get('track_id') or ''))
+        return listed_artist(track, listing_field) if track else (session.get('artist') or 'Unknown Artist')
+
     events = []
     for r in sessions:
         ps = r['play_seconds'] or 0
@@ -6935,7 +6995,7 @@ def history_view():
             'completed': bool(r['completed']),
             'valid_listen': bool(r['valid_listen']),
             'title': r['title'],
-            'artist': r['artist'],
+            'artist': session_artist(r),
             'album': r['album'],
             'duration': r['duration'],
             'album_art_key': r['album_art_key'],
@@ -6947,7 +7007,7 @@ def history_view():
     for r in sessions_all:
         total_seconds += float(r.get('play_seconds') or 0.0)
         unique_tracks.add(r.get('track_id'))
-        a = r.get('artist') or 'Unknown'
+        a = session_artist(r)
         artist_counts[a] = artist_counts.get(a, 0) + 1
     top_artist = max(artist_counts, key=artist_counts.get) if artist_counts else None
     return jsonify({
@@ -6979,6 +7039,7 @@ def insights_coverage():
     }
     with library_lock:
         all_tracks = list(library)
+    listing_field = artist_listing_field()
 
     albums = {}
     artists = {}
@@ -6990,7 +7051,7 @@ def insights_coverage():
         if is_heard:
             heard_library_track_ids.add(tid)
 
-        artist = (t.get('album_artist') or t.get('artist') or 'Unknown Artist').strip() or 'Unknown Artist'
+        artist = listed_artist(t, listing_field)
         album = (t.get('album') or 'Unknown Album').strip() or 'Unknown Album'
         album_key = f"{artist.lower()}||{album.lower()}"
         slot = albums.get(album_key)
@@ -7476,11 +7537,25 @@ def get_settings():
 @app.route('/api/settings', methods=['PUT'])
 def put_settings():
     data = request.json or {}
+    if 'artist_listing_field' in data:
+        data['artist_listing_field'] = (
+            'album_artist' if data['artist_listing_field'] == 'album_artist' else 'artist'
+        )
     settings = load_settings()
+    artist_listing_changed = (
+        'artist_listing_field' in data
+        and data['artist_listing_field'] != settings.get('artist_listing_field', 'artist')
+    )
     for key in DEFAULT_SETTINGS:
         if key in data:
             settings[key] = data[key]
     save_settings(settings)
+    if artist_listing_changed:
+        # Artist and album aggregates are cached for Home. Clear them as soon
+        # as the source tag changes so every view sees the new grouping.
+        global _meta_maps_cache
+        _meta_maps_cache = None
+        _invalidate_home_cache()
     return jsonify(settings)
 
 
@@ -8869,7 +8944,9 @@ def history_charts():
     track_stats = {}
     artist_image_keys = _db.db_get_all_artist_image_keys()
     artist_artwork_keys = {}
+    listing_field = artist_listing_field()
     with library_lock:
+        live_tracks = {str(t.get('id')): t for t in library if t.get('id')}
         for t in library:
             artwork_key = t.get('artwork_key')
             if not artwork_key:
@@ -8890,7 +8967,8 @@ def history_charts():
         hourly_counts[lt.tm_hour] = hourly_counts.get(lt.tm_hour, 0) + 1
         dow_counts[lt.tm_wday] = dow_counts.get(lt.tm_wday, 0) + 1
 
-        artist = s['artist'] or 'Unknown'
+        live_track = live_tracks.get(str(s.get('track_id') or ''))
+        artist = listed_artist(live_track, listing_field) if live_track else (s['artist'] or 'Unknown')
         artist_slot = artist_stats.setdefault(artist, {
             'artist': artist,
             'count': 0,
@@ -8908,7 +8986,7 @@ def history_charts():
         track_slot = track_stats.setdefault(track_id, {
             'track_id': track_id,
             'title': s['title'] or 'Unknown',
-            'artist': s['artist'] or '',
+            'artist': artist,
             'count': 0,
             'last_played': 0,
             'album_art_key': s['album_art_key'],
