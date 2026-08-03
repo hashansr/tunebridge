@@ -1866,7 +1866,7 @@ def get_tracks():
         af = artist_filter.lower()
         tracks = [
             t for t in tracks
-            if (album_group_artist(t) if album_filter else listed_artist(t, listing_field)).lower() == af
+            if listed_artist(t, listing_field).lower() == af
         ]
     if album_filter:
         tracks = [t for t in tracks if (t.get('album') or '').lower() == album_filter.lower()]
@@ -1980,10 +1980,10 @@ def get_albums():
 
     albums = {}
     for t in tracks:
-        # Album identity must not split when individual tracks have guests or
-        # different Artist tags. The display preference remains for artist
-        # collections; Album Artist anchors the album itself.
-        artist = album_group_artist(t)
+        # The selected listing field defines album identity as well as artist
+        # collections. This keeps an artist detail page consistent with the
+        # grouping preference when Album Artist varies between tracks.
+        artist = listed_artist(t, listing_field)
         album = t.get('album') or 'Unknown Album'
         key = f"{artist.lower()}||{album.lower()}"
         if key not in albums:
