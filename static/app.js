@@ -11303,7 +11303,7 @@ function _syncBgStart() {
 
 function _syncBgSetProgress(pct) {
   if (!_syncBgActive || !_syncBgLiveToast) return;
-  _syncBgLiveToast.update(`Sync in progress · ${pct}%`);
+  _syncBgLiveToast.update(`Sync in progress · ${Math.round(pct)}%`);
 }
 
 function _syncBgStop(finishAs = null) {
