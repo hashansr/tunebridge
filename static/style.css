@@ -1689,6 +1689,9 @@ h4.settings-subsection-title {
 /* ── Main ─────────────────────────────────────────────────────────────── */
 #main {
   flex: 1;
+  min-width: 0;
+  container-name: main;
+  container-type: inline-size;
   overflow-y: auto;
   overflow-x: clip;
   background: var(--app-page-gradient);
@@ -20999,11 +21002,11 @@ body.is-col-resizing {
 .sw-ipod-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-muted); text-align: center; }
 .sw-ipod-empty h2 { margin: 4px 0 0; color: var(--text); font-size: 20px; }
 .sw-ipod-empty p { max-width: 340px; margin: 0 0 4px; font-size: 13px; }
-/* The iPod review lives beside the app sidebar, so its usable width becomes
-   constrained well before the browser itself reaches a phone-sized width.
-   Keep the action strip and the review cards in normal flow at this point;
-   otherwise their fixed, no-wrap controls overflow past the right edge. */
-@media (max-width: 1180px) {
+/* The iPod review lives beside the app sidebar, so its usable width can be
+   much narrower than the browser viewport. Keep the action strip and review
+   cards in normal flow when the main pane becomes constrained; otherwise
+   their fixed, no-wrap controls overflow past the right edge. */
+@container main (max-width: 1180px) {
   .sw-body--ipod-review { padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 8px) 18px 0; overflow-y: auto; }
   .sw-body--ipod-review #sw-step-ipod,
   .sw-body--ipod-review .sw-ipod-browse { overflow: visible; }
