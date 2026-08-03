@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.644 · 2026-08-03
 - Fix: The "Sync in progress" toast showed the raw, unrounded progress number (e.g. "68.21743388834476%") instead of a clean whole percentage.
 
 ## v0.643 · 2026-08-03
