@@ -676,7 +676,13 @@ def main():
 
     def _on_window_closing():
         import app as flask_app
-        sync_active = flask_app.sync_state.get('status') in ('scanning', 'copying')
+        # DAP and click-wheel iPod syncs each track their own state (see
+        # sync_state / ipod_sync_state in app.py) — both need checking, or
+        # quitting mid-iPod-sync would silently cancel it with no warning.
+        sync_active = (
+            flask_app.sync_state.get('status') in ('scanning', 'copying')
+            or flask_app.ipod_sync_state.get('status') in ('scanning', 'copying')
+        )
         if sync_active and not _close_state['quit_confirmed']:
             # Run the dialog off the main AppKit thread so returning True here
             # is processed before the thread blocks — this is what allows
@@ -685,8 +691,8 @@ def main():
                 try:
                     result = subprocess.run(
                         ['osascript', '-e',
-                         'display dialog "A sync is in progress.\\n\\nQuitting now may leave '
-                         'incomplete files on your device. Quit anyway?" '
+                         'display dialog "A sync is in progress.\\n\\nClosing TuneBridge now will '
+                         'cancel it and may leave incomplete files on your device. Close anyway?" '
                          'buttons {"Go Back", "Quit App"} default button "Go Back" with icon caution'],
                         capture_output=True, text=True, timeout=30
                     )

@@ -387,7 +387,7 @@ function _toastBump(el, duration) {
   setTimeout(() => el.classList.remove('toast-bump'), 280);
 }
 
-function _showLiveToast(msg) {
+function _showLiveToast(msg, onClick = null) {
   const container = document.getElementById('toast-container');
   if (!container) return { finish: (m, t) => toast(m, t) };
   const el = document.createElement('div');
@@ -396,11 +396,15 @@ function _showLiveToast(msg) {
   text.className = 'toast-msg';
   text.textContent = msg;
   el.appendChild(text);
+  if (onClick) el.addEventListener('click', onClick);
   container.appendChild(el);
   _toastActive.push(el);
   el.getBoundingClientRect();
   el.classList.add('show');
   return {
+    update(newMsg) {
+      text.textContent = newMsg;
+    },
     finish(finalMsg, type = null) {
       const resolved = type || _toastClassify(finalMsg);
       el.className = `toast-item toast-${resolved} show`;
@@ -9738,6 +9742,20 @@ async function loadSyncView() {
       return;
     }
   } catch (_) {}
+  // iPod sync uses its own backend state (ipod_sync_state), separate from the
+  // DAP flow's sync_state checked above — so a running iPod sync has to be
+  // checked for independently, or reopening this view while one is mid-copy
+  // would fall through to the device picker below and strand it off-screen
+  // with no way back in (see _syncBgStart handoff in _swPollIpodSync).
+  try {
+    const ipodStatus = await api('/ipods/sync/status');
+    if (ipodStatus.status === 'copying' && ipodStatus.ipod_id) {
+      await _swLoadDeviceListsSilent();
+      const ipod = await api(`/ipods/${ipodStatus.ipod_id}`).catch(() => null);
+      _swResumeIpodSync(ipodStatus.ipod_id, ipod?.name);
+      return;
+    }
+  } catch (_) {}
   // Idle / error / unknown — show device picker (step 1)
   await _swLoadDeviceListsSilent();
   _swGoTo(1);
@@ -11259,32 +11277,32 @@ async function swStartSync() {
   _swGoTo(4);
 }
 
-// Background poll — shows a pulse on the Sync nav button while scan/copy runs off-screen
-let _syncBgPollTimer = null;
+// Background indicator — pulses the Sync nav button and shows a clickable
+// live toast while a DAP or iPod sync keeps running off-screen. The DAP/iPod
+// pollers (_swPollSync / _swPollIpodSync) already run every 600ms regardless
+// of which view is on screen, so they drive this directly (progress text,
+// start, and terminal stop) rather than a second poller duplicating the
+// same network status check.
+let _syncBgActive = false;
 let _syncBgLiveToast = null;
 
-function _syncBgPollTick() {
-  if (state.view === 'sync') { _syncBgStop(); return; }
-  api('/sync/status').then(s => {
-    const active = s.status === 'scanning' || s.status === 'copying';
-    const btn = document.getElementById('sync-nav-btn');
-    if (btn) btn.dataset.syncActive = active ? '1' : '';
-    if (!active) _syncBgStop(s.status === 'done' ? 'done' : null);
-  }).catch(() => {});
-}
-
 function _syncBgStart() {
-  if (_syncBgPollTimer || state.view === 'sync') return;
-  _syncBgPollTimer = setInterval(_syncBgPollTick, 3000);
-  _syncBgPollTick(); // fire immediately
+  if (_syncBgActive || state.view === 'sync') return;
+  _syncBgActive = true;
+  const btn = document.getElementById('sync-nav-btn');
+  if (btn) btn.dataset.syncActive = '1';
   if (!_syncBgLiveToast) {
-    _syncBgLiveToast = _showLiveToast('Sync in progress');
+    _syncBgLiveToast = _showLiveToast('Sync in progress', () => App.showSync());
   }
 }
 
+function _syncBgSetProgress(pct) {
+  if (!_syncBgActive || !_syncBgLiveToast) return;
+  _syncBgLiveToast.update(`Sync in progress · ${pct}%`);
+}
+
 function _syncBgStop(finishAs = null) {
-  clearInterval(_syncBgPollTimer);
-  _syncBgPollTimer = null;
+  _syncBgActive = false;
   const btn = document.getElementById('sync-nav-btn');
   if (btn) btn.dataset.syncActive = '';
   if (_syncBgLiveToast) {
@@ -11395,6 +11413,7 @@ async function _swPollSync() {
   const elapsed  = (Date.now() / 1000) - _sw.syncStartTs;
 
   _swSetProgress('sync', pct);
+  _syncBgSetProgress(pct);
   _swUpdateSyncRateSamples(status);
   _swUpdateSyncHeroStats('sync', progress, total, elapsed, _swAverageSyncRate());
 
@@ -15131,6 +15150,18 @@ function swRunIpodSync() {
   }).catch(e => _swHandleIpodSyncError(String(e)));
 }
 
+// Resumes an iPod sync that's already executing on the backend — reopening
+// the sync wizard (nav button, or loadSyncView on any other entry) while
+// ipod_sync_state.status is 'copying'. Attaches the poller/UI only; does NOT
+// re-POST to execute, which would 400 while one is already running (see
+// ipod_sync_execute's concurrent-op guard in app.py).
+function _swResumeIpodSync(id, name) {
+  _sw.device = { id, name: name || 'iPod', deviceType: 'ipod' };
+  _sw.ipodSyncPhase = 'syncing';
+  _swGoTo('ipod-sync');
+  _swInitIpodSyncExecuteUI(id);
+}
+
 // Inner content of #sw-ipod-sync-card — structural clone of #sw-step-4's
 // sync card (see static/index.html) with sw-sync-* ids renamed to
 // sw-ipod-sync-*. Kept as a template string (not just static HTML) so a
@@ -15264,6 +15295,8 @@ function _swInitIpodSyncExecuteUI(id) {
 
 async function _swPollIpodSync(id) {
   if (_sw.step !== 'ipod-sync') { clearInterval(_sw.ipodSyncExecTimer); _sw.ipodSyncExecTimer = null; return; }
+  // User navigated away from the sync view — hand off to background indicator
+  if (state.view !== 'sync') _syncBgStart();
   let status;
   try { status = await api(`/ipods/${id}/sync/status`); } catch (_) { return; }
   if (!status || status.ipod_id !== id) return;
@@ -15274,6 +15307,7 @@ async function _swPollIpodSync(id) {
   const elapsed = (Date.now() / 1000) - _sw.ipodSyncStartTs;
 
   _swSetProgress('ipod-sync', pct);
+  _syncBgSetProgress(pct);
   _swUpdateSyncRateSamples(status, 'ipodSyncRateSamples');
   _swUpdateSyncHeroStats(
     'ipod-sync', progress, total, elapsed,
@@ -15319,6 +15353,7 @@ async function _swPollIpodSync(id) {
   if (status.status === 'error') {
     clearInterval(_sw.ipodSyncExecTimer); _sw.ipodSyncExecTimer = null;
     _swUnregisterUnloadGuard();
+    _syncBgStop();
     _swHandleIpodSyncError(status.error || 'Sync failed.');
     return;
   }
@@ -15330,6 +15365,7 @@ async function _swPollIpodSync(id) {
   if (status.status === 'done' || status.status === 'cancelled') {
     clearInterval(_sw.ipodSyncExecTimer); _sw.ipodSyncExecTimer = null;
     _swUnregisterUnloadGuard();
+    _syncBgStop(status.status === 'done' ? 'done' : null);
     _swSetProgress('ipod-sync', 100);
     _swRenderPhases('sw-ipod-sync-phases', _SW_IPOD_SYNC_PHASES, _SW_IPOD_SYNC_PHASES.length);
     _swUpdateIpodSyncPhaseMeta(_SW_IPOD_SYNC_PHASES.length - 1);

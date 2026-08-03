@@ -12572,6 +12572,14 @@ def ipod_sync_status(iid):
     return jsonify(ipod_sync_state)
 
 
+@app.route('/api/ipods/sync/status', methods=['GET'])
+def ipod_sync_status_active():
+    """Device-agnostic peek at ipod_sync_state, so the sync wizard can detect
+    and resume an in-progress iPod sync on reopen without already knowing
+    which iPod it belongs to."""
+    return jsonify(ipod_sync_state)
+
+
 @app.route('/api/ipods/<iid>/sync/reset', methods=['POST'])
 def ipod_sync_reset(iid):
     global ipod_sync_state
