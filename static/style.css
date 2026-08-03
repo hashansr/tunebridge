@@ -20933,6 +20933,7 @@ body.is-col-resizing {
 .sw-ipod-tabs button.active { color: var(--accent); background: var(--accent-dim); border-color: rgba(173,198,255,.3); }
 .sw-ipod-tabs small { font-size: 10.5px; font-weight: 700; margin-left: 1px; opacity: .85; font-variant-numeric: tabular-nums; }
 .sw-ipod-svg--song { width: 12px; height: 12px; -webkit-mask-image: url('/icons/songs.svg'); mask-image: url('/icons/songs.svg'); }
+.sw-ipod-svg--tag { width: 12px; height: 12px; -webkit-mask-image: url('/icons/tag-svgrepo-com.svg'); mask-image: url('/icons/tag-svgrepo-com.svg'); }
 .sw-ipod-svg--playlist { width: 12px; height: 12px; -webkit-mask-image: url('/icons/playlist.svg'); mask-image: url('/icons/playlist.svg'); }
 .sw-ipod-search { display: flex; align-items: center; gap: 8px; padding: 8px 14px; margin-bottom: 10px; color: var(--text-muted); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 999px; line-height: 1; }
 .sw-ipod-search input { min-width: 0; flex: 1; padding: 0; color: var(--text); background: none; border: 0; outline: 0; font: 12.5px inherit; }
@@ -20998,7 +20999,21 @@ body.is-col-resizing {
 .sw-ipod-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-muted); text-align: center; }
 .sw-ipod-empty h2 { margin: 4px 0 0; color: var(--text); font-size: 20px; }
 .sw-ipod-empty p { max-width: 340px; margin: 0 0 4px; font-size: 13px; }
-@media (max-width: 860px) { .sw-body--ipod-review { padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 8px) 18px 0; overflow-y: auto; } .sw-body--ipod-review #sw-step-ipod, .sw-body--ipod-review .sw-ipod-browse { overflow: visible; } .sw-ipod-columns { grid-template-columns: 1fr; } .sw-ipod-list { min-height: 360px; } .sw-ipod-stats { gap: 12px; } .sw-ipod-stats small { display: none; } .sw-footer--ipod-review { padding: 12px 18px; } }
+/* The iPod review lives beside the app sidebar, so its usable width becomes
+   constrained well before the browser itself reaches a phone-sized width.
+   Keep the action strip and the review cards in normal flow at this point;
+   otherwise their fixed, no-wrap controls overflow past the right edge. */
+@media (max-width: 1180px) {
+  .sw-body--ipod-review { padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 8px) 18px 0; overflow-y: auto; }
+  .sw-body--ipod-review #sw-step-ipod,
+  .sw-body--ipod-review .sw-ipod-browse { overflow: visible; }
+  .sw-ipod-chrome { position: static; width: 100%; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: 12px; margin-bottom: 14px; }
+  .sw-ipod-columns { grid-template-columns: 1fr; }
+  .sw-ipod-list { min-height: 360px; }
+  .sw-ipod-stats { gap: 12px; }
+  .sw-ipod-stats small { display: none; }
+  .sw-footer--ipod-review { padding: 12px 18px; }
+}
 
 /* Device row button */
 .sw-device-row {
@@ -21764,6 +21779,19 @@ body.is-col-resizing {
   font-size: 10.5px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+.sw-chip-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  -webkit-mask: center / contain no-repeat;
+  mask: center / contain no-repeat;
+}
+.sw-chip-icon--tag {
+  -webkit-mask-image: url('/icons/tag-svgrepo-com.svg');
+  mask-image: url('/icons/tag-svgrepo-com.svg');
 }
 
 /* Review groups */
