@@ -1,7 +1,7 @@
 {
-  "version": "0.644",
-  "version_full": "0.644",
-  "build": 644,
-  "channel": "prod",
+  "version": "0.645",
+  "version_full": "0.645-rc.030826-1708",
+  "build": 645,
+  "channel": "rc",
   "released": "2026-08-03"
 }
