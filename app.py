@@ -12509,7 +12509,8 @@ def ipod_sync_scan(iid):
 
             tracks_to_add_list = [
                 {'id': t['id'], 'title': t.get('title') or '', 'artist': t.get('artist') or 'Unknown Artist',
-                 'album': t.get('album') or 'Unknown Album', 'size_bytes': _local_track_size(t.get('path'))}
+                 'album_artist': t.get('album_artist') or '', 'album': t.get('album') or 'Unknown Album',
+                 'size_bytes': _local_track_size(t.get('path'))}
                 for t in plan['tracks_to_add']
             ]
             # A playlist can be selected independently of the individual songs

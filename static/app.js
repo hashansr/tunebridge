@@ -13970,7 +13970,9 @@ async function _swLoadIpodLibraryBrowse(id) {
 function _swBuildIpodArtistTree(tracks) {
   const artists = new Map(); // lowercased artist -> { name, albums: Map(lowercased album -> {name, tracks[]}) }
   for (const t of tracks) {
-    const artistName = (t.artist || '').trim() || 'Unknown Artist';
+    // Match the Artists grid: group albums under Album Artist when tagged,
+    // otherwise Artist. Keep the original tag spelling for display.
+    const artistName = (t.album_artist || t.artist || '').trim() || 'Unknown Artist';
     const albumName = (t.album || '').trim() || 'Unknown Album';
     const artistKey = artistName.toLowerCase();
     if (!artists.has(artistKey)) artists.set(artistKey, { name: artistName, albums: new Map() });
@@ -13981,7 +13983,10 @@ function _swBuildIpodArtistTree(tracks) {
   }
   return [...artists.values()]
     .map(a => ({ name: a.name, albums: [...a.albums.values()].sort((x, y) => x.name.localeCompare(y.name)) }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    // Artist-grid ordering ignores leading articles, while the displayed
+    // label remains unchanged: “A Perfect Circle” is under P and “The Veer
+    // Union” is under V.
+    .sort((a, b) => _nameSortKey(a.name).localeCompare(_nameSortKey(b.name)) || a.name.localeCompare(b.name));
 }
 
 function _swIpodGroupCheckState(trackIds, trackKeep) {
