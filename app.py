@@ -9529,6 +9529,7 @@ def export_to_device():
 SYNC_EXTENSIONS = {'.flac', '.mp3', '.m4a', '.aac', '.mp4', '.wav', '.ogg', '.opus', '.wv', '.aiff', '.aif', '.ape', '.wma', '.alac', '.lrc'}
 SYNC_DISCREPANCY_LIBRARY_DELETED = 'library_deleted_on_source'
 SYNC_DISCREPANCY_DEVICE_ONLY = 'device_only_not_in_library'
+SYNC_DISCREPANCY_TAGS_CHANGED = 'tags_changed'
 SYNC_IGNORE_TYPES = {
     SYNC_DISCREPANCY_LIBRARY_DELETED,
     SYNC_DISCREPANCY_DEVICE_ONLY,
@@ -10093,6 +10094,7 @@ def _build_sync_track_entries(template):
             'target_rel': target_rel,
             'warnings': warns,
             'tags_updated_at': int((t or {}).get('tags_updated_at') or 0),
+            'tags_fingerprint': _tags_fingerprint(t) if t else '',
         })
 
     # A DAP path template can collapse distinct library files onto one device
@@ -10146,6 +10148,28 @@ def _stat_signature(path: Path):
         return None, None
 
 
+_TAGS_FINGERPRINT_FIELDS = (
+    'artist', 'album_artist', 'album', 'title',
+    'track_number', 'disc_number', 'year', 'genre',
+)
+
+
+def _tags_fingerprint(track):
+    """
+    Short hash of the tag fields that matter for sync purposes. Unlike
+    _track_tokens(), fields are used raw (not defaulted to "Unknown X") so a
+    tag cleared to empty still registers as a real change. Used to detect
+    "this track's tags changed since last sync" independent of how the tags
+    were edited (TuneBridge's own editor, an external tool, etc.) and
+    independent of whether the underlying file's mtime/size happened to change.
+    """
+    if not track:
+        return ''
+    parts = [str(track.get(f) or '').strip() for f in _TAGS_FINGERPRINT_FIELDS]
+    raw = '\x1f'.join(parts)
+    return hashlib.sha1(raw.encode('utf-8')).hexdigest()[:16]
+
+
 def _compute_sync_diff_for_dap(dap, ignored_keys=None):
     """Compute music sync diff for a DAP profile and return summary payload."""
     if not dap:
@@ -10186,6 +10210,7 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
     local_copy_map = {}
     local_only_existing_sizes = {}
     local_only_reasons = {}
+    local_only_kinds = {}  # rel -> 'new' | 'tags_changed' | 'changed' (drives discrepancy_type)
     warnings = []
     target_collisions = set()
     target_collision_tracks = {}  # {target_rel: [local_rel, ...]} — all local tracks mapping to same dest
@@ -10262,6 +10287,7 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
             local_copy_map[target_rel] = e['local_rel']
             local_only.append(target_rel)
             local_only_reasons[target_rel] = 'Missing on device at destination path'
+            local_only_kinds[target_rel] = 'new'
             warnings.extend(e.get('warnings') or [])
             continue
 
@@ -10288,13 +10314,14 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
                 f'Size mismatch: local {int(src_size or 0)} bytes, '
                 f'device {int(dst_size or 0)} bytes'
             )
+            local_only_kinds[matched_rel] = 'changed'
             manifest_seen_keys.add(matched_key)
             manifest_updates[matched_key] = {
                 'target_rel': matched_rel,
                 'local_rel': e['local_rel'],
                 'local_size': int(src_size or 0),
                 'local_mtime_ns': int(src_mtime or 0),
-                'local_hash': '',
+                'local_hash': str(e.get('tags_fingerprint') or ''),
                 'device_size': int(dst_size or 0),
                 'device_mtime_ns': int(dst_mtime or 0),
                 'device_hash': '',
@@ -10316,22 +10343,40 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
             and int(manifest_entry.get('local_size') or 0) == int(src_size)
             and int(manifest_entry.get('local_mtime_ns') or 0) == int(src_mtime)
         )
-        local_changed_since_manifest = stat_changed_since_manifest or tag_edit_since_sync
+        # Fingerprint of the tag fields themselves — catches tag edits made by
+        # ANY tool (not just TuneBridge's own editor, which is all
+        # tag_edit_since_sync can see), and doesn't depend on mtime/size
+        # actually changing (some tag writers preserve one or both).
+        current_fingerprint = str(e.get('tags_fingerprint') or '')
+        tags_changed_since_manifest = bool(
+            manifest_entry
+            and manifest_entry.get('local_hash')
+            and current_fingerprint
+            and current_fingerprint != manifest_entry.get('local_hash')
+        )
+        local_changed_since_manifest = (
+            stat_changed_since_manifest or tag_edit_since_sync or tags_changed_since_manifest
+        )
         if local_changed_since_manifest and manifest_entry:
             local_copy_map[matched_rel] = e['local_rel']
             local_only_existing_sizes[matched_rel] = int(dst_size or 0)
             local_only.append(matched_rel)
-            local_only_reasons[matched_rel] = (
-                'Tags edited since last sync' if tag_edit_since_sync and not stat_changed_since_manifest
-                else 'Local file changed since last verified sync'
-            )
+            if tags_changed_since_manifest:
+                local_only_reasons[matched_rel] = 'Tags changed since last sync'
+                local_only_kinds[matched_rel] = 'tags_changed'
+            elif tag_edit_since_sync and not stat_changed_since_manifest:
+                local_only_reasons[matched_rel] = 'Tags edited since last sync'
+                local_only_kinds[matched_rel] = 'tags_changed'
+            else:
+                local_only_reasons[matched_rel] = 'Local file changed since last verified sync'
+                local_only_kinds[matched_rel] = 'changed'
 
         manifest_updates[matched_key] = {
             'target_rel': matched_rel,
             'local_rel': e['local_rel'],
             'local_size': int(src_size or 0),
             'local_mtime_ns': int(src_mtime or 0),
-            'local_hash': str(manifest_entry.get('local_hash') or ''),
+            'local_hash': current_fingerprint or str(manifest_entry.get('local_hash') or ''),
             'device_size': int(dst_size or 0),
             'device_mtime_ns': int(dst_mtime or 0),
             'device_hash': str(manifest_entry.get('device_hash') or ''),
@@ -10415,6 +10460,14 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
         inSync_manifest_updates,
         prune_to_keys=device_keys.union(manifest_seen_keys),
     )
+    # Regression guard: sync_manifest previously got silently cascade-wiped by
+    # every save_daps() call (see db_save_daps() history). If this count is
+    # ever unexpectedly 0 right after a non-empty write, that bug is back.
+    if inSync_manifest_updates:
+        _manifest_row_count = len(_get_dap_sync_manifest(dap_id))
+        if _manifest_row_count == 0:
+            print(f'WARNING: sync_manifest empty for dap {dap_id} immediately after writing '
+                  f'{len(inSync_manifest_updates)} entries — manifest persistence may be broken')
 
     # Net required bytes for local->device copy:
     #   max(0, source_size - existing_destination_size)
@@ -10495,7 +10548,11 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
         _sync_row(
             rel,
             str(local_only_reasons.get(rel) or 'Missing on device at destination path'),
-            'to_device_add',
+            (
+                SYNC_DISCREPANCY_TAGS_CHANGED
+                if local_only_kinds.get(rel) == 'tags_changed'
+                else 'to_device_add'
+            ),
             'sync_to_dap',
             ['sync_to_dap', 'skip'],
         )
@@ -12274,13 +12331,28 @@ def _ipod_refresh_scan_cache(iid, itdb_path):
     from ipod.itunesdb_reader import parse_ipod_library
     info, tracks, playlists = parse_ipod_library(str(itdb_path))
 
+    # local_track_id is a convenience/debug mirror of ipod_sync_manifest's
+    # (ipod_id, local_track_id) -> device_track_id mapping — not load-bearing
+    # for sync matching itself (that reads the manifest directly, keyed by
+    # db_track_id, since this cache's device_track_id is just the reassigned
+    # slot position). Populated here purely so the value is visible without
+    # a join, e.g. for a future track-inspector UI.
+    manifest = _db.db_load_ipod_sync_manifest(iid)
+    local_by_device_db_id = {
+        int(row['device_track_id']): ltid
+        for ltid, row in manifest.items()
+        if row.get('device_track_id')
+    }
+
     track_dicts = [{
-        'device_track_id': t.track_id, 'device_path': t.device_path,
+        'device_track_id': t.track_id, 'db_track_id': t.db_track_id,
+        'device_path': t.device_path,
         'title': t.title, 'artist': t.artist, 'album': t.album,
         'album_artist': t.album_artist, 'genre': t.genre,
         'duration_ms': t.duration_ms, 'size_bytes': t.size_bytes,
         'bitrate': t.bitrate, 'sample_rate': t.sample_rate,
-        'filetype': t.filetype, 'local_track_id': '',
+        'filetype': t.filetype,
+        'local_track_id': local_by_device_db_id.get(t.db_track_id, ''),
     } for t in tracks]
     playlist_dicts = [{
         'device_playlist_id': p.playlist_id, 'name': p.name,
@@ -12555,7 +12627,7 @@ def _ipod_sync_idle_state():
         # transcoding, so the client uses these byte weights for its ETA.
         'work_bytes_done': 0, 'work_bytes_total': 0, 'work_started_at': 0,
         'completed_items': [], 'errors': [], 'cancel_requested': False,
-        'added_count': 0, 'removed_track_count': 0,
+        'added_count': 0, 'removed_track_count': 0, 'updated_track_count': 0,
         'playlist_synced_count': 0, 'playlist_removed_count': 0,
         'playlist_errors': [], 'playlist_failed_count': 0,
     }
@@ -12604,8 +12676,28 @@ def ipod_sync_scan(iid):
             ]
             ipod_tracks = _db.db_load_ipod_tracks(iid)
             ipod_playlists = _db.db_load_ipod_playlists(iid)
+            ipod_manifest = _db.db_load_ipod_sync_manifest(iid)
+            local_fingerprints = {t['id']: _tags_fingerprint(t) for t in local_tracks}
 
-            plan = compute_sync_plan(local_tracks, local_playlists, ipod_tracks, ipod_playlists)
+            plan = compute_sync_plan(
+                local_tracks, local_playlists, ipod_tracks, ipod_playlists,
+                ipod_manifest=ipod_manifest, local_fingerprints=local_fingerprints,
+            )
+
+            # Backfill manifest links for tracks matched only via the fuzzy
+            # key this run (legacy/pre-existing device content) so future
+            # scans can detect tag drift for them without relying on the
+            # fuzzy key again.
+            if plan.get('tracks_matched_unlinked'):
+                backfill = {
+                    m['local_track_id']: {
+                        'device_track_id': m['device_track_id'],
+                        'local_hash': local_fingerprints.get(m['local_track_id'], ''),
+                        'status': 'synced',
+                    }
+                    for m in plan['tracks_matched_unlinked']
+                }
+                _db.db_upsert_ipod_sync_manifest(iid, backfill)
 
             # Sizes aren't cached on local track rows (same situation as the
             # DAP sync diff's local_only_sizes) - stat() them on demand here,
@@ -12632,6 +12724,15 @@ def ipod_sync_scan(iid):
             # to compute accurate required-space totals without double-
             # counting tracks that are also individually selected elsewhere.
             track_size_by_id = {t['id']: t['size_bytes'] for t in tracks_to_add_list}
+
+            tracks_to_update_list = [
+                {'id': u['local_track_id'], 'title': u['local_track'].get('title') or '',
+                 'artist': u['local_track'].get('artist') or 'Unknown Artist',
+                 'album_artist': u['local_track'].get('album_artist') or '',
+                 'album': u['local_track'].get('album') or 'Unknown Album',
+                 'size_bytes': _local_track_size(u['local_track'].get('path'))}
+                for u in plan['tracks_to_update']
+            ]
 
             def _missing_from_add_set(track_ids):
                 missing = [tid for tid in track_ids if tid in track_size_by_id]
@@ -12664,6 +12765,9 @@ def ipod_sync_scan(iid):
                     'tracks_to_add_ids': [t['id'] for t in plan['tracks_to_add']],
                     'tracks_to_add': tracks_to_add_list,
                     'tracks_to_add_count': len(plan['tracks_to_add']),
+                    'tracks_to_update_ids': [u['local_track_id'] for u in plan['tracks_to_update']],
+                    'tracks_to_update': tracks_to_update_list,
+                    'tracks_to_update_count': len(plan['tracks_to_update']),
                     'tracks_already_on_device': plan['tracks_already_on_device'],
                     'playlists_to_create_ids': [p['id'] for p in plan['playlists_to_create']],
                     'playlists_to_create': playlists_to_create,
@@ -12721,7 +12825,11 @@ def ipod_sync_cancel(iid):
 def ipod_sync_execute(iid):
     """Transcodes selected tracks, copies them onto the device under
     iPod_Control/Music/Fxx/, and rewrites the on-device iTunesDB to add
-    them, remove selected tracks/playlists, and create playlists for
+    them, update the metadata of tracks already on the device whose local
+    tags have changed since (`update_track_ids`, no re-transcode/re-copy —
+    only the iTunesDB entry is rebuilt from current local tags, keyed off
+    the existing track's persistent db_track_id so artwork/playlist links
+    survive), remove selected tracks/playlists, and create playlists for
     selected local playlists (member tracks included automatically) —
     backed up first, written atomically. Removed tracks' on-device audio
     files are deleted only after the rewritten iTunesDB is safely on
@@ -12751,7 +12859,8 @@ def ipod_sync_execute(iid):
     add_playlist_ids = set(str(x) for x in (data.get('playlist_ids') or []))
     remove_track_ids = set(str(x) for x in (data.get('remove_track_ids') or []))
     remove_playlist_ids = set(str(x) for x in (data.get('remove_playlist_ids') or []))
-    if not (add_track_ids or add_playlist_ids or remove_track_ids or remove_playlist_ids):
+    update_track_ids = set(str(x) for x in (data.get('update_track_ids') or []))
+    if not (add_track_ids or add_playlist_ids or remove_track_ids or remove_playlist_ids or update_track_ids):
         return jsonify({'error': 'No items selected'}), 400
 
     ipod = next((i for i in load_ipods() if i['id'] == iid), None)
@@ -12931,6 +13040,7 @@ def ipod_sync_execute(iid):
 
             with library_lock:
                 local_by_id = {t['id']: t for t in library}
+            ipod_manifest = _db.db_load_ipod_sync_manifest(iid)
 
             # Selecting a playlist syncs the songs within it, too - expand
             # add_track_ids with any member track that isn't already on
@@ -12955,7 +13065,7 @@ def ipod_sync_execute(iid):
             # had a chance to grow add_track_ids - progress already
             # accumulated from the removal loops above carries forward.
             ipod_sync_state['total'] = (
-                len(add_track_ids) + len(remove_track_ids)
+                len(add_track_ids) + len(remove_track_ids) + len(update_track_ids)
                 + len(add_playlist_ids) + len(remove_playlist_ids)
             )
 
@@ -13045,7 +13155,7 @@ def ipod_sync_execute(iid):
                 # files on a subsequent sync.
                 return int(hashlib.sha256(local_id.encode('utf-8')).hexdigest()[:15], 16) + 1
 
-            def _make_local_track_info(t, local_id, device_path, device_file, was_transcoded):
+            def _make_local_track_info(t, local_id, device_path, device_file, was_transcoded, db_track_id_override=None):
                 ext = device_file.suffix.lstrip('.').lower() or 'm4a'
                 # sample_rate/length/bitrate are measured from the real
                 # on-device file rather than trusted from source tags:
@@ -13095,8 +13205,60 @@ def ipod_sync_execute(iid):
                     album_artist=t.get('album_artist') or None, genre=t.get('genre') or None,
                     track_number=_as_int(t.get('track_number')), disc_number=_as_int(t.get('disc_number'), 1),
                     total_discs=1, year=_as_int(t.get('year')),
-                    date_added=int(time.time()), db_track_id=_db_track_id_for_local(local_id),
+                    date_added=int(time.time()),
+                    db_track_id=(
+                        db_track_id_override if db_track_id_override is not None
+                        else _db_track_id_for_local(local_id)
+                    ),
                 )
+
+            # Update branch: for kept tracks whose local tags have drifted
+            # since they were last pushed to this device (per
+            # ipod_sync_manifest), rebuild the TrackInfo from the CURRENT
+            # local tags instead of carrying the stale as-parsed-from-device
+            # values through unchanged (which is what the kept_tracks loop
+            # above does for every other kept track). No re-transcode or
+            # re-copy: a tag-only edit never touches the audio bytes, and
+            # iPod tag data lives entirely in the iTunesDB, not the file.
+            # The existing device track's persistent db_track_id is reused
+            # (not a freshly-derived one) so artwork links and playlist
+            # membership survive the rebuild.
+            updated_track_count = 0
+            local_id_to_db_track_id = {}
+            if update_track_ids:
+                kept_by_persistent_id = {
+                    (t2.db_track_id or t2.track_id): (idx, t2)
+                    for idx, t2 in enumerate(kept_tracks)
+                }
+                for local_id in update_track_ids:
+                    if ipod_sync_state.get('cancel_requested'):
+                        was_cancelled = True
+                        break
+                    t = local_by_id.get(local_id)
+                    manifest_entry = ipod_manifest.get(local_id)
+                    linked_id = int(manifest_entry['device_track_id']) if manifest_entry and manifest_entry.get('device_track_id') else None
+                    if not t or linked_id is None:
+                        continue
+                    match = kept_by_persistent_id.get(linked_id)
+                    if not match:
+                        continue  # no longer on device (e.g. removed this same run)
+                    idx, t2 = match
+                    device_file = Path(resolved_mount) / t2.device_path
+                    try:
+                        updated_info = _make_local_track_info(
+                            t, local_id, t2.device_path, device_file,
+                            was_transcoded=(t2.filetype == 'Apple Lossless audio file'),
+                            db_track_id_override=linked_id,
+                        )
+                    except OSError:
+                        sync_errors.append({'title': t.get('title') or local_id, 'error': 'Could not read existing on-device file'})
+                        continue
+                    track_infos[idx] = updated_info
+                    local_id_to_db_track_id[local_id] = linked_id
+                    key_to_device_db_track_id[match_key(t.get('title'), t.get('artist'), t.get('album'))] = linked_id
+                    updated_track_count += 1
+                    ipod_sync_state['progress'] += 1
+                    push_completed(updated_info.title, 'Tags updated', updated_info.size, 'update')
 
             # Recover files left by an interrupted sync.  File names are
             # deterministic from the local track id, so this is unambiguous
@@ -13123,7 +13285,8 @@ def ipod_sync_execute(iid):
             except OSError:
                 pass
 
-            local_id_to_db_track_id = {}
+            # local_id_to_db_track_id was already initialised above (and may
+            # already hold entries from the update branch) — not reset here.
             recovered_track_count = 0
             for local_id in tuple(add_track_ids):
                 t = local_by_id.get(local_id)
@@ -13152,7 +13315,7 @@ def ipod_sync_execute(iid):
             # physical copy; recovered files count as completed index work.
             ipod_sync_state['progress'] += recovered_track_count
             ipod_sync_state['total'] = (
-                len(add_track_ids) + recovered_track_count + len(remove_track_ids)
+                len(add_track_ids) + recovered_track_count + len(remove_track_ids) + updated_track_count
                 + len(add_playlist_ids) + len(remove_playlist_ids)
             )
             ipod_sync_state['work_bytes_total'] = sum(
@@ -13440,11 +13603,27 @@ def ipod_sync_execute(iid):
             # the way back).
             _ipod_refresh_scan_cache(iid, itdb_path)
 
+            # Persist the (ipod_id, local_track_id) -> device_track_id link
+            # for every track added or updated this run, with a fresh tags
+            # fingerprint, so the *next* scan can detect drift again instead
+            # of the manifest staying permanently empty for this device.
+            if local_id_to_db_track_id:
+                manifest_backfill = {
+                    local_id: {
+                        'device_track_id': db_id,
+                        'local_hash': _tags_fingerprint(local_by_id.get(local_id)),
+                        'status': 'synced',
+                    }
+                    for local_id, db_id in local_id_to_db_track_id.items()
+                }
+                _db.db_upsert_ipod_sync_manifest(iid, manifest_backfill)
+
             added_ok = added_track_count
             blocking_playlist_errors = [pe for pe in playlist_errors if not pe.get('warning_only')]
             playlist_warnings = [pe for pe in playlist_errors if pe.get('warning_only')]
             message = (
-                f'Added {added_ok}, indexed {recovered_track_count}, removed {len(remove_track_ids)} song(s); '
+                f'Added {added_ok}, indexed {recovered_track_count}, updated {updated_track_count}, '
+                f'removed {len(remove_track_ids)} song(s); '
                 f'synced {synced_playlist_count}, removed {len(remove_playlist_ids)} playlist(s).'
             )
             if sync_errors:
@@ -13467,6 +13646,7 @@ def ipod_sync_execute(iid):
                 # Structured counts for the done screen's stat tiles - avoids
                 # the frontend having to parse them back out of the message.
                 'added_count': added_ok, 'removed_track_count': len(remove_track_ids),
+                'updated_track_count': updated_track_count,
                 'playlist_synced_count': synced_playlist_count, 'playlist_removed_count': len(remove_playlist_ids),
                 'playlist_errors': playlist_errors, 'playlist_failed_count': len(blocking_playlist_errors),
                 'playlist_warnings': playlist_warnings, 'playlist_warning_count': len(playlist_warnings),

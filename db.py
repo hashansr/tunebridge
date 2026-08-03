@@ -53,7 +53,7 @@ def close_conn():
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -129,6 +129,13 @@ _MIGRATIONS: list[tuple] = [
     ]),
     (17, 'Add tags_updated_at to tracks for tag-edit sync staleness detection',
         ['ALTER TABLE tracks ADD COLUMN tags_updated_at INTEGER DEFAULT 0']),
+    # ipod_tracks.device_track_id is the sequential MHIT slot position,
+    # reassigned on every iTunesDB rebuild — useless as a stable join key.
+    # db_track_id is the persistent 64-bit id (see ipod/models.py::IpodTrack)
+    # needed to match a cached device track back to ipod_sync_manifest's
+    # (ipod_id, local_track_id) -> device_track_id mapping across rescans.
+    (18, 'Add db_track_id to ipod_tracks for stable persistent-id matching',
+        ['ALTER TABLE ipod_tracks ADD COLUMN db_track_id INTEGER DEFAULT 0']),
 ]
 
 _SCHEMA_SQL = """
@@ -590,6 +597,7 @@ CREATE TABLE IF NOT EXISTS ipod_tracks (
     sample_rate      INTEGER DEFAULT 0,
     filetype         TEXT DEFAULT '',
     local_track_id   TEXT DEFAULT '',
+    db_track_id      INTEGER DEFAULT 0,
     PRIMARY KEY (ipod_id, device_track_id)
 );
 
@@ -1480,16 +1488,38 @@ def db_load_daps():
 
 
 def db_save_daps(daps):
-    """Full replace of all DAPs."""
+    """
+    Upsert all DAPs (NOT a delete-all + reinsert). daps/sync_manifest and
+    sync_ignored_discrepancies reference daps(id) ON DELETE CASCADE, and every
+    connection runs with foreign_keys=ON — a blanket `DELETE FROM daps` here
+    used to cascade-wipe every DAP's sync_manifest (and ignored-discrepancy
+    rules) on every single save, including the routine save that follows every
+    scan/status-check/sync-execute. Only genuinely removed DAPs should ever
+    trigger that cascade. Mirrors the upsert pattern db_save_single_ipod()
+    already uses for the same reason on the ipod tables.
+    """
     conn = get_conn()
-    conn.execute("DELETE FROM dap_playlist_exports")
-    conn.execute("DELETE FROM daps")
+    incoming_ids = {d['id'] for d in daps}
+    existing_ids = {r[0] for r in conn.execute("SELECT id FROM daps").fetchall()}
+    removed_ids = existing_ids - incoming_ids
+    if removed_ids:
+        conn.executemany("DELETE FROM daps WHERE id = ?", [(did,) for did in removed_ids])
+
     for d in daps:
         conn.execute(
             """INSERT INTO daps (id, name, model, mount_path, export_folder, path_prefix,
                peq_folder, storage_type, music_root, path_template,
                mount_volume_uuid, mount_disk_uuid, mount_device_identifier, sync_summary)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   name=excluded.name, model=excluded.model, mount_path=excluded.mount_path,
+                   export_folder=excluded.export_folder, path_prefix=excluded.path_prefix,
+                   peq_folder=excluded.peq_folder, storage_type=excluded.storage_type,
+                   music_root=excluded.music_root, path_template=excluded.path_template,
+                   mount_volume_uuid=excluded.mount_volume_uuid,
+                   mount_disk_uuid=excluded.mount_disk_uuid,
+                   mount_device_identifier=excluded.mount_device_identifier,
+                   sync_summary=excluded.sync_summary""",
             (
                 d['id'], d.get('name', ''), d.get('model', ''),
                 d.get('mount_path', ''), d.get('export_folder', ''),
@@ -1500,6 +1530,7 @@ def db_save_daps(daps):
                 json.dumps(d.get('sync_summary', {})),
             )
         )
+        conn.execute("DELETE FROM dap_playlist_exports WHERE dap_id = ?", (d['id'],))
         for pid, ts in d.get('playlist_exports', {}).items():
             conn.execute(
                 "INSERT INTO dap_playlist_exports (dap_id, playlist_id, exported_at) VALUES (?, ?, ?)",
@@ -1509,13 +1540,27 @@ def db_save_daps(daps):
 
 
 def db_save_single_dap(d):
-    """Insert or update a single DAP."""
+    """
+    Insert or update a single DAP. Uses ON CONFLICT DO UPDATE rather than
+    INSERT OR REPLACE, which is a delete+insert under the hood and would
+    cascade-wipe this DAP's sync_manifest/sync_ignored_discrepancies rows
+    (see db_save_daps() for the same issue found on the bulk path).
+    """
     conn = get_conn()
     conn.execute(
-        """INSERT OR REPLACE INTO daps (id, name, model, mount_path, export_folder, path_prefix,
+        """INSERT INTO daps (id, name, model, mount_path, export_folder, path_prefix,
            peq_folder, storage_type, music_root, path_template,
            mount_volume_uuid, mount_disk_uuid, mount_device_identifier, sync_summary)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+               name=excluded.name, model=excluded.model, mount_path=excluded.mount_path,
+               export_folder=excluded.export_folder, path_prefix=excluded.path_prefix,
+               peq_folder=excluded.peq_folder, storage_type=excluded.storage_type,
+               music_root=excluded.music_root, path_template=excluded.path_template,
+               mount_volume_uuid=excluded.mount_volume_uuid,
+               mount_disk_uuid=excluded.mount_disk_uuid,
+               mount_device_identifier=excluded.mount_device_identifier,
+               sync_summary=excluded.sync_summary""",
         (
             d['id'], d.get('name', ''), d.get('model', ''),
             d.get('mount_path', ''), d.get('export_folder', ''),
@@ -2756,8 +2801,8 @@ def db_save_ipod_scan_results(ipod_id, tracks, playlists):
             """INSERT INTO ipod_tracks
                (ipod_id, device_track_id, device_path, title, artist, album,
                 album_artist, genre, duration_ms, size_bytes, bitrate, sample_rate,
-                filetype, local_track_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                filetype, local_track_id, db_track_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 ipod_id, t['device_track_id'], t.get('device_path', ''),
                 t.get('title', ''), t.get('artist', ''), t.get('album', ''),
@@ -2765,6 +2810,7 @@ def db_save_ipod_scan_results(ipod_id, tracks, playlists):
                 int(t.get('duration_ms', 0) or 0), int(t.get('size_bytes', 0) or 0),
                 int(t.get('bitrate', 0) or 0), int(t.get('sample_rate', 0) or 0),
                 t.get('filetype', ''), t.get('local_track_id', ''),
+                int(t.get('db_track_id', 0) or 0),
             )
         )
     for p in playlists:
@@ -2806,6 +2852,62 @@ def db_load_ipod_playlists(ipod_id) -> list:
             d['track_order'] = []
         result.append(d)
     return result
+
+
+def db_load_ipod_sync_manifest(ipod_id) -> dict:
+    """
+    Persistent (ipod_id, local_track_id) -> device_track_id mapping, surviving
+    iTunesDB rebuilds (which reassign nothing TuneBridge itself tracks — see
+    itunesdb_writer.py's db_track_id handling). Returns dict keyed by
+    local_track_id so sync_planner can look up "is this local track already
+    linked to a device track, and has it drifted since?" in O(1).
+    """
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT local_track_id, device_track_id, local_hash, transcoded_hash,
+                  transcoded_path, status, updated_at
+           FROM ipod_sync_manifest WHERE ipod_id = ?""",
+        (str(ipod_id),)
+    ).fetchall()
+    return {r['local_track_id']: dict(r) for r in rows}
+
+
+def db_upsert_ipod_sync_manifest(ipod_id, records: dict):
+    """
+    Upsert ipod_sync_manifest rows. records: dict[local_track_id] -> entry dict
+    with device_track_id/local_hash/transcoded_hash/transcoded_path/status.
+    Uses ON CONFLICT DO UPDATE (never INSERT OR REPLACE / DELETE+reinsert) —
+    this table references ipods(id) ON DELETE CASCADE, and db_save_daps()'s
+    prior bug (a blanket delete-all silently wiping sync_manifest on every
+    save) is exactly the failure mode to avoid repeating here.
+    """
+    conn = get_conn()
+    iid = str(ipod_id)
+    now = int(time.time())
+    for local_track_id, entry in (records or {}).items():
+        if not local_track_id:
+            continue
+        e = entry if isinstance(entry, dict) else {}
+        conn.execute(
+            """INSERT INTO ipod_sync_manifest (
+                   ipod_id, local_track_id, device_track_id, local_hash,
+                   transcoded_hash, transcoded_path, status, updated_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(ipod_id, local_track_id) DO UPDATE SET
+                   device_track_id=excluded.device_track_id,
+                   local_hash=excluded.local_hash,
+                   transcoded_hash=excluded.transcoded_hash,
+                   transcoded_path=excluded.transcoded_path,
+                   status=excluded.status,
+                   updated_at=excluded.updated_at""",
+            (
+                iid, str(local_track_id), int(e.get('device_track_id') or 0),
+                str(e.get('local_hash') or ''), str(e.get('transcoded_hash') or ''),
+                str(e.get('transcoded_path') or ''), str(e.get('status') or 'synced'),
+                int(e.get('updated_at') or now),
+            )
+        )
+    conn.commit()
 
 
 def db_load_ipod_backups(ipod_id) -> list:

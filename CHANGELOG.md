@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Updated ID3/FLAC tags (e.g. Artist, Album Artist) on songs already synced to a DAP or SD card were silently never re-copied, no matter how the tags were edited — a bug in how DAP settings were saved was quietly erasing the sync history needed to detect the change on every sync. Tag changes are now detected reliably and offered for re-sync under a new "Tags Updated" section in the sync review screen.
+- Add: Click-wheel iPod sync now detects when a song already on the device has had its tags edited locally, and updates the on-device entry accordingly (no re-transcoding needed) — shown under a new "Tags Changed" tab when reviewing what to sync.
 
 ## v0.644 · 2026-08-03
 - Fix: The "Sync in progress" toast showed the raw, unrounded progress number (e.g. "68.21743388834476%") instead of a clean whole percentage.

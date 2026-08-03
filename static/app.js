@@ -10508,16 +10508,26 @@ function _swBuildProposal(status) {
     ...onDeviceItems(status.device_only_not_in_library, 'copy', status.device_only_sizes),
   ];
 
-  const toDeviceAll = toDeviceItems(status.local_only, status.local_only_sizes, status.local_only_copy_sizes);
+  // to_device_add rows carry a discrepancy_type — split out tag-only changes
+  // (already on the device, just stale metadata) from genuinely new files,
+  // instead of folding both into one undifferentiated "new songs" bucket.
+  const toDeviceAddRows = status.to_device_add || [];
+  const isTagsChangedRow = r => typeof r === 'object' && r.discrepancy_type === 'tags_changed';
+  const toDeviceTagsChangedRows = toDeviceAddRows.filter(isTagsChangedRow);
+  const toDeviceNewRows = toDeviceAddRows.filter(r => !isTagsChangedRow(r));
+
+  const toDeviceAll = toDeviceItems(toDeviceNewRows, status.local_only_sizes, status.local_only_copy_sizes);
   const toDeviceSongs = toDeviceAll.filter(item => !_swIsLyricsPath(item.rel || item.id));
   const toDeviceLyrics = toDeviceAll.filter(item => _swIsLyricsPath(item.rel || item.id))
     .map(item => ({ ...item, kind: 'lyrics' }));
+  const toDeviceTagsChanged = toDeviceItems(toDeviceTagsChangedRows, status.local_only_sizes, status.local_only_copy_sizes);
 
   const pathTemplateFormatted = _swFormatPathTemplate(status.path_template || null);
 
   _sw.proposal = {
     toDevice:       { label: 'New Songs In Library',      hint: 'Songs in your library not yet on the device', items: toDeviceSongs },
     toDeviceLyrics: { label: 'New Lyrics in Library',     hint: 'Lyric files in your library not yet on the device', items: toDeviceLyrics },
+    tagsUpdated:    { label: 'Tags Updated',              hint: 'Songs whose tags changed since the last sync', items: toDeviceTagsChanged },
     onDevice:       { label: 'On Device, not in Library', hint: 'Files on the player with no match in your library', items: onDeviceCombined },
     playlists:      { label: 'New or Updated Playlists',  hint: 'Playlists that have changed since the last sync', items: plItems(status.playlists_out_of_sync) },
     pathTemplateFormatted,
@@ -10529,20 +10539,23 @@ function _swBuildProposal(status) {
   _sw.mismatchWarning = (notInLib > 10 && totalUnmatched > 0 && (notInLib / totalUnmatched) > 0.2) ? notInLib : 0;
 
   // Reset pagination
-  _sw.pages = { toDevice: 0, toDeviceLyrics: 0, onDevice: 0, playlists: 0 };
+  _sw.pages = { toDevice: 0, toDeviceLyrics: 0, tagsUpdated: 0, onDevice: 0, playlists: 0 };
 
   // Reset playlist-aware auto-selection tracking
   _sw.playlistAutoSelected = {};
   _sw.toDeviceManual = new Set();
 
   // Initialise selection
-  _sw.selection = { toDevice: {}, toDeviceLyrics: {}, onDevice: {}, playlists: {} };
+  _sw.selection = { toDevice: {}, toDeviceLyrics: {}, tagsUpdated: {}, onDevice: {}, playlists: {} };
 
   for (const item of _sw.proposal.toDevice.items) {
     _sw.selection.toDevice[item.id] = true;
   }
   for (const item of _sw.proposal.toDeviceLyrics.items) {
     _sw.selection.toDeviceLyrics[item.id] = true;
+  }
+  for (const item of _sw.proposal.tagsUpdated.items) {
+    _sw.selection.tagsUpdated[item.id] = true;
   }
   // onDevice: each item gets an action string ('keep'|'copy'|'delete')
   for (const item of _sw.proposal.onDevice.items) {
@@ -10556,7 +10569,7 @@ function _swBuildProposal(status) {
 }
 
 function _swRenderReview() {
-  const ORDER = ['toDevice', 'toDeviceLyrics', 'onDevice', 'playlists'];
+  const ORDER = ['toDevice', 'toDeviceLyrics', 'tagsUpdated', 'onDevice', 'playlists'];
   const filter = _sw.filter;
 
   // Mismatch warning banner
@@ -10606,7 +10619,7 @@ function _swBuildGroupCard(gid, group) {
   const sel = _sw.selection[gid] ?? {};
   const total = group.items.length;
   const isOnDevice = gid === 'onDevice';
-  const isHierarchicalToDevice = gid === 'toDevice' || gid === 'toDeviceLyrics';
+  const isHierarchicalToDevice = gid === 'toDevice' || gid === 'toDeviceLyrics' || gid === 'tagsUpdated';
   const totalSizeLabel = _swAggregateSizeLabel(group.items, 'displaySizeBytes');
 
   // Pagination
@@ -11165,6 +11178,7 @@ function _swComputeTotals() {
 
   const toDev  = selOf('toDevice');
   const lyricsToDev = selOf('toDeviceLyrics');
+  const tagsUpdatedToDev = selOf('tagsUpdated');
   const plists = selOf('playlists');
 
   // onDevice: partition by action
@@ -11177,7 +11191,8 @@ function _swComputeTotals() {
 
   const toDeviceSongItems = (groups.toDevice?.items ?? []).filter(i => _sw.selection.toDevice?.[i.id]);
   const toDeviceLyricItems = (groups.toDeviceLyrics?.items ?? []).filter(i => _sw.selection.toDeviceLyrics?.[i.id]);
-  const toDeviceBytes = bytesOfItems([...toDeviceSongItems, ...toDeviceLyricItems]);
+  const toDeviceTagsUpdatedItems = (groups.tagsUpdated?.items ?? []).filter(i => _sw.selection.tagsUpdated?.[i.id]);
+  const toDeviceBytes = bytesOfItems([...toDeviceSongItems, ...toDeviceLyricItems, ...toDeviceTagsUpdatedItems]);
   const copyBytes     = bytesOfItems(copyItems);
   const deleteBytes   = bytesOfItems(deleteItems);
   const toDeviceMB  = toDeviceBytes / (1024 ** 2);
@@ -11186,7 +11201,7 @@ function _swComputeTotals() {
   const netMB       = toDeviceMB - deleteMB;
   const netGB       = Math.abs(netMB) / 1024;
   const sign        = netMB >= 0 ? '+' : '−';
-  const totalChanges = toDev.length + lyricsToDev.length + copyItems.length + deleteItems.length + plists.length;
+  const totalChanges = toDev.length + lyricsToDev.length + tagsUpdatedToDev.length + copyItems.length + deleteItems.length + plists.length;
 
   const usedBytes  = _sw.device?.used_bytes ?? 0;
   const capBytes   = _sw.device?.capacity_bytes ?? 0;
@@ -11201,6 +11216,7 @@ function _swComputeTotals() {
   return {
     toDeviceCount: toDev.length,
     toDeviceLyricsCount: lyricsToDev.length,
+    tagsUpdatedCount: tagsUpdatedToDev.length,
     copyCount: copyItems.length, deleteCount: deleteItems.length,
     playlistCount: plists.length,
     toDeviceMB, copyMB, deleteMB, netMB, netGB, sign,
@@ -11232,6 +11248,7 @@ function _swStoragePhrase(t) {
   const selectedSummary = [];
   if (t.toDeviceCount) selectedSummary.push(`${t.toDeviceCount} song${t.toDeviceCount===1?'':'s'}`);
   if (t.toDeviceLyricsCount) selectedSummary.push(`${t.toDeviceLyricsCount} lyric${t.toDeviceLyricsCount===1?'':'s'}`);
+  if (t.tagsUpdatedCount) selectedSummary.push(`${t.tagsUpdatedCount} tag update${t.tagsUpdatedCount===1?'':'s'}`);
   if (t.copyCount) selectedSummary.push(`${t.copyCount} to library`);
   if (t.deleteCount) selectedSummary.push(`${t.deleteCount} deleted from device`);
   if (t.playlistCount) selectedSummary.push(`${t.playlistCount} playlist${t.playlistCount===1?'':'s'}`);
@@ -11390,6 +11407,7 @@ function _swBuildExecutePayload() {
   const toDevice   = [
     ...(proposal.toDevice?.items ?? []).filter(i => _sw.selection.toDevice?.[i.id]).map(i => i.id),
     ...(proposal.toDeviceLyrics?.items ?? []).filter(i => _sw.selection.toDeviceLyrics?.[i.id]).map(i => i.id),
+    ...(proposal.tagsUpdated?.items ?? []).filter(i => _sw.selection.tagsUpdated?.[i.id]).map(i => i.id),
   ];
   const toLibrary  = onDeviceItems.filter(i => onDeviceSel[i.id] === 'copy').map(i => i.id);
   const deletions  = onDeviceItems.filter(i => onDeviceSel[i.id] === 'delete').map(i => i.id);
@@ -11692,6 +11710,7 @@ function _swRenderDone() {
   // Derive actual counts from what was submitted
   const addedItems   = (_sw.proposal?.toDevice?.items ?? [])
     .concat(_sw.proposal?.toDeviceLyrics?.items ?? [])
+    .concat(_sw.proposal?.tagsUpdated?.items ?? [])
     .filter(i => (payload.add_to_device_paths ?? []).includes(i.id));
   const copyItems    = (_sw.proposal?.onDevice?.items ?? [])
     .filter(i => (payload.copy_to_local_paths ?? []).includes(i.id));
@@ -14130,7 +14149,7 @@ function _swIpodReviewState() {
   return _sw.ipodReview ||= {
     leftTab: 'songs', rightTab: 'songs', leftQuery: '', rightQuery: '', open: new Set(),
     leftSongsPage: 0, leftPlaylistsPage: 0,
-    rightSongsPage: 0, rightPlaylistsPage: 0,
+    rightSongsPage: 0, rightPlaylistsPage: 0, rightChangedPage: 0,
   };
 }
 function _swIpodReviewToggle(el) {
@@ -14165,7 +14184,7 @@ function _swIpodReviewToggleAll(scope, type) {
   if (!browse || (scope === 'library' && !plan)) return;
   const selections = scope === 'device'
     ? (type === 'songs' ? browse.trackKeep : browse.playlistKeep)
-    : (type === 'songs' ? plan.trackSelected : plan.playlistSelected);
+    : (type === 'changed' ? plan.trackUpdateSelected : type === 'songs' ? plan.trackSelected : plan.playlistSelected);
   const selectAll = [...selections.values()].some(value => value === false);
   selections.forEach((_, id) => selections.set(id, selectAll));
   _swRenderIpodReview();
@@ -14205,7 +14224,9 @@ function _swIpodReviewToggleTrack(el) {
   if (!browse || (scope === 'library' && !plan)) return;
   const map = scope === 'device'
     ? (el.dataset.type === 'playlist' ? browse.playlistKeep : browse.trackKeep)
-    : (el.dataset.type === 'playlist' ? plan.playlistSelected : plan.trackSelected);
+    : (el.dataset.type === 'playlist' ? plan.playlistSelected
+       : el.dataset.type === 'changed' ? plan.trackUpdateSelected
+       : plan.trackSelected);
   map.set(el.dataset.id, el.checked);
   _swRenderIpodReview();
 }
@@ -14267,19 +14288,24 @@ function _swRenderIpodReview() {
     ? plan.artistTree.filter(a => matches(a.name + a.albums.flatMap(x => x.tracks).map(t => `${t.title} ${t.album}`).join(' '), qRight))
     : [];
   const addPlaylists = plan ? plan.playlists.filter(p => matches(p.name, qRight)) : [];
+  const changedTracks = plan
+    ? (plan.tracksToUpdate || []).filter(t => matches(`${t.title || ''} ${t.artist || ''} ${t.album || ''}`, qRight))
+    : [];
   const onTracks = browse.trackById.size;
   const onPlaylists = browse.playlists.length;
   const totals = _swComputeIpodTotals();
   const selectedSongs = plan ? [...plan.trackSelected.values()].filter(v => v !== false).length : 0;
   const selectedPlaylists = plan ? [...plan.playlistSelected.values()].filter(v => v !== false).length : 0;
+  const selectedChanged = plan ? [...(plan.trackUpdateSelected ?? new Map()).values()].filter(v => v !== false).length : 0;
   const allSongsSelected = plan && [...plan.trackSelected.values()].every(value => value !== false);
   const allPlaylistsSelected = plan && [...plan.playlistSelected.values()].every(value => value !== false);
+  const allChangedSelected = plan && [...(plan.trackUpdateSelected ?? new Map()).values()].every(value => value !== false);
   const allDeviceSongsKept = [...browse.trackKeep.values()].every(value => value !== false);
   const allDevicePlaylistsKept = [...browse.playlistKeep.values()].every(value => value !== false);
   const lastScan = device.last_scanned_at ? _fmtRelDate(device.last_scanned_at) : 'Just now';
 
-  const trackRow = (track, checked, scope = 'library') => `<div class="sw-ipod-track${scope === 'device' && !checked ? ' is-marked-remove' : ''}">
-    ${_swIpodReviewCheck(checked, false, `data-scope="${scope}" data-type="song" data-id="${esc(String(scope === 'device' ? track.device_track_id : track.id))}" onchange="App.swIpodReviewToggleTrack(this)"`)}
+  const trackRow = (track, checked, scope = 'library', type = 'song') => `<div class="sw-ipod-track${scope === 'device' && !checked ? ' is-marked-remove' : ''}">
+    ${_swIpodReviewCheck(checked, false, `data-scope="${scope}" data-type="${type}" data-id="${esc(String(scope === 'device' ? track.device_track_id : track.id))}" onchange="App.swIpodReviewToggleTrack(this)"`)}
     ${_swIpodReviewThumb(track)}
     <span class="sw-ipod-track-copy"><span>${esc(track.title || 'Untitled')}</span><small>${esc([track.artist, track.album].filter(Boolean).join(' · '))}</small></span>
     <span class="sw-ipod-track-meta">${scope === 'device' ? (checked ? esc(_fmtBytes(track.size_bytes || 0)) : '<span class="sw-ipod-remove-tag">Remove</span>') : esc(_fmtBytes(track.size_bytes || 0))}</span>
@@ -14332,11 +14358,28 @@ function _swRenderIpodReview() {
     ? paginate('right', 'songs', addArtists, artist => addArtist(artist, plan.artistTree.indexOf(artist)), 'artists')
     : '<div class="sw-ipod-loading">Comparing your library with this iPod…</div>';
   const rightPlaylists = plan ? paginate('right', 'playlists', addPlaylists, p => addPlaylist(p, plan.playlists.indexOf(p)), 'playlists') : '<div class="sw-ipod-loading">Comparing your library with this iPod…</div>';
+  const rightChanged = plan
+    ? paginate('right', 'changed', changedTracks, t => trackRow(t, (plan.trackUpdateSelected ?? new Map()).get(t.id) !== false, 'library', 'changed'), 'songs')
+    : '<div class="sw-ipod-loading">Comparing your library with this iPod…</div>';
+  const rightSearchPlaceholder = state.rightTab === 'songs' ? 'artists, tracks, albums'
+    : state.rightTab === 'changed' ? 'tracks with updated tags'
+    : 'playlists';
+  const rightListHeadText = state.rightTab === 'songs'
+    ? `${addArtists.length} artists · ${addTracks.length} songs · ${selectedSongs.toLocaleString()} selected to add`
+    : state.rightTab === 'changed'
+    ? `${changedTracks.length} track${changedTracks.length === 1 ? '' : 's'} · ${selectedChanged.toLocaleString()} selected to update`
+    : `${selectedPlaylists} playlists selected to add`;
+  const rightSelectAllChecked = state.rightTab === 'songs' ? allSongsSelected
+    : state.rightTab === 'changed' ? allChangedSelected
+    : allPlaylistsSelected;
+  const rightBodyHtml = state.rightTab === 'songs' ? rightSongs
+    : state.rightTab === 'changed' ? rightChanged
+    : rightPlaylists;
   root.innerHTML = `<div class="sw-ipod-chrome"><div class="sw-ipod-stats"><span><b>${onTracks.toLocaleString()}</b><small>Songs on iPod</small></span><span><b>${onPlaylists}</b><small>Playlists on iPod</small></span></div><button class="sw-ipod-rescan sw-ipod-refresh" id="sw-ipod-refresh-btn" onclick="App.swRefreshIpodConnection()"><span class="sw-ipod-svg sw-ipod-svg--refresh"></span>Refresh connection</button><button class="sw-ipod-rescan" id="sw-ipod-scan-btn" onclick="App.swScanIpod()"><span class="sw-ipod-svg sw-ipod-svg--refresh"></span>Rescan iPod</button></div>
     <section class="sw-ipod-hero"><span class="sw-ipod-device-icon">${_IPOD_SVG_SMALL}</span><span class="sw-ipod-identity"><span class="sw-ipod-title-row"><h2>${esc(device.name || 'iPod')}</h2></span><p>${esc(device.model || 'iPod')} <b></b> Scanned ${esc(lastScan)}</p></span></section>
     <section class="sw-ipod-columns">
       <div class="sw-ipod-panel"><header><b>On this iPod now</b><span class="sw-ipod-tabs"><button class="${state.leftTab === 'songs' ? 'active' : ''}" onclick="App.swIpodReviewSetTab('left','songs')"><span class="sw-ipod-svg sw-ipod-svg--song"></span>Songs <small>${onTracks.toLocaleString()}</small></button><button class="${state.leftTab === 'playlists' ? 'active' : ''}" onclick="App.swIpodReviewSetTab('left','playlists')"><span class="sw-ipod-svg sw-ipod-svg--playlist"></span>Playlists <small>${onPlaylists}</small></button></span></header><label class="sw-ipod-search"><span class="sw-ipod-svg sw-ipod-svg--search"></span><input data-side="left" value="${esc(state.leftQuery)}" oninput="App.swIpodReviewSearch('left',this.value)" placeholder="Search ${state.leftTab === 'songs' ? 'artists on this iPod' : 'playlists on this iPod'}…">${state.leftQuery ? '<button type="button" class="sw-ipod-search-clear" onclick="App.swIpodReviewClearSearch(\'left\')" aria-label="Clear search"><span class="sw-ipod-svg sw-ipod-svg--close"></span></button>' : ''}</label><div class="sw-ipod-list"><div class="sw-ipod-list-head">${state.leftTab === 'songs' ? `${deviceArtists.length} artists · ${onTracks.toLocaleString()} tracks` : `${devicePlaylists.length} playlists`}<label class="sw-ipod-list-toggle"><input type="checkbox" ${state.leftTab === 'songs' ? (allDeviceSongsKept ? 'checked' : '') : (allDevicePlaylistsKept ? 'checked' : '')} onchange="App.swIpodReviewToggleAll('device','${state.leftTab}')"> Keep all</label></div><div class="sw-ipod-list-body" data-side="left">${state.leftTab === 'songs' ? leftSongs : leftPlaylists || '<div class="sw-ipod-loading">No matching playlists.</div>'}</div></div></div>
-      <div class="sw-ipod-panel"><header><b>Add from your library</b><span class="sw-ipod-tabs"><button class="${state.rightTab === 'songs' ? 'active' : ''}" onclick="App.swIpodReviewSetTab('right','songs')"><span class="sw-ipod-svg sw-ipod-svg--song"></span>Songs <small>${selectedSongs.toLocaleString()}</small></button><button class="${state.rightTab === 'playlists' ? 'active' : ''}" onclick="App.swIpodReviewSetTab('right','playlists')"><span class="sw-ipod-svg sw-ipod-svg--playlist"></span>Playlists <small>${selectedPlaylists}</small></button></span></header><label class="sw-ipod-search"><span class="sw-ipod-svg sw-ipod-svg--search"></span><input data-side="right" value="${esc(state.rightQuery)}" oninput="App.swIpodReviewSearch('right',this.value)" placeholder="Search ${state.rightTab === 'songs' ? 'artists, tracks, albums' : 'playlists'}…">${state.rightQuery ? '<button type="button" class="sw-ipod-search-clear" onclick="App.swIpodReviewClearSearch(\'right\')" aria-label="Clear search"><span class="sw-ipod-svg sw-ipod-svg--close"></span></button>' : ''}</label><div class="sw-ipod-list"><div class="sw-ipod-list-head">${state.rightTab === 'songs' ? `${addArtists.length} artists · ${addTracks.length} songs · ${selectedSongs.toLocaleString()} selected to add` : `${selectedPlaylists} playlists selected to add`}<label class="sw-ipod-list-toggle"><input type="checkbox" ${state.rightTab === 'songs' ? (allSongsSelected ? 'checked' : '') : (allPlaylistsSelected ? 'checked' : '')} ${plan ? '' : 'disabled'} onchange="App.swIpodReviewToggleAll('library','${state.rightTab}')"> Select all</label></div><div class="sw-ipod-list-body" data-side="right">${state.rightTab === 'songs' ? rightSongs : rightPlaylists}</div></div></div>
+      <div class="sw-ipod-panel"><header><b>Add from your library</b><span class="sw-ipod-tabs"><button class="${state.rightTab === 'songs' ? 'active' : ''}" onclick="App.swIpodReviewSetTab('right','songs')"><span class="sw-ipod-svg sw-ipod-svg--song"></span>Songs <small>${selectedSongs.toLocaleString()}</small></button><button class="${state.rightTab === 'changed' ? 'active' : ''}" onclick="App.swIpodReviewSetTab('right','changed')"><span class="sw-ipod-svg sw-ipod-svg--song"></span>Tags Changed <small>${selectedChanged.toLocaleString()}</small></button><button class="${state.rightTab === 'playlists' ? 'active' : ''}" onclick="App.swIpodReviewSetTab('right','playlists')"><span class="sw-ipod-svg sw-ipod-svg--playlist"></span>Playlists <small>${selectedPlaylists}</small></button></span></header><label class="sw-ipod-search"><span class="sw-ipod-svg sw-ipod-svg--search"></span><input data-side="right" value="${esc(state.rightQuery)}" oninput="App.swIpodReviewSearch('right',this.value)" placeholder="Search ${rightSearchPlaceholder}…">${state.rightQuery ? '<button type="button" class="sw-ipod-search-clear" onclick="App.swIpodReviewClearSearch(\'right\')" aria-label="Clear search"><span class="sw-ipod-svg sw-ipod-svg--close"></span></button>' : ''}</label><div class="sw-ipod-list"><div class="sw-ipod-list-head">${rightListHeadText}<label class="sw-ipod-list-toggle"><input type="checkbox" ${rightSelectAllChecked ? 'checked' : ''} ${plan ? '' : 'disabled'} onchange="App.swIpodReviewToggleAll('library','${state.rightTab}')"> Select all</label></div><div class="sw-ipod-list-body" data-side="right">${rightBodyHtml}</div></div></div>
     </section>`;
   const scanBtn = document.getElementById('sw-ipod-scan-btn');
   if (scanBtn) scanBtn.disabled = !device.mounted;
@@ -14381,7 +14424,7 @@ function _swComputeIpodTotals() {
     if (browse.playlistKeep.get(p.device_playlist_id) === false) removedPlaylistCount++;
   }
 
-  let requiredBytes = 0, addedTrackCount = 0, addedPlaylistCount = 0;
+  let requiredBytes = 0, addedTrackCount = 0, addedPlaylistCount = 0, updatedTrackCount = 0;
   const countedIds = new Set();
   const addPlan = browse.addPlan;
   if (addPlan) {
@@ -14403,6 +14446,11 @@ function _swComputeIpodTotals() {
         if (t) requiredBytes += Number(t.size_bytes) || 0;
       }
     }
+    // Tag-only updates rewrite the existing on-device iTunesDB entry - no new
+    // audio bytes land on the device, so they don't factor into requiredBytes.
+    for (const [, sel] of addPlan.trackUpdateSelected ?? []) {
+      if (sel !== false) updatedTrackCount++;
+    }
   }
 
   const usedBytes = dev.used_bytes ?? 0;
@@ -14413,12 +14461,12 @@ function _swComputeIpodTotals() {
   const afterUsed = usedBytes - freedBytes + requiredBytes;
   const tight = capBytes > 0 && (afterUsed / capBytes) > 0.95;
   const outOfSpace = capBytes > 0 && remainingBytes < 0;
-  const totalChanges = removedTrackCount + removedPlaylistCount + addedTrackCount + addedPlaylistCount;
+  const totalChanges = removedTrackCount + removedPlaylistCount + addedTrackCount + addedPlaylistCount + updatedTrackCount;
 
   return {
     usedBytes, capBytes, freeBytes, deleteBytes: freedBytes, requiredBytes,
     effectiveAvailableBytes, remainingBytes, afterUsed, tight, outOfSpace,
-    removedTrackCount, removedPlaylistCount, addedTrackCount, addedPlaylistCount, totalChanges,
+    removedTrackCount, removedPlaylistCount, addedTrackCount, addedPlaylistCount, updatedTrackCount, totalChanges,
   };
 }
 
@@ -14457,6 +14505,7 @@ function _swUpdateIpodFooter() {
   if (msgEl) {
     const selected = [];
     if (t.addedTrackCount) selected.push(`${t.addedTrackCount} song${t.addedTrackCount === 1 ? '' : 's'} to add`);
+    if (t.updatedTrackCount) selected.push(`${t.updatedTrackCount} tag update${t.updatedTrackCount === 1 ? '' : 's'}`);
     if (t.addedPlaylistCount) selected.push(`${t.addedPlaylistCount} playlist${t.addedPlaylistCount === 1 ? '' : 's'} to add`);
     if (t.removedTrackCount) selected.push(`${t.removedTrackCount} song${t.removedTrackCount === 1 ? '' : 's'} removed`);
     if (t.removedPlaylistCount) selected.push(`${t.removedPlaylistCount} playlist${t.removedPlaylistCount === 1 ? '' : 's'} removed`);
@@ -14973,10 +15022,11 @@ function _swComputeIpodRemovals() {
 
 function _swComputeIpodAdditions() {
   const addPlan = _sw.ipodBrowse?.addPlan;
-  if (!addPlan) return { addTrackIds: [], addPlaylistIds: [] };
+  if (!addPlan) return { addTrackIds: [], addPlaylistIds: [], updateTrackIds: [] };
   const addTrackIds = [...addPlan.trackSelected.entries()].filter(([, sel]) => sel).map(([id]) => id);
   const addPlaylistIds = [...addPlan.playlistSelected.entries()].filter(([, sel]) => sel).map(([id]) => id);
-  return { addTrackIds, addPlaylistIds };
+  const updateTrackIds = [...(addPlan.trackUpdateSelected ?? new Map()).entries()].filter(([, sel]) => sel).map(([id]) => id);
+  return { addTrackIds, addPlaylistIds, updateTrackIds };
 }
 
 /* ── Library-to-iPod diff: fetches what /api/ipods/<id>/sync/scan already
@@ -15012,6 +15062,7 @@ async function _swPollIpodAddPlan(id) {
   const plan = status.plan;
   const tracks = plan.tracks_to_add || [];
   const trackById = new Map(tracks.map(t => [t.id, t]));
+  const tracksToUpdate = plan.tracks_to_update || [];
 
   const playlists = [
     ...(plan.playlists_to_create || []).map(p => ({ id: p.id, name: p.name, kind: 'create', trackCount: p.track_count, missingTrackCount: p.missing_track_count, missingTrackIds: p.missing_track_ids, missingBytes: p.missing_bytes })),
@@ -15022,6 +15073,7 @@ async function _swPollIpodAddPlan(id) {
   const prevAdd = _sw.ipodBrowse.addPlan;
   const trackSelected = new Map(tracks.map(t => [t.id, prevAdd?.trackSelected.get(t.id) ?? true]));
   const playlistSelected = new Map(playlists.map(p => [p.id, prevAdd?.playlistSelected.get(p.id) ?? true]));
+  const trackUpdateSelected = new Map(tracksToUpdate.map(t => [t.id, prevAdd?.trackUpdateSelected?.get(t.id) ?? true]));
 
   _sw.ipodBrowse.addPlan = {
     trackById,
@@ -15029,8 +15081,11 @@ async function _swPollIpodAddPlan(id) {
     artistTree: _swBuildIpodArtistTree(tracks),
     playlists,
     playlistSelected,
+    tracksToUpdate,
+    trackUpdateSelected,
     songsPage: prevAdd?.songsPage || 0,
     playlistsPage: prevAdd?.playlistsPage || 0,
+    changedPage: prevAdd?.changedPage || 0,
   };
   _swRenderIpodGroups();
 }
@@ -15099,9 +15154,9 @@ function _ipodStaleResolveRow(pid) {
 
 async function swStartIpodSync() {
   if (!_sw.ipodBrowse?.addPlan) return; // still comparing — Continue is disabled while this is true
-  const { addTrackIds, addPlaylistIds } = _swComputeIpodAdditions();
+  const { addTrackIds, addPlaylistIds, updateTrackIds } = _swComputeIpodAdditions();
   const { removeTrackIds, removePlaylistIds } = _swComputeIpodRemovals();
-  if (!addTrackIds.length && !addPlaylistIds.length && !removeTrackIds.length && !removePlaylistIds.length) {
+  if (!addTrackIds.length && !addPlaylistIds.length && !updateTrackIds.length && !removeTrackIds.length && !removePlaylistIds.length) {
     toast('Nothing to sync.');
     return;
   }
@@ -15120,7 +15175,7 @@ async function swStartIpodSync() {
       _swRenderIpodGroups();
       const remaining = _swComputeIpodAdditions();
       const remainingRemovals = _swComputeIpodRemovals();
-      if (!remaining.addTrackIds.length && !remaining.addPlaylistIds.length
+      if (!remaining.addTrackIds.length && !remaining.addPlaylistIds.length && !remaining.updateTrackIds.length
         && !remainingRemovals.removeTrackIds.length && !remainingRemovals.removePlaylistIds.length) {
         toast('Nothing left to sync.');
         return;
@@ -15137,9 +15192,9 @@ async function swStartIpodSync() {
 function swRunIpodSync() {
   const id = _sw.device?.id;
   if (!id) return;
-  const { addTrackIds, addPlaylistIds } = _swComputeIpodAdditions();
+  const { addTrackIds, addPlaylistIds, updateTrackIds } = _swComputeIpodAdditions();
   const { removeTrackIds, removePlaylistIds } = _swComputeIpodRemovals();
-  if (!addTrackIds.length && !addPlaylistIds.length && !removeTrackIds.length && !removePlaylistIds.length) { toast('Nothing to sync.'); return; }
+  if (!addTrackIds.length && !addPlaylistIds.length && !updateTrackIds.length && !removeTrackIds.length && !removePlaylistIds.length) { toast('Nothing to sync.'); return; }
 
   _sw.ipodSyncPhase = 'syncing';
   // Progress UI goes up immediately, POST fires in the background - mirrors
@@ -15149,7 +15204,7 @@ function swRunIpodSync() {
   api(`/ipods/${id}/sync/execute`, {
     method: 'POST',
     body: {
-      track_ids: addTrackIds, playlist_ids: addPlaylistIds,
+      track_ids: addTrackIds, playlist_ids: addPlaylistIds, update_track_ids: updateTrackIds,
       remove_track_ids: removeTrackIds, remove_playlist_ids: removePlaylistIds,
     },
   }).catch(e => _swHandleIpodSyncError(String(e)));
@@ -15467,9 +15522,10 @@ async function _swHandleIpodSyncDone(status) {
   const devName = _sw.device?.name || 'iPod';
   const addedCount = Number(status.added_count ?? 0);
   const removedCount = Number(status.removed_track_count ?? 0);
+  const updatedCount = Number(status.updated_track_count ?? 0);
   const playlistSyncedCount = Number(status.playlist_synced_count ?? 0);
   const playlistRemovedCount = Number(status.playlist_removed_count ?? 0);
-  const doneOps = addedCount + removedCount + playlistSyncedCount + playlistRemovedCount;
+  const doneOps = addedCount + removedCount + updatedCount + playlistSyncedCount + playlistRemovedCount;
 
   // iPods compute capacity/used live from the mount rather than caching it
   // on the row, so the pre-sync _sw.device snapshot is stale by now - fetch
@@ -15495,6 +15551,7 @@ async function _swHandleIpodSyncDone(status) {
 
     const tiles = [
       { label: 'Added to iPod', value: addedCount, unit: addedCount === 1 ? 'track' : 'tracks' },
+      { label: 'Tags updated', value: updatedCount, unit: updatedCount === 1 ? 'track' : 'tracks' },
       { label: 'Removed', value: removedCount, unit: removedCount === 1 ? 'track' : 'tracks' },
       { label: 'Playlists synced', value: playlistSyncedCount, unit: playlistSyncedCount === 1 ? 'playlist' : 'playlists' },
       { label: 'Playlists removed', value: playlistRemovedCount, unit: playlistRemovedCount === 1 ? 'playlist' : 'playlists' },
@@ -15509,6 +15566,7 @@ async function _swHandleIpodSyncDone(status) {
     const items = status.completed_items ?? [];
     const groupDefs = [
       { kind: 'add', dot: 'accent', label: n => `Added ${n} track${n === 1 ? '' : 's'} to ${devName}` },
+      { kind: 'update', dot: 'accent', label: n => `Updated tags on ${n} track${n === 1 ? '' : 's'}` },
       { kind: 'remove', dot: 'danger', label: n => `Removed ${n} track${n === 1 ? '' : 's'} from ${devName}` },
       { kind: 'playlist', dot: 'success', label: n => `Synced ${n} playlist${n === 1 ? '' : 's'}` },
       { kind: 'playlist_remove', dot: 'muted', label: n => `Removed ${n} playlist${n === 1 ? '' : 's'}` },
