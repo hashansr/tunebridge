@@ -21002,6 +21002,25 @@ body.is-col-resizing {
 .sw-ipod-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-muted); text-align: center; }
 .sw-ipod-empty h2 { margin: 4px 0 0; color: var(--text); font-size: 20px; }
 .sw-ipod-empty p { max-width: 340px; margin: 0 0 4px; font-size: 13px; }
+.sw-ipod-tag-changed { color: var(--accent); font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+
+/* Footer storage summary, restructured into 3 aligned columns so each GB
+   figure sits directly above its related count (was a single inline line). */
+.sw-ipod-foot-grid { display: flex; gap: 28px; }
+.sw-ipod-foot-col { display: flex; flex-direction: column; gap: 5px; min-width: 0; color: var(--text-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sw-ipod-foot-col b { color: var(--text-sub); font-weight: 700; }
+.sw-ipod-foot-col b.tone-warn { color: var(--accent-warning); }
+.sw-ipod-foot-col b.tone-ok { color: var(--accent-success); }
+.sw-ipod-foot-headline { display: inline-flex; align-items: center; gap: 7px; }
+.sw-ipod-foot-warn { display: inline-flex; align-items: center; color: var(--accent-warning); }
+
+/* Accessibility fixes: visible keyboard focus on the review's buttons and
+   search inputs, previously missing on this screen. */
+.sw-ipod-review button:focus-visible,
+.sw-ipod-chrome button:focus-visible,
+.sw-footer--ipod-review .sw-btn:focus-visible { outline: 2px solid rgba(173,198,255,.5); outline-offset: 2px; }
+.sw-ipod-search:focus-within { box-shadow: 0 0 0 1.5px rgba(173,198,255,.4); background: var(--bg-hover); }
+
 /* The iPod review lives beside the app sidebar, so its usable width can be
    much narrower than the browser viewport. Keep the action strip and review
    cards in normal flow when the main pane becomes constrained; otherwise
