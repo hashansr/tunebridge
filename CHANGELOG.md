@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.642-rc.030826-1119 · 2026-08-03
 - Fix: Reopening Sync while a click-wheel iPod sync was still running in the background used to show the device picker instead of the in-progress sync, effectively losing track of it. It now resumes straight into the running sync screen, matching how this already worked for DAPs.
 - Add: A live toast now appears whenever you navigate away from an active sync (DAP or iPod), showing its progress percentage and updating as it proceeds. Click it to jump straight back to the sync screen.
 - Fix: Quitting TuneBridge while a click-wheel iPod sync was in progress closed the app immediately with no warning, unlike DAP syncs which already prompted first. Quitting mid-sync for either device type now shows the same confirmation before closing.
