@@ -1833,6 +1833,39 @@ def _do_scan_locked():
         _scan_lock.release()
 
 
+def _rescan_library_before_sync(progress_state=None):
+    """
+    Run a full library rescan synchronously before computing a sync diff, so
+    the diff (and the tags fingerprint it compares) reflects the CURRENT
+    on-disk tags rather than whatever the library happened to hold as of the
+    last manual "Rescan Library" — which could be stale relative to files
+    edited by an external tool since then. Called from within the DAP/iPod
+    sync scan's own background thread, so blocking here just extends that
+    thread's work, not the HTTP request that started it (which already
+    returned immediately and is polled for status).
+
+    progress_state: the caller's sync_state/ipod_sync_state dict, if given —
+    updated with a friendly message so the wizard's existing "scanning" step
+    reflects this instead of appearing to hang.
+    """
+    if progress_state is not None:
+        progress_state['current'] = 'Refreshing your library…'
+        progress_state['message'] = 'Refreshing your library…'
+    if _scan_lock.acquire(blocking=False):
+        try:
+            do_scan()
+        finally:
+            _scan_lock.release()
+        return
+    # Another rescan (e.g. user-triggered from Settings) is already running —
+    # don't run a second one concurrently; just wait for it to finish, then
+    # proceed with whatever library state it leaves behind.
+    waited = 0.0
+    while scan_state.get('status') == 'scanning' and waited < 120:
+        time.sleep(0.5)
+        waited += 0.5
+
+
 @app.route('/api/library/scan', methods=['POST'])
 def trigger_scan():
     if not _scan_lock.acquire(blocking=False):
@@ -10843,6 +10876,7 @@ def sync_scan():
     def do_scan():
         global sync_state, _pending_manifest_by_device_rel
         try:
+            _rescan_library_before_sync(sync_state)
             sync_state['current'] = 'Mapping local library structure…'
             daps = load_daps()
             dap = next((d for d in daps if d.get('id') == dap_id), None)
@@ -12667,6 +12701,9 @@ def ipod_sync_scan(iid):
     def do_scan():
         global ipod_sync_state
         try:
+            _rescan_library_before_sync(ipod_sync_state)
+            ipod_sync_state['current'] = ''
+            ipod_sync_state['message'] = 'Comparing library…'
             from ipod.sync_planner import compute_sync_plan
             with library_lock:
                 local_tracks = library[:]

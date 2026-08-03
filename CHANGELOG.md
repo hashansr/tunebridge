@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Starting a sync (DAP, SD card, or iPod) compared your device against whatever the library last looked like as of the last manual rescan, which could be stale if a track's tags had been edited outside TuneBridge since then. Sync now refreshes the library first, so it always compares against what's actually on disk.
 
 ## v0.648-rc.040826-0755 · 2026-08-04
 
