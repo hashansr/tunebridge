@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.650-rc.040826-1046 · 2026-08-04
 - Fix: Duplicate track detection (Settings and the per-DAP duplicate scan) required titles, artists, and albums to match exactly, so real duplicates with slightly different tagging — different whitespace or bracket punctuation, a truncated album tag, a collaboration credit added to one copy — were invisible to it. Detection is now tolerant of that kind of drift while still requiring an exact title match, so it won't merge genuinely different songs or versions.
 
 ## v0.649-rc.040826-0952 · 2026-08-04
