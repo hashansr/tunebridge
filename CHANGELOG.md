@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.652-rc.040826-1306 · 2026-08-04
+
 ## v0.651-rc.040826-1128 · 2026-08-04
 - Fix: A song already on a click-wheel iPod would permanently fail to match its local library counterpart — and so could never be detected as "tags changed" — if a "feat. X" credit had been reformatted or moved out of the artist/title since it was first synced (e.g. by the recent artist-grouping cleanup). It's now matched even when that credit differs, unless doing so would be ambiguous with a genuinely different track.
 
