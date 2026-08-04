@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.653-rc.040826-1526 · 2026-08-04
 - Fix: On a narrower window, the click-wheel iPod sync review screen hid the "Songs on iPod"/"Playlists on iPod" labels (leaving two bare numbers) and let the footer's storage summary push the Sync button off the edge of the screen. Both now reflow onto their own row instead of overlapping or disappearing.
 
 ## v0.652-rc.040826-1306 · 2026-08-04
