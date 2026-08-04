@@ -17495,9 +17495,99 @@ def set_heatmap_genres():
 
 # ── Duplicate track detection ─────────────────────────────────────────────────
 
-def _dup_group_key(title, artist, album):
-    raw = f"{(title or '').lower()}|{(artist or '').lower()}|{(album or '').lower()}"
-    return hashlib.md5(raw.encode()).hexdigest()
+def _dup_normalize_text(s):
+    """
+    Normalize a tag string (title/artist/album) for fuzzy duplicate matching.
+    Strips diacritics, folds bracket/punctuation variants and case, and
+    collapses whitespace, so e.g. "Café (Live) [2019]" and "cafe live 2019"
+    compare equal despite differing only in accents/brackets/case. Reuses the
+    same compatibility tables as the sync engine's path matcher
+    (_SYNC_COMPAT_TRANSLATE / _SYNC_APOSTROPHE_CHARS) for consistency.
+
+    "?" and "!" are deliberately kept rather than folded away: they're
+    sometimes the ONLY thing distinguishing two genuinely different songs
+    (Pink Floyd's "In the Flesh?" vs its later reprise "In the Flesh" on The
+    Wall is a real case — stripping the "?" merged them into one false
+    duplicate group during testing).
+    """
+    if not s:
+        return ''
+    s = unicodedata.normalize('NFKD', str(s))
+    s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+    s = s.translate(_SYNC_COMPAT_TRANSLATE)
+    for ap in _SYNC_APOSTROPHE_CHARS:
+        s = s.replace(ap, '')
+    s = s.replace('&', ' and ')
+    s = ''.join(ch if (ch.isalnum() or ch in '?!') else ' ' for ch in s.casefold())
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+
+def _dup_text_similar(a, b):
+    """
+    True if two already-normalized tag strings are the same value modulo a
+    genuine truncation: one is a prefix of the other AND the cut is small
+    relative to the string's length (a real filesystem/tag-length cutoff
+    loses a handful of trailing characters — e.g. "...1999)" trimmed to
+    "...199]" — not an entire extra clause).
+
+    Deliberately NOT a generic edit-distance ratio: SequenceMatcher's ratio
+    is dominated by long shared substrings, so e.g. four different Metallica
+    songs that all carry the same ~130-character "(with Michael Kamen
+    Conducting...) [Live at the Berkeley...]" suffix would score above 0.90
+    even though the actual song names are completely different. Titles are
+    intentionally matched by exact equality only (see library_duplicates())
+    for the same reason — this truncation-tolerant check is used for album
+    text, which is the field we've actually observed getting cut off.
+    """
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+    if len(shorter) < 8:
+        return False
+    if len(shorter) / len(longer) < 0.92:
+        return False
+    return longer.startswith(shorter)
+
+
+def _dup_artist_match(artist_a, album_artist_a, artist_b, album_artist_b):
+    """
+    True if two tracks' artist credits plausibly refer to the same act,
+    tolerating collaboration-credit variants (e.g. "Metallica" vs "Metallica,
+    Michael Kamen Conducting the San Francisco Symphony Orchestra"). Inputs
+    are already-normalized strings.
+    """
+    cands_a = {x for x in (artist_a, album_artist_a) if x}
+    cands_b = {x for x in (artist_b, album_artist_b) if x}
+    if not cands_a or not cands_b:
+        return False
+    for x in cands_a:
+        for y in cands_b:
+            if x == y:
+                return True
+            shorter, longer = (x, y) if len(x) <= len(y) else (y, x)
+            if len(shorter) >= 4 and shorter in longer:
+                return True
+    return False
+
+
+class _DupUnionFind:
+    """Minimal union-find over a fixed range [0, n) used to cluster fuzzy-matched tracks."""
+    def __init__(self, n):
+        self.parent = list(range(n))
+
+    def find(self, x):
+        while self.parent[x] != x:
+            self.parent[x] = self.parent[self.parent[x]]
+            x = self.parent[x]
+        return x
+
+    def union(self, x, y):
+        rx, ry = self.find(x), self.find(y)
+        if rx != ry:
+            self.parent[rx] = ry
 
 
 def _find_sidecar_files(abs_path):
@@ -17635,6 +17725,20 @@ def _delete_tracks_from_library(track_ids, action, move_folder=None):
 
 @app.route('/api/library/duplicates')
 def library_duplicates():
+    """
+    Duplicate detection. Tracks are grouped by normalized title — exact
+    match only (see _dup_text_similar for why title deliberately isn't
+    fuzzy-matched: a shared "(Live at ...)"/"(Demo)" suffix pattern across
+    many different songs makes edit-distance ratio unreliable for titles).
+    Normalization alone (punctuation/whitespace/bracket-style/diacritics/
+    case) already covers the common case of two copies of the same file
+    tagged slightly differently. Artist matching tolerates collaboration
+    credit variants like "Metallica" vs "Metallica, Michael Kamen
+    Conducting...". Album is matched with truncation tolerance (a soft
+    signal, not exact) since it's the field we've observed getting cut off
+    by a filesystem/tag length limit on one of two otherwise-identical
+    copies.
+    """
     conn = _db.get_conn()
     ignored = {r[0] for r in conn.execute("SELECT group_key FROM duplicate_ignores").fetchall()}
     # Per-group sets of track IDs the user flagged as "not a duplicate"
@@ -17643,52 +17747,98 @@ def library_duplicates():
     for gk, tid in not_dup_rows:
         not_dup_map.setdefault(gk, set()).add(tid)
 
-    rows = conn.execute("""
-        SELECT title, artist, album, COUNT(*) as cnt
-        FROM tracks
-        WHERE title IS NOT NULL AND title != ''
-        GROUP BY lower(title), lower(artist), lower(album)
-        HAVING cnt > 1
-        ORDER BY lower(artist), lower(album), lower(title)
-    """).fetchall()
+    rows = conn.execute(
+        "SELECT * FROM tracks WHERE title IS NOT NULL AND title != ''"
+    ).fetchall()
+
+    n = len(rows)
+    norm_titles = [_dup_normalize_text(r['title']) for r in rows]
+    norm_artists = [_dup_normalize_text(r['artist']) for r in rows]
+    norm_album_artists = [_dup_normalize_text(r['album_artist']) for r in rows]
+    norm_albums = [_dup_normalize_text(r['album']) for r in rows]
+
+    # Bucket by exact normalized title — this is both the blocking key (so
+    # we never compare tracks that couldn't possibly match) and the actual
+    # match criterion, so buckets only ever need the cheap artist/album
+    # checks below, no pairwise fuzzy title comparison.
+    buckets = {}
+    for i in range(n):
+        if norm_titles[i]:
+            buckets.setdefault(norm_titles[i], []).append(i)
+
+    uf = _DupUnionFind(n)
+    for idxs in buckets.values():
+        if len(idxs) < 2:
+            continue
+        for a_pos in range(len(idxs)):
+            i = idxs[a_pos]
+            for b_pos in range(a_pos + 1, len(idxs)):
+                j = idxs[b_pos]
+                if uf.find(i) == uf.find(j):
+                    continue
+                if not _dup_artist_match(norm_artists[i], norm_album_artists[i], norm_artists[j], norm_album_artists[j]):
+                    continue
+                album_ok = (
+                    not norm_albums[i] or not norm_albums[j]
+                    or _dup_text_similar(norm_albums[i], norm_albums[j])
+                )
+                if not album_ok:
+                    continue
+                uf.union(i, j)
+
+    clusters = {}
+    for i in range(n):
+        clusters.setdefault(uf.find(i), []).append(i)
 
     music_base = get_music_base()
     groups = []
-    for row in rows:
-        title, artist, album, _ = row
-        key = _dup_group_key(title, artist, album)
+    for idxs in clusters.values():
+        if len(idxs) < 2:
+            continue
+        # Key is derived from full cluster membership (before "not a
+        # duplicate" exclusion) so it stays stable across that filter, same
+        # as the ignore/not-duplicate lookups below expect.
+        track_ids_all = sorted(rows[i]['id'] for i in idxs)
+        key = hashlib.md5('|'.join(track_ids_all).encode()).hexdigest()
         if key in ignored:
             continue
-        tracks = conn.execute(
-            "SELECT * FROM tracks WHERE lower(title)=lower(?) AND lower(artist)=lower(?) AND lower(album)=lower(?) ORDER BY path",
-            (title, artist, album)
-        ).fetchall()
-        track_list = [dict(t) for t in tracks]
 
-        # Filter out tracks flagged as "not a duplicate" in this group
         excluded = not_dup_map.get(key, set())
-        track_list = [t for t in track_list if t['id'] not in excluded]
-        if len(track_list) < 2:
+        member_idxs = [i for i in idxs if rows[i]['id'] not in excluded]
+        if len(member_idxs) < 2:
             continue
 
-        durations = [t['duration'] or 0 for t in track_list]
-        duration_warning = (max(durations) - min(durations)) > 5 if len(durations) > 1 else False
-
-        for t in track_list:
+        track_list = []
+        for i in member_idxs:
+            t = dict(rows[i])
             try:
                 t['file_size'] = (music_base / t['path']).stat().st_size
             except Exception:
                 t['file_size'] = 0
+            track_list.append(t)
+        track_list.sort(key=lambda t: t['path'])
+
+        durations = [t['duration'] or 0 for t in track_list]
+        duration_warning = (max(durations) - min(durations)) > 5 if len(durations) > 1 else False
+
+        # Header text: longest non-empty variant among the group's members —
+        # the fullest/least-truncated tag is usually the most useful one to
+        # display, and this is what makes a filesystem-truncated album tag
+        # show correctly instead of the cut-off copy.
+        def _longest(field):
+            vals = [t.get(field) for t in track_list if t.get(field)]
+            return max(vals, key=len) if vals else ''
 
         groups.append({
             'key': key,
-            'title': title,
-            'artist': artist,
-            'album': album,
+            'title': _longest('title'),
+            'artist': _longest('artist'),
+            'album': _longest('album'),
             'tracks': track_list,
             'duration_warning': duration_warning,
         })
 
+    groups.sort(key=lambda g: (g['artist'].lower(), g['album'].lower(), g['title'].lower()))
     return jsonify(groups)
 
 
@@ -17978,39 +18128,85 @@ def dap_duplicates(did):
             device_music_root = resolved_mount / music_root_rel
             files = walk_music_files(device_music_root)
 
-            by_key = {}
+            items = []
             for rel in files:
                 abs_path = device_music_root / rel
                 try:
                     info = scan_file(abs_path)
                     if not info:
                         continue
-                    gkey = _dup_group_key(info.get('title'), info.get('artist'), info.get('album'))
-                    by_key.setdefault(gkey, []).append({'rel': rel, 'info': info})
+                    items.append({'rel': rel, 'info': info})
                 except Exception:
                     continue
 
-            groups = []
-            for gkey, items in by_key.items():
-                if len(items) < 2:
+            # Cluster the same way as the library duplicate scan (see
+            # library_duplicates()) so punctuation/whitespace/bracket drift
+            # and truncated album tags don't hide real duplicates on the
+            # device — grouped by exact normalized title (not fuzzy; see
+            # _dup_text_similar for why), with artist/album as secondary
+            # checks within each title bucket.
+            n = len(items)
+            norm_titles = [_dup_normalize_text(it['info'].get('title')) for it in items]
+            norm_artists = [_dup_normalize_text(it['info'].get('artist')) for it in items]
+            norm_album_artists = [_dup_normalize_text(it['info'].get('album_artist')) for it in items]
+            norm_albums = [_dup_normalize_text(it['info'].get('album')) for it in items]
+
+            buckets = {}
+            for i in range(n):
+                if norm_titles[i]:
+                    buckets.setdefault(norm_titles[i], []).append(i)
+
+            uf = _DupUnionFind(n)
+            for idxs in buckets.values():
+                if len(idxs) < 2:
                     continue
+                for a_pos in range(len(idxs)):
+                    i = idxs[a_pos]
+                    for b_pos in range(a_pos + 1, len(idxs)):
+                        j = idxs[b_pos]
+                        if uf.find(i) == uf.find(j):
+                            continue
+                        if not _dup_artist_match(norm_artists[i], norm_album_artists[i], norm_artists[j], norm_album_artists[j]):
+                            continue
+                        album_ok = (
+                            not norm_albums[i] or not norm_albums[j]
+                            or _dup_text_similar(norm_albums[i], norm_albums[j])
+                        )
+                        if not album_ok:
+                            continue
+                        uf.union(i, j)
+
+            clusters = {}
+            for i in range(n):
+                clusters.setdefault(uf.find(i), []).append(i)
+
+            groups = []
+            for idxs in clusters.values():
+                if len(idxs) < 2:
+                    continue
+                key = hashlib.md5('|'.join(sorted(items[i]['rel'] for i in idxs)).encode()).hexdigest()
                 track_list = []
-                for item in items:
-                    t = item['info']
-                    t['rel_path'] = item['rel']
+                for i in idxs:
+                    t = dict(items[i]['info'])
+                    t['rel_path'] = items[i]['rel']
                     try:
-                        t['file_size'] = (device_music_root / item['rel']).stat().st_size
+                        t['file_size'] = (device_music_root / items[i]['rel']).stat().st_size
                     except Exception:
                         t['file_size'] = 0
                     track_list.append(t)
+                track_list.sort(key=lambda t: t['rel_path'])
                 durations = [t.get('duration') or 0 for t in track_list]
                 duration_warning = (max(durations) - min(durations)) > 5 if len(durations) > 1 else False
-                first = track_list[0]
+
+                def _longest(field):
+                    vals = [t.get(field) for t in track_list if t.get(field)]
+                    return max(vals, key=len) if vals else ''
+
                 groups.append({
-                    'key': gkey,
-                    'title': first.get('title'),
-                    'artist': first.get('artist'),
-                    'album': first.get('album'),
+                    'key': key,
+                    'title': _longest('title'),
+                    'artist': _longest('artist'),
+                    'album': _longest('album'),
                     'tracks': track_list,
                     'duration_warning': duration_warning,
                 })
