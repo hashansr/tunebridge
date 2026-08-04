@@ -21029,10 +21029,21 @@ body.is-col-resizing {
   .sw-body--ipod-review { padding: calc(var(--main-nav-top-inset) + var(--main-nav-overlay-clearance) + 8px) 18px 0; overflow-y: auto; }
   .sw-body--ipod-review #sw-step-ipod,
   .sw-body--ipod-review .sw-ipod-browse { overflow: visible; }
-  .sw-ipod-chrome { position: static; width: 100%; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: 12px; margin-bottom: 14px; }
-  .sw-ipod-stats { gap: 12px; }
-  .sw-ipod-stats small { display: none; }
-  .sw-footer--ipod-review { padding: 12px 18px; }
+  .sw-ipod-chrome { position: static; width: 100%; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: 10px 12px; margin-bottom: 14px; }
+  /* Was hiding the "Songs on iPod"/"Playlists on iPod" captions outright,
+     leaving two orphaned numbers with no context. Lay the stat pair out on
+     its own full-width row (below the buttons) instead, with the caption
+     inline next to its number rather than stacked - keeps the label
+     without needing the vertical room the desktop layout has. */
+  .sw-ipod-stats { order: 2; width: 100%; height: auto; justify-content: flex-end; gap: 18px; }
+  .sw-ipod-stats > span { flex-direction: row; align-items: baseline; height: auto; gap: 5px; }
+  .sw-ipod-stats small { display: inline-block; margin-top: 0; }
+  /* Same overflow problem in the footer: the 3-column storage summary and
+     the action buttons used to fight for one row, pushing "Sync iPod" past
+     the edge. Give the summary its own full-width row above the actions. */
+  .sw-footer--ipod-review { padding: 12px 18px; flex-wrap: wrap; row-gap: 10px; }
+  .sw-footer--ipod-review .sw-footer-status { flex-basis: 100%; }
+  .sw-footer--ipod-review .sw-footer-actions { flex-basis: 100%; justify-content: flex-end; }
 }
 @container main (max-width: 760px) {
   .sw-ipod-columns {
@@ -21041,6 +21052,7 @@ body.is-col-resizing {
     grid-auto-rows: 460px;
   }
   .sw-ipod-list { min-height: 0; }
+  .sw-ipod-foot-grid { flex-wrap: wrap; row-gap: 8px; }
 }
 
 /* Device row button */
