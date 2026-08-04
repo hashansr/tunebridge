@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: A song already on a click-wheel iPod would permanently fail to match its local library counterpart — and so could never be detected as "tags changed" — if a "feat. X" credit had been reformatted or moved out of the artist/title since it was first synced (e.g. by the recent artist-grouping cleanup). It's now matched even when that credit differs, unless doing so would be ambiguous with a genuinely different track.
 
 ## v0.650-rc.040826-1046 · 2026-08-04
 - Fix: Duplicate track detection (Settings and the per-DAP duplicate scan) required titles, artists, and albums to match exactly, so real duplicates with slightly different tagging — different whitespace or bracket punctuation, a truncated album tag, a collaboration credit added to one copy — were invisible to it. Detection is now tolerant of that kind of drift while still requiring an exact title match, so it won't merge genuinely different songs or versions.

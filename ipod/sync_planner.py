@@ -21,8 +21,24 @@ Two matching mechanisms, tried in order:
      baseline fingerprint exists to compare against); the caller backfills
      the manifest for it instead, via `tracks_matched_unlinked`, so the
      *next* sync can detect drift for it too.
+  3. If (2) fails, a SECOND fallback: the same fields with any "feat./ft./
+     featuring ..." annotation stripped out of title and artist first, only
+     accepted when it identifies exactly one device track (never on an
+     ambiguous tie). This exists because local tag-cleanup tools (e.g.
+     TuneBridge's own artist-grouping normalization) commonly move a
+     featured-artist credit out of `artist`/`title` and into `album_artist`,
+     or reformat its punctuation — while a device synced before that cleanup
+     still carries the old, credit-inclusive form. Without this, every track
+     on an album full of "feat." credits (verified against a real device:
+     an entire 17-track album) permanently fails to link via (2), so it can
+     never be detected as "already on device, tags changed" — it just looks
+     new forever, risking a duplicate add instead of an update.
 """
 from __future__ import annotations
+
+import re
+
+_FEAT_RE = re.compile(r'[\(\[]?\s*(?:feat\.?|ft\.?|featuring)\s+[^)\]]*[\)\]]?', re.IGNORECASE)
 
 
 def match_key(title: str, artist: str, album: str) -> tuple:
@@ -31,6 +47,15 @@ def match_key(title: str, artist: str, album: str) -> tuple:
         (artist or '').strip().lower(),
         (album or '').strip().lower(),
     )
+
+
+def _strip_feat_credit(s: str) -> str:
+    out = _FEAT_RE.sub('', s or '')
+    return re.sub(r'\s+', ' ', out).strip().lower()
+
+
+def _feat_stripped_match_key(title: str, artist: str, album: str) -> tuple:
+    return (_strip_feat_credit(title), _strip_feat_credit(artist), (album or '').strip().lower())
 
 
 def compute_sync_plan(
@@ -92,6 +117,20 @@ def compute_sync_plan(
         for t in ipod_tracks if t.get('db_track_id')
     }
 
+    # Fallback index for the feat.-stripped match (mechanism 3, see module
+    # docstring). Grouped rather than last-write-wins: a normalized key that
+    # collapses two DISTINCT device tracks together (e.g. a "Song" and a
+    # separate "Song (feat. X)" that happen to share everything else) must
+    # never be treated as a match — that would silently link the wrong
+    # track. Only keys with exactly one device row are usable.
+    _feat_groups: dict[tuple, list] = {}
+    for t in ipod_tracks:
+        nk = _feat_stripped_match_key(t.get('title'), t.get('artist'), t.get('album'))
+        _feat_groups.setdefault(nk, []).append(t)
+    device_track_by_feat_stripped_key = {
+        nk: rows[0] for nk, rows in _feat_groups.items() if len(rows) == 1
+    }
+
     tracks_to_add = []
     tracks_to_update = []
     tracks_matched_unlinked = []
@@ -119,15 +158,22 @@ def compute_sync_plan(
                 })
             continue  # matched (updated or unchanged) — not a new add
 
-        if key not in device_track_keys:
+        device_row = device_track_by_key.get(key) if key in device_track_keys else None
+        if device_row is None:
+            # Exact key missed — try the feat.-stripped fallback before
+            # concluding this is genuinely new (mechanism 3, see module
+            # docstring). Only accepted when unambiguous.
+            nk = _feat_stripped_match_key(t.get('title'), t.get('artist'), t.get('album'))
+            device_row = device_track_by_feat_stripped_key.get(nk)
+
+        if device_row is None:
             tracks_to_add.append(t)
         else:
             # Matched only by fuzzy key — no persistent link yet (legacy
             # content, or a device that predates ipod_sync_manifest). Not an
             # add and not flagged for update (no baseline to diff against),
             # but worth backfilling so future syncs get real drift detection.
-            device_row = device_track_by_key.get(key)
-            if device_row is not None and device_row.get('db_track_id'):
+            if device_row.get('db_track_id'):
                 tracks_matched_unlinked.append({
                     'local_track': t,
                     'device_track_id': int(device_row['db_track_id']),
