@@ -104,7 +104,7 @@ Built with **Flask** (Python) + **Vanilla JS**. No cloud, no subscription — ru
 - **Genre Distribution** and library coverage panels
 - **Unplayed Albums / Coverage** discovery view with playlist actions
 - **Rescan tags**: one-click re-scan with inline progress for updated library tags
-- **Sonic Profile**: compact tonal profile cards + brightness/energy histograms + tonal demand chart (requires analysis)
+- **Sonic Profile**: compact sound-character and Gear Priority cards, with optional bright–warm diagnostics and an interactive sonic map (requires analysis)
 - **Gear Fit**: score every IEM against your library's sonic character using two models:
   - *Target Fidelity* — how accurately the IEM reproduces a chosen FR target (Harman, flat, etc.)
   - *Library Fit* — how well the IEM matches your library's own tonal balance

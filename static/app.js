@@ -25377,11 +25377,11 @@ const _INSIGHTS_HELP = {
   },
   sonic: {
     title: 'Sonic Profile',
-    body: `<p>Summarises your library's <strong>tonal demand</strong> so you can understand what IEM/headphone signatures are likely to suit your collection.</p>
-           <p><strong>Library Tonal Demand</strong> shows where your music places most emphasis across perceptual frequency bands. This is the same signal used in compatibility scoring.</p>
-           <p><strong>Brightness Distribution</strong> indicates how often tracks skew warm/dark vs bright/forward.</p>
-           <p><strong>RMS Energy Distribution</strong> reflects mastering density (more compressed vs more dynamic recordings).</p>
-           <p><strong>Note:</strong> Analysis covers FLAC files only. M4A/AAC tracks are skipped (libsndfile limitation). Results update after running "Analyse Library".</p>`,
+    body: `<p>Summarises your library's <strong>overall sound character</strong>, then connects it to IEM/headphone recommendations when Gear Compatibility Analysis is available.</p>
+           <p><strong>Gear priorities</strong> are the genre-weighted perceptual areas used by Gear Fit. They explain which parts of a headphone or IEM response matter most for your library.</p>
+           <p><strong>Bright–warm range</strong> is an optional technical view of tonal balance across analysed tracks. It describes the collection; it is not a sound-quality score.</p>
+           <p><strong>Explore your sound</strong> groups tracks by deep audio similarity. Select a point or group to play a representative track or open its queue actions.</p>
+           <p><strong>Note:</strong> the coverage label shows how much of your library the local analyser could read. Results update after running "Analyse Library".</p>`,
   },
   gear: {
     title: 'IEM / Headphone Fit',
@@ -25551,173 +25551,143 @@ function _updateAnalysisBanner(s) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 let _sonicBrightnessChart = null;
-let _sonicEnergyChart     = null;
-let _sonicScatterChart    = null;
-let _sonicBandChart       = null;
+let _sonicGearChart       = null;
 
-function _renderInsightsSonicProfile(d) {
-  const el = document.getElementById('insights-sonic-content');
-
-  [_sonicBrightnessChart, _sonicEnergyChart, _sonicScatterChart, _sonicBandChart]
-    .forEach(c => { if (c) c.destroy(); });
-  _sonicBrightnessChart = _sonicEnergyChart = _sonicScatterChart = _sonicBandChart = null;
-
-  const _hz = v => v >= 1000 ? `${(v/1000).toFixed(v%1000===0?0:1)}k` : Math.round(v).toString();
-  const _barOpts = () => ({
+function _renderSonicAnalysisDetails(d) {
+  if (_sonicBrightnessChart || _sonicGearChart) return;
+  const _hz = v => v >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : Math.round(v).toString();
+  const baseOptions = {
     responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() },
     scales: {
       x: { ticks: { color: '#6b6b7b', font: { size: 10 } }, grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
       y: { ticks: { color: '#6b6b7b', font: { size: 9 } }, grid: { color: 'rgba(173,198,255,0.06)' }, border: { color: 'transparent' } },
     },
-    plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() },
-  });
+  };
 
-  const bs = d.brightness.stats;
-  const es = d.energy.stats;
-  const bandLabels = d.band_labels || {};
-  const bandEntries = Object.entries(d.band_profile || {}).sort((a, b) => b[1] - a[1]);
-
-  const _sumBands = keys => keys.reduce((acc, k) => acc + Number((d.band_profile || {})[k] || 0), 0);
-  const bassDemand   = _sumBands(['sub_bass', 'bass', 'bass_feel', 'slam']);
-  const midDemand    = _sumBands(['lower_mids', 'upper_mids', 'note_weight', 'presence']);
-  const trebleDemand = _sumBands(['lower_treble', 'upper_treble', 'detail', 'sibilance', 'texture']);
-
-  const topBands = bandEntries.slice(0, 3).map(([k]) => bandLabels[k] || k).join(' · ');
-  const brightnessMedian = Number(bs.median || 0);
-  const energySpread = Math.max(0, Number(es.p75 || 0) - Number(es.p25 || 0));
-
-  let tonalTilt = 'Balanced tonal demand';
-  if (bassDemand > trebleDemand + 0.08) tonalTilt = 'Low-end weighted demand';
-  else if (trebleDemand > bassDemand + 0.08) tonalTilt = 'Treble-weighted demand';
-  else if (midDemand > bassDemand && midDemand > trebleDemand) tonalTilt = 'Mid-centric demand';
-
-  let brightnessRead = 'Mixed brightness profile';
-  if (brightnessMedian >= 4500) brightnessRead = 'Mostly bright / detail-forward';
-  else if (brightnessMedian <= 2500) brightnessRead = 'Mostly warm / low-end-forward';
-
-  let dynamicsRead = 'Moderate mastering spread';
-  if (energySpread >= 0.08) dynamicsRead = 'Wide spread (dynamic + compressed)';
-  else if (energySpread <= 0.03) dynamicsRead = 'Consistent mastering density';
-
-  const cues = [];
-  if (bassDemand > trebleDemand + 0.08) cues.push('Prioritise bass control and low-end separation.');
-  if (trebleDemand > bassDemand + 0.08) cues.push('Smoother upper mids/treble can reduce fatigue.');
-  if (brightnessMedian <= 2500) cues.push('A touch more upper-mid/treble presence may improve clarity.');
-  if (brightnessMedian >= 4500) cues.push('Neutral-to-warm signatures may sound more natural.');
-  if (energySpread >= 0.08) cues.push('Good dynamics help across mixed mastering quality.');
-  if (!cues.length) cues.push('Balanced signatures should perform consistently across your library.');
-
-  const bandProfileHtml = d.band_profile
-    ? `<div class="sonic-band-card">
-        <div class="sonic-chart-title">Library Tonal Demand (Compatibility Signal)</div>
-        <div class="sonic-chart-subtitle">Relative frequency emphasis used by IEM/headphone matching.</div>
-        <div class="insights-chart-wrap" style="height:148px"><canvas id="sonic-band-canvas"></canvas></div>
-       </div>`
-    : '';
-
-  el.innerHTML = `
-    <div class="sonic-profile-stack">
-    <div class="sonic-insight-grid">
-      <div class="sonic-insight-card">
-        <div class="sonic-insight-kicker">Tonal Tilt</div>
-        <div class="sonic-insight-title">${tonalTilt}</div>
-        <div class="sonic-insight-meta">Top demand: ${esc(topBands || 'N/A')}</div>
-      </div>
-      <div class="sonic-insight-card">
-        <div class="sonic-insight-kicker">Brightness Read</div>
-        <div class="sonic-insight-title">${brightnessRead}</div>
-        <div class="sonic-insight-meta">Median centroid: ${_hz(bs.median)} Hz</div>
-      </div>
-      <div class="sonic-insight-card">
-        <div class="sonic-insight-kicker">Dynamics Read</div>
-        <div class="sonic-insight-title">${dynamicsRead}</div>
-        <div class="sonic-insight-meta">RMS IQR: ${es.p25.toFixed(3)} - ${es.p75.toFixed(3)}</div>
-      </div>
-    </div>
-    ${bandProfileHtml}
-    <div class="sonic-charts-grid">
-      <div class="sonic-chart-card">
-        <div class="sonic-chart-title">Spectral Centroid Distribution</div>
-        <div class="sonic-chart-subtitle">Peak left = warm/dark library · Peak right = bright/detail-forward</div>
-        <div class="insights-chart-wrap" style="height:138px"><canvas id="sonic-brightness-canvas"></canvas></div>
-        <div class="sonic-stat-row">
-          <span class="sonic-stat">Median <strong>${_hz(bs.median)} Hz</strong></span>
-          <span class="sonic-stat">Mean <strong>${_hz(bs.mean)} Hz</strong></span>
-          <span class="sonic-stat">IQR <strong>${_hz(bs.p25)}–${_hz(bs.p75)} Hz</strong></span>
-        </div>
-      </div>
-      <div class="sonic-chart-card">
-        <div class="sonic-chart-title">Dynamic Energy Distribution</div>
-        <div class="sonic-chart-subtitle">Wide spread = varied mastering · Tight cluster = consistently compressed</div>
-        <div class="insights-chart-wrap" style="height:138px"><canvas id="sonic-energy-canvas"></canvas></div>
-        <div class="sonic-stat-row">
-          <span class="sonic-stat">Spread <strong>${(energySpread / Math.max(es.mean, 0.001) * 100).toFixed(0)}%</strong></span>
-          <span class="sonic-stat">${energySpread >= 0.08 ? 'High variation' : energySpread <= 0.03 ? 'Consistent' : 'Moderate variation'}</span>
-        </div>
-      </div>
-    </div>
-    <div class="sonic-caveat">
-      <strong>Compatibility cues:</strong> ${cues.map(c => esc(c)).join(' ')} <strong>Note:</strong> Analysis covers FLAC files only. M4A/AAC tracks are skipped.
-    </div>
-    </div>`;
-
-  _sonicBrightnessChart = new Chart(document.getElementById('sonic-brightness-canvas'), {
-    type: 'bar',
-    data: { labels: d.brightness.histogram.midpoints,
-            datasets: [{ data: d.brightness.histogram.counts, backgroundColor: 'rgba(173,198,255,0.65)', borderColor: 'rgba(173,198,255,0.9)', borderWidth: 1, borderRadius: 3 }] },
-    options: {
-      ..._barOpts(),
-      scales: { ..._barOpts().scales,
-        x: { ..._barOpts().scales.x,
-             ticks: { ...(_barOpts().scales.x.ticks), callback: function(_, i) { return _hz(this.chart.data.labels[i]); } } } },
-    },
-  });
-
-  _sonicEnergyChart = new Chart(document.getElementById('sonic-energy-canvas'), {
-    type: 'bar',
-    data: { labels: d.energy.histogram.midpoints,
-            datasets: [{ data: d.energy.histogram.counts, backgroundColor: 'rgba(83,225,111,0.65)', borderColor: 'rgba(83,225,111,0.9)', borderWidth: 1, borderRadius: 3 }] },
-    options: {
-      ..._barOpts(),
-      scales: { ..._barOpts().scales,
-        x: { ..._barOpts().scales.x,
-             ticks: { ...(_barOpts().scales.x.ticks), callback: function(_, i) { return this.chart.data.labels[i].toFixed(2); } } } },
-    },
-  });
-
-  if (d.band_profile && document.getElementById('sonic-band-canvas')) {
-    const bl     = d.band_labels || {};
-    const bKeys  = Object.keys(d.band_profile);
-    const bVals  = bKeys.map(k => d.band_profile[k]);
-    const bLabels = bKeys.map(k => bl[k] || k);
-    _sonicBandChart = new Chart(document.getElementById('sonic-band-canvas'), {
+  const brightnessCanvas = document.getElementById('sonic-brightness-canvas');
+  if (brightnessCanvas) {
+    _sonicBrightnessChart = new Chart(brightnessCanvas, {
       type: 'bar',
-      data: {
-        labels: bLabels,
-        datasets: [{
-          data: bVals,
-          backgroundColor: bVals.map(v => `rgba(173,198,255,${0.3 + v * 0.5})`),
-          borderColor: 'rgba(173,198,255,0.8)',
-          borderWidth: 1, borderRadius: 3,
-        }],
-      },
+      data: { labels: d.brightness.histogram.midpoints,
+              datasets: [{ data: d.brightness.histogram.counts, backgroundColor: 'rgba(173,198,255,0.65)', borderColor: 'rgba(173,198,255,0.9)', borderWidth: 1, borderRadius: 3 }] },
       options: {
-        responsive: true, maintainAspectRatio: false,
-        scales: {
-          x: { ticks: { color: '#6b6b7b', font: { size: 9 }, maxRotation: 45 },
-               grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
-          y: { min: 0, max: 1,
-               ticks: { color: '#6b6b7b', font: { size: 9 },
-                        callback: v => (v * 100).toFixed(0) + '%' },
-               grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' },
-               title: { display: true, text: 'Relative energy', color: '#6b6b7b', font: { size: 10 } } },
-        },
-        plugins: { legend: { display: false },
-                   tooltip: { ..._insightsTooltipDefaults(),
-                              callbacks: { label: ctx => `${(ctx.parsed.y * 100).toFixed(1)}% of peak band` } } },
+        ...baseOptions,
+        scales: { ...baseOptions.scales,
+          x: { ...baseOptions.scales.x,
+               ticks: { ...baseOptions.scales.x.ticks, callback: function(_, i) { return _hz(this.chart.data.labels[i]); } } } },
       },
     });
   }
+
+  const profile = d.gear_priorities && d.gear_priorities.profile;
+  const gearCanvas = document.getElementById('sonic-gear-priority-canvas');
+  if (profile && gearCanvas) {
+    const keys = Object.keys(profile);
+    const values = keys.map(key => profile[key]);
+    _sonicGearChart = new Chart(gearCanvas, {
+      type: 'bar',
+      data: {
+        labels: keys.map(key => (d.band_labels || {})[key] || key),
+        datasets: [{
+          data: values,
+          backgroundColor: values.map(value => `rgba(83,225,111,${0.3 + value * 0.55})`),
+          borderColor: 'rgba(83,225,111,0.85)', borderWidth: 1, borderRadius: 3,
+        }],
+      },
+      options: {
+        ...baseOptions,
+        scales: { ...baseOptions.scales,
+          x: { ...baseOptions.scales.x, ticks: { ...baseOptions.scales.x.ticks, font: { size: 9 }, maxRotation: 35 } },
+          y: { ...baseOptions.scales.y, min: 0, max: 1,
+               ticks: { ...baseOptions.scales.y.ticks, callback: value => `${Math.round(value * 100)}%` } },
+        },
+        plugins: { ...baseOptions.plugins, tooltip: { ..._insightsTooltipDefaults(), callbacks: { label: ctx => `${Math.round(ctx.parsed.y * 100)}% of highest Gear Fit priority` } } },
+      },
+    });
+  }
+}
+
+function _renderInsightsSonicProfile(d) {
+  const el = document.getElementById('insights-sonic-content');
+  if (!el) return;
+
+  [_sonicBrightnessChart, _sonicGearChart].forEach(chart => { if (chart) chart.destroy(); });
+  _sonicBrightnessChart = _sonicGearChart = null;
+
+  const brightness = d.brightness.stats;
+  const median = Number(brightness.median || 0);
+  const range = Math.max(0, Number(brightness.p75 || 0) - Number(brightness.p25 || 0));
+  let character = 'Balanced character';
+  if (median >= 4500) character = 'Bright, detail-forward character';
+  else if (median <= 2500) character = 'Warm, low-end-forward character';
+
+  let variety = 'Varied bright–warm range';
+  if (range <= 650) variety = 'Focused bright–warm range';
+  else if (range >= 1600) variety = 'Broad bright–warm range';
+
+  const gear = d.gear_priorities || null;
+  const profile = gear && gear.profile;
+  const topPriorities = profile
+    ? Object.entries(profile).sort((a, b) => b[1] - a[1]).slice(0, 3)
+      .map(([key]) => (d.band_labels || {})[key] || key)
+    : [];
+  const bestFit = gear && gear.best_fit;
+  const gearTitle = topPriorities.length ? topPriorities.join(' · ') : 'Connect your gear';
+  const gearMeta = bestFit
+    ? `${bestFit.iem_name} is your strongest current fit · ${bestFit.score}%`
+    : 'Run Gear Compatibility Analysis to see priorities for your IEMs.';
+  const coverage = `${Math.round(d.analysis_coverage_pct || 0)}% coverage · ${(d.track_count || 0).toLocaleString()} analysed`;
+
+  el.innerHTML = `
+    <div class="sonic-profile-stack">
+      <div class="sonic-overview-title">Your library at a glance</div>
+      <div class="sonic-insight-grid">
+        <div class="sonic-insight-card">
+          <div class="sonic-insight-kicker">Library character</div>
+          <div class="sonic-insight-title">${character}</div>
+          <div class="sonic-insight-meta">${coverage}</div>
+        </div>
+        <div class="sonic-insight-card">
+          <div class="sonic-insight-kicker">Listening variety</div>
+          <div class="sonic-insight-title">${variety}</div>
+          <div class="sonic-insight-meta">Based on the tonal spread across analysed tracks</div>
+        </div>
+        <div class="sonic-insight-card sonic-insight-card--gear">
+          <div class="sonic-insight-kicker">Gear priorities</div>
+          <div class="sonic-insight-title">${esc(gearTitle)}</div>
+          <div class="sonic-insight-meta">${esc(gearMeta)}</div>
+          <button type="button" class="sonic-inline-link" id="sonic-gear-link">${bestFit ? 'See gear fit' : 'Go to Gear Compatibility'}</button>
+        </div>
+      </div>
+      <details class="sonic-details" id="sonic-analysis-details">
+        <summary><span>Analysis details</span><span>Gear priorities and bright–warm range</span></summary>
+        <div class="sonic-details-content">
+          ${profile ? `<div class="sonic-band-card">
+            <div class="sonic-chart-title">Gear priority profile</div>
+            <div class="sonic-chart-subtitle">The relative genre-weighted priorities used by Gear Fit. These are perceptual focus areas, not literal amounts of bass or treble.</div>
+            <div class="insights-chart-wrap" style="height:168px"><canvas id="sonic-gear-priority-canvas"></canvas></div>
+          </div>` : `<div class="sonic-details-empty">Run Gear Compatibility Analysis to unlock the profile that explains your IEM recommendations.</div>`}
+          <div class="sonic-chart-card">
+            <div class="sonic-chart-title">Bright–warm range</div>
+            <div class="sonic-chart-subtitle">A technical distribution of tonal balance across your tracks. It is descriptive, not a quality score.</div>
+            <div class="insights-chart-wrap" style="height:148px"><canvas id="sonic-brightness-canvas"></canvas></div>
+            <div class="sonic-stat-row">
+              <span class="sonic-stat">Median <strong>${Math.round(brightness.median)} Hz</strong></span>
+              <span class="sonic-stat">Middle 50% <strong>${Math.round(brightness.p25)}–${Math.round(brightness.p75)} Hz</strong></span>
+            </div>
+          </div>
+          <div class="sonic-caveat">Analysis currently covers FLAC files supported by the local analyser. ${coverage} of your library is represented here.</div>
+        </div>
+      </details>
+    </div>`;
+
+  document.getElementById('sonic-gear-link')?.addEventListener('click', () => {
+    document.getElementById('insights-gear-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  document.getElementById('sonic-analysis-details')?.addEventListener('toggle', event => {
+    if (event.currentTarget.open) requestAnimationFrame(() => _renderSonicAnalysisDetails(d));
+  });
 }
 
 /* ── Sonic Map: PANNs-embedding KMeans clusters + PCA 2D projection ────────
@@ -25727,6 +25697,18 @@ function _renderInsightsSonicProfile(d) {
 
 let _sonicMapChart  = null;
 let _sonicMapPoller = null;
+
+function _selectSonicMapPoint(point, clusterLabel) {
+  const panel = document.getElementById('sonic-map-selection');
+  if (!panel || !point) return;
+  const name = point.title || 'Unknown track';
+  const artist = point.artist ? ` — ${point.artist}` : '';
+  panel.hidden = false;
+  panel.querySelector('[data-sonic-map-track]').textContent = name + artist;
+  panel.querySelector('[data-sonic-map-cluster]').textContent = clusterLabel || 'Sonic group';
+  panel.querySelector('[data-sonic-map-play]').onclick = () => Player.playTrackById(point.track_id);
+  panel.querySelector('[data-sonic-map-menu]').onclick = event => App.showTrackCtxMenu(event, point.track_id);
+}
 
 /* ── Global sonic-analysis progress toast ───────────────────────────────────
    Sonic (CNN14 embedding) analysis now auto-starts in the background after a
@@ -25791,16 +25773,18 @@ function _renderInsightsSonicMap(d) {
 
   if (!d || !d.points || !d.points.length) {
     el.innerHTML = `
-      <div class="sonic-chart-card">
-        <div class="sonic-chart-title">Sonic Map</div>
-        <div class="sonic-chart-subtitle">Groups your library by deep audio similarity into a 2D map — a different signal from the tonal-balance analysis above.</div>
-        <div class="insights-cta-inner" style="margin-top:14px">
+      <details class="sonic-details sonic-map-details">
+        <summary><span>Explore your sound</span><span>Group similar-sounding tracks</span></summary>
+        <div class="sonic-details-content">
+          <div class="sonic-chart-subtitle">Build a map of the tracks that sound alike, separate from the tonal and gear insights above.</div>
+          <div class="insights-cta-inner">
           <div class="insights-cta-body">
             <p class="insights-analyse-status" id="sonic-map-analyse-status">Run sonic embedding analysis to unlock the map.</p>
           </div>
           <button class="btn-primary insights-cta-btn" id="sonic-map-analyse-btn" onclick="App.startSonicEmbeddingAnalysis()">Analyse</button>
+          </div>
         </div>
-      </div>`;
+      </details>`;
     return;
   }
 
@@ -25815,48 +25799,85 @@ function _renderInsightsSonicMap(d) {
   const datasets = clusterIds.map(cid => ({
     label: clusters[cid].label || `Cluster ${cid}`,
     data: d.points.filter(p => String(p.cluster_id) === cid)
-                  .map(p => ({ x: p.x, y: p.y, title: p.title, artist: p.artist })),
+                  .map(p => ({ x: p.x, y: p.y, track_id: p.track_id, title: p.title, artist: p.artist, cluster_id: p.cluster_id })),
     backgroundColor: colorOf[cid],
     pointRadius: 3, pointHoverRadius: 5,
   }));
 
   const legendHtml = clusterIds.map(cid => `
-    <div class="insights-legend-item">
+    <button type="button" class="insights-legend-item sonic-map-cluster-btn" data-sonic-cluster="${esc(cid)}">
       <span class="insights-legend-dot" style="background:${colorOf[cid]}"></span>
       <span class="insights-legend-label">${esc(clusters[cid].label || `Cluster ${cid}`)}</span>
       <span class="insights-legend-count">${clusters[cid].track_count || 0}</span>
-    </div>`).join('');
+    </button>`).join('');
 
   el.innerHTML = `
-    <div class="sonic-chart-card">
-      <div class="sonic-chart-title">Sonic Map</div>
-      <div class="sonic-chart-subtitle">${d.embedding_count} tracks grouped into ${d.k} sonic clusters by deep audio similarity (PANNs embeddings).</div>
-      <div class="insights-chart-wrap" style="height:320px"><canvas id="sonic-map-canvas"></canvas></div>
-      <div class="sonic-map-legend">${legendHtml}</div>
-      <div class="sonic-caveat">Position reflects similarity only — axes have no fixed meaning, only distance between points does. Tracks placed close together sound similar to the model; how far apart or which direction isn't meaningful on its own.</div>
-    </div>`;
+    <details class="sonic-details sonic-map-details" id="sonic-map-details">
+      <summary><span>Explore your sound</span><span>${d.embedding_count.toLocaleString()} tracks in ${d.k} sound groups</span></summary>
+      <div class="sonic-details-content sonic-map-content">
+        <div class="sonic-chart-subtitle">Tracks that sit close together sound similar to the model. Select a point or sound group to play or queue a representative sampled track.</div>
+        <div class="insights-chart-wrap" style="height:320px"><canvas id="sonic-map-canvas"></canvas></div>
+        <div class="sonic-map-legend">${legendHtml}</div>
+        <div class="sonic-map-selection" id="sonic-map-selection" hidden>
+          <div><strong data-sonic-map-track></strong><span data-sonic-map-cluster></span></div>
+          <div class="sonic-map-selection-actions"><button type="button" class="btn-primary" data-sonic-map-play>Play</button><button type="button" class="btn-secondary" data-sonic-map-menu>More actions</button></div>
+        </div>
+        <div class="sonic-caveat">The map has no meaningful up/down or left/right axis; only the distance between tracks is meaningful.</div>
+      </div>
+    </details>`;
 
-  _sonicMapChart = new Chart(document.getElementById('sonic-map-canvas'), {
-    type: 'scatter',
-    data: { datasets },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      scales: { x: { display: false }, y: { display: false } },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          ..._insightsTooltipDefaults(),
-          callbacks: {
-            title: () => '',
-            label: ctx => {
-              const p = ctx.raw;
-              const name = p.title ? `${p.title}${p.artist ? ' — ' + p.artist : ''}` : 'Unknown track';
-              return [name, ctx.dataset.label];
+  const mountMap = () => {
+    if (_sonicMapChart) return;
+    const canvas = document.getElementById('sonic-map-canvas');
+    if (!canvas) return;
+    _sonicMapChart = new Chart(canvas, {
+      type: 'scatter',
+      data: { datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { x: { display: false }, y: { display: false } },
+        onClick: (event, elements, chart) => {
+          const hit = elements[0];
+          if (!hit) return;
+          const point = chart.data.datasets[hit.datasetIndex].data[hit.index];
+          _selectSonicMapPoint(point, chart.data.datasets[hit.datasetIndex].label);
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            ..._insightsTooltipDefaults(),
+            callbacks: {
+              title: () => '',
+              label: ctx => {
+                const p = ctx.raw;
+                const name = p.title ? `${p.title}${p.artist ? ' — ' + p.artist : ''}` : 'Unknown track';
+                return [name, `${ctx.dataset.label} · Select for actions`];
+              },
             },
           },
         },
       },
-    },
+    });
+  };
+
+  document.getElementById('sonic-map-details')?.addEventListener('toggle', event => {
+    if (event.currentTarget.open) requestAnimationFrame(mountMap);
+  });
+  el.querySelectorAll('[data-sonic-cluster]').forEach(button => {
+    button.addEventListener('click', () => {
+      const cid = button.dataset.sonicCluster;
+      const members = d.points.filter(item => String(item.cluster_id) === cid);
+      if (!members.length) return;
+      const centre = members.reduce((sum, item) => ({ x: sum.x + item.x, y: sum.y + item.y }), { x: 0, y: 0 });
+      centre.x /= members.length;
+      centre.y /= members.length;
+      const point = members.reduce((closest, item) => {
+        const distance = (item.x - centre.x) ** 2 + (item.y - centre.y) ** 2;
+        const closestDistance = (closest.x - centre.x) ** 2 + (closest.y - centre.y) ** 2;
+        return distance < closestDistance ? item : closest;
+      });
+      if (point) _selectSonicMapPoint(point, clusters[cid]?.label || `Sonic Group ${cid}`);
+    });
   });
 }
 

@@ -16847,14 +16847,18 @@ def _compute_sonic_clusters(force=False):
 
 @app.route('/api/insights/sonic-profile')
 def insights_sonic_profile():
-    import numpy as np, random as _rnd
+    import numpy as np
     features = _load_features()
-    valid    = [f for f in features if f.get('brightness') and f.get('energy') is not None]
+    with library_lock:
+        library_track_ids = {str(t.get('id')) for t in library if t.get('id')}
+        library_track_count = len(library_track_ids)
+    valid    = [f for f in features
+                if str(f.get('track_id')) in library_track_ids
+                and f.get('brightness') is not None and f.get('energy') is not None]
     if not valid:
         return jsonify({'error': 'Run audio analysis first'}), 404
 
     brightness = np.array([f['brightness'] for f in valid], dtype=float)
-    energy     = np.array([f['energy']     for f in valid], dtype=float)
 
     def _hist(arr, n=25):
         counts, edges = np.histogram(arr, bins=n)
@@ -16868,25 +16872,46 @@ def insights_sonic_profile():
             'p75': np.percentile(arr, 75),
         }.items()}
 
-    sample  = _rnd.sample(valid, min(600, len(valid)))
-    scatter = [{'x': round(f['brightness'], 0), 'y': round(f['energy'], 5)} for f in sample]
-
-    # Per-band energy profile (normalised to 0–1 relative to max band)
-    valid12 = [f for f in features
-               if f.get('band_energy') and len(f['band_energy']) == N_PERC_BANDS
-               and f.get('analysis_version') == ANALYSIS_VERSION and not f.get('failed')]
-    band_profile = None
-    if valid12:
-        bm  = np.array([f['band_energy'] for f in valid12]).mean(axis=0)
-        mx  = bm.max() + 1e-12
-        band_profile = {b[0]: round(float(v / mx), 4) for b, v in zip(_PERC_BANDS, bm)}
+    # Gear priorities intentionally use the exact normalised genre fingerprints
+    # that feed _build_match_matrix(), not the separate raw-spectrum average
+    # previously rendered as "Library Tonal Demand".  This makes the profile a
+    # faithful explanation of what matters to Gear Fit.
+    gear_priorities = None
+    match_data = _load_match_data()
+    if match_data and match_data.get('matrix_data') and match_data.get('genre_fps'):
+        fps = match_data['genre_fps']
+        total_weight = sum(float(fp.get('weight', fp.get('track_count', 0)))
+                           for fp in fps.values())
+        priority = {key: 0.0 for key in _MATCH_CORE_BANDS}
+        if total_weight > 0:
+            for fp in fps.values():
+                genre_weight = float(fp.get('weight', fp.get('track_count', 0))) / total_weight
+                fingerprint = fp.get('fingerprint') or {}
+                denom = sum(float(fingerprint.get(key, 0)) for key in _MATCH_CORE_BANDS)
+                if denom <= 0:
+                    continue
+                for key in _MATCH_CORE_BANDS:
+                    priority[key] += genre_weight * float(fingerprint.get(key, 0)) / denom
+            peak = max(priority.values(), default=0.0)
+            if peak > 0:
+                summary = (match_data.get('matrix_data', {}).get('library_overview', {})
+                           .get('iem_summary') or [])
+                best_fit = summary[0] if summary else None
+                gear_priorities = {
+                    'profile': {key: round(value / peak, 4) for key, value in priority.items()},
+                    'best_fit': ({
+                        'iem_id': best_fit.get('iem_id'),
+                        'iem_name': best_fit.get('iem_name'),
+                        'score': best_fit.get('library_match_score'),
+                    } if best_fit else None),
+                }
 
     return jsonify({
         'track_count':  len(valid),
+        'library_track_count': library_track_count,
+        'analysis_coverage_pct': round(len(valid) / max(library_track_count, 1) * 100, 1),
         'brightness':   {'histogram': _hist(brightness), 'stats': _stats(brightness)},
-        'energy':       {'histogram': _hist(energy),     'stats': _stats(energy)},
-        'scatter':      scatter,
-        'band_profile': band_profile,
+        'gear_priorities': gear_priorities,
         'band_labels':  {b[0]: b[3] for b in _PERC_BANDS},
     })
 
