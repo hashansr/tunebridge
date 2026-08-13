@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.661-rc.130826-2326 · 2026-08-13
+
 ## v0.658-rc.130826-2301 · 2026-08-13
 - Add: Sonic analysis (which powers Inspired by, Track Radio, and Continuous Play) now starts automatically in the background whenever new songs are added — via a library scan or the Import feature — with a progress toast, and resumes on its own next time the app opens if it was interrupted.
 - Fix: Inspired by no longer builds a confusing one-song "playlist" when there isn't enough sonic analysis data yet for a song — it now shows a clear "not enough analysed tracks" message instead.
