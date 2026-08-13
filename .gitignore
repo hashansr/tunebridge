@@ -27,6 +27,8 @@ data/playlists.bak.json
 # Runtime ephemera
 data/player_state.json
 tunebridge.db
+tunebridge.db-wal
+tunebridge.db-shm
 
 # macOS
 .DS_Store

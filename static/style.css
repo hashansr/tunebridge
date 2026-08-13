@@ -9098,6 +9098,193 @@ tbody tr:hover {
 .genius-phase-tag--discover  { color: #53e16f; background: rgba(83, 225, 111, 0.14); }
 .genius-phase-tag--reanchor  { color: #ffb3b5; background: rgba(255, 179, 181, 0.14); }
 
+/* Inspired playlist — high-fidelity modal refresh.  The dialog chrome stays
+   mounted; generation updates only replace .genius-preview-list's contents. */
+#genius-modal .genius-modal-sheet {
+  --tb-modal-w: 640px;
+  max-height: min(720px, calc(100% - 8px));
+  padding: 0 !important;
+  overflow: hidden !important;
+  display: flex;
+  flex-direction: column;
+}
+#genius-modal .genius-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  flex: 0 0 auto;
+}
+#genius-modal .genius-seed-art,
+#genius-modal .genius-track-art {
+  overflow: hidden;
+  flex: 0 0 auto;
+  background: var(--modal-row);
+  box-shadow: inset 0 0 0 .5px rgba(255,255,255,.10);
+}
+#genius-modal .genius-seed-art { width: 60px; height: 60px; border-radius: 10px; }
+#genius-modal .genius-seed-art img,
+#genius-modal .genius-track-art img { display: block; width: 100%; height: 100%; object-fit: cover; }
+#genius-modal .genius-seed-copy { flex: 1; min-width: 0; }
+#genius-modal .genius-kicker,
+#genius-modal .genius-setting-label {
+  color: var(--modal-text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+#genius-modal .genius-kicker { color: var(--modal-accent); margin-bottom: 4px; }
+#genius-modal #genius-modal-title { margin: 0 0 3px !important; }
+#genius-modal .genius-modal-subtitle {
+  margin: 0;
+  color: var(--modal-text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#genius-modal .genius-modal-header .modal-x-btn { align-self: flex-start; margin-top: 1px; }
+#genius-modal .genius-modal-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 20px 4px;
+  flex: 0 0 auto;
+}
+#genius-modal .genius-setting { display: flex; flex-direction: column; gap: 6px; }
+#genius-modal .genius-setting-heading { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+#genius-modal .genius-discovery-hint { color: var(--modal-text-dim); font-size: 11.5px; line-height: 1.25; text-align: right; }
+#genius-modal .genius-segmented {
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--modal-hairline);
+  border-radius: 7px;
+  background: #252527;
+}
+#genius-modal .genius-length-btn,
+#genius-modal .genius-discovery-btn {
+  flex: 1;
+  min-height: 27px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--modal-text-muted);
+  background: transparent;
+  font: 500 12.5px var(--modal-font);
+  cursor: pointer;
+}
+#genius-modal .genius-length-btn:hover,
+#genius-modal .genius-discovery-btn:hover { color: var(--modal-text); }
+#genius-modal .genius-length-btn--active,
+#genius-modal .genius-discovery-btn--active {
+  color: var(--modal-text);
+  background: rgba(255,255,255,.10);
+  font-weight: 600;
+}
+#genius-modal .genius-preview-section {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-top: 12px;
+  border-top: 1px solid var(--modal-hairline);
+}
+#genius-modal .genius-preview-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12px 20px 4px;
+  flex: 0 0 auto;
+}
+#genius-modal .genius-preview-label { color: var(--modal-text-dim); font-size: 11.5px; }
+#genius-modal .genius-preview-list { max-height: 380px; overflow-y: auto; transition: opacity .2s; }
+#genius-modal .genius-preview-list.is-refreshing { opacity: .5; }
+#genius-modal .genius-list-status { padding: 24px 20px; color: var(--modal-text-muted); font-size: 13px; text-align: center; }
+#genius-modal .genius-track-list { display: flex; flex-direction: column; }
+#genius-modal .genius-track-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  background: transparent;
+  transition: background .1s;
+}
+#genius-modal .genius-track-row:hover { background: rgba(255,255,255,.04); }
+#genius-modal .genius-track-row.is-previewing { background: rgba(173,198,255,.08); }
+#genius-modal .genius-track-art { width: 34px; height: 34px; border-radius: 6px; }
+#genius-modal .genius-track-info { min-width: 0; }
+#genius-modal .genius-track-title {
+  color: var(--modal-text);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -.008em;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#genius-modal .is-previewing .genius-track-title { color: var(--modal-accent); }
+#genius-modal .genius-track-meta { margin-top: 1px; color: var(--modal-text-muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#genius-modal .genius-match { font-weight: 600; }
+#genius-modal .genius-match--establish { color: var(--modal-accent); }
+#genius-modal .genius-match--expand { color: #ffb3b5; }
+#genius-modal .genius-match--discover { color: #53e16f; }
+#genius-modal .genius-match--reanchor { color: #f0b429; }
+#genius-modal .genius-track-play {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--modal-text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+#genius-modal .genius-track-row:hover .genius-track-play { background: rgba(255,255,255,.08); }
+#genius-modal .is-previewing .genius-track-play { color: var(--modal-accent); background: rgba(173,198,255,.16); }
+#genius-modal .genius-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--modal-hairline);
+  flex: 0 0 auto;
+}
+#genius-modal .genius-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--modal-border);
+  border-radius: 7px;
+  color: var(--modal-text);
+  background: #2e2e30;
+  font: 500 13px var(--modal-font);
+  cursor: pointer;
+}
+#genius-modal .genius-action-btn:hover { background: #36363a; }
+#genius-modal .genius-action-btn--ghost { padding: 0 12px; border-color: transparent; color: var(--modal-text-sub); background: transparent; }
+#genius-modal .genius-action-btn--ghost:hover { background: rgba(255,255,255,.06); }
+#genius-modal .genius-action-btn--primary { padding: 0 16px; border-color: var(--modal-accent); color: var(--modal-accent-ink); background: var(--modal-accent); font-weight: 600; }
+#genius-modal .genius-action-btn--primary:hover { background: #c4d5ff; }
+#genius-modal .genius-action-btn:disabled { opacity: .75 !important; }
+#genius-modal .genius-refresh-icon { transition: transform .5s ease; }
+#genius-modal .genius-action-btn.is-refreshing .genius-refresh-icon { transform: rotate(180deg); }
+@media (max-width: 620px) {
+  #genius-modal .genius-discovery-hint { display: none; }
+  #genius-modal .genius-modal-footer { flex-wrap: wrap; }
+}
+
 /* Insights popup list density */
 .problem-tracks-modal-body {
   max-height: 56vh;

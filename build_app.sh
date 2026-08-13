@@ -279,12 +279,35 @@ _spin_stop
 DEP_ELAPSED=$(_elapsed "$_DEP_T0")
 _ok "Dependencies installed  (${DEP_ELAPSED})"
 
+# panns_inference imports matplotlib.pyplot at module level but never calls it --
+# a dead import in the upstream package that drags matplotlib+contourpy+kiwisolver
+# (~6-8MB) into the bundle for nothing. Strip it from the installed copy so
+# PyInstaller's static analysis never sees the import. Warns (doesn't fail) if
+# a future panns-inference version moves/removes the line, so this silently
+# stops helping rather than silently breaking.
+_PANNS_PKG="$(python -c 'import panns_inference, os; print(os.path.dirname(panns_inference.__file__))' 2>/dev/null || true)"
+if [ -n "$_PANNS_PKG" ]; then
+  _PANNS_PATCHED=0
+  for _f in "$_PANNS_PKG/models.py" "$_PANNS_PKG/inference.py"; do
+    if [ -f "$_f" ] && grep -q "^import matplotlib.pyplot as plt$" "$_f"; then
+      sed -i '' '/^import matplotlib\.pyplot as plt$/d' "$_f"
+      _PANNS_PATCHED=$((_PANNS_PATCHED + 1))
+    fi
+  done
+  if [ "$_PANNS_PATCHED" -gt 0 ]; then
+    _ok "Stripped dead matplotlib import from panns_inference (${_PANNS_PATCHED} file(s))"
+  else
+    _warn "panns_inference matplotlib import not found to strip -- package may have changed, matplotlib will be bundled"
+  fi
+fi
+
 # ── Clean + prepare ───────────────────────────────────────────────────────────
 _phase "🏗️  Bundle Assembly"
 
 printf "  🗑️   Cleaning previous outputs... "
 rm -rf "${PROJECT_DIR}/build" \
        "${PROJECT_DIR}/dist/${APP_NAME}.app" \
+       "${PROJECT_DIR}/dist/${APP_NAME}" \
        "${PROJECT_DIR}/dist/${APP_NAME}.dmg" \
        "${PROJECT_DIR}/dist/${APP_NAME}_tmp.dmg"
 mkdir -p "$DIST_DIR"
@@ -294,6 +317,7 @@ ICON_PATH="${PROJECT_DIR}/static/TuneBridge.icns"
 PYI_ARGS=(
   --noconfirm
   --windowed
+  --strip
   --name "$APP_NAME"
   --target-arch arm64
   --osx-bundle-identifier "$BUNDLE_ID"
@@ -308,6 +332,10 @@ PYI_ARGS=(
   --collect-submodules soundfile
   --collect-submodules mpv
   --collect-submodules pyloudnorm
+  --collect-submodules panns_inference
+  --collect-submodules torchlibrosa
+  --exclude-module librosa.display
+  --exclude-module matplotlib
   --add-data "${PROJECT_DIR}/static:static"
   --add-data "${PROJECT_DIR}/version.json:."
   --add-data "${PROJECT_DIR}/ipod/_vendor:ipod/_vendor"
@@ -455,8 +483,13 @@ if [ "$BUILD_DMG" = "1" ]; then
   [ -f "$DMG_PATH" ] && rm -f "$DMG_PATH"
   [ -f "$TMP_DMG" ]  && rm -f "$TMP_DMG"
 
-  _spin_start "Creating DMG volume..."
-  hdiutil create -size 500m -fs HFS+ -volname "$APP_NAME" "$TMP_DMG" -quiet
+  # Size the staging volume off the actual bundle (torch/panns-inference can push
+  # this well past the old fixed 500m), with generous headroom for HFS+ overhead.
+  APP_SIZE_MB="$(du -sm "$APP_PATH" | awk '{print $1}')"
+  DMG_SIZE_MB="$((APP_SIZE_MB + 300))"
+
+  _spin_start "Creating DMG volume (${DMG_SIZE_MB}m)..."
+  hdiutil create -size "${DMG_SIZE_MB}m" -fs HFS+ -volname "$APP_NAME" "$TMP_DMG" -quiet
   _spin_stop
   _ok "Temporary DMG volume created"
 
@@ -480,9 +513,11 @@ print(mp)
   ln -s /Applications "$MOUNT_POINT/Applications"
   echo -e "${GREEN}done ✅${NC}"
 
-  _spin_start "Compressing DMG (UDZO)..."
+  # ULMO (LZMA) compresses ~35% smaller than UDZO (zlib) for this bundle --
+  # worth the extra ~10s since DMG builds are infrequent (RC/prod/manual dev).
+  _spin_start "Compressing DMG (ULMO)..."
   hdiutil detach "$MOUNT_POINT" -quiet
-  hdiutil convert "$TMP_DMG" -format UDZO -o "$DMG_PATH" -quiet
+  hdiutil convert "$TMP_DMG" -format ULMO -o "$DMG_PATH" -quiet
   rm -f "$TMP_DMG"
   _spin_stop
 

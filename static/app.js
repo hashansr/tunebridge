@@ -5352,7 +5352,17 @@ async function showRelatedTracks(trackId) {
 
 // --- Genius Playlist (replaces AI Mix -- built alongside it for now, see CLAUDE.md rollout plan) ---
 
-const _GENIUS_PHASE_LABELS = { establish: 'Establish', expand: 'Expand', discover: 'Discover', reanchor: 'Re-anchor' };
+const _GENIUS_PHASE_META = {
+  establish: { phrase: 'closest match', className: 'establish' },
+  expand: { phrase: 'broadens the sound', className: 'expand' },
+  discover: { phrase: 'new to try', className: 'discover' },
+  reanchor: { phrase: 'back to seed artist', className: 'reanchor' },
+};
+const _GENIUS_DISCOVERY_HINTS = {
+  matching: title => `Stays close to ${title} — safe, familiar picks.`,
+  balanced: () => 'Mixes familiar favorites with new discoveries.',
+  explore: () => 'Prioritizes new artists and unexpected tracks.',
+};
 
 let _geniusState = {
   seedTrack: null,
@@ -5363,6 +5373,8 @@ let _geniusState = {
   nonce: null,
   loading: false,
   insufficientData: false,
+  previewingId: null,
+  saveFeedbackTimer: null,
 };
 
 function ctxCreateGeniusPlaylist() {
@@ -5373,10 +5385,12 @@ function ctxCreateGeniusPlaylist() {
 }
 
 function openGeniusModal(seedTrack) {
-  _geniusState = { seedTrack, length: 25, discoveryMode: 'balanced', tracks: [], explanations: [], nonce: null, loading: false, insufficientData: false };
+  if (_geniusState.saveFeedbackTimer) clearTimeout(_geniusState.saveFeedbackTimer);
+  _geniusState = { seedTrack, length: 25, discoveryMode: 'balanced', tracks: [], explanations: [], nonce: null, loading: false, insufficientData: false, previewingId: null, saveFeedbackTimer: null };
   const modal = document.getElementById('genius-modal');
   if (!modal) return;
   modal.style.display = 'flex';
+  _updateGeniusHeader();
   _updateGeniusLengthButtons();
   _updateGeniusDiscoveryButtons();
   runGeniusGeneration();
@@ -5385,6 +5399,22 @@ function openGeniusModal(seedTrack) {
 function closeGeniusModal() {
   const modal = document.getElementById('genius-modal');
   if (modal) modal.style.display = 'none';
+  if (_geniusState.saveFeedbackTimer) clearTimeout(_geniusState.saveFeedbackTimer);
+}
+
+function _updateGeniusHeader() {
+  const seed = _geniusState.seedTrack || {};
+  const title = seed.title || 'Unknown track';
+  const art = document.getElementById('genius-seed-art');
+  const titleEl = document.getElementById('genius-modal-title');
+  const subtitle = document.getElementById('genius-modal-subtitle');
+  if (titleEl) titleEl.textContent = title;
+  if (subtitle) subtitle.textContent = [seed.artist, seed.album].filter(Boolean).join(' · ');
+  if (art) {
+    art.innerHTML = seed.artwork_key
+      ? `<img src="${artworkUrl(seed.artwork_key)}" alt="" onerror="this.remove()">`
+      : coverPlaceholder('album', 60, '10px', true);
+  }
 }
 
 function _updateGeniusLengthButtons() {
@@ -5397,12 +5427,16 @@ function _updateGeniusDiscoveryButtons() {
   document.querySelectorAll('.genius-discovery-btn').forEach(btn => {
     btn.classList.toggle('genius-discovery-btn--active', btn.dataset.mode === _geniusState.discoveryMode);
   });
+  const hint = document.getElementById('genius-discovery-hint');
+  const copy = _GENIUS_DISCOVERY_HINTS[_geniusState.discoveryMode];
+  if (hint) hint.textContent = copy ? copy(_geniusState.seedTrack?.title || 'this song') : '';
 }
 
 function changeGeniusLength(len) {
   if (_geniusState.loading || len === _geniusState.length) return;
   _geniusState.length = len;
   _updateGeniusLengthButtons();
+  _geniusState.previewingId = null;
   runGeniusGeneration();
 }
 
@@ -5410,28 +5444,34 @@ function changeGeniusDiscoveryMode(mode) {
   if (_geniusState.loading || mode === _geniusState.discoveryMode) return;
   _geniusState.discoveryMode = mode;
   _updateGeniusDiscoveryButtons();
+  _geniusState.previewingId = null;
   runGeniusGeneration();
 }
 
+function _geniusApiDiscoveryMode() {
+  return _geniusState.discoveryMode === 'matching' ? 'familiar' : _geniusState.discoveryMode;
+}
+
 async function runGeniusGeneration() {
-  const subtitle = document.getElementById('genius-modal-subtitle');
   const body = document.getElementById('genius-modal-body');
   if (!body) return;
   _geniusState.loading = true;
-  subtitle.textContent = _geniusState.seedTrack ? ` ${_geniusState.seedTrack.title}` : '';
-  body.innerHTML = `<div class="related-tracks-loading">Building your playlist…</div>`;
+  body.classList.add('is-refreshing');
+  document.getElementById('genius-refresh-btn')?.classList.remove('is-refreshing');
+  body.innerHTML = `<div class="genius-list-status">Building your playlist…</div>`;
 
   try {
     const data = await api('/genius/preview', {
       method: 'POST',
-      body: { seed_track_ids: [_geniusState.seedTrack.id], length: _geniusState.length, discovery_mode: _geniusState.discoveryMode },
+      body: { seed_track_ids: [_geniusState.seedTrack.id], length: _geniusState.length, discovery_mode: _geniusApiDiscoveryMode() },
     });
     _geniusState.tracks = data.tracks || [];
     _geniusState.explanations = data.explanations || [];
     _geniusState.nonce = data.generation_nonce;
     _geniusState.insufficientData = !!data.insufficient_data;
   } catch (e) {
-    body.innerHTML = `<div class="related-tracks-empty">Couldn't generate a playlist: ${esc(e.message || 'unknown error')}</div>`;
+    body.classList.remove('is-refreshing');
+    body.innerHTML = `<div class="genius-list-status">Couldn't generate a playlist: ${esc(e.message || 'unknown error')}</div>`;
     _geniusState.loading = false;
     return;
   }
@@ -5443,14 +5483,16 @@ async function refreshGeniusPlaylist() {
   if (_geniusState.loading || !_geniusState.tracks.length || _geniusState.insufficientData) return;
   const body = document.getElementById('genius-modal-body');
   _geniusState.loading = true;
-  body.innerHTML = `<div class="related-tracks-loading">Refreshing…</div>`;
+  _geniusState.previewingId = null;
+  body.classList.add('is-refreshing');
+  document.getElementById('genius-refresh-btn')?.classList.add('is-refreshing');
   try {
     const data = await api('/genius/refresh', {
       method: 'POST',
       body: {
         seed_track_ids: [_geniusState.seedTrack.id],
         length: _geniusState.length,
-        discovery_mode: _geniusState.discoveryMode,
+        discovery_mode: _geniusApiDiscoveryMode(),
         previous_track_ids: _geniusState.tracks.map(t => t.id),
       },
     });
@@ -5462,59 +5504,89 @@ async function refreshGeniusPlaylist() {
     toast(`Refresh failed: ${e.message || 'unknown error'}`, 'error');
   }
   _geniusState.loading = false;
+  document.getElementById('genius-refresh-btn')?.classList.remove('is-refreshing');
   _renderGeniusModal();
 }
 
 function playGeniusPlaylist() {
   if (!_geniusState.tracks.length || _geniusState.insufficientData) return;
+  _geniusState.previewingId = _geniusState.tracks[0].id;
   Player.playAll(_geniusState.tracks, 0, `Inspired by ${_geniusState.seedTrack?.title || ''}`);
+  _renderGeniusModal();
+}
+
+function previewGeniusTrack(trackId) {
+  if (!_geniusState.tracks.length) return;
+  if (String(_geniusState.previewingId) === String(trackId)) {
+    _geniusState.previewingId = null;
+    _renderGeniusModal();
+    return;
+  }
+  const index = _geniusState.tracks.findIndex(track => String(track.id) === String(trackId));
+  if (index < 0) return;
+  _geniusState.previewingId = _geniusState.tracks[index].id;
+  Player.playAll(_geniusState.tracks, index, `Inspired by ${_geniusState.seedTrack?.title || ''}`);
+  _renderGeniusModal();
 }
 
 async function saveGeniusPlaylist() {
   if (!_geniusState.tracks.length || _geniusState.insufficientData) return;
   try {
-    const result = await api('/genius/save', {
+    await api('/genius/save', {
       method: 'POST',
       body: {
         name: `Inspired by ${_geniusState.seedTrack?.title || 'Playlist'}`,
         track_ids: _geniusState.tracks.map(t => t.id),
         seed_track_ids: [_geniusState.seedTrack.id],
-        discovery_mode: _geniusState.discoveryMode,
+        discovery_mode: _geniusApiDiscoveryMode(),
         generation_nonce: _geniusState.nonce,
         explanations: _geniusState.explanations,
       },
     });
-    toast(`Saved "${result.name}"`, 'success');
-    closeGeniusModal();
+    _showGeniusSaveFeedback();
     await loadPlaylists();
   } catch (e) {
     toast(`Couldn't save playlist: ${e.message || 'unknown error'}`, 'error');
   }
 }
 
+function _showGeniusSaveFeedback() {
+  const button = document.getElementById('genius-save-btn');
+  if (!button) return;
+  clearTimeout(_geniusState.saveFeedbackTimer);
+  button.innerHTML = `${_CHECK_ICON(11)}Saved`;
+  button.disabled = true;
+  _geniusState.saveFeedbackTimer = setTimeout(() => {
+    button.innerHTML = 'Save as playlist';
+    button.disabled = false;
+  }, 1800);
+}
+
 function _renderGeniusModal() {
   const body = document.getElementById('genius-modal-body');
   if (!body) return;
+  body.classList.remove('is-refreshing');
   if (!_geniusState.tracks.length || _geniusState.insufficientData) {
-    body.innerHTML = `<div class="related-tracks-empty">Not enough analysed tracks yet to build a playlist around this song.</div>`;
+    body.innerHTML = `<div class="genius-list-status">Not enough analysed tracks yet to build a playlist around this song.</div>`;
     return;
   }
-  const explainByIdx = _geniusState.explanations;
   body.innerHTML = `
-    <div class="related-tracks-list">
+    <div class="genius-track-list">
       ${_geniusState.tracks.map((t, i) => {
-        const phase = _GENIUS_PHASE_LABELS[t.genius_phase] || '';
-        const explain = explainByIdx[i];
-        const never = explain?.components?.never_played;
+        const meta = _GENIUS_PHASE_META[t.genius_phase] || _GENIUS_PHASE_META.establish;
+        const isPreviewing = String(_geniusState.previewingId) === String(t.id);
+        const art = t.artwork_key
+          ? `<img src="${artworkUrl(t.artwork_key)}" alt="" loading="lazy" onerror="this.remove()">`
+          : coverPlaceholder('album', 34, '6px', true);
         return `
-        <div class="related-track-row genius-track-row" ondblclick="Player.playTrackById('${esc(t.id)}')">
-          <div class="genius-phase-tag genius-phase-tag--${esc(t.genius_phase || '')}">${esc(phase)}</div>
-          <div class="related-track-info">
-            <div class="related-track-title">${esc(t.title || 'Unknown')}</div>
-            <div class="related-track-meta">${esc(t.artist || '')}${t.album ? ' · ' + esc(t.album) : ''}${never ? ' · Never played' : ''}</div>
+        <div class="genius-track-row${isPreviewing ? ' is-previewing' : ''}" ondblclick="App.previewGeniusTrack('${esc(t.id)}')">
+          <div class="genius-track-art">${art}</div>
+          <div class="genius-track-info">
+            <div class="genius-track-title">${esc(t.title || 'Unknown')}</div>
+            <div class="genius-track-meta">${esc(t.artist || '')}${t.album ? ' · ' + esc(t.album) : ''} · <span class="genius-match genius-match--${meta.className}">${meta.phrase === 'back to seed artist' ? 'back to ' + esc(_geniusState.seedTrack?.artist || 'seed artist') : meta.phrase}</span></div>
           </div>
-          <button class="related-track-play-btn" title="Play" onclick="Player.playTrackById('${esc(t.id)}')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <button class="genius-track-play" type="button" title="${isPreviewing ? 'Stop preview' : 'Preview'}" onclick="event.stopPropagation();App.previewGeniusTrack('${esc(t.id)}')">
+            ${isPreviewing ? nowPlayingSvg(10) : '<svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2.5 1.5v9l8-4.5-8-4.5z"/></svg>'}
           </button>
         </div>
       `;
@@ -23382,6 +23454,7 @@ const App = {
   changeGeniusDiscoveryMode,
   refreshGeniusPlaylist,
   playGeniusPlaylist,
+  previewGeniusTrack,
   saveGeniusPlaylist,
   ctxToggleFavourite,
   ctxTogglePin,
