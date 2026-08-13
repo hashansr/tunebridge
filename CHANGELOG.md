@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.664-rc.140826-0810 · 2026-08-14
 - Fix: Track Radio / Continuous Play no longer queues multiple versions of the same song (e.g. a live recording and the studio version back-to-back) in one session.
 - Fix: Track Radio / Continuous Play now spreads the queue across more artists instead of one artist dominating it.
 
