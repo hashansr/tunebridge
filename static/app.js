@@ -5353,10 +5353,10 @@ async function showRelatedTracks(trackId) {
 // --- Genius Playlist (replaces AI Mix -- built alongside it for now, see CLAUDE.md rollout plan) ---
 
 const _GENIUS_PHASE_META = {
-  establish: { phrase: 'closest to the seed', className: 'establish' },
+  establish: { phrase: 'close match', className: 'establish' },
   expand: { phrase: 'broadens the sound', className: 'expand' },
-  discover: { phrase: 'widens the journey', className: 'discover' },
-  reanchor: { phrase: 'returns to the seed', className: 'reanchor' },
+  discover: { phrase: 'new to try', className: 'discover' },
+  reanchor: { phrase: 'brings it back', className: 'reanchor' },
 };
 const _GENIUS_DISCOVERY_HINTS = {
   matching: title => `Stays close to ${title} — safe, familiar picks.`,
