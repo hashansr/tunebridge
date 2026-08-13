@@ -2044,7 +2044,7 @@ function _renderPlaylistsList(wrap, paginationEl, rows, favCount) {
             coverHtml = keys.length ? `<img src="/api/artwork/${keys[0]}" alt="" loading="lazy" />` : coverPlaceholder('playlist', 34, '5px');
           }
           const open = _playlistOpenAction(pl.id);
-          const type = pl.id === '__favourites__' ? 'Favourites' : (pl.is_genius ? 'Library Mix' : 'Manual');
+          const type = pl.id === '__favourites__' ? 'Favourites' : (pl.is_genius ? 'Inspired by' : 'Manual');
           return `
           <tr data-playlist-id="${esc(pl.id)}" data-playlist-name="${esc(pl.name)}" tabindex="0" onclick="if(!event.target.closest('button')) ${open}" onkeydown="if(event.key==='Enter') ${open}" ondblclick="${open}" oncontextmenu="App.showPlaylistCtxMenu(event,this.dataset.playlistId,this.dataset.playlistName)">
             <td class="collection-col-title"><div class="collection-title-cell">${_collectionThumb('playlist', coverHtml)}<span title="${esc(pl.name)}">${esc(pl.name)}</span></div></td>
@@ -3960,7 +3960,7 @@ async function openPlaylist(pid) {
       const badge = document.createElement('span');
       badge.id = 'pl-genius-badge';
       badge.className = 'pl-genius-badge';
-      badge.textContent = 'Library Mix';
+      badge.textContent = 'Inspired by';
       nameEl.insertAdjacentElement('afterend', badge);
     }
   }
@@ -5415,7 +5415,7 @@ async function runGeniusGeneration() {
   const body = document.getElementById('genius-modal-body');
   if (!body) return;
   _geniusState.loading = true;
-  subtitle.textContent = _geniusState.seedTrack ? ` · Inspired by ${_geniusState.seedTrack.title}` : '';
+  subtitle.textContent = _geniusState.seedTrack ? ` ${_geniusState.seedTrack.title}` : '';
   body.innerHTML = `<div class="related-tracks-loading">Building your playlist…</div>`;
 
   try {
@@ -5462,7 +5462,7 @@ async function refreshGeniusPlaylist() {
 
 function playGeniusPlaylist() {
   if (!_geniusState.tracks.length) return;
-  Player.playAll(_geniusState.tracks, 0, `Library Mix · ${_geniusState.seedTrack?.title || ''}`);
+  Player.playAll(_geniusState.tracks, 0, `Inspired by ${_geniusState.seedTrack?.title || ''}`);
 }
 
 async function saveGeniusPlaylist() {
@@ -5471,7 +5471,7 @@ async function saveGeniusPlaylist() {
     const result = await api('/genius/save', {
       method: 'POST',
       body: {
-        name: `Library Mix · ${_geniusState.seedTrack?.title || 'Playlist'}`,
+        name: `Inspired by ${_geniusState.seedTrack?.title || 'Playlist'}`,
         track_ids: _geniusState.tracks.map(t => t.id),
         seed_track_ids: [_geniusState.seedTrack.id],
         discovery_mode: _geniusState.discoveryMode,
