@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.655-rc.130826-1847 · 2026-08-13
 - Change: The right-click "Create Track Radio" menu item, its modal, and the playlist type badge are now called "Library Mix" instead.
 - Change: "Related Tracks" is now called "Track Radio" and no longer opens a pop-up — right-clicking a song and choosing "Track Radio" immediately queues that song together with its sonically related tracks and starts playing.
 - Fix: Distributable app (DMG) build no longer fails with a disk-space error during packaging.
