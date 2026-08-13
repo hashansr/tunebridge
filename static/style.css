@@ -9561,6 +9561,14 @@ tbody tr:hover {
   mask-image: url('/icons/play-next.svg');
   -webkit-mask-image: url('/icons/play-next.svg');
 }
+.tb-icon-track-radio {
+  mask-image: url('/icons/radio.svg');
+  -webkit-mask-image: url('/icons/radio.svg');
+}
+.tb-icon-inspired-playlist {
+  mask-image: url('/icons/inspired.svg');
+  -webkit-mask-image: url('/icons/inspired.svg');
+}
 .tb-icon-resolve-playlist {
   mask-image: url('/icons/resolve-playlist.svg');
   -webkit-mask-image: url('/icons/resolve-playlist.svg');

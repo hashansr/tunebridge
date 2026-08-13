@@ -5353,10 +5353,10 @@ async function showRelatedTracks(trackId) {
 // --- Genius Playlist (replaces AI Mix -- built alongside it for now, see CLAUDE.md rollout plan) ---
 
 const _GENIUS_PHASE_META = {
-  establish: { phrase: 'closest match', className: 'establish' },
+  establish: { phrase: 'closest to the seed', className: 'establish' },
   expand: { phrase: 'broadens the sound', className: 'expand' },
-  discover: { phrase: 'new to try', className: 'discover' },
-  reanchor: { phrase: 'back to seed artist', className: 'reanchor' },
+  discover: { phrase: 'widens the journey', className: 'discover' },
+  reanchor: { phrase: 'returns to the seed', className: 'reanchor' },
 };
 const _GENIUS_DISCOVERY_HINTS = {
   matching: title => `Stays close to ${title} — safe, familiar picks.`,
@@ -5589,7 +5589,7 @@ function _renderGeniusModal() {
           <div class="genius-track-art">${art}</div>
           <div class="genius-track-info">
             <div class="genius-track-title">${esc(t.title || 'Unknown')}</div>
-            <div class="genius-track-meta">${esc(t.artist || '')}${t.album ? ' · ' + esc(t.album) : ''} · <span class="genius-match genius-match--${meta.className}">${meta.phrase === 'back to seed artist' ? 'back to ' + esc(_geniusState.seedTrack?.artist || 'seed artist') : meta.phrase}</span></div>
+            <div class="genius-track-meta">${esc(t.artist || '')}${t.album ? ' · ' + esc(t.album) : ''} · <span class="genius-match genius-match--${meta.className}">${meta.phrase}</span></div>
           </div>
           <button class="genius-track-play" type="button" title="${isPreviewing ? 'Stop preview' : 'Preview'}" onclick="event.stopPropagation();App.previewGeniusTrack('${esc(t.id)}')">
             ${isPreviewing ? nowPlayingSvg(10) : '<svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2.5 1.5v9l8-4.5-8-4.5z"/></svg>'}
