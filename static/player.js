@@ -36,10 +36,16 @@ const Player = (function () {
     playbackContext: { sourceType: 'unknown', sourceId: '', sourceLabel: '' },
     recentContexts: [],
     lastShuffleFirstIdx: -1,
-    autoplayEnabled: true,
-    autoplayQueue: [],
-    autoplaySessionId: '',
-    autoplayExcludedTrackIds: [],
+    continuousPlayEnabled: true,
+    continuousPlayQueue: [],
+    continuousPlaySessionId: '',
+    continuousPlayExcludedTrackIds: [],
+    // Continuous Play session context (PRD sections 24-33) -- rebuilt fresh
+    // each refill call from this client-side history, not persisted server-side.
+    continuousSessionAnchorId: '',    // track that started the current session (PRD section 25)
+    continuousSessionTrackIds: [],     // [{id, manual}] chronological, most recent last
+    continuousRecentSkips: [],          // [{id, positionPct}] most recent last, for skip-position interpretation (section 32)
+    continuousRecentCategories: [],      // discovery categories of recently queued generated tracks, for the consecutive-stretch rule (section 30)
   };
 
   /* ── mpv backend state ──────────────────────────────────────────────── */
@@ -125,14 +131,14 @@ const Player = (function () {
   let _lastPauseEventAt = 0;
   let _suppressPauseFlush = false;
   let _startupRestoreGuardActive = true;
-  let _autoplayFetchInFlight = false;
-  let _autoplayFetchPromise = null;
+  let _continuousPlayFetchInFlight = false;
+  let _continuousPlayFetchPromise = null;
 
   const _CUSTOM_PEQ_KEY = 'tb_custom_peq';
   const _CUSTOM_EQ_ID = '__custom__';
   const _CREATE_PEQ_ID = '__create__';
-  const _AUTOPLAY_VISIBLE_LIMIT = 10;
-  const _AUTOPLAY_TARGET_SIZE = _AUTOPLAY_VISIBLE_LIMIT;
+  const _CONTINUOUS_PLAY_VISIBLE_LIMIT = 10;
+  const _CONTINUOUS_PLAY_TARGET_SIZE = _CONTINUOUS_PLAY_VISIBLE_LIMIT;
   const _NO_GAIN_TYPES = new Set(['LPQ', 'HPQ', 'NO', 'AP']);
   const _LOSSLESS_FORMATS = new Set(['FLAC', 'ALAC', 'WAV', 'AIFF', 'AIF', 'APE', 'WV', 'DSF', 'DFF']);
   const _LOSSY_FORMATS = new Set(['MP3', 'AAC', 'M4A', 'MP4', 'OGG', 'OPUS', 'WMA']);
@@ -456,11 +462,11 @@ const Player = (function () {
         _markTrackSessionStart();
         if (ps.queueOpen) _renderQueue();
         _saveState();
-        _ensureAutoplayQueue('mpv-advance');
+        _ensureContinuousPlayQueue('mpv-advance');
       }
     } else {
       // End of queue, no repeat
-      _ensureAutoplayQueue('queue-end', { force: true }).then((added) => {
+      _ensureContinuousPlayQueue('queue-end', { force: true }).then((added) => {
         if (added && ps.queueIdx < ps.queue.length - 1 && ps.repeatMode === 'off') {
           ps.queueIdx = ps.queueIdx + 1;
           const t = currentTrack();
@@ -623,7 +629,7 @@ const Player = (function () {
         _markTrackSessionStart();
         _saveState();
         if (ps.queueOpen) _renderQueue();
-        _ensureAutoplayQueue('crossfade-complete');
+        _ensureContinuousPlayQueue('crossfade-complete');
         _mpvXfadeTriggered = false;
         _mpvXfadeQueueIdx  = -1;
       });
@@ -748,7 +754,7 @@ const Player = (function () {
     _highlightActiveRow();
     _saveState();
     if (ps.queueOpen) _renderQueue();
-    _ensureAutoplayQueue('crossfade-complete');
+    _ensureContinuousPlayQueue('crossfade-complete');
 
     _xfadeTriggered = false;
     _xfadeTimeout   = null;
@@ -1088,62 +1094,65 @@ const Player = (function () {
     return (idx >= 0 && idx < ps.queue.length) ? ps.queue[idx] : null;
   }
 
-  function _isAutoplayTrack(track) {
-    return !!(track && track.__autoplay);
+  function _isContinuousPlayTrack(track) {
+    return !!(track && track.__continuousPlay);
   }
 
-  function _markAutoplayTrack(track, seedTrack = null) {
+  function _markContinuousPlayTrack(track, seedTrack = null) {
     const seedTitle = String(seedTrack?.title || '').trim();
     const seedArtist = String(seedTrack?.artist || '').trim();
     return {
       ...track,
-      __autoplay: true,
-      __autoplaySeedTitle: seedTitle,
-      __autoplaySeedArtist: seedArtist,
+      __continuousPlay: true,
+      __continuousPlaySeedTitle: seedTitle,
+      __continuousPlaySeedArtist: seedArtist,
+      __continuousCategory: track.continuous_category || '',
     };
   }
 
   function _stripInternalTrackFields(track) {
     if (!track || typeof track !== 'object') return track;
     const clean = { ...track };
-    delete clean.__autoplay;
-    delete clean.__autoplaySeedTitle;
-    delete clean.__autoplaySeedArtist;
+    delete clean.__continuousCategory;
+    delete clean.continuous_category;
+    delete clean.__continuousPlay;
+    delete clean.__continuousPlaySeedTitle;
+    delete clean.__continuousPlaySeedArtist;
     return clean;
   }
 
-  function _pendingAutoplayEntries() {
+  function _pendingContinuousPlayEntries() {
     if (!ps.queue.length) return [];
     if (ps.shuffle && ps.shuffleOrder.length > 0) {
       return ps.shuffleOrder
         .slice(Math.max(0, ps.queueIdx + 1))
         .map(i => ({ t: ps.queue[i], realIdx: i }))
-        .filter(({ t }) => _isAutoplayTrack(t));
+        .filter(({ t }) => _isContinuousPlayTrack(t));
     }
     const curRealIdx = _realIdx();
     return ps.queue
       .slice(Math.max(0, curRealIdx + 1))
       .map((t, i) => ({ t, realIdx: curRealIdx + 1 + i }))
-      .filter(({ t }) => _isAutoplayTrack(t));
+      .filter(({ t }) => _isContinuousPlayTrack(t));
   }
 
-  function _syncAutoplayQueueState() {
-    ps.autoplayQueue = _pendingAutoplayEntries().slice(0, _AUTOPLAY_VISIBLE_LIMIT).map(({ t }) => _stripInternalTrackFields(t));
-    const excluded = new Set(Array.isArray(ps.autoplayExcludedTrackIds) ? ps.autoplayExcludedTrackIds : []);
-    ps.queue.forEach(t => { if (_isAutoplayTrack(t) && t.id) excluded.add(String(t.id)); });
-    ps.autoplayExcludedTrackIds = Array.from(excluded).slice(-250);
+  function _syncContinuousPlayQueueState() {
+    ps.continuousPlayQueue = _pendingContinuousPlayEntries().slice(0, _CONTINUOUS_PLAY_VISIBLE_LIMIT).map(({ t }) => _stripInternalTrackFields(t));
+    const excluded = new Set(Array.isArray(ps.continuousPlayExcludedTrackIds) ? ps.continuousPlayExcludedTrackIds : []);
+    ps.queue.forEach(t => { if (_isContinuousPlayTrack(t) && t.id) excluded.add(String(t.id)); });
+    ps.continuousPlayExcludedTrackIds = Array.from(excluded).slice(-250);
   }
 
-  function _removePendingAutoplayTracks() {
+  function _removePendingContinuousPlayTracks() {
     if (!ps.queue.length) {
-      ps.autoplayQueue = [];
+      ps.continuousPlayQueue = [];
       return;
     }
     const curRealIdx = _realIdx();
     const keep = [];
     const oldToNew = new Map();
     ps.queue.forEach((t, idx) => {
-      const pending = _isAutoplayTrack(t) && idx !== curRealIdx;
+      const pending = _isContinuousPlayTrack(t) && idx !== curRealIdx;
       if (!pending) {
         oldToNew.set(idx, keep.length);
         keep.push(t);
@@ -1159,21 +1168,35 @@ const Player = (function () {
     } else {
       ps.queueIdx = oldToNew.get(curRealIdx) ?? Math.min(ps.queueIdx, ps.queue.length - 1);
     }
-    ps.autoplayQueue = [];
+    ps.continuousPlayQueue = [];
     _invalidatePreload();
   }
 
-  function _firstPendingAutoplayRealIdx() {
-    const pending = _pendingAutoplayEntries();
+  function _firstPendingContinuousPlayRealIdx() {
+    const pending = _pendingContinuousPlayEntries();
     if (!pending.length) return -1;
     return Math.min(...pending.map(({ realIdx }) => realIdx));
   }
 
-  function _startNewAutoplaySession() {
-    ps.autoplaySessionId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  function _startNewContinuousPlaySession() {
+    ps.continuousPlaySessionId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const current = currentTrack();
-    ps.autoplayExcludedTrackIds = current && current.id ? [String(current.id)] : [];
-    _removePendingAutoplayTracks();
+    ps.continuousPlayExcludedTrackIds = current && current.id ? [String(current.id)] : [];
+    ps.continuousSessionAnchorId = current && current.id ? String(current.id) : '';
+    ps.continuousSessionTrackIds = current && current.id
+      ? [{ id: String(current.id), manual: !_isContinuousPlayTrack(current) }]
+      : [];
+    ps.continuousRecentSkips = [];
+    ps.continuousRecentCategories = [];
+    _removePendingContinuousPlayTracks();
+  }
+
+  function _pushContinuousSessionTrack(track) {
+    if (!track || !track.id) return;
+    const id = String(track.id);
+    const entry = { id, manual: !_isContinuousPlayTrack(track) };
+    const list = Array.isArray(ps.continuousSessionTrackIds) ? ps.continuousSessionTrackIds : [];
+    ps.continuousSessionTrackIds = [...list.filter(e => e.id !== id), entry].slice(-30);
   }
 
   /* ── Playback core ──────────────────────────────────────────────────── */
@@ -1204,36 +1227,40 @@ const Player = (function () {
     // Immediately bump the active playback context to the front of Jump Back In.
     // This keeps rails responsive even before a track ends or pauses.
     _pushRecentContext(track, 'start');
+    _pushContinuousSessionTrack(track);
     _markTrackSessionStart();
     _saveState();
     // Start buffering next track for gapless playback (no-op when crossfade > 0 or mpv active)
     _preloadNext();
-    _ensureAutoplayQueue('track-load');
+    _ensureContinuousPlayQueue('track-load');
   }
 
-  function _collectAutoplaySeedIds() {
-    const ids = [];
-    const cur = currentTrack();
-    if (cur && cur.id) ids.push(String(cur.id));
-    (ps.recentContexts || []).forEach(ctx => {
-      const tid = String(ctx?.track_id || '');
-      if (tid && !ids.includes(tid)) ids.push(tid);
-    });
-    return ids.slice(0, 6);
-  }
-
-  function _collectAutoplayExcludeIds() {
+  function _collectContinuousPlayExcludeIds() {
     const ids = new Set();
     ps.queue.forEach(t => { if (t && t.id) ids.add(String(t.id)); });
-    (ps.autoplayExcludedTrackIds || []).forEach(id => { if (id) ids.add(String(id)); });
+    (ps.continuousPlayExcludedTrackIds || []).forEach(id => { if (id) ids.add(String(id)); });
     return Array.from(ids).slice(-400);
   }
 
-  function _appendAutoplayTracks(tracks) {
+  function _collectContinuousRecentTrackIds() {
+    return (Array.isArray(ps.continuousSessionTrackIds) ? ps.continuousSessionTrackIds : []).map(e => e.id);
+  }
+
+  function _collectContinuousManualTrackIds() {
+    return (Array.isArray(ps.continuousSessionTrackIds) ? ps.continuousSessionTrackIds : [])
+      .filter(e => e.manual).map(e => e.id);
+  }
+
+  function _collectContinuousSkipPositions() {
+    return (Array.isArray(ps.continuousRecentSkips) ? ps.continuousRecentSkips : []).slice(-6).map(e => e.positionPct);
+  }
+
+  function _appendContinuousPlayTracks(tracks) {
     if (!Array.isArray(tracks) || tracks.length === 0) return 0;
     const existing = new Set(ps.queue.map(t => String(t?.id || '')).filter(Boolean));
-    const excluded = new Set(Array.isArray(ps.autoplayExcludedTrackIds) ? ps.autoplayExcludedTrackIds.map(String) : []);
+    const excluded = new Set(Array.isArray(ps.continuousPlayExcludedTrackIds) ? ps.continuousPlayExcludedTrackIds.map(String) : []);
     const clean = [];
+    const newCategories = [];
     tracks.forEach(track => {
       if (!track || !track.id) return;
       const id = String(track.id);
@@ -1241,7 +1268,9 @@ const Player = (function () {
       existing.add(id);
       excluded.add(id);
       _registry.set(id, track);
-      clean.push(_markAutoplayTrack(track, currentTrack()));
+      const marked = _markContinuousPlayTrack(track, currentTrack());
+      clean.push(marked);
+      if (marked.__continuousCategory) newCategories.push(marked.__continuousCategory);
     });
     if (!clean.length) return 0;
 
@@ -1251,79 +1280,87 @@ const Player = (function () {
       const indices = clean.map((_, i) => insertAt + i);
       ps.shuffleOrder.push(...indices);
     }
-    ps.autoplayExcludedTrackIds = Array.from(excluded).slice(-250);
-    _syncAutoplayQueueState();
+    ps.continuousPlayExcludedTrackIds = Array.from(excluded).slice(-250);
+    if (newCategories.length) {
+      const prior = Array.isArray(ps.continuousRecentCategories) ? ps.continuousRecentCategories : [];
+      ps.continuousRecentCategories = [...prior, ...newCategories].slice(-10);
+    }
+    _syncContinuousPlayQueueState();
     _preloadNext();
     if (ps.queueOpen) _renderQueue();
     return clean.length;
   }
 
-  async function _ensureAutoplayQueue(reason = 'refill', options = {}) {
-    if (!ps.autoplayEnabled) return false;
-    if (_autoplayFetchInFlight) return _autoplayFetchPromise || false;
+  async function _ensureContinuousPlayQueue(reason = 'refill', options = {}) {
+    if (!ps.continuousPlayEnabled) return false;
+    if (_continuousPlayFetchInFlight) return _continuousPlayFetchPromise || false;
     if (ps.repeatMode !== 'off') return false;
     const cur = currentTrack();
     if (!cur || !cur.id) return false;
 
-    _syncAutoplayQueueState();
-    const pending = _pendingAutoplayEntries().length;
-    if (!options.force && pending >= _AUTOPLAY_TARGET_SIZE) return false;
-    if (pending >= _AUTOPLAY_VISIBLE_LIMIT) return false;
+    _syncContinuousPlayQueueState();
+    const pending = _pendingContinuousPlayEntries().length;
+    if (!options.force && pending >= _CONTINUOUS_PLAY_TARGET_SIZE) return false;
+    if (pending >= _CONTINUOUS_PLAY_VISIBLE_LIMIT) return false;
 
-    _autoplayFetchInFlight = true;
-    _autoplayFetchPromise = (async () => {
-      const res = await fetch('/api/player/autoplay/recommend', {
+    _continuousPlayFetchInFlight = true;
+    _continuousPlayFetchPromise = (async () => {
+      const res = await fetch('/api/player/continuous/next', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          seed_track_ids: _collectAutoplaySeedIds(),
+          recent_track_ids: _collectContinuousRecentTrackIds(),
+          manual_track_ids: _collectContinuousManualTrackIds(),
+          original_seed_ids: ps.continuousSessionAnchorId ? [ps.continuousSessionAnchorId] : [],
           current_track_id: cur.id,
-          previous_track_id: cur.id,
-          exclude_track_ids: _collectAutoplayExcludeIds(),
-          limit: Math.max(1, _AUTOPLAY_VISIBLE_LIMIT - pending),
+          exclude_track_ids: _collectContinuousPlayExcludeIds(),
+          recent_skip_positions: _collectContinuousSkipPositions(),
+          recent_generated_categories: Array.isArray(ps.continuousRecentCategories) ? ps.continuousRecentCategories : [],
+          limit: Math.max(1, _CONTINUOUS_PLAY_VISIBLE_LIMIT - pending),
           reason,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const added = _appendAutoplayTracks(data.tracks || []);
+      const added = _appendContinuousPlayTracks(data.tracks || []);
       if (added > 0) _saveState();
       return added > 0;
     })();
     try {
-      return await _autoplayFetchPromise;
+      return await _continuousPlayFetchPromise;
     } catch (e) {
-      console.warn('Player: Auto Play refill failed', e);
+      console.warn('Player: Continuous Play refill failed', e);
       return false;
     } finally {
-      _autoplayFetchInFlight = false;
-      _autoplayFetchPromise = null;
+      _continuousPlayFetchInFlight = false;
+      _continuousPlayFetchPromise = null;
     }
   }
 
-  function setAutoplayEnabled(enabled) {
-    ps.autoplayEnabled = !!enabled;
-    // Autoplay and Repeat are mutually exclusive — enabling autoplay turns repeat off
-    // so the queue advances into autoplay tracks rather than looping the same album.
-    if (ps.autoplayEnabled && ps.repeatMode !== 'off') {
+  function setContinuousPlayEnabled(enabled) {
+    ps.continuousPlayEnabled = !!enabled;
+    // Continuous Play and Repeat are mutually exclusive — enabling Continuous Play
+    // turns repeat off so the queue advances into generated tracks rather than
+    // looping the same album.
+    if (ps.continuousPlayEnabled && ps.repeatMode !== 'off') {
       ps.repeatMode = 'off';
       _updateRepeatBtn();
     }
-    if (ps.autoplayEnabled) {
-      if (!ps.autoplaySessionId) _startNewAutoplaySession();
-      _ensureAutoplayQueue('enabled', { force: true });
+    if (ps.continuousPlayEnabled) {
+      if (!ps.continuousPlaySessionId) _startNewContinuousPlaySession();
+      _ensureContinuousPlayQueue('enabled', { force: true });
     } else {
-      _removePendingAutoplayTracks();
-      ps.autoplayQueue = [];
+      _removePendingContinuousPlayTracks();
+      ps.continuousPlayQueue = [];
     }
-    _updateAutoplayBtn();
+    _updateContinuousPlayBtn();
     _renderQueue();
     _saveState();
   }
 
-  function toggleAutoplay() {
+  function toggleContinuousPlay() {
     _startupRestoreGuardActive = false;
-    setAutoplayEnabled(!ps.autoplayEnabled);
+    setContinuousPlayEnabled(!ps.continuousPlayEnabled);
   }
 
   function _startPlay() {
@@ -1522,7 +1559,7 @@ const Player = (function () {
   }
 
   function toggleShuffle() {
-    if (ps.autoplayEnabled) _removePendingAutoplayTracks();
+    if (ps.continuousPlayEnabled) _removePendingContinuousPlayTracks();
     // If queue is only a single track but we have a richer active context
     // (playlist/artist/album/songs), promote that context into queue first.
     if (ps.queue.length <= 1 && ps.playbackContextTracks.length > 1 && currentTrack()) {
@@ -1559,20 +1596,20 @@ const Player = (function () {
     _renderQueue();
     _saveState();
     _preloadNext();  // re-buffer with new shuffle order
-    _ensureAutoplayQueue('shuffle-change', { force: true });
+    _ensureContinuousPlayQueue('shuffle-change', { force: true });
   }
 
   function cycleRepeat() {
     const modes = ['off', 'all', 'one'];
     ps.repeatMode = modes[(modes.indexOf(ps.repeatMode) + 1) % modes.length];
     if (ps.repeatMode !== 'off') {
-      _removePendingAutoplayTracks();
+      _removePendingContinuousPlayTracks();
     } else {
-      _ensureAutoplayQueue('repeat-off', { force: true });
+      _ensureContinuousPlayQueue('repeat-off', { force: true });
     }
     _updateRepeatBtn();
-    _updateAutoplayBtn();  // reflect conflict/active state when repeat changes
-    _renderQueue();        // update queue drawer autoplay section message
+    _updateContinuousPlayBtn();  // reflect conflict/active state when repeat changes
+    _renderQueue();        // update queue drawer Continuous Play section message
     _saveState();
     _preloadNext();  // repeat mode change may change which track is next
   }
@@ -1596,7 +1633,7 @@ const Player = (function () {
       }
     }
     // Insert at current position + 1 (or at start)
-    if (ps.autoplayEnabled) _startNewAutoplaySession();
+    if (ps.continuousPlayEnabled) _startNewContinuousPlaySession();
     const insertAt = ps.queueIdx >= 0 ? ps.queueIdx + 1 : 0;
     ps.queue.splice(insertAt, 0, track);
     ps.queueIdx = insertAt;
@@ -1652,7 +1689,7 @@ const Player = (function () {
       ps.lastShuffleFirstIdx = firstRealIdx;
       ps.queueIdx = 0;
     }
-    if (ps.autoplayEnabled) _startNewAutoplaySession();
+    if (ps.continuousPlayEnabled) _startNewContinuousPlaySession();
     _loadTrack(currentTrack());
     _startPlay();
     _renderQueue();
@@ -1672,7 +1709,7 @@ const Player = (function () {
     ps.shuffle = false;
     ps.shuffleOrder = [];
     _updateShuffleBtn();
-    if (ps.autoplayEnabled) _startNewAutoplaySession();
+    if (ps.continuousPlayEnabled) _startNewContinuousPlaySession();
     _loadTrack(currentTrack());
     _startPlay();
     _renderQueue();
@@ -1684,13 +1721,13 @@ const Player = (function () {
     if (!Array.isArray(tracks)) tracks = [tracks];
     if (tracks.length === 0) return;
     tracks.forEach(t => _registry.set(t.id, t));
-    const firstAuto = _firstPendingAutoplayRealIdx();
+    const firstAuto = _firstPendingContinuousPlayRealIdx();
     const insertAt = firstAuto >= 0 ? firstAuto : ps.queue.length;
     ps.queue.splice(insertAt, 0, ...tracks);
     if (ps.shuffle) {
       ps.shuffleOrder = ps.shuffleOrder.map(i => i >= insertAt ? i + tracks.length : i);
       const newIndices = tracks.map((_, i) => insertAt + i);
-      const firstAutoPos = ps.shuffleOrder.findIndex((idx, pos) => pos > ps.queueIdx && _isAutoplayTrack(ps.queue[idx]));
+      const firstAutoPos = ps.shuffleOrder.findIndex((idx, pos) => pos > ps.queueIdx && _isContinuousPlayTrack(ps.queue[idx]));
       const shuffleInsertAt = firstAutoPos >= 0 ? firstAutoPos : ps.shuffleOrder.length;
       ps.shuffleOrder.splice(shuffleInsertAt, 0, ..._fisherYates(newIndices));
     }
@@ -1700,7 +1737,7 @@ const Player = (function () {
       _loadTrack(currentTrack());
     }
     _renderQueue();
-    _syncAutoplayQueueState();
+    _syncContinuousPlayQueueState();
     _saveState();
     _invalidatePreload();  // queue changed — pre-buffered next may no longer be correct
     const n = tracks.length;
@@ -1740,7 +1777,7 @@ const Player = (function () {
     }
 
     _renderQueue();
-    _syncAutoplayQueueState();
+    _syncContinuousPlayQueueState();
     _saveState();
     _invalidatePreload();  // inserted after current — pre-buffered next is now wrong
     _preloadNext();
@@ -1790,7 +1827,7 @@ const Player = (function () {
       _invalidatePreload();
       _preloadNext();
     }
-    _syncAutoplayQueueState();
+    _syncContinuousPlayQueueState();
     _renderQueue();
     _saveState();
   }
@@ -1801,7 +1838,7 @@ const Player = (function () {
       ps.queue        = [];
       ps.queueIdx     = -1;
       ps.shuffleOrder = [];
-      ps.autoplayQueue = [];
+      ps.continuousPlayQueue = [];
       if (_isMpvActive()) {
         _mpvCmd('stop', {});
       } else {
@@ -1821,7 +1858,7 @@ const Player = (function () {
     ps.queue = [keep];
     ps.queueIdx = 0;
     ps.shuffleOrder = ps.shuffle ? [0] : [];
-    ps.autoplayQueue = [];
+    ps.continuousPlayQueue = [];
     _invalidatePreload();  // no next track after clear
     _highlightActiveRow();
     _renderQueue();
@@ -1838,7 +1875,7 @@ const Player = (function () {
       else if (fromIdx < ps.queueIdx && toIdx >= ps.queueIdx) ps.queueIdx--;
       else if (fromIdx > ps.queueIdx && toIdx <= ps.queueIdx) ps.queueIdx++;
     }
-    _syncAutoplayQueueState();
+    _syncContinuousPlayQueueState();
     _saveState();
     _invalidatePreload();
     _preloadNext();
@@ -1849,7 +1886,7 @@ const Player = (function () {
     if (fromPos === toPos) return;
     const [item] = ps.shuffleOrder.splice(fromPos, 1);
     ps.shuffleOrder.splice(toPos, 0, item);
-    _syncAutoplayQueueState();
+    _syncContinuousPlayQueueState();
     _saveState();
     _invalidatePreload();
     _preloadNext();
@@ -2021,7 +2058,7 @@ const Player = (function () {
         _saveState();
         if (ps.queueOpen) _renderQueue();
         _preloadNext();  // buffer the track after next
-        _ensureAutoplayQueue('gapless-advance');
+        _ensureContinuousPlayQueue('gapless-advance');
       } else {
         // Fallback: normal load (pre-buffer wasn't ready or crossfade > 0)
         _resetStandbyBuffer();
@@ -2031,7 +2068,7 @@ const Player = (function () {
         if (ps.queueOpen) _renderQueue();
       }
     } else {
-      _ensureAutoplayQueue('queue-end', { force: true }).then((added) => {
+      _ensureContinuousPlayQueue('queue-end', { force: true }).then((added) => {
         if (added && ps.queueIdx < ps.queue.length - 1 && ps.repeatMode === 'off') {
           ps.queueIdx = ps.queueIdx + 1;
           _loadTrack(currentTrack());
@@ -2450,16 +2487,16 @@ const Player = (function () {
     return value;
   }
 
-  function _autoplaySeedLabel(track, historyItems = []) {
-    const seed = String(track?.__autoplaySeedTitle || '').trim();
+  function _continuousPlaySeedLabel(track, historyItems = []) {
+    const seed = String(track?.__continuousPlaySeedTitle || '').trim();
     if (seed) return seed;
-    const previous = [...historyItems].reverse().find(({ t }) => t && !_isAutoplayTrack(t));
+    const previous = [...historyItems].reverse().find(({ t }) => t && !_isContinuousPlayTrack(t));
     return String(previous?.t?.title || '').trim();
   }
 
   function _queueSourceLabel(currentTrackObj, upcomingItems, historyItems) {
-    if (_isAutoplayTrack(currentTrackObj)) {
-      const detail = _autoplaySeedLabel(currentTrackObj, historyItems) || currentTrackObj?.title || '';
+    if (_isContinuousPlayTrack(currentTrackObj)) {
+      const detail = _continuousPlaySeedLabel(currentTrackObj, historyItems) || currentTrackObj?.title || '';
       return detail ? { prefix: 'Similar Songs:', detail } : null;
     }
 
@@ -2497,22 +2534,22 @@ const Player = (function () {
     </span>`;
   }
 
-  function _queueItemHtml(t, realIdx, mode = 'autoplay') {
+  function _queueItemHtml(t, realIdx, mode = 'continuous') {
     const isPlaying = mode === 'playing';
     const isQueue = mode === 'queue';
-    const isAutoplay = mode === 'autoplay';
-    const isRemovable = isQueue || isAutoplay;
+    const isContinuousPlay = mode === 'continuous';
+    const isRemovable = isQueue || isContinuousPlay;
     const classes = [
       'queue-item',
       isPlaying ? 'queue-item-active' : '',
       isPlaying && !ps.isPlaying ? 'queue-item-paused' : '',
-      isQueue || isAutoplay ? 'queue-item-reorderable' : '',
-      isAutoplay ? 'queue-item-autoplay' : '',
+      isQueue || isContinuousPlay ? 'queue-item-reorderable' : '',
+      isContinuousPlay ? 'queue-item-continuous-play' : '',
       mode === 'history' ? 'queue-item-history' : '',
     ].filter(Boolean).join(' ');
     const leading = isPlaying
       ? _queueEqHtml()
-      : (isQueue || isAutoplay ? _queueGripHtml() : '<div class="queue-drag-spacer"></div>');
+      : (isQueue || isContinuousPlay ? _queueGripHtml() : '<div class="queue-drag-spacer"></div>');
     const remove = isRemovable
       ? `<button class="queue-item-remove" onclick="event.stopPropagation();Player.removeFromQueue(${realIdx})" title="Remove from queue" aria-label="Remove from queue">
           <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
@@ -2562,9 +2599,9 @@ const Player = (function () {
       historyItems  = ps.queue.slice(0, curRealIdx).map((t, i) => ({ t, realIdx: i, queuePos: i }));
       upcomingItems = ps.queue.slice(curRealIdx + 1).map((t, i) => ({ t, realIdx: curRealIdx + 1 + i, queuePos: curRealIdx + 1 + i }));
     }
-    const explicitUpcomingItems = upcomingItems.filter(({ t }) => !_isAutoplayTrack(t));
-    const autoplayItems = upcomingItems.filter(({ t }) => _isAutoplayTrack(t)).slice(0, _AUTOPLAY_VISIBLE_LIMIT);
-    const hiddenAutoplayCount = Math.max(0, upcomingItems.filter(({ t }) => _isAutoplayTrack(t)).length - autoplayItems.length);
+    const explicitUpcomingItems = upcomingItems.filter(({ t }) => !_isContinuousPlayTrack(t));
+    const continuousPlayItems = upcomingItems.filter(({ t }) => _isContinuousPlayTrack(t)).slice(0, _CONTINUOUS_PLAY_VISIBLE_LIMIT);
+    const hiddenContinuousPlayCount = Math.max(0, upcomingItems.filter(({ t }) => _isContinuousPlayTrack(t)).length - continuousPlayItems.length);
     const currentTrackObj = ps.queue[curRealIdx];
 
     let html = '';
@@ -2612,33 +2649,33 @@ const Player = (function () {
     }
     html += `</div></div>`;  // close upcoming list + section
 
-    if (ps.autoplayEnabled) {
-      html += `<div class="queue-section queue-section-autoplay">
+    if (ps.continuousPlayEnabled) {
+      html += `<div class="queue-section queue-section-continuous-play">
         <div class="queue-section-hdr queue-section-hdr-plain">
-          <span class="queue-section-title">Autoplay</span>
+          <span class="queue-section-title">Continuous Play &#8734;</span>
           <span class="queue-section-from">Similar songs</span>
         </div>
-        <div id="queue-autoplay-list" class="queue-autoplay-list">`;
-      if (autoplayItems.length > 0) {
-        autoplayItems.forEach(({ t, realIdx }) => {
-          html += _queueItemHtml(t, realIdx, 'autoplay');
+        <div id="queue-continuous-play-list" class="queue-continuous-play-list">`;
+      if (continuousPlayItems.length > 0) {
+        continuousPlayItems.forEach(({ t, realIdx }) => {
+          html += _queueItemHtml(t, realIdx, 'continuous');
         });
-        if (hiddenAutoplayCount > 0) {
-          html += `<div class="queue-overflow-note">+ ${hiddenAutoplayCount} more Autoplay track${hiddenAutoplayCount !== 1 ? 's' : ''}</div>`;
+        if (hiddenContinuousPlayCount > 0) {
+          html += `<div class="queue-overflow-note">+ ${hiddenContinuousPlayCount} more track${hiddenContinuousPlayCount !== 1 ? 's' : ''}</div>`;
         }
       } else {
-        const _apBlocked = ps.repeatMode !== 'off';
-        const _apMsg = _apBlocked
-          ? 'Autoplay is paused while Repeat is on.'
-          : (_autoplayFetchInFlight ? 'Finding similar songs...' : 'Autoplay will add similar songs at the end.');
-        html += `<div class="queue-empty queue-empty-compact">${_apMsg}</div>`;
+        const _cpBlocked = ps.repeatMode !== 'off';
+        const _cpMsg = _cpBlocked
+          ? 'Continuous Play is paused while Repeat is on.'
+          : (_continuousPlayFetchInFlight ? 'Finding similar songs...' : 'Continuous Play will add similar songs at the end.');
+        html += `<div class="queue-empty queue-empty-compact">${_cpMsg}</div>`;
       }
       html += `</div></div>`;
     } else {
-      html += `<div class="queue-autoplay-off">
-        <div class="queue-autoplay-off-title">Autoplay off</div>
-        <div class="queue-autoplay-off-copy">Playback stops after the queue ends.</div>
-        <button onclick="Player.setAutoplayEnabled(true)">Turn on</button>
+      html += `<div class="queue-continuous-play-off">
+        <div class="queue-continuous-play-off-title">Continuous Play off</div>
+        <div class="queue-continuous-play-off-copy">Playback stops after the queue ends.</div>
+        <button onclick="Player.setContinuousPlayEnabled(true)">Turn on</button>
       </div>`;
     }
 
@@ -2665,9 +2702,9 @@ const Player = (function () {
       }));
     }
 
-    const autoplayList = document.getElementById('queue-autoplay-list');
-    if (autoplayList && typeof Sortable !== 'undefined' && autoplayItems.length > 1) {
-      _addQueueSortable(Sortable.create(autoplayList, {
+    const continuousPlayList = document.getElementById('queue-continuous-play-list');
+    if (continuousPlayList && typeof Sortable !== 'undefined' && continuousPlayItems.length > 1) {
+      _addQueueSortable(Sortable.create(continuousPlayList, {
         animation: 150,
         draggable: '.queue-item',
         filter: '.queue-item-remove',
@@ -2677,9 +2714,9 @@ const Player = (function () {
           const newIndex = typeof evt.newDraggableIndex === 'number' ? evt.newDraggableIndex : evt.newIndex;
           if (oldIndex === newIndex) return;
           if (ps.shuffle) {
-            moveShuffleItem(autoplayItems[oldIndex].queuePos, autoplayItems[newIndex].queuePos);
+            moveShuffleItem(continuousPlayItems[oldIndex].queuePos, continuousPlayItems[newIndex].queuePos);
           } else {
-            moveQueueItem(autoplayItems[oldIndex].realIdx, autoplayItems[newIndex].realIdx);
+            moveQueueItem(continuousPlayItems[oldIndex].realIdx, continuousPlayItems[newIndex].realIdx);
           }
           _renderQueue();
         },
@@ -2711,7 +2748,7 @@ const Player = (function () {
       ps.queueIdx = 0;
     }
     _renderQueue();
-    _syncAutoplayQueueState();
+    _syncContinuousPlayQueueState();
     _saveState();
   }
 
@@ -2970,17 +3007,17 @@ const Player = (function () {
       : `<span class="tb-icon tb-icon-repeat-list" aria-hidden="true"></span>`;
   }
 
-  function _updateAutoplayBtn() {
-    const btn = document.getElementById('player-autoplay-btn');
+  function _updateContinuousPlayBtn() {
+    const btn = document.getElementById('player-continuous-play-btn');
     if (!btn) return;
-    // Autoplay is "conflicted" when it's enabled but repeat is on — it won't actually fire.
-    const conflicted = ps.autoplayEnabled && ps.repeatMode !== 'off';
-    btn.classList.toggle('active',     ps.autoplayEnabled && !conflicted);
+    // Continuous Play is "conflicted" when it's enabled but repeat is on — it won't actually fire.
+    const conflicted = ps.continuousPlayEnabled && ps.repeatMode !== 'off';
+    btn.classList.toggle('active',     ps.continuousPlayEnabled && !conflicted);
     btn.classList.toggle('conflicted', conflicted);
     btn.title = conflicted
-      ? 'Autoplay paused — Repeat is on'
-      : (ps.autoplayEnabled ? 'Autoplay on — click to turn off' : 'Autoplay off — click to turn on');
-    btn.setAttribute('aria-pressed', ps.autoplayEnabled ? 'true' : 'false');
+      ? 'Continuous Play paused — Repeat is on'
+      : (ps.continuousPlayEnabled ? 'Continuous Play on — click to turn off' : 'Continuous Play off — click to turn on');
+    btn.setAttribute('aria-pressed', ps.continuousPlayEnabled ? 'true' : 'false');
   }
 
   function _updateVolumeUI() {
@@ -3045,7 +3082,7 @@ const Player = (function () {
   }
 
   function getStateJSON() {
-    _syncAutoplayQueueState();
+    _syncContinuousPlayQueueState();
     const seekTime = _isMpvActive() ? _mpvPosition : (_audio.currentTime || 0);
     return JSON.stringify({
       queue:        ps.queue,
@@ -3059,10 +3096,14 @@ const Player = (function () {
       peqIem:       ps.activePeqIemId     || '',
       peqProfile:   ps.activePeqProfileId || '',
       recentContexts: Array.isArray(ps.recentContexts) ? ps.recentContexts.slice(0, 30) : [],
-      autoplayEnabled: !!ps.autoplayEnabled,
-      autoplayQueue: Array.isArray(ps.autoplayQueue) ? ps.autoplayQueue.slice(0, _AUTOPLAY_VISIBLE_LIMIT) : [],
-      autoplaySessionId: ps.autoplaySessionId || '',
-      autoplayExcludedTrackIds: Array.isArray(ps.autoplayExcludedTrackIds) ? ps.autoplayExcludedTrackIds.slice(-250) : [],
+      continuousPlayEnabled: !!ps.continuousPlayEnabled,
+      continuousPlayQueue: Array.isArray(ps.continuousPlayQueue) ? ps.continuousPlayQueue.slice(0, _CONTINUOUS_PLAY_VISIBLE_LIMIT) : [],
+      continuousPlaySessionId: ps.continuousPlaySessionId || '',
+      continuousPlayExcludedTrackIds: Array.isArray(ps.continuousPlayExcludedTrackIds) ? ps.continuousPlayExcludedTrackIds.slice(-250) : [],
+      continuousSessionAnchorId: ps.continuousSessionAnchorId || '',
+      continuousSessionTrackIds: Array.isArray(ps.continuousSessionTrackIds) ? ps.continuousSessionTrackIds.slice(-30) : [],
+      continuousRecentSkips: Array.isArray(ps.continuousRecentSkips) ? ps.continuousRecentSkips.slice(-10) : [],
+      continuousRecentCategories: Array.isArray(ps.continuousRecentCategories) ? ps.continuousRecentCategories.slice(-10) : [],
       seekTime,
     });
   }
@@ -3090,10 +3131,14 @@ const Player = (function () {
     peqIem:     'tb_peq_iem',
     peqProfile: 'tb_peq_profile',
     seekTime:   'tb_seek_time',
-    autoplay:   'tb_autoplay_enabled',
-    autoplayQueue: 'tb_autoplay_queue',
-    autoplaySession: 'tb_autoplay_session',
-    autoplayExcluded: 'tb_autoplay_excluded',
+    continuousPlay: 'tb_continuous_play_enabled',
+    continuousPlayQueue: 'tb_continuous_play_queue',
+    continuousPlaySession: 'tb_continuous_play_session',
+    continuousPlayExcluded: 'tb_continuous_play_excluded',
+    continuousAnchor: 'tb_continuous_anchor',
+    continuousTracks: 'tb_continuous_tracks',
+    continuousSkips: 'tb_continuous_skips',
+    continuousCategories: 'tb_continuous_categories',
   };
 
   function _saveState() {
@@ -3110,11 +3155,15 @@ const Player = (function () {
       localStorage.setItem(_LS.peqProfile, ps.activePeqProfileId || '');
       localStorage.setItem(_LS.seekTime,   _isMpvActive() ? _mpvPosition : (_audio.currentTime || 0));
       localStorage.setItem('tb_recent_contexts', JSON.stringify(ps.recentContexts || []));
-      _syncAutoplayQueueState();
-      localStorage.setItem(_LS.autoplay, ps.autoplayEnabled);
-      localStorage.setItem(_LS.autoplayQueue, JSON.stringify(ps.autoplayQueue || []));
-      localStorage.setItem(_LS.autoplaySession, ps.autoplaySessionId || '');
-      localStorage.setItem(_LS.autoplayExcluded, JSON.stringify(ps.autoplayExcludedTrackIds || []));
+      _syncContinuousPlayQueueState();
+      localStorage.setItem(_LS.continuousPlay, ps.continuousPlayEnabled);
+      localStorage.setItem(_LS.continuousPlayQueue, JSON.stringify(ps.continuousPlayQueue || []));
+      localStorage.setItem(_LS.continuousPlaySession, ps.continuousPlaySessionId || '');
+      localStorage.setItem(_LS.continuousPlayExcluded, JSON.stringify(ps.continuousPlayExcludedTrackIds || []));
+      localStorage.setItem(_LS.continuousAnchor, ps.continuousSessionAnchorId || '');
+      localStorage.setItem(_LS.continuousTracks, JSON.stringify(ps.continuousSessionTrackIds || []));
+      localStorage.setItem(_LS.continuousSkips, JSON.stringify(ps.continuousRecentSkips || []));
+      localStorage.setItem(_LS.continuousCategories, JSON.stringify(ps.continuousRecentCategories || []));
     } catch (_) { /* quota exceeded — ignore */ }
     _scheduleRemoteSave();
   }
@@ -3147,19 +3196,38 @@ const Player = (function () {
       } catch (_) {
         ps.recentContexts = [];
       }
-      ps.autoplayEnabled = _boolFromState(localStorage.getItem(_LS.autoplay), true);
-      ps.autoplaySessionId = localStorage.getItem(_LS.autoplaySession) || '';
+      ps.continuousPlayEnabled = _boolFromState(localStorage.getItem(_LS.continuousPlay), true);
+      ps.continuousPlaySessionId = localStorage.getItem(_LS.continuousPlaySession) || '';
       try {
-        const aqRaw = localStorage.getItem(_LS.autoplayQueue);
-        ps.autoplayQueue = aqRaw ? JSON.parse(aqRaw) : [];
+        const aqRaw = localStorage.getItem(_LS.continuousPlayQueue);
+        ps.continuousPlayQueue = aqRaw ? JSON.parse(aqRaw) : [];
       } catch (_) {
-        ps.autoplayQueue = [];
+        ps.continuousPlayQueue = [];
       }
       try {
-        const aeRaw = localStorage.getItem(_LS.autoplayExcluded);
-        ps.autoplayExcludedTrackIds = aeRaw ? JSON.parse(aeRaw) : [];
+        const aeRaw = localStorage.getItem(_LS.continuousPlayExcluded);
+        ps.continuousPlayExcludedTrackIds = aeRaw ? JSON.parse(aeRaw) : [];
       } catch (_) {
-        ps.autoplayExcludedTrackIds = [];
+        ps.continuousPlayExcludedTrackIds = [];
+      }
+      ps.continuousSessionAnchorId = localStorage.getItem(_LS.continuousAnchor) || '';
+      try {
+        const ctRaw = localStorage.getItem(_LS.continuousTracks);
+        ps.continuousSessionTrackIds = ctRaw ? JSON.parse(ctRaw) : [];
+      } catch (_) {
+        ps.continuousSessionTrackIds = [];
+      }
+      try {
+        const csRaw = localStorage.getItem(_LS.continuousSkips);
+        ps.continuousRecentSkips = csRaw ? JSON.parse(csRaw) : [];
+      } catch (_) {
+        ps.continuousRecentSkips = [];
+      }
+      try {
+        const ccRaw = localStorage.getItem(_LS.continuousCategories);
+        ps.continuousRecentCategories = ccRaw ? JSON.parse(ccRaw) : [];
+      } catch (_) {
+        ps.continuousRecentCategories = [];
       }
 
       const xfade = parseInt(localStorage.getItem('tb_xfade') ?? '0', 10);
@@ -3200,17 +3268,29 @@ const Player = (function () {
     if (Array.isArray(sv.recentContexts)) {
       ps.recentContexts = sv.recentContexts.slice(0, 30);
     }
-    if (typeof sv.autoplayEnabled !== 'undefined') {
-      ps.autoplayEnabled = _boolFromState(sv.autoplayEnabled, false);
+    if (typeof sv.continuousPlayEnabled !== 'undefined') {
+      ps.continuousPlayEnabled = _boolFromState(sv.continuousPlayEnabled, false);
     }
-    if (Array.isArray(sv.autoplayQueue)) {
-      ps.autoplayQueue = sv.autoplayQueue.slice(0, _AUTOPLAY_VISIBLE_LIMIT);
+    if (Array.isArray(sv.continuousPlayQueue)) {
+      ps.continuousPlayQueue = sv.continuousPlayQueue.slice(0, _CONTINUOUS_PLAY_VISIBLE_LIMIT);
     }
-    if (typeof sv.autoplaySessionId !== 'undefined') {
-      ps.autoplaySessionId = String(sv.autoplaySessionId || '');
+    if (typeof sv.continuousPlaySessionId !== 'undefined') {
+      ps.continuousPlaySessionId = String(sv.continuousPlaySessionId || '');
     }
-    if (Array.isArray(sv.autoplayExcludedTrackIds)) {
-      ps.autoplayExcludedTrackIds = sv.autoplayExcludedTrackIds.map(String).slice(-250);
+    if (Array.isArray(sv.continuousPlayExcludedTrackIds)) {
+      ps.continuousPlayExcludedTrackIds = sv.continuousPlayExcludedTrackIds.map(String).slice(-250);
+    }
+    if (typeof sv.continuousSessionAnchorId !== 'undefined') {
+      ps.continuousSessionAnchorId = String(sv.continuousSessionAnchorId || '');
+    }
+    if (Array.isArray(sv.continuousSessionTrackIds)) {
+      ps.continuousSessionTrackIds = sv.continuousSessionTrackIds.slice(-30);
+    }
+    if (Array.isArray(sv.continuousRecentSkips)) {
+      ps.continuousRecentSkips = sv.continuousRecentSkips.slice(-10);
+    }
+    if (Array.isArray(sv.continuousRecentCategories)) {
+      ps.continuousRecentCategories = sv.continuousRecentCategories.slice(-10);
     }
     ps.queue.forEach(t => { if (t && t.id) _registry.set(t.id, t); });
     return seekTimeOverride ?? sv.seekTime ?? 0;
@@ -3258,7 +3338,7 @@ const Player = (function () {
     _updateVolumeUI();
     _updateShuffleBtn();
     _updateRepeatBtn();
-    _updateAutoplayBtn();
+    _updateContinuousPlayBtn();
     _updatePlayBtn();
     _updatePeqBtn();
     _updateRgModeUI();
@@ -3612,6 +3692,13 @@ const Player = (function () {
     const duration = Number(t.duration || (_isMpvActive() ? _mpvDuration : _audio.duration) || 0);
     const completed = !!opts.completed || (duration > 0 && pos >= Math.max(duration - 1.0, duration * 0.98));
     const skipped = !!opts.skipped;
+    // Continuous Play skip-position tracking (PRD section 32): only meaningful
+    // for a genuine move-away-before-finishing, not a pause or heartbeat refresh.
+    if (!completed && reason !== 'pause' && reason !== 'refresh' && t.id && duration > 0) {
+      const positionPct = Math.max(0, Math.min(1, pos / duration));
+      const list = Array.isArray(ps.continuousRecentSkips) ? ps.continuousRecentSkips : [];
+      ps.continuousRecentSkips = [...list, { id: String(t.id), positionPct }].slice(-10);
+    }
     const ctx = ps.playbackContext || { sourceType: 'unknown', sourceId: '', sourceLabel: '' };
     const posted = _postPlaybackEvents([{
       track_id: t.id,
@@ -3661,8 +3748,8 @@ const Player = (function () {
     toggleMute,
     toggleShuffle,
     cycleRepeat,
-    toggleAutoplay,
-    setAutoplayEnabled,
+    toggleContinuousPlay,
+    setContinuousPlayEnabled,
     // Queue
     playTrack,
     playTrackById,

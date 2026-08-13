@@ -49,6 +49,9 @@ skills-lock.json
 data/features/
 data/match-matrix.json
 
+# Downloaded ML model checkpoints (fetched on first use, not committed)
+data/models/
+
 # SQLite database (auto-created from JSON or library scan)
 data/tunebridge.db
 data/tunebridge.db-wal

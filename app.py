@@ -305,28 +305,6 @@ _DEFAULT_GENRE_FAMILIES = {
     'rock': ['alternative rock', 'hard rock', 'classic rock', 'progressive rock', 'indie rock', 'punk rock'],
 }
 
-_DEFAULT_PLAYLIST_GEN_CONFIG = {
-    'max_library_tracks': 5000,
-    'candidate_pool_cap': 1500,
-    'default_playlist_length': 20,
-    'min_playlist_length': 8,
-    'max_playlist_length': 80,
-    'deterministic_default': True,
-    'weights': {
-        'similarity': 0.35,
-        'genre': 0.2,
-        'mood': 0.2,
-        'sound': 0.1,
-        'diversity': 0.15,
-    },
-    'transition_weights': {
-        'energy': 0.4,
-        'brightness': 0.25,
-        'year': 0.15,
-        'genre': 0.2,
-    },
-}
-
 _DEFAULT_FAVOURITES = {
     'songs': [],
     'albums': [],
@@ -2371,7 +2349,6 @@ def global_search():
                 if len(seen) >= 4:
                     break
         p_out['artwork_keys'] = seen
-        p_out['is_smart'] = _db.db_is_smart_playlist(p['id'])
         matched_playlists.append(p_out)
     matched_playlists.sort(key=lambda p: (p.get('name') or '').lower())
     total_playlists = len(matched_playlists)
@@ -4982,7 +4959,7 @@ def get_playlists():
                 if len(seen) >= 4:
                     break
         p['artwork_keys'] = seen
-        p['is_smart'] = _db.db_is_smart_playlist(p['id'])
+        p['is_genius'] = _db.db_is_genius_playlist(p['id'])
     return jsonify(result)
 
 
@@ -5014,10 +4991,10 @@ def get_playlist(pid):
         if track:
             enriched.append(track)
 
-    is_smart = _db.db_is_smart_playlist(pid)
-    smart_rules = _db.db_load_smart_rules(pid) if is_smart else None
+    is_genius = _db.db_is_genius_playlist(pid)
+    genius_config = _db.db_load_generation_config(pid) if is_genius else None
     return jsonify({**playlist, 'tracks': enriched, 'has_artwork': has_playlist_artwork(pid),
-                    'is_smart': is_smart, 'smart_rules': smart_rules})
+                    'is_genius': is_genius, 'genius_config': genius_config})
 
 
 @app.route('/api/playlists/<pid>/artwork', methods=['POST'])
@@ -5108,6 +5085,7 @@ def delete_playlist(pid):
         return jsonify({'error': 'Not found'}), 404
     del playlists[pid]
     save_playlists(playlists)
+    _db.db_delete_generation_config(pid)
     return '', 204
 
 
@@ -5987,988 +5965,6 @@ def _safe_float(v, fallback=None):
         return float(v)
     except Exception:
         return fallback
-
-
-def _load_track_feature_map():
-    return _db.db_load_feature_map()
-
-
-def _load_track_play_stats():
-    """Return {track_id: {count, last_played}} for all tracks with ≥1 valid listen."""
-    return _db.db_load_play_stats()
-
-
-def _track_numeric_features(track, feat_map):
-    """Return normalized generation features with graceful fallbacks."""
-    f = feat_map.get(track.get('id'), {}) if feat_map else {}
-    # Energy fallback: 0.5 center; if band profile exists use mean band energy.
-    band = f.get('band_energy')
-    if isinstance(band, list) and band:
-        vals = [_safe_float(v) for v in band if _safe_float(v) is not None]
-        energy = sum(vals) / len(vals) if vals else 0.5
-        bass = sum(vals[:4]) / max(1, len(vals[:4]))
-        treble = sum(vals[-4:]) / max(1, len(vals[-4:]))
-    else:
-        energy = 0.5
-        bass = 0.5
-        treble = 0.5
-
-    # Brightness can be either normalized 0..1 or centroid in Hz.
-    b = f.get('brightness')
-    if isinstance(b, dict):
-        b = b.get('centroid_hz') or b.get('median_hz') or b.get('value')
-    bb = _safe_float(b)
-    if bb is None:
-        brightness = 0.5
-    elif bb > 2.0:  # likely Hz scale
-        brightness = _clamp((bb - 1500.0) / 5000.0, 0.0, 1.0)
-    else:
-        brightness = _clamp(bb, 0.0, 1.0)
-
-    y = _safe_float(track.get('year'))
-    year_norm = 0.5 if y is None else _clamp((y - 1950.0) / 90.0, 0.0, 1.0)
-    dur = _safe_float(track.get('duration'), 180.0)
-    dur_norm = _clamp((dur - 60.0) / 420.0, 0.0, 1.0)
-
-    missing_penalty = 0.0
-    if f.get('failed'):
-        missing_penalty += 0.08
-    if band is None:
-        missing_penalty += 0.04
-    if bb is None:
-        missing_penalty += 0.03
-
-    return {
-        'energy': energy,
-        'brightness': brightness,
-        'bass': bass,
-        'treble': treble,
-        'year_norm': year_norm,
-        'dur_norm': dur_norm,
-        'missing_penalty': missing_penalty,
-    }
-
-
-def _genre_match_score(track_genres, target_genre, genre_mode, families):
-    if not target_genre:
-        return 0.5
-    tg = _norm_genre_text(target_genre)
-    if not tg:
-        return 0.5
-    alias = _build_genre_lookup(families)
-    track_bases = set(alias.get(g, g) for g in track_genres)
-    target_base = alias.get(tg, tg)
-    if target_base in track_bases:
-        return 1.0
-    if genre_mode == 'strict':
-        return 0.0
-    # relaxed: adjacent family membership gets partial credit
-    related = set([target_base] + families.get(target_base, []))
-    if any(g in related or alias.get(g, g) in related for g in track_genres):
-        return 0.72
-    return 0.0
-
-
-def _similarity_score(track_vec, seed_vec):
-    if not seed_vec:
-        return 0.5
-    de = abs(track_vec['energy'] - seed_vec['energy'])
-    db = abs(track_vec['brightness'] - seed_vec['brightness'])
-    dy = abs(track_vec['year_norm'] - seed_vec['year_norm'])
-    dd = abs(track_vec['dur_norm'] - seed_vec['dur_norm'])
-    dist = (de * 0.45 + db * 0.3 + dy * 0.15 + dd * 0.1)
-    return _clamp(1.0 - dist, 0.0, 1.0)
-
-
-def _transition_score(prev_track, prev_vec, cur_track, cur_vec, tw, transition_smoothness):
-    if not prev_track or not prev_vec:
-        return 0.65
-    energy_cont = 1.0 - abs(prev_vec['energy'] - cur_vec['energy'])
-    bright_cont = 1.0 - abs(prev_vec['brightness'] - cur_vec['brightness'])
-    year_cont = 1.0 - abs(prev_vec['year_norm'] - cur_vec['year_norm'])
-
-    prev_genres = set(_split_track_genres(prev_track.get('genre')))
-    cur_genres = set(_split_track_genres(cur_track.get('genre')))
-    genre_cont = 1.0 if (prev_genres & cur_genres) else 0.45
-
-    raw = (
-        tw.get('energy', 0.4) * energy_cont
-        + tw.get('brightness', 0.25) * bright_cont
-        + tw.get('year', 0.15) * year_cont
-        + tw.get('genre', 0.2) * genre_cont
-    )
-    smooth = _clamp(transition_smoothness if transition_smoothness is not None else 0.8, 0.0, 1.0)
-    return _clamp((raw * smooth) + (0.5 * (1.0 - smooth)), 0.0, 1.0)
-
-
-def _arc_target_energy(idx, total, start_energy, arc):
-    if total <= 1:
-        return start_energy
-    t = idx / max(1, total - 1)
-    s = _clamp(start_energy, 0.0, 1.0)
-    if arc == 'gradual_build':
-        return _clamp(s + 0.28 * t, 0.0, 1.0)
-    if arc == 'peak_release':
-        if t <= 0.55:
-            return _clamp(s + 0.32 * (t / 0.55), 0.0, 1.0)
-        return _clamp((s + 0.32) - 0.35 * ((t - 0.55) / 0.45), 0.0, 1.0)
-    if arc == 'wind_down':
-        return _clamp(s - 0.32 * t, 0.0, 1.0)
-    return s  # steady
-
-
-def _build_playlist_generation_preview(payload):
-    cfg = load_playlist_gen_config()
-    families = load_genre_families()
-    weights = cfg.get('weights', {})
-    tw = cfg.get('transition_weights', {})
-
-    mode = str(payload.get('mode') or 'genre').strip().lower()
-    if mode not in ('seed', 'genre', 'hybrid'):
-        mode = 'genre'
-    genre_mode = str(payload.get('genre_mode') or 'strict').strip().lower()
-    if genre_mode not in ('strict', 'relaxed'):
-        genre_mode = 'strict'
-
-    with library_lock:
-        lib_tracks = list(library)
-
-    max_lib = int(cfg.get('max_library_tracks', 5000) or 5000)
-    if len(lib_tracks) > max_lib:
-        # Keep most recent-ish tracks first for predictable performance.
-        lib_tracks = sorted(lib_tracks, key=lambda t: t.get('date_added') or 0, reverse=True)[:max_lib]
-
-    lib_map = {t.get('id'): t for t in lib_tracks if t.get('id')}
-
-    seed_ids = [str(x) for x in (payload.get('seed_track_ids') or []) if str(x)]
-    seed_ids = [sid for sid in seed_ids if sid in lib_map]
-    target_genre = payload.get('target_genre')
-    playlist_length = int(payload.get('playlist_length') or cfg.get('default_playlist_length', 20))
-    playlist_length = _clamp(playlist_length, int(cfg.get('min_playlist_length', 8)), int(cfg.get('max_playlist_length', 80)))
-    year_range = payload.get('year_range') if isinstance(payload.get('year_range'), list) and len(payload.get('year_range')) == 2 else None
-    energy_target = _safe_float(payload.get('energy_target'))
-    brightness_target = _safe_float(payload.get('brightness_target'))
-    mood = str(payload.get('mood') or '').strip().lower()
-    mood_presets = {
-        'focus': (0.42, 0.40),
-        'late_night': (0.30, 0.35),
-        'energetic': (0.78, 0.62),
-        'warm_relaxed': (0.38, 0.28),
-        'hype': (0.86, 0.70),
-        'bright_bouncy': (0.72, 0.78),
-        'dark_heavy': (0.68, 0.24),
-    }
-    if mood in mood_presets:
-        m_energy, m_brightness = mood_presets[mood]
-        if energy_target is None:
-            energy_target = m_energy
-        if brightness_target is None:
-            brightness_target = m_brightness
-    allow_repeat_artists = bool(payload.get('allow_repeat_artists', False))
-    diversity_strength = _clamp(_safe_float(payload.get('diversity_strength'), 0.7), 0.0, 1.0)
-    transition_smoothness = _clamp(_safe_float(payload.get('transition_smoothness'), 0.8), 0.0, 1.0)
-    deterministic_default = bool(cfg.get('deterministic_default', True))
-    deterministic = bool(payload.get('deterministic', deterministic_default))
-    regenerate_mode = bool(payload.get('regenerate', False))
-    arc = str(payload.get('playlist_arc') or 'steady').strip().lower()
-    if arc not in ('steady', 'gradual_build', 'peak_release', 'wind_down'):
-        arc = 'steady'
-    excluded_track_ids = {str(x) for x in (payload.get('excluded_track_ids') or [])}
-    excluded_artists = {_norm_text_key(x) for x in (payload.get('excluded_artists') or []) if str(x).strip()}
-
-    # Play-history filters
-    exclude_heard = bool(payload.get('exclude_heard') or payload.get('unheard_only', False))
-    exclude_heard_within_days = None
-    _ehwd = payload.get('exclude_heard_within_days')
-    if _ehwd is not None:
-        try:
-            exclude_heard_within_days = max(1, int(_ehwd))
-        except (TypeError, ValueError):
-            pass
-    min_play_count = None
-    max_play_count = None
-    _mpc = payload.get('min_play_count')
-    if _mpc is not None:
-        try:
-            min_play_count = max(0, int(_mpc))
-        except (TypeError, ValueError):
-            pass
-    _xpc = payload.get('max_play_count')
-    if _xpc is not None:
-        try:
-            max_play_count = max(0, int(_xpc))
-        except (TypeError, ValueError):
-            pass
-    _needs_play_stats = (exclude_heard or exclude_heard_within_days is not None
-                         or min_play_count is not None or max_play_count is not None)
-
-    payload_seed = int(payload.get('seed', 1337))
-    rng = random.Random(payload_seed if deterministic else time.time_ns())
-    feat_map = _load_track_feature_map()
-    play_stats = _load_track_play_stats() if _needs_play_stats else {}
-
-    # Seed centroid
-    seed_vec = None
-    if seed_ids:
-        vectors = [_track_numeric_features(lib_map[sid], feat_map) for sid in seed_ids]
-        seed_vec = {
-            'energy': sum(v['energy'] for v in vectors) / len(vectors),
-            'brightness': sum(v['brightness'] for v in vectors) / len(vectors),
-            'year_norm': sum(v['year_norm'] for v in vectors) / len(vectors),
-            'dur_norm': sum(v['dur_norm'] for v in vectors) / len(vectors),
-        }
-
-    # Candidate pool
-    candidates = []
-    for t in lib_tracks:
-        tid = t.get('id')
-        if not tid or tid in excluded_track_ids:
-            continue
-        if _norm_text_key(t.get('artist')) in excluded_artists:
-            continue
-        if _needs_play_stats:
-            ps = play_stats.get(tid, {'count': 0, 'last_played': None})
-            pc = ps.get('count', 0)
-            lp = ps.get('last_played')
-            if exclude_heard and pc > 0:
-                continue
-            if exclude_heard_within_days is not None and lp is not None:
-                age_days = (time.time() - lp) / 86400.0
-                if age_days < exclude_heard_within_days:
-                    continue
-            if min_play_count is not None and pc < min_play_count:
-                continue
-            if max_play_count is not None and pc > max_play_count:
-                continue
-        if year_range:
-            y = _safe_float(t.get('year'))
-            if y is not None and (y < year_range[0] or y > year_range[1]):
-                continue
-
-        genres = _split_track_genres(t.get('genre'))
-        gm = _genre_match_score(genres, target_genre, genre_mode, families)
-        if mode in ('genre', 'hybrid') and target_genre:
-            if genre_mode == 'strict' and gm <= 0:
-                continue
-            if genre_mode == 'relaxed' and gm < 0.72 and mode == 'genre':
-                continue
-
-        v = _track_numeric_features(t, feat_map)
-        sim = _similarity_score(v, seed_vec) if mode in ('seed', 'hybrid') else 0.5
-        mood_parts = []
-        if energy_target is not None:
-            mood_parts.append(1.0 - abs(v['energy'] - _clamp(energy_target, 0.0, 1.0)))
-        if brightness_target is not None:
-            mood_parts.append(1.0 - abs(v['brightness'] - _clamp(brightness_target, 0.0, 1.0)))
-        mood = sum(mood_parts) / len(mood_parts) if mood_parts else 0.5
-        sound = _clamp(1.0 - abs(v['bass'] - v['treble']) * 0.6, 0.0, 1.0)
-        diversity = 0.55 + (0.25 * (1.0 - v['missing_penalty']))
-
-        cand_score = (
-            weights.get('similarity', 0.35) * sim
-            + weights.get('genre', 0.2) * gm
-            + weights.get('mood', 0.2) * mood
-            + weights.get('sound', 0.1) * sound
-            + weights.get('diversity', 0.15) * diversity
-            - v['missing_penalty']
-        )
-        candidates.append({
-            'track': t,
-            'vec': v,
-            'genres': genres,
-            'scores': {
-                'similarity': round(sim, 4),
-                'genre_match': round(gm, 4),
-                'mood_match': round(mood, 4),
-                'sound_match': round(sound, 4),
-                'diversity': round(diversity, 4),
-            },
-            'candidate_score': cand_score,
-        })
-
-    if not candidates:
-        return {'tracks': [], 'explanations': [], 'summary': {'reason': 'No candidates matched filters.'}}
-
-    candidates.sort(key=lambda c: c['candidate_score'], reverse=True)
-    cap = int(cfg.get('candidate_pool_cap', 1500) or 1500)
-    candidates = candidates[:cap]
-
-    # Selection + sequencing
-    selected = []
-    selected_ids = set()
-    artist_counts = {}
-    album_counts = {}
-
-    prev_track = None
-    prev_vec = None
-    base_start_energy = energy_target if energy_target is not None else (seed_vec['energy'] if seed_vec else 0.5)
-
-    # If seeds exist, anchor the first one.
-    if seed_ids and seed_ids[0] in lib_map:
-        s0 = lib_map[seed_ids[0]]
-        v0 = _track_numeric_features(s0, feat_map)
-        selected.append({
-            'track': s0,
-            'candidate_score': 1.0,
-            'transition_score': 0.7,
-            'placement_score': 1.0,
-            'reason': 'Seed anchor',
-        })
-        selected_ids.add(s0['id'])
-        artist_counts[_norm_text_key(s0.get('artist'))] = 1
-        album_counts[_norm_text_key(s0.get('album'))] = 1
-        prev_track, prev_vec = s0, v0
-
-    while len(selected) < playlist_length:
-        best = None
-        best_score = -1e9
-        top_alternatives = []
-        idx = len(selected)
-        arc_target = _arc_target_energy(idx, playlist_length, base_start_energy, arc)
-        for c in candidates:
-            tid = c['track'].get('id')
-            if not tid or tid in selected_ids:
-                continue
-
-            artist_k = _norm_text_key(c['track'].get('artist'))
-            album_k = _norm_text_key(c['track'].get('album'))
-            repeat_artist_pen = 0.0
-            repeat_album_pen = 0.0
-            if not allow_repeat_artists and artist_counts.get(artist_k, 0) > 0:
-                repeat_artist_pen = 0.22 + 0.10 * artist_counts.get(artist_k, 0)
-            if album_counts.get(album_k, 0) > 0:
-                repeat_album_pen = 0.08 + 0.05 * album_counts.get(album_k, 0)
-
-            trans = _transition_score(prev_track, prev_vec, c['track'], c['vec'], tw, transition_smoothness)
-            arc_pen = abs(c['vec']['energy'] - arc_target) * 0.18
-            diversity_pen = (repeat_artist_pen + repeat_album_pen) * diversity_strength
-            placement = (c['candidate_score'] * (1.0 - transition_smoothness * 0.35)) + (trans * transition_smoothness) - diversity_pen - arc_pen
-
-            # Deterministic mode still gets a reproducible tie-break jitter that changes
-            # across run seeds (used by Regenerate). Non-deterministic uses true random jitter.
-            if deterministic:
-                key = f"{payload_seed}:{idx}:{tid or ''}"
-                digest = hashlib.md5(key.encode()).digest()
-                unit = int.from_bytes(digest[:4], 'big') / 0xFFFFFFFF
-                placement += (unit - 0.5) * 0.016
-            else:
-                placement += rng.uniform(-0.012, 0.012)
-
-            if placement > best_score:
-                best_score = placement
-                best = (c, trans, placement)
-            top_alternatives.append((placement, c, trans))
-
-        if not best:
-            break
-
-        # Regenerate mode intentionally explores the top-ranked window so each run
-        # can return alternate but still high-quality sequences.
-        if regenerate_mode and top_alternatives:
-            top_alternatives.sort(key=lambda x: x[0], reverse=True)
-            window = min(8, len(top_alternatives))
-            pick_rank = int(rng.random() * window)
-            placement, c, trans = top_alternatives[pick_rank]
-        else:
-            c, trans, placement = best
-        t = c['track']
-        selected.append({
-            'track': t,
-            'candidate_score': round(c['candidate_score'], 4),
-            'transition_score': round(trans, 4),
-            'placement_score': round(placement, 4),
-            'reason': 'Genre fit' if c['scores']['genre_match'] >= 0.99 else ('Transition continuity' if trans >= 0.72 else 'Balanced fit'),
-            'score_components': c['scores'],
-        })
-        selected_ids.add(t['id'])
-        artist_counts[_norm_text_key(t.get('artist'))] = artist_counts.get(_norm_text_key(t.get('artist')), 0) + 1
-        album_counts[_norm_text_key(t.get('album'))] = album_counts.get(_norm_text_key(t.get('album')), 0) + 1
-        prev_track, prev_vec = t, c['vec']
-
-    out_tracks = [s['track'] for s in selected]
-    out_explain = [{
-        'track_id': s['track'].get('id'),
-        'candidate_score': s['candidate_score'],
-        'transition_score': s['transition_score'],
-        'placement_score': s['placement_score'],
-        'reason': s['reason'],
-        'score_components': s.get('score_components', {}),
-    } for s in selected]
-
-    return {
-        'tracks': out_tracks,
-        'explanations': out_explain,
-        'summary': {
-            'mode': mode,
-            'genre_mode': genre_mode,
-            'mood': mood,
-            'target_genre': target_genre or '',
-            'requested_length': playlist_length,
-            'generated_length': len(out_tracks),
-            'seed_count': len(seed_ids),
-            'candidate_pool_size': len(candidates),
-            'deterministic': deterministic,
-            'arc': arc,
-            'library_tracks_considered': len(lib_tracks),
-            'max_library_tracks': max_lib,
-            'note': 'Some tracks used fallback scoring due to missing audio features.',
-        }
-    }
-
-
-@app.route('/api/playlists/generate/options', methods=['GET'])
-def playlist_generate_options():
-    with library_lock:
-        tracks = list(library)
-    genres = {}
-    for t in tracks:
-        for g in _split_track_genres(t.get('genre')):
-            genres[g] = genres.get(g, 0) + 1
-    top_genres = [_genre_display_label(g) for g, _ in sorted(genres.items(), key=lambda kv: (-kv[1], kv[0]))[:80]]
-    cfg = load_playlist_gen_config()
-    return jsonify({
-        'modes': ['seed', 'genre', 'hybrid'],
-        'genre_modes': ['strict', 'relaxed'],
-        'playlist_arcs': ['steady', 'gradual_build', 'peak_release', 'wind_down'],
-        'genres': top_genres,
-        'genre_families': load_genre_families(),
-        'defaults': {
-            'mode': 'genre',
-            'genre_mode': 'strict',
-            'playlist_length': cfg.get('default_playlist_length', 20),
-            'deterministic': cfg.get('deterministic_default', True),
-            'diversity_strength': 0.7,
-            'transition_smoothness': 0.8,
-            'playlist_arc': 'steady',
-            'allow_repeat_artists': False,
-        },
-        'limits': {
-            'playlist_length': [cfg.get('min_playlist_length', 8), cfg.get('max_playlist_length', 80)],
-            'max_library_tracks': cfg.get('max_library_tracks', 5000),
-            'candidate_pool_cap': cfg.get('candidate_pool_cap', 1500),
-        }
-    })
-
-
-@app.route('/api/playlists/generate/preview', methods=['POST'])
-def playlist_generate_preview():
-    data = request.json or {}
-    result = _build_playlist_generation_preview(data)
-    return jsonify(result)
-
-
-@app.route('/api/player/autoplay/recommend', methods=['POST'])
-def player_autoplay_recommend():
-    data = request.json or {}
-    limit = int(_safe_float(data.get('limit'), 10) or 10)
-    limit = max(1, min(limit, 10))
-
-    with library_lock:
-        lib_tracks = list(library)
-    lib_map = {str(t.get('id')): t for t in lib_tracks if t.get('id')}
-
-    seed_ids = [str(x) for x in (data.get('seed_track_ids') or []) if str(x) in lib_map]
-    current_track_id = str(data.get('current_track_id') or '')
-    previous_track_id = str(data.get('previous_track_id') or current_track_id or '')
-    if current_track_id and current_track_id in lib_map and current_track_id not in seed_ids:
-        seed_ids.insert(0, current_track_id)
-    seed_ids = seed_ids[:6]
-
-    excluded = {str(x) for x in (data.get('exclude_track_ids') or []) if str(x)}
-    excluded.update(seed_ids)
-
-    if not lib_tracks:
-        return jsonify({'tracks': [], 'explanations': [], 'summary': {'reason': 'Library is empty.'}})
-
-    feat_map = _load_track_feature_map()
-    families = load_genre_families()
-    cfg = load_playlist_gen_config()
-    tw = cfg.get('transition_weights', {})
-
-    seed_tracks = [lib_map[sid] for sid in seed_ids if sid in lib_map]
-    seed_vec = None
-    if seed_tracks:
-        vectors = [_track_numeric_features(t, feat_map) for t in seed_tracks]
-        seed_vec = {
-            'energy': sum(v['energy'] for v in vectors) / len(vectors),
-            'brightness': sum(v['brightness'] for v in vectors) / len(vectors),
-            'year_norm': sum(v['year_norm'] for v in vectors) / len(vectors),
-            'dur_norm': sum(v['dur_norm'] for v in vectors) / len(vectors),
-        }
-
-    genre_counts = {}
-    for t in seed_tracks:
-        for g in _split_track_genres(t.get('genre')):
-            genre_counts[g] = genre_counts.get(g, 0) + 1
-    target_genre = max(genre_counts, key=genre_counts.get) if genre_counts else ''
-
-    conn = _db.get_conn()
-    stat_rows = conn.execute(
-        """SELECT track_id,
-                  COUNT(*) AS plays,
-                  SUM(CASE WHEN skipped = 1 THEN 1 ELSE 0 END) AS skips,
-                  SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) AS completions,
-                  SUM(CASE WHEN valid_listen = 1 THEN 1 ELSE 0 END) AS valid_plays,
-                  MAX(played_at) AS last_played
-           FROM play_events
-           GROUP BY track_id"""
-    ).fetchall()
-    play_stats = {str(r['track_id']): dict(r) for r in stat_rows}
-
-    prev_track = lib_map.get(previous_track_id) or (seed_tracks[0] if seed_tracks else None)
-    prev_vec = _track_numeric_features(prev_track, feat_map) if prev_track else None
-
-    candidates = []
-    for t in lib_tracks:
-        tid = str(t.get('id') or '')
-        if not tid or tid in excluded:
-            continue
-
-        vec = _track_numeric_features(t, feat_map)
-        sim = _similarity_score(vec, seed_vec)
-        gm = _genre_match_score(_split_track_genres(t.get('genre')), target_genre, 'relaxed', families)
-        trans = _transition_score(prev_track, prev_vec, t, vec, tw, 0.82)
-
-        stats = play_stats.get(tid, {})
-        plays = int(stats.get('plays') or 0)
-        valid_plays = int(stats.get('valid_plays') or 0)
-        skips = int(stats.get('skips') or 0)
-        completions = int(stats.get('completions') or 0)
-        skip_rate = skips / plays if plays else 0.0
-        completion_rate = completions / plays if plays else 0.5
-        engagement = _clamp((0.72 + 0.32 * completion_rate) - (0.38 * skip_rate), 0.25, 1.08)
-        discovery = 1.0 / (1.0 + valid_plays)
-        metadata = 1.0 - vec.get('missing_penalty', 0.0)
-
-        score = (
-            0.34 * sim
-            + 0.22 * gm
-            + 0.20 * trans
-            + 0.12 * discovery
-            + 0.08 * engagement
-            + 0.04 * metadata
-        )
-        candidates.append({
-            'track': t,
-            'vec': vec,
-            'score': score,
-            'artist_key': _norm_text_key(t.get('artist')),
-            'album_key': _norm_text_key(t.get('album')),
-            'explain': {
-                'similarity': round(sim, 4),
-                'genre_match': round(gm, 4),
-                'transition': round(trans, 4),
-                'discovery': round(discovery, 4),
-                'engagement': round(engagement, 4),
-            },
-        })
-
-    if not candidates:
-        return jsonify({
-            'tracks': [],
-            'explanations': [],
-            'summary': {'reason': 'No candidates matched filters.', 'seed_count': len(seed_ids)}
-        })
-
-    rng = random.Random(time.time_ns())
-    selected = []
-    selected_ids = set()
-    artist_counts = {}
-    album_counts = {}
-    while len(selected) < limit and candidates:
-        best_i = -1
-        best_score = -1e9
-        for i, c in enumerate(candidates):
-            if c['track'].get('id') in selected_ids:
-                continue
-            diversity_penalty = 0.0
-            diversity_penalty += 0.18 * artist_counts.get(c['artist_key'], 0)
-            diversity_penalty += 0.08 * album_counts.get(c['album_key'], 0)
-            jitter = rng.uniform(-0.012, 0.012)
-            placement = c['score'] - diversity_penalty + jitter
-            if placement > best_score:
-                best_score = placement
-                best_i = i
-        if best_i < 0:
-            break
-        picked = candidates.pop(best_i)
-        t = picked['track']
-        selected.append((t, picked, best_score))
-        selected_ids.add(t.get('id'))
-        artist_counts[picked['artist_key']] = artist_counts.get(picked['artist_key'], 0) + 1
-        album_counts[picked['album_key']] = album_counts.get(picked['album_key'], 0) + 1
-        prev_track = t
-        prev_vec = picked['vec']
-
-    return jsonify({
-        'tracks': [t for t, _picked, _placement in selected],
-        'explanations': [{
-            'track_id': t.get('id'),
-            'placement_score': round(placement, 4),
-            'reason': 'Auto Play fit',
-            'score_components': picked['explain'],
-        } for t, picked, placement in selected],
-        'summary': {
-            'seed_count': len(seed_ids),
-            'target_genre': _genre_display_label(target_genre) if target_genre else '',
-            'generated_length': len(selected),
-            'candidate_pool_size': len(candidates) + len(selected),
-        }
-    })
-
-
-@app.route('/api/playlists/generate/save', methods=['POST'])
-def playlist_generate_save():
-    data = request.json or {}
-    name = str(data.get('name') or '').strip() or f"Generated Playlist {time.strftime('%Y-%m-%d %H:%M')}"
-    track_ids = data.get('track_ids') or []
-    if not isinstance(track_ids, list):
-        return jsonify({'error': 'track_ids must be a list'}), 400
-
-    with library_lock:
-        valid_ids = {t.get('id') for t in library}
-    clean_ids = [str(tid) for tid in track_ids if str(tid) in valid_ids]
-    if not clean_ids:
-        return jsonify({'error': 'No valid tracks to save'}), 400
-
-    playlists = load_playlists()
-    pid = str(uuid.uuid4())
-    now = int(time.time())
-    playlists[pid] = {
-        'id': pid,
-        'name': name,
-        'created_at': now,
-        'updated_at': now,
-        'tracks': clean_ids,
-        'generator': 'ml_v1',
-    }
-    save_playlists(playlists)
-    return jsonify({'id': pid, 'name': name, 'track_count': len(clean_ids)}), 201
-
-
-# ---------------------------------------------------------------------------
-# Smart Playlist — rule evaluator
-# ---------------------------------------------------------------------------
-
-def _evaluate_smart_rules(rules, match_mode='all', limit_count=50, sort_field='date_added', sort_order='desc'):
-    """Evaluate declarative smart rules against the library. Returns {track_ids, total, unanalysed_count}."""
-    conn = _db.get_conn()
-
-    play_fields = {'play_count', 'never_played', 'last_played'}
-    sonic_fields = {'energy', 'brightness', 'has_analysis'}
-    needs_play = any(r.get('field') in play_fields for r in rules)
-    needs_sonic = any(r.get('field') in sonic_fields for r in rules)
-
-    select_parts = ['t.id', 't.title', 't.artist', 't.album', 't.genre', 't.year',
-                    't.date_added', 't.format', 't.bitrate']
-    from_clause = 'FROM tracks t'
-    joins = []
-    if needs_play:
-        joins.append("""LEFT JOIN (
-            SELECT track_id, COUNT(*) AS play_count, MAX(played_at) AS last_played
-            FROM play_events WHERE valid_listen=1 GROUP BY track_id
-        ) pe ON pe.track_id = t.id""")
-        select_parts += ['COALESCE(pe.play_count,0) AS play_count', 'pe.last_played']
-    if needs_sonic:
-        joins.append("LEFT JOIN track_features tf ON tf.track_id = t.id")
-        select_parts += ['tf.brightness', 'tf.energy', 'tf.band_energy', 'tf.analysis_version']
-
-    where_clauses = []
-    params = []
-
-    for r in rules:
-        field = r.get('field', '')
-        op = r.get('op', '')
-        val = r.get('value')
-
-        def _str_op(col):
-            if op == 'contains':
-                where_clauses.append(f"LOWER({col}) LIKE LOWER(?)")
-                params.append(f'%{val}%')
-            elif op == 'not_contains':
-                where_clauses.append(f"LOWER({col}) NOT LIKE LOWER(?)")
-                params.append(f'%{val}%')
-            elif op == 'is':
-                where_clauses.append(f"LOWER({col}) = LOWER(?)")
-                params.append(str(val))
-            elif op == 'is_not':
-                where_clauses.append(f"LOWER({col}) != LOWER(?)")
-                params.append(str(val))
-
-        def _num_op(col):
-            if op == 'equals':
-                where_clauses.append(f"{col} = ?")
-                params.append(val)
-            elif op == 'greater_than':
-                where_clauses.append(f"{col} > ?")
-                params.append(val)
-            elif op == 'less_than':
-                where_clauses.append(f"{col} < ?")
-                params.append(val)
-            elif op == 'between' and isinstance(val, list) and len(val) == 2:
-                where_clauses.append(f"{col} BETWEEN ? AND ?")
-                params.extend(val)
-
-        if field == 'genre':
-            _str_op('t.genre')
-        elif field == 'artist':
-            _str_op('t.artist')
-        elif field == 'album':
-            _str_op('t.album')
-        elif field == 'year':
-            _num_op('CAST(t.year AS INTEGER)')
-        elif field == 'format':
-            _str_op('t.format')
-        elif field == 'bitrate':
-            _num_op('CAST(t.bitrate AS INTEGER)')
-        elif field == 'date_added':
-            now_ts = int(time.time())
-            if op == 'within_days':
-                cutoff = now_ts - int(val) * 86400
-                where_clauses.append("t.date_added >= ?")
-                params.append(cutoff)
-            elif op == 'older_than_days':
-                cutoff = now_ts - int(val) * 86400
-                where_clauses.append("t.date_added <= ?")
-                params.append(cutoff)
-            elif op == 'before':
-                where_clauses.append("t.date_added < ?")
-                params.append(int(val))
-            elif op == 'after':
-                where_clauses.append("t.date_added > ?")
-                params.append(int(val))
-        elif field == 'play_count':
-            _num_op('COALESCE(pe.play_count,0)')
-        elif field == 'never_played':
-            if val:
-                where_clauses.append("COALESCE(pe.play_count,0) = 0")
-            else:
-                where_clauses.append("COALESCE(pe.play_count,0) > 0")
-        elif field == 'last_played':
-            now_ts = int(time.time())
-            if op == 'within_days':
-                cutoff = now_ts - int(val) * 86400
-                where_clauses.append("pe.last_played >= ?")
-                params.append(cutoff)
-            elif op == 'older_than_days':
-                cutoff = now_ts - int(val) * 86400
-                where_clauses.append("(pe.last_played IS NULL OR pe.last_played <= ?)")
-                params.append(cutoff)
-        elif field == 'energy':
-            _num_op('tf.energy')
-        elif field == 'brightness':
-            _num_op('tf.brightness')
-        elif field == 'has_analysis':
-            if val:
-                where_clauses.append(f"tf.band_energy IS NOT NULL AND tf.analysis_version = {ANALYSIS_VERSION}")
-            else:
-                where_clauses.append(f"(tf.band_energy IS NULL OR tf.analysis_version != {ANALYSIS_VERSION})")
-
-    connector = ' AND ' if match_mode == 'all' else ' OR '
-    where_sql = connector.join(where_clauses) if where_clauses else '1=1'
-
-    sort_col_map = {
-        'date_added': 't.date_added',
-        'title': 't.title',
-        'artist': 't.artist',
-        'album': 't.album',
-        'year': 'CAST(t.year AS INTEGER)',
-        'play_count': 'COALESCE(pe.play_count,0)' if needs_play else 't.date_added',
-        'last_played': 'pe.last_played' if needs_play else 't.date_added',
-    }
-    sort_col = sort_col_map.get(sort_field, 't.date_added')
-    order = 'DESC' if sort_order == 'desc' else 'ASC'
-
-    sql = f"""SELECT {', '.join(select_parts)}
-              {from_clause}
-              {chr(10).join(joins)}
-              WHERE {where_sql}
-              ORDER BY {sort_col} {order}
-              LIMIT ?"""
-    params.append(limit_count)
-
-    rows = conn.execute(sql, params).fetchall()
-    track_ids = [r['id'] for r in rows]
-
-    unanalysed_count = 0
-    if needs_sonic:
-        sonic_rules = [r for r in rules if r.get('field') in sonic_fields]
-        if sonic_rules:
-            total_unanalysed = conn.execute(
-                "SELECT COUNT(*) FROM tracks t LEFT JOIN track_features tf ON tf.track_id=t.id "
-                f"WHERE tf.band_energy IS NULL OR tf.analysis_version != {ANALYSIS_VERSION}"
-            ).fetchone()[0]
-            unanalysed_count = total_unanalysed
-
-    return {'track_ids': track_ids, 'total': len(track_ids), 'unanalysed_count': unanalysed_count}
-
-
-# ---------------------------------------------------------------------------
-# Smart Playlist routes
-# ---------------------------------------------------------------------------
-
-def _normalise_smart_playlist_payload(data):
-    allowed_fields = {
-        'genre': 'string',
-        'artist': 'string',
-        'album': 'string',
-        'year': 'int',
-        'format': 'string',
-        'bitrate': 'int',
-        'date_added': 'date',
-        'play_count': 'int',
-        'never_played': 'bool',
-        'last_played': 'date',
-        'energy': 'float',
-        'brightness': 'float',
-        'has_analysis': 'bool',
-    }
-    allowed_ops = {
-        'string': {'contains', 'not_contains', 'is', 'is_not'},
-        'int': {'equals', 'greater_than', 'less_than'},
-        'float': {'greater_than', 'less_than'},
-        'bool': {'is'},
-        'date': {'within_days', 'older_than_days'},
-    }
-
-    rules_in = data.get('rules') or []
-    if not isinstance(rules_in, list) or not rules_in:
-        raise ValueError('Choose a starter or add at least one rule.')
-
-    rules = []
-    for idx, rule in enumerate(rules_in, start=1):
-        field = str((rule or {}).get('field') or '')
-        typ = allowed_fields.get(field)
-        if not typ:
-            raise ValueError(f'Rule {idx} uses an unknown field.')
-
-        op = str((rule or {}).get('op') or '')
-        if op not in allowed_ops[typ]:
-            raise ValueError(f'Rule {idx} has an unsupported condition.')
-
-        val = (rule or {}).get('value')
-        if typ == 'bool':
-            if isinstance(val, str):
-                val = val.strip().lower() in {'1', 'true', 'yes', 'on'}
-            else:
-                val = bool(val)
-        elif typ == 'string':
-            val = str(val or '').strip()
-            if not val:
-                raise ValueError(f'Add a value for rule {idx}.')
-        elif typ in {'int', 'date'}:
-            try:
-                val = int(val)
-            except (TypeError, ValueError):
-                raise ValueError(f'Use a whole number for rule {idx}.')
-            if val < 0:
-                raise ValueError(f'Use a positive number for rule {idx}.')
-        elif typ == 'float':
-            try:
-                val = float(val)
-            except (TypeError, ValueError):
-                raise ValueError(f'Use a number between 0 and 1 for rule {idx}.')
-            if val < 0 or val > 1:
-                raise ValueError(f'Use a number between 0 and 1 for rule {idx}.')
-
-        rules.append({'field': field, 'op': op, 'value': val})
-
-    match_mode = str(data.get('match_mode', 'all'))
-    if match_mode not in {'all', 'any'}:
-        match_mode = 'all'
-
-    try:
-        limit_count = int(data.get('limit_count') or 50)
-    except (TypeError, ValueError):
-        limit_count = 50
-    limit_count = max(5, min(limit_count, 500))
-
-    sort_field = str(data.get('sort_field', 'date_added'))
-    if sort_field not in {'date_added', 'play_count', 'last_played', 'title', 'artist', 'album', 'year'}:
-        sort_field = 'date_added'
-
-    sort_order = str(data.get('sort_order', 'desc'))
-    if sort_order not in {'asc', 'desc'}:
-        sort_order = 'desc'
-
-    return rules, match_mode, limit_count, sort_field, sort_order
-
-
-@app.route('/api/playlists/smart/preview', methods=['POST'])
-def smart_playlist_preview():
-    data = request.json or {}
-    try:
-        rules, match_mode, limit_count, sort_field, sort_order = _normalise_smart_playlist_payload(data)
-    except ValueError as exc:
-        return jsonify({'error': str(exc)}), 400
-    result = _evaluate_smart_rules(rules, match_mode, limit_count, sort_field, sort_order)
-    with library_lock:
-        lib_map = {t['id']: t for t in library}
-    tracks_out = [lib_map[tid] for tid in result['track_ids'] if tid in lib_map]
-    return jsonify({'tracks': tracks_out, 'total': result['total'], 'unanalysed_count': result['unanalysed_count']})
-
-
-@app.route('/api/playlists/smart', methods=['POST'])
-def smart_playlist_create():
-    data = request.json or {}
-    name = str(data.get('name') or '').strip() or f"Smart Playlist {time.strftime('%Y-%m-%d %H:%M')}"
-    try:
-        rules, match_mode, limit_count, sort_field, sort_order = _normalise_smart_playlist_payload(data)
-    except ValueError as exc:
-        return jsonify({'error': str(exc)}), 400
-    refresh_on_open = bool(data.get('refresh_on_open', True))
-
-    result = _evaluate_smart_rules(rules, match_mode, limit_count, sort_field, sort_order)
-    now = int(time.time())
-    pid = str(uuid.uuid4())
-    _db.db_create_playlist(pid, name, now, now)
-    _db.db_set_playlist_tracks(pid, result['track_ids'], now)
-    _db.db_save_smart_rules(pid, rules, match_mode, limit_count, sort_field, sort_order, refresh_on_open)
-    _db.db_touch_smart_rules_refreshed(pid, now)
-    return jsonify({'id': pid, 'name': name, 'track_count': len(result['track_ids']),
-                    'unanalysed_count': result['unanalysed_count']}), 201
-
-
-@app.route('/api/playlists/<pid>/smart', methods=['GET'])
-def smart_playlist_get_rules(pid):
-    rules_data = _db.db_load_smart_rules(pid)
-    if rules_data is None:
-        return jsonify({'error': 'Not a smart playlist'}), 404
-    return jsonify(rules_data)
-
-
-@app.route('/api/playlists/<pid>/smart', methods=['PUT'])
-def smart_playlist_update_rules(pid):
-    data = request.json or {}
-    try:
-        rules, match_mode, limit_count, sort_field, sort_order = _normalise_smart_playlist_payload(data)
-    except ValueError as exc:
-        return jsonify({'error': str(exc)}), 400
-    refresh_on_open = bool(data.get('refresh_on_open', True))
-    _db.db_save_smart_rules(pid, rules, match_mode, limit_count, sort_field, sort_order, refresh_on_open)
-    return jsonify({'ok': True})
-
-
-@app.route('/api/playlists/<pid>/smart/refresh', methods=['POST'])
-def smart_playlist_refresh(pid):
-    rules_data = _db.db_load_smart_rules(pid)
-    if rules_data is None:
-        return jsonify({'error': 'Not a smart playlist'}), 404
-    try:
-        rules, match_mode, limit_count, sort_field, sort_order = _normalise_smart_playlist_payload(rules_data)
-    except ValueError as exc:
-        return jsonify({'error': str(exc)}), 400
-    result = _evaluate_smart_rules(
-        rules, match_mode, limit_count, sort_field, sort_order
-    )
-    now = int(time.time())
-    _db.db_set_playlist_tracks(pid, result['track_ids'], now)
-    _db.db_touch_smart_rules_refreshed(pid, now)
-    with library_lock:
-        lib_map = {t['id']: t for t in library}
-    tracks_out = [lib_map[tid] for tid in result['track_ids'] if tid in lib_map]
-    return jsonify({'tracks': tracks_out, 'total': result['total'],
-                    'unanalysed_count': result['unanalysed_count']})
 
 
 # ---------------------------------------------------------------------------
@@ -11711,21 +10707,6 @@ def load_genre_families():
     return raw if raw else dict(_DEFAULT_GENRE_FAMILIES)
 
 
-def load_playlist_gen_config():
-    stored = _db.db_load_playlist_gen_config()
-    if stored:
-        cfg = dict(_DEFAULT_PLAYLIST_GEN_CONFIG)
-        # Reconstruct nested dicts from flattened keys
-        for k, v in stored.items():
-            parts = k.split('.')
-            if len(parts) == 1:
-                cfg[k] = v
-            elif len(parts) == 2 and parts[0] in cfg and isinstance(cfg[parts[0]], dict):
-                cfg[parts[0]][parts[1]] = v
-        return cfg
-    return dict(_DEFAULT_PLAYLIST_GEN_CONFIG)
-
-
 @app.route('/api/gear/profiles', methods=['GET'])
 def get_gear_profiles():
     return jsonify(load_gear_profiles())
@@ -16322,6 +15303,483 @@ def insights_analyse_info():
     return jsonify({
         'total': total, 'analysed': valid, 'processed': processed,
         'pending': pending, 'status': status, 'needs_upgrade': needs_upgrade,
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Sonic Embedding — Genius Playlist / Continuous Play (PRD Phase 1)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Mirrors the "Insights — Phase 2" background analysis pattern above (resumable,
+# incremental, crash-resilient, cancellable daemon thread) but computes a deep
+# PANNs CNN14 embedding per track instead of the 13-band FFT profile. Kept as a
+# fully separate table/version/state from track_features / analysis_state so
+# IEM Match's existing pipeline is never disturbed by this feature.
+
+embedding_state = {
+    'status':            'idle',   # idle | running | done | error
+    'stage':             None,     # loading_model | analysing (only meaningful while status == 'running')
+    'model_download_pct': None,     # 0-100 while first-time-only checkpoint download is in progress, else None
+    'done':              0,
+    'total':             0,
+    'started_at':        None,
+    'completed_at':      None,
+    'error':             None,
+}
+
+_embedder_instance = None   # lazy singleton -- avoid reloading the ~330MB checkpoint per analysis run
+
+
+def _get_embedder():
+    global _embedder_instance
+    if _embedder_instance is None:
+        from recommend.embedder import PannsCnn14Embedder
+
+        def _on_download_progress(written, total):
+            embedding_state['model_download_pct'] = int(written * 100 / total) if total else None
+
+        _embedder_instance = PannsCnn14Embedder(DATA_DIR, device='cpu', progress_cb=_on_download_progress)
+        embedding_state['model_download_pct'] = None
+    return _embedder_instance
+
+
+def _is_cached_embedding_current(cached, track):
+    """Return True when a cached embedding entry is valid for the current track revision."""
+    if not cached:
+        return False
+    from recommend.embedder import EMBEDDING_VERSION
+    if cached.get('embedding_version') != EMBEDDING_VERSION:
+        return False
+    if cached.get('source_path') != track.get('path'):
+        return False
+    if int(cached.get('source_mtime') or 0) != _track_source_mtime(track):
+        return False
+    if cached.get('failed'):
+        return True
+    return cached.get('vector') is not None
+
+
+def _run_embedding_analysis():
+    global embedding_state
+    from recommend.embedder import EMBEDDING_VERSION, MODEL_NAME, EmbedderUnavailable
+
+    # Set 'running' immediately -- _get_embedder() below may block for several
+    # minutes on a first-time-only checkpoint download, and status must not
+    # report 'idle' (looks like nothing is happening) while that's in flight.
+    embedding_state.update({
+        'status':     'running',
+        'stage':      'loading_model',
+        'done':       0,
+        'total':      0,
+        'started_at': int(time.time()),
+        'completed_at': None,
+        'error':      None,
+    })
+
+    try:
+        embedder = _get_embedder()
+    except EmbedderUnavailable as exc:
+        embedding_state.update({'status': 'error', 'stage': None, 'error': str(exc)})
+        return
+
+    tracks = list(library)
+    track_ids = {t.get('id') for t in tracks}
+    existing_map = {
+        e['track_id']: e for e in _db.db_load_embedding_entries()
+        if e['track_id'] in track_ids
+    }
+    pending_tracks = [t for t in tracks if not _is_cached_embedding_current(existing_map.get(t['id']), t)]
+
+    embedding_state.update({
+        'status':     'running',
+        'stage':      'analysing',
+        'done':       0,
+        'total':      len(pending_tracks),
+        'error':      None,
+    })
+
+    music_base = get_music_base()
+    results_map = dict(existing_map)  # keep prior work if cancelled early
+
+    for i, track in enumerate(pending_tracks):
+        if embedding_state['status'] != 'running':
+            break  # external cancellation
+
+        embedding_state['done'] = i
+        tid = track['id']
+        source_path = track.get('path')
+        source_mtime = _track_source_mtime(track)
+
+        try:
+            path = Path(music_base) / source_path
+            vector = embedder.embed_file(path)
+            if vector is None:
+                raise ValueError('no valid audio windows')
+            results_map[tid] = {
+                'track_id': tid,
+                'embedding_version': EMBEDDING_VERSION,
+                'model_name': MODEL_NAME,
+                'vector': vector,
+                'failed': False,
+                'reason': None,
+                'source_path': source_path,
+                'source_mtime': source_mtime,
+                'analysed_at': int(time.time()),
+            }
+        except Exception as exc:
+            reason = 'unsupported_format' if 'sndfile' in str(exc).lower() else 'read_error'
+            results_map[tid] = {
+                'track_id': tid,
+                'embedding_version': EMBEDDING_VERSION,
+                'model_name': MODEL_NAME,
+                'vector': None,
+                'failed': True,
+                'reason': reason,
+                'source_path': source_path,
+                'source_mtime': source_mtime,
+                'analysed_at': int(time.time()),
+            }
+
+        # Flush every 200 tracks so progress survives a crash. Per-row upsert,
+        # not a full delete+reinsert (unlike the older track_features path).
+        if i > 0 and i % 200 == 0:
+            try:
+                _db.db_upsert_embeddings_batch(list(results_map.values()))
+            except Exception:
+                pass
+
+    global _similarity_index_cache
+    if embedding_state['status'] == 'running':
+        try:
+            _db.db_upsert_embeddings_batch(list(results_map.values()))
+        except Exception:
+            pass
+        embedding_state.update({
+            'status':       'done',
+            'stage':        None,
+            'done':         len(pending_tracks),
+            'completed_at': int(time.time()),
+        })
+        _similarity_index_cache = None  # force rebuild on next lookup so new vectors are visible
+    else:
+        try:
+            _db.db_upsert_embeddings_batch(list(results_map.values()))
+        except Exception:
+            pass
+        embedding_state.update({'status': 'idle', 'stage': None, 'done': 0, 'total': 0, 'error': None})
+        _similarity_index_cache = None
+
+
+@app.route('/api/sonic/analyse', methods=['POST'])
+def sonic_start_analysis():
+    if embedding_state['status'] == 'running':
+        return jsonify({'error': 'Sonic analysis already running'}), 409
+    existing_map = {e['track_id']: e for e in _db.db_load_embedding_entries()}
+    pending = [t for t in library if not _is_cached_embedding_current(existing_map.get(t['id']), t)]
+    if not pending:
+        return jsonify({'ok': True, 'already_up_to_date': True, 'total': 0, 'pending': 0})
+    t = threading.Thread(target=_run_embedding_analysis, daemon=True)
+    t.start()
+    return jsonify({'ok': True, 'total': len(pending), 'pending': len(pending)})
+
+
+@app.route('/api/sonic/analyse/cancel', methods=['POST'])
+def sonic_cancel_analysis():
+    if embedding_state['status'] == 'running':
+        embedding_state['status'] = 'cancelled'
+        return jsonify({'ok': True})
+    return jsonify({'error': 'No sonic analysis is currently running'}), 409
+
+
+@app.route('/api/sonic/analyse/status')
+def sonic_analysis_status():
+    return jsonify(embedding_state)
+
+
+@app.route('/api/sonic/analyse/info')
+def sonic_analyse_info():
+    """Return per-track sonic-embedding coverage: how many library tracks have been processed."""
+    from recommend.embedder import EMBEDDING_VERSION
+    total = len(library)
+    processed = 0
+    valid = 0
+    needs_upgrade = False
+    existing_map = {e['track_id']: e for e in _db.db_load_embedding_entries()}
+    for track in library:
+        cached = existing_map.get(track['id'])
+        if not cached:
+            continue
+        if cached.get('embedding_version') != EMBEDDING_VERSION:
+            needs_upgrade = True
+        if _is_cached_embedding_current(cached, track):
+            processed += 1
+            if not cached.get('failed'):
+                valid += 1
+    pending = max(0, total - processed)
+    if processed == 0:
+        status = 'not_run'
+    elif needs_upgrade:
+        status = 'needs_upgrade'
+    elif pending == 0:
+        status = 'up_to_date'
+    else:
+        status = 'pending'
+    return jsonify({
+        'total': total, 'analysed': valid, 'processed': processed,
+        'pending': pending, 'status': status, 'needs_upgrade': needs_upgrade,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Similarity index cache -- lazily built, rebuilt after each analysis run
+# completes (both embedding and legacy FFT-feature runs can add new vectors)
+# ---------------------------------------------------------------------------
+
+_similarity_index_cache = None
+
+
+def _get_similarity_index(force_refresh=False):
+    global _similarity_index_cache
+    if _similarity_index_cache is None or force_refresh:
+        from recommend.similarity import SimilarityIndex
+        _similarity_index_cache = SimilarityIndex(
+            _db.db_load_embedding_entries(),
+            _db.db_load_feature_entries(),
+        )
+    return _similarity_index_cache
+
+
+@app.route('/api/sonic/related/<track_id>')
+def sonic_related_tracks(track_id):
+    """Top-k nearest neighbours to a track by sonic similarity (Phase 1 verification endpoint)."""
+    limit = max(1, min(int(_safe_float(request.args.get('limit'), 20) or 20), 100))
+    with library_lock:
+        lib_map = {str(t.get('id')): t for t in library if t.get('id')}
+    if track_id not in lib_map:
+        return jsonify({'error': 'Track not found'}), 404
+
+    index = _get_similarity_index()
+    signal = index.signal_for(track_id)
+    if signal is None:
+        return jsonify({
+            'track': lib_map[track_id], 'signal': None, 'related': [],
+            'message': 'No sonic analysis available for this track yet.',
+        })
+
+    neighbours = index.nearest_neighbors(track_id, k=limit)
+    related = [
+        {**lib_map[tid], 'similarity': round(score, 4)}
+        for tid, score in neighbours if tid in lib_map
+    ]
+    return jsonify({'track': lib_map[track_id], 'signal': signal, 'related': related})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Genius Playlist (PRD sections 12-21) -- replaces AI Mix and rule-based
+# Smart Playlists (retired at the hard-swap cutover).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_GENIUS_DEFAULT_LENGTH = 25
+_GENIUS_ALLOWED_LENGTHS = (25, 50, 75, 100)
+
+
+def _load_play_stats_map():
+    """{track_id: {plays, valid_plays, skips, completions, last_played}} from play_events."""
+    conn = _db.get_conn()
+    rows = conn.execute(
+        """SELECT track_id,
+                  COUNT(*) AS plays,
+                  SUM(CASE WHEN skipped = 1 THEN 1 ELSE 0 END) AS skips,
+                  SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) AS completions,
+                  SUM(CASE WHEN valid_listen = 1 THEN 1 ELSE 0 END) AS valid_plays,
+                  MAX(played_at) AS last_played
+           FROM play_events
+           GROUP BY track_id"""
+    ).fetchall()
+    return {str(r['track_id']): dict(r) for r in rows}
+
+
+def _load_favourite_song_ids():
+    fav = _db.db_load_favourites()
+    return {row['id'] for row in fav.get('songs', [])}
+
+
+def _genius_generation_context():
+    """Shared setup for preview/refresh: library map, similarity index, play stats, favourites."""
+    with library_lock:
+        lib_tracks = list(library)
+    library_by_id = {str(t.get('id')): t for t in lib_tracks if t.get('id')}
+    return library_by_id, _get_similarity_index(), _load_play_stats_map(), _load_favourite_song_ids()
+
+
+def _genius_result_to_response(generated, library_by_id):
+    tracks = []
+    explanations = []
+    for entry in generated:
+        track = library_by_id.get(entry['track_id'])
+        if not track:
+            continue
+        tracks.append({**track, 'genius_phase': entry['phase']})
+        explanations.append({
+            'track_id': entry['track_id'],
+            'phase': entry['phase'],
+            'score': entry['score'],
+            'components': entry['explanation'],
+        })
+    return tracks, explanations
+
+
+@app.route('/api/genius/preview', methods=['POST'])
+def genius_preview():
+    from recommend.genius import generate_genius_playlist
+
+    data = request.json or {}
+    seed_ids = [str(x) for x in (data.get('seed_track_ids') or []) if str(x)]
+    length = int(_safe_float(data.get('length'), _GENIUS_DEFAULT_LENGTH) or _GENIUS_DEFAULT_LENGTH)
+    if length not in _GENIUS_ALLOWED_LENGTHS:
+        length = min(_GENIUS_ALLOWED_LENGTHS, key=lambda x: abs(x - length))
+    filters = data.get('filters') if isinstance(data.get('filters'), dict) else {}
+    discovery_mode = str(data.get('discovery_mode') or 'balanced').strip().lower()
+
+    library_by_id, index, play_stats, favourite_ids = _genius_generation_context()
+    seed_ids = [sid for sid in seed_ids if sid in library_by_id]
+    if not seed_ids:
+        return jsonify({'error': 'No valid seed track(s) provided'}), 400
+
+    nonce = str(uuid.uuid4())
+    generated = generate_genius_playlist(
+        index, seed_ids, length, library_by_id, play_stats, favourite_ids,
+        filters=filters, rng_seed=None, discovery_mode=discovery_mode,
+    )
+    tracks, explanations = _genius_result_to_response(generated, library_by_id)
+    return jsonify({
+        'tracks': tracks, 'explanations': explanations, 'generation_nonce': nonce,
+        'seed_track_ids': seed_ids, 'requested_length': length, 'generated_length': len(tracks),
+        'discovery_mode': discovery_mode,
+    })
+
+
+@app.route('/api/genius/refresh', methods=['POST'])
+def genius_refresh():
+    from recommend.genius import refresh_genius_playlist
+
+    data = request.json or {}
+    seed_ids = [str(x) for x in (data.get('seed_track_ids') or []) if str(x)]
+    length = int(_safe_float(data.get('length'), _GENIUS_DEFAULT_LENGTH) or _GENIUS_DEFAULT_LENGTH)
+    if length not in _GENIUS_ALLOWED_LENGTHS:
+        length = min(_GENIUS_ALLOWED_LENGTHS, key=lambda x: abs(x - length))
+    filters = data.get('filters') if isinstance(data.get('filters'), dict) else {}
+    previous_ids = [str(x) for x in (data.get('previous_track_ids') or []) if str(x)]
+    discovery_mode = str(data.get('discovery_mode') or 'balanced').strip().lower()
+
+    library_by_id, index, play_stats, favourite_ids = _genius_generation_context()
+    seed_ids = [sid for sid in seed_ids if sid in library_by_id]
+    if not seed_ids:
+        return jsonify({'error': 'No valid seed track(s) provided'}), 400
+
+    nonce = str(uuid.uuid4())
+    generated = refresh_genius_playlist(
+        index, seed_ids, length, library_by_id, play_stats, favourite_ids,
+        previous_track_ids=previous_ids, filters=filters, discovery_mode=discovery_mode,
+    )
+    tracks, explanations = _genius_result_to_response(generated, library_by_id)
+    prev_set = set(previous_ids)
+    new_set = {t['id'] for t in tracks}
+    overlap = round(len(new_set & prev_set) / len(new_set), 3) if new_set else 0.0
+    return jsonify({
+        'tracks': tracks, 'explanations': explanations, 'generation_nonce': nonce,
+        'seed_track_ids': seed_ids, 'requested_length': length, 'generated_length': len(tracks),
+        'overlap_with_previous': overlap,
+    })
+
+
+@app.route('/api/genius/save', methods=['POST'])
+def genius_save():
+    data = request.json or {}
+    name = str(data.get('name') or '').strip() or f"Genius Playlist {time.strftime('%Y-%m-%d %H:%M')}"
+    track_ids = data.get('track_ids') or []
+    if not isinstance(track_ids, list):
+        return jsonify({'error': 'track_ids must be a list'}), 400
+
+    with library_lock:
+        valid_ids = {t.get('id') for t in library}
+    clean_ids = [str(tid) for tid in track_ids if str(tid) in valid_ids]
+    if not clean_ids:
+        return jsonify({'error': 'No valid tracks to save'}), 400
+
+    playlists = load_playlists()
+    pid = str(uuid.uuid4())
+    now = int(time.time())
+    playlists[pid] = {
+        'id': pid,
+        'name': name,
+        'created_at': now,
+        'updated_at': now,
+        'tracks': clean_ids,
+    }
+    save_playlists(playlists)
+
+    _db.db_save_generation_config(
+        pid,
+        seed_track_ids=data.get('seed_track_ids') or [],
+        filters=data.get('filters') if isinstance(data.get('filters'), dict) else {},
+        discovery_mode=str(data.get('discovery_mode') or 'balanced'),
+        refresh_on_open=bool(data.get('refresh_on_open')),
+        generation_nonce=data.get('generation_nonce'),
+        explanation_data={e['track_id']: e for e in (data.get('explanations') or []) if e.get('track_id')},
+    )
+    return jsonify({'id': pid, 'name': name, 'track_count': len(clean_ids)}), 201
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Continuous Play (PRD sections 22-33) -- replaces the old
+# /api/player/autoplay/recommend endpoint (retired at the hard-swap cutover).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/api/player/continuous/next', methods=['POST'])
+def player_continuous_next():
+    from recommend.continuous import generate_continuous_next, classify_skip
+
+    data = request.json or {}
+    limit = int(_safe_float(data.get('limit'), 3) or 3)
+    limit = max(1, min(limit, 10))
+
+    library_by_id, index, play_stats, favourite_ids = _genius_generation_context()
+
+    recent_ids = [str(x) for x in (data.get('recent_track_ids') or []) if str(x) in library_by_id]
+    manual_ids = [str(x) for x in (data.get('manual_track_ids') or []) if str(x)]
+    seed_ids = [str(x) for x in (data.get('original_seed_ids') or []) if str(x) in library_by_id]
+    current_id = str(data.get('current_track_id') or (recent_ids[-1] if recent_ids else ''))
+    exclude_ids = [str(x) for x in (data.get('exclude_track_ids') or []) if str(x)]
+    discovery_mode = str(data.get('discovery_mode') or 'balanced').strip().lower()
+
+    skip_positions = data.get('recent_skip_positions') or []
+    skip_classes = [classify_skip(_safe_float(p, None)) for p in skip_positions]
+    recent_categories = [str(c) for c in (data.get('recent_generated_categories') or [])]
+
+    if not current_id or current_id not in library_by_id:
+        return jsonify({'tracks': [], 'explanations': [], 'summary': {'reason': 'No current track to continue from.'}})
+
+    generated = generate_continuous_next(
+        index, recent_ids, manual_ids, seed_ids, current_id, library_by_id, play_stats, favourite_ids,
+        recent_skip_classifications=skip_classes, recent_generated_categories=recent_categories,
+        exclude_track_ids=exclude_ids, limit=limit, discovery_mode=discovery_mode,
+    )
+
+    tracks = []
+    explanations = []
+    for entry in generated:
+        track = library_by_id.get(entry['track_id'])
+        if not track:
+            continue
+        tracks.append({**track, 'continuous_category': entry['category']})
+        explanations.append({
+            'track_id': entry['track_id'], 'score': entry['score'],
+            'category': entry['category'], 'components': entry['explanation'],
+        })
+
+    return jsonify({
+        'tracks': tracks, 'explanations': explanations,
+        'summary': {'generated_length': len(tracks), 'discovery_mode': discovery_mode},
     })
 
 

@@ -1539,31 +1539,6 @@ let _playlistExportSubmenuTimer = null;
 let _createPlPendingIds = [];
 let _dapModalInitialJson = '';
 let _iemModalInitialJson = '';
-let _mlGenOptions = null;
-let _mlGenPreviewTracks = [];
-let _mlGenPreviewDirty = false;
-let _mlGenContext = 'global';
-let _mlGenSeedTrackIds = [];
-let _mlModeBound = false;
-let _mlSongCatalog = null;
-let _mlRefQuery = '';
-const _ML_MAX_REF_TRACKS = 12;
-let _mlRefDraftIds = [];
-let _mlPreviewSeed = 1337;
-let _srInitialJson = '';
-let _srDirty = false;
-let _srDirtyBound = false;
-
-const _ML_MOOD_PRESETS = {
-  focus: { energy: 0.42, brightness: 0.4 },
-  late_night: { energy: 0.3, brightness: 0.35 },
-  energetic: { energy: 0.78, brightness: 0.62 },
-  warm_relaxed: { energy: 0.38, brightness: 0.28 },
-  hype: { energy: 0.86, brightness: 0.7 },
-  bright_bouncy: { energy: 0.72, brightness: 0.78 },
-  dark_heavy: { energy: 0.68, brightness: 0.24 },
-};
-
 /* ── Generic confirm modal ──────────────────────────────────────────── */
 let _confirmResolve = null;
 
@@ -2069,7 +2044,7 @@ function _renderPlaylistsList(wrap, paginationEl, rows, favCount) {
             coverHtml = keys.length ? `<img src="/api/artwork/${keys[0]}" alt="" loading="lazy" />` : coverPlaceholder('playlist', 34, '5px');
           }
           const open = _playlistOpenAction(pl.id);
-          const type = pl.id === '__favourites__' ? 'Favourites' : (pl.is_smart ? 'Smart' : 'Manual');
+          const type = pl.id === '__favourites__' ? 'Favourites' : (pl.is_genius ? 'Genius' : 'Manual');
           return `
           <tr data-playlist-id="${esc(pl.id)}" data-playlist-name="${esc(pl.name)}" tabindex="0" onclick="if(!event.target.closest('button')) ${open}" onkeydown="if(event.key==='Enter') ${open}" ondblclick="${open}" oncontextmenu="App.showPlaylistCtxMenu(event,this.dataset.playlistId,this.dataset.playlistName)">
             <td class="collection-col-title"><div class="collection-title-cell">${_collectionThumb('playlist', coverHtml)}<span title="${esc(pl.name)}">${esc(pl.name)}</span></div></td>
@@ -3962,7 +3937,6 @@ function trackRow(t, num, inPlaylist) {
 
 /* ── Playlist view ──────────────────────────────────────────────────── */
 async function openPlaylist(pid) {
-  if (!await _guardMlGeneratorNavigation()) return;
   if (!await _guardPeqEditorNavigation()) return;
   if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
@@ -3976,26 +3950,17 @@ async function openPlaylist(pid) {
   showViewEl('playlist');
   _resetPlaylistDetailScroll();
 
-  // Auto-refresh smart playlist silently before rendering
-  if (pl.is_smart && pl.smart_rules?.refresh_on_open) {
-    const refreshed = await refreshSmartPlaylist(pid).catch(() => null);
-    if (refreshed) {
-      pl = await api(`/playlists/${pid}`);
-      state.playlist = pl;
-    }
-  }
-
-  // Show smart pill badge in header if applicable
+  // Show Genius pill badge in header if applicable
   const nameEl = document.getElementById('pl-name');
   if (nameEl) {
     nameEl.textContent = pl.name;
-    const existing = document.getElementById('pl-smart-badge');
+    const existing = document.getElementById('pl-genius-badge');
     if (existing) existing.remove();
-    if (pl.is_smart) {
+    if (pl.is_genius) {
       const badge = document.createElement('span');
-      badge.id = 'pl-smart-badge';
-      badge.className = 'pl-smart-badge';
-      badge.textContent = 'Smart';
+      badge.id = 'pl-genius-badge';
+      badge.className = 'pl-genius-badge';
+      badge.textContent = 'Genius';
       nameEl.insertAdjacentElement('afterend', badge);
     }
   }
@@ -4072,7 +4037,6 @@ function _applyPlaylistDetailMode(isFavouriteVirtual) {
 }
 
 async function openFavouriteSongsPlaylist() {
-  if (!await _guardMlGeneratorNavigation()) return;
   if (!await _guardPeqEditorNavigation()) return;
   if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
@@ -4928,7 +4892,6 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null
     : (tracks.length === 1 ? _trackFinderTarget(tracks[0]) : null);
   const menu = document.getElementById('ctx-menu');
   const labelEl = document.getElementById('ctx-label');
-  const smartLabel = document.getElementById('ctx-smart-playlist-label');
   const favItem = document.getElementById('ctx-favourite-item');
   const favLabel = document.getElementById('ctx-favourite-label');
   const finderItem = document.getElementById('ctx-show-in-finder-item');
@@ -4947,11 +4910,6 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null
       : `Find Lyrics for ${missing.length} missing song${missing.length === 1 ? '' : 's'}`;
   }
   if (labelEl) labelEl.textContent = label || (tracks.length === 1 ? tracks[0].title : `${tracks.length} songs`);
-  if (smartLabel) {
-    smartLabel.textContent = tracks.length === 1
-      ? 'Create AI Mix from This Song'
-      : `Create AI Mix from ${tracks.length} Songs`;
-  }
   if (favItem && favLabel) {
     if (!favTarget?.id || !favTarget?.type) {
       favItem.style.display = 'none';
@@ -4988,6 +4946,10 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null
   }
   const editTrackItem = document.getElementById('ctx-edit-track-tags-item');
   if (editTrackItem) editTrackItem.style.display = tracks.length === 1 ? '' : 'none';
+  const relatedItem = document.getElementById('ctx-related-tracks-item');
+  if (relatedItem) relatedItem.style.display = tracks.length === 1 ? '' : 'none';
+  const geniusItem = document.getElementById('ctx-genius-item');
+  if (geniusItem) geniusItem.style.display = tracks.length === 1 ? '' : 'none';
   menu.style.display = 'block';
   menu.style.left = '-9999px';
   menu.style.top  = '-9999px';
@@ -5360,11 +5322,235 @@ function ctxAddToQueue() {
   Player.addToQueue(tracks);
 }
 
-function ctxCreateSmartPlaylist() {
-  const refs = _ctxTracks.slice(0, _ML_MAX_REF_TRACKS).map(t => t.id).filter(Boolean);
+// --- Related Tracks (Genius Playlist / Continuous Play) ---
+
+function ctxShowRelatedTracks() {
+  const track = _ctxTracks[0];
   hideCtxMenu();
-  if (!refs.length) return;
-  openMlPlaylistGenerator('global', { referenceTrackIds: refs, preferredMode: 'seed' });
+  if (!track?.id) return;
+  showRelatedTracks(track.id);
+}
+
+async function showRelatedTracks(trackId) {
+  const modal = document.getElementById('related-tracks-modal');
+  const body = document.getElementById('related-tracks-modal-body');
+  const subtitle = document.getElementById('related-tracks-modal-subtitle');
+  if (!modal || !body) return;
+  modal.style.display = 'flex';
+  subtitle.textContent = '';
+  body.innerHTML = `<div class="related-tracks-loading">Finding similar tracks…</div>`;
+
+  let data;
+  try {
+    data = await api(`/sonic/related/${encodeURIComponent(trackId)}?limit=20`);
+  } catch (e) {
+    body.innerHTML = `<div class="related-tracks-empty">Couldn't load related tracks: ${esc(e.message || 'unknown error')}</div>`;
+    return;
+  }
+
+  subtitle.textContent = data.track ? ` · Inspired by ${data.track.title}` : '';
+
+  if (!data.signal || !data.related?.length) {
+    body.innerHTML = `<div class="related-tracks-empty">${esc(data.message || 'No related tracks found yet — run Analyse Library (or the sonic analysis pass) first.')}</div>`;
+    return;
+  }
+
+  const signalNote = data.signal === 'deep'
+    ? 'Deep sonic embedding'
+    : 'Spectral profile (deep embedding not analysed yet for this track)';
+
+  body.innerHTML = `
+    <div class="related-tracks-signal-note">${esc(signalNote)}</div>
+    <div class="related-tracks-list">
+      ${data.related.map(t => `
+        <div class="related-track-row" ondblclick="Player.playTrackById('${esc(t.id)}')">
+          <div class="related-track-info">
+            <div class="related-track-title">${esc(t.title || 'Unknown')}</div>
+            <div class="related-track-meta">${esc(t.artist || '')}${t.album ? ' · ' + esc(t.album) : ''}</div>
+          </div>
+          <div class="related-track-score">${Math.round((t.similarity || 0) * 100)}%</div>
+          <button class="related-track-play-btn" title="Play" onclick="Player.playTrackById('${esc(t.id)}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function closeRelatedTracks() {
+  const modal = document.getElementById('related-tracks-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+// --- Genius Playlist (replaces AI Mix -- built alongside it for now, see CLAUDE.md rollout plan) ---
+
+const _GENIUS_PHASE_LABELS = { establish: 'Establish', expand: 'Expand', discover: 'Discover', reanchor: 'Re-anchor' };
+
+let _geniusState = {
+  seedTrack: null,
+  length: 25,
+  discoveryMode: 'balanced',
+  tracks: [],
+  explanations: [],
+  nonce: null,
+  loading: false,
+};
+
+function ctxCreateGeniusPlaylist() {
+  const track = _ctxTracks[0];
+  hideCtxMenu();
+  if (!track?.id) return;
+  openGeniusModal(track);
+}
+
+function openGeniusModal(seedTrack) {
+  _geniusState = { seedTrack, length: 25, discoveryMode: 'balanced', tracks: [], explanations: [], nonce: null, loading: false };
+  const modal = document.getElementById('genius-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  _updateGeniusLengthButtons();
+  _updateGeniusDiscoveryButtons();
+  runGeniusGeneration();
+}
+
+function closeGeniusModal() {
+  const modal = document.getElementById('genius-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function _updateGeniusLengthButtons() {
+  document.querySelectorAll('.genius-length-btn').forEach(btn => {
+    btn.classList.toggle('genius-length-btn--active', Number(btn.dataset.len) === _geniusState.length);
+  });
+}
+
+function _updateGeniusDiscoveryButtons() {
+  document.querySelectorAll('.genius-discovery-btn').forEach(btn => {
+    btn.classList.toggle('genius-discovery-btn--active', btn.dataset.mode === _geniusState.discoveryMode);
+  });
+}
+
+function changeGeniusLength(len) {
+  if (_geniusState.loading || len === _geniusState.length) return;
+  _geniusState.length = len;
+  _updateGeniusLengthButtons();
+  runGeniusGeneration();
+}
+
+function changeGeniusDiscoveryMode(mode) {
+  if (_geniusState.loading || mode === _geniusState.discoveryMode) return;
+  _geniusState.discoveryMode = mode;
+  _updateGeniusDiscoveryButtons();
+  runGeniusGeneration();
+}
+
+async function runGeniusGeneration() {
+  const subtitle = document.getElementById('genius-modal-subtitle');
+  const body = document.getElementById('genius-modal-body');
+  if (!body) return;
+  _geniusState.loading = true;
+  subtitle.textContent = _geniusState.seedTrack ? ` · Inspired by ${_geniusState.seedTrack.title}` : '';
+  body.innerHTML = `<div class="related-tracks-loading">Building your playlist…</div>`;
+
+  try {
+    const data = await api('/genius/preview', {
+      method: 'POST',
+      body: { seed_track_ids: [_geniusState.seedTrack.id], length: _geniusState.length, discovery_mode: _geniusState.discoveryMode },
+    });
+    _geniusState.tracks = data.tracks || [];
+    _geniusState.explanations = data.explanations || [];
+    _geniusState.nonce = data.generation_nonce;
+  } catch (e) {
+    body.innerHTML = `<div class="related-tracks-empty">Couldn't generate a playlist: ${esc(e.message || 'unknown error')}</div>`;
+    _geniusState.loading = false;
+    return;
+  }
+  _geniusState.loading = false;
+  _renderGeniusModal();
+}
+
+async function refreshGeniusPlaylist() {
+  if (_geniusState.loading || !_geniusState.tracks.length) return;
+  const body = document.getElementById('genius-modal-body');
+  _geniusState.loading = true;
+  body.innerHTML = `<div class="related-tracks-loading">Refreshing…</div>`;
+  try {
+    const data = await api('/genius/refresh', {
+      method: 'POST',
+      body: {
+        seed_track_ids: [_geniusState.seedTrack.id],
+        length: _geniusState.length,
+        discovery_mode: _geniusState.discoveryMode,
+        previous_track_ids: _geniusState.tracks.map(t => t.id),
+      },
+    });
+    _geniusState.tracks = data.tracks || [];
+    _geniusState.explanations = data.explanations || [];
+    _geniusState.nonce = data.generation_nonce;
+  } catch (e) {
+    toast(`Refresh failed: ${e.message || 'unknown error'}`, 'error');
+  }
+  _geniusState.loading = false;
+  _renderGeniusModal();
+}
+
+function playGeniusPlaylist() {
+  if (!_geniusState.tracks.length) return;
+  Player.playAll(_geniusState.tracks, 0, `Genius · ${_geniusState.seedTrack?.title || ''}`);
+}
+
+async function saveGeniusPlaylist() {
+  if (!_geniusState.tracks.length) return;
+  try {
+    const result = await api('/genius/save', {
+      method: 'POST',
+      body: {
+        name: `Genius · ${_geniusState.seedTrack?.title || 'Playlist'}`,
+        track_ids: _geniusState.tracks.map(t => t.id),
+        seed_track_ids: [_geniusState.seedTrack.id],
+        discovery_mode: _geniusState.discoveryMode,
+        generation_nonce: _geniusState.nonce,
+        explanations: _geniusState.explanations,
+      },
+    });
+    toast(`Saved "${result.name}"`, 'success');
+    closeGeniusModal();
+    await loadPlaylists();
+  } catch (e) {
+    toast(`Couldn't save playlist: ${e.message || 'unknown error'}`, 'error');
+  }
+}
+
+function _renderGeniusModal() {
+  const body = document.getElementById('genius-modal-body');
+  if (!body) return;
+  if (!_geniusState.tracks.length) {
+    body.innerHTML = `<div class="related-tracks-empty">Not enough analysed tracks yet to build a playlist around this song.</div>`;
+    return;
+  }
+  const explainByIdx = _geniusState.explanations;
+  body.innerHTML = `
+    <div class="related-tracks-list">
+      ${_geniusState.tracks.map((t, i) => {
+        const phase = _GENIUS_PHASE_LABELS[t.genius_phase] || '';
+        const explain = explainByIdx[i];
+        const never = explain?.components?.never_played;
+        return `
+        <div class="related-track-row genius-track-row" ondblclick="Player.playTrackById('${esc(t.id)}')">
+          <div class="genius-phase-tag genius-phase-tag--${esc(t.genius_phase || '')}">${esc(phase)}</div>
+          <div class="related-track-info">
+            <div class="related-track-title">${esc(t.title || 'Unknown')}</div>
+            <div class="related-track-meta">${esc(t.artist || '')}${t.album ? ' · ' + esc(t.album) : ''}${never ? ' · Never played' : ''}</div>
+          </div>
+          <button class="related-track-play-btn" title="Play" onclick="Player.playTrackById('${esc(t.id)}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+        </div>
+      `;
+      }).join('')}
+    </div>
+  `;
 }
 
 async function ctxToggleFavourite() {
@@ -5845,11 +6031,6 @@ function _isImportModalDirty() {
   return !!(_importData || Object.keys(_importMappings || {}).length);
 }
 
-function _isSmartRulesModalDirty() {
-  if (!_isOverlayOpen('sr-modal')) return false;
-  return _srDirty || (!!_srInitialJson && _srStateJson() !== _srInitialJson);
-}
-
 function _isTagEditorModalDirty() {
   return _isOverlayOpen('tag-editor-modal') && _tagEditorDirty();
 }
@@ -5910,7 +6091,6 @@ async function _guardModalNavigation() {
   if (_isPeqUploadModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Upload?', message: "Your PEQ upload details haven't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
   if (_isCreatePlaylistModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Playlist?', message: "The new playlist name hasn't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
   if (_isImportModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Import?', message: "Your import mapping hasn't been saved.", okText: 'Discard', cancelText: 'Keep Mapping' })) return false;
-  if (_isSmartRulesModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Smart Rules?', message: "Your Smart Rules changes haven't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
   if (_isTagEditorModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Tag Edits?', message: "Your track tag edits haven't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
   if (_isAlbumTagModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Album Edits?', message: "Your album tag edits haven't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
   if (_isArtistRenameModalDirty() && !await _showConfirm({ kind: 'prompt', title: 'Discard Rename?', message: "The new artist name hasn't been saved.", okText: 'Discard', cancelText: 'Keep Editing' })) return false;
@@ -5923,11 +6103,6 @@ async function _guardModalNavigation() {
 }
 
 function _closeModalOverlaysForNavigation() {
-  if (_isOverlayOpen('ml-ref-modal')) closeMlReferenceBrowser();
-  if (_isOverlayOpen('ml-gen-modal')) {
-    _resetMlPreviewState();
-    closeMlPlaylistGenerator();
-  }
   if (_isOverlayOpen('device-type-modal')) closeDeviceTypeModal();
   if (_isOverlayOpen('dap-modal')) closeDapModal();
   if (_isOverlayOpen('ipod-modal')) closeIpodModal();
@@ -5937,7 +6112,6 @@ function _closeModalOverlaysForNavigation() {
   if (_isOverlayOpen('settings-modal')) closeSettings();
   if (_isOverlayOpen('sync-modal')) closeSyncModal();
   if (_isOverlayOpen('import-modal')) closeImportModal(true);
-  if (_isOverlayOpen('sr-modal')) srClose(true);
   if (_isOverlayOpen('dup-modal')) document.getElementById('dup-modal').style.display = 'none';
   if (_isOverlayOpen('export-csv-modal')) _closeExportCsvModal();
   if (_isOverlayOpen('problem-tracks-modal')) closeProblemTracksModal();
@@ -5991,578 +6165,6 @@ async function submitCreatePlaylist() {
     toast(`Playlist "${pl.name}" created`);
   }
   await openPlaylist(pl.id);
-}
-
-function _isMlModalOpen() {
-  const modal = document.getElementById('ml-gen-modal');
-  return !!(modal && modal.style.display !== 'none');
-}
-
-function _hasUnsavedMlPreview() {
-  return _mlGenPreviewDirty && _mlGenPreviewTracks.length > 0;
-}
-
-function _resetMlPreviewState() {
-  _mlGenPreviewTracks = [];
-  _mlGenPreviewDirty = false;
-  _mlPreviewSeed = 1337;
-  const summaryEl = document.getElementById('ml-gen-summary');
-  const previewEl = document.getElementById('ml-gen-preview');
-  const previewPane = document.getElementById('ml-gen-preview-pane');
-  const saveBtn = document.getElementById('ml-gen-save-btn');
-  const regenBtn = document.getElementById('ml-gen-regen-btn');
-  if (summaryEl) summaryEl.textContent = '';
-  if (previewEl) previewEl.innerHTML = '';
-  if (previewPane) previewPane.style.display = 'none';
-  if (saveBtn) saveBtn.disabled = true;
-  if (regenBtn) regenBtn.disabled = true;
-}
-
-async function _confirmMlDiscard() {
-  if (!_hasUnsavedMlPreview()) return true;
-  return _showConfirm({
-    kind: 'prompt',
-    title: 'Discard Preview?',
-    message: "Your generated playlist preview hasn't been saved.",
-    okText: 'Discard',
-    cancelText: 'Keep Editing',
-  });
-}
-
-async function _guardMlGeneratorNavigation() {
-  if (!_isMlModalOpen()) return true;
-  if (!await _confirmMlDiscard()) return false;
-  _resetMlPreviewState();
-  const modal = document.getElementById('ml-gen-modal');
-  if (modal) modal.style.display = 'none';
-  return true;
-}
-
-function _getMlSeedCandidates() {
-  const selectedIds = [...state.selectedTrackIds];
-  if (selectedIds.length) return selectedIds.slice(0, _ML_MAX_REF_TRACKS);
-  if (_mlGenContext === 'playlist' && state.playlist?.tracks?.length) {
-    return state.playlist.tracks.slice(0, 8).map(t => t.id).filter(Boolean);
-  }
-  if (state.playlist?.tracks?.length) {
-    return state.playlist.tracks.slice(0, 5).map(t => t.id).filter(Boolean);
-  }
-  if (state.tracks?.length) {
-    return state.tracks.slice(0, 5).map(t => t.id).filter(Boolean);
-  }
-  return [];
-}
-
-function _renderMlSeedNote() {
-  const note = document.getElementById('ml-gen-seed-note');
-  if (!note) return;
-  if (!_mlGenSeedTrackIds.length) {
-    note.textContent = 'No reference songs selected yet.';
-    return;
-  }
-  note.textContent = `${_mlGenSeedTrackIds.length} reference song${_mlGenSeedTrackIds.length !== 1 ? 's' : ''} selected.`;
-}
-
-async function _ensureMlSongCatalog() {
-  if (_mlSongCatalog) return _mlSongCatalog;
-  _mlSongCatalog = await api('/library/songs?sort=title&order=asc').catch(() => []);
-  return _mlSongCatalog;
-}
-
-function _renderMlReferenceSelected() {
-  const el = document.getElementById('ml-gen-ref-selected');
-  if (!el) return;
-  if (!_mlGenSeedTrackIds.length) {
-    el.innerHTML = '';
-    return;
-  }
-  const map = new Map((_mlSongCatalog || []).map(t => [t.id, t]));
-  el.innerHTML = _mlGenSeedTrackIds.map(tid => {
-    const t = map.get(tid) || {};
-    const name = t.title || tid;
-    const meta = t.artist ? ` · ${t.artist}` : '';
-    return `<span class="ml-gen-ref-chip">${esc(name)}${esc(meta)}<button onclick="App.mlGenRemoveReference('${tid}')" title="Remove">✕</button></span>`;
-  }).join('');
-}
-
-function _renderMlReferenceResults(query = '') {
-  const el = document.getElementById('ml-gen-ref-results');
-  if (!el) return;
-  const q = (query || '').trim().toLowerCase();
-  let pool = _mlSongCatalog || [];
-  if (q) {
-    pool = pool.filter(t =>
-      `${t.title || ''} ${t.artist || ''} ${t.album || ''}`.toLowerCase().includes(q)
-    );
-  }
-  pool = pool.filter(t => t && t.id && !_mlGenSeedTrackIds.includes(t.id)).slice(0, 25);
-  if (!pool.length) {
-    el.innerHTML = '<div class="ml-gen-ref-empty">No matching songs found.</div>';
-    return;
-  }
-  el.innerHTML = pool.map(t => `
-    <button class="ml-gen-ref-option" onclick="App.mlGenAddReference('${t.id}')">
-      <div class="ml-gen-ref-option-title">${esc(t.title || 'Untitled')}</div>
-      <div class="ml-gen-ref-option-meta">${esc(t.artist || 'Unknown Artist')} · ${esc(t.album || 'Unknown Album')}</div>
-    </button>
-  `).join('');
-}
-
-function mlGenSearchRefSongs(query = '') {
-  _mlRefQuery = query || '';
-  _renderMlReferenceResults(_mlRefQuery);
-}
-
-function mlGenAddReference(trackId) {
-  if (!trackId) return;
-  if (_mlGenSeedTrackIds.includes(trackId)) return;
-  if (_mlGenSeedTrackIds.length >= _ML_MAX_REF_TRACKS) {
-    toast(`You can add up to ${_ML_MAX_REF_TRACKS} reference songs.`, 'warn');
-    return;
-  }
-  _mlGenSeedTrackIds.push(trackId);
-  _renderMlSeedNote();
-  _renderMlReferenceSelected();
-  _renderMlReferenceResults(_mlRefQuery);
-}
-
-function mlGenRemoveReference(trackId) {
-  _mlGenSeedTrackIds = _mlGenSeedTrackIds.filter(id => id !== trackId);
-  _renderMlSeedNote();
-  _renderMlReferenceSelected();
-  _renderMlReferenceResults(_mlRefQuery);
-}
-
-function mlGenClearReferences() {
-  _mlGenSeedTrackIds = [];
-  _renderMlSeedNote();
-  _renderMlReferenceSelected();
-  _renderMlReferenceResults(_mlRefQuery);
-}
-
-function _mlRefRowHtml(t, checked) {
-  return `<label class="ml-ref-row">
-    <input type="checkbox" ${checked ? 'checked' : ''} onchange="App.mlRefBrowserToggle('${t.id}', this.checked)" />
-    <div class="ml-ref-cell-title" title="${esc(t.title || '')}">${esc(t.title || 'Untitled')}</div>
-    <div class="ml-ref-cell-meta" title="${esc(t.artist || '')}">${esc(t.artist || 'Unknown Artist')}</div>
-    <div class="ml-ref-cell-meta" title="${esc(t.album || '')}">${esc(t.album || 'Unknown Album')}</div>
-  </label>`;
-}
-
-function _renderMlRefBrowserResults() {
-  const container = document.getElementById('ml-ref-results');
-  const countEl = document.getElementById('ml-ref-count');
-  if (!container) return;
-  const q = (_mlRefQuery || '').trim().toLowerCase();
-  let rows = _mlSongCatalog || [];
-  if (q) {
-    rows = rows.filter(t => `${t.title || ''} ${t.artist || ''} ${t.album || ''}`.toLowerCase().includes(q));
-  }
-  rows = rows.slice(0, 500);
-  if (!rows.length) {
-    container.innerHTML = '<div class="ml-gen-ref-empty">No matching songs found.</div>';
-  } else {
-    container.innerHTML = rows.map(t => _mlRefRowHtml(t, _mlRefDraftIds.includes(t.id))).join('');
-  }
-  if (countEl) countEl.textContent = `${_mlRefDraftIds.length} selected`;
-}
-
-async function openMlReferenceBrowser() {
-  await _ensureMlSongCatalog();
-  _mlRefDraftIds = [..._mlGenSeedTrackIds];
-  _mlRefQuery = '';
-  const input = document.getElementById('ml-ref-search');
-  const modal = document.getElementById('ml-ref-modal');
-  if (input) input.value = '';
-  _renderMlRefBrowserResults();
-  if (modal) modal.style.display = 'flex';
-}
-
-function closeMlReferenceBrowser() {
-  const modal = document.getElementById('ml-ref-modal');
-  if (modal) modal.style.display = 'none';
-}
-
-function mlRefBrowserSearch(query = '') {
-  _mlRefQuery = query || '';
-  _renderMlRefBrowserResults();
-}
-
-function mlRefBrowserToggle(trackId, checked) {
-  if (!trackId) return;
-  if (checked) {
-    if (_mlRefDraftIds.includes(trackId)) return;
-    if (_mlRefDraftIds.length >= _ML_MAX_REF_TRACKS) {
-      toast(`You can add up to ${_ML_MAX_REF_TRACKS} reference songs.`, 'warn');
-      _renderMlRefBrowserResults();
-      return;
-    }
-    _mlRefDraftIds.push(trackId);
-  } else {
-    _mlRefDraftIds = _mlRefDraftIds.filter(id => id !== trackId);
-  }
-  _renderMlRefBrowserResults();
-}
-
-function applyMlReferenceBrowser() {
-  _mlGenSeedTrackIds = [..._mlRefDraftIds];
-  _renderMlSeedNote();
-  _renderMlReferenceSelected();
-  closeMlReferenceBrowser();
-}
-
-function mlGenUseCurrentSelection() {
-  const ids = [...state.selectedTrackIds].slice(0, _ML_MAX_REF_TRACKS);
-  if (!ids.length) {
-    toast('Select songs in a list first, then use this action.');
-    return;
-  }
-  _mlGenSeedTrackIds = ids;
-  _renderMlSeedNote();
-  _renderMlReferenceSelected();
-}
-
-function _applyMlModeUi() {
-  const mode = document.getElementById('ml-gen-mode')?.value || 'genre';
-  const targetRow = document.getElementById('ml-gen-target-row');
-  const genreModeRow = document.getElementById('ml-gen-genre-mode-row');
-  const seedRow = document.getElementById('ml-gen-seed-row');
-
-  const showGenre = mode === 'genre' || mode === 'hybrid';
-  const showReference = mode === 'seed' || mode === 'hybrid';
-
-  if (targetRow) targetRow.style.display = showGenre ? '' : 'none';
-  if (genreModeRow) genreModeRow.style.display = showGenre ? '' : 'none';
-  if (seedRow) seedRow.style.display = showReference ? '' : 'none';
-}
-
-function _bindMlModeHandlers() {
-  if (_mlModeBound) return;
-  const modeEl = document.getElementById('ml-gen-mode');
-  const moodEl = document.getElementById('ml-gen-mood');
-  if (modeEl) {
-    modeEl.addEventListener('change', _applyMlModeUi);
-  }
-  if (moodEl) moodEl.addEventListener('change', _applyMlMoodPreset);
-  _mlModeBound = true;
-}
-
-async function _loadMlGenerationOptions() {
-  if (_mlGenOptions) return _mlGenOptions;
-  _mlGenOptions = await api('/playlists/generate/options');
-  return _mlGenOptions;
-}
-
-function _renderMlGenreOptions(genres = []) {
-  const genreSel = document.getElementById('ml-gen-target-genre');
-  if (!genreSel) return;
-  genreSel.innerHTML = `<option value="">Any</option>${genres.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('')}`;
-}
-
-function _setMlDefaults(opts) {
-  const defaults = opts?.defaults || {};
-  const limits = opts?.limits || {};
-  const lenRange = limits.playlist_length || [8, 80];
-
-  const modeEl = document.getElementById('ml-gen-mode');
-  const genreModeEl = document.getElementById('ml-gen-genre-mode');
-  const lenEl = document.getElementById('ml-gen-length');
-  const arcEl = document.getElementById('ml-gen-arc');
-  const diversityEl = document.getElementById('ml-gen-diversity');
-  const smoothEl = document.getElementById('ml-gen-smoothness');
-  const deterministicEl = document.getElementById('ml-gen-deterministic');
-  const repeatEl = document.getElementById('ml-gen-repeat-artists');
-  const yearMinEl = document.getElementById('ml-gen-year-min');
-  const yearMaxEl = document.getElementById('ml-gen-year-max');
-
-  if (modeEl) modeEl.value = defaults.mode || 'genre';
-  if (genreModeEl) genreModeEl.value = defaults.genre_mode || 'strict';
-  if (lenEl) {
-    lenEl.min = String(lenRange[0] ?? 8);
-    lenEl.max = String(lenRange[1] ?? 80);
-    lenEl.value = String(defaults.playlist_length ?? 20);
-  }
-  if (arcEl) arcEl.value = defaults.playlist_arc || 'steady';
-  if (diversityEl) diversityEl.value = String(defaults.diversity_strength ?? 0.7);
-  if (smoothEl) smoothEl.value = String(defaults.transition_smoothness ?? 0.8);
-  if (deterministicEl) deterministicEl.value = String(!!(defaults.deterministic ?? true));
-  if (repeatEl) repeatEl.value = String(!!(defaults.allow_repeat_artists ?? false));
-  if (yearMinEl) yearMinEl.value = '';
-  if (yearMaxEl) yearMaxEl.value = '';
-  _applyMlModeUi();
-}
-
-function _mlReadNumber(id, fallback, min = null, max = null) {
-  const el = document.getElementById(id);
-  if (!el) return fallback;
-  if (String(el.value || '').trim() === '') return fallback;
-  const raw = Number(el.value);
-  if (!Number.isFinite(raw)) return fallback;
-  let out = raw;
-  if (min !== null) out = Math.max(min, out);
-  if (max !== null) out = Math.min(max, out);
-  return out;
-}
-
-function _applyMlMoodPreset() {
-  const mood = document.getElementById('ml-gen-mood')?.value || '';
-  const preset = _ML_MOOD_PRESETS[mood];
-  if (!preset) return;
-  const energyEl = document.getElementById('ml-gen-energy');
-  const brightnessEl = document.getElementById('ml-gen-brightness');
-  if (energyEl) energyEl.value = String(preset.energy);
-  if (brightnessEl) brightnessEl.value = String(preset.brightness);
-}
-
-function _currentMlPayload() {
-  const opts = _mlGenOptions || {};
-  const defaults = opts.defaults || {};
-  const mode = document.getElementById('ml-gen-mode')?.value || defaults.mode || 'genre';
-  const targetGenre = document.getElementById('ml-gen-target-genre')?.value || '';
-  const genreMode = document.getElementById('ml-gen-genre-mode')?.value || defaults.genre_mode || 'strict';
-  const arc = document.getElementById('ml-gen-arc')?.value || defaults.playlist_arc || 'steady';
-  const mood = document.getElementById('ml-gen-mood')?.value || '';
-  const yearMin = _mlReadNumber('ml-gen-year-min', null, 1900, 2100);
-  const yearMax = _mlReadNumber('ml-gen-year-max', null, 1900, 2100);
-  const deterministic = String(document.getElementById('ml-gen-deterministic')?.value || 'true') === 'true';
-  const allowRepeatArtists = String(document.getElementById('ml-gen-repeat-artists')?.value || 'false') === 'true';
-
-  return {
-    mode,
-    target_genre: targetGenre || null,
-    genre_mode: genreMode,
-    seed_track_ids: _mlGenSeedTrackIds,
-    mood: mood || null,
-    year_range: (yearMin !== null && yearMax !== null && yearMin <= yearMax) ? [yearMin, yearMax] : null,
-    playlist_length: _mlReadNumber('ml-gen-length', defaults.playlist_length || 20, 8, 80),
-    energy_target: _mlReadNumber('ml-gen-energy', 0.5, 0, 1),
-    brightness_target: _mlReadNumber('ml-gen-brightness', 0.5, 0, 1),
-    diversity_strength: _mlReadNumber('ml-gen-diversity', defaults.diversity_strength || 0.7, 0, 1),
-    transition_smoothness: _mlReadNumber('ml-gen-smoothness', defaults.transition_smoothness || 0.8, 0, 1),
-    playlist_arc: arc,
-    deterministic,
-    allow_repeat_artists: allowRepeatArtists,
-    seed: _mlPreviewSeed,
-    ..._currentMlHeardFilter(),
-  };
-}
-
-function _currentMlHeardFilter() {
-  const val = document.getElementById('ml-gen-heard')?.value || '';
-  if (!val) return {};
-  if (val === 'unheard') return { exclude_heard: true };
-  const days = parseInt(val.replace('not_', ''), 10);
-  if (!isNaN(days)) return { exclude_heard_within_days: days };
-  return {};
-}
-
-function _renderMlPreviewSummary(summary = {}) {
-  const el = document.getElementById('ml-gen-summary');
-  const previewPane = document.getElementById('ml-gen-preview-pane');
-  if (!el) return;
-  if (previewPane) previewPane.style.display = 'block';
-  const generated = summary.generated_length ?? 0;
-  const requested = summary.requested_length ?? generated;
-  const mode = ({ genre: 'Genre Lane', seed: 'Track DNA', hybrid: 'Blend Mode' }[summary.mode] || '-');
-  const pool = summary.candidate_pool_size ?? 0;
-  const considered = summary.library_tracks_considered ?? 0;
-  const target = summary.target_genre || 'Any genre';
-  const seedTag = `run: ${_mlPreviewSeed}`;
-  el.innerHTML = `
-    <div class="ml-gen-summary-stat">
-      <span>Tracks</span>
-      <strong>${generated}/${requested}</strong>
-    </div>
-    <div class="ml-gen-summary-stat">
-      <span>Style</span>
-      <strong>${esc(mode)}</strong>
-    </div>
-    <div class="ml-gen-summary-stat">
-      <span>Target</span>
-      <strong>${esc(target)}</strong>
-    </div>
-    <div class="ml-gen-summary-stat">
-      <span>Pool</span>
-      <strong>${pool}/${considered}</strong>
-    </div>
-    <div class="ml-gen-summary-stat">
-      <span>Seed</span>
-      <strong>${esc(seedTag)}</strong>
-    </div>
-  `;
-}
-
-function _renderMlPreviewTracks(tracks = [], explanations = []) {
-  const el = document.getElementById('ml-gen-preview');
-  const previewPane = document.getElementById('ml-gen-preview-pane');
-  if (!el) return;
-  if (previewPane) previewPane.style.display = 'block';
-  if (!tracks.length) {
-    el.innerHTML = '<p class="insights-empty-note">No tracks generated with current constraints.</p>';
-    return;
-  }
-  const explainById = new Map((explanations || []).map(e => [e.track_id, e]));
-  el.innerHTML = `
-    <div class="ml-preview-table-shell tb-table-shell">
-      <div class="tb-table-scroll-area">
-        <table class="insights-table tb-table tb-table-density-compact ml-preview-table">
-          <colgroup>
-            <col class="ml-preview-col-num" />
-            <col class="ml-preview-col-title" />
-            <col class="ml-preview-col-artist" />
-            <col class="ml-preview-col-album" />
-            <col class="ml-preview-col-reason" />
-            <col class="ml-preview-col-fit" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th data-col="position">#</th>
-              <th data-col="title">Title</th>
-              <th data-col="artist">Artist</th>
-              <th data-col="album">Album</th>
-              <th data-col="reason">Why it fits</th>
-              <th data-col="fit" class="ml-preview-col-fit">Fit</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tracks.map((t, i) => {
-              const ex = explainById.get(t.id) || {};
-              const fitPct = Math.max(0, Math.min(100, Math.round((Number(ex.placement_score) || 0) * 100)));
-              const reason = ex.reason || _mlReasonFromScores(ex.score_components || {});
-              return `<tr>
-                <td>${i + 1}</td>
-                <td title="${esc(t.title)}">${esc(t.title)}</td>
-                <td title="${esc(t.artist)}">${esc(t.artist)}</td>
-                <td title="${esc(t.album)}">${esc(t.album)}</td>
-                <td title="${esc(reason)}">${esc(reason)}</td>
-                <td class="ml-preview-fit">${fitPct}%</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-  _enhanceTableSystem(el);
-}
-
-function _mlReasonFromScores(scores = {}) {
-  const ranked = [
-    ['Genre fit', scores.genre_match],
-    ['Reference match', scores.similarity],
-    ['Vibe match', scores.mood_match],
-    ['Smooth transition', scores.sound_match],
-  ].filter(([, value]) => Number.isFinite(Number(value)))
-   .sort((a, b) => Number(b[1]) - Number(a[1]));
-  return ranked[0]?.[0] || 'Balanced fit';
-}
-
-async function openMlPlaylistGenerator(context = 'global', options = {}) {
-  if (_isMlModalOpen()) {
-    if (!_confirmMlDiscard()) return;
-    _resetMlPreviewState();
-  }
-  _mlGenContext = context === 'playlist' ? 'playlist' : 'global';
-  _mlGenSeedTrackIds = (options.referenceTrackIds && options.referenceTrackIds.length)
-    ? options.referenceTrackIds.slice(0, _ML_MAX_REF_TRACKS).map(String)
-    : _getMlSeedCandidates();
-  _mlRefQuery = '';
-
-  const modal = document.getElementById('ml-gen-modal');
-  if (!modal) return;
-  modal.style.display = 'flex';
-  _bindMlModeHandlers();
-
-  const nameEl = document.getElementById('ml-gen-name');
-  if (nameEl) {
-    const stamp = new Date().toISOString().slice(0, 10);
-    nameEl.value = `AI Mix ${stamp}`;
-  }
-  _resetMlPreviewState();
-  try {
-    const opts = await _loadMlGenerationOptions();
-    await _ensureMlSongCatalog();
-    _renderMlGenreOptions(opts.genres || []);
-    _setMlDefaults(opts);
-    const modeEl = document.getElementById('ml-gen-mode');
-    if (options.preferredMode && modeEl) modeEl.value = options.preferredMode;
-    const refSearchEl = document.getElementById('ml-gen-ref-search');
-    if (refSearchEl) refSearchEl.value = '';
-    _renderMlSeedNote();
-    _renderMlReferenceSelected();
-    _renderMlReferenceResults('');
-    _applyMlModeUi();
-  } catch (e) {
-    toast('Could not load generation options');
-  }
-}
-
-async function closeMlPlaylistGenerator() {
-  if (!await _confirmMlDiscard()) return;
-  _resetMlPreviewState();
-  closeMlReferenceBrowser();
-  const modal = document.getElementById('ml-gen-modal');
-  if (modal) modal.style.display = 'none';
-}
-
-async function runMlPlaylistPreview({ regenerate = false } = {}) {
-  const previewBtn = document.getElementById('ml-gen-preview-btn');
-  const regenBtn = document.getElementById('ml-gen-regen-btn');
-  const saveBtn = document.getElementById('ml-gen-save-btn');
-  if (regenerate) _mlPreviewSeed += 1;
-  if (previewBtn) { previewBtn.disabled = true; previewBtn.textContent = 'Generating…'; }
-  if (regenBtn) { regenBtn.disabled = true; regenBtn.textContent = regenerate ? 'Regenerating…' : 'Regenerate'; }
-  try {
-    const payload = _currentMlPayload();
-    if (regenerate) payload.regenerate = true;
-    if (payload.mode === 'seed' && !payload.seed_track_ids.length) {
-      toast('Add reference tracks for better results.', 'warn');
-    }
-    const res = await api('/playlists/generate/preview', { method: 'POST', body: payload });
-    _mlGenPreviewTracks = Array.isArray(res.tracks) ? res.tracks : [];
-    _mlGenPreviewDirty = _mlGenPreviewTracks.length > 0;
-    _renderMlPreviewSummary(res.summary || {});
-    _renderMlPreviewTracks(_mlGenPreviewTracks, res.explanations || []);
-    if (saveBtn) saveBtn.disabled = !_mlGenPreviewTracks.length;
-    if (regenBtn) regenBtn.disabled = !_mlGenPreviewTracks.length;
-    if (!_mlGenPreviewTracks.length) toast('No tracks matched. Try relaxed genre mode or wider targets.');
-  } catch (e) {
-    toast('No results. Try adjusting the settings.');
-  } finally {
-    if (previewBtn) {
-      previewBtn.disabled = false;
-      previewBtn.textContent = 'Preview';
-    }
-    if (regenBtn) regenBtn.textContent = 'Regenerate';
-  }
-}
-
-async function regenerateMlPlaylist() {
-  await runMlPlaylistPreview({ regenerate: true });
-}
-
-async function saveMlGeneratedPlaylist() {
-  if (!_mlGenPreviewTracks.length) {
-    toast('Generate a preview first');
-    return;
-  }
-  const name = (document.getElementById('ml-gen-name')?.value || '').trim();
-  try {
-    const res = await api('/playlists/generate/save', {
-      method: 'POST',
-      body: {
-        name,
-        track_ids: _mlGenPreviewTracks.map(t => t.id).filter(Boolean),
-      },
-    });
-    _mlGenPreviewDirty = false;
-    closeMlPlaylistGenerator();
-    await loadPlaylists();
-    toast(`Saved playlist "${res.name}" (${res.track_count} tracks)`);
-    await openPlaylist(res.id);
-  } catch (e) {
-    toast('Could not save the playlist');
-  }
 }
 
 async function createPlaylist() {
@@ -8508,7 +8110,6 @@ async function searchSeeAll(category) {
 }
 
 async function showView(viewName) {
-  if (!await _guardMlGeneratorNavigation()) return;
   if (!await _guardPeqEditorNavigation()) return;
   if (!await _guardModalNavigation()) return;
   const organizerOptions = viewName === 'organizer-import' ? { initialStep: 2 } : null;
@@ -8617,7 +8218,6 @@ function setActiveNav(view) {
 }
 
 async function backToArtists() {
-  if (!await _guardMlGeneratorNavigation()) return;
   if (!await _guardPeqEditorNavigation()) return;
   if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
@@ -8630,7 +8230,6 @@ async function backToArtists() {
 }
 
 async function backToGear() {
-  if (!await _guardMlGeneratorNavigation()) return;
   if (!await _guardPeqEditorNavigation()) return;
   if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
@@ -8803,7 +8402,6 @@ async function navBack() {
     return;
   }
   if (_navHistory.length === 0) return;
-  if (!await _guardMlGeneratorNavigation()) return;
   if (!await _guardPeqEditorNavigation()) return;
   if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
@@ -8822,7 +8420,6 @@ async function navBack() {
 
 
 async function showArtist(artist) {
-  if (!await _guardMlGeneratorNavigation()) return;
   if (!await _guardPeqEditorNavigation()) return;
   if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
@@ -8848,7 +8445,6 @@ async function showArtist(artist) {
 }
 
 async function showAlbum(artist, album, displayArtist = '') {
-  if (!await _guardMlGeneratorNavigation()) return;
   if (!await _guardPeqEditorNavigation()) return;
   if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
@@ -8864,7 +8460,6 @@ async function showAlbum(artist, album, displayArtist = '') {
 }
 
 async function showArtistTracks(artist) {
-  if (!await _guardMlGeneratorNavigation()) return;
   if (!await _guardPeqEditorNavigation()) return;
   if (!await _guardModalNavigation()) return;
   _closeModalOverlaysForNavigation();
@@ -20659,413 +20254,6 @@ function _getOsPlatform() {
   return 'linux';
 }
 
-/* ── Smart Rules modal ──────────────────────────────────────────────── */
-const _SR_FIELDS = [
-  { value: 'genre',        label: 'Genre',        type: 'string', placeholder: 'Rock' },
-  { value: 'artist',       label: 'Artist',       type: 'string', placeholder: 'Artist name' },
-  { value: 'album',        label: 'Album',        type: 'string', placeholder: 'Album name' },
-  { value: 'year',         label: 'Year',         type: 'int',    placeholder: '1990' },
-  { value: 'format',       label: 'Format',       type: 'string', placeholder: 'FLAC' },
-  { value: 'bitrate',      label: 'Bitrate',      type: 'int',    placeholder: '320' },
-  { value: 'date_added',   label: 'Date added',   type: 'date',   placeholder: '30' },
-  { value: 'play_count',   label: 'Play count',   type: 'int',    placeholder: '2' },
-  { value: 'never_played', label: 'Never played', type: 'bool' },
-  { value: 'last_played',  label: 'Last played',  type: 'date',   placeholder: '90' },
-  { value: 'energy',       label: 'Energy',       type: 'float',  placeholder: '0.65' },
-  { value: 'brightness',   label: 'Brightness',   type: 'float',  placeholder: '0.5' },
-  { value: 'has_analysis', label: 'Has analysis', type: 'bool' },
-];
-const _SR_OPS = {
-  string: [['contains','contains'],['not_contains','does not contain'],['is','is exactly'],['is_not','is not']],
-  int:    [['equals','is'],['greater_than','is more than'],['less_than','is less than']],
-  float:  [['greater_than','is more than'],['less_than','is less than']],
-  bool:   [['is','is']],
-  date:   [['within_days','within days'],['older_than_days','older than days']],
-};
-const _SR_TEMPLATES = {
-  unheard:    { name: 'Unheard Library',         rules: [{field:'never_played',op:'is',value:true}],                                           limit: 50, sort_field: 'date_added', sort_order: 'desc' },
-  forgotten:  { name: 'Forgotten Favorites',     rules: [{field:'play_count',op:'greater_than',value:2},{field:'last_played',op:'older_than_days',value:90}], limit: 30, sort_field: 'last_played', sort_order: 'asc' },
-  new_unheard:{ name: 'Recently Added, Unheard', rules: [{field:'date_added',op:'within_days',value:30},{field:'never_played',op:'is',value:true}],           limit: 50, sort_field: 'date_added', sort_order: 'desc' },
-  high_energy:{ name: 'High Energy Unheard',     rules: [{field:'energy',op:'greater_than',value:0.65},{field:'never_played',op:'is',value:true}],             limit: 50, sort_field: 'date_added', sort_order: 'desc' },
-  flac_only:  { name: 'FLAC Only',               rules: [{field:'format',op:'is',value:'FLAC'},{field:'never_played',op:'is',value:true}],                     limit: 50, sort_field: 'date_added', sort_order: 'desc' },
-  deep_cuts:  { name: 'Old Deep Cuts',           rules: [{field:'year',op:'less_than',value:1990},{field:'never_played',op:'is',value:true},{field:'has_analysis',op:'is',value:true}], limit: 50, sort_field: 'year', sort_order: 'asc' },
-};
-let _srRules = [];
-let _srSelectedTemplateKey = 'unheard';
-let _srLastPreviewJson = '';
-let _srLastPreviewTotal = 0;
-
-function srOpen() {
-  _srSelectedTemplateKey = 'unheard';
-  _srApplyTemplate('unheard');
-  _srRenderStarters();
-  _srSetPreviewStatus('');
-  document.getElementById('sr-unanalysed-banner').style.display = 'none';
-  document.getElementById('sr-modal').style.display = 'flex';
-  _srBindDirtyInputs();
-  _srDirty = false;
-  _srInitialJson = _srStateJson();
-  _srLastPreviewJson = '';
-  _srLastPreviewTotal = 0;
-  _srUpdateActionState();
-}
-
-async function srClose(force = false) {
-  if (!force && _isSmartRulesModalDirty() && !await _showConfirm({
-    kind: 'prompt',
-    title: 'Discard Smart Rules?',
-    message: "Your Smart Rules changes haven't been saved.",
-    okText: 'Discard',
-    cancelText: 'Keep Editing',
-  })) return;
-  _srDirty = false;
-  _srInitialJson = '';
-  _srLastPreviewJson = '';
-  _srLastPreviewTotal = 0;
-  _srRenderPreview([]);
-  document.getElementById('sr-modal').style.display = 'none';
-}
-
-function srAddRule() {
-  _srRules.push({ field: 'genre', op: 'contains', value: '' });
-  _srSelectedTemplateKey = '';
-  _srRenderRules();
-  srMarkDirty();
-}
-
-function srRemoveRule(idx) {
-  _srRules.splice(idx, 1);
-  _srSelectedTemplateKey = '';
-  _srRenderRules();
-  srMarkDirty();
-}
-
-function srChangeField(idx, field) {
-  const fd = _SR_FIELDS.find(f => f.value === field);
-  const ops = fd ? _SR_OPS[fd.type] : _SR_OPS.string;
-  _srRules[idx] = { field, op: ops[0][0], value: _srDefaultValue(fd) };
-  _srSelectedTemplateKey = '';
-  _srRenderRules();
-  srMarkDirty();
-}
-
-function srChangeOp(idx, op) {
-  _srRules[idx].op = op;
-  _srSelectedTemplateKey = '';
-  srMarkDirty();
-}
-
-function srChangeVal(idx, val) {
-  const fd = _SR_FIELDS.find(f => f.value === _srRules[idx].field);
-  if (fd?.type === 'bool') _srRules[idx].value = val === 'true';
-  else if (fd?.type === 'int' || fd?.type === 'float' || fd?.type === 'date') _srRules[idx].value = val;
-  else _srRules[idx].value = val;
-  _srSelectedTemplateKey = '';
-  srMarkDirty();
-}
-
-function _srBindDirtyInputs() {
-  if (_srDirtyBound) return;
-  ['sr-name', 'sr-match-mode', 'sr-limit', 'sr-sort-field', 'sr-sort-order'].forEach((id) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('input', srMarkDirty);
-    el.addEventListener('change', srMarkDirty);
-  });
-  _srDirtyBound = true;
-}
-
-function _srStateJson() {
-  return JSON.stringify({
-    name: document.getElementById('sr-name')?.value || '',
-    ..._srBuildPayload(),
-  });
-}
-
-function srMarkDirty() {
-  if (!_isOverlayOpen('sr-modal')) return;
-  _srDirty = _srStateJson() !== _srInitialJson;
-  if (_srDirty) _srSetPreviewStatus('Preview needed before saving.');
-  if (_srDirty) _srRenderPreview([]);
-  _srLastPreviewJson = '';
-  _srLastPreviewTotal = 0;
-  _srRenderStarters();
-  _srUpdateActionState();
-}
-
-function _srRenderRules() {
-  const list = document.getElementById('sr-rules-list');
-  if (!list) return;
-  if (!_srRules.length) {
-    list.innerHTML = '<div class="sr-empty-rules">Add at least one rule, or choose a discovery starter above.</div>';
-    _srUpdateActionState();
-    return;
-  }
-  list.innerHTML = _srRules.map((r, i) => {
-    const fd = _SR_FIELDS.find(f => f.value === r.field) || _SR_FIELDS[0];
-    const ops = _SR_OPS[fd.type] || _SR_OPS.string;
-    const fieldOpts = _SR_FIELDS.map(f => `<option value="${f.value}" ${f.value === r.field ? 'selected' : ''}>${f.label}</option>`).join('');
-    const opOpts = ops.map(([v, l]) => `<option value="${v}" ${v === r.op ? 'selected' : ''}>${l}</option>`).join('');
-    const value = r.value ?? '';
-    let valInput;
-    if (fd.type === 'bool') {
-      valInput = `<label class="sr-rule-control"><span>Value</span><select class="sr-val-input" onchange="App.srChangeVal(${i},this.value)">
-        <option value="true" ${r.value === true ? 'selected' : ''}>Yes</option>
-        <option value="false" ${r.value === false ? 'selected' : ''}>No</option>
-      </select></label>`;
-    } else {
-      valInput = `<label class="sr-rule-control"><span>Value</span><input class="sr-val-input" type="${fd.type === 'float' || fd.type === 'int' || fd.type === 'date' ? 'number' : 'text'}"
-        ${fd.type === 'float' ? 'min="0" max="1" step="0.05"' : ''}
-        ${fd.type === 'int' || fd.type === 'date' ? 'min="0" step="1"' : ''}
-        placeholder="${esc(fd.placeholder || '')}"
-        value="${esc(value)}"
-        onchange="App.srChangeVal(${i},this.value)"
-        oninput="App.srChangeVal(${i},this.value)" /></label>`;
-    }
-    return `<div class="sr-rule-row">
-      <label class="sr-rule-control"><span>Find</span><select class="sr-field-sel" onchange="App.srChangeField(${i},this.value)">${fieldOpts}</select></label>
-      <label class="sr-rule-control"><span>Condition</span><select class="sr-op-sel" onchange="App.srChangeOp(${i},this.value)">${opOpts}</select></label>
-      ${valInput}
-      <button class="sr-remove-btn" onclick="App.srRemoveRule(${i})" title="Remove rule">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>`;
-  }).join('');
-  _srUpdateActionState();
-}
-
-async function srPreview() {
-  const validation = _srValidateRules();
-  const banner = document.getElementById('sr-unanalysed-banner');
-  const msg = document.getElementById('sr-unanalysed-msg');
-  if (!validation.valid) {
-    _srSetValidationMessage(validation.message);
-    _srSetPreviewStatus('Fix the recipe before previewing.');
-    _srRenderPreview([], { emptyMessage: validation.message });
-    _srUpdateActionState();
-    return;
-  }
-  const payload = validation.payload;
-  try {
-    _srSetValidationMessage('');
-    _srSetPreviewStatus('Previewing...');
-    _srRenderPreview([]);
-    const res = await api('/playlists/smart/preview', { method: 'POST', body: payload });
-    const tracks = Array.isArray(res.tracks) ? res.tracks : [];
-    const total = Number(res.total || 0);
-    _srSetPreviewStatus(`${total} track${total !== 1 ? 's' : ''} match`);
-    _srRenderPreview(tracks, { emptyMessage: 'No tracks match this recipe yet. Try Any rules, a wider date range, or another starter.' });
-    _srLastPreviewJson = _srStateJson();
-    _srLastPreviewTotal = total;
-    if (res.unanalysed_count > 0 && banner && msg) {
-      msg.textContent = `${res.unanalysed_count} unanalysed tracks may be missing from sonic rules.`;
-      banner.style.display = 'flex';
-    } else if (banner) {
-      banner.style.display = 'none';
-    }
-  } catch (e) {
-    _srSetPreviewStatus('Preview failed');
-    _srRenderPreview([], { emptyMessage: e.message || 'Preview failed. Check the recipe and try again.' });
-  }
-  _srUpdateActionState();
-}
-
-function _srRenderPreview(tracks = [], opts = {}) {
-  const pane = document.getElementById('sr-preview-pane');
-  const list = document.getElementById('sr-preview-list');
-  if (!pane || !list) return;
-  if (!tracks.length) {
-    if (opts.emptyMessage) {
-      pane.style.display = 'block';
-      list.innerHTML = `<div class="sr-preview-empty">${esc(opts.emptyMessage)}</div>`;
-    } else {
-      pane.style.display = 'none';
-      list.innerHTML = '';
-    }
-    return;
-  }
-  pane.style.display = 'block';
-  list.innerHTML = `
-    <div class="sr-preview-table-wrap tb-table-shell">
-      <div class="tb-table-scroll-area">
-        <table class="insights-table tb-table tb-table-density-compact sr-preview-table">
-          <colgroup>
-            <col class="sr-preview-col-num" />
-            <col class="sr-preview-col-title" />
-            <col class="sr-preview-col-artist" />
-            <col class="sr-preview-col-album" />
-            <col class="sr-preview-col-genre" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th data-col="position">#</th>
-              <th data-col="title">Title</th>
-              <th data-col="artist">Artist</th>
-              <th data-col="album">Album</th>
-              <th data-col="genre">Genre</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tracks.slice(0, 25).map((t, i) => `<tr>
-              <td data-col="position">${i + 1}</td>
-              <td data-col="title" title="${esc(t.title || '')}">${esc(t.title || 'Untitled')}</td>
-              <td data-col="artist" title="${esc(t.artist || '')}">${esc(t.artist || 'Unknown Artist')}</td>
-              <td data-col="album" title="${esc(t.album || '')}">${esc(t.album || 'Unknown Album')}</td>
-              <td data-col="genre" title="${esc(t.genre || '')}">${esc(t.genre || '-')}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-      ${tracks.length > 25 ? `<div class="sr-preview-more">Showing first 25 of ${tracks.length} matches.</div>` : ''}
-    </div>
-  `;
-  _enhanceTableSystem(list);
-}
-
-function _srBuildPayload() {
-  return {
-    rules: _srRules,
-    match_mode: document.getElementById('sr-match-mode')?.value || 'all',
-    limit_count: parseInt(document.getElementById('sr-limit')?.value || '50', 10),
-    sort_field: document.getElementById('sr-sort-field')?.value || 'date_added',
-    sort_order: document.getElementById('sr-sort-order')?.value || 'desc',
-  };
-}
-
-async function srSave() {
-  const validation = _srValidateRules();
-  if (!validation.valid) {
-    _srSetValidationMessage(validation.message);
-    _srUpdateActionState();
-    return;
-  }
-  if (_srLastPreviewJson !== _srStateJson() || _srLastPreviewTotal < 1) {
-    _srSetPreviewStatus('Preview matches before saving.');
-    _srUpdateActionState();
-    return;
-  }
-  const name = (document.getElementById('sr-name')?.value || '').trim() || 'Smart Rules Playlist';
-  const payload = { ...validation.payload, name, refresh_on_open: true };
-  try {
-    const res = await api('/playlists/smart', { method: 'POST', body: payload });
-    _srDirty = false;
-    srClose(true);
-    await loadPlaylists();
-    toast(`Smart Rules playlist "${res.name}" created (${res.track_count} tracks)`, 'success');
-    if (res.unanalysed_count > 0) {
-      toast(`${res.unanalysed_count} tracks excluded. Run Analyse Library first.`, 'warn');
-    }
-    await openPlaylist(res.id);
-  } catch (e) {
-    toast('Could not create smart playlist');
-  }
-}
-
-function srLoadTemplate(key) {
-  if (!_srApplyTemplate(key)) return;
-  _srSelectedTemplateKey = key;
-  _srRenderStarters();
-  srMarkDirty();
-}
-
-function _srApplyTemplate(key) {
-  const tmpl = _SR_TEMPLATES[key];
-  if (!tmpl) return false;
-  _srRules = tmpl.rules.map(r => ({ ...r }));
-  document.getElementById('sr-name').value = tmpl.name;
-  document.getElementById('sr-match-mode').value = 'all';
-  document.getElementById('sr-limit').value = String(tmpl.limit);
-  document.getElementById('sr-sort-field').value = tmpl.sort_field;
-  document.getElementById('sr-sort-order').value = tmpl.sort_order;
-  _srRenderRules();
-  _srSetValidationMessage('');
-  _srSetPreviewStatus('Preview needed before saving.');
-  _srRenderPreview([]);
-  return true;
-}
-
-function _srDefaultValue(fd) {
-  if (fd?.type === 'bool') return true;
-  return '';
-}
-
-function _srSetPreviewStatus(text) {
-  const countEl = document.getElementById('sr-preview-count');
-  if (countEl) countEl.textContent = text || '';
-}
-
-function _srSetValidationMessage(text) {
-  const el = document.getElementById('sr-validation-msg');
-  if (!el) return;
-  el.textContent = text || '';
-  el.classList.toggle('is-visible', !!text);
-}
-
-function _srRenderStarters() {
-  document.querySelectorAll('#sr-starters-grid .sr-starter-card').forEach((btn) => {
-    btn.classList.toggle('is-selected', btn.dataset.template === _srSelectedTemplateKey);
-  });
-}
-
-function _srValidateRules() {
-  const rules = [];
-  if (!_srRules.length) return { valid: false, message: 'Choose a starter or add at least one rule.' };
-
-  for (let i = 0; i < _srRules.length; i += 1) {
-    const rule = _srRules[i];
-    const fd = _SR_FIELDS.find(f => f.value === rule.field);
-    if (!fd) return { valid: false, message: `Rule ${i + 1} uses an unknown field.` };
-    const op = rule.op;
-    const allowedOps = (_SR_OPS[fd.type] || []).map(([value]) => value);
-    if (!allowedOps.includes(op)) return { valid: false, message: `Rule ${i + 1} has an unsupported condition.` };
-
-    let value = rule.value;
-    if (fd.type === 'bool') {
-      value = value === true || value === 'true';
-    } else if (fd.type === 'string') {
-      value = String(value ?? '').trim();
-      if (!value) return { valid: false, message: `Add a value for ${fd.label.toLowerCase()} in rule ${i + 1}.` };
-    } else if (fd.type === 'int' || fd.type === 'date') {
-      value = Number.parseInt(value, 10);
-      if (!Number.isFinite(value) || value < 0) return { valid: false, message: `Use a whole number for ${fd.label.toLowerCase()} in rule ${i + 1}.` };
-    } else if (fd.type === 'float') {
-      value = Number.parseFloat(value);
-      if (!Number.isFinite(value) || value < 0 || value > 1) return { valid: false, message: `${fd.label} must be between 0 and 1 in rule ${i + 1}.` };
-    }
-    rules.push({ field: fd.value, op, value });
-  }
-
-  let limit = Number.parseInt(document.getElementById('sr-limit')?.value || '50', 10);
-  if (!Number.isFinite(limit)) limit = 50;
-  limit = Math.max(5, Math.min(limit, 500));
-  const limitEl = document.getElementById('sr-limit');
-  if (limitEl) limitEl.value = String(limit);
-
-  return {
-    valid: true,
-    payload: {
-      rules,
-      match_mode: document.getElementById('sr-match-mode')?.value || 'all',
-      limit_count: limit,
-      sort_field: document.getElementById('sr-sort-field')?.value || 'date_added',
-      sort_order: document.getElementById('sr-sort-order')?.value || 'desc',
-    },
-  };
-}
-
-function _srUpdateActionState() {
-  const validation = _srValidateRules();
-  _srSetValidationMessage(validation.valid ? '' : validation.message);
-  const previewBtn = document.getElementById('sr-preview-btn');
-  const saveBtn = document.getElementById('sr-save-btn');
-  const hasFreshPreview = _srLastPreviewJson === _srStateJson() && _srLastPreviewTotal > 0;
-  if (previewBtn) previewBtn.disabled = !validation.valid;
-  if (saveBtn) {
-    saveBtn.disabled = !validation.valid || !hasFreshPreview;
-    saveBtn.title = hasFreshPreview ? '' : 'Preview matches before saving';
-  }
-}
-
 /* ── History view ───────────────────────────────────────────────────── */
 const _HISTORY_PERIOD_STORAGE_KEY = 'tb_history_period';
 const _HISTORY_PERIOD_DEFAULT = 7;
@@ -21428,19 +20616,6 @@ function _historyDateLabel(d) {
 
 function _historyTimeStr(ts) {
   return new Date(ts * 1000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-}
-
-/* ── Smart playlist auto-refresh ────────────────────────────────────── */
-async function refreshSmartPlaylist(pid) {
-  try {
-    const res = await api(`/playlists/${pid}/smart/refresh`, { method: 'POST' });
-    if (res.unanalysed_count > 0) {
-      toast(`${res.unanalysed_count} tracks excluded. Run Analyse Library first.`, 'warn');
-    }
-    return res.tracks || [];
-  } catch (e) {
-    return null;
-  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -24183,20 +23358,6 @@ const App = {
   showCreatePlaylistModal,
   closeCreatePlaylistModal,
   submitCreatePlaylist,
-  openMlPlaylistGenerator,
-  closeMlPlaylistGenerator,
-  runMlPlaylistPreview,
-  regenerateMlPlaylist,
-  saveMlGeneratedPlaylist,
-  mlGenAddReference,
-  mlGenRemoveReference,
-  mlGenClearReferences,
-  mlGenUseCurrentSelection,
-  openMlReferenceBrowser,
-  closeMlReferenceBrowser,
-  mlRefBrowserSearch,
-  mlRefBrowserToggle,
-  applyMlReferenceBrowser,
   _confirmYes,
   _confirmNo,
   _confirmAlt,
@@ -24242,7 +23403,15 @@ const App = {
   hideCtxMenu,
   ctxPlayNext,
   ctxAddToQueue,
-  ctxCreateSmartPlaylist,
+  ctxShowRelatedTracks,
+  closeRelatedTracks,
+  ctxCreateGeniusPlaylist,
+  closeGeniusModal,
+  changeGeniusLength,
+  changeGeniusDiscoveryMode,
+  refreshGeniusPlaylist,
+  playGeniusPlaylist,
+  saveGeniusPlaylist,
   ctxToggleFavourite,
   ctxTogglePin,
   ctxTogglePinPlaylist,
@@ -24715,19 +23884,6 @@ const App = {
   onAlbumArtFileSelected,
   saveAlbumArt,
   removeAlbumArt,
-  // Smart Rules
-  srOpen,
-  srClose,
-  srAddRule,
-  srRemoveRule,
-  srChangeField,
-  srChangeOp,
-  srChangeVal,
-  srMarkDirty,
-  srPreview,
-  srSave,
-  srLoadTemplate,
-  refreshSmartPlaylist,
   // History
   loadHistoryView,
   refreshHistoryView,

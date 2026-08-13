@@ -11,6 +11,8 @@ import json
 import time
 from pathlib import Path
 
+import numpy as np
+
 # ---------------------------------------------------------------------------
 # Connection management
 # ---------------------------------------------------------------------------
@@ -53,7 +55,7 @@ def close_conn():
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 21
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -136,6 +138,15 @@ _MIGRATIONS: list[tuple] = [
     # (ipod_id, local_track_id) -> device_track_id mapping across rescans.
     (18, 'Add db_track_id to ipod_tracks for stable persistent-id matching',
         ['ALTER TABLE ipod_tracks ADD COLUMN db_track_id INTEGER DEFAULT 0']),
+    # v19: track_embeddings is a new table handled by create_schema().
+    (19, 'Add track_embeddings table for deep sonic embedding cache (Genius/Continuous Play)', None),
+    # v20: playlist_generation_config is a new table handled by create_schema().
+    (20, 'Add playlist_generation_config table for Genius Playlist generation state', None),
+    (21, 'Drop smart_playlist_rules and playlist_gen_config tables -- retired at the '
+         'Genius Playlist / Continuous Play hard-swap cutover', [
+        'DROP TABLE IF EXISTS smart_playlist_rules',
+        'DROP TABLE IF EXISTS playlist_gen_config',
+    ]),
 ]
 
 _SCHEMA_SQL = """
@@ -364,6 +375,23 @@ CREATE TABLE IF NOT EXISTS track_features (
 
 CREATE INDEX IF NOT EXISTS idx_features_version ON track_features(analysis_version);
 
+-- Track embeddings (deep sonic embedding cache, independent of track_features/
+-- analysis_version -- IEM Match's _is_cached_feature_current() logic keys off
+-- track_features.analysis_version and must not be disturbed by this feature)
+CREATE TABLE IF NOT EXISTS track_embeddings (
+    track_id          TEXT PRIMARY KEY,
+    embedding_version INTEGER,
+    model_name        TEXT,
+    vector            BLOB,
+    failed            INTEGER DEFAULT 0,
+    reason            TEXT,
+    source_path       TEXT,
+    source_mtime      INTEGER DEFAULT 0,
+    analysed_at       INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_embeddings_version ON track_embeddings(embedding_version);
+
 -- Settings (key-value)
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
@@ -388,12 +416,6 @@ CREATE TABLE IF NOT EXISTS match_matrix (
 CREATE TABLE IF NOT EXISTS genre_families (
     base_genre      TEXT PRIMARY KEY,
     related_genres  TEXT NOT NULL
-);
-
--- Playlist generation config
-CREATE TABLE IF NOT EXISTS playlist_gen_config (
-    key   TEXT PRIMARY KEY,
-    value TEXT
 );
 
 -- Insights config
@@ -453,16 +475,21 @@ CREATE INDEX IF NOT EXISTS idx_play_events_played_at ON play_events(played_at DE
 CREATE INDEX IF NOT EXISTS idx_play_events_track_id  ON play_events(track_id);
 CREATE INDEX IF NOT EXISTS idx_play_events_artist    ON play_events(artist COLLATE NOCASE);
 
--- Rule-based smart playlists
-CREATE TABLE IF NOT EXISTS smart_playlist_rules (
-    playlist_id     TEXT PRIMARY KEY,
-    rules           TEXT NOT NULL DEFAULT '[]',
-    match_mode      TEXT NOT NULL DEFAULT 'all',
-    limit_count     INTEGER NOT NULL DEFAULT 50,
-    sort_field      TEXT NOT NULL DEFAULT 'date_added',
-    sort_order      TEXT NOT NULL DEFAULT 'desc',
-    refresh_on_open INTEGER NOT NULL DEFAULT 1,
-    last_refreshed  INTEGER
+-- Genius Playlist generation config -- one row per generated playlist,
+-- covering both "Genius from a seed" and "filters-only" generations
+-- (folds in what the retired rule-based Smart Playlists used to do).
+-- explanation_data holds the
+-- per-track "why this track?" data (PRD section 50) from the generation
+-- that produced the playlist's current tracks.
+CREATE TABLE IF NOT EXISTS playlist_generation_config (
+    playlist_id      TEXT PRIMARY KEY,
+    seed_track_ids   TEXT NOT NULL DEFAULT '[]',
+    filters          TEXT NOT NULL DEFAULT '{}',
+    discovery_mode   TEXT NOT NULL DEFAULT 'balanced',
+    refresh_on_open  INTEGER NOT NULL DEFAULT 0,
+    generation_nonce TEXT,
+    explanation_data TEXT NOT NULL DEFAULT '{}',
+    last_refreshed   INTEGER
 );
 
 -- Duplicate detection: ignored groups (user said "don't show me these again")
@@ -2021,12 +2048,6 @@ def db_load_feature_entries():
     return result
 
 
-def db_load_feature_map():
-    """Load features as {track_id: feature_dict}."""
-    entries = db_load_feature_entries()
-    return {e['track_id']: e for e in entries}
-
-
 def db_save_feature_entries(entries):
     """Full replace of all feature entries."""
     conn = get_conn()
@@ -2111,6 +2132,94 @@ def db_get_feature(track_id):
 
 
 # ---------------------------------------------------------------------------
+# Track embeddings (deep sonic embedding cache)
+# ---------------------------------------------------------------------------
+# Vectors are stored as raw float32 BLOBs (np.ndarray.tobytes()), not JSON --
+# far smaller/faster than track_features' JSON-text band_energy for a ~512-
+# float vector across thousands of tracks. Always upsert per-row/per-batch;
+# never full-delete-and-reinsert (that pattern in db_save_feature_entries()
+# above is an existing inefficiency, not one to repeat here).
+
+def _embedding_row_to_entry(row):
+    d = dict(row)
+    d['failed'] = bool(d['failed'])
+    vec = d.get('vector')
+    d['vector'] = np.frombuffer(vec, dtype=np.float32) if vec else None
+    return d
+
+
+def db_load_embedding_entries():
+    """Load all embedding entries. Returns list of dicts with 'vector' as np.ndarray|None."""
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM track_embeddings").fetchall()
+    return [_embedding_row_to_entry(r) for r in rows]
+
+
+def db_load_embedding_map():
+    """Load embeddings as {track_id: entry_dict}."""
+    return {e['track_id']: e for e in db_load_embedding_entries()}
+
+
+def db_get_embedding(track_id):
+    """Get a single embedding entry by track_id, or None."""
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM track_embeddings WHERE track_id = ?", (track_id,)).fetchone()
+    return _embedding_row_to_entry(row) if row else None
+
+
+def db_get_embeddings_batch(track_ids):
+    """Get embedding entries for a specific set of track_ids as {track_id: entry_dict}."""
+    if not track_ids:
+        return {}
+    conn = get_conn()
+    placeholders = ','.join('?' * len(track_ids))
+    rows = conn.execute(
+        f"SELECT * FROM track_embeddings WHERE track_id IN ({placeholders})",
+        list(track_ids)
+    ).fetchall()
+    return {r['track_id']: _embedding_row_to_entry(r) for r in rows}
+
+
+def _embedding_entry_params(e):
+    vec = e.get('vector')
+    if isinstance(vec, np.ndarray):
+        vec_blob = vec.astype(np.float32).tobytes()
+    else:
+        vec_blob = vec  # already bytes, or None
+    return (
+        e['track_id'], e.get('embedding_version'), e.get('model_name'),
+        vec_blob,
+        1 if e.get('failed') else 0, e.get('reason'),
+        e.get('source_path'), e.get('source_mtime', 0),
+        e.get('analysed_at', 0),
+    )
+
+
+def db_upsert_embedding(entry):
+    """Insert or update a single embedding entry."""
+    conn = get_conn()
+    conn.execute(
+        """INSERT OR REPLACE INTO track_embeddings (track_id, embedding_version, model_name,
+           vector, failed, reason, source_path, source_mtime, analysed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        _embedding_entry_params(entry)
+    )
+    conn.commit()
+
+
+def db_upsert_embeddings_batch(entries):
+    """Bulk upsert embedding entries (used during analysis flush)."""
+    conn = get_conn()
+    conn.executemany(
+        """INSERT OR REPLACE INTO track_embeddings (track_id, embedding_version, model_name,
+           vector, failed, reason, source_path, source_mtime, analysed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [_embedding_entry_params(e) for e in entries]
+    )
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
 # Match matrix
 # ---------------------------------------------------------------------------
 
@@ -2159,40 +2268,6 @@ def db_save_genre_families(families):
     )
     conn.commit()
 
-
-# ---------------------------------------------------------------------------
-# Playlist generation config
-# ---------------------------------------------------------------------------
-
-def db_load_playlist_gen_config():
-    conn = get_conn()
-    rows = conn.execute("SELECT key, value FROM playlist_gen_config").fetchall()
-    result = {}
-    for r in rows:
-        try:
-            result[r['key']] = json.loads(r['value'])
-        except (json.JSONDecodeError, TypeError):
-            result[r['key']] = r['value']
-    return result
-
-
-def db_save_playlist_gen_config(cfg):
-    conn = get_conn()
-    conn.execute("DELETE FROM playlist_gen_config")
-
-    def _flatten(d, prefix=''):
-        for k, v in d.items():
-            key = f"{prefix}.{k}" if prefix else k
-            if isinstance(v, dict):
-                _flatten(v, key)
-            else:
-                conn.execute(
-                    "INSERT INTO playlist_gen_config (key, value) VALUES (?, ?)",
-                    (key, json.dumps(v))
-                )
-
-    _flatten(cfg)
-    conn.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -2503,65 +2578,60 @@ def db_load_play_stats():
 
 
 # ---------------------------------------------------------------------------
-# Smart playlist rules
+# Genius Playlist generation config
 # ---------------------------------------------------------------------------
 
-def db_save_smart_rules(playlist_id: str, rules: list, match_mode: str = 'all',
-                        limit_count: int = 50, sort_field: str = 'date_added',
-                        sort_order: str = 'desc', refresh_on_open: bool = True):
+def db_save_generation_config(playlist_id: str, seed_track_ids: list, filters: dict,
+                               discovery_mode: str = 'balanced', refresh_on_open: bool = False,
+                               generation_nonce: str = None, explanation_data: dict = None):
     conn = get_conn()
     conn.execute(
-        """INSERT INTO smart_playlist_rules
-               (playlist_id, rules, match_mode, limit_count, sort_field, sort_order, refresh_on_open)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
+        """INSERT INTO playlist_generation_config
+               (playlist_id, seed_track_ids, filters, discovery_mode, refresh_on_open,
+                generation_nonce, explanation_data, last_refreshed)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(playlist_id) DO UPDATE SET
-               rules=excluded.rules,
-               match_mode=excluded.match_mode,
-               limit_count=excluded.limit_count,
-               sort_field=excluded.sort_field,
-               sort_order=excluded.sort_order,
-               refresh_on_open=excluded.refresh_on_open""",
-        (playlist_id, json.dumps(rules), match_mode, limit_count,
-         sort_field, sort_order, int(refresh_on_open))
+               seed_track_ids=excluded.seed_track_ids,
+               filters=excluded.filters,
+               discovery_mode=excluded.discovery_mode,
+               refresh_on_open=excluded.refresh_on_open,
+               generation_nonce=excluded.generation_nonce,
+               explanation_data=excluded.explanation_data,
+               last_refreshed=excluded.last_refreshed""",
+        (playlist_id, json.dumps(seed_track_ids or []), json.dumps(filters or {}),
+         discovery_mode, int(refresh_on_open), generation_nonce,
+         json.dumps(explanation_data or {}), int(time.time()))
     )
     conn.commit()
 
 
-def db_load_smart_rules(playlist_id: str):
+def db_load_generation_config(playlist_id: str):
     conn = get_conn()
     row = conn.execute(
-        "SELECT * FROM smart_playlist_rules WHERE playlist_id = ?", (playlist_id,)
+        "SELECT * FROM playlist_generation_config WHERE playlist_id = ?", (playlist_id,)
     ).fetchone()
     if not row:
         return None
     d = dict(row)
-    try:
-        d['rules'] = json.loads(d['rules'])
-    except (json.JSONDecodeError, TypeError):
-        d['rules'] = []
+    for field in ('seed_track_ids', 'filters', 'explanation_data'):
+        try:
+            d[field] = json.loads(d[field])
+        except (json.JSONDecodeError, TypeError):
+            d[field] = [] if field == 'seed_track_ids' else {}
     d['refresh_on_open'] = bool(d['refresh_on_open'])
     return d
 
 
-def db_delete_smart_rules(playlist_id: str):
+def db_delete_generation_config(playlist_id: str):
     conn = get_conn()
-    conn.execute("DELETE FROM smart_playlist_rules WHERE playlist_id = ?", (playlist_id,))
+    conn.execute("DELETE FROM playlist_generation_config WHERE playlist_id = ?", (playlist_id,))
     conn.commit()
 
 
-def db_touch_smart_rules_refreshed(playlist_id: str, ts: int):
-    conn = get_conn()
-    conn.execute(
-        "UPDATE smart_playlist_rules SET last_refreshed = ? WHERE playlist_id = ?",
-        (ts, playlist_id)
-    )
-    conn.commit()
-
-
-def db_is_smart_playlist(playlist_id: str) -> bool:
+def db_is_genius_playlist(playlist_id: str) -> bool:
     conn = get_conn()
     row = conn.execute(
-        "SELECT 1 FROM smart_playlist_rules WHERE playlist_id = ?", (playlist_id,)
+        "SELECT 1 FROM playlist_generation_config WHERE playlist_id = ?", (playlist_id,)
     ).fetchone()
     return row is not None
 
