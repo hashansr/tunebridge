@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.663-rc.140826-0803 · 2026-08-14
+
 ## v0.662-rc.130826-2350 · 2026-08-13
 - Change: The background sonic analysis progress toast no longer shows a "Loading model" step — it now stays quiet until analysis actually starts, then reads "Sonic analysis in progress NN%", finishing with "Sonic analysis complete".
 
