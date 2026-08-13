@@ -15695,7 +15695,7 @@ def genius_refresh():
 @app.route('/api/genius/save', methods=['POST'])
 def genius_save():
     data = request.json or {}
-    name = str(data.get('name') or '').strip() or f"Genius Playlist {time.strftime('%Y-%m-%d %H:%M')}"
+    name = str(data.get('name') or '').strip() or f"Library Mix {time.strftime('%Y-%m-%d %H:%M')}"
     track_ids = data.get('track_ids') or []
     if not isinstance(track_ids, list):
         return jsonify({'error': 'track_ids must be a list'}), 400

@@ -3,8 +3,16 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: The right-click "Create Track Radio" menu item, its modal, and the playlist type badge are now called "Library Mix" instead.
+- Change: "Related Tracks" is now called "Track Radio" and no longer opens a pop-up — right-clicking a song and choosing "Track Radio" immediately queues that song together with its sonically related tracks and starts playing.
+- Fix: Distributable app (DMG) build no longer fails with a disk-space error during packaging.
+- Fix: The bundled distributable app was silently missing two dependencies required for Genius Playlist / Continuous Play's sonic analysis, which would have crashed the first time anyone used the feature — now correctly included.
+- Change: Distributable app and DMG download size reduced (app ~19MB smaller, DMG ~35% smaller) by removing an unused dependency and switching to better DMG compression.
 
-## v0.654-rc.130826-1811 · 2026-08-13
+## v0.660-dev.130826+0122c66 · 2026-08-13
+- Change: "Genius Playlist" is now called "Track Radio" throughout the app (the right-click "Create Track Radio" menu item, the modal, the playlist type badge, and the default name given to saved playlists).
+
+## v0.656-dev.130826+d8bcc64 · 2026-08-13
 - Add: Foundation for a new sonic-similarity engine (Genius Playlist / Continuous Play, in progress) — a background "Analyse Sonic Profile" pass computes a deep audio embedding per track, with a "Related Tracks" option on any song's right-click menu to preview its closest sonic matches while the rest of the feature is built out.
 - Add: Genius Playlist — right-click any song → "Create Genius Playlist" to build a 25/50/75/100-track playlist that opens on the seed song and travels through a musical arc (familiar neighbours → wider exploration → rediscovered tracks → back to the seed's sound), with Play, Refresh, and Save.
 - Add: Genius Playlist gained a Familiar / Balanced / Explore discovery slider that shifts the mix toward songs you already know vs. underplayed and forgotten tracks in your library, and now refuses to recommend a track just because it's unheard — a track has to already sound right for the playlist before its novelty counts in its favour.
