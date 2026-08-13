@@ -24,6 +24,16 @@ ALBUM_LOOKBACK = 6
 SKIPPED_SUPPRESSION_PENALTY = 0.6   # subtracted from score, not a hard exclude
 RECENT_PLAY_PENALTY = 0.25          # subtracted when played within SAME_TRACK_RECENT_PLAY_DAYS
 
+# Rolling-window artist-share soft cap: separate from the proximity-decay
+# penalty above -- ARTIST_LOOKBACK alone resets to zero once an artist has
+# been absent for a few tracks, which doesn't stop one artist dominating a
+# whole queue (e.g. reappearing every ~5th slot indefinitely). This caps
+# an artist's *total* share of the trailing window instead.
+ARTIST_SHARE_WINDOW = 10          # trailing N placed tracks the share cap looks at
+ARTIST_SHARE_MAX_FRACTION = 0.30  # max allowed fraction of that window from one artist
+ARTIST_SHARE_CAP_COUNT = int(ARTIST_SHARE_WINDOW * ARTIST_SHARE_MAX_FRACTION)  # = 3
+ARTIST_SHARE_PENALTY = 0.45       # heavy additive penalty once the cap is reached (soft, not hard-exclude)
+
 
 class RepetitionState:
     """Tracks what's already been placed in the current generation/session,
@@ -60,6 +70,11 @@ class RepetitionState:
                 distance_from_end = len(recent_artists) - recent_artists[::-1].index(artist_key)
                 closeness = 1.0 - (distance_from_end - 1) / max(1, ARTIST_LOOKBACK)
                 penalty += 0.35 * closeness
+
+        if artist_key:
+            share_window = self._artist_history[-ARTIST_SHARE_WINDOW:]
+            if share_window.count(artist_key) >= ARTIST_SHARE_CAP_COUNT:
+                penalty += ARTIST_SHARE_PENALTY
 
         if album_key:
             recent_albums = self._album_history[-ALBUM_LOOKBACK:]

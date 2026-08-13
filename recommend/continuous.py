@@ -17,9 +17,9 @@ import random
 import time
 
 from recommend.candidates import build_candidate_pool
-from recommend.repetition import RepetitionState
+from recommend.repetition import RepetitionState, ARTIST_LOOKBACK, ALBUM_LOOKBACK, ARTIST_SHARE_WINDOW
 from recommend import discovery
-from recommend.scoring_utils import norm_key, genre_continuity, weighted_sample, clamp
+from recommend.scoring_utils import norm_key, norm_song_key, genre_continuity, weighted_sample, clamp
 
 # PRD section 27: anchor influence starts high and decays as the session
 # continues, so a long session doesn't run away into unrelated territory
@@ -28,6 +28,12 @@ _ANCHOR_INFLUENCE_EARLY = 0.75   # tracks 1-5 of the session
 _ANCHOR_INFLUENCE_MID = 0.45      # tracks 6-15
 _ANCHOR_INFLUENCE_LATE = 0.25      # tracks 16+
 _ANCHOR_WEIGHT_BASE = 0.15          # base scoring weight anchor similarity gets at full (early) influence
+
+# continuous.py is stateless per HTTP call, so RepetitionState only ever
+# "sees" what gets seeded from recent_track_ids before the loop starts --
+# this must cover the widest repetition-protection window (repetition.py)
+# or that window silently gets starved on every fresh incremental call.
+_REPETITION_SEED_WINDOW = max(ARTIST_LOOKBACK, ALBUM_LOOKBACK, ARTIST_SHARE_WINDOW)
 
 # PRD section 30: never stack more than 2 exploration/stretch tracks in a row
 # without a strong match or rediscovery to give the listener reassurance.
@@ -236,13 +242,20 @@ def generate_continuous_next(
             break
 
     repetition = RepetitionState()
-    for tid in recent_track_ids[-6:]:
+    for tid in recent_track_ids[-_REPETITION_SEED_WINDOW:]:
         track = library_by_id.get(tid)
         if track:
             repetition.record(tid, norm_key(track.get('artist')), norm_key(track.get('album')))
 
     seed_ids_for_pool = list(dict.fromkeys([sid for sid in ([anchor_id] if anchor_id else []) + [current_track_id] if sid]))
     hard_exclude = set(exclude_track_ids or ()) | set(recent_track_ids)
+    # Session-wide "same underlying song, any recording" exclusion (distinct
+    # from hard_exclude's exact-track_id matching) -- different versions of
+    # the same song score extremely high on audio similarity, so this has to
+    # be a hard pre-filter, not a soft/decaying penalty like repetition below.
+    hard_exclude_song_keys = {
+        key for key in (norm_song_key(library_by_id.get(tid)) for tid in hard_exclude) if key
+    }
     played_ids = {tid for tid, s in play_stats_by_id.items() if int(s.get('plays') or 0) > 0}
 
     # Discovery-mode budget bookkeeping (PRD section 15/52), seeded from
@@ -272,6 +285,11 @@ def generate_continuous_next(
             ranked = sorted(remaining_played,
                              key=lambda tid: -(similarity_index.similarity(anchor_id, tid) or -1.0))[:top_n]
             candidate_pool = candidate_pool | set(ranked)
+        if hard_exclude_song_keys:
+            candidate_pool = {
+                tid for tid in candidate_pool
+                if norm_song_key(library_by_id.get(tid)) not in hard_exclude_song_keys
+            }
         if not candidate_pool:
             break
 
@@ -295,6 +313,9 @@ def generate_continuous_next(
         track = library_by_id[chosen['track_id']]
         repetition.record(chosen['track_id'], norm_key(track.get('artist')), norm_key(track.get('album')))
         hard_exclude.add(chosen['track_id'])
+        chosen_song_key = norm_song_key(track)
+        if chosen_song_key:
+            hard_exclude_song_keys.add(chosen_song_key)
         results.append({
             'track_id': chosen['track_id'], 'score': round(chosen['score'], 4),
             'category': chosen['category'], 'explanation': chosen['explanation'],

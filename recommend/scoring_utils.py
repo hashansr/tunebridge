@@ -6,10 +6,53 @@ Controlled Randomness sampling method (PRD section 20).
 """
 
 import math
+import re
 
 
 def norm_key(s):
     return (s or '').strip().lower()
+
+
+_VERSION_TAG_TERMS = (
+    r'live(?:\s+(?:in|at)\s+[^()\[\]-]+)?|remaster(?:ed)?(?:\s+\d{4})?|\d{4}\s+remaster|'
+    r'acoustic|unplugged|single\s+version|album\s+version|radio\s+edit|mono|stereo|demo|'
+    r'deluxe(?:\s+edition)?|bonus\s+track|explicit|clean|extended(?:\s+version)?|'
+    r'instrumental|karaoke(?:\s+version)?|original\s+(?:mix|version|recording)'
+)
+_PAREN_VERSION_RE = re.compile(
+    r'\s*[\(\[][^()\[\]]*\b(?:' + _VERSION_TAG_TERMS + r')\b[^()\[\]]*[\)\]]',
+    re.IGNORECASE,
+)
+_DASH_VERSION_RE = re.compile(
+    r'\s+-\s+(?:' + _VERSION_TAG_TERMS + r')\s*$',
+    re.IGNORECASE,
+)
+
+
+def strip_version_tags(title):
+    """Strip common version/edition qualifiers (Live, Remastered, Acoustic,
+    Radio Edit, etc.) so different recordings of the same underlying song
+    normalize to the same title. Not exhaustive -- only needs to catch the
+    common cases. Mirrors app.py's _EDITION_RE/_strip_edition_tags, kept
+    independent here since recommend/ must not import the Flask app."""
+    s = title or ''
+    s = _PAREN_VERSION_RE.sub('', s)
+    s = _DASH_VERSION_RE.sub('', s)
+    return s.strip(' -–—').strip()
+
+
+def norm_song_key(track):
+    """Session-wide dedup key for 'same underlying song regardless of
+    recording/version': normalized-stripped-title + normalized artist, so
+    different songs that happen to share a title across different artists
+    aren't merged together."""
+    if not track:
+        return None
+    title_key = norm_key(strip_version_tags(track.get('title')))
+    artist_key = norm_key(track.get('artist'))
+    if not title_key:
+        return None
+    return f"{title_key}|{artist_key}"
 
 
 def split_genres(genre_str):
