@@ -25738,7 +25738,8 @@ async function _maybeShowEmbeddingAnalysisToast() {
   if (!res || !res.ok) return;
   const s = await res.json();
   if (s.status !== 'running') return;
-  _embeddingAnalysisLiveToast = _showLiveToast('Sonic analysis starting…');
+  // No toast yet -- _pollEmbeddingAnalysisToast() shows one once analysis
+  // actually starts (skips the one-time model load/download stage).
   _embeddingAnalysisPoller = setInterval(_pollEmbeddingAnalysisToast, 1500);
   _pollEmbeddingAnalysisToast();
 }
@@ -25748,18 +25749,22 @@ async function _pollEmbeddingAnalysisToast() {
   if (!res || !res.ok) return;
   const s = await res.json();
   if (s.status === 'running') {
-    const stage = s.stage === 'loading_model'
-      ? (s.model_download_pct != null ? `Downloading model… ${s.model_download_pct}%` : 'Loading model…')
-      : `Analysing sonic profile… ${s.done} / ${s.total}`;
-    if (_embeddingAnalysisLiveToast) _embeddingAnalysisLiveToast.update(stage);
+    if (s.stage === 'loading_model') return; // no toast during the one-time model load/download
+    const pct = s.total > 0 ? Math.round((s.done / s.total) * 100) : 0;
+    const msg = `Sonic analysis in progress ${pct}%`;
+    if (_embeddingAnalysisLiveToast) _embeddingAnalysisLiveToast.update(msg);
+    else _embeddingAnalysisLiveToast = _showLiveToast(msg);
     return;
   }
   clearInterval(_embeddingAnalysisPoller);
   _embeddingAnalysisPoller = null;
   if (s.status === 'done' && _embeddingAnalysisLiveToast) {
     _embeddingAnalysisLiveToast.finish('Sonic analysis complete', 'success');
-  } else if (s.status === 'error' && _embeddingAnalysisLiveToast) {
-    _embeddingAnalysisLiveToast.finish(s.error || 'Sonic analysis failed', 'error');
+  } else if (s.status === 'error') {
+    // Surface errors even if they happened before any progress toast was shown
+    // (e.g. the model download itself failed).
+    if (_embeddingAnalysisLiveToast) _embeddingAnalysisLiveToast.finish(s.error || 'Sonic analysis failed', 'error');
+    else toast(s.error || 'Sonic analysis failed', 'error');
   } else if (_embeddingAnalysisLiveToast) {
     _embeddingAnalysisLiveToast.dismiss();
   }
