@@ -3952,19 +3952,12 @@ async function openPlaylist(pid) {
   showViewEl('playlist');
   _resetPlaylistDetailScroll();
 
-  // Show Genius pill badge in header if applicable
+  // The inspired label belongs with the playlist metadata, not the title.
   const nameEl = document.getElementById('pl-name');
   if (nameEl) {
     nameEl.textContent = pl.name;
     const existing = document.getElementById('pl-genius-badge');
     if (existing) existing.remove();
-    if (pl.is_genius) {
-      const badge = document.createElement('span');
-      badge.id = 'pl-genius-badge';
-      badge.className = 'pl-genius-badge';
-      badge.textContent = 'Inspired by';
-      nameEl.insertAdjacentElement('afterend', badge);
-    }
   }
   _applyPlaylistDetailMode(false);
 
@@ -4777,8 +4770,16 @@ function updatePlaylistStats(tracks) {
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const timeStr = h > 0 ? `${h} hr ${m} min` : `${m} min`;
-  document.getElementById('pl-stats').textContent =
-    `${tracks.length} song${tracks.length !== 1 ? 's' : ''} · ${timeStr}`;
+  const stats = document.getElementById('pl-stats');
+  if (!stats) return;
+  stats.textContent = `${tracks.length} song${tracks.length !== 1 ? 's' : ''} · ${timeStr}`;
+  if (state.playlist?.is_genius) {
+    const badge = document.createElement('span');
+    badge.id = 'pl-genius-badge';
+    badge.className = 'pl-genius-badge';
+    badge.textContent = 'Inspired Playlist';
+    stats.prepend(badge);
+  }
 }
 
 // checkDevices() removed — device status is now embedded in the DAP list
