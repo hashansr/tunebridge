@@ -5452,13 +5452,19 @@ function _geniusApiDiscoveryMode() {
   return _geniusState.discoveryMode === 'matching' ? 'familiar' : _geniusState.discoveryMode;
 }
 
-async function runGeniusGeneration() {
+function _showGeniusListLoader() {
   const body = document.getElementById('genius-modal-body');
+  if (!body) return null;
+  body.classList.add('is-refreshing');
+  body.innerHTML = '<div class="spinner-wrap genius-list-loader" role="status" aria-label="Building playlist"><div class="spinner"></div></div>';
+  return body;
+}
+
+async function runGeniusGeneration() {
+  const body = _showGeniusListLoader();
   if (!body) return;
   _geniusState.loading = true;
-  body.classList.add('is-refreshing');
   document.getElementById('genius-refresh-btn')?.classList.remove('is-refreshing');
-  body.innerHTML = `<div class="genius-list-status">Building your playlist…</div>`;
 
   try {
     const data = await api('/genius/preview', {
@@ -5481,10 +5487,10 @@ async function runGeniusGeneration() {
 
 async function refreshGeniusPlaylist() {
   if (_geniusState.loading || !_geniusState.tracks.length || _geniusState.insufficientData) return;
-  const body = document.getElementById('genius-modal-body');
+  const body = _showGeniusListLoader();
+  if (!body) return;
   _geniusState.loading = true;
   _geniusState.previewingId = null;
-  body.classList.add('is-refreshing');
   document.getElementById('genius-refresh-btn')?.classList.add('is-refreshing');
   try {
     const data = await api('/genius/refresh', {
@@ -6160,6 +6166,7 @@ function _closeModalOverlaysForNavigation() {
   if (_isOverlayOpen('genre-distribution-modal')) closeGenreDistributionModal();
   if (_isOverlayOpen('iem-blindspot-modal')) closeAllBlindspots();
   if (_isOverlayOpen('iem-compare-modal')) closeIemCompare();
+  if (_isOverlayOpen('genius-modal')) closeGeniusModal();
   if (_isOverlayOpen('create-playlist-modal')) closeCreatePlaylistModal();
   if (_isOverlayOpen('dup-action-modal')) _closeDupActionModal();
   if (_isOverlayOpen('missing-tags-bulk-modal')) closeMissingTagsBulkEditor();

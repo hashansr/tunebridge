@@ -9102,6 +9102,7 @@ tbody tr:hover {
    mounted; generation updates only replace .genius-preview-list's contents. */
 #genius-modal .genius-modal-sheet {
   --tb-modal-w: 640px;
+  height: min(680px, calc(100% - 8px));
   max-height: min(720px, calc(100% - 8px));
   padding: 0 !important;
   overflow: hidden !important;
@@ -9200,9 +9201,27 @@ tbody tr:hover {
   flex: 0 0 auto;
 }
 #genius-modal .genius-preview-label { color: var(--modal-text-dim); font-size: 11.5px; }
-#genius-modal .genius-preview-list { max-height: 380px; overflow-y: auto; transition: opacity .2s; }
+#genius-modal .genius-preview-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  transition: opacity .2s;
+}
 #genius-modal .genius-preview-list.is-refreshing { opacity: .5; }
-#genius-modal .genius-list-status { padding: 24px 20px; color: var(--modal-text-muted); font-size: 13px; text-align: center; }
+#genius-modal .genius-preview-list > .spinner-wrap,
+#genius-modal .genius-list-status {
+  min-height: 100%;
+  box-sizing: border-box;
+}
+#genius-modal .genius-preview-list > .spinner-wrap { padding: 0; }
+#genius-modal .genius-list-status {
+  display: grid;
+  place-items: center;
+  padding: 24px 20px;
+  color: var(--modal-text-muted);
+  font-size: 13px;
+  text-align: center;
+}
 #genius-modal .genius-track-list { display: flex; flex-direction: column; }
 #genius-modal .genius-track-row {
   display: grid;
