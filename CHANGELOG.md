@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.657-rc.130826-2231 · 2026-08-13
 - Add: Sonic Profile now includes a "Sonic Map" — a 2D visualisation grouping your library into sonic clusters by deep audio similarity, with a legend showing each cluster's dominant genre and track count. Includes its own "Analyse" action to build the map.
 - Change: Gear Compatibility Analysis now groups untagged tracks (no genre metadata) by sonic similarity instead of lumping them all into one generic "unknown" bucket, giving more meaningful genre-match breakdowns for libraries with incomplete tagging. Tracks that already have genre tags are unaffected.
 
