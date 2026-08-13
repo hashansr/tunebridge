@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.654-rc.130826-1811 · 2026-08-13
 - Add: Foundation for a new sonic-similarity engine (Genius Playlist / Continuous Play, in progress) — a background "Analyse Sonic Profile" pass computes a deep audio embedding per track, with a "Related Tracks" option on any song's right-click menu to preview its closest sonic matches while the rest of the feature is built out.
 - Add: Genius Playlist — right-click any song → "Create Genius Playlist" to build a 25/50/75/100-track playlist that opens on the seed song and travels through a musical arc (familiar neighbours → wider exploration → rediscovered tracks → back to the seed's sound), with Play, Refresh, and Save.
 - Add: Genius Playlist gained a Familiar / Balanced / Explore discovery slider that shifts the mix toward songs you already know vs. underplayed and forgotten tracks in your library, and now refuses to recommend a track just because it's unheard — a track has to already sound right for the playlist before its novelty counts in its favour.
