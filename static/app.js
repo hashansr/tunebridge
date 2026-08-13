@@ -3945,6 +3945,19 @@ async function openPlaylist(pid) {
   _pushToNavHistory();
   let pl = await api(`/playlists/${pid}`);
   state.playlist = pl;
+  // Inspired-by playlists are a deliberate narrative arc (seed -> establish
+  // -> expand -> discover -> re-anchor) that only makes sense in original
+  // order, so force it regardless of whatever sort was last active elsewhere
+  // -- without touching the user's real persisted preference for regular
+  // playlists (restored here in case a previous Genius view left it overridden).
+  if (pl.is_genius) {
+    state.plSortMode = 'original';
+    state.plSortDir = 'asc';
+  } else {
+    state.plSortMode = _contentSortPrefs.playlistTracks.mode;
+    state.plSortDir = _contentSortPrefs.playlistTracks.dir;
+  }
+  _syncSortControls();
   state.view = 'playlist';
   clearSelection();
   setActiveNav('playlist');
@@ -5589,6 +5602,7 @@ async function saveGeniusPlaylist() {
 }
 
 function removeGeniusTrack(trackId) {
+  if (_geniusState.seedTrack && String(_geniusState.seedTrack.id) === String(trackId)) return;
   const index = _geniusState.tracks.findIndex(track => String(track.id) === String(trackId));
   if (index < 0) return;
   _geniusState.tracks.splice(index, 1);
@@ -5612,6 +5626,7 @@ function _renderGeniusModal() {
       ${_geniusState.tracks.map((t, i) => {
         const meta = _GENIUS_PHASE_META[t.genius_phase] || _GENIUS_PHASE_META.establish;
         const isPreviewing = String(_geniusState.previewingId) === String(t.id);
+        const isSeed = _geniusState.seedTrack && String(_geniusState.seedTrack.id) === String(t.id);
         const art = t.artwork_key
           ? `<img src="${artworkUrl(t.artwork_key)}" alt="" loading="lazy" onerror="this.remove()">`
           : coverPlaceholder('album', 34, '6px', true);
@@ -5625,9 +5640,11 @@ function _renderGeniusModal() {
           <button class="genius-track-play" type="button" title="${isPreviewing ? 'Stop preview' : 'Preview'}" onclick="event.stopPropagation();App.previewGeniusTrack('${esc(t.id)}')">
             ${isPreviewing ? nowPlayingSvg(10) : '<svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2.5 1.5v9l8-4.5-8-4.5z"/></svg>'}
           </button>
-          <button class="genius-track-remove" type="button" title="Remove from playlist" aria-label="Remove ${esc(t.title || 'track')} from playlist" onclick="event.stopPropagation();App.removeGeniusTrack('${esc(t.id)}')">
+          ${isSeed
+            ? `<span class="genius-track-seed-badge" title="The seed track can't be removed">Seed</span>`
+            : `<button class="genius-track-remove" type="button" title="Remove from playlist" aria-label="Remove ${esc(t.title || 'track')} from playlist" onclick="event.stopPropagation();App.removeGeniusTrack('${esc(t.id)}')">
             <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg>
-          </button>
+          </button>`}
         </div>
       `;
       }).join('')}

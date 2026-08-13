@@ -3,6 +3,9 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Inspired-by playlists no longer contain multiple versions of the same song (e.g. a live recording alongside the studio version).
+- Fix: Opening an Inspired-by playlist now always shows it in its original, intentional order, even if another playlist's sort order was active.
+- Fix: The seed song in an Inspired-by playlist's preview can no longer be accidentally removed before saving.
 
 ## v0.664-rc.140826-0810 · 2026-08-14
 - Fix: Track Radio / Continuous Play no longer queues multiple versions of the same song (e.g. a live recording and the studio version back-to-back) in one session.

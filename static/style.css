@@ -9283,6 +9283,20 @@ tbody tr:hover {
 }
 #genius-modal .genius-track-row:hover .genius-track-remove { color: #ffb3b5; background: rgba(255,179,181,.12); }
 #genius-modal .genius-track-remove:hover { color: #fff !important; background: rgba(255,100,105,.24) !important; }
+#genius-modal .genius-track-seed-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--modal-accent);
+  background: rgba(173,198,255,.14);
+  white-space: nowrap;
+}
 #genius-modal .genius-modal-footer {
   display: flex;
   align-items: center;

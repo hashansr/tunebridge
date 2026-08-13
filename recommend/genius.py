@@ -29,7 +29,7 @@ import time
 from recommend.candidates import build_candidate_pool
 from recommend.repetition import RepetitionState
 from recommend import discovery
-from recommend.scoring_utils import norm_key, genre_continuity, weighted_sample, clamp
+from recommend.scoring_utils import norm_key, norm_song_key, genre_continuity, weighted_sample, clamp
 
 # Soft phase boundaries as fractions of total playlist length, generalized
 # from the PRD's illustrative 25-track example (tracks 1-5/6-12/13-20/21-25)
@@ -206,11 +206,21 @@ def generate_genius_playlist(
     placed_ids = set()
     category_counts = {'familiar': 0, 'rediscovery': 0, 'stretch': 0}
     thresholds = discovery.compute_library_thresholds(play_stats_by_id)
+    # Session-wide "same underlying song, any recording" exclusion (mirrors
+    # continuous.py's fix) -- different versions of a seed/placed song score
+    # extremely high on audio similarity, so this has to be a hard
+    # pre-filter, not a soft/decaying repetition penalty.
+    hard_exclude_song_keys = {
+        key for key in (norm_song_key(library_by_id.get(sid)) for sid in seed_ids) if key
+    }
 
     def _place(track_id, phase, score, explanation, category='familiar'):
         track = library_by_id[track_id]
         repetition.record(track_id, norm_key(track.get('artist')), norm_key(track.get('album')))
         placed_ids.add(track_id)
+        song_key = norm_song_key(track)
+        if song_key:
+            hard_exclude_song_keys.add(song_key)
         category_counts[category] = category_counts.get(category, 0) + 1
         result.append({'track_id': track_id, 'phase': phase, 'score': round(score, 4), 'explanation': explanation})
 
@@ -247,6 +257,11 @@ def generate_genius_playlist(
                              key=lambda tid: -(similarity_index.similarity(primary_seed, tid) or -1.0))[:top_n]
             candidate_pool = candidate_pool | set(ranked)
         candidate_pool = _apply_filters(candidate_pool, library_by_id, filters)
+        if hard_exclude_song_keys:
+            candidate_pool = {
+                tid for tid in candidate_pool
+                if norm_song_key(library_by_id.get(tid)) not in hard_exclude_song_keys
+            }
         if not candidate_pool:
             break
 
