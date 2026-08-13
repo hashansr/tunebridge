@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.656-rc.130826-2142 · 2026-08-13
 - Change: "Library Mix" is now called "Inspired by" — the right-click "Create Inspired Playlist" menu item, its modal, and the playlist type badge are renamed to match, and playlists saved from it are now named "Inspired by <song>" instead of "Library Mix · <song>".
 
 ## v0.655-rc.130826-1847 · 2026-08-13
