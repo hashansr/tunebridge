@@ -25748,6 +25748,7 @@ function _renderInsightsSonicMap(d) {
       <div class="sonic-chart-subtitle">${d.embedding_count} tracks grouped into ${d.k} sonic clusters by deep audio similarity (PANNs embeddings).</div>
       <div class="insights-chart-wrap" style="height:320px"><canvas id="sonic-map-canvas"></canvas></div>
       <div class="sonic-map-legend">${legendHtml}</div>
+      <div class="sonic-caveat">Position reflects similarity only — axes have no fixed meaning, only distance between points does. Tracks placed close together sound similar to the model; how far apart or which direction isn't meaningful on its own.</div>
     </div>`;
 
   _sonicMapChart = new Chart(document.getElementById('sonic-map-canvas'), {
