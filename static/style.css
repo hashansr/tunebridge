@@ -9225,7 +9225,7 @@ tbody tr:hover {
 #genius-modal .genius-track-list { display: flex; flex-direction: column; }
 #genius-modal .genius-track-row {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 30px;
+  grid-template-columns: 34px minmax(0, 1fr) 30px 30px;
   align-items: center;
   gap: 12px;
   padding: 8px 20px;
@@ -9268,6 +9268,21 @@ tbody tr:hover {
 }
 #genius-modal .genius-track-row:hover .genius-track-play { background: rgba(255,255,255,.08); }
 #genius-modal .is-previewing .genius-track-play { color: var(--modal-accent); background: rgba(173,198,255,.16); }
+#genius-modal .genius-track-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--modal-text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+#genius-modal .genius-track-row:hover .genius-track-remove { color: #ffb3b5; background: rgba(255,179,181,.12); }
+#genius-modal .genius-track-remove:hover { color: #fff !important; background: rgba(255,100,105,.24) !important; }
 #genius-modal .genius-modal-footer {
   display: flex;
   align-items: center;

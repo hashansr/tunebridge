@@ -15757,6 +15757,16 @@ def genius_save():
         return jsonify({'error': 'No valid tracks to save'}), 400
 
     playlists = load_playlists()
+    # Inspired playlists are allowed to be saved repeatedly from the same seed,
+    # but their names stay unambiguous in the sidebar and exports.  The first
+    # keeps the natural title; later saves receive a familiar numeric suffix.
+    existing_names = {str(playlist.get('name') or '').strip().casefold() for playlist in playlists.values()}
+    unique_name = name
+    suffix = 2
+    while unique_name.casefold() in existing_names:
+        unique_name = f'{name} ({suffix})'
+        suffix += 1
+    name = unique_name
     pid = str(uuid.uuid4())
     now = int(time.time())
     playlists[pid] = {
