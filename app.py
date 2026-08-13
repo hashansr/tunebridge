@@ -15460,6 +15460,10 @@ def _run_embedding_analysis():
             'completed_at': int(time.time()),
         })
         _similarity_index_cache = None  # force rebuild on next lookup so new vectors are visible
+        try:
+            _compute_sonic_clusters(force=True)  # cheap (<1s) -- recompute Sonic Profile's map inline
+        except Exception:
+            pass
     else:
         try:
             _db.db_upsert_embeddings_batch(list(results_map.values()))
@@ -15476,6 +15480,15 @@ def sonic_start_analysis():
     existing_map = {e['track_id']: e for e in _db.db_load_embedding_entries()}
     pending = [t for t in library if not _is_cached_embedding_current(existing_map.get(t['id']), t)]
     if not pending:
+        # Embeddings are current, but the sonic-clusters cache may still be
+        # missing/stale (e.g. embeddings existed before this feature shipped,
+        # or the library changed) -- _run_embedding_analysis()'s completion
+        # branch is the only other place that recomputes it, and it's
+        # short-circuited by this early return, so make sure it still runs.
+        try:
+            _compute_sonic_clusters()
+        except Exception:
+            pass
         return jsonify({'ok': True, 'already_up_to_date': True, 'total': 0, 'pending': 0})
     t = threading.Thread(target=_run_embedding_analysis, daemon=True)
     t.start()
@@ -16095,7 +16108,9 @@ _PERC_BANDS = [
 ANALYSIS_VERSION = 4
 # Persisted match-matrix payload schema version. Payloads with a different
 # version are treated as absent so stale pre-overhaul matrices never render.
-MATCH_MATRIX_VERSION = 3
+# v4: genre-less tracks fall back to their PANNs-embedding cluster instead of
+# a single flat 'unknown' bucket, when a sonic-clusters cache is available.
+MATCH_MATRIX_VERSION = 4
 N_PERC_BANDS = len(_PERC_BANDS)
 
 # Non-overlapping core bands used for fingerprint weighting and match scores.
@@ -16442,15 +16457,35 @@ def _compute_genre_fingerprints(features, library_tracks):
     longer double-count in track weighting; 'track_count' stays the distinct
     track count for display, 'weight' carries the fractional sum for math.
 
+    Tracks with zero ID3 genre tags fall back to their PANNs-embedding
+    cluster (see _compute_sonic_clusters), when available, instead of a
+    single flat 'unknown' bucket -- splits the Tag-Health-flagged untagged
+    pile into sonically-coherent sub-groups. Purely a grouping-key change:
+    the fingerprint itself is still built from FFT band_energy exactly as
+    before, and this has zero effect on tracks that already have a genre
+    tag. If no sonic-cluster cache exists yet (embedding analysis never
+    run), every genre-less track falls back to 'unknown' exactly as before.
+
     Returns {slug: {genre, slug, track_count, weight, fingerprint: {band: 0-1}}}
     """
     import numpy as np
     band_keys = [b[0] for b in _PERC_BANDS]
     alias_to_base = _build_genre_lookup(load_genre_families())
 
+    cluster_data = _db.db_load_sonic_clusters()
+    cluster_by_track = {}
+    cluster_label_map = {}
+    if cluster_data:
+        cluster_by_track = {tid: p.get('cluster_id') for tid, p in cluster_data.get('points', {}).items()}
+        cluster_label_map = {int(cid): info.get('label')
+                              for cid, info in cluster_data.get('clusters', {}).items()}
+
     id_to_genres = {}
     for t in library_tracks:
-        raw_genres = _split_track_genres(t.get('genre')) or ['unknown']
+        raw_genres = _split_track_genres(t.get('genre'))
+        if not raw_genres:
+            cid = cluster_by_track.get(str(t.get('id')))
+            raw_genres = [f'sonic_cluster_{cid}'] if cid is not None else ['unknown']
         folded = []
         for g in raw_genres:
             base = alias_to_base.get(g, g)
@@ -16484,7 +16519,15 @@ def _compute_genre_fingerprints(features, library_tracks):
         delta = 10.0 * np.log10((avg + 1e-9) / (lib_avg + 1e-9))
         w     = np.clip(loud * (1.0 + np.clip(delta / 6.0, -0.5, 0.5)), 0.0, 1.0)
 
-        genre = _genre_display_label(genre_key)
+        if genre_key.startswith('sonic_cluster_'):
+            cid_str = genre_key[len('sonic_cluster_'):]
+            cluster_label = cluster_label_map.get(int(cid_str)) if cid_str.isdigit() else None
+            if cluster_label and not cluster_label.startswith('Sonic Group'):
+                genre = f'Sonic Group: {cluster_label}'
+            else:
+                genre = cluster_label or f'Sonic Group {cid_str}'
+        else:
+            genre = _genre_display_label(genre_key)
         slug  = re.sub(r'[^a-z0-9_-]', '_', genre_key.lower().strip())
         result[slug] = {
             'genre': genre, 'slug': slug,
@@ -16662,6 +16705,103 @@ def _load_match_data():
     return data
 
 
+# ── Sonic clusters (PANNs-embedding KMeans/PCA for Sonic Profile's sonic map) ──
+# A completely separate axis from the FFT band_energy pipeline above: KMeans
+# groups tracks by deep-embedding similarity (recommend/embedder.py's PANNs
+# CNN14 vectors, the same signal "Inspired by"/"Track Radio" use for
+# track-to-track similarity), PCA gives each track 2D coordinates for a real
+# semantic-space scatter plot. Cluster labels are a cheap majority-vote of
+# member tracks' ID3 genre tags -- an annotation only, clustering itself needs
+# no tags to run. See CLAUDE.md plan "investigate-how-we-can-robust-lark" for
+# the reasoning behind this split (embeddings cannot feed IEM Match's
+# dB-deviation scoring, only Sonic Profile's clustering/visualisation).
+
+def _is_sonic_cluster_cache_current(cached, embedding_count):
+    """Cheap staleness check: recompute only when the embedded-track count has
+    changed, so Insights page loads don't re-cluster every time."""
+    if not cached:
+        return False
+    return cached.get('embedding_count') == embedding_count
+
+
+def _compute_sonic_clusters(force=False):
+    """
+    KMeans + PCA over the PANNs embedding matrix. Returns the cached/freshly
+    computed payload dict, or None if there are no embeddings to cluster yet.
+    Cheap enough (<1s for a few thousand 2048-dim vectors) to run inline
+    rather than needing its own background-thread/progress machinery.
+    """
+    from sklearn.cluster import KMeans
+    from sklearn.decomposition import PCA
+
+    index = _get_similarity_index()
+    matrix, ids = index.deep_matrix_and_ids()
+    n = len(ids)
+    if n < 2:
+        return None
+
+    cached = None if force else _db.db_load_sonic_clusters()
+    if _is_sonic_cluster_cache_current(cached, n):
+        return cached
+
+    # Standard cheap heuristic for k with no labeled ground truth to tune
+    # against; revisit if qualitative review shows clusters too coarse/fine.
+    k = int(_clamp(round(math.sqrt(n / 2)), 4, 24))
+    k = min(k, n)
+
+    kmeans_labels = KMeans(n_clusters=k, n_init=10, random_state=42).fit_predict(matrix)
+    coords = PCA(n_components=2, random_state=42).fit_transform(matrix)
+
+    with library_lock:
+        lib_map = {str(t.get('id')): t for t in library if t.get('id')}
+    alias_to_base = _build_genre_lookup(load_genre_families())
+
+    cluster_track_counts = {}
+    cluster_genre_counts = {}
+    for tid, cid in zip(ids, kmeans_labels):
+        cid = int(cid)
+        cluster_track_counts[cid] = cluster_track_counts.get(cid, 0) + 1
+        track = lib_map.get(str(tid))
+        if not track:
+            continue
+        for g in _split_track_genres(track.get('genre')):
+            base = alias_to_base.get(g, g)
+            counts = cluster_genre_counts.setdefault(cid, {})
+            counts[base] = counts.get(base, 0) + 1
+
+    clusters = {}
+    for cid, track_count in cluster_track_counts.items():
+        counts = cluster_genre_counts.get(cid, {})
+        if counts:
+            top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:3]
+            sample_genres = [_genre_display_label(g) for g, _ in top]
+            label = f'Mostly {sample_genres[0]}'
+        else:
+            sample_genres = []
+            label = f'Sonic Group {cid + 1}'
+        clusters[str(cid)] = {
+            'label': label, 'track_count': track_count, 'sample_genres': sample_genres,
+        }
+
+    points = {
+        str(tid): {'cluster_id': int(cid), 'x': round(float(xy[0]), 4), 'y': round(float(xy[1]), 4)}
+        for tid, cid, xy in zip(ids, kmeans_labels, coords)
+    }
+
+    payload = {
+        'generated_at':    int(time.time()),
+        'embedding_count': n,
+        'k':               k,
+        'points':          points,
+        'clusters':        clusters,
+    }
+    try:
+        _db.db_save_sonic_clusters(payload)
+    except Exception:
+        pass
+    return payload
+
+
 # ── API routes ────────────────────────────────────────────────────────────────
 
 @app.route('/api/insights/sonic-profile')
@@ -16707,6 +16847,44 @@ def insights_sonic_profile():
         'scatter':      scatter,
         'band_profile': band_profile,
         'band_labels':  {b[0]: b[3] for b in _PERC_BANDS},
+    })
+
+
+@app.route('/api/insights/sonic-map')
+def insights_sonic_map():
+    """
+    PANNs-embedding KMeans clusters + PCA 2D coordinates ("sonic map").
+    Kept separate from /api/insights/sonic-profile: embedding analysis
+    (/api/sonic/analyse) is optional and staged independently from the older
+    mandatory FFT analysis, so coupling the two payloads would make the FFT
+    charts fail whenever embeddings simply haven't been run yet. The cache is
+    computed once embedding analysis finishes (see _run_embedding_analysis's
+    completion branch) -- this route only reads it, it never recomputes.
+    """
+    data = _db.db_load_sonic_clusters()
+    if not data:
+        return jsonify({'error': 'Run sonic embedding analysis first.'}), 404
+
+    items  = list(data.get('points', {}).items())
+    sample = random.sample(items, min(600, len(items))) if items else []
+
+    with library_lock:
+        lib_map = {str(t.get('id')): t for t in library if t.get('id')}
+    points = []
+    for tid, p in sample:
+        track = lib_map.get(tid)
+        points.append({
+            'track_id': tid, 'x': p['x'], 'y': p['y'], 'cluster_id': p['cluster_id'],
+            'title':  track.get('title')  if track else None,
+            'artist': track.get('artist') if track else None,
+        })
+
+    return jsonify({
+        'generated_at':    data.get('generated_at'),
+        'embedding_count': data.get('embedding_count'),
+        'k':               data.get('k'),
+        'points':          points,
+        'clusters':        data.get('clusters'),
     })
 
 

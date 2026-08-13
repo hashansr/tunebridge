@@ -23766,6 +23766,7 @@ const App = {
   loadInsightsView,
   startLibraryAnalysis,
   cancelLibraryAnalysis,
+  startSonicEmbeddingAnalysis,
   insightsRescanLibrary,
   openProblemTracksModal,
   closeProblemTracksModal,
@@ -23980,11 +23981,14 @@ async function loadInsightsView() {
   }
 
   // Phase 2 & 3 — only available after analysis has been run
-  const [sonicRes, matchRes] = await Promise.all([
+  const [sonicRes, sonicMapRes, matchRes] = await Promise.all([
     fetch('/api/insights/sonic-profile').catch(() => null),
+    fetch('/api/insights/sonic-map').catch(() => null),
     fetch('/api/insights/matching/overview').catch(() => null),
   ]);
   if (sonicRes && sonicRes.ok)  { try { _renderInsightsSonicProfile(await sonicRes.json()); } catch (_) {} }
+  if (sonicMapRes && sonicMapRes.ok) { try { _renderInsightsSonicMap(await sonicMapRes.json()); } catch (_) { _renderInsightsSonicMap(null); } }
+  else                                _renderInsightsSonicMap(null);  // show CTA / hide card
   if (matchRes && matchRes.ok)  { try { _renderInsightsMatchOverview(await matchRes.json()); } catch (_) { _renderInsightsMatchOverview(null); } }
   else                          _renderInsightsMatchOverview(null);  // show CTA to run analysis
 
@@ -25627,6 +25631,150 @@ function _renderInsightsSonicProfile(d) {
       },
     });
   }
+}
+
+/* ── Sonic Map: PANNs-embedding KMeans clusters + PCA 2D projection ────────
+   Separate signal from the FFT tonal-balance charts above (deep audio
+   similarity, the same embeddings "Inspired by"/Track Radio use), so it's
+   fetched from its own endpoint and gated on its own analysis pass. ── */
+
+let _sonicMapChart  = null;
+let _sonicMapPoller = null;
+
+function _renderInsightsSonicMap(d) {
+  const el = document.getElementById('insights-sonic-map-content');
+  if (!el) return;
+
+  if (_sonicMapChart) { _sonicMapChart.destroy(); _sonicMapChart = null; }
+
+  if (!d || !d.points || !d.points.length) {
+    el.innerHTML = `
+      <div class="sonic-chart-card">
+        <div class="sonic-chart-title">Sonic Map</div>
+        <div class="sonic-chart-subtitle">Groups your library by deep audio similarity into a 2D map — a different signal from the tonal-balance analysis above.</div>
+        <div class="insights-cta-inner" style="margin-top:14px">
+          <div class="insights-cta-body">
+            <p class="insights-analyse-status" id="sonic-map-analyse-status">Run sonic embedding analysis to unlock the map.</p>
+          </div>
+          <button class="btn-primary insights-cta-btn" id="sonic-map-analyse-btn" onclick="App.startSonicEmbeddingAnalysis()">Analyse</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const clusters = d.clusters || {};
+  const clusterIds = Object.keys(clusters)
+    .sort((a, b) => (clusters[b].track_count || 0) - (clusters[a].track_count || 0));
+  const palette = ['#adc6ff', '#ffb3b5', '#53e16f', '#f5c26b', '#c48bff', '#6bd8f5',
+                    '#f58b8b', '#8bf5c4', '#f5f08b', '#8ba7f5', '#e08bf5', '#8bf5e0'];
+  const colorOf = {};
+  clusterIds.forEach((cid, i) => { colorOf[cid] = palette[i % palette.length]; });
+
+  const datasets = clusterIds.map(cid => ({
+    label: clusters[cid].label || `Cluster ${cid}`,
+    data: d.points.filter(p => String(p.cluster_id) === cid)
+                  .map(p => ({ x: p.x, y: p.y, title: p.title, artist: p.artist })),
+    backgroundColor: colorOf[cid],
+    pointRadius: 3, pointHoverRadius: 5,
+  }));
+
+  const legendHtml = clusterIds.map(cid => `
+    <div class="insights-legend-item">
+      <span class="insights-legend-dot" style="background:${colorOf[cid]}"></span>
+      <span class="insights-legend-label">${esc(clusters[cid].label || `Cluster ${cid}`)}</span>
+      <span class="insights-legend-count">${clusters[cid].track_count || 0}</span>
+    </div>`).join('');
+
+  el.innerHTML = `
+    <div class="sonic-chart-card">
+      <div class="sonic-chart-title">Sonic Map</div>
+      <div class="sonic-chart-subtitle">${d.embedding_count} tracks grouped into ${d.k} sonic clusters by deep audio similarity (PANNs embeddings).</div>
+      <div class="insights-chart-wrap" style="height:320px"><canvas id="sonic-map-canvas"></canvas></div>
+      <div class="sonic-map-legend">${legendHtml}</div>
+    </div>`;
+
+  _sonicMapChart = new Chart(document.getElementById('sonic-map-canvas'), {
+    type: 'scatter',
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { x: { display: false }, y: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ..._insightsTooltipDefaults(),
+          callbacks: {
+            title: () => '',
+            label: ctx => {
+              const p = ctx.raw;
+              const name = p.title ? `${p.title}${p.artist ? ' — ' + p.artist : ''}` : 'Unknown track';
+              return [name, ctx.dataset.label];
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+function _updateSonicMapStatus(text, disabled) {
+  const statusEl = document.getElementById('sonic-map-analyse-status');
+  if (statusEl) statusEl.textContent = text;
+  const btn = document.getElementById('sonic-map-analyse-btn');
+  if (btn) btn.disabled = !!disabled;
+}
+
+async function startSonicEmbeddingAnalysis() {
+  const ok = await _showConfirm({
+    kind: 'info',
+    title: 'Analyse Sonic Embeddings',
+    message: 'Runs a deep audio-similarity model over every track to build the sonic map. This is separate from library tag analysis and may take a while for large libraries.',
+    okText: 'Start Analysis',
+  });
+  if (!ok) return;
+
+  const res = await fetch('/api/sonic/analyse', { method: 'POST' });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    toast(d.error || 'Could not start sonic embedding analysis.');
+    return;
+  }
+  const d = await res.json().catch(() => ({}));
+  if (d.already_up_to_date) {
+    toast('Sonic embeddings are already up to date.');
+    const mapRes = await fetch('/api/insights/sonic-map').catch(() => null);
+    _renderInsightsSonicMap(mapRes && mapRes.ok ? await mapRes.json() : null);
+    return;
+  }
+  _updateSonicMapStatus(`Analysing… 0 / ${d.total || 0}`, true);
+  if (_sonicMapPoller) clearInterval(_sonicMapPoller);
+  _sonicMapPoller = setInterval(_pollSonicMapAnalysis, 1500);
+}
+
+async function _pollSonicMapAnalysis() {
+  const res = await fetch('/api/sonic/analyse/status').catch(() => null);
+  if (!res || !res.ok) return;
+  const s = await res.json();
+
+  if (s.status === 'running') {
+    const stage = s.stage === 'loading_model'
+      ? (s.model_download_pct != null ? `Downloading model… ${s.model_download_pct}%` : 'Loading model…')
+      : `Analysing… ${s.done} / ${s.total}`;
+    _updateSonicMapStatus(stage, true);
+    return;
+  }
+
+  clearInterval(_sonicMapPoller);
+  _sonicMapPoller = null;
+
+  if (s.status === 'error') {
+    toast(s.error || 'Sonic embedding analysis failed.');
+    _updateSonicMapStatus(s.error || 'Analysis failed — try again.', false);
+    return;
+  }
+
+  const mapRes = await fetch('/api/insights/sonic-map').catch(() => null);
+  _renderInsightsSonicMap(mapRes && mapRes.ok ? await mapRes.json() : null);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Add: Sonic Profile now includes a "Sonic Map" — a 2D visualisation grouping your library into sonic clusters by deep audio similarity, with a legend showing each cluster's dominant genre and track count. Includes its own "Analyse" action to build the map.
+- Change: Gear Compatibility Analysis now groups untagged tracks (no genre metadata) by sonic similarity instead of lumping them all into one generic "unknown" bucket, giving more meaningful genre-match breakdowns for libraries with incomplete tagging. Tracks that already have genre tags are unaffected.
 
 ## v0.656-rc.130826-2142 · 2026-08-13
 - Change: "Library Mix" is now called "Inspired by" — the right-click "Create Inspired Playlist" menu item, its modal, and the playlist type badge are renamed to match, and playlists saved from it are now named "Inspired by <song>" instead of "Library Mix · <song>".

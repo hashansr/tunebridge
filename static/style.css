@@ -17178,6 +17178,23 @@ body.is-col-resizing {
   color: rgba(193, 198, 215, 0.75);
 }
 
+/* Sonic Map legend -- wraps into columns instead of the narrow single-column
+   .insights-chart-legend (that one's sized for a donut-adjacent sidebar list;
+   the sonic map can have up to 24 clusters and needs the full card width). */
+.sonic-map-legend {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.sonic-map-legend .insights-legend-item {
+  flex: 0 0 auto;
+  width: 200px;
+}
+.sonic-map-legend .insights-legend-label {
+  max-width: 140px;
+}
+
 /* Gear fit cards */
 .iemfit-summary-card {
   border-radius: 18px;

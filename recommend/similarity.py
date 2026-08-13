@@ -49,6 +49,13 @@ class SimilarityIndex:
         self._fft_matrix = _stack_and_normalize(fft_vecs)
         self._fft_index = {tid: i for i, tid in enumerate(self._fft_ids)}
 
+    def deep_matrix_and_ids(self):
+        """Return (matrix, ids) for the deep (PANNs) embedding space -- the
+        same L2-normalized matrix used internally for similarity/k-NN, exposed
+        for other consumers (e.g. Sonic Profile's KMeans/PCA clustering) that
+        need direct matrix access rather than pairwise queries."""
+        return self._deep_matrix, self._deep_ids
+
     def has_deep_embedding(self, track_id):
         return track_id in self._deep_index
 

@@ -55,7 +55,7 @@ def close_conn():
 # Schema
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -147,6 +147,8 @@ _MIGRATIONS: list[tuple] = [
         'DROP TABLE IF EXISTS smart_playlist_rules',
         'DROP TABLE IF EXISTS playlist_gen_config',
     ]),
+    # v22: sonic_clusters is a new table handled by create_schema().
+    (22, 'Add sonic_clusters table for PANNs-embedding KMeans/PCA cache (Sonic Profile)', None),
 ]
 
 _SCHEMA_SQL = """
@@ -409,6 +411,16 @@ CREATE TABLE IF NOT EXISTS match_matrix (
     id              INTEGER PRIMARY KEY CHECK (id = 1),
     generated_at    INTEGER,
     target_id       TEXT,
+    data            TEXT NOT NULL
+);
+
+-- Sonic clusters (singleton computed cache -- KMeans/PCA over track_embeddings
+-- for Sonic Profile's sonic map; mirrors match_matrix's pattern)
+CREATE TABLE IF NOT EXISTS sonic_clusters (
+    id              INTEGER PRIMARY KEY CHECK (id = 1),
+    generated_at    INTEGER,
+    embedding_count INTEGER,
+    k               INTEGER,
     data            TEXT NOT NULL
 );
 
@@ -2239,6 +2251,34 @@ def db_save_match_data(data):
     conn.execute(
         "INSERT OR REPLACE INTO match_matrix (id, generated_at, target_id, data) VALUES (1, ?, ?, ?)",
         (data.get('generated_at', int(time.time())), data.get('target_id'), json.dumps(data))
+    )
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Sonic clusters (KMeans/PCA cache over track_embeddings, for Sonic Profile's
+# sonic map -- singleton cache, same shape as match_matrix above)
+# ---------------------------------------------------------------------------
+
+def db_load_sonic_clusters():
+    """Returns the cached clustering payload dict, or None if absent/corrupt."""
+    conn = get_conn()
+    row = conn.execute("SELECT data FROM sonic_clusters WHERE id = 1").fetchone()
+    if not row:
+        return None
+    try:
+        return json.loads(row['data'])
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+def db_save_sonic_clusters(data):
+    conn = get_conn()
+    conn.execute(
+        """INSERT OR REPLACE INTO sonic_clusters (id, generated_at, embedding_count, k, data)
+           VALUES (1, ?, ?, ?, ?)""",
+        (data.get('generated_at', int(time.time())), data.get('embedding_count'),
+         data.get('k'), json.dumps(data))
     )
     conn.commit()
 
