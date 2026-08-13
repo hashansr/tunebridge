@@ -22,18 +22,25 @@ import numpy as np
 class SimilarityIndex:
     """In-memory cosine-similarity index over track embeddings, with an FFT-band fallback."""
 
-    def __init__(self, embedding_entries, feature_entries):
+    def __init__(self, embedding_entries, feature_entries, embedding_version=None, analysis_version=None):
         """
         embedding_entries: list of dicts from db.db_load_embedding_entries()
-            (track_id, vector: np.ndarray|None, failed)
+            (track_id, vector: np.ndarray|None, failed, embedding_version)
         feature_entries: list of dicts from db.db_load_feature_entries()
-            (track_id, band_energy: list|None, failed)
+            (track_id, band_energy: list|None, failed, analysis_version)
+        embedding_version / analysis_version: when given, entries whose stored
+            version doesn't match are excluded -- so once either pipeline's
+            version bumps (as ANALYSIS_VERSION already has, v1->v4), stale
+            vectors from an older model/feature-set are never silently reused
+            for similarity, they're just treated as not-yet-analysed until
+            reprocessed. Pass None to skip the check (accept any version).
         """
         self._deep_ids = []
         deep_vecs = []
         for e in embedding_entries:
             v = e.get('vector')
-            if v is not None and not e.get('failed') and len(v) > 0:
+            if (v is not None and not e.get('failed') and len(v) > 0
+                    and (embedding_version is None or e.get('embedding_version') == embedding_version)):
                 self._deep_ids.append(e['track_id'])
                 deep_vecs.append(v)
         self._deep_matrix = _stack_and_normalize(deep_vecs)
@@ -43,7 +50,8 @@ class SimilarityIndex:
         fft_vecs = []
         for e in feature_entries:
             band = e.get('band_energy')
-            if band and not e.get('failed') and len(band) > 0:
+            if (band and not e.get('failed') and len(band) > 0
+                    and (analysis_version is None or e.get('analysis_version') == analysis_version)):
                 self._fft_ids.append(e['track_id'])
                 fft_vecs.append(band)
         self._fft_matrix = _stack_and_normalize(fft_vecs)

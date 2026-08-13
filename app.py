@@ -1513,6 +1513,11 @@ def do_scan():
     global _meta_maps_cache, _stream_track_cache
     _meta_maps_cache = None
     _stream_track_cache = {}
+    if added_count > 0:
+        try:
+            _maybe_autostart_embedding_analysis(reason='scan')
+        except Exception as e:
+            print(f"[scan] Warning: could not auto-start sonic analysis: {e}")
 
 
 def load_library():
@@ -15358,6 +15363,35 @@ def _is_cached_embedding_current(cached, track):
     return cached.get('vector') is not None
 
 
+def _get_pending_embedding_tracks():
+    """Library tracks without a current-version cached embedding (new, changed, or
+    analysed under an older EMBEDDING_VERSION). Shared by the manual-trigger route,
+    the analysis loop itself, and the auto-trigger helper below so 'what's pending'
+    is defined in exactly one place."""
+    tracks = list(library)
+    track_ids = {t.get('id') for t in tracks}
+    existing_map = {
+        e['track_id']: e for e in _db.db_load_embedding_entries()
+        if e['track_id'] in track_ids
+    }
+    return [t for t in tracks if not _is_cached_embedding_current(existing_map.get(t['id']), t)], existing_map
+
+
+def _maybe_autostart_embedding_analysis(reason=None):
+    """Kick off a background embedding-analysis run if there's pending work and
+    none is already running. Safe to call opportunistically from multiple sites
+    (scan complete, songs imported, server startup) -- it's a no-op if a run is
+    already in flight or nothing is pending."""
+    if embedding_state['status'] == 'running':
+        return False
+    pending_tracks, _ = _get_pending_embedding_tracks()
+    if not pending_tracks:
+        return False
+    t = threading.Thread(target=_run_embedding_analysis, daemon=True)
+    t.start()
+    return True
+
+
 def _run_embedding_analysis():
     global embedding_state
     from recommend.embedder import EMBEDDING_VERSION, MODEL_NAME, EmbedderUnavailable
@@ -15381,13 +15415,7 @@ def _run_embedding_analysis():
         embedding_state.update({'status': 'error', 'stage': None, 'error': str(exc)})
         return
 
-    tracks = list(library)
-    track_ids = {t.get('id') for t in tracks}
-    existing_map = {
-        e['track_id']: e for e in _db.db_load_embedding_entries()
-        if e['track_id'] in track_ids
-    }
-    pending_tracks = [t for t in tracks if not _is_cached_embedding_current(existing_map.get(t['id']), t)]
+    pending_tracks, existing_map = _get_pending_embedding_tracks()
 
     embedding_state.update({
         'status':     'running',
@@ -15477,8 +15505,7 @@ def _run_embedding_analysis():
 def sonic_start_analysis():
     if embedding_state['status'] == 'running':
         return jsonify({'error': 'Sonic analysis already running'}), 409
-    existing_map = {e['track_id']: e for e in _db.db_load_embedding_entries()}
-    pending = [t for t in library if not _is_cached_embedding_current(existing_map.get(t['id']), t)]
+    pending, _ = _get_pending_embedding_tracks()
     if not pending:
         # Embeddings are current, but the sonic-clusters cache may still be
         # missing/stale (e.g. embeddings existed before this feature shipped,
@@ -15553,10 +15580,13 @@ _similarity_index_cache = None
 def _get_similarity_index(force_refresh=False):
     global _similarity_index_cache
     if _similarity_index_cache is None or force_refresh:
+        from recommend.embedder import EMBEDDING_VERSION
         from recommend.similarity import SimilarityIndex
         _similarity_index_cache = SimilarityIndex(
             _db.db_load_embedding_entries(),
             _db.db_load_feature_entries(),
+            embedding_version=EMBEDDING_VERSION,
+            analysis_version=ANALYSIS_VERSION,
         )
     return _similarity_index_cache
 
@@ -15668,6 +15698,12 @@ def genius_preview():
         'tracks': tracks, 'explanations': explanations, 'generation_nonce': nonce,
         'seed_track_ids': seed_ids, 'requested_length': length, 'generated_length': len(tracks),
         'discovery_mode': discovery_mode,
+        # The seed track is always placed first regardless of whether it has a
+        # similarity signal, so an empty candidate pool still yields a 1-track
+        # result rather than an empty one -- this flag lets the frontend show
+        # its "not enough analysed tracks yet" state instead of a misleading
+        # single-track "playlist".
+        'insufficient_data': len(tracks) <= 1,
     })
 
 
@@ -15702,6 +15738,7 @@ def genius_refresh():
         'tracks': tracks, 'explanations': explanations, 'generation_nonce': nonce,
         'seed_track_ids': seed_ids, 'requested_length': length, 'generated_length': len(tracks),
         'overlap_with_previous': overlap,
+        'insufficient_data': len(tracks) <= 1,
     })
 
 
@@ -15790,9 +15827,13 @@ def player_continuous_next():
             'category': entry['category'], 'components': entry['explanation'],
         })
 
+    reason = None
+    if not tracks and index.signal_for(current_id) is None:
+        reason = 'No sonic analysis available for the current track yet.'
+
     return jsonify({
         'tracks': tracks, 'explanations': explanations,
-        'summary': {'generated_length': len(tracks), 'discovery_mode': discovery_mode},
+        'summary': {'generated_length': len(tracks), 'discovery_mode': discovery_mode, 'reason': reason},
     })
 
 
@@ -17969,6 +18010,10 @@ if not _migrate.ensure_db(DATA_DIR):
 
 load_library()
 _backfill_deleted_from_library_json()
+try:
+    _maybe_autostart_embedding_analysis(reason='startup')
+except Exception as e:
+    print(f"[startup] Warning: could not auto-start sonic analysis: {e}")
 
 
 # ── Library Organizer Routes ──────────────────────────────────────────────────
@@ -18457,6 +18502,12 @@ def _do_organizer_apply(plan, conflict_policy, run_id, mode='reorganize'):
             'moved': moved, 'skipped': skipped, 'errors': errors,
             'message': f'{moved} moved, {skipped} skipped, {len(errors)} errors',
         })
+
+    if mode == 'import' and moved > 0:
+        try:
+            _maybe_autostart_embedding_analysis(reason='import')
+        except Exception as e:
+            print(f"[organizer] Warning: could not auto-start sonic analysis: {e}")
 
 
 @app.route('/api/organizer/apply', methods=['POST'])

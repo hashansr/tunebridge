@@ -1514,6 +1514,8 @@ async function pollScanStatus() {
       }
       // Refresh scan history if settings view is open
       if (state.view === 'settings') loadScanHistory();
+      // New/changed tracks may have auto-started background sonic analysis
+      _maybeShowEmbeddingAnalysisToast();
     }
   }
 }
@@ -5360,6 +5362,7 @@ let _geniusState = {
   explanations: [],
   nonce: null,
   loading: false,
+  insufficientData: false,
 };
 
 function ctxCreateGeniusPlaylist() {
@@ -5370,7 +5373,7 @@ function ctxCreateGeniusPlaylist() {
 }
 
 function openGeniusModal(seedTrack) {
-  _geniusState = { seedTrack, length: 25, discoveryMode: 'balanced', tracks: [], explanations: [], nonce: null, loading: false };
+  _geniusState = { seedTrack, length: 25, discoveryMode: 'balanced', tracks: [], explanations: [], nonce: null, loading: false, insufficientData: false };
   const modal = document.getElementById('genius-modal');
   if (!modal) return;
   modal.style.display = 'flex';
@@ -5426,6 +5429,7 @@ async function runGeniusGeneration() {
     _geniusState.tracks = data.tracks || [];
     _geniusState.explanations = data.explanations || [];
     _geniusState.nonce = data.generation_nonce;
+    _geniusState.insufficientData = !!data.insufficient_data;
   } catch (e) {
     body.innerHTML = `<div class="related-tracks-empty">Couldn't generate a playlist: ${esc(e.message || 'unknown error')}</div>`;
     _geniusState.loading = false;
@@ -5436,7 +5440,7 @@ async function runGeniusGeneration() {
 }
 
 async function refreshGeniusPlaylist() {
-  if (_geniusState.loading || !_geniusState.tracks.length) return;
+  if (_geniusState.loading || !_geniusState.tracks.length || _geniusState.insufficientData) return;
   const body = document.getElementById('genius-modal-body');
   _geniusState.loading = true;
   body.innerHTML = `<div class="related-tracks-loading">Refreshing…</div>`;
@@ -5453,6 +5457,7 @@ async function refreshGeniusPlaylist() {
     _geniusState.tracks = data.tracks || [];
     _geniusState.explanations = data.explanations || [];
     _geniusState.nonce = data.generation_nonce;
+    _geniusState.insufficientData = !!data.insufficient_data;
   } catch (e) {
     toast(`Refresh failed: ${e.message || 'unknown error'}`, 'error');
   }
@@ -5461,12 +5466,12 @@ async function refreshGeniusPlaylist() {
 }
 
 function playGeniusPlaylist() {
-  if (!_geniusState.tracks.length) return;
+  if (!_geniusState.tracks.length || _geniusState.insufficientData) return;
   Player.playAll(_geniusState.tracks, 0, `Inspired by ${_geniusState.seedTrack?.title || ''}`);
 }
 
 async function saveGeniusPlaylist() {
-  if (!_geniusState.tracks.length) return;
+  if (!_geniusState.tracks.length || _geniusState.insufficientData) return;
   try {
     const result = await api('/genius/save', {
       method: 'POST',
@@ -5490,7 +5495,7 @@ async function saveGeniusPlaylist() {
 function _renderGeniusModal() {
   const body = document.getElementById('genius-modal-body');
   if (!body) return;
-  if (!_geniusState.tracks.length) {
+  if (!_geniusState.tracks.length || _geniusState.insufficientData) {
     body.innerHTML = `<div class="related-tracks-empty">Not enough analysed tracks yet to build a playlist around this song.</div>`;
     return;
   }
@@ -23211,6 +23216,8 @@ async function _orgWizPoll() {
     clearInterval(_orgWiz.pollTimer); _orgWiz.pollTimer = null;
     _orgWiz.running = false; _orgWiz.done = true;
     _orgWizSyncStepper(); _orgWizRenderDone(s);
+    // Imported songs may have auto-started background sonic analysis
+    if (_orgWiz.scope === 'import' && s.moved > 0) _maybeShowEmbeddingAnalysisToast();
   }
 }
 
@@ -25640,6 +25647,56 @@ function _renderInsightsSonicProfile(d) {
 
 let _sonicMapChart  = null;
 let _sonicMapPoller = null;
+
+/* ── Global sonic-analysis progress toast ───────────────────────────────────
+   Sonic (CNN14 embedding) analysis now auto-starts in the background after a
+   library scan, a Library Organizer import, or on app startup if a previous
+   run was interrupted -- so unlike _pollSonicMapAnalysis above (which only
+   matters while the Sonic Map panel is open), this needs to be visible from
+   anywhere in the app. Reuses the same /api/sonic/analyse/status endpoint and
+   the existing persistent-toast primitive (_showLiveToast). Safe to call
+   defensively from multiple trigger sites -- idempotent via the poller guard. */
+let _embeddingAnalysisLiveToast = null;
+let _embeddingAnalysisPoller = null;
+
+async function _maybeShowEmbeddingAnalysisToast() {
+  if (_embeddingAnalysisPoller) return; // already tracking a run
+  const res = await fetch('/api/sonic/analyse/status').catch(() => null);
+  if (!res || !res.ok) return;
+  const s = await res.json();
+  if (s.status !== 'running') return;
+  _embeddingAnalysisLiveToast = _showLiveToast('Sonic analysis starting…');
+  _embeddingAnalysisPoller = setInterval(_pollEmbeddingAnalysisToast, 1500);
+  _pollEmbeddingAnalysisToast();
+}
+
+async function _pollEmbeddingAnalysisToast() {
+  const res = await fetch('/api/sonic/analyse/status').catch(() => null);
+  if (!res || !res.ok) return;
+  const s = await res.json();
+  if (s.status === 'running') {
+    const stage = s.stage === 'loading_model'
+      ? (s.model_download_pct != null ? `Downloading model… ${s.model_download_pct}%` : 'Loading model…')
+      : `Analysing sonic profile… ${s.done} / ${s.total}`;
+    if (_embeddingAnalysisLiveToast) _embeddingAnalysisLiveToast.update(stage);
+    return;
+  }
+  clearInterval(_embeddingAnalysisPoller);
+  _embeddingAnalysisPoller = null;
+  if (s.status === 'done' && _embeddingAnalysisLiveToast) {
+    _embeddingAnalysisLiveToast.finish('Sonic analysis complete', 'success');
+  } else if (s.status === 'error' && _embeddingAnalysisLiveToast) {
+    _embeddingAnalysisLiveToast.finish(s.error || 'Sonic analysis failed', 'error');
+  } else if (_embeddingAnalysisLiveToast) {
+    _embeddingAnalysisLiveToast.dismiss();
+  }
+  _embeddingAnalysisLiveToast = null;
+  // If Sonic Map is the currently open panel, refresh it with the new data.
+  if (document.getElementById('sonic-map-analyse-status')) {
+    const mapRes = await fetch('/api/insights/sonic-map').catch(() => null);
+    if (mapRes && mapRes.ok) _renderInsightsSonicMap(await mapRes.json());
+  }
+}
 
 function _renderInsightsSonicMap(d) {
   const el = document.getElementById('insights-sonic-map-content');
@@ -28575,6 +28632,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     _enhanceTableSystem();
     refreshSidebarSyncIndicator();
     pollScanStatus();
+    // A previous session's sonic analysis may have auto-resumed at server startup
+    _maybeShowEmbeddingAnalysisToast();
     showView('home');
     refreshPlayerFavouriteButton();
 

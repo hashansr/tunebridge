@@ -133,6 +133,7 @@ const Player = (function () {
   let _startupRestoreGuardActive = true;
   let _continuousPlayFetchInFlight = false;
   let _continuousPlayFetchPromise = null;
+  let _continuousPlayNoDataReason = null; // set when the backend can't extend the queue for lack of sonic analysis
 
   const _CUSTOM_PEQ_KEY = 'tb_custom_peq';
   const _CUSTOM_EQ_ID = '__custom__';
@@ -484,6 +485,7 @@ const Player = (function () {
             return;
           }
         }
+        if (!added && _continuousPlayNoDataReason) _toast(_continuousPlayNoDataReason);
         ps.isPlaying = false;
         _activeHistoryTrack = null;
         _updatePlayBtn();
@@ -1297,6 +1299,7 @@ const Player = (function () {
     if (ps.repeatMode !== 'off') return false;
     const cur = currentTrack();
     if (!cur || !cur.id) return false;
+    _continuousPlayNoDataReason = null;
 
     _syncContinuousPlayQueueState();
     const pending = _pendingContinuousPlayEntries().length;
@@ -1323,6 +1326,7 @@ const Player = (function () {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const added = _appendContinuousPlayTracks(data.tracks || []);
+      _continuousPlayNoDataReason = (added === 0 && data.summary && data.summary.reason) ? data.summary.reason : null;
       if (added > 0) _saveState();
       return added > 0;
     })();
@@ -2076,6 +2080,7 @@ const Player = (function () {
           if (ps.queueOpen) _renderQueue();
           return;
         }
+        if (!added && _continuousPlayNoDataReason) _toast(_continuousPlayNoDataReason);
         ps.isPlaying = false;
         _updatePlayBtn();
         _highlightActiveRow();
@@ -2667,7 +2672,8 @@ const Player = (function () {
         const _cpBlocked = ps.repeatMode !== 'off';
         const _cpMsg = _cpBlocked
           ? 'Continuous Play is paused while Repeat is on.'
-          : (_continuousPlayFetchInFlight ? 'Finding similar songs...' : 'Continuous Play will add similar songs at the end.');
+          : (_continuousPlayFetchInFlight ? 'Finding similar songs...'
+            : (_continuousPlayNoDataReason || 'Continuous Play will add similar songs at the end.'));
         html += `<div class="queue-empty queue-empty-compact">${_cpMsg}</div>`;
       }
       html += `</div></div>`;

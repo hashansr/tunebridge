@@ -16,6 +16,7 @@ both files ourselves via `requests` (streamed, retried, size-validated)
 and `os.system('wget ...')` is never reached.
 """
 
+import os
 import time
 from pathlib import Path
 
@@ -114,6 +115,11 @@ class PannsCnn14Embedder(SonicEmbedder):
             from panns_inference import AudioTagging
         except ImportError as exc:
             raise EmbedderUnavailable(f'torch / panns-inference not installed: {exc}') from exc
+
+        # Cap CPU threads -- this can now run automatically in the background
+        # (not just via an explicit user-initiated button click), so don't let
+        # it hog every core and compete with playback/UI responsiveness.
+        torch.set_num_threads(max(1, (os.cpu_count() or 4) // 2))
 
         self._torch = torch
         self._tagger = AudioTagging(checkpoint_path=str(self.checkpoint_path), device=device)
