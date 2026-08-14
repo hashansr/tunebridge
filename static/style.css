@@ -24647,6 +24647,7 @@ body.is-col-resizing {
 }
 #view-settings .settings-shell {
   gap: 0;
+  margin-top: 16px;
 }
 #view-settings .settings-category-bar {
   gap: 30px;
