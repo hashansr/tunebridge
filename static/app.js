@@ -4910,9 +4910,12 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null
   const labelEl = document.getElementById('ctx-label');
   const favItem = document.getElementById('ctx-favourite-item');
   const favLabel = document.getElementById('ctx-favourite-label');
+  const playlistItem = document.getElementById('ctx-playlist-item');
   const finderItem = document.getElementById('ctx-show-in-finder-item');
   const removeItem = document.getElementById('ctx-remove-from-playlist-item');
   const removeLabel = document.getElementById('ctx-remove-from-playlist-label');
+  const discoverySep = document.getElementById('ctx-discovery-sep');
+  const editSep = document.getElementById('ctx-edit-sep');
   const findLyricsItem = document.getElementById('ctx-find-lyrics-item');
   const findLyricsSep = document.getElementById('ctx-lyrics-sep');
   const findLyricsLabel = document.getElementById('ctx-find-lyrics-label');
@@ -4951,8 +4954,9 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null
   if (finderItem) {
     finderItem.style.display = _ctxFinderTarget?.path ? '' : 'none';
   }
+  const canRemove = state.view === 'playlist' && !!state.playlist && !state.playlist?.is_favourites && tracks.length > 0;
+  if (playlistItem) playlistItem.style.display = canRemove ? 'none' : '';
   if (removeItem && removeLabel) {
-    const canRemove = state.view === 'playlist' && !!state.playlist && !state.playlist?.is_favourites && tracks.length > 0;
     removeItem.style.display = canRemove ? '' : 'none';
     if (canRemove) {
       removeLabel.textContent = tracks.length === 1
@@ -4961,11 +4965,14 @@ function _showCtxMenu(x, y, tracks, label, favTarget = null, finderTarget = null
     }
   }
   const editTrackItem = document.getElementById('ctx-edit-track-tags-item');
-  if (editTrackItem) editTrackItem.style.display = tracks.length === 1 ? '' : 'none';
+  const showTrackActions = tracks.length === 1;
+  if (editTrackItem) editTrackItem.style.display = showTrackActions ? '' : 'none';
   const relatedItem = document.getElementById('ctx-related-tracks-item');
-  if (relatedItem) relatedItem.style.display = tracks.length === 1 ? '' : 'none';
+  if (relatedItem) relatedItem.style.display = showTrackActions ? '' : 'none';
   const geniusItem = document.getElementById('ctx-genius-item');
-  if (geniusItem) geniusItem.style.display = tracks.length === 1 ? '' : 'none';
+  if (geniusItem) geniusItem.style.display = showTrackActions ? '' : 'none';
+  if (discoverySep) discoverySep.style.display = showTrackActions ? '' : 'none';
+  if (editSep) editSep.style.display = (showTrackActions || !!_ctxFinderTarget || !!pinTarget) ? '' : 'none';
   menu.style.display = 'block';
   menu.style.left = '-9999px';
   menu.style.top  = '-9999px';
