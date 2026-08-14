@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Starting Track Radio, playing an album/playlist, or clicking a new song now clears the old queue instead of letting it pile up — but anything you explicitly added via "Add to Queue" or "Play Next" is kept and plays right after, in its own "Play Next" section, even with shuffle on.
 
 ## v0.665-rc.140826-0854 · 2026-08-14
 - Fix: Inspired-by playlists no longer contain multiple versions of the same song (e.g. a live recording alongside the studio version).

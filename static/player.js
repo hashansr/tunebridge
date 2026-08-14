@@ -1120,6 +1120,24 @@ const Player = (function () {
     delete clean.__continuousPlay;
     delete clean.__continuousPlaySeedTitle;
     delete clean.__continuousPlaySeedArtist;
+    delete clean.__explicitQueue;
+    return clean;
+  }
+
+  function _isExplicitQueueTrack(track) {
+    return !!(track && track.__explicitQueue);
+  }
+
+  // Explicit user action (Add to Queue / Play Next) always promotes a track out
+  // of the Continuous Play tier into the explicit tier -- a track can't be both.
+  function _markExplicitQueueTrack(track) {
+    const clean = { ...track };
+    delete clean.__continuousPlay;
+    delete clean.__continuousPlaySeedTitle;
+    delete clean.__continuousPlaySeedArtist;
+    delete clean.__continuousCategory;
+    delete clean.continuous_category;
+    clean.__explicitQueue = true;
     return clean;
   }
 
@@ -1136,6 +1154,24 @@ const Player = (function () {
       .slice(Math.max(0, curRealIdx + 1))
       .map((t, i) => ({ t, realIdx: curRealIdx + 1 + i }))
       .filter(({ t }) => _isContinuousPlayTrack(t));
+  }
+
+  // Explicitly-queued (Add to Queue / Play Next) tracks not yet reached --
+  // captured before a new playback session wipes the queue, so they can be
+  // re-spliced in immediately after the new current track.
+  function _pendingExplicitQueueEntries() {
+    if (!ps.queue.length) return [];
+    if (ps.shuffle && ps.shuffleOrder.length > 0) {
+      return ps.shuffleOrder
+        .slice(Math.max(0, ps.queueIdx + 1))
+        .map(i => ({ t: ps.queue[i], realIdx: i }))
+        .filter(({ t }) => _isExplicitQueueTrack(t));
+    }
+    const curRealIdx = _realIdx();
+    return ps.queue
+      .slice(Math.max(0, curRealIdx + 1))
+      .map((t, i) => ({ t, realIdx: curRealIdx + 1 + i }))
+      .filter(({ t }) => _isExplicitQueueTrack(t));
   }
 
   function _syncContinuousPlayQueueState() {
@@ -1625,26 +1661,29 @@ const Player = (function () {
     _startupRestoreGuardActive = false;
     if (!track) return;
     _registry.set(track.id, track);
-    // If already in queue (and not shuffle), jump to it
-    if (!ps.shuffle) {
-      const existing = ps.queue.findIndex(t => t.id === track.id);
-      if (existing >= 0) {
-        ps.queueIdx = existing;
-        _loadTrack(currentTrack());
-        _startPlay();
-        _renderQueue();
-        return;
+
+    // Already in queue -> jump to it (not "starting new playback"). Works in
+    // both shuffle and non-shuffle modes.
+    const existingRealIdx = ps.queue.findIndex(t => t.id === track.id);
+    if (existingRealIdx >= 0) {
+      if (ps.shuffle && ps.shuffleOrder.length > 0) {
+        const pos = ps.shuffleOrder.indexOf(existingRealIdx);
+        if (pos >= 0) ps.queueIdx = pos;
+      } else {
+        ps.queueIdx = existingRealIdx;
       }
+      _loadTrack(currentTrack());
+      _startPlay();
+      _renderQueue();
+      return;
     }
-    // Insert at current position + 1 (or at start)
+
+    // Genuinely new track: wipe stale content, keep the explicit queue tier.
+    const preservedExplicit = _pendingExplicitQueueEntries().map(({ t }) => t);
+    ps.queue = [track, ...preservedExplicit];
+    ps.queueIdx = 0;
+    ps.shuffleOrder = ps.shuffle ? ps.queue.map((_, i) => i) : [];
     if (ps.continuousPlayEnabled) _startNewContinuousPlaySession();
-    const insertAt = ps.queueIdx >= 0 ? ps.queueIdx + 1 : 0;
-    ps.queue.splice(insertAt, 0, track);
-    ps.queueIdx = insertAt;
-    if (ps.shuffle) {
-      // Add new track to shuffleOrder at current position
-      ps.shuffleOrder.splice(ps.queueIdx, 0, insertAt);
-    }
     _loadTrack(currentTrack());
     _startPlay();
     _renderQueue();
@@ -1668,31 +1707,44 @@ const Player = (function () {
     console.warn('Player: track not found in registry', id);
   }
 
-  /** Replace the entire queue with tracks[], start at startIdx */
+  /** Replace the entire queue with tracks[], start at startIdx.
+   *  Preserves any explicitly-queued (Add to Queue / Play Next) tracks not
+   *  yet reached -- they're spliced back in immediately after the new
+   *  current track, exempt from shuffle. */
   function playAll(tracks, startIdx = 0, contextLabel = '', options = {}) {
     _startupRestoreGuardActive = false;
     if (!tracks || tracks.length === 0) return;
+    const preservedExplicit = _pendingExplicitQueueEntries().map(({ t }) => t);
     _resetStandbyBuffer();
     tracks.forEach(t => _registry.set(t.id, t));
-    ps.queue    = [...tracks];
-    ps.queueIdx = Math.max(0, Math.min(startIdx, tracks.length - 1));
     if (contextLabel) ps.playbackContextLabel = contextLabel;
-    ps.shuffleOrder = [];
+
     if (ps.shuffle) {
       // For "Play / Play All" actions, reshuffle and randomize the first track each run.
       // Explicit starts (e.g. clicking a specific row) can opt out and preserve startIdx.
       const preserveStart = options && options.preserveStartOnShuffle === true;
-      let firstRealIdx = preserveStart
-        ? ps.queueIdx
-        : Math.floor(Math.random() * ps.queue.length);
-      if (!preserveStart && ps.queue.length > 1 && firstRealIdx === ps.lastShuffleFirstIdx) {
-        firstRealIdx = (firstRealIdx + 1 + Math.floor(Math.random() * (ps.queue.length - 1))) % ps.queue.length;
+      let firstIdx = preserveStart
+        ? Math.max(0, Math.min(startIdx, tracks.length - 1))
+        : Math.floor(Math.random() * tracks.length);
+      if (!preserveStart && tracks.length > 1 && firstIdx === ps.lastShuffleFirstIdx) {
+        firstIdx = (firstIdx + 1 + Math.floor(Math.random() * (tracks.length - 1))) % tracks.length;
       }
-      const rest = ps.queue.map((_, i) => i).filter(i => i !== firstRealIdx);
-      ps.shuffleOrder = [firstRealIdx, ..._fisherYates(rest)];
-      ps.lastShuffleFirstIdx = firstRealIdx;
+      ps.lastShuffleFirstIdx = firstIdx;
+
+      ps.queue = [...tracks.slice(0, firstIdx + 1), ...preservedExplicit, ...tracks.slice(firstIdx + 1)];
+      const curRealIdx = firstIdx;
+      const explicitRealIndices = preservedExplicit.map((_, i) => firstIdx + 1 + i);
+      const explicitSet = new Set(explicitRealIndices);
+      const restRealIndices = ps.queue.map((_, i) => i).filter(i => i !== curRealIdx && !explicitSet.has(i));
+      ps.shuffleOrder = [curRealIdx, ...explicitRealIndices, ..._fisherYates(restRealIndices)];
       ps.queueIdx = 0;
+    } else {
+      const curRealIdx = Math.max(0, Math.min(startIdx, tracks.length - 1));
+      ps.queue = [...tracks.slice(0, curRealIdx + 1), ...preservedExplicit, ...tracks.slice(curRealIdx + 1)];
+      ps.queueIdx = curRealIdx;
+      ps.shuffleOrder = [];
     }
+
     if (ps.continuousPlayEnabled) _startNewContinuousPlaySession();
     _loadTrack(currentTrack());
     _startPlay();
@@ -1700,13 +1752,17 @@ const Player = (function () {
     _saveState();
   }
 
-  /** Hero Shuffle CTA behavior: replace queue with randomized collection and start at top. */
+  /** Hero Shuffle CTA behavior: replace queue with randomized collection and start at top.
+   *  Preserves any explicitly-queued tracks not yet reached, spliced in
+   *  immediately after the new current track, exempt from shuffle. */
   function playCollectionShuffled(tracks, contextLabel = '') {
     if (!tracks || tracks.length === 0) return;
+    const preservedExplicit = _pendingExplicitQueueEntries().map(({ t }) => t);
     _resetStandbyBuffer();
     tracks.forEach(t => _registry.set(t.id, t));
     const shuffled = _fisherYates([...tracks]);
-    ps.queue = shuffled;
+    const [chosenCurrent, ...restShuffled] = shuffled;
+    ps.queue = [chosenCurrent, ...preservedExplicit, ...restShuffled];
     ps.queueIdx = 0;
     if (contextLabel) ps.playbackContextLabel = contextLabel;
     // Keep CTA shuffle independent from player shuffle toggle semantics.
@@ -1724,6 +1780,7 @@ const Player = (function () {
   function addToQueue(tracks) {
     if (!Array.isArray(tracks)) tracks = [tracks];
     if (tracks.length === 0) return;
+    tracks = tracks.map(t => _markExplicitQueueTrack(t));
     tracks.forEach(t => _registry.set(t.id, t));
     const firstAuto = _firstPendingContinuousPlayRealIdx();
     const insertAt = firstAuto >= 0 ? firstAuto : ps.queue.length;
@@ -1752,6 +1809,7 @@ const Player = (function () {
   function playNext(tracks) {
     if (!Array.isArray(tracks)) tracks = [tracks];
     if (tracks.length === 0) return;
+    tracks = tracks.map(t => _markExplicitQueueTrack(t));
     tracks.forEach(t => _registry.set(t.id, t));
     const n = tracks.length;
 
@@ -2541,7 +2599,7 @@ const Player = (function () {
 
   function _queueItemHtml(t, realIdx, mode = 'continuous') {
     const isPlaying = mode === 'playing';
-    const isQueue = mode === 'queue';
+    const isQueue = mode === 'queue' || mode === 'playnext';
     const isContinuousPlay = mode === 'continuous';
     const isRemovable = isQueue || isContinuousPlay;
     const classes = [
@@ -2604,7 +2662,8 @@ const Player = (function () {
       historyItems  = ps.queue.slice(0, curRealIdx).map((t, i) => ({ t, realIdx: i, queuePos: i }));
       upcomingItems = ps.queue.slice(curRealIdx + 1).map((t, i) => ({ t, realIdx: curRealIdx + 1 + i, queuePos: curRealIdx + 1 + i }));
     }
-    const explicitUpcomingItems = upcomingItems.filter(({ t }) => !_isContinuousPlayTrack(t));
+    const playNextItems = upcomingItems.filter(({ t }) => _isExplicitQueueTrack(t));
+    const sourceUpcomingItems = upcomingItems.filter(({ t }) => !_isExplicitQueueTrack(t) && !_isContinuousPlayTrack(t));
     const continuousPlayItems = upcomingItems.filter(({ t }) => _isContinuousPlayTrack(t)).slice(0, _CONTINUOUS_PLAY_VISIBLE_LIMIT);
     const hiddenContinuousPlayCount = Math.max(0, upcomingItems.filter(({ t }) => _isContinuousPlayTrack(t)).length - continuousPlayItems.length);
     const currentTrackObj = ps.queue[curRealIdx];
@@ -2629,7 +2688,7 @@ const Player = (function () {
     }
 
     // ── Continue Playing section ─────────────────────────────────────
-    const sourceLabel = _queueSourceLabel(currentTrackObj, upcomingItems, historyItems);
+    const sourceLabel = _queueSourceLabel(currentTrackObj, sourceUpcomingItems, historyItems);
     html += `<div class="queue-section queue-section-continue">
       <div class="queue-section-hdr queue-section-hdr-plain" oncontextmenu="event.preventDefault();event.stopPropagation();if(confirm('Clear upcoming queue?'))Player.clearQueue()" title="Right-click to clear queue">
         <span class="queue-section-title">Continue Playing</span>
@@ -2641,10 +2700,22 @@ const Player = (function () {
       html += _queueItemHtml(currentTrackObj, curRealIdx, 'playing');
     }
 
-    // Upcoming explicit tracks (draggable) — capped at 200 for perf
+    // Play Next — explicitly-queued tracks, always immediately after current
+    if (playNextItems.length > 0) {
+      html += `<div class="queue-section-hdr queue-section-hdr-plain">
+        <span class="queue-section-title">Play Next</span>
+      </div>
+      <div id="queue-playnext-list">`;
+      playNextItems.forEach(({ t, realIdx }) => {
+        html += _queueItemHtml(t, realIdx, 'playnext');
+      });
+      html += `</div>`;
+    }
+
+    // Upcoming source tracks (draggable) — capped at 200 for perf
     const QUEUE_CAP = 200;
-    const visibleUpcoming = explicitUpcomingItems.slice(0, QUEUE_CAP);
-    const hiddenCount     = explicitUpcomingItems.length - visibleUpcoming.length;
+    const visibleUpcoming = sourceUpcomingItems.slice(0, QUEUE_CAP);
+    const hiddenCount     = sourceUpcomingItems.length - visibleUpcoming.length;
     html += `<div id="queue-upcoming-list">`;
     visibleUpcoming.forEach(({ t, realIdx }) => {
       html += _queueItemHtml(t, realIdx, 'queue');
@@ -2689,7 +2760,7 @@ const Player = (function () {
 
     // Drag-and-drop on upcoming lists (normal and shuffle mode)
     const upcomingList = document.getElementById('queue-upcoming-list');
-    if (upcomingList && typeof Sortable !== 'undefined' && explicitUpcomingItems.length > 1) {
+    if (upcomingList && typeof Sortable !== 'undefined' && sourceUpcomingItems.length > 1) {
       _addQueueSortable(Sortable.create(upcomingList, {
         animation: 150,
         handle: '.queue-drag-handle',
@@ -2699,9 +2770,29 @@ const Player = (function () {
           const newIndex = typeof evt.newDraggableIndex === 'number' ? evt.newDraggableIndex : evt.newIndex;
           if (oldIndex === newIndex) return;
           if (ps.shuffle) {
-            moveShuffleItem(explicitUpcomingItems[oldIndex].queuePos, explicitUpcomingItems[newIndex].queuePos);
+            moveShuffleItem(sourceUpcomingItems[oldIndex].queuePos, sourceUpcomingItems[newIndex].queuePos);
           } else {
-            moveQueueItem(explicitUpcomingItems[oldIndex].realIdx, explicitUpcomingItems[newIndex].realIdx);
+            moveQueueItem(sourceUpcomingItems[oldIndex].realIdx, sourceUpcomingItems[newIndex].realIdx);
+          }
+          _renderQueue();
+        },
+      }));
+    }
+
+    const playNextList = document.getElementById('queue-playnext-list');
+    if (playNextList && typeof Sortable !== 'undefined' && playNextItems.length > 1) {
+      _addQueueSortable(Sortable.create(playNextList, {
+        animation: 150,
+        handle: '.queue-drag-handle',
+        draggable: '.queue-item',
+        onEnd(evt) {
+          const oldIndex = typeof evt.oldDraggableIndex === 'number' ? evt.oldDraggableIndex : evt.oldIndex;
+          const newIndex = typeof evt.newDraggableIndex === 'number' ? evt.newDraggableIndex : evt.newIndex;
+          if (oldIndex === newIndex) return;
+          if (ps.shuffle) {
+            moveShuffleItem(playNextItems[oldIndex].queuePos, playNextItems[newIndex].queuePos);
+          } else {
+            moveQueueItem(playNextItems[oldIndex].realIdx, playNextItems[newIndex].realIdx);
           }
           _renderQueue();
         },
