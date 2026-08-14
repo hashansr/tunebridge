@@ -17366,6 +17366,18 @@ body.is-col-resizing {
   font-weight: 650;
   letter-spacing: -0.01em;
 }
+.sonic-analysis-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 1px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.sonic-analysis-summary strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
 .sonic-insight-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -17510,18 +17522,6 @@ body.is-col-resizing {
   flex: 0 0 auto;
   width: 200px;
 }
-.sonic-map-cluster-btn {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.sonic-map-cluster-btn:hover .insights-legend-label {
-  color: var(--text-primary);
-}
 .sonic-map-legend .insights-legend-label {
   max-width: 140px;
 }
@@ -17539,25 +17539,70 @@ body.is-col-resizing {
 .sonic-map-selection span {
   display: block;
 }
+.sonic-map-selection-track {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+.sonic-map-selection-art {
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  border-radius: 6px;
+}
+.sonic-map-selection-art > img,
+.sonic-map-selection-art .cover-placeholder {
+  display: block;
+  width: 42px !important;
+  height: 42px !important;
+}
+.sonic-map-selection-copy {
+  min-width: 0;
+}
 .sonic-map-selection strong {
   color: var(--text-primary);
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sonic-map-selection span {
   margin-top: 3px;
   color: var(--text-muted);
   font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sonic-map-selection-actions {
   display: flex;
   flex: 0 0 auto;
   gap: 6px;
 }
-.sonic-map-selection-actions .btn-primary,
-.sonic-map-selection-actions .btn-secondary {
-  min-height: 30px;
-  padding: 5px 9px;
-  font-size: 11px;
+.sonic-map-selection-actions .sonic-map-play-btn {
+  position: relative;
+  inset: auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  opacity: 1;
+  background: var(--accent);
+  color: #101612;
+}
+.sonic-map-selection-actions .sonic-map-play-btn:hover {
+  background: var(--accent-hover, var(--accent));
+}
+.sonic-map-selection-actions .sonic-map-context-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  opacity: 0.72;
+  background: rgba(255, 255, 255, 0.07);
+}
+.sonic-map-selection-actions .sonic-map-context-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* Gear fit cards */

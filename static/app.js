@@ -25430,10 +25430,9 @@ const _INSIGHTS_HELP = {
   },
   sonic: {
     title: 'Sonic Profile',
-    body: `<p>Summarises your library's <strong>overall sound character</strong>, then connects it to IEM/headphone recommendations when Gear Compatibility Analysis is available.</p>
-           <p><strong>Gear priorities</strong> are the genre-weighted perceptual areas used by Gear Fit. They explain which parts of a headphone or IEM response matter most for your library.</p>
-           <p><strong>Bright–warm range</strong> is an optional technical view of tonal balance across analysed tracks. It describes the collection; it is not a sound-quality score.</p>
-           <p><strong>Explore your sound</strong> groups tracks by deep audio similarity. Select a point or group to play a representative track or open its queue actions.</p>
+    body: `<p>Shows whether audio analysis is ready, then lets you <strong>explore similar-sounding tracks</strong> on the Sonic Map.</p>
+           <p><strong>Explore your sound</strong> groups tracks by deep audio similarity. Select a point to play it or open its usual track actions.</p>
+           <p>For headphone and IEM recommendations, use <strong>Gear Compatibility Analysis</strong> below. It contains the comparisons and blindspots that support a real gear decision.</p>
            <p><strong>Note:</strong> the coverage label shows how much of your library the local analyser could read. Results update after running "Analyse Library".</p>`,
   },
   gear: {
@@ -25603,144 +25602,12 @@ function _updateAnalysisBanner(s) {
    Insights — Phase 2: Sonic Profile
    ═══════════════════════════════════════════════════════════════════════════ */
 
-let _sonicBrightnessChart = null;
-let _sonicGearChart       = null;
-
-function _renderSonicAnalysisDetails(d) {
-  if (_sonicBrightnessChart || _sonicGearChart) return;
-  const _hz = v => v >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : Math.round(v).toString();
-  const baseOptions = {
-    responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: false }, tooltip: _insightsTooltipDefaults() },
-    scales: {
-      x: { ticks: { color: '#6b6b7b', font: { size: 10 } }, grid: { color: 'rgba(173,198,255,0.05)' }, border: { color: 'transparent' } },
-      y: { ticks: { color: '#6b6b7b', font: { size: 9 } }, grid: { color: 'rgba(173,198,255,0.06)' }, border: { color: 'transparent' } },
-    },
-  };
-
-  const brightnessCanvas = document.getElementById('sonic-brightness-canvas');
-  if (brightnessCanvas) {
-    _sonicBrightnessChart = new Chart(brightnessCanvas, {
-      type: 'bar',
-      data: { labels: d.brightness.histogram.midpoints,
-              datasets: [{ data: d.brightness.histogram.counts, backgroundColor: 'rgba(173,198,255,0.65)', borderColor: 'rgba(173,198,255,0.9)', borderWidth: 1, borderRadius: 3 }] },
-      options: {
-        ...baseOptions,
-        scales: { ...baseOptions.scales,
-          x: { ...baseOptions.scales.x,
-               ticks: { ...baseOptions.scales.x.ticks, callback: function(_, i) { return _hz(this.chart.data.labels[i]); } } } },
-      },
-    });
-  }
-
-  const profile = d.gear_priorities && d.gear_priorities.profile;
-  const gearCanvas = document.getElementById('sonic-gear-priority-canvas');
-  if (profile && gearCanvas) {
-    const keys = Object.keys(profile);
-    const values = keys.map(key => profile[key]);
-    _sonicGearChart = new Chart(gearCanvas, {
-      type: 'bar',
-      data: {
-        labels: keys.map(key => (d.band_labels || {})[key] || key),
-        datasets: [{
-          data: values,
-          backgroundColor: values.map(value => `rgba(83,225,111,${0.3 + value * 0.55})`),
-          borderColor: 'rgba(83,225,111,0.85)', borderWidth: 1, borderRadius: 3,
-        }],
-      },
-      options: {
-        ...baseOptions,
-        scales: { ...baseOptions.scales,
-          x: { ...baseOptions.scales.x, ticks: { ...baseOptions.scales.x.ticks, font: { size: 9 }, maxRotation: 35 } },
-          y: { ...baseOptions.scales.y, min: 0, max: 1,
-               ticks: { ...baseOptions.scales.y.ticks, callback: value => `${Math.round(value * 100)}%` } },
-        },
-        plugins: { ...baseOptions.plugins, tooltip: { ..._insightsTooltipDefaults(), callbacks: { label: ctx => `${Math.round(ctx.parsed.y * 100)}% of highest Gear Fit priority` } } },
-      },
-    });
-  }
-}
-
 function _renderInsightsSonicProfile(d) {
   const el = document.getElementById('insights-sonic-content');
   if (!el) return;
-
-  [_sonicBrightnessChart, _sonicGearChart].forEach(chart => { if (chart) chart.destroy(); });
-  _sonicBrightnessChart = _sonicGearChart = null;
-
-  const brightness = d.brightness.stats;
-  const median = Number(brightness.median || 0);
-  const range = Math.max(0, Number(brightness.p75 || 0) - Number(brightness.p25 || 0));
-  let character = 'Balanced character';
-  if (median >= 4500) character = 'Bright, detail-forward character';
-  else if (median <= 2500) character = 'Warm, low-end-forward character';
-
-  let variety = 'Varied bright–warm range';
-  if (range <= 650) variety = 'Focused bright–warm range';
-  else if (range >= 1600) variety = 'Broad bright–warm range';
-
-  const gear = d.gear_priorities || null;
-  const profile = gear && gear.profile;
-  const topPriorities = profile
-    ? Object.entries(profile).sort((a, b) => b[1] - a[1]).slice(0, 3)
-      .map(([key]) => (d.band_labels || {})[key] || key)
-    : [];
-  const bestFit = gear && gear.best_fit;
-  const gearTitle = topPriorities.length ? topPriorities.join(' · ') : 'Connect your gear';
-  const gearMeta = bestFit
-    ? `${bestFit.iem_name} is your strongest current fit · ${bestFit.score}%`
-    : 'Run Gear Compatibility Analysis to see priorities for your IEMs.';
-  const coverage = `${Math.round(d.analysis_coverage_pct || 0)}% coverage · ${(d.track_count || 0).toLocaleString()} analysed`;
-
-  el.innerHTML = `
-    <div class="sonic-profile-stack">
-      <div class="sonic-overview-title">Your library at a glance</div>
-      <div class="sonic-insight-grid">
-        <div class="sonic-insight-card">
-          <div class="sonic-insight-kicker">Library character</div>
-          <div class="sonic-insight-title">${character}</div>
-          <div class="sonic-insight-meta">${coverage}</div>
-        </div>
-        <div class="sonic-insight-card">
-          <div class="sonic-insight-kicker">Listening variety</div>
-          <div class="sonic-insight-title">${variety}</div>
-          <div class="sonic-insight-meta">Based on the tonal spread across analysed tracks</div>
-        </div>
-        <div class="sonic-insight-card sonic-insight-card--gear">
-          <div class="sonic-insight-kicker">Gear priorities</div>
-          <div class="sonic-insight-title">${esc(gearTitle)}</div>
-          <div class="sonic-insight-meta">${esc(gearMeta)}</div>
-          <button type="button" class="sonic-inline-link" id="sonic-gear-link">${bestFit ? 'See gear fit' : 'Go to Gear Compatibility'}</button>
-        </div>
-      </div>
-      <details class="sonic-details" id="sonic-analysis-details">
-        <summary><span>Analysis details</span><span>Gear priorities and bright–warm range</span></summary>
-        <div class="sonic-details-content">
-          ${profile ? `<div class="sonic-band-card">
-            <div class="sonic-chart-title">Gear priority profile</div>
-            <div class="sonic-chart-subtitle">The relative genre-weighted priorities used by Gear Fit. These are perceptual focus areas, not literal amounts of bass or treble.</div>
-            <div class="insights-chart-wrap" style="height:168px"><canvas id="sonic-gear-priority-canvas"></canvas></div>
-          </div>` : `<div class="sonic-details-empty">Run Gear Compatibility Analysis to unlock the profile that explains your IEM recommendations.</div>`}
-          <div class="sonic-chart-card">
-            <div class="sonic-chart-title">Bright–warm range</div>
-            <div class="sonic-chart-subtitle">A technical distribution of tonal balance across your tracks. It is descriptive, not a quality score.</div>
-            <div class="insights-chart-wrap" style="height:148px"><canvas id="sonic-brightness-canvas"></canvas></div>
-            <div class="sonic-stat-row">
-              <span class="sonic-stat">Median <strong>${Math.round(brightness.median)} Hz</strong></span>
-              <span class="sonic-stat">Middle 50% <strong>${Math.round(brightness.p25)}–${Math.round(brightness.p75)} Hz</strong></span>
-            </div>
-          </div>
-          <div class="sonic-caveat">Analysis currently covers FLAC files supported by the local analyser. ${coverage} of your library is represented here.</div>
-        </div>
-      </details>
-    </div>`;
-
-  document.getElementById('sonic-gear-link')?.addEventListener('click', () => {
-    document.getElementById('insights-gear-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-  document.getElementById('sonic-analysis-details')?.addEventListener('toggle', event => {
-    if (event.currentTarget.open) requestAnimationFrame(() => _renderSonicAnalysisDetails(d));
-  });
+  const analysed = (d.track_count || 0).toLocaleString();
+  const total = (d.library_track_count || 0).toLocaleString();
+  el.innerHTML = `<div class="sonic-analysis-summary"><strong>Audio analysis ready</strong><span>${analysed} of ${total} tracks analysed · ${Math.round(d.analysis_coverage_pct || 0)}% coverage</span></div>`;
 }
 
 /* ── Sonic Map: PANNs-embedding KMeans clusters + PCA 2D projection ────────
@@ -25751,14 +25618,16 @@ function _renderInsightsSonicProfile(d) {
 let _sonicMapChart  = null;
 let _sonicMapPoller = null;
 
-function _selectSonicMapPoint(point, clusterLabel) {
+function _selectSonicMapPoint(point) {
   const panel = document.getElementById('sonic-map-selection');
   if (!panel || !point) return;
-  const name = point.title || 'Unknown track';
-  const artist = point.artist ? ` — ${point.artist}` : '';
+  const title = point.title || 'Unknown track';
+  const artist = point.artist || 'Unknown artist';
+  const album = point.album || 'Unknown album';
   panel.hidden = false;
-  panel.querySelector('[data-sonic-map-track]').textContent = name + artist;
-  panel.querySelector('[data-sonic-map-cluster]').textContent = clusterLabel || 'Sonic group';
+  panel.querySelector('[data-sonic-map-art]').innerHTML = thumbImg(point.artwork_key, 42, '6px', 'album');
+  panel.querySelector('[data-sonic-map-title]').textContent = title;
+  panel.querySelector('[data-sonic-map-meta]').textContent = `${artist} • ${album}`;
   panel.querySelector('[data-sonic-map-play]').onclick = () => Player.playTrackById(point.track_id);
   panel.querySelector('[data-sonic-map-menu]').onclick = event => App.showTrackCtxMenu(event, point.track_id);
 }
@@ -25852,17 +25721,17 @@ function _renderInsightsSonicMap(d) {
   const datasets = clusterIds.map(cid => ({
     label: clusters[cid].label || `Cluster ${cid}`,
     data: d.points.filter(p => String(p.cluster_id) === cid)
-                  .map(p => ({ x: p.x, y: p.y, track_id: p.track_id, title: p.title, artist: p.artist, cluster_id: p.cluster_id })),
+                  .map(p => ({ x: p.x, y: p.y, track_id: p.track_id, title: p.title, artist: p.artist, album: p.album, artwork_key: p.artwork_key, cluster_id: p.cluster_id })),
     backgroundColor: colorOf[cid],
     pointRadius: 3, pointHoverRadius: 5,
   }));
 
   const legendHtml = clusterIds.map(cid => `
-    <button type="button" class="insights-legend-item sonic-map-cluster-btn" data-sonic-cluster="${esc(cid)}">
+    <div class="insights-legend-item">
       <span class="insights-legend-dot" style="background:${colorOf[cid]}"></span>
       <span class="insights-legend-label">${esc(clusters[cid].label || `Cluster ${cid}`)}</span>
       <span class="insights-legend-count">${clusters[cid].track_count || 0}</span>
-    </button>`).join('');
+    </div>`).join('');
 
   el.innerHTML = `
     <details class="sonic-details sonic-map-details" id="sonic-map-details">
@@ -25872,8 +25741,14 @@ function _renderInsightsSonicMap(d) {
         <div class="insights-chart-wrap" style="height:320px"><canvas id="sonic-map-canvas"></canvas></div>
         <div class="sonic-map-legend">${legendHtml}</div>
         <div class="sonic-map-selection" id="sonic-map-selection" hidden>
-          <div><strong data-sonic-map-track></strong><span data-sonic-map-cluster></span></div>
-          <div class="sonic-map-selection-actions"><button type="button" class="btn-primary" data-sonic-map-play>Play</button><button type="button" class="btn-secondary" data-sonic-map-menu>More actions</button></div>
+          <div class="sonic-map-selection-track">
+            <div class="sonic-map-selection-art" data-sonic-map-art></div>
+            <div class="sonic-map-selection-copy"><strong data-sonic-map-title></strong><span data-sonic-map-meta></span></div>
+          </div>
+          <div class="sonic-map-selection-actions">
+            <button type="button" class="thumb-play-btn sonic-map-play-btn" data-sonic-map-play title="Play"><span class="thumb-play-icon">${playSvg(14)}</span></button>
+            <button type="button" class="row-ctx-btn sonic-map-context-btn" data-sonic-map-menu title="More actions"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
+          </div>
         </div>
         <div class="sonic-caveat">The map has no meaningful up/down or left/right axis; only the distance between tracks is meaningful.</div>
       </div>
@@ -25893,7 +25768,7 @@ function _renderInsightsSonicMap(d) {
           const hit = elements[0];
           if (!hit) return;
           const point = chart.data.datasets[hit.datasetIndex].data[hit.index];
-          _selectSonicMapPoint(point, chart.data.datasets[hit.datasetIndex].label);
+          _selectSonicMapPoint(point);
         },
         plugins: {
           legend: { display: false },
@@ -25915,22 +25790,6 @@ function _renderInsightsSonicMap(d) {
 
   document.getElementById('sonic-map-details')?.addEventListener('toggle', event => {
     if (event.currentTarget.open) requestAnimationFrame(mountMap);
-  });
-  el.querySelectorAll('[data-sonic-cluster]').forEach(button => {
-    button.addEventListener('click', () => {
-      const cid = button.dataset.sonicCluster;
-      const members = d.points.filter(item => String(item.cluster_id) === cid);
-      if (!members.length) return;
-      const centre = members.reduce((sum, item) => ({ x: sum.x + item.x, y: sum.y + item.y }), { x: 0, y: 0 });
-      centre.x /= members.length;
-      centre.y /= members.length;
-      const point = members.reduce((closest, item) => {
-        const distance = (item.x - centre.x) ** 2 + (item.y - centre.y) ** 2;
-        const closestDistance = (closest.x - centre.x) ** 2 + (closest.y - centre.y) ** 2;
-        return distance < closestDistance ? item : closest;
-      });
-      if (point) _selectSonicMapPoint(point, clusters[cid]?.label || `Sonic Group ${cid}`);
-    });
   });
 }
 

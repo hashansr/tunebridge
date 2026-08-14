@@ -16857,7 +16857,6 @@ def _compute_sonic_clusters(force=False):
 
 @app.route('/api/insights/sonic-profile')
 def insights_sonic_profile():
-    import numpy as np
     features = _load_features()
     with library_lock:
         library_track_ids = {str(t.get('id')) for t in library if t.get('id')}
@@ -16868,61 +16867,10 @@ def insights_sonic_profile():
     if not valid:
         return jsonify({'error': 'Run audio analysis first'}), 404
 
-    brightness = np.array([f['brightness'] for f in valid], dtype=float)
-
-    def _hist(arr, n=25):
-        counts, edges = np.histogram(arr, bins=n)
-        mids = [(edges[i] + edges[i+1]) / 2 for i in range(n)]
-        return {'counts': counts.tolist(), 'midpoints': [round(m, 2) for m in mids]}
-
-    def _stats(arr):
-        return {k: round(float(v), 2) for k, v in {
-            'min': arr.min(), 'max': arr.max(), 'mean': arr.mean(),
-            'median': np.median(arr), 'p25': np.percentile(arr, 25),
-            'p75': np.percentile(arr, 75),
-        }.items()}
-
-    # Gear priorities intentionally use the exact normalised genre fingerprints
-    # that feed _build_match_matrix(), not the separate raw-spectrum average
-    # previously rendered as "Library Tonal Demand".  This makes the profile a
-    # faithful explanation of what matters to Gear Fit.
-    gear_priorities = None
-    match_data = _load_match_data()
-    if match_data and match_data.get('matrix_data') and match_data.get('genre_fps'):
-        fps = match_data['genre_fps']
-        total_weight = sum(float(fp.get('weight', fp.get('track_count', 0)))
-                           for fp in fps.values())
-        priority = {key: 0.0 for key in _MATCH_CORE_BANDS}
-        if total_weight > 0:
-            for fp in fps.values():
-                genre_weight = float(fp.get('weight', fp.get('track_count', 0))) / total_weight
-                fingerprint = fp.get('fingerprint') or {}
-                denom = sum(float(fingerprint.get(key, 0)) for key in _MATCH_CORE_BANDS)
-                if denom <= 0:
-                    continue
-                for key in _MATCH_CORE_BANDS:
-                    priority[key] += genre_weight * float(fingerprint.get(key, 0)) / denom
-            peak = max(priority.values(), default=0.0)
-            if peak > 0:
-                summary = (match_data.get('matrix_data', {}).get('library_overview', {})
-                           .get('iem_summary') or [])
-                best_fit = summary[0] if summary else None
-                gear_priorities = {
-                    'profile': {key: round(value / peak, 4) for key, value in priority.items()},
-                    'best_fit': ({
-                        'iem_id': best_fit.get('iem_id'),
-                        'iem_name': best_fit.get('iem_name'),
-                        'score': best_fit.get('library_match_score'),
-                    } if best_fit else None),
-                }
-
     return jsonify({
         'track_count':  len(valid),
         'library_track_count': library_track_count,
         'analysis_coverage_pct': round(len(valid) / max(library_track_count, 1) * 100, 1),
-        'brightness':   {'histogram': _hist(brightness), 'stats': _stats(brightness)},
-        'gear_priorities': gear_priorities,
-        'band_labels':  {b[0]: b[3] for b in _PERC_BANDS},
     })
 
 
@@ -16953,6 +16901,8 @@ def insights_sonic_map():
             'track_id': tid, 'x': p['x'], 'y': p['y'], 'cluster_id': p['cluster_id'],
             'title':  track.get('title')  if track else None,
             'artist': track.get('artist') if track else None,
+            'album': track.get('album') if track else None,
+            'artwork_key': track.get('artwork_key') if track else None,
         })
 
     return jsonify({
