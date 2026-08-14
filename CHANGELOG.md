@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.671-rc.140826-1502 · 2026-08-14
+
 ## v0.670-rc.140826-1418 · 2026-08-14
 - Add: Settings now has a search box that filters every tab to matching options as you type, so you no longer have to guess which tab a setting lives on.
 - Fix: The "Support TuneBridge" card no longer jumps to the top of the App tab ahead of Updates, Backup, and Troubleshooting.
