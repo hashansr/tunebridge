@@ -19277,12 +19277,77 @@ async function importBackup(input) {
 
 /* ── Settings ──────────────────────────────────────────────────────── */
 let _activeSettingsCategory = 'library';
+let _settingsSearchPreTab = null;
 
-function showSettingsCategory(category = 'library') {
-  if (category === 'lyrics' || category === 'artwork') category = 'library';
-  if (category === 'maintenance') category = 'app';
+function _prepareSettingsLayout() {
+  const content = document.querySelector('#view-settings .settings-content');
+  if (!content || content.dataset.settingsPrepared) return;
+
+  const splitIntoCards = panel => {
+    const children = Array.from(panel.children);
+    let card = null;
+    children.forEach(child => {
+      if (child.classList.contains('settings-group-header')) {
+        card = document.createElement('section');
+        card.className = 'settings-group-card';
+        panel.insertBefore(card, child);
+      }
+      if (card) card.appendChild(child);
+    });
+  };
+
+  ['settings-library-section', 'settings-playback-section'].forEach(id => {
+    const panel = document.getElementById(id);
+    if (panel) splitIntoCards(panel);
+  });
+  content.querySelectorAll('.settings-section.settings-panel').forEach(panel => {
+    if (!panel.querySelector(':scope > .settings-group-card')) panel.classList.add('settings-group-card');
+  });
+
+  // Artist attribution belongs with the other metadata tools, ahead of maintenance.
+  const library = document.getElementById('settings-library-section');
+  if (library) {
+    const cards = Array.from(library.querySelectorAll(':scope > .settings-group-card'));
+    const byLabel = label => cards.find(card => card.querySelector('.settings-group-header span')?.textContent.trim() === label);
+    const artist = byLabel('Artist display');
+    const metadata = byLabel('Metadata');
+    const maintenance = byLabel('Maintenance');
+    if (artist && metadata) {
+      Array.from(artist.children).slice(1).reverse().forEach(child => metadata.insertBefore(child, metadata.children[1] || null));
+      artist.remove();
+    }
+    if (metadata && maintenance) library.insertBefore(metadata, maintenance);
+  }
+
+  const support = document.getElementById('settings-support-section');
+  const backup = document.getElementById('settings-data-backup-section');
+  if (support && backup) content.insertBefore(support, backup);
+
+  // Keep restart alongside other recovery actions, and give Developer its own card.
+  const troubleshooting = document.getElementById('settings-system-status-section');
+  const restart = document.getElementById('restart-btn')?.closest('.settings-app-row');
+  if (troubleshooting && restart) {
+    const statusRow = troubleshooting.querySelector('.settings-app-row');
+    if (statusRow) statusRow.after(restart);
+  }
+  const developer = document.getElementById('settings-developer-section');
+  const updates = document.getElementById('settings-app-restart-section');
+  if (developer && updates) {
+    developer.classList.add('settings-section', 'settings-panel', 'settings-group-card');
+    developer.dataset.settingsPanel = 'app';
+    updates.after(developer);
+  }
+
+  content.querySelectorAll('.settings-row, .settings-rg-row, .settings-app-row, .settings-audio-tool-row, .settings-support-card').forEach(row => {
+    row.classList.add('settings-setting');
+  });
+  document.getElementById('scan-history-container')?.classList.add('settings-setting');
+  document.getElementById('baselines-list')?.classList.add('settings-setting');
+  content.dataset.settingsPrepared = 'true';
+}
+
+function _activateSettingsCategory(category) {
   _activeSettingsCategory = category;
-  _exitSettingsSearch();
   document.querySelectorAll('.settings-category-btn').forEach(btn => {
     const active = btn.dataset.settingsCategory === category;
     btn.classList.toggle('active', active);
@@ -19293,7 +19358,12 @@ function showSettingsCategory(category = 'library') {
   });
 }
 
-const _SETTINGS_SEARCH_ROW_SELECTOR = '.settings-row, .settings-rg-row, .settings-app-row, .settings-audio-tool-row, .settings-support-card';
+function showSettingsCategory(category = 'library') {
+  if (category === 'lyrics' || category === 'artwork') category = 'library';
+  if (category === 'maintenance') category = 'app';
+  _prepareSettingsLayout();
+  _activateSettingsCategory(category);
+}
 
 function _exitSettingsSearch() {
   const shell = document.querySelector('.settings-shell');
@@ -19301,46 +19371,9 @@ function _exitSettingsSearch() {
   const input = document.getElementById('settings-search-input');
   if (input) input.value = '';
   document.querySelectorAll('.settings-row-hidden').forEach(el => el.classList.remove('settings-row-hidden'));
-}
-
-// Filters a flat list of sibling nodes in place. Group headers close out the
-// group before them; rows are matched directly against the query; anything
-// else that itself wraps further headers/rows (e.g. the ReplayGain or
-// Developer sub-panels) is recursed into; anything else (scan history cards,
-// baseline lists, the health grid, progress banners) is treated as satellite
-// content tied to the most recently seen row's match state. Returns true if
-// anything in this list matched.
-function _filterSettingsChildren(children, query) {
-  let anyMatch = false;
-  let currentGroup = null;
-  let groupHasMatch = false;
-  let lastRowMatched = true;
-  const finishGroup = () => {
-    if (currentGroup) currentGroup.classList.toggle('settings-row-hidden', !groupHasMatch);
-  };
-  children.forEach(el => {
-    if (el.classList.contains('settings-group-header')) {
-      finishGroup();
-      currentGroup = el;
-      groupHasMatch = false;
-      return;
-    }
-    if (el.matches(_SETTINGS_SEARCH_ROW_SELECTOR)) {
-      const matches = el.textContent.toLowerCase().includes(query);
-      el.classList.toggle('settings-row-hidden', !matches);
-      lastRowMatched = matches;
-      if (matches) { groupHasMatch = true; anyMatch = true; }
-      return;
-    }
-    if (el.querySelector(`.settings-group-header, ${_SETTINGS_SEARCH_ROW_SELECTOR}`)) {
-      const nestedMatch = _filterSettingsChildren(Array.from(el.children), query);
-      if (nestedMatch) { groupHasMatch = true; anyMatch = true; }
-      return;
-    }
-    el.classList.toggle('settings-row-hidden', !lastRowMatched);
-  });
-  finishGroup();
-  return anyMatch;
+  const noResults = document.getElementById('settings-no-results');
+  if (noResults) noResults.classList.remove('visible');
+  _settingsSearchPreTab = null;
 }
 
 function onSettingsSearchInput(value) {
@@ -19348,14 +19381,39 @@ function onSettingsSearchInput(value) {
   if (!shell) return;
   const query = (value || '').trim().toLowerCase();
   if (!query) {
-    shell.classList.remove('settings-search-active');
-    document.querySelectorAll('.settings-row-hidden').forEach(el => el.classList.remove('settings-row-hidden'));
+    const restoreTab = _settingsSearchPreTab || _activeSettingsCategory;
+    _exitSettingsSearch();
+    _activateSettingsCategory(restoreTab);
     return;
   }
+  _prepareSettingsLayout();
+  if (!_settingsSearchPreTab) _settingsSearchPreTab = _activeSettingsCategory;
   shell.classList.add('settings-search-active');
+  const matchesByTab = {};
   document.querySelectorAll('.settings-panel').forEach(panel => {
-    _filterSettingsChildren(Array.from(panel.children), query);
+    const tab = panel.dataset.settingsPanel;
+    let panelMatches = 0;
+    const cards = panel.matches('.settings-group-card') ? [panel] : Array.from(panel.querySelectorAll(':scope > .settings-group-card'));
+    cards.forEach(card => {
+      const settings = card.matches('.settings-setting') ? [card] : Array.from(card.querySelectorAll('.settings-setting'));
+      let cardMatches = 0;
+      settings.forEach(setting => {
+        const matches = setting.textContent.toLowerCase().includes(query);
+        setting.classList.toggle('settings-row-hidden', !matches);
+        if (matches) cardMatches += 1;
+      });
+      card.classList.toggle('settings-row-hidden', cardMatches === 0);
+      panelMatches += cardMatches;
+    });
+    matchesByTab[tab] = (matchesByTab[tab] || 0) + panelMatches;
   });
+  const tabOrder = ['library', 'playback', 'audio-tools', 'app'];
+  const firstMatch = tabOrder.find(tab => matchesByTab[tab] > 0);
+  if (firstMatch && !matchesByTab[_activeSettingsCategory]) _activateSettingsCategory(firstMatch);
+  const noResults = document.getElementById('settings-no-results');
+  const noResultsQuery = document.getElementById('settings-no-results-query');
+  if (noResults) noResults.classList.toggle('visible', !firstMatch);
+  if (noResultsQuery) noResultsQuery.textContent = value.trim();
 }
 
 function _setSettingsStatus(category, opts = {}) {
@@ -19417,7 +19475,7 @@ async function loadSettings() {
   const inp = document.getElementById('lib-path-input');
   if (inp) inp.value = settings.library_path || '/Volumes/Storage/Music/FLAC';
   const artistListingField = document.getElementById('artist-listing-field-select');
-  if (artistListingField) artistListingField.value = settings.artist_listing_field === 'album_artist' ? 'album_artist' : 'artist';
+  if (artistListingField) artistListingField.value = ['album_artist', 'artist_sort'].includes(settings.artist_listing_field) ? settings.artist_listing_field : 'artist';
   const powerampMount = document.getElementById('s-poweramp-mount');
   if (powerampMount) powerampMount.value = settings.poweramp_mount || '';
   const powerampPrefix = document.getElementById('s-poweramp-prefix');
@@ -19568,14 +19626,14 @@ async function setListeningTracking(enabled) {
 function _listedArtist(track) {
   if (!track) return 'Unknown Artist';
   if (track.display_artist) return track.display_artist;
-  const field = _settings?.artist_listing_field === 'album_artist' ? 'album_artist' : 'artist';
-  const fallback = field === 'album_artist' ? 'artist' : 'album_artist';
+  const field = ['album_artist', 'artist_sort'].includes(_settings?.artist_listing_field) ? _settings.artist_listing_field : 'artist';
+  const fallback = field === 'artist' ? 'album_artist' : 'artist';
   return track[field] || track[fallback] || 'Unknown Artist';
 }
 window._listedArtist = _listedArtist;
 
 async function saveArtistListingField(value) {
-  const field = value === 'album_artist' ? 'album_artist' : 'artist';
+  const field = ['album_artist', 'artist_sort'].includes(value) ? value : 'artist';
   const select = document.getElementById('artist-listing-field-select');
   if (select) select.disabled = true;
   try {
@@ -19587,9 +19645,10 @@ async function saveArtistListingField(value) {
     state.tracks = [];
     _homeLastData = null;
     _homeLastStatsData = {};
-    toast(`Artists are now listed by ${field === 'album_artist' ? 'Album Artist' : 'Artist'} tag`);
+    const labels = { artist: 'Artist', album_artist: 'Album Artist', artist_sort: 'Sort Artist' };
+    toast(`Artists are now listed by ${labels[field]} tag`);
   } catch (_) {
-    if (select) select.value = _settings?.artist_listing_field === 'album_artist' ? 'album_artist' : 'artist';
+    if (select) select.value = ['album_artist', 'artist_sort'].includes(_settings?.artist_listing_field) ? _settings.artist_listing_field : 'artist';
     toast('Could not update artist display preference');
   } finally {
     if (select) select.disabled = false;

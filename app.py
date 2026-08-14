@@ -236,7 +236,7 @@ DEFAULT_SETTINGS = {
     'preferred_audio_format': 'flac',
     # The tag used for artist collections, album attribution, and artist links.
     # Keep the per-track Artist tag as the default for new and existing libraries.
-    'artist_listing_field': 'artist',  # 'artist' | 'album_artist'
+    'artist_listing_field': 'artist',  # 'artist' | 'album_artist' | 'artist_sort'
     'onboarding_completed': False,
     'poweramp_mount':   '/Volumes/FIIO M21',
     'ap80_mount':       '/Volumes/AP80',
@@ -1554,7 +1554,8 @@ def save_settings(s):
 
 def artist_listing_field():
     """Return the configured source tag for artist-oriented library views."""
-    return 'album_artist' if load_settings().get('artist_listing_field') == 'album_artist' else 'artist'
+    value = load_settings().get('artist_listing_field')
+    return value if value in ('artist', 'album_artist', 'artist_sort') else 'artist'
 
 
 def listed_artist(track, field=None):
@@ -1565,7 +1566,7 @@ def listed_artist(track, field=None):
     "Unknown Artist".
     """
     field = field or artist_listing_field()
-    fallback = 'artist' if field == 'album_artist' else 'album_artist'
+    fallback = 'artist' if field in ('album_artist', 'artist_sort') else 'album_artist'
     return (
         str(track.get(field) or '').strip()
         or str(track.get(fallback) or '').strip()
@@ -6607,7 +6608,9 @@ def put_settings():
     data = request.json or {}
     if 'artist_listing_field' in data:
         data['artist_listing_field'] = (
-            'album_artist' if data['artist_listing_field'] == 'album_artist' else 'artist'
+            data['artist_listing_field']
+            if data['artist_listing_field'] in ('artist', 'album_artist', 'artist_sort')
+            else 'artist'
         )
     settings = load_settings()
     artist_listing_changed = (

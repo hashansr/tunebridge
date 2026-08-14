@@ -1054,6 +1054,9 @@
               <span class="settings-category-indicator" data-settings-indicator="app" style="display:none"></span>
             </button>
           </nav>
+          <div class="settings-no-results" id="settings-no-results" role="status" aria-live="polite">
+            No settings match “<span id="settings-no-results-query"></span>”.
+          </div>
 
           <div class="settings-content">
 
@@ -1100,6 +1103,7 @@
                 <select id="artist-listing-field-select" class="settings-select" onchange="App.saveArtistListingField(this.value)" aria-label="List artists by">
                   <option value="artist">Artist tag</option>
                   <option value="album_artist">Album Artist tag</option>
+                  <option value="artist_sort">Sort artist tag</option>
                 </select>
               </div>
             </div>
@@ -1252,37 +1256,28 @@
               <span>Bulk tag editing</span>
               <i aria-hidden="true"></i>
             </div>
-            <div class="settings-rg-row settings-metadata-row">
+            <div class="settings-rg-row settings-bulk-tag-row">
               <div class="settings-rg-meta">
-                <span class="settings-rg-label">Bulk tag update via CSV</span>
-                <span class="settings-rg-sub">Edit an exported CSV in a spreadsheet, then re-import to update tags on matching tracks, with a full preview and one-click undo.</span>
-                <div class="lyrics-advanced-wrap">
-                  <button class="lyrics-advanced-toggle" onclick="App.toggleBulkTagAdvanced()">
-                    Advanced
-                    <span id="bulk-tag-advanced-chevron" class="accordion-state-icon" aria-hidden="true" style="width:11px;height:11px"></span>
-                  </button>
-                  <div id="bulk-tag-advanced-body" style="display:none">
-                    <div class="settings-adv-config-row">
-                      <div>
-                        <div class="settings-adv-label">Export library catalogue</div>
-                        <div class="settings-adv-help">Save every tag TuneBridge can edit as a CSV spreadsheet. Track ID and File Path are always included so it can be re-imported cleanly.</div>
-                      </div>
-                      <div class="settings-adv-control">
-                        <button class="btn-secondary" onclick="App.showExportCsvModal()">Export to CSV</button>
-                      </div>
-                    </div>
-                    <div class="settings-adv-config-row">
-                      <div>
-                        <div class="settings-adv-label">Recent bulk edits</div>
-                        <div class="settings-adv-help">CSV imports can be undone individually. This reverts the affected tracks' tags on disk.</div>
-                      </div>
-                    </div>
-                    <div id="csv-import-batches-list" class="csv-import-batches-list"></div>
+                <div class="settings-bulk-step">
+                  <span class="settings-step-number">1</span>
+                  <div>
+                    <span class="settings-rg-label">Export to CSV</span>
+                    <span class="settings-rg-sub">Save your library catalogue, including the track IDs needed for a clean re-import.</span>
                   </div>
+                  <button class="btn-secondary" onclick="App.showExportCsvModal()">Export CSV</button>
                 </div>
-              </div>
-              <div class="settings-rg-actions">
-                <button class="btn-secondary" onclick="App.showCsvImportModal()">Import from CSV…</button>
+                <div class="settings-bulk-step">
+                  <span class="settings-step-number">2</span>
+                  <div>
+                    <span class="settings-rg-label">Import edited CSV</span>
+                    <span class="settings-rg-sub">Preview and apply tag changes to matching tracks. Each import can be undone.</span>
+                  </div>
+                  <button class="btn-primary" onclick="App.showCsvImportModal()">Import from CSV…</button>
+                </div>
+                <div class="settings-bulk-history">
+                  <div class="settings-bulk-history-label">Recent bulk edits</div>
+                  <div id="csv-import-batches-list" class="csv-import-batches-list"></div>
+                </div>
               </div>
             </div>
 
