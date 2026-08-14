@@ -6209,7 +6209,6 @@ function _closeModalOverlaysForNavigation() {
   if (_isOverlayOpen('iem-modal')) closeIemModal();
   if (_isOverlayOpen('peq-modal')) closePeqModal();
   if (_isOverlayOpen('rename-modal')) document.getElementById('rename-modal').style.display = 'none';
-  if (_isOverlayOpen('settings-modal')) closeSettings();
   if (_isOverlayOpen('sync-modal')) closeSyncModal();
   if (_isOverlayOpen('import-modal')) closeImportModal(true);
   if (_isOverlayOpen('dup-modal')) document.getElementById('dup-modal').style.display = 'none';
@@ -8710,23 +8709,6 @@ function closeRescanMenu() {
 
 /* ── Settings ───────────────────────────────────────────────────────── */
 let _settings = {};
-
-async function loadSettings() {
-  _settings = await api('/settings').catch(() => ({}));
-}
-
-function showSettings() {
-  showView('gear');
-}
-
-function closeSettings() {
-  const modal = document.getElementById('settings-modal');
-  if (modal) modal.style.display = 'none';
-}
-
-async function saveSettings() {
-  toast('Device profiles are managed in Gear.');
-}
 
 /* ── Help modal ─────────────────────────────────────────────────────── */
 function showHelp() {
@@ -19293,6 +19275,7 @@ function showSettingsCategory(category = 'library') {
   if (category === 'lyrics' || category === 'artwork') category = 'library';
   if (category === 'maintenance') category = 'app';
   _activeSettingsCategory = category;
+  _exitSettingsSearch();
   document.querySelectorAll('.settings-category-btn').forEach(btn => {
     const active = btn.dataset.settingsCategory === category;
     btn.classList.toggle('active', active);
@@ -19300,6 +19283,71 @@ function showSettingsCategory(category = 'library') {
   });
   document.querySelectorAll('.settings-panel').forEach(panel => {
     panel.classList.toggle('active', panel.dataset.settingsPanel === category);
+  });
+}
+
+const _SETTINGS_SEARCH_ROW_SELECTOR = '.settings-row, .settings-rg-row, .settings-app-row, .settings-audio-tool-row, .settings-support-card';
+
+function _exitSettingsSearch() {
+  const shell = document.querySelector('.settings-shell');
+  if (shell) shell.classList.remove('settings-search-active');
+  const input = document.getElementById('settings-search-input');
+  if (input) input.value = '';
+  document.querySelectorAll('.settings-row-hidden').forEach(el => el.classList.remove('settings-row-hidden'));
+}
+
+// Filters a flat list of sibling nodes in place. Group headers close out the
+// group before them; rows are matched directly against the query; anything
+// else that itself wraps further headers/rows (e.g. the ReplayGain or
+// Developer sub-panels) is recursed into; anything else (scan history cards,
+// baseline lists, the health grid, progress banners) is treated as satellite
+// content tied to the most recently seen row's match state. Returns true if
+// anything in this list matched.
+function _filterSettingsChildren(children, query) {
+  let anyMatch = false;
+  let currentGroup = null;
+  let groupHasMatch = false;
+  let lastRowMatched = true;
+  const finishGroup = () => {
+    if (currentGroup) currentGroup.classList.toggle('settings-row-hidden', !groupHasMatch);
+  };
+  children.forEach(el => {
+    if (el.classList.contains('settings-group-header')) {
+      finishGroup();
+      currentGroup = el;
+      groupHasMatch = false;
+      return;
+    }
+    if (el.matches(_SETTINGS_SEARCH_ROW_SELECTOR)) {
+      const matches = el.textContent.toLowerCase().includes(query);
+      el.classList.toggle('settings-row-hidden', !matches);
+      lastRowMatched = matches;
+      if (matches) { groupHasMatch = true; anyMatch = true; }
+      return;
+    }
+    if (el.querySelector(`.settings-group-header, ${_SETTINGS_SEARCH_ROW_SELECTOR}`)) {
+      const nestedMatch = _filterSettingsChildren(Array.from(el.children), query);
+      if (nestedMatch) { groupHasMatch = true; anyMatch = true; }
+      return;
+    }
+    el.classList.toggle('settings-row-hidden', !lastRowMatched);
+  });
+  finishGroup();
+  return anyMatch;
+}
+
+function onSettingsSearchInput(value) {
+  const shell = document.querySelector('.settings-shell');
+  if (!shell) return;
+  const query = (value || '').trim().toLowerCase();
+  if (!query) {
+    shell.classList.remove('settings-search-active');
+    document.querySelectorAll('.settings-row-hidden').forEach(el => el.classList.remove('settings-row-hidden'));
+    return;
+  }
+  shell.classList.add('settings-search-active');
+  document.querySelectorAll('.settings-panel').forEach(panel => {
+    _filterSettingsChildren(Array.from(panel.children), query);
   });
 }
 
@@ -19538,27 +19586,6 @@ async function saveArtistListingField(value) {
     toast('Could not update artist display preference');
   } finally {
     if (select) select.disabled = false;
-  }
-}
-
-async function saveDeviceSettings() {
-  const powerampMount = document.getElementById('s-poweramp-mount');
-  const powerampPrefix = document.getElementById('s-poweramp-prefix');
-  const ap80Mount = document.getElementById('s-ap80-mount');
-  if (!powerampMount && !powerampPrefix && !ap80Mount) {
-    toast('Device profiles are managed in Gear.');
-    return;
-  }
-  const updated = {
-    poweramp_mount:  powerampMount?.value.trim() || '',
-    poweramp_prefix: powerampPrefix?.value.trim() || '',
-    ap80_mount:      ap80Mount?.value.trim() || '',
-  };
-  try {
-    _settings = await api('/settings', { method: 'PUT', body: updated });
-    toast('Device paths saved');
-  } catch (e) {
-    toast('Could not save device paths');
   }
 }
 
@@ -23593,9 +23620,6 @@ const App = {
   shToggleCard,
   shTogglePrev,
   closeRescanMenu,
-  showSettings,
-  closeSettings,
-  saveSettings,
   openImportWizard,
   showHelp,
   closeHelp,
@@ -23670,6 +23694,7 @@ const App = {
   // Settings
   loadSettings,
   showSettingsCategory,
+  onSettingsSearchInput,
   loadLyricsSettings,
   onLyricsServiceChange,
   toggleLyricsAdvanced,
@@ -23681,7 +23706,6 @@ const App = {
   lyricHealthScan,
   lyricHealthTrash,
   saveLibraryPath,
-  saveDeviceSettings,
   closeOnboarding,
   skipOnboarding,
   completeOnboarding,

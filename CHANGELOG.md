@@ -3,6 +3,11 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Add: Settings now has a search box that filters every tab to matching options as you type, so you no longer have to guess which tab a setting lives on.
+- Fix: The "Support TuneBridge" card no longer jumps to the top of the App tab ahead of Updates, Backup, and Troubleshooting.
+- Fix: Removed an empty, non-functional "Appearance" heading left behind in Settings after the Cover Flow toggle moved to the Albums view.
+- Fix: The Settings health check's idle placeholder now shows all 6 checks (including iPod Sync) instead of 5, matching the result after running it.
+- Change: Cleaned up wording in the Bulk Tag Editing section of Settings and renamed its heading to "Bulk tag editing" for consistency with the rest of Settings.
 
 ## v0.669-rc.140826-1324 · 2026-08-14
 

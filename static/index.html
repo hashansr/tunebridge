@@ -1030,6 +1030,12 @@
           <h2 class="tb-page-title">Settings</h2>
         </div>
         <div class="settings-shell">
+          <div id="settings-search-wrap">
+            <svg class="settings-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="settings-search-input" type="search" placeholder="Search settings…" autocomplete="off" spellcheck="false"
+              aria-label="Search settings"
+              oninput="App.onSettingsSearchInput(this.value)" />
+          </div>
           <nav class="settings-category-bar" aria-label="Settings categories">
             <button class="settings-category-btn active" type="button" data-settings-category="library" onclick="App.showSettingsCategory('library')">
               <span class="settings-category-title">Library</span>
@@ -1243,13 +1249,13 @@
             </div>
 
             <div class="settings-group-header">
-              <span>Bulk Tag Editing</span>
+              <span>Bulk tag editing</span>
               <i aria-hidden="true"></i>
             </div>
             <div class="settings-rg-row settings-metadata-row">
               <div class="settings-rg-meta">
                 <span class="settings-rg-label">Bulk tag update via CSV</span>
-                <span class="settings-rg-sub">Edit an exported CSV in a spreadsheet, then re-import to update tags on matching tracks — with a full preview and one-click undo.</span>
+                <span class="settings-rg-sub">Edit an exported CSV in a spreadsheet, then re-import to update tags on matching tracks, with a full preview and one-click undo.</span>
                 <div class="lyrics-advanced-wrap">
                   <button class="lyrics-advanced-toggle" onclick="App.toggleBulkTagAdvanced()">
                     Advanced
@@ -1259,7 +1265,7 @@
                     <div class="settings-adv-config-row">
                       <div>
                         <div class="settings-adv-label">Export library catalogue</div>
-                        <div class="settings-adv-help">Save every tag TuneBridge can edit as a CSV spreadsheet — Track ID and File Path are always included so it can be re-imported cleanly.</div>
+                        <div class="settings-adv-help">Save every tag TuneBridge can edit as a CSV spreadsheet. Track ID and File Path are always included so it can be re-imported cleanly.</div>
                       </div>
                       <div class="settings-adv-control">
                         <button class="btn-secondary" onclick="App.showExportCsvModal()">Export to CSV</button>
@@ -1268,7 +1274,7 @@
                     <div class="settings-adv-config-row">
                       <div>
                         <div class="settings-adv-label">Recent bulk edits</div>
-                        <div class="settings-adv-help">CSV imports can be undone individually — this reverts the affected tracks' tags on disk.</div>
+                        <div class="settings-adv-help">CSV imports can be undone individually. This reverts the affected tracks' tags on disk.</div>
                       </div>
                     </div>
                     <div id="csv-import-batches-list" class="csv-import-batches-list"></div>
@@ -1280,39 +1286,6 @@
               </div>
             </div>
 
-          </div>
-
-          <!-- Support section -->
-          <div class="settings-section settings-panel" id="settings-support-section" data-settings-panel="app">
-            <div class="settings-support-card">
-              <div class="settings-support-card-body">
-                <div class="settings-support-card-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                </div>
-                <div class="settings-support-card-text">
-                  <div class="settings-support-card-label">Support TuneBridge</div>
-                  <div class="settings-support-card-hint">TuneBridge is free and built by one person. If it has been useful, consider a Ko-fi donation to help keep the app alive and fund new features.</div>
-                </div>
-              </div>
-              <div class="settings-support-card-actions">
-                <button class="btn-primary settings-kofi-btn" onclick="App._openKofi()">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;flex-shrink:0"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
-                  Support on Ko-fi
-                </button>
-                <a class="settings-feedback-link" onclick="App._openFeedback()" href="#">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                  Report a bug or share feedback
-                </a>
-              </div>
-            </div>
-          </div>
-
-          <!-- Appearance section -->
-          <div class="settings-section settings-panel" id="settings-appearance-section" data-settings-panel="app">
-            <div class="settings-group-header">
-              <span>Appearance</span>
-              <i aria-hidden="true"></i>
-            </div>
           </div>
 
           <!-- Data & Backup section -->
@@ -1341,8 +1314,6 @@
               </div>
             </div>
           </div>
-
-          <div class="settings-section settings-panel" id="settings-image-search-section" data-settings-panel="library" aria-hidden="true"></div>
 
           <!-- Frequency Response Baselines section -->
           <div class="settings-section settings-panel" id="settings-baselines-section" data-settings-panel="audio-tools">
@@ -1417,6 +1388,13 @@
                 <div class="health-dot health-dot-idle"></div>
                 <div class="health-item-body">
                   <div class="health-item-label">Playback Runtime</div>
+                  <div class="health-item-detail">Run check to test</div>
+                </div>
+              </div>
+              <div class="health-item">
+                <div class="health-dot health-dot-idle"></div>
+                <div class="health-item-body">
+                  <div class="health-item-label">iPod Sync (ffmpeg)</div>
                   <div class="health-item-detail">Run check to test</div>
                 </div>
               </div>
@@ -1567,8 +1545,6 @@
               </div>
             </div>
           </div>
-          <div class="settings-section settings-panel" id="settings-lyrics-section" data-settings-panel="library" aria-hidden="true"></div>
-
           <!-- App section -->
           <div class="settings-section settings-panel" id="settings-app-restart-section" data-settings-panel="app">
             <div class="settings-group-header">
@@ -1662,6 +1638,31 @@
                 <button class="btn-secondary settings-app-control" onclick="App.exitTestMode()">
                   Exit test mode
                 </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Support section -->
+          <div class="settings-section settings-panel" id="settings-support-section" data-settings-panel="app">
+            <div class="settings-support-card">
+              <div class="settings-support-card-body">
+                <div class="settings-support-card-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                </div>
+                <div class="settings-support-card-text">
+                  <div class="settings-support-card-label">Support TuneBridge</div>
+                  <div class="settings-support-card-hint">TuneBridge is free and built by one person. If it has been useful, consider a Ko-fi donation to help keep the app alive and fund new features.</div>
+                </div>
+              </div>
+              <div class="settings-support-card-actions">
+                <button class="btn-primary settings-kofi-btn" onclick="App._openKofi()">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;flex-shrink:0"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+                  Support on Ko-fi
+                </button>
+                <a class="settings-feedback-link" onclick="App._openFeedback()" href="#">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  Report a bug or share feedback
+                </a>
               </div>
             </div>
           </div>

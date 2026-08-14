@@ -805,6 +805,39 @@ nav {
   gap: 14px;
   max-width: 1180px;
 }
+#settings-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 360px;
+  background: rgba(173, 198, 255, 0.055);
+  border: 0;
+  border-radius: var(--tb-radius-pill);
+  transition: background var(--tb-motion-base), box-shadow var(--tb-motion-base);
+  flex-shrink: 0;
+}
+#settings-search-wrap:focus-within {
+  background: rgba(173, 198, 255, 0.095);
+  box-shadow: 0 0 0 1px rgba(173, 198, 255, 0.08);
+}
+.settings-search-icon {
+  position: absolute;
+  left: 12px;
+  color: rgba(173, 198, 255, 0.52);
+  pointer-events: none;
+}
+#settings-search-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 9px 14px 9px 34px;
+  font-size: 13px;
+  color: var(--tb-text-secondary);
+  -webkit-appearance: none;
+}
+#settings-search-input::placeholder { color: rgba(126, 137, 168, 0.82); }
+#settings-search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
 .settings-category-bar {
   display: flex;
   align-items: center;
@@ -914,16 +947,6 @@ nav {
   min-width: 0;
 }
 
-/* Settings section order */
-#settings-library-section { order: 1; }
-#settings-playback-section { order: 2; }
-#settings-lyrics-section { order: 3; }
-#settings-peq-section { order: 4; }
-#settings-baselines-section { order: 5; }
-#settings-image-search-section { order: 6; }
-#settings-app-restart-section { order: 7; }
-#settings-data-backup-section { order: 8; }
-#settings-system-status-section { order: 9; }
 .settings-section {
   background: transparent;
   border-radius: 0;
@@ -1028,10 +1051,6 @@ nav {
 @keyframes lyrics-spin {
   to { transform: rotate(360deg); }
 }
-#settings-lyrics-section,
-#settings-image-search-section {
-  padding-top: 0;
-}
 .rg-banner {
   margin-top: 10px;
   padding: 8px 12px;
@@ -1103,16 +1122,6 @@ h4.settings-subsection-title {
   color: var(--text-muted);
 }
 
-/* Image search settings polish */
-#settings-image-search-section .settings-subsection-title {
-  margin: 0 0 8px;
-}
-#settings-image-search-section .settings-row {
-  margin-bottom: 12px;
-}
-#settings-image-search-section .settings-inline-actions {
-  justify-content: flex-start;
-}
 .settings-fetch-btn {
   display: inline-flex;
   align-items: center;
@@ -24677,8 +24686,11 @@ body.is-col-resizing {
   display: block;
   animation: settingsPanelIn 0.28s ease;
 }
-#view-settings #settings-image-search-section,
-#view-settings #settings-lyrics-section {
+#view-settings .settings-shell.settings-search-active .settings-panel {
+  display: block;
+  animation: none;
+}
+#view-settings .settings-row-hidden {
   display: none !important;
 }
 @keyframes settingsPanelIn {
