@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 
+## v0.667-rc.140826-1145 · 2026-08-14
+
 ## v0.666-rc.140826-1123 · 2026-08-14
 - Change: Starting Track Radio, playing an album/playlist, or clicking a new song now clears the old queue instead of letting it pile up — but anything you explicitly added via "Add to Queue" or "Play Next" is kept and plays right after, in its own "Play Next" section, even with shuffle on.
 
