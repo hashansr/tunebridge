@@ -17578,31 +17578,18 @@ body.is-col-resizing {
 }
 .sonic-map-selection-actions {
   display: flex;
+  align-items: center;
   flex: 0 0 auto;
-  gap: 6px;
+  gap: 12px;
 }
 .sonic-map-selection-actions .sonic-map-play-btn {
-  position: relative;
-  inset: auto;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  opacity: 1;
-  background: var(--accent);
-  color: #101612;
-}
-.sonic-map-selection-actions .sonic-map-play-btn:hover {
-  background: var(--accent-hover, var(--accent));
+  width: 50px;
+  height: 50px;
 }
 .sonic-map-selection-actions .sonic-map-context-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  opacity: 0.72;
-  background: rgba(255, 255, 255, 0.07);
-}
-.sonic-map-selection-actions .sonic-map-context-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  position: static;
+  width: 26px;
+  height: 26px;
 }
 
 /* Gear fit cards */

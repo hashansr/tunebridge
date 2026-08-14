@@ -25628,8 +25628,43 @@ function _selectSonicMapPoint(point) {
   panel.querySelector('[data-sonic-map-art]').innerHTML = thumbImg(point.artwork_key, 42, '6px', 'album');
   panel.querySelector('[data-sonic-map-title]').textContent = title;
   panel.querySelector('[data-sonic-map-meta]').textContent = `${artist} • ${album}`;
-  panel.querySelector('[data-sonic-map-play]').onclick = () => Player.playTrackById(point.track_id);
-  panel.querySelector('[data-sonic-map-menu]').onclick = event => App.showTrackCtxMenu(event, point.track_id);
+  panel.querySelector('[data-sonic-map-play]').onclick = () => _playSonicMapTrack(point);
+  panel.querySelector('[data-sonic-map-menu]').onclick = event => _openSonicMapTrackMenu(event, point);
+}
+
+async function _resolveSonicMapTrack(point) {
+  const id = String(point?.track_id || '');
+  if (!id) return null;
+  const cached = Player.getTrack(id) || _findTrackForContext(id);
+  if (cached) return cached;
+  try {
+    const res = await fetch(`/api/library/tracks/${encodeURIComponent(id)}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_) {
+    return null;
+  }
+}
+
+async function _playSonicMapTrack(point) {
+  const track = await _resolveSonicMapTrack(point);
+  if (!track) {
+    toast('Could not load this track for playback.');
+    return;
+  }
+  Player.playTrack(track);
+}
+
+async function _openSonicMapTrackMenu(event, point) {
+  event.preventDefault();
+  event.stopPropagation();
+  const track = await _resolveSonicMapTrack(point);
+  if (!track) {
+    toast('Could not load this track for actions.');
+    return;
+  }
+  Player.registerTracks([track]);
+  App.showTrackCtxMenu(event, track.id);
 }
 
 /* ── Global sonic-analysis progress toast ───────────────────────────────────
@@ -25746,8 +25781,8 @@ function _renderInsightsSonicMap(d) {
             <div class="sonic-map-selection-copy"><strong data-sonic-map-title></strong><span data-sonic-map-meta></span></div>
           </div>
           <div class="sonic-map-selection-actions">
-            <button type="button" class="thumb-play-btn sonic-map-play-btn" data-sonic-map-play title="Play"><span class="thumb-play-icon">${playSvg(14)}</span></button>
-            <button type="button" class="row-ctx-btn sonic-map-context-btn" data-sonic-map-menu title="More actions"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
+            <button type="button" class="card-play-btn sonic-map-play-btn" data-sonic-map-play title="Play" aria-label="Play selected track">${playSvg(15)}</button>
+            <button type="button" class="card-more-btn sonic-map-context-btn" data-sonic-map-menu title="More actions" aria-label="More actions">⋮</button>
           </div>
         </div>
         <div class="sonic-caveat">The map has no meaningful up/down or left/right axis; only the distance between tracks is meaningful.</div>
