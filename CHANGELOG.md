@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.677-rc.200826-1650 · 2026-08-20
 - Fix: Sync's required-space estimate for DAPs no longer counts tag-only updates against the space needed, since those just overwrite an existing file in place and shouldn't have inflated the "Required" figure.
 
 ## v0.676-rc.200826-1631 · 2026-08-20
