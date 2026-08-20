@@ -8689,7 +8689,7 @@ async function loadScanHistory() {
   const prevToggle = prev.length > 0 ? `<button class="sh-prev-toggle" onclick="App.shTogglePrev(this)" aria-expanded="false">
     Previous scans (${prev.length})<span class="accordion-state-icon" style="width:11px;height:11px" aria-hidden="true"></span>
   </button>
-  <div class="sh-prev-list" style="display:none">${prev.map(r => _shCard(r, false, false)).join('')}</div>` : '';
+  <div class="sh-prev-list" style="display:none">${prev.map((r, index) => _shCard(r, false, index === 1)).join('')}</div>` : '';
 
   container.innerHTML = `<div class="sh-subhead">Scan history</div>${_shCard(latest, true, false)}${prevToggle}`;
 }
