@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.676-rc.200826-1631 · 2026-08-20
 - Fix: Home's Recently Added carousel now updates as soon as a library scan finishes, instead of waiting up to 30 seconds.
 
 ## v0.675-rc.200826-1545 · 2026-08-20
