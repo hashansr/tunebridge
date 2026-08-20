@@ -1508,6 +1508,10 @@ async function pollScanStatus() {
       if (['artists', 'albums', 'tracks'].includes(state.view)) {
         refreshCurrentLibraryView();
       }
+      // Home's Recently Added rail is served from a server-side cache that's
+      // busted on scan completion, but Home has no other signal to re-fetch —
+      // without this it sits stale until the 30s auto-refresh timer ticks.
+      if (state.view === 'home') _homeBackgroundRefresh();
       // Notify user if newly scanned tracks are missing ReplayGain tags (only when RG is enabled)
       if (_settings && _settings.replay_gain_enabled) {
         _checkRgMissingAndNotify();
