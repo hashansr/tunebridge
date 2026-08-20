@@ -10880,8 +10880,11 @@ function _swComputeTotals() {
 
   const toDeviceSongItems = (groups.toDevice?.items ?? []).filter(i => _sw.selection.toDevice?.[i.id]);
   const toDeviceLyricItems = (groups.toDeviceLyrics?.items ?? []).filter(i => _sw.selection.toDeviceLyrics?.[i.id]);
-  const toDeviceTagsUpdatedItems = (groups.tagsUpdated?.items ?? []).filter(i => _sw.selection.tagsUpdated?.[i.id]);
-  const toDeviceBytes = bytesOfItems([...toDeviceSongItems, ...toDeviceLyricItems, ...toDeviceTagsUpdatedItems]);
+  // Tag-only updates overwrite an existing file of ~the same size already on the
+  // device, so they land at net-zero space, unlike the iPod flow's DB rewrite -
+  // see the matching exclusion + comment in _swComputeIpodTotals(). They still
+  // count toward tagsUpdatedToDev/totalChanges below, just not toward bytes.
+  const toDeviceBytes = bytesOfItems([...toDeviceSongItems, ...toDeviceLyricItems]);
   const copyBytes     = bytesOfItems(copyItems);
   const deleteBytes   = bytesOfItems(deleteItems);
   const toDeviceMB  = toDeviceBytes / (1024 ** 2);
