@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Adding untagged songs from a brand-new artist no longer files them under generic "Unknown Artist/Unknown Album" folders — TuneBridge now reads the artist and song title from the filename (e.g. "Artist - Title.flac") and names the folders after them, per your chosen structure.
 
 ## v0.674 · 2026-08-19
 

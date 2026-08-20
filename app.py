@@ -8934,6 +8934,44 @@ def _render_device_relpath(track, template):
     return rel, warnings
 
 
+_FN_TRACK_DOT_RE = re.compile(r'^(\d{1,3})[\.\)]\s*')
+_FN_TRACK_DASH_RE = re.compile(r'^(\d{1,3})\s[-–—]\s')
+_FN_ARTIST_TITLE_RE = re.compile(r'^(.+?)\s[-–—]\s(.+)$')
+
+
+def _parse_filename_track_info(stem):
+    """Best-effort parse of a bare filename (no usable tags) into
+    (track_num, artist, title), e.g. '00. Vertical Horizon - Everything You
+    Want' -> ('00', 'Vertical Horizon', 'Everything You Want').
+
+    A leading number is only treated as a track number when it's followed by
+    an unambiguous marker ('.' / ')'), or by ' - ' *and* what's left still
+    splits into an artist/title pair — otherwise a digit-leading artist name
+    like '50 Cent - In Da Club' would get misread as track 50, artist 'Cent'.
+    """
+    track_num = ''
+    working = stem
+
+    m = _FN_TRACK_DOT_RE.match(working)
+    if m:
+        track_num = m.group(1)
+        working = working[m.end():].strip()
+    else:
+        m = _FN_TRACK_DASH_RE.match(working)
+        if m:
+            remainder = working[m.end():]
+            if _FN_ARTIST_TITLE_RE.match(remainder):
+                track_num = m.group(1)
+                working = remainder.strip()
+
+    artist = ''
+    title = working
+    m = _FN_ARTIST_TITLE_RE.match(working)
+    if m and m.group(1).strip() and m.group(2).strip():
+        artist, title = m.group(1).strip(), m.group(2).strip()
+    return track_num, artist, title
+
+
 def _extract_file_metadata(abs_path):
     """Extract ID3/vorbis tags from any audio file for organizer preview.
     Returns a minimal track dict (no 'id', no 'path' relative to library)."""
@@ -8949,20 +8987,36 @@ def _extract_file_metadata(abs_path):
         import mutagen
         mf = mutagen.File(str(abs_path), easy=True)
         if mf is None:
-            return result
-        def _tag(key):
-            v = mf.get(key)
-            return str(v[0]).strip() if v else ''
-        result['title'] = _tag('title') or abs_path.stem
-        result['artist'] = _tag('artist')
-        result['album_artist'] = _tag('albumartist') or _tag('artist')
-        result['album'] = _tag('album')
-        result['track_number'] = _tag('tracknumber')
-        result['disc_number'] = _tag('discnumber')
-        result['year'] = _tag('date')[:4] if _tag('date') else _tag('year')
-        result['genre'] = _tag('genre')
+            mf = None
+        else:
+            def _tag(key):
+                v = mf.get(key)
+                return str(v[0]).strip() if v else ''
+            result['title'] = _tag('title') or abs_path.stem
+            result['artist'] = _tag('artist')
+            result['album_artist'] = _tag('albumartist') or _tag('artist')
+            result['album'] = _tag('album')
+            result['track_number'] = _tag('tracknumber')
+            result['disc_number'] = _tag('discnumber')
+            result['year'] = _tag('date')[:4] if _tag('date') else _tag('year')
+            result['genre'] = _tag('genre')
     except Exception:
         pass
+
+    # Fall back to parsing "Track. Artist - Title" style filenames when the
+    # file itself carries no usable artist/title tags — otherwise a new
+    # artist's untagged rip lands in generic "Unknown Artist/Unknown Album"
+    # folders instead of ones named for the actual song.
+    if not result['artist'] or result['title'] == abs_path.stem:
+        fn_track, fn_artist, fn_title = _parse_filename_track_info(abs_path.stem)
+        if not result['track_number'] and fn_track:
+            result['track_number'] = fn_track
+        if not result['artist'] and fn_artist:
+            result['artist'] = fn_artist
+            result['album_artist'] = fn_artist
+        if result['title'] == abs_path.stem and fn_title:
+            result['title'] = fn_title
+
     return result
 
 
@@ -8981,11 +9035,15 @@ def _organizer_token_map(track):
     ext = Path(track.get('path') or track.get('filename') or '').suffix.lstrip('.').lower()
     artist = str(track.get('artist') or '').strip()
     album_artist = str(track.get('album_artist') or '').strip() or artist
+    title = str(track.get('title') or Path(track.get('path') or '').stem or '').strip()
+    # A missing album tag most often means a loose single, not a data error —
+    # name its folder after the song itself rather than a generic placeholder.
+    album = str(track.get('album') or '').strip() or title
     return {
         'artist': artist or 'Unknown Artist',
         'album_artist': album_artist or 'Unknown Artist',
-        'album': str(track.get('album') or '').strip() or 'Unknown Album',
-        'title': str(track.get('title') or Path(track.get('path') or '').stem or '').strip() or 'Unknown Title',
+        'album': album or 'Unknown Album',
+        'title': title or 'Unknown Title',
         'track': track_num,
         'disc': disc_num,
         'year': str(track.get('year') or '').strip(),
