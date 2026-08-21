@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.678-rc.210826-1219 · 2026-08-21
 - Fix: Importing a playlist file that has no tracks in it now shows a clear message explaining the file looks empty, instead of silently opening the import screen with 0 matched songs.
 - Fix: Importing a completely empty file (0 bytes) is now caught immediately with a clear message, before TuneBridge even tries to analyse it.
 - Fix: If creating a playlist during import succeeds but adding its tracks fails, you now get an error message instead of the failure happening silently.
