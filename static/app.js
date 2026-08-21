@@ -8751,7 +8751,19 @@ async function handleImportFile(input) {
   const file = input.files[0];
   if (!file) return;
 
-  const content = await file.text();
+  if (file.size === 0) {
+    toast('That file is empty. Check you selected the right playlist and try again.', 'error');
+    return;
+  }
+
+  let content;
+  try {
+    content = await file.text();
+  } catch (e) {
+    toast('Could not read that file: ' + e.message, 'error');
+    return;
+  }
+
   // Extract name: prefer #PLAYLIST: tag, fallback to filename
   const playlistTag = content.match(/^#PLAYLIST:(.+)/m);
   const name = playlistTag
@@ -8767,7 +8779,7 @@ async function handleImportFile(input) {
       body: { content, name, create: false },
     });
   } catch (e) {
-    toast('Import error: ' + e.message);
+    toast(e.message, 'error');
     return;
   }
 
@@ -8784,6 +8796,12 @@ function showImportModal(data) {
   _renderImportSummary();
   if (data.unmatched_entries?.length) {
     unmatchedWrap.style.display = 'block';
+    const label = document.getElementById('import-unmatched-label');
+    if (label) {
+      label.textContent = data.unmatched_truncated
+        ? `Unmatched tracks - showing first ${data.unmatched_entries.length} of ${data.unmatched} - search to map to your library`
+        : 'Unmatched tracks - search to map to your library';
+    }
     unmatchedList.innerHTML = data.unmatched_entries.map((e, idx) => {
       // Parse path segments to extract artist / album folder names
       const parts = e.path.replace(/\\/g, '/').split('/').filter(p => p && p !== '..' && p !== '.');
@@ -8896,13 +8914,28 @@ async function confirmImport() {
   const mappedIds = Object.values(_importMappings).map(m => m.trackId);
   const allIds = [..._importData.matched_track_ids, ...mappedIds];
 
-  if (!allIds.length) { toast('No tracks to import'); return; }
+  if (!allIds.length) { toast('No tracks to import', 'error'); return; }
 
-  const pl = await api('/playlists', { method: 'POST', body: { name } });
-  await api(`/playlists/${pl.id}/tracks`, {
-    method: 'POST',
-    body: { track_ids: allIds, force: true },
-  });
+  const btn = document.getElementById('import-confirm-btn');
+  if (btn) btn.disabled = true;
+
+  let pl;
+  try {
+    pl = await api('/playlists', { method: 'POST', body: { name } });
+    await api(`/playlists/${pl.id}/tracks`, {
+      method: 'POST',
+      body: { track_ids: allIds, force: true },
+    });
+  } catch (e) {
+    toast(
+      pl
+        ? `"${name}" was created but adding tracks failed: ${e.message}. Try importing again.`
+        : `Import failed: ${e.message}`,
+      'error'
+    );
+    if (btn) btn.disabled = false;
+    return;
+  }
 
   const totalAdded = allIds.length;
   closeImportModal(true);

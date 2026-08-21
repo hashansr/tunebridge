@@ -6315,7 +6315,13 @@ def import_playlist():
     name    = data.get('name', 'Imported Playlist').strip() or 'Imported Playlist'
     create  = data.get('create', False)
 
+    if not isinstance(content, str) or not content.strip():
+        return jsonify({'error': "That file is empty. Check you selected the right playlist and try again."}), 400
+
     entries = parse_m3u(content)
+
+    if not entries:
+        return jsonify({'error': "No tracks were found in this playlist file. It may be empty, or exported in a format TuneBridge doesn't recognise — try re-exporting it from the source app."}), 400
 
     with library_lock:
         lib_by_path     = {t['path']: t for t in library}
@@ -6338,8 +6344,12 @@ def import_playlist():
         'matched': len(matched),
         'unmatched': len(unmatched),
         'unmatched_entries': unmatched[:30],
+        'unmatched_truncated': len(unmatched) > 30,
         'matched_track_ids': [t['id'] for t in matched],
     }
+
+    if create and not matched:
+        return jsonify({'error': "None of the tracks in this playlist matched your library, so there's nothing to import."}), 400
 
     if create:
         playlists = load_playlists()

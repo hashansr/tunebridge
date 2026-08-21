@@ -3,6 +3,10 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: Importing a playlist file that has no tracks in it now shows a clear message explaining the file looks empty, instead of silently opening the import screen with 0 matched songs.
+- Fix: Importing a completely empty file (0 bytes) is now caught immediately with a clear message, before TuneBridge even tries to analyse it.
+- Fix: If creating a playlist during import succeeds but adding its tracks fails, you now get an error message instead of the failure happening silently.
+- Add: The import screen now tells you when only some unmatched tracks are shown (e.g. "showing first 30 of 40") instead of leaving the rest unexplained.
 
 ## v0.677-rc.200826-1650 · 2026-08-20
 - Fix: Sync's required-space estimate for DAPs no longer counts tag-only updates against the space needed, since those just overwrite an existing file in place and shouldn't have inflated the "Required" figure.
