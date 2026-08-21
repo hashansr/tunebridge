@@ -8752,7 +8752,7 @@ async function handleImportFile(input) {
   if (!file) return;
 
   if (file.size === 0) {
-    toast('That file is empty. Check you selected the right playlist and try again.', 'error');
+    toast('That file is empty. Check you picked the right playlist.', 'error');
     return;
   }
 
@@ -8760,15 +8760,16 @@ async function handleImportFile(input) {
   try {
     content = await file.text();
   } catch (e) {
-    toast('Could not read that file: ' + e.message, 'error');
+    toast('Could not read that file. Try again.', 'error');
     return;
   }
 
   // Extract name: prefer #PLAYLIST: tag, fallback to filename
+  // (the backend overrides this with the embedded playlist name for XML imports)
   const playlistTag = content.match(/^#PLAYLIST:(.+)/m);
   const name = playlistTag
     ? playlistTag[1].trim()
-    : file.name.replace(/\.(m3u8?|M3U8?)$/, '').trim();
+    : file.name.replace(/\.(m3u8?|xml|M3U8?|XML)$/, '').trim();
 
   toast('Analysing playlist…');
 
@@ -8809,10 +8810,10 @@ function showImportModal(data) {
       const albumFolder  = parts.length >= 2 ? parts[parts.length - 2] : '';
       const artistFolder = parts.length >= 3 ? parts[parts.length - 3] : '';
 
-      // Prefer EXTINF tags; fall back to folder-derived values
+      // Prefer EXTINF/XML metadata; fall back to folder-derived values
       const displayTitle  = e.title  || filename.replace(/^\d+[\.\-\s]+/, '').replace(/\.flac$/i, '').trim() || filename;
       const displayArtist = e.artist || artistFolder;
-      const displayAlbum  = albumFolder;
+      const displayAlbum  = e.album  || albumFolder;
 
       // Pre-fill search with the most useful terms
       const preSearch = [displayTitle, displayArtist].filter(Boolean).join(' ');
@@ -8928,9 +8929,7 @@ async function confirmImport() {
     });
   } catch (e) {
     toast(
-      pl
-        ? `"${name}" was created but adding tracks failed: ${e.message}. Try importing again.`
-        : `Import failed: ${e.message}`,
+      pl ? `"${name}" was created, but adding tracks failed. Try again.` : `Import failed: ${e.message}`,
       'error'
     );
     if (btn) btn.disabled = false;

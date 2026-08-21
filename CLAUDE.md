@@ -168,6 +168,7 @@ No icon library — every icon is hand-written inline SVG (in `index.html` marku
 - [x] Export to Poweramp (M3U) — download or copy direct to FiiO M21
 - [x] Export to AP80 Pro Max (M3U) — download or copy direct to AP80
 - [x] M3U / M3U8 import with 4-tier path matching
+- [x] Apple Music/iTunes XML playlist import (e.g. SongShift exports) — matched by artist+title against the library, since these tracks carry no local file path
 - [x] Help modal with device-specific instructions
 - [x] Device settings modal (mount paths, Poweramp prefix)
 - [x] Library rescan with progress bar
@@ -330,6 +331,11 @@ Key findings from that research:
 - **Effort estimate**: PoC 2–3 sessions; playlists + delta sync +3–4; transcoding pipeline +2–3; artwork +3–4; Sequoia workarounds unpredictable. Total: 10–15+ sessions for production quality.
 
 ## Last Updated
+2026-08-21 — Playlist import: error handling + Apple Music/iTunes XML support
+
+- **Import error handling**: `POST /api/playlists/import` now validates before parsing — empty/blank file content and zero-entry playlists (e.g. an `.m3u` with only an `#EXTM3U` header) return a 400 with a short, clear error instead of silently opening the import screen with 0 matched songs. Client-side `handleImportFile()` in `static/app.js` catches 0-byte files and file-read errors before even hitting the API. `confirmImport()` was previously unguarded — a failure creating the playlist or adding tracks failed silently (and could leave an orphaned empty playlist); now wrapped in try/catch with a message that reflects whether the playlist was already created. Unmatched-entries list (capped at 30 by the backend) now tells the user when it's truncated ("showing first 30 of 40"). All new toasts kept to a single short clause — the toast pill is `white-space: nowrap` with a ~480px cap, so multi-sentence messages overflow/clip.
+- **Apple Music/iTunes XML playlist import**: `parse_itunes_xml()` in `app.py` parses the standard iTunes/Apple Music XML plist export format (seen from SongShift's "Export Playlist" and Apple Music's own library export) via `plistlib`. `_looks_like_plist_xml()` sniffs the first ~200 chars of uploaded content (`<?xml`, `<!DOCTYPE plist`, or `<plist`) to route between the XML parser and the existing `parse_m3u()` — no new endpoint, `/api/playlists/import` branches internally. These tracks carry no local file path (Apple Music catalog entries, `Track Type: Remote`), so they skip straight to the existing artist+title match tier in `match_track()` rather than path matching. The playlist's embedded `<key>Name</key>` always overrides whatever name the frontend derived from the filename. Built-in system playlists (`Master` flag or `Distinguished Kind` key — Library, Music, Movies, Podcasts, etc.) are filtered out; a file with zero remaining user playlists or more than one returns a clear error asking to export just one playlist, rather than picking arbitrarily. Unmatched entries now carry an `album` field so the import mapping UI can show real metadata instead of a blank breadcrumb when there's no file path to parse folder names from. File input `accept` and the Help modal's Playlists section updated to mention XML support.
+
 2026-07-19 — IEM Match accuracy overhaul (analysis v4, 13 bands, Harman IE 2019 default target)
 
 - **Why**: TuneBridge match results disagreed with Hashan's outside IEM analysis (spreadsheet + squig.link reading). Root causes: a 1.5–3 kHz scoring gap (pinna-gain region unscored), a literal flat-75 dB default target that punished normal pinna gain, and band-overlap double-counting that over-weighted bass/treble.

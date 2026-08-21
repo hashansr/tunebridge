@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Add: Playlist import now supports Apple Music/iTunes XML playlist exports (e.g. from SongShift), not just M3U/M3U8.
+- Fix: Toast messages for playlist import errors were too long and got clipped by the toast pill — shortened to fit on one line.
 
 ## v0.678-rc.210826-1219 · 2026-08-21
 - Fix: Importing a playlist file that has no tracks in it now shows a clear message explaining the file looks empty, instead of silently opening the import screen with 0 matched songs.

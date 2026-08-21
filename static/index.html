@@ -1021,7 +1021,7 @@
           <p class="empty-subtitle">Create a playlist to start organising your music.</p>
           <button class="btn-secondary empty-cta" onclick="App.createPlaylist()">+ New Playlist</button>
         </div>
-        <input type="file" id="import-file-input" accept=".m3u,.m3u8" style="display:none" onchange="App.handleImportFile(this)" />
+        <input type="file" id="import-file-input" accept=".m3u,.m3u8,.xml" style="display:none" onchange="App.handleImportFile(this)" />
       </div>
 
       <!-- Settings view -->
@@ -2773,7 +2773,7 @@
                 <span class="help-s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span>
                 <div>
                   <div class="help-s-title">Playlists</div>
-                  <div class="help-s-desc">Create playlists in TuneBridge, download them as <span class="help-chip">.m3u</span> files, or copy them straight to a connected device. Imports read <span class="help-chip">.m3u</span> and <span class="help-chip">.m3u8</span>. When an import cannot match every song, TuneBridge keeps those tracks visible so you can map them by hand.</div>
+                  <div class="help-s-desc">Create playlists in TuneBridge, download them as <span class="help-chip">.m3u</span> files, or copy them straight to a connected device. Imports read <span class="help-chip">.m3u</span>, <span class="help-chip">.m3u8</span>, and Apple Music/iTunes XML playlist exports (<span class="help-chip">.xml</span>, e.g. from SongShift). When an import cannot match every song, TuneBridge keeps those tracks visible so you can map them by hand.</div>
                 </div>
               </div>
             </div>

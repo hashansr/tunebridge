@@ -6237,6 +6237,54 @@ def insights_coverage():
     })
 
 
+def _looks_like_plist_xml(content):
+    head = content.lstrip()[:200]
+    return head.startswith('<?xml') or head.startswith('<!DOCTYPE plist') or head.startswith('<plist')
+
+
+def parse_itunes_xml(content):
+    """Parse an iTunes/Apple Music (e.g. SongShift) XML playlist export.
+
+    Returns (name, entries) where entries mirror parse_m3u()'s shape
+    ({'path', 'title', 'artist', 'album', 'duration'}) so they can share
+    the same match_track() pipeline. Raises ValueError with a user-facing
+    message on malformed or unsupported input.
+    """
+    try:
+        data = plistlib.loads(content.encode('utf-8'))
+    except Exception:
+        raise ValueError("Couldn't read that XML file - it may be corrupted.")
+
+    tracks = data.get('Tracks') or {}
+    playlists = data.get('Playlists') or []
+    # Skip Apple's built-in playlists (Library, Music, Movies, Podcasts, ...) -
+    # those carry a Master flag or a Distinguished Kind, user playlists don't.
+    user_playlists = [p for p in playlists if not p.get('Master') and 'Distinguished Kind' not in p]
+
+    if not user_playlists:
+        raise ValueError("No playlist found in this file.")
+    if len(user_playlists) > 1:
+        raise ValueError("This file has multiple playlists - export just one and try again.")
+
+    playlist = user_playlists[0]
+    name = (playlist.get('Name') or '').strip()
+
+    entries = []
+    for item in playlist.get('Playlist Items') or []:
+        track = tracks.get(str(item.get('Track ID', '')))
+        if not track:
+            continue
+        total_time = track.get('Total Time')
+        entries.append({
+            'path': '',
+            'title': track.get('Name', ''),
+            'artist': track.get('Artist', ''),
+            'album': track.get('Album', ''),
+            'duration': round(total_time / 1000) if total_time else None,
+        })
+    return name, entries
+
+
 def parse_m3u(content):
     """Return list of {path, title, artist, duration} from M3U/M3U8 text."""
     entries = []
@@ -6316,12 +6364,20 @@ def import_playlist():
     create  = data.get('create', False)
 
     if not isinstance(content, str) or not content.strip():
-        return jsonify({'error': "That file is empty. Check you selected the right playlist and try again."}), 400
+        return jsonify({'error': "That file is empty. Check you picked the right playlist."}), 400
 
-    entries = parse_m3u(content)
+    if _looks_like_plist_xml(content):
+        try:
+            xml_name, entries = parse_itunes_xml(content)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        if xml_name:
+            name = xml_name
+    else:
+        entries = parse_m3u(content)
 
     if not entries:
-        return jsonify({'error': "No tracks were found in this playlist file. It may be empty, or exported in a format TuneBridge doesn't recognise — try re-exporting it from the source app."}), 400
+        return jsonify({'error': "No tracks found in this playlist. Try re-exporting it."}), 400
 
     with library_lock:
         lib_by_path     = {t['path']: t for t in library}
@@ -6337,7 +6393,12 @@ def import_playlist():
             matched.append(track)
             seen_ids.add(track['id'])
         elif not track:
-            unmatched.append({'path': entry.get('path', ''), 'title': entry.get('title', ''), 'artist': entry.get('artist', '')})
+            unmatched.append({
+                'path': entry.get('path', ''),
+                'title': entry.get('title', ''),
+                'artist': entry.get('artist', ''),
+                'album': entry.get('album', ''),
+            })
 
     result = {
         'name': name,
@@ -6349,7 +6410,7 @@ def import_playlist():
     }
 
     if create and not matched:
-        return jsonify({'error': "None of the tracks in this playlist matched your library, so there's nothing to import."}), 400
+        return jsonify({'error': "No tracks matched your library — nothing to import."}), 400
 
     if create:
         playlists = load_playlists()
