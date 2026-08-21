@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.679-rc.210826-1245 · 2026-08-21
 - Add: Playlist import now supports Apple Music/iTunes XML playlist exports (e.g. from SongShift), not just M3U/M3U8.
 - Fix: Toast messages for playlist import errors were too long and got clipped by the toast pill — shortened to fit on one line.
 
