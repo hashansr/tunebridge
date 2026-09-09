@@ -9789,7 +9789,7 @@ function _swRenderIpodDetailPanel(ipod) {
   const readOnlyBanner = ipod.mounted && ipod.writable === false ? `
     <div class="sw-readonly-banner">
       ${_WARNING_ICON(16)}
-      <span><strong>${esc(ipod.name)}'s storage is mounted read-only.</strong> Files can be scanned but nothing can be copied to it until this is fixed — safely eject and reconnect the device, or run First Aid on it.</span>
+      <span><strong>${esc(ipod.name)}'s storage is mounted read-only.</strong> Files can be scanned but nothing can be copied to it until this is fixed. Safely eject and reconnect the device, or run First Aid on it.</span>
     </div>` : '';
 
   content.innerHTML = `
@@ -9860,7 +9860,7 @@ function _swRenderDetailPanel(dap) {
   const readOnlyBanner = dap.mounted && dap.writable === false ? `
     <div class="sw-readonly-banner">
       ${_WARNING_ICON(16)}
-      <span><strong>${esc(dap.name)}'s storage is mounted read-only.</strong> Files can be scanned but nothing can be copied to it until this is fixed — safely eject and reconnect the device, or run First Aid on it.</span>
+      <span><strong>${esc(dap.name)}'s storage is mounted read-only.</strong> Files can be scanned but nothing can be copied to it until this is fixed. Safely eject and reconnect the device, or run First Aid on it.</span>
     </div>` : '';
 
   content.innerHTML = `
