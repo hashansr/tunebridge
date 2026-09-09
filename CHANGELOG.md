@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.682-rc.090926-1230 · 2026-09-09
 - Change: Cleaned up em dashes throughout the app's UI text (messages, tooltips, labels) and native error dialogs, replacing them with plainer punctuation or separators.
 
 ## v0.681-rc.090926-1207 · 2026-09-09
