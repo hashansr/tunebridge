@@ -10878,6 +10878,23 @@ def _mount_matches_dap(mount, dap):
     return False
 
 
+def _mount_is_writable(path):
+    """Best-effort check for whether a mounted volume currently accepts writes.
+
+    os.access(path, os.W_OK) reflects the OS-level read-only mount state on
+    macOS (e.g. an exFAT SD card mounted read-only after an unclean eject),
+    not just POSIX permission bits — so this catches the "device is
+    connected but every copy to it fails" case before a sync is attempted.
+    Returns None when there's nothing mounted to check.
+    """
+    if not path:
+        return None
+    try:
+        return bool(os.access(str(path), os.W_OK))
+    except Exception:
+        return None
+
+
 def _resolve_dap_mount(dap, mounts=None):
     resolved_mount, matched_mount, _ = _resolve_dap_mount_with_method(dap, mounts)
     return resolved_mount, matched_mount
@@ -10959,6 +10976,7 @@ def get_daps():
     for d in daps:
         resolved_mount, matched_mount, match_method = _resolve_dap_mount_with_method(d, mounts)
         d['mounted'] = bool(resolved_mount and resolved_mount.exists())
+        d['writable'] = _mount_is_writable(resolved_mount) if d['mounted'] else None
         d['active_mount_path'] = str(resolved_mount) if resolved_mount else ''
         d['mount_match_method'] = match_method or ''
         if matched_mount:
@@ -11076,6 +11094,7 @@ def get_dap(did):
     mounts = _discover_mount_points(include_identity=False)
     resolved_mount, matched_mount = _resolve_dap_mount(dap, mounts)
     dap['mounted'] = bool(resolved_mount and resolved_mount.exists())
+    dap['writable'] = _mount_is_writable(resolved_mount) if dap['mounted'] else None
     dap['active_mount_path'] = str(resolved_mount) if resolved_mount else ''
     if matched_mount:
         dap['active_mount_label'] = matched_mount.get('label') or str(resolved_mount)
@@ -11596,6 +11615,7 @@ def get_ipods():
     for ip in ipods:
         resolved_mount, matched_mount, match_method = _resolve_ipod_mount(ip, mounts)
         ip['mounted'] = bool(resolved_mount and resolved_mount.exists())
+        ip['writable'] = _mount_is_writable(resolved_mount) if ip['mounted'] else None
         ip['active_mount_path'] = str(resolved_mount) if resolved_mount else ''
         ip['mount_match_method'] = match_method or ''
         if matched_mount:
@@ -11650,6 +11670,7 @@ def get_ipod(iid):
         return jsonify({'error': 'Not found'}), 404
     resolved_mount, matched_mount, match_method = _resolve_ipod_mount(ipod)
     ipod['mounted'] = bool(resolved_mount and resolved_mount.exists())
+    ipod['writable'] = _mount_is_writable(resolved_mount) if ipod['mounted'] else None
     ipod['active_mount_path'] = str(resolved_mount) if resolved_mount else ''
     ipod['mount_match_method'] = match_method or ''
     if matched_mount:

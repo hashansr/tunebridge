@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Add: The Sync wizard now warns you upfront, on the device picker (step 1), if a connected DAP or iPod's storage is mounted read-only — showing a "Read-only" chip on the device and an explanation banner — instead of only surfacing the problem after a failed sync.
 
 ## v0.680 · 2026-09-09
 - Fix: The Sync wizard's final "Done" screen no longer shows a green "up to date" success state when files actually failed to copy (e.g. a read-only or disconnected SD card) — it now shows a clear failure/warning state, lists exactly which tracks failed and why, and warns before you disconnect the device.

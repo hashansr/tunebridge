@@ -734,6 +734,12 @@ function _CHECK_ICON(size = 14, color = 'currentColor', cls = '') {
 // House style for the search (magnifying glass) icon: viewBox 0 0 24 24, stroke-width 2, currentColor.
 const _SEARCH_ICON_HTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Search`;
 
+// House style for the warning-triangle icon: viewBox 0 0 24 24, stroke-width 2.5, currentColor.
+function _WARNING_ICON(size = 14, cls = '') {
+  const clsAttr = cls ? ` class="${cls}"` : '';
+  return `<svg${clsAttr} width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z"/></svg>`;
+}
+
 function nowPlayingSvg(size = 11) {
   return `<svg class="track-now-playing-icon" width="${size}" height="${size}" viewBox="0 0 11 11" aria-hidden="true" focusable="false"><rect x="1" y="2" width="2.5" height="7" rx="1" fill="currentColor" opacity="0.92"><animate attributeName="height" values="7;3;7" dur="0.9s" repeatCount="indefinite"></animate><animate attributeName="y" values="2;4;2" dur="0.9s" repeatCount="indefinite"></animate></rect><rect x="7.5" y="2" width="2.5" height="7" rx="1" fill="currentColor" opacity="0.92"><animate attributeName="height" values="7;5;7" dur="0.7s" repeatCount="indefinite"></animate><animate attributeName="y" values="2;3;2" dur="0.7s" repeatCount="indefinite"></animate></rect></svg>`;
 }
@@ -9637,10 +9643,10 @@ function _swRenderDeviceList(daps, ipods = []) {
   }
 
   const dapRows = daps.map(dap => _swDeviceRowHtml({
-    id: dap.id, type: 'dap', iconType: dap.model === 'rockbox' ? 'ipod' : 'dap', name: dap.name, connected: dap.mounted,
+    id: dap.id, type: 'dap', iconType: dap.model === 'rockbox' ? 'ipod' : 'dap', name: dap.name, connected: dap.mounted, writable: dap.writable,
   }));
   const ipodRows = ipods.map(ipod => _swDeviceRowHtml({
-    id: ipod.id, type: 'ipod', name: ipod.name, connected: ipod.mounted,
+    id: ipod.id, type: 'ipod', name: ipod.name, connected: ipod.mounted, writable: ipod.writable,
   }));
 
   const sections = [];
@@ -9649,11 +9655,14 @@ function _swRenderDeviceList(daps, ipods = []) {
   list.innerHTML = sections.join('');
 }
 
-function _swDeviceRowHtml({ id, type, iconType = type, name, connected }) {
+function _swDeviceRowHtml({ id, type, iconType = type, name, connected, writable }) {
   const connClass = connected ? 'sw-conn-chip--on' : 'sw-conn-chip--off';
   const dotClass  = connected ? 'sw-conn-dot--on'  : 'sw-conn-dot--off';
   const connText  = connected ? 'Connected' : 'Offline';
   const icon = iconType === 'ipod' ? _IPOD_SVG_SMALL : _DAP_SVG_SMALL;
+  // writable is null when the device isn't mounted (nothing to check yet);
+  // only show the chip once we actually know it's mounted read-only.
+  const readOnly = connected && writable === false;
 
   return `<button class="sw-device-row" data-dap-id="${esc(id)}" data-device-type="${type}"
       onclick="App.swSelectDevice('${esc(id)}', '${type}')"
@@ -9665,6 +9674,9 @@ function _swDeviceRowHtml({ id, type, iconType = type, name, connected }) {
         <span class="sw-conn-chip ${connClass}">
           <span class="sw-conn-dot ${dotClass}"></span>${connText}
         </span>
+        ${readOnly ? `<span class="sw-conn-chip sw-conn-chip--warn">
+          <span class="sw-conn-dot sw-conn-dot--warn"></span>Read-only
+        </span>` : ''}
       </div>
     </div>
     <div class="sw-device-radio"></div>
@@ -9687,7 +9699,7 @@ async function swSelectDevice(id, type = 'dap') {
     try {
       const ipod = await api(`/ipods/${id}`);
       _sw.device = {
-        id: ipod.id, name: ipod.name, deviceType: 'ipod', mounted: ipod.mounted,
+        id: ipod.id, name: ipod.name, deviceType: 'ipod', mounted: ipod.mounted, writable: ipod.writable,
         mount: ipod.active_mount_path, track_count: ipod.track_count,
         playlist_count: ipod.playlist_count, last_scanned_at: ipod.last_scanned_at,
         capacity_bytes: ipod.capacity_bytes, used_bytes: ipod.used_bytes,
@@ -9706,7 +9718,7 @@ async function swSelectDevice(id, type = 'dap') {
   // Fetch detail for the panel
   try {
     const dap = await api(`/daps/${id}`);
-    _sw.device = { id: dap.id, name: dap.name, deviceType: 'dap', mount: dap.active_mount_path || dap.mount_path,
+    _sw.device = { id: dap.id, name: dap.name, deviceType: 'dap', mount: dap.active_mount_path || dap.mount_path, writable: dap.writable,
       capacity_bytes: dap.capacity_bytes, used_bytes: dap.used_bytes, last_sync_at: dap.last_sync_at };
     _swRenderDetailPanel(dap);
   } catch (e) {
@@ -9774,6 +9786,12 @@ function _swRenderIpodDetailPanel(ipod) {
       <span class="sw-cap-free-caption">${_fmtGB(free)} free</span>
     </div>` : '';
 
+  const readOnlyBanner = ipod.mounted && ipod.writable === false ? `
+    <div class="sw-readonly-banner">
+      ${_WARNING_ICON(16)}
+      <span><strong>${esc(ipod.name)}'s storage is mounted read-only.</strong> Files can be scanned but nothing can be copied to it until this is fixed — safely eject and reconnect the device, or run First Aid on it.</span>
+    </div>` : '';
+
   content.innerHTML = `
     <div class="sw-detail-hdr">
       <div class="sw-detail-icon-tile">${_IPOD_SVG_SMALL}</div>
@@ -9782,6 +9800,8 @@ function _swRenderIpodDetailPanel(ipod) {
         <p class="sw-detail-name">${esc(ipod.name)}</p>
       </div>
     </div>
+
+    ${readOnlyBanner}
 
     ${capacitySection}
 
@@ -9837,6 +9857,12 @@ function _swRenderDetailPanel(dap) {
     activityRows.push({ text: 'Last sync', time: _fmtRelDate(dap.last_sync_at) });
   }
 
+  const readOnlyBanner = dap.mounted && dap.writable === false ? `
+    <div class="sw-readonly-banner">
+      ${_WARNING_ICON(16)}
+      <span><strong>${esc(dap.name)}'s storage is mounted read-only.</strong> Files can be scanned but nothing can be copied to it until this is fixed — safely eject and reconnect the device, or run First Aid on it.</span>
+    </div>` : '';
+
   content.innerHTML = `
     <div class="sw-detail-hdr">
       <div class="sw-detail-icon-tile">${_dapDeviceIcon(dap, true)}</div>
@@ -9845,6 +9871,8 @@ function _swRenderDetailPanel(dap) {
         <p class="sw-detail-name">${esc(dap.name)}</p>
       </div>
     </div>
+
+    ${readOnlyBanner}
 
     <div class="sw-cap-section">
       <div class="sw-cap-label-row">
@@ -11473,9 +11501,7 @@ function _swRenderDone() {
   const circleEl = document.getElementById('sw-done-check-circle');
   if (circleEl) {
     circleEl.classList.toggle('sw-done-check-circle--warn', hasErrors);
-    circleEl.innerHTML = hasErrors
-      ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z"/></svg>'
-      : '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    circleEl.innerHTML = hasErrors ? _WARNING_ICON(22) : _CHECK_ICON(22);
   }
   const badgeEl = document.getElementById('sw-done-badge');
   if (badgeEl) {

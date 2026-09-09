@@ -21023,6 +21023,24 @@ body.is-col-resizing {
 }
 .sw-conn-dot--on  { background: var(--accent-success); box-shadow: 0 0 0 3px rgba(83,225,111,0.12); }
 .sw-conn-dot--off { background: var(--text-muted); }
+.sw-conn-chip--warn { color: var(--accent-warning); }
+.sw-conn-dot--warn { background: var(--accent-warning); box-shadow: 0 0 0 3px rgba(255,184,92,0.14); }
+
+.sw-readonly-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255,184,92,0.08);
+  border: 1px solid rgba(255,184,92,0.22);
+  color: var(--accent-warning);
+  font-size: 12px;
+  line-height: 1.45;
+  margin-bottom: 12px;
+}
+.sw-readonly-banner svg { flex-shrink: 0; margin-top: 1px; }
+.sw-readonly-banner strong { color: var(--text); }
 
 .sw-device-meta {
   display: flex;
