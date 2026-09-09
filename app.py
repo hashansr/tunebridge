@@ -1483,7 +1483,7 @@ def do_scan():
     failure_note = f' · {scan_failures} unreadable' if scan_failures else ''
     scan_state.update({
         'status': 'done',
-        'message': f'Library ready — {len(tracks)} tracks{failure_note}',
+        'message': f'Library ready: {len(tracks)} tracks{failure_note}',
         'progress': len(files),
         'total': len(files),
         'new_tracks': new_count,
@@ -1529,7 +1529,7 @@ def load_library():
                 library = data
             scan_state.update({
                 'status': 'done',
-                'message': f'Library ready — {len(data)} tracks',
+                'message': f'Library ready: {len(data)} tracks',
                 'total': len(data),
                 'progress': len(data),
                 'new_tracks': 0,
@@ -1860,7 +1860,7 @@ def trigger_scan():
             with library_lock:
                 global library
                 library = []
-            scan_state.update({'message': 'Cache cleared — rescanning…'})
+            scan_state.update({'message': 'Cache cleared, rescanning…'})
         except Exception as e:
             _scan_lock.release()
             print(f"Error clearing cache: {e}")
@@ -3968,7 +3968,7 @@ def update_artist_tags(artist):
         return jsonify({'error': 'No tracks found for that artist'}), 404
 
     if len(tracks) > 2000:
-        return jsonify({'error': 'Too many tracks (>2000) — split into smaller batches'}), 400
+        return jsonify({'error': 'Too many tracks (>2000), split into smaller batches'}), 400
 
     updated = 0
     errors = []
@@ -6410,7 +6410,7 @@ def import_playlist():
     }
 
     if create and not matched:
-        return jsonify({'error': "No tracks matched your library — nothing to import."}), 400
+        return jsonify({'error': "No tracks matched your library. Nothing to import."}), 400
 
     if create:
         playlists = load_playlists()
@@ -7509,7 +7509,7 @@ def player_play():
     global _mpv_current_track_id, _mpv_track_ended, _mpv_load_time, _xfade_in_progress, _last_play_dev_id
     _refresh_mpv_backend()
     if not MPV_AVAILABLE:
-        return jsonify({'error': 'mpv not available — run: brew install mpv'}), 503
+        return jsonify({'error': 'mpv not available, run: brew install mpv'}), 503
     data     = request.get_json(force=True) or {}
     track_id = data.get('track_id')
     if not track_id:
@@ -7655,7 +7655,7 @@ def player_peq():
     if not MPV_AVAILABLE:
         return jsonify({'error': 'mpv not available'}), 503
     if _xfade_in_progress:
-        return jsonify({'error': 'crossfade in progress — wait for completion'}), 409
+        return jsonify({'error': 'crossfade in progress, wait for completion'}), 409
     data      = request.get_json(force=True) or {}
     preamp_db = data.get('preamp_db', 0)
     filters   = data.get('filters', [])
@@ -9182,7 +9182,7 @@ def _render_organizer_relpath(track, template):
     # Safety: warn if any path segment starts with '.' (hidden files on macOS/Linux)
     for seg in parts:
         if seg.startswith('.'):
-            warnings.append(f"Path segment '{seg}' starts with '.' — creates a hidden file/folder on macOS and Linux")
+            warnings.append(f"Path segment '{seg}' starts with '.', creates a hidden file/folder on macOS and Linux")
 
     return '/'.join(parts), warnings
 
@@ -9698,12 +9698,12 @@ def _compute_sync_diff_for_dap(dap, ignored_keys=None):
         tracks = target_collision_tracks.get(c, [])
         track_list = ', '.join(f'"{t}"' for t in tracks)
         warnings.append(
-            f'Path collision: {len(tracks)} local tracks all map to device path "{c}" — '
+            f'Path collision: {len(tracks)} local tracks all map to device path "{c}", '
             f'only the first will be synced. Tracks: {track_list}'
         )
         if c in local_only_reasons:
             local_only_reasons[c] = (
-                f'Missing on device (note: {len(tracks)} tracks map here — only this one will be synced)'
+                f'Missing on device (note: {len(tracks)} tracks map here, only this one will be synced)'
             )
     warnings = sorted(set(warnings))
     if len(warnings) > 250:
@@ -10219,7 +10219,7 @@ def sync_execute():
     dap_id = sync_state['dap_id']
     requested_dap_id = str(data.get('dap_id') or '').strip()
     if requested_dap_id and requested_dap_id != dap_id:
-        return jsonify({'error': 'DAP mismatch — re-scan before syncing'}), 409
+        return jsonify({'error': 'DAP mismatch, re-scan before syncing'}), 409
     device_path = get_dap_music_path(dap_id)
 
     if not device_path or not device_path.exists():
@@ -10401,7 +10401,7 @@ def sync_execute():
                         src_size = src.stat().st_size
                         if dst_size != src_size:
                             errors.append(
-                                f'{rel}: local file already exists with different content — '
+                                f'{rel}: local file already exists with different content, '
                                 f'skipped to prevent overwrite. Remove the local file first to import from device.'
                             )
                             progress += 1
@@ -10549,7 +10549,7 @@ def sync_execute():
             ),
             'playlists_out_of_sync_count': playlist_out,
             'message': (
-                f'Done — {copied} item(s) synced.'
+                f'Done: {copied} item(s) synced.'
                 + (f' {len(errors)} error(s).' if errors else '')
                 + (
                     f' {len(clean_ignore_upserts)} ignore rule(s) saved.'
@@ -11167,14 +11167,14 @@ def eject_dap(did):
     if not mount or not mount.exists():
         return jsonify({'error': 'Device is not connected'}), 400
     if sync_state.get('status') in ('scanning', 'copying'):
-        return jsonify({'error': 'A sync operation is in progress — wait for it to finish before ejecting.'}), 409
+        return jsonify({'error': 'A sync operation is in progress, wait for it to finish before ejecting.'}), 409
     result = subprocess.run(
         ['diskutil', 'eject', str(mount)],
         capture_output=True, text=True, timeout=60
     )
     if result.returncode == 0:
         return jsonify({'success': True, 'message': f'{dap["name"]} ejected safely.'})
-    msg = result.stderr.strip() or 'Eject failed — the device may be busy.'
+    msg = result.stderr.strip() or 'Eject failed, the device may be busy.'
     return jsonify({'error': msg}), 500
 
 
@@ -14467,7 +14467,7 @@ def _csv_diff_rows(rows, mapping, match_key, blank_behavior):
 
         warnings = []
         if key_val in seen_keys:
-            warnings.append(f'Duplicate match for this track (also on row {seen_keys[key_val]}) — last one wins')
+            warnings.append(f'Duplicate match for this track (also on row {seen_keys[key_val]}), last one wins')
         seen_keys[key_val] = idx
 
         changes = []
@@ -14635,7 +14635,7 @@ def _run_csv_import_apply(my_gen, batch_id, rows, mapping, match_key, blank_beha
             threading.Thread(target=_do_apply, daemon=True, name=f'csv_apply_{track_id[:12]}').start()
 
             if not evt.wait(timeout=_CSV_APPLY_FILE_TIMEOUT):
-                err = f'Timed out after {_CSV_APPLY_FILE_TIMEOUT}s — file may be on a sleeping/disconnected drive'
+                err = f'Timed out after {_CSV_APPLY_FILE_TIMEOUT}s, file may be on a sleeping/disconnected drive'
             else:
                 err = result[1]
 
@@ -14799,7 +14799,7 @@ def import_backup():
                     dest.write_bytes(zf.read(name))
         return jsonify({'ok': True})
     except zipfile.BadZipFile:
-        return jsonify({'error': 'Invalid ZIP file — is this a TuneBridge backup?'}), 400
+        return jsonify({'error': 'Invalid ZIP file, is this a TuneBridge backup?'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

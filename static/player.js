@@ -2947,7 +2947,7 @@ const Player = (function () {
     if (curEl)     curEl.textContent  = '0:00';
     if (qualityEl) qualityEl.textContent = _formatQuality(track);
     _updateBitPerfectBadge();
-    document.title = `${track.title} — TuneBridge`;
+    document.title = `${track.title} · TuneBridge`;
     window.dispatchEvent(new CustomEvent('tb-track-change', { detail: { trackId: track.id } }));
     if (typeof App !== 'undefined' && App._onLyricsTrackChange) App._onLyricsTrackChange(track);
   }
@@ -3112,8 +3112,8 @@ const Player = (function () {
     btn.classList.toggle('active',     ps.continuousPlayEnabled && !conflicted);
     btn.classList.toggle('conflicted', conflicted);
     btn.title = conflicted
-      ? 'Continuous Play paused — Repeat is on'
-      : (ps.continuousPlayEnabled ? 'Continuous Play on — click to turn off' : 'Continuous Play off — click to turn on');
+      ? 'Continuous Play paused, Repeat is on'
+      : (ps.continuousPlayEnabled ? 'Continuous Play on, click to turn off' : 'Continuous Play off, click to turn on');
     btn.setAttribute('aria-pressed', ps.continuousPlayEnabled ? 'true' : 'false');
   }
 

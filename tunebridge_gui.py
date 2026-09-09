@@ -557,7 +557,7 @@ def main():
                 _set_port(fallback)
             except Exception as exc:
                 webview.create_window(
-                    "TuneBridge — Error",
+                    "TuneBridge: Error",
                     html="<h2 style='font-family:sans-serif;color:#c00;padding:40px'>"
                          "TuneBridge could not find a free local port.<br>"
                          f"<small>{exc}</small></h2>",
@@ -580,7 +580,7 @@ def main():
                           .replace(">", "&gt;")
                 )
                 webview.create_window(
-                    "TuneBridge — Error",
+                    "TuneBridge: Error",
                     html="<h2 style='font-family:sans-serif;color:#c00;padding:40px'>"
                          "TuneBridge failed to start.<br>"
                          "<small>Check that port 5001 is not blocked.</small></h2>"

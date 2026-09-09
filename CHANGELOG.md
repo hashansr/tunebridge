@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Change: Cleaned up em dashes throughout the app's UI text (messages, tooltips, labels) and native error dialogs, replacing them with plainer punctuation or separators.
 
 ## v0.681-rc.090926-1207 · 2026-09-09
 - Add: The Sync wizard now warns you upfront, on the device picker (step 1), if a connected DAP or iPod's storage is mounted read-only — showing a "Read-only" chip on the device and an explanation banner — instead of only surfacing the problem after a failed sync.

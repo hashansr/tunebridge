@@ -5374,7 +5374,7 @@ async function showRelatedTracks(trackId) {
   }
 
   if (!data.signal || !data.related?.length || !data.track) {
-    toast(data.message || 'No related tracks found yet — run Analyse Library (or the sonic analysis pass) first.', 'error');
+    toast(data.message || 'No related tracks found yet. Run Analyse Library (or the sonic analysis pass) first.', 'error');
     return;
   }
 
@@ -5390,7 +5390,7 @@ const _GENIUS_PHASE_META = {
   reanchor: { phrase: 'brings it back', className: 'reanchor' },
 };
 const _GENIUS_DISCOVERY_HINTS = {
-  matching: title => `Stays close to ${title} — safe, familiar picks.`,
+  matching: title => `Stays close to ${title}: safe, familiar picks.`,
   balanced: () => 'Mixes familiar favorites with new discoveries.',
   explore: () => 'Prioritizes new artists and unexpected tracks.',
 };
@@ -5961,7 +5961,7 @@ function showDupDialog(res, pid, plName) {
     const shown = dups.slice(0, 5);
     document.getElementById('dup-modal-list').innerHTML = shown.map(d =>
       `<div class="dup-playlist-row">
-        ${esc(d.title)} <span style="opacity:0.6">— ${esc(d.artist)}</span>
+        ${esc(d.title)} <span style="opacity:0.6">· ${esc(d.artist)}</span>
       </div>`
     ).join('') + (dups.length > 5
       ? `<div class="dup-playlist-row">…and ${dups.length - 5} more</div>`
@@ -7603,7 +7603,7 @@ function _renderHomeListeningStats(data) {
         <div class="ls-micro-genre-row">
           ${c.top_genre
             ? `<span class="ls-micro-text">${esc(c.top_genre)}</span>`
-            : `<span class="ls-micro-suffix">—</span>`}
+            : `<span class="ls-micro-suffix">–</span>`}
         </div>
       </div>
       <div class="ls-micro-cell">
@@ -7705,7 +7705,7 @@ function _homeApplyData(data, force) {
       'home-continue-section',
       'home-continue',
       data.jump_back_in || data.continue_listening || [],
-      'Start listening — your recent sessions will appear here.'
+      'Start listening. Your recent sessions will appear here.'
     );
   }
 
@@ -8984,7 +8984,7 @@ function selectMapping(idx, trackId, title, artist) {
   const mappedEl   = document.getElementById(`map-mapped-${idx}`);
   const labelEl    = document.getElementById(`map-mapped-label-${idx}`);
   if (searchWrap) searchWrap.style.display = 'none';
-  if (labelEl) labelEl.textContent = `${title} — ${artist}`;
+  if (labelEl) labelEl.textContent = `${title} · ${artist}`;
   if (mappedEl) mappedEl.style.display = 'flex';
 
   // Close results dropdown
@@ -9108,7 +9108,7 @@ function _renderResolveModal(data) {
 
   const n = data.missing.length;
   if (subtitleEl) subtitleEl.textContent = `${n} missing track${n !== 1 ? 's' : ''} of ${data.total_tracks}`;
-  if (labelEl)    labelEl.textContent = `${n} missing track${n !== 1 ? 's' : ''} — choose a replacement or remove`;
+  if (labelEl)    labelEl.textContent = `${n} missing track${n !== 1 ? 's' : ''}: choose a replacement or remove`;
 
   listEl.innerHTML = data.missing.map(_renderResolveMissingRow).join('');
   missingEl.style.display = 'block';
@@ -9225,7 +9225,7 @@ function _resolveSelectCandidate(trackId, newId, title, artist) {
   document.getElementById(`resolve-remove-badge-${trackId}`)?.style?.setProperty('display', 'none');
   document.getElementById(`resolve-results-${trackId}`)?.style?.setProperty('display', 'none');
   const labelEl = document.getElementById(`resolve-resolved-label-${trackId}`);
-  if (labelEl) labelEl.textContent = `${title}${artist ? ' — ' + artist : ''}`;
+  if (labelEl) labelEl.textContent = `${title}${artist ? ' · ' + artist : ''}`;
   const resolvedEl = document.getElementById(`resolve-resolved-${trackId}`);
   if (resolvedEl) resolvedEl.style.display = 'flex';
   _updateResolveApplyBtn();
@@ -9276,7 +9276,7 @@ async function applyResolve() {
     if (state.playlist?.id === pid) await openPlaylist(pid);
     await loadPlaylists();
     const applied = res.applied || 0;
-    toast(`Resolve complete — ${applied} change${applied !== 1 ? 's' : ''} applied`);
+    toast(`Resolve complete: ${applied} change${applied !== 1 ? 's' : ''} applied`);
   } catch (e) {
     toast('Apply failed: ' + (e.message || e), 'error');
     if (btn) { btn.disabled = false; btn.textContent = 'Apply Changes'; }
@@ -9293,7 +9293,7 @@ async function applyResolve() {
 // capacity-tracking bug at a glance.
 function _fmtBytes(bytes) {
   const n = Number(bytes);
-  if (!Number.isFinite(n) || n < 0) return '—';
+  if (!Number.isFinite(n) || n < 0) return '–';
   if (n === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let v = n, i = 0;
@@ -9303,7 +9303,7 @@ function _fmtBytes(bytes) {
 }
 
 function _fmtGB(bytes) {
-  if (!Number.isFinite(Number(bytes))) return '—';
+  if (!Number.isFinite(Number(bytes))) return '–';
   return (Number(bytes) / (1000 ** 3)).toFixed(1) + ' GB';
 }
 
@@ -9765,7 +9765,7 @@ function _swRenderIpodDetailPanel(ipod) {
   if (empty)   empty.style.display   = 'none';
   if (content) content.style.display = '';
 
-  const mount = ipod.active_mount_path || '—';
+  const mount = ipod.active_mount_path || '–';
   const lastScanned = ipod.last_scanned_at ? _fmtRelDate(ipod.last_scanned_at) : 'Never';
 
   const cap  = ipod.capacity_bytes ?? 0;
@@ -9838,7 +9838,7 @@ function _swRenderDetailPanel(dap) {
   const usedPct = cap > 0 ? Math.min(100, (used / cap) * 100) : 0;
   const tight = usedPct > 95;
   const barClass = tight ? 'sw-cap-bar-fill--tight' : '';
-  const mount = dap.active_mount_path || dap.mount_path || '—';
+  const mount = dap.active_mount_path || dap.mount_path || '–';
   const lastSync = _fmtRelDate(dap.last_sync_at);
 
   // Build recent activity from sync_summary
@@ -11524,7 +11524,7 @@ function _swRenderDone() {
     if (stepTitleEl) stepTitleEl.textContent = doneOps > 0 ? 'Sync completed with errors' : 'Sync failed';
     const stepSubEl = document.getElementById('sw-step-sub');
     if (stepSubEl) {
-      stepSubEl.textContent = 'Some items did not make it to your device — see details below.';
+      stepSubEl.textContent = 'Some items did not make it to your device. See details below.';
       stepSubEl.style.display = '';
     }
   }
@@ -11600,7 +11600,7 @@ function _swRenderDone() {
   const footerStatusEl = document.getElementById('sw-footer-status');
   footerStatusEl?.classList.remove('sw-footer-status--success', 'sw-footer-status--warn');
   if (hasErrors) {
-    if (footerMsg) footerMsg.textContent = `${errors.length} item${errors.length===1?'':'s'} failed to copy — check the errors above before disconnecting.`;
+    if (footerMsg) footerMsg.textContent = `${errors.length} item${errors.length===1?'':'s'} failed to copy. Check the errors above before disconnecting.`;
     footerStatusEl?.classList.add('sw-footer-status--warn');
   } else {
     if (footerMsg) footerMsg.textContent = 'Safe to disconnect.';
@@ -11934,7 +11934,7 @@ function _updateIemCompareBar() {
     bar.style.display = 'flex';
     const labelText = n === 0 ? 'Select an IEM to compare'
                     : n === 1 ? 'Select 1 more IEM'
-                    : '2 IEMs selected — ready';
+                    : '2 IEMs selected, ready';
     if (label) label.textContent = labelText;
     if (btn) { btn.textContent = 'Compare'; btn.disabled = n < 2; }
   } else {
@@ -12306,13 +12306,13 @@ async function showDapDetail(id) {
           <span class="gd-chevron" aria-hidden="true"></span>
         </summary>
         <div class="gd-config-grid">
-          <div><label>Mount path</label><span>${esc(activeMountPath || '—')}</span></div>
+          <div><label>Mount path</label><span>${esc(activeMountPath || '–')}</span></div>
           <div><label>Storage</label><span>${esc(dap.storage_type === 'internal' ? 'Internal' : 'SD card')}</span></div>
           <div><label>Music folder</label><span>${esc(dap.music_root || 'Music')}</span></div>
           <div><label>Export folder</label><span>${esc(dap.export_folder || 'Playlists')}</span></div>
           <div><label>PEQ folder</label><span>${esc(dap.peq_folder || '~/PEQ')}</span></div>
           <div><label>Sync template</label><span>${esc(dap.path_template || DAP_TEMPLATE_PRESETS.artist_album_track)}</span></div>
-          <div><label>Path prefix</label><span class="muted">${esc(dap.path_prefix || '— none')}</span></div>
+          <div><label>Path prefix</label><span class="muted">${esc(dap.path_prefix || 'None')}</span></div>
           <div><label>Model</label><span>${esc(dap.model || 'generic')}</span></div>
           <div><label>Playlists out of sync</label><span class="${playlistOut ? 'warn' : ''}">${playlistOut}</span></div>
           <div><label>Music files out of sync</label><span>${songsToSync} <small>${musicToAdd} add · ${musicToRemove} remove</small></span></div>
@@ -13307,7 +13307,7 @@ function _renderIpodDetail() {
   </div>`;
   const modelControl = `<select class="ipod-detail-select" onchange="App.updateIpodModel('${ipod.id}', this.value)">${_ipodModelOptionsHtml(ipod.device_class)}</select>`;
   const config = isOpen('configuration') ? `<div class="ipod-detail-deflist">
-    <div><label>Mount path</label><span>${esc(ipod.active_mount_path || '—')}</span></div>
+    <div><label>Mount path</label><span>${esc(ipod.active_mount_path || '–')}</span></div>
     <div><label>Model</label>${modelControl}</div>
     <div><label>Database format</label><span>${esc(ipod.db_variant || 'iTunesDB')}</span></div>
     <div><label>Checksum scheme</label><span class="muted">${esc(_ipodChecksumLabel(ipod.hashing_scheme))}</span></div>
@@ -13316,10 +13316,10 @@ function _renderIpodDetail() {
   </div>` : '';
   const shownBackups = ui.showAllBackups ? backups : backups.slice(0, 3);
   const backupRows = shownBackups.length ? shownBackups.map(backup => `<div class="ipod-detail-backup-row">
-    <span class="ipod-detail-row-icon">${_IPOD_DETAIL_BACKUP}</span><span class="ipod-detail-backup-name">${esc(backup.kind === 'artworkdb' ? 'ArtworkDB' : 'iTunesDB')} — ${esc(_fmtRelDate(backup.created_at))}</span>
+    <span class="ipod-detail-row-icon">${_IPOD_DETAIL_BACKUP}</span><span class="ipod-detail-backup-name">${esc(backup.kind === 'artworkdb' ? 'ArtworkDB' : 'iTunesDB')} · ${esc(_fmtRelDate(backup.created_at))}</span>
     <span class="ipod-detail-backup-size">${_fmtBytes(backup.size_bytes)}${backup.exists ? '' : ' · missing'}</span>
     <span class="ipod-detail-backup-actions"><button class="ipod-detail-btn small ghost" ${backup.exists ? `onclick="App.restoreIpodBackup('${ipod.id}', '${backup.id}', '${backup.kind}')"` : 'disabled'}>${_IPOD_DETAIL_REFRESH} Restore</button><button class="ipod-detail-icon-btn danger" title="Delete backup" aria-label="Delete backup" onclick="App.deleteIpodBackupEntry('${ipod.id}', '${backup.id}')">${_GEAR_ICON_TRASH}</button></span>
-  </div>`).join('') : '<p class="ipod-detail-empty">No backups yet — one is taken automatically before the first sync.</p>';
+  </div>`).join('') : '<p class="ipod-detail-empty">No backups yet. One is taken automatically before the first sync.</p>';
   const backupsBody = isOpen('backups') ? `<div class="ipod-detail-note">A backup of the on-device iTunesDB (and ArtworkDB, if artwork was written) is taken automatically before every sync. Restoring replaces what’s currently on the device; the current state is backed up first too.</div>${backupRows}${!ui.showAllBackups && backups.length > 3 ? `<button class="ipod-detail-btn small ghost ipod-detail-more-backups" onclick="App.ipodDetailShowAllBackups()">Show ${backups.length - 3} more backups</button>` : ''}` : '';
   const plNeedle = ui.playlistQuery.trim().toLocaleLowerCase();
   const filteredPlaylists = playlists.filter(p => String(p.name || '').toLocaleLowerCase().includes(plNeedle));
@@ -13352,7 +13352,7 @@ function _renderIpodDetail() {
     <div class="ipod-detail-action-row"><button id="ipod-scan-btn" class="ipod-detail-btn primary" ${ipod.mounted ? `onclick="App.scanIpod('${ipod.id}')"` : 'disabled title="Connect the iPod to scan it"'}>${_IPOD_DETAIL_REFRESH} Scan library</button><span id="ipod-scan-status-line">${ipod.last_scanned_at ? `Last scanned ${esc(_fmtRelDate(ipod.last_scanned_at))}` : 'Not scanned yet'}</span></div>
     <section class="ipod-detail-section">${sectionHead('configuration', 'Configuration', '6 fields')}${config}</section>
     <section class="ipod-detail-section">${sectionHead('backups', 'Backups', backups.length)}${backupsBody}</section>
-    <section class="ipod-detail-section ipod-detail-sync">${sectionHead('sync', 'Sync', null, syncAction)}${isOpen('sync') ? '<div id="ipod-sync-summary" class="ipod-detail-note">No changes checked yet this session — run a check to compare your library against what’s on this iPod.</div><span id="ipod-sync-status-line" class="ipod-detail-sync-status"></span>' : ''}</section>
+    <section class="ipod-detail-section ipod-detail-sync">${sectionHead('sync', 'Sync', null, syncAction)}${isOpen('sync') ? '<div id="ipod-sync-summary" class="ipod-detail-note">No changes checked yet this session. Run a check to compare your library against what’s on this iPod.</div><span id="ipod-sync-status-line" class="ipod-detail-sync-status"></span>' : ''}</section>
     <section class="ipod-detail-section">${sectionHead('playlists', 'Playlists', `${Number(ipod.playlist_count || playlists.length).toLocaleString()} playlists`, `<label class="ipod-detail-search">${_IPOD_DETAIL_SEARCH}<input value="${esc(ui.playlistQuery)}" placeholder="Search playlists…" oninput="App.ipodDetailSetQuery('playlists',this.value)"></label>`)}${playlistsBody}</section>
     <section class="ipod-detail-section">${sectionHead('tracks', 'Tracks', `${Number(ipod.track_count || tracks.length).toLocaleString()} tracks`, `<label class="ipod-detail-search">${_IPOD_DETAIL_SEARCH}<input value="${esc(ui.trackQuery)}" placeholder="Search artists, tracks, albums…" oninput="App.ipodDetailSetQuery('tracks',this.value)"></label>`)}${tracksBody}</section>
   </div>`;
@@ -13401,14 +13401,14 @@ async function _loadIpodBackups(id) {
   if (!list) return;
   const backups = await api(`/ipods/${id}/backups`).catch(() => []);
   if (!backups.length) {
-    list.innerHTML = '<p class="muted" style="padding:8px 0">No backups yet — one is taken automatically the first time you sync.</p>';
+    list.innerHTML = '<p class="muted" style="padding:8px 0">No backups yet. One is taken automatically the first time you sync.</p>';
     return;
   }
   list.innerHTML = backups.map(b => `
     <div class="gear-row">
       <span class="gear-row-icon">${_GEAR_ICON_PLAYLIST}</span>
       <div class="gear-row-main">
-        <span class="gear-row-title">${b.kind === 'artworkdb' ? 'ArtworkDB' : 'iTunesDB'} — ${esc(_fmtRelDate(b.created_at))}</span>
+        <span class="gear-row-title">${b.kind === 'artworkdb' ? 'ArtworkDB' : 'iTunesDB'} · ${esc(_fmtRelDate(b.created_at))}</span>
         <span class="gear-row-sub">${_fmtBytes(b.size_bytes)}${b.exists ? '' : ' · missing on disk'}</span>
       </div>
       <div class="gear-row-actions">
@@ -13438,7 +13438,7 @@ async function restoreIpodBackup(id, backupId, kind) {
 async function deleteIpodBackupEntry(id, backupId) {
   const ok = await _showConfirm({
     title: 'Delete backup',
-    message: 'This only removes the local backup copy — nothing on the device is affected.',
+    message: 'This only removes the local backup copy. Nothing on the device is affected.',
     okText: 'Delete',
     danger: true,
   });
@@ -13577,7 +13577,7 @@ async function _pollIpodSyncStatus(id) {
   if (!summary) return;
   const nothingToDo = !plan.tracks_to_add_count && !plan.playlists_to_create_count && !plan.playlists_to_update?.length;
   if (nothingToDo) {
-    summary.innerHTML = `<span class="ipod-detail-sync-ok">${_IPOD_DETAIL_CHECK} Library and iPod match — nothing to sync.</span>`;
+    summary.innerHTML = `<span class="ipod-detail-sync-ok">${_IPOD_DETAIL_CHECK} Library and iPod match. Nothing to sync.</span>`;
     return;
   }
   summary.innerHTML = `
@@ -15855,9 +15855,9 @@ function _renderPeqList(profiles) {
 
     const filterRows = (p.filters || []).map(f => {
       const freq = f.fc >= 1000 ? (f.fc / 1000).toFixed(f.fc % 1000 === 0 ? 0 : 1) + ' kHz' : f.fc + ' Hz';
-      const gainStr = f.gain != null ? (f.gain > 0 ? '+' : '') + Number(f.gain).toFixed(1) + ' dB' : '—';
+      const gainStr = f.gain != null ? (f.gain > 0 ? '+' : '') + Number(f.gain).toFixed(1) + ' dB' : '–';
       const gainClass = f.gain > 0 ? 'peq-gain-pos' : f.gain < 0 ? 'peq-gain-neg' : '';
-      const qStr = f.q != null ? Number(f.q).toFixed(2) : '—';
+      const qStr = f.q != null ? Number(f.q).toFixed(2) : '–';
       return `<tr>
         <td>${esc(f.type || '')}</td>
         <td>${freq}</td>
@@ -18592,7 +18592,7 @@ async function exportBackup() {
     setTimeout(() => URL.revokeObjectURL(url), 30000);
     toast('Backup exported.', 'success');
   } catch {
-    toast('Export failed — check the server is running.');
+    toast('Export failed. Check the server is running.');
   }
 }
 
@@ -18665,7 +18665,7 @@ function _renderExportCsvModal() {
     row.setAttribute('aria-checked', checked ? 'true' : 'false');
     if (locked) {
       row.setAttribute('aria-disabled', 'true');
-      row.title = 'Always included — used to match rows if you re-import this CSV';
+      row.title = 'Always included, used to match rows if you re-import this CSV';
     } else {
       row.tabIndex = 0;
       row.onclick = () => _toggleExportCsvColumn(key);
@@ -18792,7 +18792,7 @@ async function exportCsv() {
     setTimeout(() => URL.revokeObjectURL(url), 30000);
     toast('Library exported.', 'success');
   } catch {
-    toast('Export failed — check the server is running.');
+    toast('Export failed. Check the server is running.');
   }
 }
 
@@ -18964,7 +18964,7 @@ function _csvImportRenderStep() {
     if (el) el.style.display = (i === _csvImport.step) ? '' : 'none';
   }
   const sub = document.getElementById('csv-import-step-sub');
-  if (sub) sub.textContent = `Step ${_csvImport.step} of 6 — ${_CSV_IMPORT_STEP_LABELS[_csvImport.step - 1]}`;
+  if (sub) sub.textContent = `Step ${_csvImport.step} of 6: ${_CSV_IMPORT_STEP_LABELS[_csvImport.step - 1]}`;
 
   const backBtn = document.getElementById('csv-import-back-btn');
   const nextBtn = document.getElementById('csv-import-next-btn');
@@ -19298,7 +19298,7 @@ function _csvImportUpdateProgress(s) {
   const msg = document.getElementById('csv-import-progress-msg');
   const pct = s.total > 0 ? Math.round((s.done / s.total) * 100) : 0;
   if (bar) bar.style.width = pct + '%';
-  if (msg) msg.textContent = `${s.done || 0} / ${s.total || 0} tracks — ${s.updated || 0} updated, ${s.skipped || 0} skipped`;
+  if (msg) msg.textContent = `${s.done || 0} / ${s.total || 0} tracks: ${s.updated || 0} updated, ${s.skipped || 0} skipped`;
 }
 
 async function csvImportCancelApply() {
@@ -19311,7 +19311,7 @@ function _csvImportShowResults(s) {
   const summaryEl = document.getElementById('csv-import-results-summary');
   if (summaryEl) {
     const verb = s.status === 'cancelled' ? 'Cancelled' : (s.status === 'error' ? 'Something went wrong' : 'Done');
-    summaryEl.textContent = `${verb} — ${s.updated || 0} of ${s.total || 0} tracks updated${s.skipped ? `, ${s.skipped} skipped` : ''}.`;
+    summaryEl.textContent = `${verb}: ${s.updated || 0} of ${s.total || 0} tracks updated${s.skipped ? `, ${s.skipped} skipped` : ''}.`;
   }
   const errorsWrap = document.getElementById('csv-import-results-errors');
   if (errorsWrap) {
@@ -19395,10 +19395,10 @@ async function importBackup(input) {
       toast('Backup restored. Reloading...', 'success');
       setTimeout(() => location.reload(), 1500);
     } else {
-      toast(data.error || 'Restore failed — the file may be corrupt.');
+      toast(data.error || 'Restore failed. The file may be corrupt.');
     }
   } catch(e) {
-    toast('Restore failed — the file may be corrupt.');
+    toast('Restore failed. The file may be corrupt.');
   }
   input.value = '';
 }
@@ -20418,7 +20418,7 @@ async function runHealthCheck() {
       ${dot(!!ipodSync.ok)}
       <div class="health-item-body">
         <div class="health-item-label">iPod Sync (ffmpeg)</div>
-        <div class="health-item-detail">${ipodSync.ffmpeg_available ? `Found${ipodSync.ffmpeg_path ? `<br>${esc(ipodSync.ffmpeg_path)}` : ''}` : 'Not found — required to sync FLAC to click-wheel iPods'}${ipodSyncActions}</div>
+        <div class="health-item-detail">${ipodSync.ffmpeg_available ? `Found${ipodSync.ffmpeg_path ? `<br>${esc(ipodSync.ffmpeg_path)}` : ''}` : 'Not found, required to sync FLAC to click-wheel iPods'}${ipodSyncActions}</div>
       </div>
     </div>`;
 
@@ -21116,12 +21116,12 @@ function _renderDupGroups(groups) {
 function _renderDupGroupCard(g) {
   const isDap = _dupScope === 'dap';
   const warn = g.duration_warning
-    ? `<span class="dup-duration-warn" title="Duration differs by more than 5 seconds — may be different versions">⚠ Duration mismatch</span>`
+    ? `<span class="dup-duration-warn" title="Duration differs by more than 5 seconds, may be different versions">⚠ Duration mismatch</span>`
     : '';
 
   const rows = (g.tracks || []).map((t, i) => {
     const size = _formatBytes(t.file_size || 0);
-    const dur = t.duration ? _fmtDuration(t.duration) : '—';
+    const dur = t.duration ? _fmtDuration(t.duration) : '–';
     const path = isDap ? (t.rel_path || t.path || '') : (t.path || '');
     // tid = track ID for library (used for DB operations), path-encoded for DAP
     const tid = isDap ? encodeURIComponent(path) : esc(t.id);
@@ -21130,11 +21130,11 @@ function _renderDupGroupCard(g) {
     // "Unique" fires immediately and removes the row; Keep/Remove are deferred
     const uniqueBtn = !isDap
       ? `<button class="dup-action-btn unique"
-           title="This is a unique version (e.g. live recording or remix with same tags) — exclude it from this group permanently"
+           title="This is a unique version (e.g. live recording or remix with same tags), exclude it from this group permanently"
            onclick="App._dupMarkNotDuplicate('${esc(g.key)}','${tid}',this)">Unique</button>`
       : '';
     const actionPills = `<div class="dup-row-action-group" data-group="${esc(g.key)}" data-id="${tid}">
-      <button class="dup-action-btn keep"   onclick="App._dupRowAction(this,'keep')"   title="Keep this copy — use with Consolidate to update playlists">Keep</button>
+      <button class="dup-action-btn keep"   onclick="App._dupRowAction(this,'keep')"   title="Keep this copy, use with Consolidate to update playlists">Keep</button>
       <button class="dup-action-btn remove" onclick="App._dupRowAction(this,'remove')" title="Mark this copy for deletion">Remove</button>${uniqueBtn}
     </div>`;
 
@@ -21156,8 +21156,8 @@ function _renderDupGroupCard(g) {
 
     return `<tr class="dup-track-row" data-idx="${i}">
       <td class="dup-cell-action">${actionPills}</td>
-      <td class="dup-cell-fmt">${esc(t.format || '—')}</td>
-      <td class="dup-cell-bitrate">${t.bitrate ? t.bitrate + ' kbps' : '—'}</td>
+      <td class="dup-cell-fmt">${esc(t.format || '–')}</td>
+      <td class="dup-cell-bitrate">${t.bitrate ? t.bitrate + ' kbps' : '–'}</td>
       <td class="dup-cell-dur">${dur}</td>
       <td class="dup-cell-size">${size}</td>
       <td class="dup-cell-path"><span class="dup-path-text" title="${esc(path)}">${esc(path)}</span></td>
@@ -21168,22 +21168,22 @@ function _renderDupGroupCard(g) {
   const actionsHtml = isDap
     ? `<button class="btn-secondary dup-btn" onclick="App._dupDapDelete('${esc(g.key)}')">Delete marked from DAP</button>`
     : `<button class="btn-secondary dup-btn"
-         title="Delete all tracks marked Remove — choose Trash or move to a folder"
+         title="Delete all tracks marked Remove, choose Trash or move to a folder"
          onclick="App._dupDelete('${esc(g.key)}')">Delete marked</button>
        <button class="btn-secondary dup-btn"
-         title="Keep the track marked Keep and delete all others — also updates playlist references so you don't lose any songs"
+         title="Keep the track marked Keep and delete all others, also updates playlist references so you don't lose any songs"
          onclick="App._dupConsolidate('${esc(g.key)}')">Consolidate &amp; fix playlists</button>`;
 
   return `<div class="dup-group-card" id="dup-group-${esc(g.key)}">
     <div class="dup-group-header">
       <div class="dup-group-title">
-        <span class="dup-group-name">${esc(g.title || '—')}</span>
+        <span class="dup-group-name">${esc(g.title || '–')}</span>
         <span class="dup-group-meta">${esc(g.artist || '')}${g.album ? ' · ' + esc(g.album) : ''}</span>
         ${warn}
       </div>
       <div class="dup-group-actions-right">
         <span class="dup-count-badge">${(g.tracks || []).length} copies</span>
-        <button class="dup-ignore-btn" title="Hide this group — the files stay, but this group won't appear in future scans" onclick="App._dupIgnore('${esc(g.key)}')">Ignore group</button>
+        <button class="dup-ignore-btn" title="Hide this group. The files stay, but this group won't appear in future scans" onclick="App._dupIgnore('${esc(g.key)}')">Ignore group</button>
       </div>
     </div>
     <table class="dup-group-table tb-table tb-table-density-compact">
@@ -21433,7 +21433,7 @@ async function _dupConsolidate(key) {
     const allGroups = document.querySelectorAll(`.dup-row-action-group[data-group="${key}"]`);
     deleteIds = Array.from(allGroups).map(g => g.dataset.id).filter(id => id !== keepId);
   }
-  if (!deleteIds.length) { toast('Nothing to remove — only one track', 'error'); return; }
+  if (!deleteIds.length) { toast('Nothing to remove, only one track', 'error'); return; }
 
   const result = await _showDupActionModal('Consolidate Tracks', `Keep selected track and remove ${deleteIds.length} other${deleteIds.length !== 1 ? 's' : ''}? Playlist references will be updated.`);
   if (!result) return;
@@ -21617,7 +21617,7 @@ async function _dupUndoNotDuplicate(groupKey, trackId) {
       method: 'POST',
       body: { group_key: groupKey, track_id: trackId }
     });
-    toast('Restored — rescan to see updated groups');
+    toast('Restored. Rescan to see updated groups');
     _loadDupSkipped();
   } catch(e) { toast('Failed to undo', 'error'); }
 }
@@ -21628,7 +21628,7 @@ async function _dupUndoIgnore(groupKey) {
       method: 'POST',
       body: { group_key: groupKey }
     });
-    toast('Group restored — rescan to see it again');
+    toast('Group restored. Rescan to see it again');
     _loadDupSkipped();
   } catch(e) { toast('Failed to restore group', 'error'); }
 }
@@ -22961,7 +22961,7 @@ function _orgWizSyncFooter() {
       if (note) note.textContent = `Fix ${warnings} warning${warnings !== 1 ? 's' : ''} before applying`;
     } else if (total === 0) {
       if (nextBtn) nextBtn.disabled = true;
-      if (note) note.textContent = 'Everything already matches — nothing to apply';
+      if (note) note.textContent = 'Everything already matches, nothing to apply';
     } else {
       const map = { keep_both: 'Keep both (add suffix)', skip: 'Skip existing', overwrite: 'Overwrite existing' };
       if (note) note.textContent = `Conflicts resolved by "${map[_orgWiz.conflict] || 'Keep both'}"`;
@@ -24609,7 +24609,7 @@ function _discoverCardHtml(a) {
     : '';
   const trackCount = Number(a.track_count || 0);
   const meta = [a.year, a.genre, `${trackCount} track${trackCount === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
-  return `<div class="album-card discover-album-card" data-artist="${esc(a.artist)}" data-album="${esc(a.album)}" onclick="App._coverageOpenAlbum(this)" title="${esc(a.artist)} — ${esc(a.album)}">
+  return `<div class="album-card discover-album-card" data-artist="${esc(a.artist)}" data-album="${esc(a.album)}" onclick="App._coverageOpenAlbum(this)" title="${esc(a.artist)} · ${esc(a.album)}">
     <div class="album-thumb" style="background:${bg}">
       ${img}
       <div class="card-thumb-overlay">
@@ -26031,7 +26031,7 @@ function _renderInsightsSonicMap(d) {
               title: () => '',
               label: ctx => {
                 const p = ctx.raw;
-                const name = p.title ? `${p.title}${p.artist ? ' — ' + p.artist : ''}` : 'Unknown track';
+                const name = p.title ? `${p.title}${p.artist ? ' · ' + p.artist : ''}` : 'Unknown track';
                 return [name, `${ctx.dataset.label} · Select for actions`];
               },
             },
@@ -26098,7 +26098,7 @@ async function _pollSonicMapAnalysis() {
 
   if (s.status === 'error') {
     toast(s.error || 'Sonic embedding analysis failed.');
-    _updateSonicMapStatus(s.error || 'Analysis failed — try again.', false);
+    _updateSonicMapStatus(s.error || 'Analysis failed. Try again.', false);
     return;
   }
 
@@ -26417,7 +26417,7 @@ async function runMatchingAnalysis() {
     if (ovRes.ok) _renderInsightsMatchOverview(await ovRes.json());
     else          _renderInsightsMatchOverview(null);
   } catch (e) {
-    _renderInsightsMatchOverview(null, 'Network error — is the server running?');
+    _renderInsightsMatchOverview(null, 'Network error, is the server running?');
   }
 }
 
@@ -26590,7 +26590,7 @@ function _renderIemDetail(iemId, container) {
         <div class="iemfit-detail-section">
           <div class="iemfit-detail-section-hdr">
             <span class="iemfit-detail-section-title tb-section-title">Genre Scores</span>
-            <span class="iemfit-detail-avg" id="iemfit-genre-avg-${esc(iemId)}">Avg —</span>
+            <span class="iemfit-detail-avg" id="iemfit-genre-avg-${esc(iemId)}">Avg –</span>
             <span class="iemfit-detail-section-hint">How well this IEM matches each genre in your library</span>
           </div>
           <div id="iemfit-heatmap-${esc(iemId)}" class="iemfit-heatmap-body"></div>
@@ -26598,7 +26598,7 @@ function _renderIemDetail(iemId, container) {
         <div class="iemfit-detail-section">
           <div class="iemfit-detail-section-hdr">
             <span class="iemfit-detail-section-title tb-section-title">Weak Genre Coverage</span>
-            <span class="iemfit-detail-avg" id="iemfit-weak-avg-${esc(iemId)}">Avg —</span>
+            <span class="iemfit-detail-avg" id="iemfit-weak-avg-${esc(iemId)}">Avg –</span>
             <span class="iemfit-detail-section-hint">Genres where this IEM is the weakest match for your library</span>
           </div>
           <div id="iemfit-bs-${esc(iemId)}" class="iemfit-bs-body"></div>
@@ -26624,8 +26624,8 @@ function _updateIemSectionAverages(iemId, peqScores12 = null) {
   const weakAvgEl = document.getElementById(`iemfit-weak-avg-${iemId}`);
   if (!genreAvgEl && !weakAvgEl) return;
   if (!_iemFitMatrixData || !_iemFitMatrixData.matrix) {
-    if (genreAvgEl) genreAvgEl.textContent = 'Avg —';
-    if (weakAvgEl) weakAvgEl.textContent = 'Avg —';
+    if (genreAvgEl) genreAvgEl.textContent = 'Avg –';
+    if (weakAvgEl) weakAvgEl.textContent = 'Avg –';
     return;
   }
 
@@ -26638,8 +26638,8 @@ function _updateIemSectionAverages(iemId, peqScores12 = null) {
     .filter(v => v !== null && Number.isFinite(v));
 
   if (!scores.length) {
-    if (genreAvgEl) genreAvgEl.textContent = 'Avg —';
-    if (weakAvgEl) weakAvgEl.textContent = 'Avg —';
+    if (genreAvgEl) genreAvgEl.textContent = 'Avg –';
+    if (weakAvgEl) weakAvgEl.textContent = 'Avg –';
     return;
   }
 
@@ -27777,7 +27777,7 @@ function openAlbumArtModal() {
   _albumArtSelectedIndex = null;
 
   document.getElementById('album-art-modal-subtitle').textContent =
-    `${state.artist} — ${state.album}`;
+    `${state.artist} · ${state.album}`;
 
   // Reset candidate grid, error, buttons, file input
   _setArtworkCandidateHint('aa', 'Select a service and click Search to find covers.');
@@ -28361,20 +28361,20 @@ function _updateArtistBatchBanner(s) {
       title: `Artist photo fetch running: ${Number(s.done || 0).toLocaleString()} / ${Number(s.total || 0).toLocaleString()}`,
     });
     if (bar) bar.style.width = pct + '%';
-    if (msg) msg.textContent = `Searching… ${s.done.toLocaleString()} / ${s.total.toLocaleString()} artists — ${s.fetched} found, ${s.skipped} skipped`;
+    if (msg) msg.textContent = `Searching… ${s.done.toLocaleString()} / ${s.total.toLocaleString()} artists: ${s.fetched} found, ${s.skipped} skipped`;
   } else if (s.status === 'done') {
     _setSettingsStatus('artwork');
     if (bar) bar.style.width = '100%';
     if (msg) {
       const errNote = s.failed > 0 ? `, ${s.failed} not found` : '';
-      msg.textContent = `Done — ${s.fetched} new photos${errNote}, ${s.skipped} already had photos`;
+      msg.textContent = `Done: ${s.fetched} new photos${errNote}, ${s.skipped} already had photos`;
     }
     if (startBtn) startBtn.disabled = false;
     if (!_artistBatchBannerDismissed) _scheduleArtistBatchBannerHide(banner);
   } else if (s.status === 'cancelled') {
     _setSettingsStatus('artwork');
     if (bar) bar.style.width = '0%';
-    if (msg) msg.textContent = `Cancelled after ${s.done.toLocaleString()} artists — ${s.fetched} photos saved`;
+    if (msg) msg.textContent = `Cancelled after ${s.done.toLocaleString()} artists: ${s.fetched} photos saved`;
     if (startBtn) startBtn.disabled = false;
     banner.style.display = 'none';
   } else if (s.status === 'error') {
@@ -28616,7 +28616,7 @@ async function _checkRgMissingAndNotify() {
       const count  = info.pending.toLocaleString();
       const plural = info.pending === 1 ? '' : 's';
       _toastEnqueue({
-        msg:      `${count} track${plural} missing Replay Gain data — tap to fix`,
+        msg:      `${count} track${plural} missing Replay Gain data, tap to fix`,
         type:     'warning',
         duration: 6000,
         action() {
