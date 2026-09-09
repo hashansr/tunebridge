@@ -3,6 +3,8 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+
+## v0.681-rc.090926-1207 · 2026-09-09
 - Add: The Sync wizard now warns you upfront, on the device picker (step 1), if a connected DAP or iPod's storage is mounted read-only — showing a "Read-only" chip on the device and an explanation banner — instead of only surfacing the problem after a failed sync.
 
 ## v0.680 · 2026-09-09
