@@ -22238,6 +22238,16 @@ body.is-col-resizing {
   color: var(--accent-success);
   flex-shrink: 0;
 }
+.sw-done-hero--warn {
+  background: linear-gradient(180deg, rgba(255,184,92,0.08), rgba(28,27,27,0.55));
+  border-color: rgba(255,184,92,0.22);
+}
+.sw-done-check-circle--warn {
+  background: rgba(255,184,92,0.12);
+  border-color: rgba(255,184,92,0.28);
+  color: var(--accent-warning);
+}
+.sw-overline--warn { color: var(--accent-warning); }
 .sw-done-hero-text { min-width: 0; }
 .sw-done-hero-title {
   font-size: 17px;

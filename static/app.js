@@ -11430,23 +11430,78 @@ function _swRenderDone() {
   const payload  = _sw.executedPayload ?? {};
   const devName  = _sw.device?.name ?? 'Device';
   const errors   = status.errors ?? [];
+  const hasErrors = errors.length > 0;
+
+  // Backend errors are formatted as "<id>: <reason>" (see sync_execute in
+  // app.py) — match on that prefix to tell which requested items actually
+  // failed to copy, instead of assuming every requested item succeeded.
+  const errorFor = (id) => {
+    const prefix = `${id}: `;
+    const hit = errors.find(e => typeof e === 'string' && e.startsWith(prefix));
+    return hit ? hit.slice(prefix.length) : null;
+  };
+  const partition = (arr) => {
+    const ok = [], failed = [];
+    for (const i of arr) {
+      const reason = errorFor(i.id);
+      (reason ? failed : ok).push(reason ? { ...i, _failReason: reason } : i);
+    }
+    return { ok, failed };
+  };
 
   // Derive actual counts from what was submitted
-  const addedItems   = (_sw.proposal?.toDevice?.items ?? [])
+  const addedItemsAll   = (_sw.proposal?.toDevice?.items ?? [])
     .concat(_sw.proposal?.toDeviceLyrics?.items ?? [])
     .concat(_sw.proposal?.tagsUpdated?.items ?? [])
     .filter(i => (payload.add_to_device_paths ?? []).includes(i.id));
-  const copyItems    = (_sw.proposal?.onDevice?.items ?? [])
+  const copyItemsAll    = (_sw.proposal?.onDevice?.items ?? [])
     .filter(i => (payload.copy_to_local_paths ?? []).includes(i.id));
-  const deleteItems  = (_sw.proposal?.onDevice?.items ?? [])
+  const deleteItemsAll  = (_sw.proposal?.onDevice?.items ?? [])
     .filter(i => (payload.delete_on_device_paths ?? []).includes(i.id));
+  const { ok: addedItems, failed: addedFailed }   = partition(addedItemsAll);
+  const { ok: copyItems, failed: copyFailed }     = partition(copyItemsAll);
+  const { ok: deleteItems, failed: deleteFailed } = partition(deleteItemsAll);
+  const failedItems  = [...addedFailed, ...copyFailed, ...deleteFailed];
   const plCount      = (payload.playlist_ids ?? []).length;
-  const totalOps     = addedItems.length + copyItems.length + deleteItems.length + plCount;
+  const totalOps     = addedItemsAll.length + copyItemsAll.length + deleteItemsAll.length + plCount;
   const doneOps      = Math.max(0, totalOps - errors.length);
 
-  // Hero title
+  // Hero badge / icon / title — the check-circle + "COMPLETE" badge otherwise
+  // always read as a plain success regardless of whether anything failed.
+  const heroEl = document.getElementById('sw-done-hero');
+  heroEl?.classList.toggle('sw-done-hero--warn', hasErrors);
+  const circleEl = document.getElementById('sw-done-check-circle');
+  if (circleEl) {
+    circleEl.classList.toggle('sw-done-check-circle--warn', hasErrors);
+    circleEl.innerHTML = hasErrors
+      ? '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z"/></svg>'
+      : '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  }
+  const badgeEl = document.getElementById('sw-done-badge');
+  if (badgeEl) {
+    badgeEl.textContent = !hasErrors ? 'COMPLETE' : doneOps > 0 ? 'COMPLETED WITH ERRORS' : 'FAILED';
+    badgeEl.classList.toggle('sw-overline--success', !hasErrors);
+    badgeEl.classList.toggle('sw-overline--warn', hasErrors);
+  }
   const titleEl = document.getElementById('sw-done-title');
-  if (titleEl) titleEl.textContent = `${devName} is up to date`;
+  if (titleEl) {
+    titleEl.textContent = !hasErrors
+      ? `${devName} is up to date`
+      : doneOps > 0
+      ? `${devName} synced with errors`
+      : `${devName} sync failed`;
+  }
+  // The shared step header ("5 / 5 · Sync complete") is set generically by
+  // _swGoTo before this runs — override it here when the sync had failures.
+  if (hasErrors) {
+    const stepTitleEl = document.getElementById('sw-title');
+    if (stepTitleEl) stepTitleEl.textContent = doneOps > 0 ? 'Sync completed with errors' : 'Sync failed';
+    const stepSubEl = document.getElementById('sw-step-sub');
+    if (stepSubEl) {
+      stepSubEl.textContent = 'Some items did not make it to your device — see details below.';
+      stepSubEl.style.display = '';
+    }
+  }
 
   // Hero meta
   const metaEl = document.getElementById('sw-done-meta');
@@ -11458,7 +11513,7 @@ function _swRenderDone() {
     metaEl.innerHTML = parts.map((p, i) => i === 0 ? p : `<span class="sw-done-meta-dot"></span>${p}`).join('');
   }
 
-  // Stat tiles
+  // Stat tiles — reflect items that actually copied, not just what was requested
   const tilesEl = document.getElementById('sw-stat-tiles');
   if (tilesEl) {
     const tiles = [
@@ -11479,6 +11534,7 @@ function _swRenderDone() {
   const changelogEl = document.getElementById('sw-changelog');
   if (changelogEl) {
     const groups = [];
+    if (failedItems.length) groups.push({ dot: 'danger',  label: `Failed to sync ${failedItems.length} item${failedItems.length===1?'':'s'}`, items: failedItems, showReason: true });
     if (addedItems.length)  groups.push({ dot: 'accent',   label: `Added ${addedItems.length} track${addedItems.length===1?'':'s'} to ${devName}`, items: addedItems });
     if (copyItems.length)   groups.push({ dot: 'success',  label: `Copied ${copyItems.length} track${copyItems.length===1?'':'s'} to library`,       items: copyItems });
     if (deleteItems.length) groups.push({ dot: 'danger',   label: `Removed ${deleteItems.length} track${deleteItems.length===1?'':'s'} from device`,  items: deleteItems });
@@ -11491,9 +11547,9 @@ function _swRenderDone() {
           ${_swRowThumb(t)}
           <div class="sw-change-text-col">
             <div class="sw-change-title">${esc(t.title ?? t)}</div>
-            <div class="sw-change-sub">${esc(t.artist ?? '')}</div>
+            <div class="sw-change-sub">${esc(g.showReason ? (t._failReason || '') : (t.artist ?? ''))}</div>
           </div>
-          <span class="sw-change-size">${esc(_swItemSizeLabel(t))}</span>
+          ${g.showReason ? '' : `<span class="sw-change-size">${esc(_swItemSizeLabel(t))}</span>`}
         </div>`).join('')}
         ${g.items.length > 4 ? `<div class="sw-change-more">+${g.items.length - 4} more</div>` : ''}
       </div>`).join('')
@@ -11515,8 +11571,15 @@ function _swRenderDone() {
 
   // Footer
   const footerMsg = document.getElementById('sw-footer-msg');
-  if (footerMsg) footerMsg.textContent = 'Safe to disconnect.';
-  document.getElementById('sw-footer-status')?.classList.add('sw-footer-status--success');
+  const footerStatusEl = document.getElementById('sw-footer-status');
+  footerStatusEl?.classList.remove('sw-footer-status--success', 'sw-footer-status--warn');
+  if (hasErrors) {
+    if (footerMsg) footerMsg.textContent = `${errors.length} item${errors.length===1?'':'s'} failed to copy — check the errors above before disconnecting.`;
+    footerStatusEl?.classList.add('sw-footer-status--warn');
+  } else {
+    if (footerMsg) footerMsg.textContent = 'Safe to disconnect.';
+    footerStatusEl?.classList.add('sw-footer-status--success');
+  }
 
   // Eject button
   const ejectWrap = document.getElementById('sw-eject-wrap');

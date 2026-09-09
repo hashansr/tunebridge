@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: The Sync wizard's final "Done" screen no longer shows a green "up to date" success state when files actually failed to copy (e.g. a read-only or disconnected SD card) — it now shows a clear failure/warning state, lists exactly which tracks failed and why, and warns before you disconnect the device.
 
 ## v0.679-rc.210826-1245 · 2026-08-21
 - Add: Playlist import now supports Apple Music/iTunes XML playlist exports (e.g. from SongShift), not just M3U/M3U8.
