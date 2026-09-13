@@ -3,6 +3,7 @@
 ## [Unreleased]
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
+- Fix: TuneBridge no longer shows a hard "failed to start" error the first time it's slow to come up right after a Mac restart (e.g. when macOS reopens it automatically) — it now shows a brief loading screen and gives the backend up to 45 seconds (was 15) before giving up, and startup progress is now logged to `~/Library/Application Support/TuneBridge/startup.log` for diagnosis if it ever does time out.
 
 ## v0.682-rc.090926-1230 · 2026-09-09
 - Change: Cleaned up em dashes throughout the app's UI text (messages, tooltips, labels) and native error dialogs, replacing them with plainer punctuation or separators.

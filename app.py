@@ -45,6 +45,25 @@ MPV_AVAILABLE = False
 _mpv_import_error = None
 _mpv_import_lock = threading.Lock()
 
+# ── Startup diagnostics ────────────────────────────────────────────────────────
+# Module-level import (this file) is where a cold, post-reboot launch can stall
+# silently for long enough that tunebridge_gui.py's health-check gives up —
+# there is no exception to show in that case, just a stuck checkpoint. This log
+# records timestamps for each startup phase so a repeat can be diagnosed.
+_STARTUP_LOG_PATH = Path.home() / 'Library' / 'Application Support' / 'TuneBridge' / 'startup.log'
+
+
+def _log_startup(msg: str) -> None:
+    try:
+        _STARTUP_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(_STARTUP_LOG_PATH, 'a', encoding='utf-8') as f:
+            f.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")} [pid {os.getpid()}] {msg}\n')
+    except Exception:
+        pass
+
+
+_log_startup('module import started')
+
 
 def _runtime_env():
     """Build a process env with common Homebrew locations available in PATH.
@@ -197,7 +216,9 @@ def _mpv_runtime_status():
     }
 
 
+_log_startup('mpv backend refresh: begin')
 _refresh_mpv_backend(force=True)
+_log_startup(f'mpv backend refresh: done (available={MPV_AVAILABLE})')
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
@@ -18143,10 +18164,15 @@ def _backfill_deleted_from_library_json():
 
 
 # ── SQLite initialization ─────────────────────────────────────────────────────
+_log_startup('sqlite migration: begin')
 if not _migrate.ensure_db(DATA_DIR):
+    _log_startup('sqlite migration: FAILED')
     raise RuntimeError('SQLite migration failed; startup aborted (JSON fallback removed).')
+_log_startup('sqlite migration: done')
 
+_log_startup('load_library: begin')
 load_library()
+_log_startup('load_library: done')
 _backfill_deleted_from_library_json()
 try:
     _maybe_autostart_embedding_analysis(reason='startup')
@@ -18820,6 +18846,8 @@ def _artwork_backfill_thread():
 
 threading.Thread(target=_artwork_backfill_thread, daemon=True).start()
 _start_macos_device_watcher()
+
+_log_startup('module import finished — routes registered')
 
 
 if __name__ == '__main__':

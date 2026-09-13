@@ -71,6 +71,7 @@ BASE_PORT = int(os.environ.get("TUNEBRIDGE_PORT", 5001))
 PORT = BASE_PORT
 URL  = f"http://localhost:{PORT}"
 _SERVER_STARTUP_ERROR = None
+_STARTUP_LOG_PATH = Path.home() / 'Library' / 'Application Support' / 'TuneBridge' / 'startup.log'
 
 
 _ALLOWED_OPEN_URL_PREFIXES = (
@@ -222,7 +223,7 @@ def _find_fallback_port(start: int) -> int:
     raise RuntimeError("No available TuneBridge local port found.")
 
 
-def _wait_for_server(timeout: int = 15) -> bool:
+def _wait_for_server(timeout: int = 45) -> bool:
     """Poll until a healthy server responds on PORT. Returns True on success."""
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -570,34 +571,23 @@ def main():
     if not reusing:
         server_thread = threading.Thread(target=_start_server, daemon=True)
         server_thread.start()
-        if not _wait_for_server():
-            # Last-chance check: maybe a concurrent launch beat us to the port
-            if not _health_check():
-                detail = _SERVER_STARTUP_ERROR or "No backend response before startup timeout."
-                detail_html = (
-                    detail.replace("&", "&amp;")
-                          .replace("<", "&lt;")
-                          .replace(">", "&gt;")
-                )
-                webview.create_window(
-                    "TuneBridge: Error",
-                    html="<h2 style='font-family:sans-serif;color:#c00;padding:40px'>"
-                         "TuneBridge failed to start.<br>"
-                         "<small>Check that port 5001 is not blocked.</small></h2>"
-                         "<pre style='font-family:monospace;color:#333;padding:0 40px;white-space:pre-wrap'>"
-                         f"{detail_html}</pre>",
-                )
-                webview.start()
-                return
 
-    # Per-launch query param prevents WKWebView from reusing a stale cached
-    # document shell on cold start.
-    app_url = f"{URL}/?v={int(time.time())}"
-
+    # Show a window immediately instead of leaving the user staring at nothing
+    # while the backend comes up — right after a Mac restart, a relaunched app
+    # can be slow for reasons that have nothing to do with TuneBridge itself
+    # (Gatekeeper re-checking dylibs it hasn't loaded since boot, every other
+    # login item competing for disk I/O, an external music drive still
+    # remounting). The window swaps to the real app once healthy, or to the
+    # failure page if it truly never comes up.
     native_api = _TuneBridgeApi()
     window = webview.create_window(
         title="TuneBridge",
-        url=app_url,
+        html="<div style='font-family:-apple-system,sans-serif;height:100vh;"
+             "display:flex;flex-direction:column;align-items:center;justify-content:center;"
+             "background:#131313;color:#adc6ff;margin:0'>"
+             "<h2 style='margin:0 0 8px;font-weight:600'>Starting TuneBridge…</h2>"
+             "<p style='color:#8a8a8a;font-size:13px;margin:0'>"
+             "This can take a bit longer right after a Mac restart.</p></div>",
         width=1280,
         height=800,
         min_size=(900, 600),
@@ -605,6 +595,33 @@ def main():
         js_api=native_api,
     )
     native_api.window = window
+
+    def _bootstrap_content():
+        ok = reusing or _wait_for_server()
+        if not ok and not _health_check():
+            # Last-chance check: maybe a concurrent launch beat us to the port
+            detail = _SERVER_STARTUP_ERROR or "No backend response before startup timeout."
+            detail_html = (
+                detail.replace("&", "&amp;")
+                      .replace("<", "&lt;")
+                      .replace(">", "&gt;")
+            )
+            window.load_html(
+                "<h2 style='font-family:sans-serif;color:#c00;padding:40px'>"
+                "TuneBridge failed to start.<br>"
+                "<small>Check that port 5001 is not blocked.</small></h2>"
+                "<pre style='font-family:monospace;color:#333;padding:0 40px;white-space:pre-wrap'>"
+                f"{detail_html}</pre>"
+                "<p style='font-family:sans-serif;color:#888;padding:0 40px;font-size:12px'>"
+                f"Startup diagnostics: {_STARTUP_LOG_PATH}</p>"
+            )
+            return
+        # Per-launch query param prevents WKWebView from reusing a stale cached
+        # document shell on cold start.
+        app_url = f"{URL}/?v={int(time.time())}"
+        window.load_url(app_url)
+
+    threading.Thread(target=_bootstrap_content, daemon=True).start()
 
     # ── Player state persistence ─────────────────────────────────────────────
     # IMPORTANT: Do NOT call evaluate_js from window.events.closing.
