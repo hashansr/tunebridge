@@ -11512,7 +11512,7 @@ def _ipod_itunesdb_path(mount_path):
     return p if p.exists() else None
 
 
-def _ipod_refresh_scan_cache(iid, itdb_path):
+def _ipod_refresh_scan_cache(iid, itdb_path, mount_path=None):
     """Re-parse the on-device iTunesDB and overwrite the cached
     ipod_tracks/ipod_playlists rows to match. Shared by the read-only
     scan route and by sync execute (right after a write): re-parsing our
@@ -11557,6 +11557,16 @@ def _ipod_refresh_scan_cache(iid, itdb_path):
     fresh_ipod = next((i for i in load_ipods() if i['id'] == iid), None)
     if fresh_ipod:
         fresh_ipod['hashing_scheme'] = info.hashing_scheme
+        if mount_path:
+            # Best-effort refresh from the device's own SysInfo file. Only
+            # overwrites when a GUID is actually found — never clears an
+            # existing value just because this scan's read failed, since a
+            # manually-entered fallback (Gear -> iPod -> Config) may be the
+            # only reason HASH58 sync works at all for this device.
+            from ipod.sysinfo import read_firewire_guid
+            detected_fw = read_firewire_guid(mount_path)
+            if detected_fw:
+                fresh_ipod['firewire_id'] = detected_fw
         save_single_ipod(fresh_ipod)
 
     return info, tracks, playlists
@@ -11716,6 +11726,21 @@ def update_ipod(iid):
     for k in ('name', 'device_class', 'transcode_format'):
         if k in data:
             ipod[k] = data[k]
+    if 'firewire_id' in data:
+        # Manual escape hatch for HASH58 devices (iPod Classic, Nano 3G/4G)
+        # whose SysInfo file wasn't auto-readable during a scan (see
+        # ipod/sysinfo.py) - lets a user paste the GUID in themselves
+        # rather than being stuck unable to sync at all. Empty clears it
+        # back to "not set"; anything else must be a plausible hex GUID.
+        raw = data['firewire_id']
+        if not raw:
+            ipod['firewire_id'] = ''
+        else:
+            from ipod.sysinfo import normalize_firewire_guid
+            normalized = normalize_firewire_guid(raw)
+            if not normalized:
+                return jsonify({'error': 'FireWire ID must be 16-40 hex characters (8-20 bytes), e.g. from the SysInfo file on the device'}), 400
+            ipod['firewire_id'] = normalized
     save_single_ipod(ipod)
     return jsonify(ipod)
 
@@ -11769,7 +11794,7 @@ def scan_ipod(iid):
     def do_scan():
         global ipod_scan_state
         try:
-            info, tracks, playlists = _ipod_refresh_scan_cache(iid, itdb_path)
+            info, tracks, playlists = _ipod_refresh_scan_cache(iid, itdb_path, mount_path=resolved_mount)
             ipod_scan_state = {
                 'status': 'done', 'ipod_id': iid,
                 'message': f'{len(tracks)} tracks, {len(playlists)} playlists', 'error': '',
@@ -12798,7 +12823,7 @@ def ipod_sync_execute(iid):
             # check on the write itself (a reader failure here means the
             # writer produced something invalid, and the backup above is
             # the way back).
-            _ipod_refresh_scan_cache(iid, itdb_path)
+            _ipod_refresh_scan_cache(iid, itdb_path, mount_path=resolved_mount)
 
             # Persist the (ipod_id, local_track_id) -> device_track_id link
             # for every track added or updated this run, with a fresh tags
@@ -12948,7 +12973,7 @@ def restore_ipod_backup(iid, backup_id):
         write_ipod_itunesdb_atomic(str(live_path), backup_path.read_bytes())
 
         if not is_artwork:
-            _ipod_refresh_scan_cache(iid, live_path)
+            _ipod_refresh_scan_cache(iid, live_path, mount_path=resolved_mount)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

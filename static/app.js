@@ -13306,11 +13306,13 @@ function _renderIpodDetail() {
     <span class="ipod-detail-chevron${isOpen(name) ? ' open' : ''}">${_IPOD_DETAIL_CHEVRON}</span>
   </div>`;
   const modelControl = `<select class="ipod-detail-select" onchange="App.updateIpodModel('${ipod.id}', this.value)">${_ipodModelOptionsHtml(ipod.device_class)}</select>`;
+  const firewireRow = ipod.hashing_scheme === 1 ? `<div><label>FireWire ID</label><span>${ipod.firewire_id ? esc(ipod.firewire_id) : `<span style="color:var(--accent-warning)">Not detected · required to sync this device</span>`} <button class="ipod-detail-btn small ghost" onclick="App.ipodDetailEditFirewireId('${ipod.id}')">Edit</button></span></div>` : '';
   const config = isOpen('configuration') ? `<div class="ipod-detail-deflist">
     <div><label>Mount path</label><span>${esc(ipod.active_mount_path || '–')}</span></div>
     <div><label>Model</label>${modelControl}</div>
     <div><label>Database format</label><span>${esc(ipod.db_variant || 'iTunesDB')}</span></div>
     <div><label>Checksum scheme</label><span class="muted">${esc(_ipodChecksumLabel(ipod.hashing_scheme))}</span></div>
+    ${firewireRow}
     <div><label>Tracks on device</label><span>${Number(ipod.track_count || 0).toLocaleString()}</span></div>
     <div><label>Playlists on device</label><span>${Number(ipod.playlist_count || 0).toLocaleString()}</span></div>
   </div>` : '';
@@ -13350,7 +13352,7 @@ function _renderIpodDetail() {
   content.innerHTML = `<div class="ipod-detail-page">
     <div class="ipod-detail-identity"><span class="ipod-detail-badge">${_IPOD_DETAIL_DEVICE}</span><span><h1>${esc(ipod.name || 'iPod')}</h1><p>${esc(ipod.mounted ? (ipod.active_mount_path || 'Connected') : 'Not connected')}</p></span><span class="ipod-detail-identity-actions"><button class="ipod-detail-icon-btn danger" onclick="App.deleteIpod('${ipod.id}')" title="Remove iPod" aria-label="Remove iPod">${_GEAR_ICON_TRASH}</button><button class="ipod-detail-icon-btn ipod-detail-nav-icon" onclick="App.ipodDetailRename()" title="Rename iPod" aria-label="Rename iPod">${_IPOD_DETAIL_MORE}</button></span></div>
     <div class="ipod-detail-action-row"><button id="ipod-scan-btn" class="ipod-detail-btn primary" ${ipod.mounted ? `onclick="App.scanIpod('${ipod.id}')"` : 'disabled title="Connect the iPod to scan it"'}>${_IPOD_DETAIL_REFRESH} Scan library</button><span id="ipod-scan-status-line">${ipod.last_scanned_at ? `Last scanned ${esc(_fmtRelDate(ipod.last_scanned_at))}` : 'Not scanned yet'}</span></div>
-    <section class="ipod-detail-section">${sectionHead('configuration', 'Configuration', '6 fields')}${config}</section>
+    <section class="ipod-detail-section">${sectionHead('configuration', 'Configuration', `${firewireRow ? 7 : 6} fields`)}${config}</section>
     <section class="ipod-detail-section">${sectionHead('backups', 'Backups', backups.length)}${backupsBody}</section>
     <section class="ipod-detail-section ipod-detail-sync">${sectionHead('sync', 'Sync', null, syncAction)}${isOpen('sync') ? '<div id="ipod-sync-summary" class="ipod-detail-note">No changes checked yet this session. Run a check to compare your library against what’s on this iPod.</div><span id="ipod-sync-status-line" class="ipod-detail-sync-status"></span>' : ''}</section>
     <section class="ipod-detail-section">${sectionHead('playlists', 'Playlists', `${Number(ipod.playlist_count || playlists.length).toLocaleString()} playlists`, `<label class="ipod-detail-search">${_IPOD_DETAIL_SEARCH}<input value="${esc(ui.playlistQuery)}" placeholder="Search playlists…" oninput="App.ipodDetailSetQuery('playlists',this.value)"></label>`)}${playlistsBody}</section>
@@ -13382,6 +13384,24 @@ function ipodDetailToggleArtist(key) { if (_ipodDetailUi) { key = decodeURICompo
 function ipodDetailToggleAlbum(artistKey, albumKey) { if (_ipodDetailUi) { const key = `${decodeURIComponent(artistKey)}\u0000${decodeURIComponent(albumKey)}`; _ipodDetailUi.openAlbums.has(key) ? _ipodDetailUi.openAlbums.delete(key) : _ipodDetailUi.openAlbums.add(key); _renderIpodDetail(); } }
 function ipodDetailRemovePlaylist(index) { const ui = _ipodDetailUi; const playlist = ui?.playlists[index]; if (ui && playlist) removeIpodPlaylist(ui.id, playlist.device_playlist_id, playlist.name || 'Untitled playlist'); }
 async function ipodDetailRename() { const ui = _ipodDetailUi; if (!ui) return; const name = window.prompt('Name this iPod', ui.ipod.name || 'iPod'); if (name == null) return; const trimmed = name.trim(); if (!trimmed || trimmed === ui.ipod.name) return; try { await api(`/ipods/${ui.id}`, { method: 'PUT', body: { name: trimmed } }); toast('iPod renamed.'); showIpodDetail(ui.id); } catch (_) { toast('Could not rename iPod.'); } }
+async function ipodDetailEditFirewireId(id) {
+  const ui = _ipodDetailUi;
+  const current = ui?.ipod?.firewire_id || '';
+  // Manual fallback for when scanning couldn't auto-read the GUID from the
+  // device's SysInfo file — this field is only used for HASH58 devices
+  // (iPod Classic, Nano 3G/4G); syncing raises a clear error without it.
+  const input = window.prompt('FireWire ID (hex, from iPod_Control/Device/SysInfo on the device). Leave blank to clear.', current);
+  if (input == null) return;
+  const trimmed = input.trim();
+  if (trimmed === current) return;
+  try {
+    await api(`/ipods/${id}`, { method: 'PUT', body: { firewire_id: trimmed } });
+    toast(trimmed ? 'FireWire ID saved.' : 'FireWire ID cleared.');
+    showIpodDetail(id);
+  } catch (e) {
+    toast(e?.message || 'Could not save FireWire ID.');
+  }
+}
 
 function _fmtBytes(n) {
   if (!n) return '0 B';
@@ -24023,6 +24043,7 @@ const App = {
   ipodDetailToggleAlbum,
   ipodDetailRemovePlaylist,
   ipodDetailRename,
+  ipodDetailEditFirewireId,
   restoreIpodBackup,
   deleteIpodBackupEntry,
   deleteIpod,

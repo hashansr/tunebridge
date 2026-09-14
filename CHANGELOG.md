@@ -4,6 +4,8 @@
 <!-- Claude Code: add entries here as changes are made during development -->
 <!-- Format: `- Fix:` / `- Add:` / `- Change:` / `- Remove:` -->
 - Fix: TuneBridge no longer shows a hard "failed to start" error the first time it's slow to come up right after a Mac restart (e.g. when macOS reopens it automatically) — it now shows a brief loading screen and gives the backend up to 45 seconds (was 15) before giving up, and startup progress is now logged to `~/Library/Application Support/TuneBridge/startup.log` for diagnosis if it ever does time out.
+- Fix: Syncing to an iPod Classic, Nano 3G, or Nano 4G no longer always fails with "HASH58 requires a firewire_id and none was provided" — TuneBridge now reads the device's FireWire ID automatically during a scan.
+- Add: If the FireWire ID can't be auto-detected for one of those iPods, you can now paste it in manually from the iPod's detail page (Configuration section) as a fallback.
 
 ## v0.682-rc.090926-1230 · 2026-09-09
 - Change: Cleaned up em dashes throughout the app's UI text (messages, tooltips, labels) and native error dialogs, replacing them with plainer punctuation or separators.
